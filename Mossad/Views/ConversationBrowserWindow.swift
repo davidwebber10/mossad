@@ -5,6 +5,7 @@ import MossadShared
 struct ConversationBrowserWindow: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedConversationId: String?
+    @State private var scrollToUtteranceId: Int64?
 
     var body: some View {
         NavigationSplitView {
@@ -12,7 +13,7 @@ struct ConversationBrowserWindow: View {
                 .environmentObject(appState)
         } detail: {
             if let id = selectedConversationId {
-                TranscriptPlaceholder(conversationId: id)
+                TranscriptView(conversationId: id, scrollToUtteranceId: scrollToUtteranceId)
                     .environmentObject(appState)
             } else {
                 ContentUnavailableView(
@@ -24,16 +25,5 @@ struct ConversationBrowserWindow: View {
         }
         .frame(minWidth: 800, minHeight: 500)
         .glassEffect(.regular.tint(.clear))
-    }
-}
-
-// Placeholder until Task 15
-struct TranscriptPlaceholder: View {
-    let conversationId: String
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        Text("Transcript view — next task")
-            .foregroundStyle(.secondary)
     }
 }
