@@ -17,6 +17,10 @@ struct MossadApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: .openConversationBrowser)) { _ in
                     openWindow(id: "browser")
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
+                    NSApp.activate(ignoringOtherApps: true)
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                }
         } label: {
             Image(systemName: appState.recordingState == .recording ? "mic.fill" : "mic")
                 .symbolRenderingMode(.palette)
