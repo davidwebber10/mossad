@@ -14,13 +14,6 @@ struct MossadApp: App {
         MenuBarExtra {
             MenuBarPopover()
                 .environmentObject(appState)
-                .onReceive(NotificationCenter.default.publisher(for: .openConversationBrowser)) { _ in
-                    openWindow(id: "browser")
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
-                    NSApp.activate(ignoringOtherApps: true)
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                }
         } label: {
             Image(systemName: appState.recordingState == .recording ? "mic.fill" : "mic")
                 .symbolRenderingMode(.palette)
@@ -34,9 +27,10 @@ struct MossadApp: App {
                 .environmentObject(appState)
         }
 
-        Settings {
+        Window("Settings", id: "settings") {
             SettingsView()
         }
+        .defaultSize(width: 450, height: 350)
 
         Window("Setup", id: "onboarding") {
             OnboardingView()

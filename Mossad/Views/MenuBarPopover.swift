@@ -4,6 +4,7 @@ import MossadShared
 
 struct MenuBarPopover: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -176,17 +177,12 @@ struct MenuBarPopover: View {
 
     private func openConversationBrowser() {
         NSApp.activate(ignoringOtherApps: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            NotificationCenter.default.post(name: .openConversationBrowser, object: nil)
-        }
+        openWindow(id: "browser")
     }
 
     private func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
-        // Delay slightly so the popover can dismiss first
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        }
+        openWindow(id: "settings")
     }
 }
 
