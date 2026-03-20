@@ -1,0 +1,284 @@
+// MossadService/SessionCoordinator.swift
+import Foundation
+import MossadShared
+
+public protocol SessionCoordinatorDelegate: AnyObject {
+    func coordinator(_ coordinator: SessionCoordinator, didChangeState snapshot: ServiceSnapshot)
+    func coordinator(_ coordinator: SessionCoordinator, didReceiveUtterance utteranceData: Data)
+}
+
+public final class SessionCoordinator {
+    public weak var delegate: SessionCoordinatorDelegate?
+
+    private let processMonitor = ProcessMonitor()
+    private let calendarMatcher = CalendarMatcher()
+    private let audioCaptureManager = AudioCaptureManager()
+    private var appAudioClient: AssemblyAIClient?
+    private var micAudioClient: AssemblyAIClient?
+    private let store: ConversationStore
+    private let dbManager: DatabaseManager
+
+    private var currentConversationId: String?
+    public private(set) var currentSnapshot = ServiceSnapshot()
+    private var conversationStartTime: Date?
+    private var speakerMap: [String: String] = [:] // diarization label → speaker ID
+    private var meSpeaker: Speaker?
+
+    public init() throws {
+        self.dbManager = try DatabaseManager()
+        self.store = ConversationStore(dbQueue: dbManager.dbQueue)
+    }
+
+    public func startMonitoring() {
+        // Ensure we have the "me" speaker
+        meSpeaker = try? store.getOrCreateMeSpeaker(
+            name: UserDefaults.standard.string(forKey: "userName") ?? "Me"
+        )
+
+        processMonitor.startMonitoring(
+            onDetected: { [weak self] meeting in
+                self?.handleMeetingDetected(meeting)
+            },
+            onEnded: { [weak self] in
+                self?.handleMeetingEnded()
+            }
+        )
+
+        updateState { $0.recordingState = .detecting }
+    }
+
+    public func stopMonitoring() {
+        processMonitor.stopMonitoring()
+        if currentConversationId != nil {
+            handleMeetingEnded()
+        }
+        updateState { $0.recordingState = .idle }
+    }
+
+    public func pauseRecording() {
+        audioCaptureManager.stopCapture()
+        appAudioClient?.terminateSession()
+        micAudioClient?.terminateSession()
+        updateState { $0.recordingState = .paused }
+    }
+
+    public func resumeRecording() {
+        guard let convId = currentConversationId else { return }
+        // Re-poll to find the meeting process and restart capture
+        // We need to re-detect the meeting app to get its process ID
+        processMonitor.stopMonitoring()
+        processMonitor.startMonitoring(
+            onDetected: { [weak self] meeting in
+                guard let self = self else { return }
+                // Restart audio capture for the existing conversation
+                Task {
+                    try? await self.audioCaptureManager.startCapture(appProcessID: meeting.processIdentifier)
+                    self.audioCaptureManager.delegate = self
+                    self.startTranscriptionClients()
+                }
+                self.updateState { $0.recordingState = .recording }
+            },
+            onEnded: { [weak self] in
+                self?.handleMeetingEnded()
+            }
+        )
+        updateState { $0.recordingState = .detecting }
+    }
+
+    // MARK: - Meeting Lifecycle
+
+    private func handleMeetingDetected(_ meeting: DetectedMeeting) {
+        // Match against calendar
+        let matchedEvent = calendarMatcher.findMatchingEvent(
+            platform: meeting.platform,
+            detectedURL: meeting.meetingUrl
+        )
+
+        let title = matchedEvent?.title ?? "Ad-hoc \(meeting.platform.rawValue.capitalized) Call"
+        let calendarEventId = matchedEvent?.calendarEventId
+        let meetingUrl = meeting.meetingUrl ?? matchedEvent?.meetingUrl
+
+        // Create conversation record
+        guard let conversation = try? store.createConversation(
+            title: title,
+            platform: meeting.platform.rawValue,
+            calendarEventId: calendarEventId,
+            meetingUrl: meetingUrl
+        ) else { return }
+
+        currentConversationId = conversation.id
+        conversationStartTime = conversation.startedAt
+
+        // Add "me" as a conversation speaker
+        if let me = meSpeaker {
+            try? store.addConversationSpeaker(
+                conversationId: conversation.id,
+                speakerId: me.id,
+                diarizationLabel: "me"
+            )
+        }
+
+        // Start audio capture
+        Task {
+            do {
+                try await audioCaptureManager.startCapture(appProcessID: meeting.processIdentifier)
+                audioCaptureManager.delegate = self
+                startTranscriptionClients()
+            } catch {
+                print("Audio capture failed: \(error)")
+            }
+        }
+
+        updateState {
+            $0.recordingState = .recording
+            $0.currentConversationId = conversation.id
+            $0.currentMeetingTitle = title
+            $0.currentPlatform = meeting.platform.rawValue
+            $0.elapsedSeconds = 0
+        }
+
+        // Start elapsed time ticker
+        startElapsedTimer()
+    }
+
+    private func handleMeetingEnded() {
+        guard let convId = currentConversationId else { return }
+
+        // Stop everything
+        audioCaptureManager.stopCapture()
+        appAudioClient?.terminateSession()
+        appAudioClient?.disconnect()
+        micAudioClient?.terminateSession()
+        micAudioClient?.disconnect()
+
+        // Finalize conversation
+        try? store.finalizeConversation(id: convId)
+
+        currentConversationId = nil
+        conversationStartTime = nil
+        speakerMap = [:]
+
+        updateState {
+            $0.recordingState = .detecting
+            $0.currentConversationId = nil
+            $0.currentMeetingTitle = nil
+            $0.currentPlatform = nil
+            $0.elapsedSeconds = nil
+            $0.speakerCount = nil
+        }
+    }
+
+    // MARK: - Transcription
+
+    private func startTranscriptionClients() {
+        guard let apiKey = try? KeychainManager.retrieve(account: "assemblyai-api-key") else {
+            print("No AssemblyAI API key configured")
+            return
+        }
+
+        // App audio client (others' voices, with diarization)
+        let appClient = AssemblyAIClient(apiKey: apiKey)
+        appClient.delegate = self
+        appClient.connect()
+        self.appAudioClient = appClient
+
+        // Mic audio client (my voice)
+        let micClient = AssemblyAIClient(apiKey: apiKey)
+        micClient.delegate = self
+        micClient.connect()
+        self.micAudioClient = micClient
+    }
+
+    // MARK: - State Management
+
+    private func updateState(_ modify: (inout ServiceSnapshot) -> Void) {
+        modify(&currentSnapshot)
+        delegate?.coordinator(self, didChangeState: currentSnapshot)
+    }
+
+    private var elapsedTimer: Timer?
+
+    private func startElapsedTimer() {
+        elapsedTimer?.invalidate()
+        elapsedTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self = self, let start = self.conversationStartTime else { return }
+            self.updateState {
+                $0.elapsedSeconds = Int(Date().timeIntervalSince(start))
+            }
+        }
+    }
+}
+
+// MARK: - AudioCaptureDelegate
+
+extension SessionCoordinator: AudioCaptureDelegate {
+    public func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureAppAudio data: Data) {
+        appAudioClient?.sendAudio(data)
+    }
+
+    public func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureMicAudio data: Data) {
+        micAudioClient?.sendAudio(data)
+    }
+
+    public func audioCaptureManager(_ manager: AudioCaptureManager, didEncounterError error: Error) {
+        print("Audio capture error: \(error)")
+    }
+}
+
+// MARK: - AssemblyAIClientDelegate
+
+extension SessionCoordinator: AssemblyAIClientDelegate {
+    public func client(_ client: AssemblyAIClient, didReceiveFinalTranscript transcript: FinalTranscriptData) {
+        guard let convId = currentConversationId,
+              let startTime = conversationStartTime else { return }
+
+        let isMyVoice = (client === micAudioClient)
+        let startOffset = Double(transcript.audioStartMs) / 1000.0
+        let endOffset = Double(transcript.audioEndMs) / 1000.0
+
+        let speakerId: String
+        if isMyVoice {
+            speakerId = meSpeaker?.id ?? "unknown"
+        } else {
+            let label = transcript.speakerLabel ?? "Unknown"
+            if let existingId = speakerMap[label] {
+                speakerId = existingId
+            } else {
+                // Create a new placeholder speaker
+                let speaker = try? store.getOrCreateSpeaker(name: "Speaker \(label)")
+                speakerId = speaker?.id ?? "unknown"
+                speakerMap[label] = speakerId
+                try? store.addConversationSpeaker(
+                    conversationId: convId,
+                    speakerId: speakerId,
+                    diarizationLabel: label
+                )
+                updateState { $0.speakerCount = self.speakerMap.count + 1 } // +1 for me
+            }
+        }
+
+        try? store.insertUtterance(
+            conversationId: convId,
+            speakerId: speakerId,
+            text: transcript.text,
+            startedAt: startOffset,
+            endedAt: endOffset
+        )
+    }
+
+    public func client(_ client: AssemblyAIClient, didReceivePartialTranscript text: String) {
+        // Could display live partial text in UI — ignored for now
+    }
+
+    public func clientDidConnect(_ client: AssemblyAIClient) {
+        // Both clients connected — ready to stream
+    }
+
+    public func clientDidDisconnect(_ client: AssemblyAIClient) {
+        // Handle reconnection if needed
+    }
+
+    public func client(_ client: AssemblyAIClient, didEncounterError error: Error) {
+        print("AssemblyAI error: \(error)")
+    }
+}
