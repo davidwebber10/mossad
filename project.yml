@@ -1,0 +1,103 @@
+name: Mossad
+options:
+  bundleIdPrefix: com.mossad
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "6.0.0"
+
+targets:
+
+  # ── MossadShared Framework ─────────────────────────────────────────────────
+  MossadShared:
+    type: framework
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - MossadShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mossad.shared
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: "NO"
+    dependencies:
+      - package: GRDB
+        product: GRDB
+
+  # ── Mossad App ─────────────────────────────────────────────────────────────
+  Mossad:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - Mossad
+    info:
+      path: Mossad/Info.plist
+      properties:
+        LSUIElement: true
+        NSCalendarsUsageDescription: "Mossad reads your calendar to match meetings with transcriptions."
+        NSMicrophoneUsageDescription: "Mossad uses the microphone to capture your voice during calls."
+    entitlements:
+      path: Mossad/Mossad.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mossad.app
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGN_STYLE: Manual
+    dependencies:
+      - target: MossadShared
+        embed: false
+      - target: MossadService
+        embed: true
+        link: false
+        codeSign: false
+        copy:
+          destination: plugins
+
+  # ── MossadService XPC Service ──────────────────────────────────────────────
+  MossadService:
+    type: bundle
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - MossadService
+    info:
+      path: MossadService/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mossad.app.MossadService
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: "NO"
+        MACH_O_TYPE: mh_execute
+        WRAPPER_EXTENSION: xpc
+    dependencies:
+      - target: MossadShared
+        embed: false
+
+  # ── MossadTests ────────────────────────────────────────────────────────────
+  MossadTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - MossadTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mossad.tests
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+    dependencies:
+      - target: Mossad
