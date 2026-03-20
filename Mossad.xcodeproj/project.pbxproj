@@ -13,6 +13,7 @@
 		067C4DC3A3AAEC5D83AE5CB7 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 3951CB861743C462D024AA3D /* GRDB */; };
 		0A248043605472C4B2A6C343 /* SearchResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84908F4E327C0B94635348CA /* SearchResultsView.swift */; };
 		0DBB61C64DC9D2A8E606DAC0 /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
+		0FF2F13167B85511955CAE5F /* MossadShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1F3907CBB1E0292253A998D6 /* ConversationStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571FDD2E044FA52C90D260B0 /* ConversationStoreTests.swift */; };
 		1FE63D323F641D63598113B0 /* ProcessMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E7C31ABC50BBE27BFBD3C1 /* ProcessMonitorTests.swift */; };
 		249910C612D200FF1CD4AE4D /* AssemblyAIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A76746C95208DC066E0EE21 /* AssemblyAIClientTests.swift */; };
@@ -97,6 +98,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		16DB75F5FF3D5CD44A24FA6E /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				0FF2F13167B85511955CAE5F /* MossadShared.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		222E5B8FC123E08E3D6FAFEE /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -330,6 +342,7 @@
 			buildPhases = (
 				E1CA77AFA6EACC2446D5309A /* Sources */,
 				9E21BE7A42C1CCD902B0630D /* Frameworks */,
+				16DB75F5FF3D5CD44A24FA6E /* Embed Frameworks */,
 				222E5B8FC123E08E3D6FAFEE /* Embed Dependencies */,
 			);
 			buildRules = (
