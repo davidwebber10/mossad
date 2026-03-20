@@ -9,8 +9,11 @@
 /* Begin PBXBuildFile section */
 		067C4DC3A3AAEC5D83AE5CB7 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 3951CB861743C462D024AA3D /* GRDB */; };
 		0DBB61C64DC9D2A8E606DAC0 /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
+		1F3907CBB1E0292253A998D6 /* ConversationStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571FDD2E044FA52C90D260B0 /* ConversationStoreTests.swift */; };
+		1FE63D323F641D63598113B0 /* ProcessMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E7C31ABC50BBE27BFBD3C1 /* ProcessMonitorTests.swift */; };
 		2D279D8F4E3541B29E74B4BF /* MossadApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15292B890FEEFCB31AE3AD5E /* MossadApp.swift */; };
 		2F18020854CA23C4346FBCC3 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FE4E6F302ABFCE38D476A6C /* main.swift */; };
+		32C49E284E883C1FDC179335 /* KeychainManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C3EC53E346E3AB6B1B9DE2 /* KeychainManagerTests.swift */; };
 		36D6B3C52207DC7770E8B58E /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3611AB543E255A4625DBC9 /* Conversation.swift */; };
 		39077B27F40EFF0CC9B8921A /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
 		49D4D59634DB3B2596D26172 /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
@@ -18,11 +21,17 @@
 		66FBE158FDAE02069EE45181 /* DatabaseManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624F59415D0020D4F22F0D87 /* DatabaseManagerTests.swift */; };
 		6F02EBAE2EF9AF1B021D9739 /* MossadService.bundle in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 9AF9AD8B8E9356A45DA4B78F /* MossadService.bundle */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		74B27208D8BC7BF872C0C817 /* Speaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8C74205DDD385EEE8C5922 /* Speaker.swift */; };
+		76B66D16D30BF66BDB8CA3A3 /* MossadService.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 9AF9AD8B8E9356A45DA4B78F /* MossadService.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		7ABAC3FC49B7B271E4297E47 /* Utterance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D24F0150F3709FD860F80D2 /* Utterance.swift */; };
+		7D561291A5BB7C21ACB3B80D /* ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46571234AAB7CD8C8309EFEA /* ProcessMonitor.swift */; };
+		8FDA1D04AAE6CA372886309F /* MossadServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 375D8EE5D7EB93BAB073ACF8 /* MossadServiceProtocol.swift */; };
+		BA11CA9BBB6DBFE1598B0FC9 /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92419633F3542C7CA59D5827 /* KeychainManager.swift */; };
 		C781784541210454A3E3A553 /* MossadShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D24191C9ABC2E53D80E46C24 /* DatabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B913BF2AEC707AF5050F0A /* DatabaseManager.swift */; };
 		D3114D6334F8B28F4CA0B544 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BE1EE70FF9A93E820BB57D60 /* GRDB */; };
+		DDA3D373C7CE86CB7CD3D1E3 /* ServiceState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C8F250649926662A6D852C /* ServiceState.swift */; };
 		E1AD164BED3AAAEB516D7089 /* MossadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D90495786750C710F1612F /* MossadTests.swift */; };
+		F45B85DCB8242AD8713ED258 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D922E64DE2F3851372EB24C6 /* ConversationStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +55,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 840256E856B3F4BA55655F4D;
 			remoteInfo = MossadShared;
+		};
+		361A68E2DE2110FF40AC291B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0400D3243AA5F614A0312C34 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B7683606126750BC976C5C82;
+			remoteInfo = MossadService;
 		};
 		46C30CF7B154D48E2644AD34 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -92,15 +108,23 @@
 		01B913BF2AEC707AF5050F0A /* DatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseManager.swift; sourceTree = "<group>"; };
 		0D24F0150F3709FD860F80D2 /* Utterance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utterance.swift; sourceTree = "<group>"; };
 		15292B890FEEFCB31AE3AD5E /* MossadApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MossadApp.swift; sourceTree = "<group>"; };
+		375D8EE5D7EB93BAB073ACF8 /* MossadServiceProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MossadServiceProtocol.swift; sourceTree = "<group>"; };
 		3FD932A8E5C7B5EF53D51E56 /* MossadTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MossadTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		46571234AAB7CD8C8309EFEA /* ProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessMonitor.swift; sourceTree = "<group>"; };
 		4BD497CA81C8D6AA550950D5 /* Mossad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mossad.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C3611AB543E255A4625DBC9 /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
+		571FDD2E044FA52C90D260B0 /* ConversationStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStoreTests.swift; sourceTree = "<group>"; };
+		60C8F250649926662A6D852C /* ServiceState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceState.swift; sourceTree = "<group>"; };
 		624F59415D0020D4F22F0D87 /* DatabaseManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseManagerTests.swift; sourceTree = "<group>"; };
 		7DA14CBC649C1A1921435C3F /* MossadShared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MossadShared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7FE4E6F302ABFCE38D476A6C /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		81E7C31ABC50BBE27BFBD3C1 /* ProcessMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessMonitorTests.swift; sourceTree = "<group>"; };
+		88C3EC53E346E3AB6B1B9DE2 /* KeychainManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManagerTests.swift; sourceTree = "<group>"; };
+		92419633F3542C7CA59D5827 /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
 		9AF9AD8B8E9356A45DA4B78F /* MossadService.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MossadService.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6D90495786750C710F1612F /* MossadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MossadTests.swift; sourceTree = "<group>"; };
 		CD544FB5C0185640B5B7C70A /* ConversationSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSpeaker.swift; sourceTree = "<group>"; };
+		D922E64DE2F3851372EB24C6 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		DF8C74205DDD385EEE8C5922 /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
 		E30C9D2178B64B1BA8FB185F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F91FF5C7DAD3B234E5AC63C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -149,6 +173,8 @@
 			children = (
 				C91BBF5F4077EE71C5CC86D0 /* Database */,
 				CB761EDEAB74F469D3320350 /* Models */,
+				8C8292E57DF91A0202A78749 /* XPC */,
+				92419633F3542C7CA59D5827 /* KeychainManager.swift */,
 			);
 			path = MossadShared;
 			sourceTree = "<group>";
@@ -162,6 +188,15 @@
 				3FD932A8E5C7B5EF53D51E56 /* MossadTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		8C8292E57DF91A0202A78749 /* XPC */ = {
+			isa = PBXGroup;
+			children = (
+				375D8EE5D7EB93BAB073ACF8 /* MossadServiceProtocol.swift */,
+				60C8F250649926662A6D852C /* ServiceState.swift */,
+			);
+			path = XPC;
 			sourceTree = "<group>";
 		};
 		8E4DFD918BA88D7A60AA4652 = {
@@ -188,6 +223,7 @@
 		C91BBF5F4077EE71C5CC86D0 /* Database */ = {
 			isa = PBXGroup;
 			children = (
+				D922E64DE2F3851372EB24C6 /* ConversationStore.swift */,
 				01B913BF2AEC707AF5050F0A /* DatabaseManager.swift */,
 			);
 			path = Database;
@@ -209,6 +245,7 @@
 			children = (
 				F91FF5C7DAD3B234E5AC63C3 /* Info.plist */,
 				7FE4E6F302ABFCE38D476A6C /* main.swift */,
+				46571234AAB7CD8C8309EFEA /* ProcessMonitor.swift */,
 			);
 			path = MossadService;
 			sourceTree = "<group>";
@@ -216,8 +253,11 @@
 		FDCD53462AF23327EB8EB9EB /* MossadTests */ = {
 			isa = PBXGroup;
 			children = (
+				571FDD2E044FA52C90D260B0 /* ConversationStoreTests.swift */,
 				624F59415D0020D4F22F0D87 /* DatabaseManagerTests.swift */,
+				88C3EC53E346E3AB6B1B9DE2 /* KeychainManagerTests.swift */,
 				C6D90495786750C710F1612F /* MossadTests.swift */,
+				81E7C31ABC50BBE27BFBD3C1 /* ProcessMonitorTests.swift */,
 			);
 			path = MossadTests;
 			sourceTree = "<group>";
@@ -289,6 +329,7 @@
 			buildConfigurationList = B0D45A0D194E3E534B87D71D /* Build configuration list for PBXNativeTarget "MossadTests" */;
 			buildPhases = (
 				A0AE489EFF8E2EA72D3867A6 /* Sources */,
+				5CA3523B4874162F6F4FDFE0 /* Resources */,
 				0284CEB83B289E79E9ABCD71 /* Frameworks */,
 				E63F79793A66E5B238338074 /* Embed Frameworks */,
 			);
@@ -297,6 +338,7 @@
 			dependencies = (
 				F131F0496AB667D998EB90E4 /* PBXTargetDependency */,
 				0480FA6EB5AF1C1FAB53EE1A /* PBXTargetDependency */,
+				2EA2A0FD0E208FD56670D1B8 /* PBXTargetDependency */,
 			);
 			name = MossadTests;
 			packageProductDependencies = (
@@ -345,6 +387,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		5CA3523B4874162F6F4FDFE0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				76B66D16D30BF66BDB8CA3A3 /* MossadService.bundle in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		1BEDA91B6399C806C2054CA3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -352,7 +405,11 @@
 			files = (
 				36D6B3C52207DC7770E8B58E /* Conversation.swift in Sources */,
 				52C7BE53956F8E767E5FC10D /* ConversationSpeaker.swift in Sources */,
+				F45B85DCB8242AD8713ED258 /* ConversationStore.swift in Sources */,
 				D24191C9ABC2E53D80E46C24 /* DatabaseManager.swift in Sources */,
+				BA11CA9BBB6DBFE1598B0FC9 /* KeychainManager.swift in Sources */,
+				8FDA1D04AAE6CA372886309F /* MossadServiceProtocol.swift in Sources */,
+				DDA3D373C7CE86CB7CD3D1E3 /* ServiceState.swift in Sources */,
 				74B27208D8BC7BF872C0C817 /* Speaker.swift in Sources */,
 				7ABAC3FC49B7B271E4297E47 /* Utterance.swift in Sources */,
 			);
@@ -362,8 +419,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1F3907CBB1E0292253A998D6 /* ConversationStoreTests.swift in Sources */,
 				66FBE158FDAE02069EE45181 /* DatabaseManagerTests.swift in Sources */,
+				32C49E284E883C1FDC179335 /* KeychainManagerTests.swift in Sources */,
 				E1AD164BED3AAAEB516D7089 /* MossadTests.swift in Sources */,
+				1FE63D323F641D63598113B0 /* ProcessMonitorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -371,6 +431,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7D561291A5BB7C21ACB3B80D /* ProcessMonitor.swift in Sources */,
 				2F18020854CA23C4346FBCC3 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -390,6 +451,11 @@
 			isa = PBXTargetDependency;
 			target = 840256E856B3F4BA55655F4D /* MossadShared */;
 			targetProxy = 46C30CF7B154D48E2644AD34 /* PBXContainerItemProxy */;
+		};
+		2EA2A0FD0E208FD56670D1B8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B7683606126750BC976C5C82 /* MossadService */;
+			targetProxy = 361A68E2DE2110FF40AC291B /* PBXContainerItemProxy */;
 		};
 		650FE6CAC0C854CA5232B1AD /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;

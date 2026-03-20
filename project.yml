@@ -102,5 +102,6 @@ targets:
     dependencies:
       - target: Mossad
       - target: MossadShared
+      - target: MossadService
       - package: GRDB
         product: GRDB
