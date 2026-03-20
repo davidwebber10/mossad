@@ -7,6 +7,7 @@ struct MossadApp: App {
     @StateObject private var appState = AppState()
     @State private var showBrowser = false
     @State private var showSettings = false
+    @AppStorage("onboardingComplete") private var onboardingComplete = false
 
     var body: some Scene {
         MenuBarExtra {
@@ -28,5 +29,11 @@ struct MossadApp: App {
         Settings {
             SettingsView()
         }
+
+        Window("Setup", id: "onboarding") {
+            OnboardingView()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 500, height: 400)
     }
 }
