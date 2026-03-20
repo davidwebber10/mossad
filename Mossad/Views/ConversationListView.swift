@@ -5,9 +5,12 @@ import MossadShared
 struct ConversationListView: View {
     @EnvironmentObject var appState: AppState
     @Binding var selectedConversationId: String?
+    @Binding var scrollToUtteranceId: Int64?
     @State private var conversations: [Conversation] = []
     @State private var speakerCounts: [String: Int] = [:]
     @State private var searchText = ""
+    @State private var searchResults: [SearchResult] = []
+    @State private var isSearching = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,24 +33,32 @@ struct ConversationListView: View {
             .padding(10)
             .glassEffect(.regular.tint(.clear))
 
-            // Conversation list
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(conversations) { conversation in
-                        ConversationRow(
-                            conversation: conversation,
-                            isSelected: selectedConversationId == conversation.id,
-                            speakerCount: speakerCounts[conversation.id] ?? 0
-                        )
-                        .onTapGesture {
-                            withAnimation(.spring(duration: 0.3)) {
-                                selectedConversationId = conversation.id
+            // Conversation list or search results
+            if isSearching && !searchResults.isEmpty {
+                SearchResultsView(
+                    results: searchResults,
+                    selectedConversationId: $selectedConversationId,
+                    scrollToUtteranceId: $scrollToUtteranceId
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(conversations) { conversation in
+                            ConversationRow(
+                                conversation: conversation,
+                                isSelected: selectedConversationId == conversation.id,
+                                speakerCount: speakerCounts[conversation.id] ?? 0
+                            )
+                            .onTapGesture {
+                                withAnimation(.spring(duration: 0.3)) {
+                                    selectedConversationId = conversation.id
+                                }
                             }
                         }
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 4)
                 }
-                .padding(.horizontal, 8)
-                .padding(.top, 4)
             }
         }
         .frame(minWidth: 280, maxWidth: 320)
@@ -60,12 +71,17 @@ struct ConversationListView: View {
     }
 
     private func loadConversations() {
-        // Search wiring added in Task 16
-        conversations = (try? appState.store.listConversations()) ?? []
-        // Load speaker counts for each conversation
-        for conv in conversations {
-            let speakers = (try? appState.store.fetchSpeakers(conversationId: conv.id)) ?? []
-            speakerCounts[conv.id] = speakers.count
+        if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+            isSearching = false
+            conversations = (try? appState.store.listConversations()) ?? []
+            // Load speaker counts for each conversation
+            for conv in conversations {
+                let speakers = (try? appState.store.fetchSpeakers(conversationId: conv.id)) ?? []
+                speakerCounts[conv.id] = speakers.count
+            }
+        } else {
+            isSearching = true
+            searchResults = (try? appState.store.search(query: searchText)) ?? []
         }
     }
 }

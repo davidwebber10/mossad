@@ -9,7 +9,7 @@ struct ConversationBrowserWindow: View {
 
     var body: some View {
         NavigationSplitView {
-            ConversationListView(selectedConversationId: $selectedConversationId)
+            ConversationListView(selectedConversationId: $selectedConversationId, scrollToUtteranceId: $scrollToUtteranceId)
                 .environmentObject(appState)
         } detail: {
             if let id = selectedConversationId {
