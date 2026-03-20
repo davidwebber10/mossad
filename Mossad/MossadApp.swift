@@ -21,7 +21,7 @@ struct MossadApp: App {
         .menuBarExtraStyle(.window)
 
         Window("Conversations", id: "browser") {
-            Text("Conversation Browser — coming next task")
+            ConversationBrowserWindow()
                 .environmentObject(appState)
         }
 
