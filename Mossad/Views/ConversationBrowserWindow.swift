@@ -25,5 +25,14 @@ struct ConversationBrowserWindow: View {
         }
         .frame(minWidth: 800, minHeight: 500)
         .glassEffect(.regular.tint(.clear))
+        .sheet(isPresented: $appState.showSpeakerLabeling) {
+            if let convId = appState.lastEndedConversationId {
+                SpeakerLabelingSheet(
+                    conversationId: convId,
+                    calendarAttendees: appState.lastEndedCalendarAttendees
+                )
+                .environmentObject(appState)
+            }
+        }
     }
 }

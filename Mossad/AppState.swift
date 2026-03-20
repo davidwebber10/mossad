@@ -11,6 +11,9 @@ public final class AppState: NSObject, ObservableObject {
     @Published var elapsedSeconds: Int = 0
     @Published var speakerCount: Int = 0
     @Published var currentConversationId: String?
+    @Published var showSpeakerLabeling = false
+    @Published var lastEndedConversationId: String?
+    @Published var lastEndedCalendarAttendees: [String] = []
 
     private var xpcConnection: NSXPCConnection?
     private var service: MossadServiceProtocol?
@@ -62,11 +65,26 @@ extension AppState: MossadAppProtocol {
     nonisolated public func stateDidChange(_ stateData: Data) {
         guard let snapshot = ServiceSnapshot.decoded(from: stateData) else { return }
         Task { @MainActor in
+            // Detect recording → idle/detecting transition
+            let wasRecording = self.recordingState == .recording
+            let nowIdle = snapshot.recordingState == .idle || snapshot.recordingState == .detecting
+
             self.recordingState = snapshot.recordingState
             self.currentMeetingTitle = snapshot.currentMeetingTitle
             self.currentPlatform = snapshot.currentPlatform
             self.elapsedSeconds = snapshot.elapsedSeconds ?? 0
             self.speakerCount = snapshot.speakerCount ?? 0
+
+            // If call just ended, check for unlabeled speakers and show labeling sheet
+            if wasRecording && nowIdle, let convId = self.currentConversationId {
+                let speakers = (try? self.store.fetchSpeakers(conversationId: convId)) ?? []
+                let unlabeled = speakers.filter { !$0.isMe && $0.name.hasPrefix("Speaker ") }
+                if !unlabeled.isEmpty {
+                    self.lastEndedConversationId = convId
+                    self.showSpeakerLabeling = true
+                }
+            }
+
             self.currentConversationId = snapshot.currentConversationId
         }
     }

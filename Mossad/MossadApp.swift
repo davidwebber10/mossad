@@ -8,11 +8,15 @@ struct MossadApp: App {
     @State private var showBrowser = false
     @State private var showSettings = false
     @AppStorage("onboardingComplete") private var onboardingComplete = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarPopover()
                 .environmentObject(appState)
+                .onReceive(NotificationCenter.default.publisher(for: .openConversationBrowser)) { _ in
+                    openWindow(id: "browser")
+                }
         } label: {
             Image(systemName: appState.recordingState == .recording ? "mic.fill" : "mic")
                 .symbolRenderingMode(.palette)
