@@ -224,59 +224,81 @@ Triggers keep the FTS index in sync with the utterances table on insert, update,
 
 ## UI
 
+### Design Language: Apple Liquid Glass
+
+The app follows Apple's Liquid Glass design principles introduced in iOS 26 / macOS 26. All UI surfaces use the glass material system for a layered, translucent aesthetic that feels native to the latest macOS.
+
+**Key principles applied:**
+
+- **Glass materials everywhere**: all panels, popovers, and cards use `.glassEffect()` modifiers with appropriate tinting. The menu bar popover and main window use layered glass rather than opaque backgrounds.
+- **Fluid animations**: state transitions (idle → recording, conversation selection, search results appearing) use spring-based animations with natural motion curves. No hard cuts.
+- **Depth through translucency**: the sidebar and detail panel use different glass tint levels to establish visual hierarchy. The sidebar is a lighter glass layer; the transcript panel sits behind it with deeper translucency.
+- **Semantic colors with glass tinting**: speaker colors, recording indicators, and platform badges use vibrant system colors that interact with the glass material (tinting the glass rather than sitting opaquely on top).
+- **Minimal chrome**: no heavy borders or dividers. Separation between elements comes from glass layers, subtle shadows, and spacing rather than explicit lines.
+- **SF Symbols throughout**: all icons use SF Symbols with the new fluid rendering mode for consistency with system UI.
+- **Dynamic type and accessibility**: all text respects Dynamic Type settings. Glass contrast levels adapt for accessibility settings (increased contrast mode uses more opaque glass).
+
 ### Menu Bar Icon
 
-- **Idle**: monochrome microphone or headphone icon
-- **Recording**: red-tinted icon or red dot overlay, indicating active capture
+- **Idle**: SF Symbol microphone icon, monochrome, matching system menu bar style
+- **Recording**: same icon with a Liquid Glass red tint pulse animation — subtle enough to not distract but visible at a glance
 
 ### Menu Bar Popover
 
-Clicking the menu bar icon opens a popover:
+Clicking the menu bar icon opens a glass-material popover:
 
 **Idle state:**
-- Status: "No active call detected"
-- "Open Conversations..." button
+- Status text: "No active call detected" on a glass surface
+- "Open Conversations..." button (glass-tinted button style)
 - "Settings..." button
 - "Quit Mossad" button
 
 **Recording state:**
-- Meeting title (from calendar or "Ad-hoc [Platform] Call")
-- Platform and elapsed time
-- Speaker count
-- "Pause Recording" button
-- "Open Conversations..." button
-- "Settings..." button
+- Meeting title in bold on a glass card with subtle red tint
+- Platform icon (SF Symbol) and elapsed time with live-updating counter
+- Speaker count with animated dot indicators
+- "Pause Recording" glass button with amber tint
+- "Open Conversations..." and "Settings..." buttons
 
 ### Main Window — Conversation Browser
 
-A separate window opened from the popover or via keyboard shortcut.
+A separate window opened from the popover or via keyboard shortcut. Uses a full Liquid Glass window style.
 
-**Left sidebar (280px):**
-- Search bar at top (FTS5 query)
-- Chronological list of conversations
-- Each entry shows: title, date/time, duration, platform, speaker count
-- Selected conversation highlighted
+**Left sidebar:**
+- Search bar at top using the glass-material text field style
+- Chronological list of conversations as glass cards
+- Each card shows: title, date/time, duration, platform icon (SF Symbol), speaker count
+- Selected conversation uses a brighter, more saturated glass highlight
+- Cards have subtle parallax/depth shift on hover
 
-**Right panel:**
-- Header: meeting title, date, time range, platform, attendee names
-- Transcript: sequential utterances with speaker name (color-coded), timestamp, and text
-- Unlabeled speakers show as clickable "Speaker X" with option to assign a name
+**Right panel (transcript reader):**
+- Sits on a deeper glass layer than the sidebar
+- Header: meeting title, date, time range, platform badge, attendee avatars (initials in colored glass circles)
+- Transcript: sequential utterances with:
+  - Speaker name in their assigned color (color tints the glass bubble around their utterance)
+  - Timestamp as subtle secondary text
+  - Text content
+- Unlabeled speakers show as "Speaker X" with a glass-tinted "Assign Name" chip
+- Smooth scroll with utterances fading in as they enter the viewport
 
 ### Search
 
 - Typing in the search bar queries the FTS5 index
-- Results show matching utterances with:
+- Results appear as glass cards showing:
   - Conversation title and date
   - Speaker name and timestamp
-  - Matched text with search terms highlighted
-- Clicking a result opens that conversation scrolled to the matching utterance
+  - Matched text with search terms highlighted using a warm glass accent tint
+- Clicking a result opens that conversation with a fluid transition, scrolled to the matching utterance
+- Search field has a live-filter feel — results update as you type with animated list transitions
 
 ### Settings Window
 
-- AssemblyAI API key entry (stored in Keychain)
+Glass-material settings panel:
+- AssemblyAI API key entry (stored in Keychain) — secure text field with glass styling
 - "Your name" configuration (for the is_me speaker record)
-- Launch at login toggle
-- Audio input device selection (defaults to system default)
+- Launch at login toggle (native SwiftUI toggle)
+- Audio input device selection (dropdown, defaults to system default)
+- All sections use grouped glass cards consistent with System Settings
 
 ## macOS Permissions
 
