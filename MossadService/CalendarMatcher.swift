@@ -14,7 +14,15 @@ public final class CalendarMatcher {
     public init() {}
 
     public func requestAccess() async -> Bool {
-        do { return try await eventStore.requestFullAccessToEvents() } catch { return false }
+        if #available(macOS 14.0, *) {
+            do { return try await eventStore.requestFullAccessToEvents() } catch { return false }
+        } else {
+            return await withCheckedContinuation { continuation in
+                eventStore.requestAccess(to: .event) { granted, _ in
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
     }
 
     public func findMatchingEvent(platform: MeetingPlatform, detectedURL: String?, at date: Date = Date()) -> MatchedEvent? {
@@ -39,10 +47,10 @@ public final class CalendarMatcher {
 
     private func matchedEvent(from event: EKEvent) -> MatchedEvent {
         let attendees = event.attendees?.compactMap { participant -> String? in
-            guard let url = participant.url else { return nil }
+            let url = participant.url
             return url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
         } ?? []
-        let organizer = event.organizer?.url?.absoluteString.replacingOccurrences(of: "mailto:", with: "")
+        let organizer = event.organizer.map { $0.url.absoluteString.replacingOccurrences(of: "mailto:", with: "") }
         let urls = Self.extractMeetingURLs(from: event)
         return MatchedEvent(title: event.title ?? "Untitled Meeting", attendees: attendees, organizer: organizer, calendarEventId: event.eventIdentifier, meetingUrl: urls.first)
     }

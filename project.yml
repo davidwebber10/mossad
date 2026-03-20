@@ -2,7 +2,7 @@ name: Mossad
 options:
   bundleIdPrefix: com.mossad
   deploymentTarget:
-    macOS: "13.0"
+    macOS: "26.0"
   xcodeVersion: "16.0"
   createIntermediateGroups: true
   groupSortPosition: top
@@ -18,14 +18,14 @@ targets:
   MossadShared:
     type: framework
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "26.0"
     sources:
       - MossadShared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mossad.shared
         SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         CODE_SIGN_IDENTITY: ""
         CODE_SIGNING_REQUIRED: "NO"
     dependencies:
@@ -36,7 +36,7 @@ targets:
   Mossad:
     type: application
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "26.0"
     sources:
       - Mossad
     info:
@@ -51,7 +51,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mossad.app
         SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         CODE_SIGN_IDENTITY: ""
         CODE_SIGNING_REQUIRED: "NO"
         CODE_SIGN_STYLE: Manual
@@ -69,7 +69,7 @@ targets:
   MossadService:
     type: bundle
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "26.0"
     sources:
       - MossadService
     info:
@@ -78,7 +78,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mossad.app.MossadService
         SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         CODE_SIGN_IDENTITY: ""
         CODE_SIGNING_REQUIRED: "NO"
         MACH_O_TYPE: mh_execute
@@ -91,14 +91,14 @@ targets:
   MossadTests:
     type: bundle.unit-test
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "26.0"
     sources:
       - MossadTests
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mossad.tests
         SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
     dependencies:
       - target: Mossad
       - target: MossadShared

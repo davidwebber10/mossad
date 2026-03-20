@@ -47,7 +47,7 @@ struct OnboardingView: View {
         VStack(spacing: 16) {
             Image(systemName: "mic.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(.accent)
+                .foregroundStyle(Color.accentColor)
             Text("Welcome to Mossad")
                 .font(.title)
                 .fontWeight(.bold)
