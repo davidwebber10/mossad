@@ -7,12 +7,20 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		067C4DC3A3AAEC5D83AE5CB7 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 3951CB861743C462D024AA3D /* GRDB */; };
+		0DBB61C64DC9D2A8E606DAC0 /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
 		2D279D8F4E3541B29E74B4BF /* MossadApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15292B890FEEFCB31AE3AD5E /* MossadApp.swift */; };
 		2F18020854CA23C4346FBCC3 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FE4E6F302ABFCE38D476A6C /* main.swift */; };
 		36D6B3C52207DC7770E8B58E /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3611AB543E255A4625DBC9 /* Conversation.swift */; };
 		39077B27F40EFF0CC9B8921A /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
 		49D4D59634DB3B2596D26172 /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
+		52C7BE53956F8E767E5FC10D /* ConversationSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD544FB5C0185640B5B7C70A /* ConversationSpeaker.swift */; };
+		66FBE158FDAE02069EE45181 /* DatabaseManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624F59415D0020D4F22F0D87 /* DatabaseManagerTests.swift */; };
 		6F02EBAE2EF9AF1B021D9739 /* MossadService.bundle in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 9AF9AD8B8E9356A45DA4B78F /* MossadService.bundle */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		74B27208D8BC7BF872C0C817 /* Speaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8C74205DDD385EEE8C5922 /* Speaker.swift */; };
+		7ABAC3FC49B7B271E4297E47 /* Utterance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D24F0150F3709FD860F80D2 /* Utterance.swift */; };
+		C781784541210454A3E3A553 /* MossadShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D24191C9ABC2E53D80E46C24 /* DatabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B913BF2AEC707AF5050F0A /* DatabaseManager.swift */; };
 		D3114D6334F8B28F4CA0B544 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BE1EE70FF9A93E820BB57D60 /* GRDB */; };
 		E1AD164BED3AAAEB516D7089 /* MossadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D90495786750C710F1612F /* MossadTests.swift */; };
 /* End PBXBuildFile section */
@@ -33,6 +41,13 @@
 			remoteInfo = Mossad;
 		};
 		2896199E50A3F98586FACEE8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0400D3243AA5F614A0312C34 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 840256E856B3F4BA55655F4D;
+			remoteInfo = MossadShared;
+		};
+		46C30CF7B154D48E2644AD34 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0400D3243AA5F614A0312C34 /* Project object */;
 			proxyType = 1;
@@ -60,23 +75,48 @@
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E63F79793A66E5B238338074 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				C781784541210454A3E3A553 /* MossadShared.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		01B913BF2AEC707AF5050F0A /* DatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseManager.swift; sourceTree = "<group>"; };
+		0D24F0150F3709FD860F80D2 /* Utterance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utterance.swift; sourceTree = "<group>"; };
 		15292B890FEEFCB31AE3AD5E /* MossadApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MossadApp.swift; sourceTree = "<group>"; };
 		3FD932A8E5C7B5EF53D51E56 /* MossadTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MossadTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4BD497CA81C8D6AA550950D5 /* Mossad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mossad.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C3611AB543E255A4625DBC9 /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
+		624F59415D0020D4F22F0D87 /* DatabaseManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseManagerTests.swift; sourceTree = "<group>"; };
 		7DA14CBC649C1A1921435C3F /* MossadShared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MossadShared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7FE4E6F302ABFCE38D476A6C /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		9AF9AD8B8E9356A45DA4B78F /* MossadService.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MossadService.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6D90495786750C710F1612F /* MossadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MossadTests.swift; sourceTree = "<group>"; };
+		CD544FB5C0185640B5B7C70A /* ConversationSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSpeaker.swift; sourceTree = "<group>"; };
+		DF8C74205DDD385EEE8C5922 /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
 		E30C9D2178B64B1BA8FB185F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F91FF5C7DAD3B234E5AC63C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		FCEE75F7B6FDDC352E465FAE /* Mossad.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Mossad.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0284CEB83B289E79E9ABCD71 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0DBB61C64DC9D2A8E606DAC0 /* MossadShared.framework in Frameworks */,
+				067C4DC3A3AAEC5D83AE5CB7 /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2ECBBAE15B4BF9F512FC73B3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -107,6 +147,7 @@
 		03BE5320E4DF278952DE6810 /* MossadShared */ = {
 			isa = PBXGroup;
 			children = (
+				C91BBF5F4077EE71C5CC86D0 /* Database */,
 				CB761EDEAB74F469D3320350 /* Models */,
 			);
 			path = MossadShared;
@@ -144,10 +185,21 @@
 			path = Mossad;
 			sourceTree = "<group>";
 		};
+		C91BBF5F4077EE71C5CC86D0 /* Database */ = {
+			isa = PBXGroup;
+			children = (
+				01B913BF2AEC707AF5050F0A /* DatabaseManager.swift */,
+			);
+			path = Database;
+			sourceTree = "<group>";
+		};
 		CB761EDEAB74F469D3320350 /* Models */ = {
 			isa = PBXGroup;
 			children = (
 				4C3611AB543E255A4625DBC9 /* Conversation.swift */,
+				CD544FB5C0185640B5B7C70A /* ConversationSpeaker.swift */,
+				DF8C74205DDD385EEE8C5922 /* Speaker.swift */,
+				0D24F0150F3709FD860F80D2 /* Utterance.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -164,6 +216,7 @@
 		FDCD53462AF23327EB8EB9EB /* MossadTests */ = {
 			isa = PBXGroup;
 			children = (
+				624F59415D0020D4F22F0D87 /* DatabaseManagerTests.swift */,
 				C6D90495786750C710F1612F /* MossadTests.swift */,
 			);
 			path = MossadTests;
@@ -236,14 +289,18 @@
 			buildConfigurationList = B0D45A0D194E3E534B87D71D /* Build configuration list for PBXNativeTarget "MossadTests" */;
 			buildPhases = (
 				A0AE489EFF8E2EA72D3867A6 /* Sources */,
+				0284CEB83B289E79E9ABCD71 /* Frameworks */,
+				E63F79793A66E5B238338074 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				F131F0496AB667D998EB90E4 /* PBXTargetDependency */,
+				0480FA6EB5AF1C1FAB53EE1A /* PBXTargetDependency */,
 			);
 			name = MossadTests;
 			packageProductDependencies = (
+				3951CB861743C462D024AA3D /* GRDB */,
 			);
 			productName = MossadTests;
 			productReference = 3FD932A8E5C7B5EF53D51E56 /* MossadTests.xctest */;
@@ -294,6 +351,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				36D6B3C52207DC7770E8B58E /* Conversation.swift in Sources */,
+				52C7BE53956F8E767E5FC10D /* ConversationSpeaker.swift in Sources */,
+				D24191C9ABC2E53D80E46C24 /* DatabaseManager.swift in Sources */,
+				74B27208D8BC7BF872C0C817 /* Speaker.swift in Sources */,
+				7ABAC3FC49B7B271E4297E47 /* Utterance.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -301,6 +362,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				66FBE158FDAE02069EE45181 /* DatabaseManagerTests.swift in Sources */,
 				E1AD164BED3AAAEB516D7089 /* MossadTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -324,6 +386,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		0480FA6EB5AF1C1FAB53EE1A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 840256E856B3F4BA55655F4D /* MossadShared */;
+			targetProxy = 46C30CF7B154D48E2644AD34 /* PBXContainerItemProxy */;
+		};
 		650FE6CAC0C854CA5232B1AD /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 840256E856B3F4BA55655F4D /* MossadShared */;
@@ -696,6 +763,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		3951CB861743C462D024AA3D /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6F4B8CF95140E1AA56A6545E /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
 		BE1EE70FF9A93E820BB57D60 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6F4B8CF95140E1AA56A6545E /* XCRemoteSwiftPackageReference "GRDB.swift" */;

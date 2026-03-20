@@ -101,3 +101,6 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "13.0"
     dependencies:
       - target: Mossad
+      - target: MossadShared
+      - package: GRDB
+        product: GRDB
