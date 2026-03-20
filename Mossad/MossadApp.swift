@@ -26,8 +26,7 @@ struct MossadApp: App {
         }
 
         Settings {
-            Text("Settings — coming in a later task")
-                .environmentObject(appState)
+            SettingsView()
         }
     }
 }
