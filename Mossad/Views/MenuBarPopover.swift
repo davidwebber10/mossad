@@ -176,13 +176,17 @@ struct MenuBarPopover: View {
 
     private func openConversationBrowser() {
         NSApp.activate(ignoringOtherApps: true)
-        // Window opening handled by MossadApp scene
-        NotificationCenter.default.post(name: .openConversationBrowser, object: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NotificationCenter.default.post(name: .openConversationBrowser, object: nil)
+        }
     }
 
     private func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
-        NotificationCenter.default.post(name: .openSettings, object: nil)
+        // Delay slightly so the popover can dismiss first
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
     }
 }
 
