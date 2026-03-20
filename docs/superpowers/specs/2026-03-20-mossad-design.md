@@ -81,9 +81,17 @@ The user's microphone is captured via AVAudioEngine:
 1. Install a tap on the input node
 2. Receive PCM audio buffers
 
-### Audio Mixing
+### Audio Strategy: Dual-Stream with Mic Correlation
 
-The two streams (app audio + mic audio) are mixed into a single PCM stream for transcription. The service maintains awareness of which stream each audio segment came from — this is how the user ("me") is always auto-identified as a speaker.
+Rather than mixing audio into a single stream, the app uses a dual-stream approach to reliably identify the user's utterances:
+
+1. **App audio only** is sent to AssemblyAI for transcription and diarization. This stream contains what everyone else is saying (remote participants' voices as played through the meeting app).
+2. **Mic audio** is sent to a separate AssemblyAI real-time session to transcribe what the user says.
+3. The two transcript streams are merged locally by timestamp. All utterances from the mic session are attributed to the "me" speaker. All utterances from the app audio session are attributed to other speakers (with AssemblyAI's diarization labels distinguishing between them).
+
+This avoids the problem of trying to correlate AssemblyAI's arbitrary speaker labels back to audio source. The user's voice never enters the app audio stream (it comes from the mic), so there is clean separation.
+
+**Cost note**: this uses two concurrent AssemblyAI sessions per call. At AssemblyAI's real-time pricing, a 1-hour call costs approximately $1.44 total (two streams × $0.012/min × 60 min).
 
 ### Audio Format
 
@@ -305,7 +313,7 @@ The app should guide the user through granting these permissions on first launch
 - **Audio Capture**: ScreenCaptureKit (macOS 13+), AVAudioEngine
 - **Calendar**: EventKit
 - **Networking**: URLSessionWebSocketTask (for AssemblyAI WebSocket)
-- **Database**: SQLite via swift-sqlite or GRDB.swift
+- **Database**: SQLite via GRDB.swift (mature, well-maintained, supports FTS5, Swift-native)
 - **Keychain**: Security framework
 - **Process Monitoring**: NSWorkspace, NSRunningApplication
 - **Minimum macOS Version**: 13.0 (Ventura) — required for ScreenCaptureKit audio capture
