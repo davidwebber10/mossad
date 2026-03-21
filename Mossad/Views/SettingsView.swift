@@ -3,6 +3,8 @@ import SwiftUI
 import MossadShared
 import CoreAudio
 import EventKit
+import AVFoundation
+import ScreenCaptureKit
 
 struct SettingsView: View {
     @State private var apiKey: String = ""
@@ -13,6 +15,9 @@ struct SettingsView: View {
     @State private var selectedCalendarId: String = "all"
     @State private var calendars: [CalendarInfo] = []
     @State private var showSavedMessage = false
+    @State private var micPermission: Bool = false
+    @State private var calendarPermission: Bool = false
+    @State private var screenPermission: Bool = false
 
     var body: some View {
         Form {
@@ -62,6 +67,33 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Permissions") {
+                PermissionRow(
+                    title: "Microphone",
+                    description: "Capture your voice during calls",
+                    systemImage: "mic.fill",
+                    granted: micPermission
+                ) {
+                    requestMicPermission()
+                }
+                PermissionRow(
+                    title: "Calendar",
+                    description: "Match meetings with calendar events",
+                    systemImage: "calendar",
+                    granted: calendarPermission
+                ) {
+                    requestCalendarPermission()
+                }
+                PermissionRow(
+                    title: "Screen Recording",
+                    description: "Capture meeting app audio",
+                    systemImage: "rectangle.on.rectangle",
+                    granted: screenPermission
+                ) {
+                    requestScreenPermission()
+                }
+            }
+
             Section("General") {
                 Toggle("Launch at Login", isOn: $launchAtLogin)
             }
@@ -80,7 +112,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 450, height: 450)
+        .frame(width: 450, height: 580)
         .task {
             apiKey = (try? KeychainManager.retrieve(account: "assemblyai-api-key")) ?? ""
             userName = UserDefaults.standard.string(forKey: "userName") ?? ""
@@ -89,6 +121,7 @@ struct SettingsView: View {
             audioDevices = AudioDeviceInfo.listInputDevices()
             selectedCalendarId = UserDefaults.standard.string(forKey: "calendarId") ?? "all"
             calendars = CalendarInfo.listCalendars()
+            checkPermissions()
         }
     }
 
@@ -106,6 +139,85 @@ struct SettingsView: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation { showSavedMessage = false }
+        }
+    }
+
+    private func checkPermissions() {
+        // Mic
+        micPermission = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+
+        // Calendar
+        let ekStatus = EKEventStore.authorizationStatus(for: .event)
+        calendarPermission = ekStatus == .fullAccess || ekStatus == .authorized
+
+        // Screen Recording — check by attempting to get shareable content
+        Task {
+            do {
+                let _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+                await MainActor.run { screenPermission = true }
+            } catch {
+                await MainActor.run { screenPermission = false }
+            }
+        }
+    }
+
+    private func requestMicPermission() {
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+            DispatchQueue.main.async {
+                micPermission = granted
+            }
+        }
+    }
+
+    private func requestCalendarPermission() {
+        let store = EKEventStore()
+        Task {
+            let granted = (try? await store.requestFullAccessToEvents()) ?? false
+            await MainActor.run {
+                calendarPermission = granted
+                if granted {
+                    calendars = CalendarInfo.listCalendars()
+                }
+            }
+        }
+    }
+
+    private func requestScreenPermission() {
+        // macOS can't programmatically prompt — open System Settings
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+struct PermissionRow: View {
+    let title: String
+    let description: String
+    let systemImage: String
+    let granted: Bool
+    let action: () -> Void
+
+    var body: some View {
+        HStack {
+            Image(systemName: systemImage)
+                .foregroundStyle(granted ? .green : .secondary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if granted {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            } else {
+                Button("Grant") { action() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
         }
     }
 }
