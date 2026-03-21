@@ -60,7 +60,7 @@ struct MenuBarPopover: View {
                 Button {
                     NSApplication.shared.terminate(nil)
                 } label: {
-                    Text("Quit Mossad")
+                    Label("Quit Mossad", systemImage: "xmark.circle")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
