@@ -34,39 +34,23 @@ struct MenuBarPopover: View {
             Divider()
 
             // Actions
-            VStack(alignment: .leading, spacing: 0) {
-                Button {
+            VStack(alignment: .leading, spacing: 2) {
+                PopoverButton("Open Conversations...", systemImage: "list.bullet.rectangle") {
                     openConversationBrowser()
-                } label: {
-                    Label("Open Conversations...", systemImage: "list.bullet.rectangle")
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal)
-                .padding(.vertical, 6)
-
-                Button {
+                PopoverButton("Settings...", systemImage: "gear") {
                     openSettings()
-                } label: {
-                    Label("Settings...", systemImage: "gear")
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal)
-                .padding(.vertical, 6)
 
                 Divider()
+                    .padding(.vertical, 4)
 
-                Button {
+                PopoverButton("Quit Mossad", systemImage: "xmark.circle") {
                     NSApplication.shared.terminate(nil)
-                } label: {
-                    Label("Quit Mossad", systemImage: "xmark.circle")
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal)
-                .padding(.vertical, 6)
             }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
         }
         .frame(width: 280)
     }
@@ -182,6 +166,36 @@ struct MenuBarPopover: View {
     private func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "settings")
+    }
+}
+
+struct PopoverButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+    @State private var isHovered = false
+
+    init(_ title: String, systemImage: String, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isHovered ? Color.primary.opacity(0.1) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
 
