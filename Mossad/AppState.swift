@@ -4,6 +4,19 @@ import Foundation
 import MossadShared
 import SwiftUI
 
+public enum AttendeeStatus: String {
+    case accepted
+    case declined
+    case tentative
+    case pending
+}
+
+public struct Attendee {
+    public let name: String
+    public let email: String
+    public let status: AttendeeStatus
+}
+
 public struct UpcomingEvent: Identifiable {
     public let id: String
     public let title: String
@@ -14,7 +27,7 @@ public struct UpcomingEvent: Identifiable {
     public let location: String?
     public let notes: String?
     public let organizer: String?
-    public let attendees: [String]
+    public let attendees: [Attendee]
     public let calendarTitle: String?
     public let calendarColor: CGColor?
 }
@@ -104,13 +117,17 @@ public final class AppState: NSObject, ObservableObject {
                     }
                 }
 
-                let attendees = event.attendees?.compactMap { participant -> String? in
-                    let url = participant.url
-                    let email = url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
-                    if let name = participant.name, !name.isEmpty {
-                        return "\(name) <\(email)>"
+                let attendees: [Attendee] = event.attendees?.map { participant in
+                    let email = participant.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
+                    let name = participant.name ?? email
+                    let status: AttendeeStatus
+                    switch participant.participantStatus {
+                    case .accepted: status = .accepted
+                    case .declined: status = .declined
+                    case .tentative: status = .tentative
+                    default: status = .pending
                     }
-                    return email
+                    return Attendee(name: name, email: email, status: status)
                 } ?? []
 
                 let organizer = event.organizer.map { org -> String in

@@ -59,6 +59,9 @@ struct MenuBarPopover: View {
 
             // Actions
             VStack(alignment: .leading, spacing: 2) {
+                PopoverButton("Open Upcoming...", systemImage: "calendar") {
+                    openUpcoming()
+                }
                 PopoverButton("Open Conversations...", systemImage: "list.bullet.rectangle") {
                     openConversationBrowser()
                 }
@@ -180,6 +183,11 @@ struct MenuBarPopover: View {
         case "teams": return "person.2.fill"
         default: return "phone.fill"
         }
+    }
+
+    private func openUpcoming() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "browser")
     }
 
     private func openConversationBrowser() {

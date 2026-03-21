@@ -92,9 +92,9 @@ struct EventDetailSheet: View {
                     // Attendees
                     if !event.attendees.isEmpty {
                         DetailSection(icon: "person.2.fill", title: "Attendees (\(event.attendees.count))") {
-                            FlowLayout(spacing: 6) {
-                                ForEach(event.attendees, id: \.self) { attendee in
-                                    PersonPill(text: attendee)
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(event.attendees, id: \.email) { attendee in
+                                    AttendeeRow(attendee: attendee)
                                 }
                             }
                         }
@@ -189,95 +189,65 @@ struct DetailSection<Content: View>: View {
     }
 }
 
-struct PersonPill: View {
-    let text: String
-
-    private var name: String {
-        // Extract name from "Name <email>" format
-        if let angleBracket = text.firstIndex(of: "<") {
-            let n = text[text.startIndex..<angleBracket].trimmingCharacters(in: .whitespaces)
-            return n.isEmpty ? email : n
-        }
-        return text
-    }
-
-    private var email: String {
-        if let start = text.firstIndex(of: "<"),
-           let end = text.firstIndex(of: ">") {
-            return String(text[text.index(after: start)..<end])
-        }
-        return text
-    }
-
-    private var initials: String {
-        let parts = name.split(separator: " ")
-        if parts.count >= 2 {
-            return "\(parts[0].prefix(1))\(parts[1].prefix(1))".uppercased()
-        }
-        return String(name.prefix(2)).uppercased()
-    }
+struct AttendeeRow: View {
+    let attendee: Attendee
 
     var body: some View {
-        HStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .fill(Color(hue: Double(abs(name.hashValue) % 360) / 360.0, saturation: 0.4, brightness: 0.7))
-                    .frame(width: 24, height: 24)
-                Text(initials)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white)
+        HStack(spacing: 10) {
+            statusIcon
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(attendee.name)
+                    .font(.callout)
+                if attendee.email != attendee.name {
+                    Text(attendee.email)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            Text(name)
+
+            Spacer()
+
+            Text(statusLabel)
                 .font(.caption)
-                .lineLimit(1)
-        }
-        .padding(.trailing, 8)
-        .padding(.vertical, 4)
-        .padding(.leading, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.primary.opacity(0.06))
-        )
-        .help(email)
-    }
-}
-
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = layout(proposal: proposal, subviews: subviews)
-        return result.size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = layout(proposal: proposal, subviews: subviews)
-        for (index, position) in result.positions.enumerated() {
-            subviews[index].place(at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y), proposal: .unspecified)
+                .foregroundStyle(statusColor)
         }
     }
 
-    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
-        let maxWidth = proposal.width ?? .infinity
-        var positions: [CGPoint] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var maxX: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth && x > 0 {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            positions.append(CGPoint(x: x, y: y))
-            rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-            maxX = max(maxX, x)
+    @ViewBuilder
+    private var statusIcon: some View {
+        switch attendee.status {
+        case .accepted:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .declined:
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.red)
+        case .tentative:
+            Image(systemName: "questionmark.circle.fill")
+                .foregroundStyle(.orange)
+        case .pending:
+            Image(systemName: "circle")
+                .foregroundStyle(.secondary)
         }
+    }
 
-        return (CGSize(width: maxX, height: y + rowHeight), positions)
+    private var statusLabel: String {
+        switch attendee.status {
+        case .accepted: return "Accepted"
+        case .declined: return "Declined"
+        case .tentative: return "Maybe"
+        case .pending: return "No response"
+        }
+    }
+
+    private var statusColor: Color {
+        switch attendee.status {
+        case .accepted: return .green
+        case .declined: return .red
+        case .tentative: return .orange
+        case .pending: return .secondary
+        }
     }
 }
