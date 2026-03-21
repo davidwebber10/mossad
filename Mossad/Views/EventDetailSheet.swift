@@ -192,19 +192,22 @@ struct DetailSection<Content: View>: View {
 struct AttendeeRow: View {
     let attendee: Attendee
 
+    private var hasEmail: Bool {
+        attendee.email != attendee.name && !attendee.email.isEmpty
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             statusIcon
                 .frame(width: 16)
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(attendee.name)
                     .font(.callout)
-                Text(attendee.email != attendee.name ? attendee.email : " ")
+                Text(hasEmail ? attendee.email : "")
                     .font(.caption)
-                    .foregroundColor(attendee.email != attendee.name ? .secondary : .clear)
+                    .foregroundStyle(.secondary)
             }
-            .frame(minHeight: 34, alignment: .leading)
 
             Spacer()
 
@@ -212,6 +215,7 @@ struct AttendeeRow: View {
                 .font(.caption)
                 .foregroundStyle(statusColor)
         }
+        .frame(height: 40)
     }
 
     @ViewBuilder
