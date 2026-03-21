@@ -27,6 +27,7 @@
 		49D4D59634DB3B2596D26172 /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
 		52C7BE53956F8E767E5FC10D /* ConversationSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD544FB5C0185640B5B7C70A /* ConversationSpeaker.swift */; };
 		66FBE158FDAE02069EE45181 /* DatabaseManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624F59415D0020D4F22F0D87 /* DatabaseManagerTests.swift */; };
+		6943E5D1E00A81F9A9AA0BF0 /* EventDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D236A3F62204C909F7701023 /* EventDetailSheet.swift */; };
 		6F02EBAE2EF9AF1B021D9739 /* MossadService.bundle in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 9AF9AD8B8E9356A45DA4B78F /* MossadService.bundle */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		738AEE5244A934E898F26122 /* SpeakerLabelingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C5165076A10576402DB4DF /* SpeakerLabelingSheet.swift */; };
 		74B27208D8BC7BF872C0C817 /* Speaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8C74205DDD385EEE8C5922 /* Speaker.swift */; };
@@ -165,6 +166,7 @@
 		9AF9AD8B8E9356A45DA4B78F /* MossadService.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MossadService.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6D90495786750C710F1612F /* MossadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MossadTests.swift; sourceTree = "<group>"; };
 		CD544FB5C0185640B5B7C70A /* ConversationSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSpeaker.swift; sourceTree = "<group>"; };
+		D236A3F62204C909F7701023 /* EventDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailSheet.swift; sourceTree = "<group>"; };
 		D922E64DE2F3851372EB24C6 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		DD3F48C69DCBD84FA1BEA593 /* UpcomingEventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpcomingEventsView.swift; sourceTree = "<group>"; };
 		DF8C74205DDD385EEE8C5922 /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
@@ -243,6 +245,7 @@
 			children = (
 				81DB6FB65E4C0EBBD0BDE6D2 /* ConversationBrowserWindow.swift */,
 				F48C5017133D9DAE4C84AEDC /* ConversationListView.swift */,
+				D236A3F62204C909F7701023 /* EventDetailSheet.swift */,
 				2EEC6BD96CD56F4FFAEA8DF5 /* MenuBarPopover.swift */,
 				E78A62369D673F43B2EED6A7 /* OnboardingView.swift */,
 				84908F4E327C0B94635348CA /* SearchResultsView.swift */,
@@ -526,6 +529,7 @@
 				D320E46E270486590E71E24D /* AppState.swift in Sources */,
 				9086D81C3B0DAA60629F7D61 /* ConversationBrowserWindow.swift in Sources */,
 				035CA066A4B9515F26396278 /* ConversationListView.swift in Sources */,
+				6943E5D1E00A81F9A9AA0BF0 /* EventDetailSheet.swift in Sources */,
 				05174560A2D27FC6093C11A0 /* MenuBarPopover.swift in Sources */,
 				2D279D8F4E3541B29E74B4BF /* MossadApp.swift in Sources */,
 				DEE4BB9686E77181356EC872 /* OnboardingView.swift in Sources */,

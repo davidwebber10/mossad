@@ -11,6 +11,12 @@ public struct UpcomingEvent: Identifiable {
     public let endDate: Date
     public let meetingUrl: String?
     public let isAllDay: Bool
+    public let location: String?
+    public let notes: String?
+    public let organizer: String?
+    public let attendees: [String]
+    public let calendarTitle: String?
+    public let calendarColor: CGColor?
 }
 
 @MainActor
@@ -98,13 +104,36 @@ public final class AppState: NSObject, ObservableObject {
                     }
                 }
 
+                let attendees = event.attendees?.compactMap { participant -> String? in
+                    let url = participant.url
+                    let email = url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
+                    if let name = participant.name, !name.isEmpty {
+                        return "\(name) <\(email)>"
+                    }
+                    return email
+                } ?? []
+
+                let organizer = event.organizer.map { org -> String in
+                    let email = org.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
+                    if let name = org.name, !name.isEmpty {
+                        return "\(name) <\(email)>"
+                    }
+                    return email
+                }
+
                 return UpcomingEvent(
                     id: event.eventIdentifier,
                     title: event.title ?? "Untitled",
                     startDate: event.startDate,
                     endDate: event.endDate,
                     meetingUrl: meetingUrl,
-                    isAllDay: event.isAllDay
+                    isAllDay: event.isAllDay,
+                    location: event.location,
+                    notes: event.notes,
+                    organizer: organizer,
+                    attendees: attendees,
+                    calendarTitle: event.calendar.title,
+                    calendarColor: event.calendar.cgColor
                 )
             }
     }

@@ -4,6 +4,7 @@ import MossadShared
 
 struct UpcomingEventsView: View {
     @EnvironmentObject var appState: AppState
+    @State private var selectedEvent: UpcomingEvent?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -24,11 +25,23 @@ struct UpcomingEventsView: View {
                                 ) {
                                     appState.toggleEventRecording(event.id)
                                 }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    selectedEvent = event
+                                }
                             }
                         }
                     }
                 }
                 .listStyle(.inset)
+            }
+        }
+        .sheet(item: $selectedEvent) { event in
+            EventDetailSheet(
+                event: event,
+                enabled: appState.isEventEnabled(event.id)
+            ) {
+                appState.toggleEventRecording(event.id)
             }
         }
         .navigationTitle("Upcoming")
