@@ -153,6 +153,20 @@ public final class AppState: NSObject, ObservableObject {
                     calendarColor: event.calendar.cgColor
                 )
             }
+
+        // Auto-skip events matching skip patterns (only for events not already manually toggled)
+        let skipPatterns = UserDefaults.standard.stringArray(forKey: "skipPatterns") ?? []
+        let manuallyToggled = UserDefaults.standard.stringArray(forKey: "manuallyToggledEventIds") ?? []
+        for event in upcomingEvents {
+            if !manuallyToggled.contains(event.id) {
+                let titleLower = event.title.lowercased()
+                let shouldSkip = skipPatterns.contains { titleLower.contains($0.lowercased()) }
+                if shouldSkip {
+                    disabledEventIds.insert(event.id)
+                }
+            }
+        }
+        UserDefaults.standard.set(Array(disabledEventIds), forKey: "disabledEventIds")
     }
 
     func toggleEventRecording(_ eventId: String) {
@@ -162,6 +176,12 @@ public final class AppState: NSObject, ObservableObject {
             disabledEventIds.insert(eventId)
         }
         UserDefaults.standard.set(Array(disabledEventIds), forKey: "disabledEventIds")
+        // Track that this event was manually toggled so auto-skip doesn't override
+        var toggled = UserDefaults.standard.stringArray(forKey: "manuallyToggledEventIds") ?? []
+        if !toggled.contains(eventId) {
+            toggled.append(eventId)
+            UserDefaults.standard.set(toggled, forKey: "manuallyToggledEventIds")
+        }
     }
 
     func isEventEnabled(_ eventId: String) -> Bool {

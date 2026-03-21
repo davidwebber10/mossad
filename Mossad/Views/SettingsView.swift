@@ -18,6 +18,8 @@ struct SettingsView: View {
     @State private var micPermission: Bool = false
     @State private var calendarPermission: Bool = false
     @State private var screenPermission: Bool = false
+    @State private var skipPatterns: [String] = []
+    @State private var newSkipPattern: String = ""
 
     var body: some View {
         Form {
@@ -67,6 +69,34 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Auto-Skip Events") {
+                Text("Events with titles containing these words will be unchecked by default.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                ForEach(skipPatterns, id: \.self) { pattern in
+                    HStack {
+                        Text(pattern)
+                        Spacer()
+                        Button {
+                            skipPatterns.removeAll { $0 == pattern }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                HStack {
+                    TextField("e.g. Busy, OOO, Focus Time...", text: $newSkipPattern)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { addSkipPattern() }
+                    Button("Add") { addSkipPattern() }
+                        .disabled(newSkipPattern.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+
             Section("Permissions") {
                 PermissionRow(
                     title: "Microphone",
@@ -112,7 +142,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 450, height: 580)
+        .frame(width: 450, height: 680)
         .task {
             apiKey = (try? KeychainManager.retrieve(account: "assemblyai-api-key")) ?? ""
             userName = UserDefaults.standard.string(forKey: "userName") ?? ""
@@ -121,6 +151,7 @@ struct SettingsView: View {
             audioDevices = AudioDeviceInfo.listInputDevices()
             selectedCalendarId = UserDefaults.standard.string(forKey: "calendarId") ?? "all"
             calendars = CalendarInfo.listCalendars()
+            skipPatterns = UserDefaults.standard.stringArray(forKey: "skipPatterns") ?? ["Busy", "Out of Office", "OOO", "Focus Time", "No Meeting Block"]
             checkPermissions()
         }
     }
@@ -133,6 +164,7 @@ struct SettingsView: View {
         UserDefaults.standard.set(launchAtLogin, forKey: "launchAtLogin")
         UserDefaults.standard.set(selectedAudioDevice, forKey: "audioDeviceId")
         UserDefaults.standard.set(selectedCalendarId, forKey: "calendarId")
+        UserDefaults.standard.set(skipPatterns, forKey: "skipPatterns")
 
         withAnimation {
             showSavedMessage = true
@@ -140,6 +172,13 @@ struct SettingsView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation { showSavedMessage = false }
         }
+    }
+
+    private func addSkipPattern() {
+        let pattern = newSkipPattern.trimmingCharacters(in: .whitespaces)
+        guard !pattern.isEmpty, !skipPatterns.contains(pattern) else { return }
+        skipPatterns.append(pattern)
+        newSkipPattern = ""
     }
 
     private func checkPermissions() {
