@@ -2,6 +2,7 @@
 import SwiftUI
 import MossadShared
 import CoreAudio
+import EventKit
 
 struct SettingsView: View {
     @State private var apiKey: String = ""
@@ -9,6 +10,8 @@ struct SettingsView: View {
     @State private var launchAtLogin: Bool = false
     @State private var selectedAudioDevice: String = "default"
     @State private var audioDevices: [AudioDeviceInfo] = []
+    @State private var selectedCalendarId: String = "all"
+    @State private var calendars: [CalendarInfo] = []
     @State private var showSavedMessage = false
 
     var body: some View {
@@ -41,6 +44,24 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Calendar") {
+                Picker("Calendar", selection: $selectedCalendarId) {
+                    Text("All Calendars").tag("all")
+                    ForEach(calendars, id: \.id) { cal in
+                        HStack {
+                            Circle()
+                                .fill(cal.color)
+                                .frame(width: 8, height: 8)
+                            Text(cal.title)
+                        }
+                        .tag(cal.id)
+                    }
+                }
+                Text("Which calendar to use for matching meetings. Select a specific calendar to avoid matching events from unrelated calendars.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("General") {
                 Toggle("Launch at Login", isOn: $launchAtLogin)
             }
@@ -59,13 +80,15 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 450, height: 320)
+        .frame(width: 450, height: 450)
         .task {
             apiKey = (try? KeychainManager.retrieve(account: "assemblyai-api-key")) ?? ""
             userName = UserDefaults.standard.string(forKey: "userName") ?? ""
             launchAtLogin = UserDefaults.standard.bool(forKey: "launchAtLogin")
             selectedAudioDevice = UserDefaults.standard.string(forKey: "audioDeviceId") ?? "default"
             audioDevices = AudioDeviceInfo.listInputDevices()
+            selectedCalendarId = UserDefaults.standard.string(forKey: "calendarId") ?? "all"
+            calendars = CalendarInfo.listCalendars()
         }
     }
 
@@ -76,6 +99,7 @@ struct SettingsView: View {
         UserDefaults.standard.set(userName, forKey: "userName")
         UserDefaults.standard.set(launchAtLogin, forKey: "launchAtLogin")
         UserDefaults.standard.set(selectedAudioDevice, forKey: "audioDeviceId")
+        UserDefaults.standard.set(selectedCalendarId, forKey: "calendarId")
 
         withAnimation {
             showSavedMessage = true
@@ -83,6 +107,25 @@ struct SettingsView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation { showSavedMessage = false }
         }
+    }
+}
+
+struct CalendarInfo: Identifiable {
+    let id: String
+    let title: String
+    let color: Color
+
+    static func listCalendars() -> [CalendarInfo] {
+        let store = EKEventStore()
+        let calendars = store.calendars(for: .event)
+        return calendars.map { cal in
+            CalendarInfo(
+                id: cal.calendarIdentifier,
+                title: cal.title,
+                color: Color(cgColor: cal.cgColor)
+            )
+        }
+        .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
 }
 
