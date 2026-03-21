@@ -42,8 +42,18 @@ public final class AppState: NSObject, ObservableObject {
         super.init()
         setupXPCConnection()
         refreshUpcomingEvents()
-        // Refresh every 5 minutes
+        // Refresh every 5 minutes as a fallback
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshUpcomingEvents()
+            }
+        }
+        // Refresh immediately when calendar changes
+        NotificationCenter.default.addObserver(
+            forName: .EKEventStoreChanged,
+            object: eventStore,
+            queue: .main
+        ) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshUpcomingEvents()
             }
