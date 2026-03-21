@@ -204,10 +204,13 @@ struct AttendeeRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(attendee.name)
                     .font(.callout)
-                Text(hasEmail ? attendee.email : "")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if hasEmail {
+                    Text(attendee.email)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .frame(maxHeight: .infinity, alignment: .center)
 
             Spacer()
 
