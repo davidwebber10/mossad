@@ -69,7 +69,6 @@ struct MenuBarPopover: View {
             }
         }
         .frame(width: 280)
-        .glassEffect(.regular.tint(.clear))
     }
 
     @ViewBuilder

@@ -86,7 +86,6 @@ struct TranscriptView: View {
             .foregroundStyle(.secondary)
         }
         .padding()
-        .glassEffect(.regular.tint(.clear))
     }
 
     private func colorForSpeaker(_ speaker: Speaker) -> Color {

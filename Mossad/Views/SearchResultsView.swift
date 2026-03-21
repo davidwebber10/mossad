@@ -59,7 +59,6 @@ struct SearchResultRow: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(.background.opacity(0.6))
         }
-        .glassEffect(.regular.tint(.clear))
     }
 
     private func formatTimestamp(_ seconds: Double) -> String {

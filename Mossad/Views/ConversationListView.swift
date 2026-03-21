@@ -13,27 +13,7 @@ struct ConversationListView: View {
     @State private var isSearching = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Search bar
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Search conversations...", text: $searchText)
-                    .textFieldStyle(.plain)
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(10)
-            .glassEffect(.regular.tint(.clear))
-
-            // Conversation list or search results
+        Group {
             if isSearching && !searchResults.isEmpty {
                 SearchResultsView(
                     results: searchResults,
@@ -41,27 +21,20 @@ struct ConversationListView: View {
                     scrollToUtteranceId: $scrollToUtteranceId
                 )
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(conversations) { conversation in
-                            ConversationRow(
-                                conversation: conversation,
-                                isSelected: selectedConversationId == conversation.id,
-                                speakerCount: speakerCounts[conversation.id] ?? 0
-                            )
-                            .onTapGesture {
-                                withAnimation(.spring(duration: 0.3)) {
-                                    selectedConversationId = conversation.id
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.top, 4)
+                List(conversations, selection: $selectedConversationId) { conversation in
+                    ConversationRow(
+                        conversation: conversation,
+                        isSelected: selectedConversationId == conversation.id,
+                        speakerCount: speakerCounts[conversation.id] ?? 0
+                    )
+                    .tag(conversation.id)
                 }
+                .listStyle(.sidebar)
             }
         }
-        .frame(minWidth: 280, maxWidth: 320)
+        .navigationTitle("Conversations")
+        .searchable(text: $searchText, prompt: "Search conversations...")
+        .frame(minWidth: 250)
         .task {
             loadConversations()
         }
