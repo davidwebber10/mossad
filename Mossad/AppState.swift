@@ -52,7 +52,7 @@ public final class AppState: NSObject, ObservableObject {
 
     func refreshUpcomingEvents() {
         let now = Date()
-        let endOfDay = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now.addingTimeInterval(86400)
+        let endOfSearch = now.addingTimeInterval(60 * 60 * 24 * 30) // 30 days out
 
         let selectedCalendarId = UserDefaults.standard.string(forKey: "calendarId")
         let calendars: [EKCalendar]?
@@ -63,7 +63,7 @@ public final class AppState: NSObject, ObservableObject {
             calendars = nil
         }
 
-        let predicate = eventStore.predicateForEvents(withStart: now, end: endOfDay, calendars: calendars)
+        let predicate = eventStore.predicateForEvents(withStart: now, end: endOfSearch, calendars: calendars)
         let events = eventStore.events(matching: predicate)
 
         upcomingEvents = events

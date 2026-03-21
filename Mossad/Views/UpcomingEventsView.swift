@@ -11,11 +11,11 @@ struct UpcomingEventsView: View {
                 ContentUnavailableView(
                     "No Upcoming Meetings",
                     systemImage: "calendar",
-                    description: Text("No meetings scheduled for the rest of today, or calendar access hasn't been granted.")
+                    description: Text("No meetings found in the next 30 days, or calendar access hasn't been granted.")
                 )
             } else {
                 List {
-                    ForEach(groupedByTime, id: \.key) { label, events in
+                    ForEach(groupedByDay, id: \.key) { label, events in
                         Section(label) {
                             ForEach(events) { event in
                                 EventRow(
@@ -44,36 +44,40 @@ struct UpcomingEventsView: View {
         }
     }
 
-    private var groupedByTime: [(key: String, value: [UpcomingEvent])] {
+    private var groupedByDay: [(key: String, value: [UpcomingEvent])] {
         let calendar = Calendar.current
         let now = Date()
-        var groups: [String: [UpcomingEvent]] = [:]
+        var groups: [(key: String, date: Date, value: [UpcomingEvent])] = []
+        var seen: [String: Int] = [:]
 
         for event in appState.upcomingEvents {
             let label: String
-            if event.startDate <= now && event.endDate >= now {
-                label = "Now"
-            } else if calendar.isDate(event.startDate, equalTo: now, toGranularity: .hour) {
-                label = "This Hour"
+            let groupDate: Date
+
+            if calendar.isDateInToday(event.startDate) {
+                label = "Today"
+                groupDate = calendar.startOfDay(for: now)
+            } else if calendar.isDateInTomorrow(event.startDate) {
+                label = "Tomorrow"
+                groupDate = calendar.startOfDay(for: now.addingTimeInterval(86400))
             } else {
-                let hour = calendar.component(.hour, from: event.startDate)
                 let formatter = DateFormatter()
-                formatter.dateFormat = "h a"
+                formatter.dateFormat = "EEEE, MMM d"
                 label = formatter.string(from: event.startDate)
+                groupDate = calendar.startOfDay(for: event.startDate)
             }
-            groups[label, default: []].append(event)
+
+            if let idx = seen[label] {
+                groups[idx].value.append(event)
+            } else {
+                seen[label] = groups.count
+                groups.append((key: label, date: groupDate, value: [event]))
+            }
         }
 
-        // Sort: "Now" first, then by time
-        let order = ["Now", "This Hour"]
-        return groups.sorted { a, b in
-            let aIdx = order.firstIndex(of: a.key) ?? Int.max
-            let bIdx = order.firstIndex(of: b.key) ?? Int.max
-            if aIdx != bIdx { return aIdx < bIdx }
-            let aTime = a.value.first?.startDate ?? .distantFuture
-            let bTime = b.value.first?.startDate ?? .distantFuture
-            return aTime < bTime
-        }
+        return groups
+            .sorted { $0.date < $1.date }
+            .map { (key: $0.key, value: $0.value) }
     }
 }
 
