@@ -7,6 +7,7 @@ import AVFoundation
 import ScreenCaptureKit
 
 struct SettingsView: View {
+    @EnvironmentObject var appState: AppState
     @State private var apiKey: String = ""
     @State private var userName: String = ""
     @State private var launchAtLogin: Bool = false
@@ -80,6 +81,7 @@ struct SettingsView: View {
                         Spacer()
                         Button {
                             skipPatterns.removeAll { $0 == pattern }
+                            saveSkipPatterns()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.secondary)
@@ -179,6 +181,12 @@ struct SettingsView: View {
         guard !pattern.isEmpty, !skipPatterns.contains(pattern) else { return }
         skipPatterns.append(pattern)
         newSkipPattern = ""
+        saveSkipPatterns()
+    }
+
+    private func saveSkipPatterns() {
+        UserDefaults.standard.set(skipPatterns, forKey: "skipPatterns")
+        appState.refreshUpcomingEvents()
     }
 
     private func checkPermissions() {

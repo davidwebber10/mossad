@@ -29,8 +29,9 @@ struct MossadApp: App {
 
         Window("Settings", id: "settings") {
             SettingsView()
+                .environmentObject(appState)
         }
-        .defaultSize(width: 450, height: 350)
+        .defaultSize(width: 450, height: 680)
 
         Window("Setup", id: "onboarding") {
             OnboardingView()
