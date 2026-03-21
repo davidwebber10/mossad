@@ -45,6 +45,7 @@ public final class AppState: NSObject, ObservableObject {
     @Published var lastEndedCalendarAttendees: [String] = []
     @Published var upcomingEvents: [UpcomingEvent] = []
     @Published var disabledEventIds: Set<String> = []
+    @Published var autoSkippedEventIds: Set<String> = []
 
     private var xpcConnection: NSXPCConnection?
     private var service: MossadServiceProtocol?
@@ -154,24 +155,28 @@ public final class AppState: NSObject, ObservableObject {
                 )
             }
 
-        // Auto-skip events matching skip patterns (only for events not already manually toggled)
+        // Re-evaluate auto-skip on every refresh
         let skipPatterns = UserDefaults.standard.stringArray(forKey: "skipPatterns") ?? []
-        let manuallyToggled = UserDefaults.standard.stringArray(forKey: "manuallyToggledEventIds") ?? []
+        let manuallyToggled = Set(UserDefaults.standard.stringArray(forKey: "manuallyToggledEventIds") ?? [])
+
+        // Clear previous auto-skips and re-evaluate
+        var newAutoSkipped = Set<String>()
         for event in upcomingEvents {
-            if !manuallyToggled.contains(event.id) {
-                let titleLower = event.title.lowercased()
-                let shouldSkip = skipPatterns.contains { titleLower.contains($0.lowercased()) }
-                if shouldSkip {
-                    disabledEventIds.insert(event.id)
-                }
+            let titleLower = event.title.lowercased()
+            let shouldSkip = skipPatterns.contains { titleLower.contains($0.lowercased()) }
+            if shouldSkip && !manuallyToggled.contains(event.id) {
+                disabledEventIds.insert(event.id)
+                newAutoSkipped.insert(event.id)
             }
         }
+        autoSkippedEventIds = newAutoSkipped
         UserDefaults.standard.set(Array(disabledEventIds), forKey: "disabledEventIds")
     }
 
     func toggleEventRecording(_ eventId: String) {
         if disabledEventIds.contains(eventId) {
             disabledEventIds.remove(eventId)
+            autoSkippedEventIds.remove(eventId)
         } else {
             disabledEventIds.insert(eventId)
         }
@@ -182,6 +187,10 @@ public final class AppState: NSObject, ObservableObject {
             toggled.append(eventId)
             UserDefaults.standard.set(toggled, forKey: "manuallyToggledEventIds")
         }
+    }
+
+    func isAutoSkipped(_ eventId: String) -> Bool {
+        autoSkippedEventIds.contains(eventId)
     }
 
     func isEventEnabled(_ eventId: String) -> Bool {

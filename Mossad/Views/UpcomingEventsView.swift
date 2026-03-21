@@ -21,7 +21,8 @@ struct UpcomingEventsView: View {
                             ForEach(events) { event in
                                 EventRow(
                                     event: event,
-                                    enabled: appState.isEventEnabled(event.id)
+                                    enabled: appState.isEventEnabled(event.id),
+                                    autoSkipped: appState.isAutoSkipped(event.id)
                                 ) {
                                     appState.toggleEventRecording(event.id)
                                 }
@@ -97,6 +98,7 @@ struct UpcomingEventsView: View {
 struct EventRow: View {
     let event: UpcomingEvent
     let enabled: Bool
+    var autoSkipped: Bool = false
     let onToggle: () -> Void
 
     var body: some View {
@@ -140,14 +142,14 @@ struct EventRow: View {
             Spacer()
 
             if !enabled {
-                Text("Skipped")
+                Text(autoSkipped ? "Auto-skipped" : "Skipped")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(autoSkipped ? .purple : .orange)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(.orange.opacity(0.15))
+                            .fill((autoSkipped ? Color.purple : Color.orange).opacity(0.15))
                     )
             }
         }
