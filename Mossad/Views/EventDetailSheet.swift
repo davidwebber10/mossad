@@ -93,10 +93,9 @@ struct EventDetailSheet: View {
                     // Attendees
                     if !event.attendees.isEmpty {
                         DetailSection(icon: "person.2.fill", title: "Attendees (\(event.attendees.count))") {
-                            VStack(alignment: .leading, spacing: 4) {
+                            FlowLayout(spacing: 6) {
                                 ForEach(event.attendees, id: \.self) { attendee in
-                                    Text(attendee)
-                                        .textSelection(.enabled)
+                                    PersonPill(text: attendee)
                                 }
                             }
                         }
@@ -115,9 +114,9 @@ struct EventDetailSheet: View {
                     HStack {
                         Spacer()
                         Button {
-                            openInCalendar()
+                            openInGoogleCalendar()
                         } label: {
-                            Label("Open in Calendar", systemImage: "calendar")
+                            Label("Open in Google Calendar", systemImage: "calendar")
                         }
                         .buttonStyle(.bordered)
                         Spacer()
@@ -159,10 +158,16 @@ struct EventDetailSheet: View {
         return "\(minutes) minutes"
     }
 
-    private func openInCalendar() {
-        // calshow: opens Calendar.app to the event's date
-        let timestamp = event.startDate.timeIntervalSinceReferenceDate
-        if let url = URL(string: "ical://show?date=\(timestamp)") {
+    private func openInGoogleCalendar() {
+        // Google Calendar event URL format: uses the event ID
+        // EventKit IDs from Google have a format we can extract from
+        // Fallback: open Google Calendar to the event's date
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        let dateStr = formatter.string(from: event.startDate)
+        let urlString = "https://calendar.google.com/calendar/r/day/\(Calendar.current.component(.year, from: event.startDate))/\(Calendar.current.component(.month, from: event.startDate))/\(Calendar.current.component(.day, from: event.startDate))"
+        if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
     }
@@ -182,5 +187,98 @@ struct DetailSection<Content: View>: View {
             content
                 .padding(.leading, 28)
         }
+    }
+}
+
+struct PersonPill: View {
+    let text: String
+
+    private var name: String {
+        // Extract name from "Name <email>" format
+        if let angleBracket = text.firstIndex(of: "<") {
+            let n = text[text.startIndex..<angleBracket].trimmingCharacters(in: .whitespaces)
+            return n.isEmpty ? email : n
+        }
+        return text
+    }
+
+    private var email: String {
+        if let start = text.firstIndex(of: "<"),
+           let end = text.firstIndex(of: ">") {
+            return String(text[text.index(after: start)..<end])
+        }
+        return text
+    }
+
+    private var initials: String {
+        let parts = name.split(separator: " ")
+        if parts.count >= 2 {
+            return "\(parts[0].prefix(1))\(parts[1].prefix(1))".uppercased()
+        }
+        return String(name.prefix(2)).uppercased()
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .fill(Color(hue: Double(abs(name.hashValue) % 360) / 360.0, saturation: 0.4, brightness: 0.7))
+                    .frame(width: 24, height: 24)
+                Text(initials)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            Text(name)
+                .font(.caption)
+                .lineLimit(1)
+        }
+        .padding(.trailing, 8)
+        .padding(.vertical, 4)
+        .padding(.leading, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.primary.opacity(0.06))
+        )
+        .help(email)
+    }
+}
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = layout(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = layout(proposal: proposal, subviews: subviews)
+        for (index, position) in result.positions.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y), proposal: .unspecified)
+        }
+    }
+
+    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+        let maxWidth = proposal.width ?? .infinity
+        var positions: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var maxX: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth && x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            positions.append(CGPoint(x: x, y: y))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+            maxX = max(maxX, x)
+        }
+
+        return (CGSize(width: maxX, height: y + rowHeight), positions)
     }
 }
