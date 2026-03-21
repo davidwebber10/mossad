@@ -32,6 +32,7 @@ struct MenuBarPopover: View {
             }
 
             Divider()
+                .padding(.bottom, 6)
 
             // Actions
             VStack(alignment: .leading, spacing: 2) {
