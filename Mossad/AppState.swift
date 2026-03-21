@@ -98,7 +98,7 @@ public final class AppState: NSObject, ObservableObject {
         upcomingEvents = events
             .filter { !$0.isAllDay }
             .sorted { $0.startDate < $1.startDate }
-            .prefix(10)
+            .prefix(50)
             .map { event in
                 // Extract meeting URL from notes/location
                 var meetingUrl: String? = nil
