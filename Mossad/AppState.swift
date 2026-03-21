@@ -159,12 +159,20 @@ public final class AppState: NSObject, ObservableObject {
         let skipPatterns = UserDefaults.standard.stringArray(forKey: "skipPatterns") ?? []
         let manuallyToggled = Set(UserDefaults.standard.stringArray(forKey: "manuallyToggledEventIds") ?? [])
 
-        // Clear previous auto-skips and re-evaluate
+        // Remove previously auto-skipped events that no longer match
+        for eventId in autoSkippedEventIds {
+            if !manuallyToggled.contains(eventId) {
+                disabledEventIds.remove(eventId)
+            }
+        }
+
+        // Re-evaluate which events should be auto-skipped
         var newAutoSkipped = Set<String>()
         for event in upcomingEvents {
+            if manuallyToggled.contains(event.id) { continue }
             let titleLower = event.title.lowercased()
             let shouldSkip = skipPatterns.contains { titleLower.contains($0.lowercased()) }
-            if shouldSkip && !manuallyToggled.contains(event.id) {
+            if shouldSkip {
                 disabledEventIds.insert(event.id)
                 newAutoSkipped.insert(event.id)
             }
