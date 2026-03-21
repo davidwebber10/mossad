@@ -74,11 +74,10 @@ struct EventDetailSheet: View {
                     }
 
                     // Meeting link
-                    if let meetingUrl = event.meetingUrl {
+                    if let meetingUrl = event.meetingUrl, let url = URL(string: meetingUrl) {
                         DetailSection(icon: "video.fill", title: "Meeting Link") {
-                            Text(meetingUrl)
-                                .foregroundStyle(.blue)
-                                .textSelection(.enabled)
+                            Link(meetingUrl, destination: url)
+                                .font(.callout)
                         }
                     }
 
