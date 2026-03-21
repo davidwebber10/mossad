@@ -31,6 +31,29 @@ struct MenuBarPopover: View {
                 }
             }
 
+            // Upcoming events
+            if !appState.upcomingEvents.isEmpty {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Upcoming")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 4)
+
+                    ForEach(appState.upcomingEvents.prefix(4)) { event in
+                        UpcomingEventRow(
+                            event: event,
+                            enabled: appState.isEventEnabled(event.id)
+                        ) {
+                            appState.toggleEventRecording(event.id)
+                        }
+                    }
+                }
+            }
+
             Divider()
                 .padding(.bottom, 6)
 
@@ -167,6 +190,52 @@ struct MenuBarPopover: View {
     private func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "settings")
+    }
+}
+
+struct UpcomingEventRow: View {
+    let event: UpcomingEvent
+    let enabled: Bool
+    let onToggle: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: onToggle) {
+                Image(systemName: enabled ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(enabled ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(event.title)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .strikethrough(!enabled, color: .secondary)
+                    .foregroundStyle(enabled ? .primary : .secondary)
+                HStack(spacing: 4) {
+                    Text(event.startDate, style: .time)
+                    Text("–")
+                    Text(event.endDate, style: .time)
+                    if event.meetingUrl != nil {
+                        Image(systemName: "video.fill")
+                            .font(.caption2)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isHovered ? Color.primary.opacity(0.05) : Color.clear)
+                .padding(.horizontal, 8)
+        )
+        .onHover { isHovered = $0 }
     }
 }
 

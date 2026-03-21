@@ -1,7 +1,17 @@
 // Mossad/AppState.swift
+import EventKit
 import Foundation
 import MossadShared
 import SwiftUI
+
+public struct UpcomingEvent: Identifiable {
+    public let id: String
+    public let title: String
+    public let startDate: Date
+    public let endDate: Date
+    public let meetingUrl: String?
+    public let isAllDay: Bool
+}
 
 @MainActor
 public final class AppState: NSObject, ObservableObject {
@@ -14,16 +24,92 @@ public final class AppState: NSObject, ObservableObject {
     @Published var showSpeakerLabeling = false
     @Published var lastEndedConversationId: String?
     @Published var lastEndedCalendarAttendees: [String] = []
+    @Published var upcomingEvents: [UpcomingEvent] = []
+    @Published var disabledEventIds: Set<String> = []
 
     private var xpcConnection: NSXPCConnection?
     private var service: MossadServiceProtocol?
+    private let eventStore = EKEventStore()
+    private var refreshTimer: Timer?
     let store: ConversationStore
 
     override init() {
         let dbManager = try! DatabaseManager()
         self.store = ConversationStore(dbQueue: dbManager.dbQueue)
+        // Load disabled events from UserDefaults
+        let savedDisabled = UserDefaults.standard.stringArray(forKey: "disabledEventIds") ?? []
+        self.disabledEventIds = Set(savedDisabled)
         super.init()
         setupXPCConnection()
+        refreshUpcomingEvents()
+        // Refresh every 5 minutes
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshUpcomingEvents()
+            }
+        }
+    }
+
+    func refreshUpcomingEvents() {
+        let now = Date()
+        let endOfDay = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now.addingTimeInterval(86400)
+
+        let selectedCalendarId = UserDefaults.standard.string(forKey: "calendarId")
+        let calendars: [EKCalendar]?
+        if let selectedCalendarId, selectedCalendarId != "all",
+           let cal = eventStore.calendar(withIdentifier: selectedCalendarId) {
+            calendars = [cal]
+        } else {
+            calendars = nil
+        }
+
+        let predicate = eventStore.predicateForEvents(withStart: now, end: endOfDay, calendars: calendars)
+        let events = eventStore.events(matching: predicate)
+
+        upcomingEvents = events
+            .filter { !$0.isAllDay }
+            .sorted { $0.startDate < $1.startDate }
+            .prefix(10)
+            .map { event in
+                // Extract meeting URL from notes/location
+                var meetingUrl: String? = nil
+                let text = [event.notes, event.location].compactMap { $0 }.joined(separator: " ")
+                let patterns = [
+                    #"https://meet\.google\.com/[a-z]+-[a-z]+-[a-z]+"#,
+                    #"https://zoom\.us/j/\d+[^\s]*"#,
+                    #"https://teams\.microsoft\.com/[^\s]+"#,
+                ]
+                for pattern in patterns {
+                    if let regex = try? NSRegularExpression(pattern: pattern),
+                       let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+                       let range = Range(match.range, in: text) {
+                        meetingUrl = String(text[range])
+                        break
+                    }
+                }
+
+                return UpcomingEvent(
+                    id: event.eventIdentifier,
+                    title: event.title ?? "Untitled",
+                    startDate: event.startDate,
+                    endDate: event.endDate,
+                    meetingUrl: meetingUrl,
+                    isAllDay: event.isAllDay
+                )
+            }
+    }
+
+    func toggleEventRecording(_ eventId: String) {
+        if disabledEventIds.contains(eventId) {
+            disabledEventIds.remove(eventId)
+        } else {
+            disabledEventIds.insert(eventId)
+        }
+        UserDefaults.standard.set(Array(disabledEventIds), forKey: "disabledEventIds")
+    }
+
+    func isEventEnabled(_ eventId: String) -> Bool {
+        !disabledEventIds.contains(eventId)
     }
 
     private func setupXPCConnection() {
