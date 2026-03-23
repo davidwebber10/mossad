@@ -134,14 +134,17 @@ public final class AssemblyAIClient {
     }
 
     private func connectWebSocket(token: String) {
-        guard let encodedToken = token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            aaiLog.error("Failed to URL-encode token")
-            return
-        }
-        let urlString = "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&token=\(encodedToken)"
+        var components = URLComponents()
+        components.scheme = "wss"
+        components.host = "streaming.assemblyai.com"
+        components.path = "/v3/ws"
+        components.queryItems = [
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "token", value: token),
+        ]
         aaiLog.notice("Connecting WebSocket (token length: \(token.count, privacy: .public))...")
-        guard let url = URL(string: urlString) else {
-            aaiLog.error("Invalid WebSocket URL")
+        guard let url = components.url else {
+            aaiLog.error("Invalid WebSocket URL from components")
             return
         }
         webSocketTask = session.webSocketTask(with: url)
