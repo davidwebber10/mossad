@@ -32,11 +32,20 @@ struct ConversationListView: View {
                         .onTapGesture {
                             selectedConversationId = conversation.id
                         }
-                        .listRowBackground(
-                            selectedConversationId == conversation.id
-                                ? Color.accentColor.opacity(0.2)
-                                : Color.clear
-                        )
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                deleteConversation(conversation)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                deleteConversation(conversation)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
                 }
                 .listStyle(.sidebar)
@@ -51,6 +60,14 @@ struct ConversationListView: View {
         .onChange(of: searchText) {
             loadConversations()
         }
+    }
+
+    private func deleteConversation(_ conversation: Conversation) {
+        try? appState.store.deleteConversation(id: conversation.id)
+        if selectedConversationId == conversation.id {
+            selectedConversationId = nil
+        }
+        loadConversations()
     }
 
     private func loadConversations() {
