@@ -58,13 +58,28 @@ public final class AppState: NSObject, ObservableObject {
     override init() {
         let dbManager = try! DatabaseManager()
         self.store = ConversationStore(dbQueue: dbManager.dbQueue)
-        // Load disabled events from UserDefaults
         let savedDisabled = UserDefaults.standard.stringArray(forKey: "disabledEventIds") ?? []
         self.disabledEventIds = Set(savedDisabled)
         super.init()
 
-        // Start the session coordinator in-process
-        logger.notice("AppState init — about to create SessionCoordinator")
+        refreshUpcomingEvents()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshUpcomingEvents() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .EKEventStoreChanged, object: eventStore, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.refreshUpcomingEvents() }
+        }
+
+        // Start coordinator after a delay so UI can render first
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.startCoordinator()
+        }
+    }
+
+    private func startCoordinator() {
+        logger.notice("Starting SessionCoordinator...")
         do {
             coordinator = try SessionCoordinator()
             coordinator?.delegate = self
@@ -73,29 +88,11 @@ public final class AppState: NSObject, ObservableObject {
         } catch {
             logger.error("Failed to start SessionCoordinator: \(error.localizedDescription)")
         }
-
-        refreshUpcomingEvents()
-        // Refresh every 5 minutes as a fallback
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshUpcomingEvents()
-            }
-        }
-        // Refresh immediately when calendar changes
-        NotificationCenter.default.addObserver(
-            forName: .EKEventStoreChanged,
-            object: eventStore,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshUpcomingEvents()
-            }
-        }
     }
 
     func refreshUpcomingEvents() {
         let now = Date()
-        let endOfSearch = now.addingTimeInterval(60 * 60 * 24 * 30) // 30 days out
+        let endOfSearch = now.addingTimeInterval(60 * 60 * 24 * 30)
 
         let selectedCalendarId = UserDefaults.standard.string(forKey: "calendarId")
         let calendars: [EKCalendar]?
@@ -114,7 +111,6 @@ public final class AppState: NSObject, ObservableObject {
             .sorted { $0.startDate < $1.startDate }
             .prefix(50)
             .map { event in
-                // Extract meeting URL from notes/location
                 var meetingUrl: String? = nil
                 let text = [event.notes, event.location].compactMap { $0 }.joined(separator: " ")
                 let patterns = [
@@ -146,40 +142,29 @@ public final class AppState: NSObject, ObservableObject {
 
                 let organizer = event.organizer.map { org -> String in
                     let email = org.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
-                    if let name = org.name, !name.isEmpty {
-                        return "\(name) <\(email)>"
-                    }
+                    if let name = org.name, !name.isEmpty { return "\(name) <\(email)>" }
                     return email
                 }
 
                 return UpcomingEvent(
                     id: event.eventIdentifier,
                     title: event.title ?? "Untitled",
-                    startDate: event.startDate,
-                    endDate: event.endDate,
-                    meetingUrl: meetingUrl,
-                    isAllDay: event.isAllDay,
-                    location: event.location,
-                    notes: event.notes,
-                    organizer: organizer,
-                    attendees: attendees,
+                    startDate: event.startDate, endDate: event.endDate,
+                    meetingUrl: meetingUrl, isAllDay: event.isAllDay,
+                    location: event.location, notes: event.notes,
+                    organizer: organizer, attendees: attendees,
                     calendarTitle: event.calendar.title,
                     calendarColor: event.calendar.cgColor
                 )
             }
 
-        // Re-evaluate auto-skip on every refresh
         let skipPatterns = UserDefaults.standard.stringArray(forKey: "skipPatterns") ?? []
         let manuallyToggled = Set(UserDefaults.standard.stringArray(forKey: "manuallyToggledEventIds") ?? [])
 
-        // Remove previously auto-skipped events that no longer match
         for eventId in autoSkippedEventIds {
-            if !manuallyToggled.contains(eventId) {
-                disabledEventIds.remove(eventId)
-            }
+            if !manuallyToggled.contains(eventId) { disabledEventIds.remove(eventId) }
         }
 
-        // Re-evaluate which events should be auto-skipped
         var newAutoSkipped = Set<String>()
         for event in upcomingEvents {
             if manuallyToggled.contains(event.id) { continue }
@@ -202,7 +187,6 @@ public final class AppState: NSObject, ObservableObject {
             disabledEventIds.insert(eventId)
         }
         UserDefaults.standard.set(Array(disabledEventIds), forKey: "disabledEventIds")
-        // Track that this event was manually toggled so auto-skip doesn't override
         var toggled = UserDefaults.standard.stringArray(forKey: "manuallyToggledEventIds") ?? []
         if !toggled.contains(eventId) {
             toggled.append(eventId)
@@ -210,21 +194,11 @@ public final class AppState: NSObject, ObservableObject {
         }
     }
 
-    func isAutoSkipped(_ eventId: String) -> Bool {
-        autoSkippedEventIds.contains(eventId)
-    }
+    func isAutoSkipped(_ eventId: String) -> Bool { autoSkippedEventIds.contains(eventId) }
+    func isEventEnabled(_ eventId: String) -> Bool { !disabledEventIds.contains(eventId) }
 
-    func isEventEnabled(_ eventId: String) -> Bool {
-        !disabledEventIds.contains(eventId)
-    }
-
-    func pauseRecording() {
-        coordinator?.pauseRecording()
-    }
-
-    func resumeRecording() {
-        coordinator?.resumeRecording()
-    }
+    func pauseRecording() { coordinator?.pauseRecording() }
+    func resumeRecording() { coordinator?.resumeRecording() }
 
     var elapsedFormatted: String {
         let minutes = elapsedSeconds / 60
@@ -233,7 +207,6 @@ public final class AppState: NSObject, ObservableObject {
     }
 
     func handleStateChange(_ snapshot: ServiceSnapshot) {
-        print("[Mossad] State changed: \(snapshot.recordingState.rawValue) - \(snapshot.currentMeetingTitle ?? "no meeting")")
         let wasRecording = self.recordingState == .recording
         let nowIdle = snapshot.recordingState == .idle || snapshot.recordingState == .detecting
 
@@ -258,12 +231,8 @@ public final class AppState: NSObject, ObservableObject {
 
 extension AppState: SessionCoordinatorDelegate {
     nonisolated public func coordinator(_ coordinator: SessionCoordinator, didChangeState snapshot: ServiceSnapshot) {
-        Task { @MainActor in
-            self.handleStateChange(snapshot)
-        }
+        Task { @MainActor in self.handleStateChange(snapshot) }
     }
 
-    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didReceiveUtterance utteranceData: Data) {
-        // Could use for live transcript display
-    }
+    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didReceiveUtterance utteranceData: Data) {}
 }

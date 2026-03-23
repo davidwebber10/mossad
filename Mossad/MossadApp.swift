@@ -5,8 +5,6 @@ import MossadShared
 @main
 struct MossadApp: App {
     @StateObject private var appState = AppState()
-    @State private var showBrowser = false
-    @State private var showSettings = false
     @AppStorage("onboardingComplete") private var onboardingComplete = false
     @Environment(\.openWindow) private var openWindow
 
@@ -16,9 +14,6 @@ struct MossadApp: App {
                 .environmentObject(appState)
         } label: {
             Image(systemName: appState.recordingState == .recording ? "mic.fill" : "mic")
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(appState.recordingState == .recording ? .red : .primary)
-                .symbolEffect(.pulse, options: .repeating, isActive: appState.recordingState == .recording)
         }
         .menuBarExtraStyle(.window)
 
