@@ -47,8 +47,6 @@ public final class AppState: NSObject, ObservableObject {
     @Published var disabledEventIds: Set<String> = []
     @Published var autoSkippedEventIds: Set<String> = []
 
-    private var xpcConnection: NSXPCConnection?
-    private var service: MossadServiceProtocol?
     private let eventStore = EKEventStore()
     private var refreshTimer: Timer?
     let store: ConversationStore
@@ -60,7 +58,6 @@ public final class AppState: NSObject, ObservableObject {
         let savedDisabled = UserDefaults.standard.stringArray(forKey: "disabledEventIds") ?? []
         self.disabledEventIds = Set(savedDisabled)
         super.init()
-        setupXPCConnection()
         refreshUpcomingEvents()
         // Refresh every 5 minutes as a fallback
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
@@ -205,32 +202,12 @@ public final class AppState: NSObject, ObservableObject {
         !disabledEventIds.contains(eventId)
     }
 
-    private func setupXPCConnection() {
-        let connection = NSXPCConnection(serviceName: "com.mossad.MossadService")
-        connection.remoteObjectInterface = NSXPCInterface(with: MossadServiceProtocol.self)
-        connection.exportedInterface = NSXPCInterface(with: MossadAppProtocol.self)
-        connection.exportedObject = self
-        connection.resume()
-
-        self.xpcConnection = connection
-        self.service = connection.remoteObjectProxyWithErrorHandler { error in
-            print("XPC error: \(error)")
-        } as? MossadServiceProtocol
-
-        // Start monitoring immediately
-        service?.startMonitoring()
-    }
-
     func pauseRecording() {
-        service?.pauseRecording()
+        // TODO: wire to in-process SessionCoordinator
     }
 
     func resumeRecording() {
-        service?.resumeRecording()
-    }
-
-    func stopMonitoring() {
-        service?.stopMonitoring()
+        // TODO: wire to in-process SessionCoordinator
     }
 
     var elapsedFormatted: String {
@@ -238,37 +215,26 @@ public final class AppState: NSObject, ObservableObject {
         let seconds = elapsedSeconds % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
-}
 
-extension AppState: MossadAppProtocol {
-    nonisolated public func stateDidChange(_ stateData: Data) {
-        guard let snapshot = ServiceSnapshot.decoded(from: stateData) else { return }
-        Task { @MainActor in
-            // Detect recording → idle/detecting transition
-            let wasRecording = self.recordingState == .recording
-            let nowIdle = snapshot.recordingState == .idle || snapshot.recordingState == .detecting
+    func handleStateChange(_ snapshot: ServiceSnapshot) {
+        let wasRecording = self.recordingState == .recording
+        let nowIdle = snapshot.recordingState == .idle || snapshot.recordingState == .detecting
 
-            self.recordingState = snapshot.recordingState
-            self.currentMeetingTitle = snapshot.currentMeetingTitle
-            self.currentPlatform = snapshot.currentPlatform
-            self.elapsedSeconds = snapshot.elapsedSeconds ?? 0
-            self.speakerCount = snapshot.speakerCount ?? 0
+        self.recordingState = snapshot.recordingState
+        self.currentMeetingTitle = snapshot.currentMeetingTitle
+        self.currentPlatform = snapshot.currentPlatform
+        self.elapsedSeconds = snapshot.elapsedSeconds ?? 0
+        self.speakerCount = snapshot.speakerCount ?? 0
 
-            // If call just ended, check for unlabeled speakers and show labeling sheet
-            if wasRecording && nowIdle, let convId = self.currentConversationId {
-                let speakers = (try? self.store.fetchSpeakers(conversationId: convId)) ?? []
-                let unlabeled = speakers.filter { !$0.isMe && $0.name.hasPrefix("Speaker ") }
-                if !unlabeled.isEmpty {
-                    self.lastEndedConversationId = convId
-                    self.showSpeakerLabeling = true
-                }
+        if wasRecording && nowIdle, let convId = self.currentConversationId {
+            let speakers = (try? self.store.fetchSpeakers(conversationId: convId)) ?? []
+            let unlabeled = speakers.filter { !$0.isMe && $0.name.hasPrefix("Speaker ") }
+            if !unlabeled.isEmpty {
+                self.lastEndedConversationId = convId
+                self.showSpeakerLabeling = true
             }
-
-            self.currentConversationId = snapshot.currentConversationId
         }
-    }
 
-    nonisolated public func utteranceReceived(_ utteranceData: Data) {
-        // Could use this for live transcript display
+        self.currentConversationId = snapshot.currentConversationId
     }
 }
