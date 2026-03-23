@@ -45,4 +45,7 @@ extension MossadServiceImpl: SessionCoordinatorDelegate {
     func coordinator(_ coordinator: SessionCoordinator, didReceiveUtterance utteranceData: Data) {
         appProxy?.utteranceReceived(utteranceData)
     }
+
+    func coordinator(_ coordinator: SessionCoordinator, didTranscribe text: String, speaker: String, timestamp: Double) {}
+    func coordinator(_ coordinator: SessionCoordinator, didReceivePartial text: String) {}
 }

@@ -8,6 +8,8 @@ private let coordLog = Logger(subsystem: "com.mossad.app", category: "SessionCoo
 public protocol SessionCoordinatorDelegate: AnyObject {
     func coordinator(_ coordinator: SessionCoordinator, didChangeState snapshot: ServiceSnapshot)
     func coordinator(_ coordinator: SessionCoordinator, didReceiveUtterance utteranceData: Data)
+    func coordinator(_ coordinator: SessionCoordinator, didTranscribe text: String, speaker: String, timestamp: Double)
+    func coordinator(_ coordinator: SessionCoordinator, didReceivePartial text: String)
 }
 
 public final class SessionCoordinator {
@@ -104,7 +106,16 @@ public final class SessionCoordinator {
             detectedURL: meeting.meetingUrl
         )
 
-        let title = matchedEvent?.title ?? "Ad-hoc \(meeting.platform.rawValue.capitalized) Call"
+        // Use calendar title if matched, otherwise extract Meet ID from URL
+        let title: String
+        if let eventTitle = matchedEvent?.title {
+            title = eventTitle
+        } else if let url = meeting.meetingUrl,
+                  let meetCode = url.components(separatedBy: "meet.google.com/").last?.components(separatedBy: "?").first {
+            title = meetCode
+        } else {
+            title = "Ad-hoc \(meeting.platform.rawValue.capitalized) Call"
+        }
         let calendarEventId = matchedEvent?.calendarEventId
         let meetingUrl = meeting.meetingUrl ?? matchedEvent?.meetingUrl
 
@@ -286,10 +297,14 @@ extension SessionCoordinator: AssemblyAIClientDelegate {
             startedAt: startOffset,
             endedAt: endOffset
         )
+
+        // Notify delegate for live display
+        let speakerName = isMyVoice ? (meSpeaker?.name ?? "Me") : (try? store.fetchSpeaker(id: speakerId))?.name ?? "Speaker"
+        delegate?.coordinator(self, didTranscribe: transcript.text, speaker: speakerName, timestamp: startOffset)
     }
 
     public func client(_ client: AssemblyAIClient, didReceivePartialTranscript text: String) {
-        // Could display live partial text in UI — ignored for now
+        delegate?.coordinator(self, didReceivePartial: text)
     }
 
     public func clientDidConnect(_ client: AssemblyAIClient) {

@@ -50,6 +50,8 @@ public final class AppState: NSObject, ObservableObject {
     @Published var disabledEventIds: Set<String> = []
     @Published var autoSkippedEventIds: Set<String> = []
     @Published var initialTab: BrowserTab = .upcoming
+    @Published var liveUtterances: [(speaker: String, text: String, timestamp: Double)] = []
+    @Published var livePartialText: String = ""
 
     private let eventStore = EKEventStore()
     private var refreshTimer: Timer?
@@ -217,7 +219,14 @@ public final class AppState: NSObject, ObservableObject {
         self.elapsedSeconds = snapshot.elapsedSeconds ?? 0
         self.speakerCount = snapshot.speakerCount ?? 0
 
+        // Clear live feed when recording starts
+        if !wasRecording && snapshot.recordingState == .recording {
+            self.liveUtterances = []
+            self.livePartialText = ""
+        }
+
         if wasRecording && nowIdle, let convId = self.currentConversationId {
+            self.livePartialText = ""
             let speakers = (try? self.store.fetchSpeakers(conversationId: convId)) ?? []
             let unlabeled = speakers.filter { !$0.isMe && $0.name.hasPrefix("Speaker ") }
             if !unlabeled.isEmpty {
@@ -236,4 +245,17 @@ extension AppState: SessionCoordinatorDelegate {
     }
 
     nonisolated public func coordinator(_ coordinator: SessionCoordinator, didReceiveUtterance utteranceData: Data) {}
+
+    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didTranscribe text: String, speaker: String, timestamp: Double) {
+        Task { @MainActor in
+            self.liveUtterances.append((speaker: speaker, text: text, timestamp: timestamp))
+            self.livePartialText = ""
+        }
+    }
+
+    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didReceivePartial text: String) {
+        Task { @MainActor in
+            self.livePartialText = text
+        }
+    }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 import MossadShared
 
 enum BrowserTab: String, CaseIterable {
+    case live = "Live"
     case upcoming = "Upcoming"
     case conversations = "Conversations"
 }
@@ -10,12 +11,18 @@ enum BrowserTab: String, CaseIterable {
 struct ConversationBrowserWindow: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedTab: BrowserTab = .upcoming
-    @State private var didApplyInitialTab = false
     @State private var selectedConversationId: String?
     @State private var scrollToUtteranceId: Int64?
 
     var body: some View {
         TabView(selection: $selectedTab) {
+            if appState.recordingState == .recording {
+                Tab("Live", systemImage: "waveform", value: .live) {
+                    LiveTranscriptView()
+                        .environmentObject(appState)
+                }
+            }
+
             Tab("Upcoming", systemImage: "calendar", value: .upcoming) {
                 UpcomingEventsView()
                     .environmentObject(appState)
@@ -43,6 +50,11 @@ struct ConversationBrowserWindow: View {
         .frame(minWidth: 800, minHeight: 500)
         .onReceive(appState.$initialTab) { tab in
             selectedTab = tab
+        }
+        .onChange(of: appState.recordingState) {
+            if appState.recordingState == .recording {
+                selectedTab = .live
+            }
         }
         .sheet(isPresented: $appState.showSpeakerLabeling) {
             if let convId = appState.lastEndedConversationId {

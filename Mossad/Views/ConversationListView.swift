@@ -13,6 +13,8 @@ struct ConversationListView: View {
     @State private var isSearching = false
     @State private var isSelecting = false
     @State private var selectedIds: Set<String> = []
+    @State private var renamingConversation: Conversation?
+    @State private var renameText: String = ""
 
     var body: some View {
         Group {
@@ -61,6 +63,13 @@ struct ConversationListView: View {
                         )
                         .contextMenu {
                             if !isSelecting {
+                                Button {
+                                    renameText = conversation.title
+                                    renamingConversation = conversation
+                                } label: {
+                                    Label("Rename", systemImage: "pencil")
+                                }
+                                Divider()
                                 Button(role: .destructive) {
                                     deleteConversation(conversation)
                                 } label: {
@@ -129,6 +138,24 @@ struct ConversationListView: View {
             }
         }
         .frame(minWidth: 250)
+        .sheet(item: $renamingConversation) { conversation in
+            VStack(spacing: 16) {
+                Text("Rename Conversation")
+                    .font(.headline)
+                TextField("Title", text: $renameText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 300)
+                    .onSubmit { saveRename(conversation) }
+                HStack {
+                    Button("Cancel") { renamingConversation = nil }
+                        .buttonStyle(.bordered)
+                    Button("Save") { saveRename(conversation) }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(renameText.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .padding(24)
+        }
         .task {
             loadConversations()
         }
@@ -154,6 +181,14 @@ struct ConversationListView: View {
         }
         selectedIds.removeAll()
         isSelecting = false
+        loadConversations()
+    }
+
+    private func saveRename(_ conversation: Conversation) {
+        let newTitle = renameText.trimmingCharacters(in: .whitespaces)
+        guard !newTitle.isEmpty else { return }
+        try? appState.store.renameConversation(id: conversation.id, title: newTitle)
+        renamingConversation = nil
         loadConversations()
     }
 

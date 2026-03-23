@@ -26,6 +26,14 @@ public final class ConversationStore {
         return conv
     }
 
+    public func renameConversation(id: String, title: String) throws {
+        try dbQueue.write { db in
+            guard var conv = try Conversation.fetchOne(db, key: id) else { return }
+            conv.title = title
+            try conv.update(db)
+        }
+    }
+
     public func deleteConversation(id: String) throws {
         try dbQueue.write { db in
             // Cascade deletes utterances and conversationSpeakers via FK
