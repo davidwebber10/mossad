@@ -1,6 +1,9 @@
 // MossadService/SessionCoordinator.swift
 import Foundation
 import MossadShared
+import os.log
+
+private let coordLog = Logger(subsystem: "com.mossad.app", category: "SessionCoordinator")
 
 public protocol SessionCoordinatorDelegate: AnyObject {
     func coordinator(_ coordinator: SessionCoordinator, didChangeState snapshot: ServiceSnapshot)
@@ -126,13 +129,15 @@ public final class SessionCoordinator {
         }
 
         // Start audio capture
+        coordLog.notice("Starting audio capture for pid \(meeting.processIdentifier)")
         Task {
             do {
                 try await audioCaptureManager.startCapture(appProcessID: meeting.processIdentifier)
                 audioCaptureManager.delegate = self
+                coordLog.notice("Audio capture started, connecting to AssemblyAI...")
                 startTranscriptionClients()
             } catch {
-                print("Audio capture failed: \(error)")
+                coordLog.error("Audio capture failed: \(error.localizedDescription)")
             }
         }
 
@@ -179,9 +184,11 @@ public final class SessionCoordinator {
 
     private func startTranscriptionClients() {
         guard let apiKey = try? KeychainManager.retrieve(account: "assemblyai-api-key") else {
-            print("No AssemblyAI API key configured")
+            coordLog.error("No AssemblyAI API key configured")
             return
         }
+
+        coordLog.notice("Connecting to AssemblyAI (2 streams)...")
 
         // App audio client (others' voices, with diarization)
         let appClient = AssemblyAIClient(apiKey: apiKey)
@@ -219,16 +226,27 @@ public final class SessionCoordinator {
 // MARK: - AudioCaptureDelegate
 
 extension SessionCoordinator: AudioCaptureDelegate {
+    private static var appAudioLogCount = 0
+    private static var micAudioLogCount = 0
+
     public func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureAppAudio data: Data) {
+        Self.appAudioLogCount += 1
+        if Self.appAudioLogCount <= 3 {
+            coordLog.notice("App audio chunk received: \(data.count) bytes")
+        }
         appAudioClient?.sendAudio(data)
     }
 
     public func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureMicAudio data: Data) {
+        Self.micAudioLogCount += 1
+        if Self.micAudioLogCount <= 3 {
+            coordLog.notice("Mic audio chunk received: \(data.count) bytes")
+        }
         micAudioClient?.sendAudio(data)
     }
 
     public func audioCaptureManager(_ manager: AudioCaptureManager, didEncounterError error: Error) {
-        print("Audio capture error: \(error)")
+        coordLog.error("Audio capture error: \(error.localizedDescription)")
     }
 }
 
@@ -236,6 +254,8 @@ extension SessionCoordinator: AudioCaptureDelegate {
 
 extension SessionCoordinator: AssemblyAIClientDelegate {
     public func client(_ client: AssemblyAIClient, didReceiveFinalTranscript transcript: FinalTranscriptData) {
+        let source = (client === micAudioClient) ? "mic" : "app"
+        coordLog.notice("Transcript (\(source)): \(transcript.text)")
         guard let convId = currentConversationId,
               let startTime = conversationStartTime else { return }
 
@@ -278,14 +298,16 @@ extension SessionCoordinator: AssemblyAIClientDelegate {
     }
 
     public func clientDidConnect(_ client: AssemblyAIClient) {
-        // Both clients connected — ready to stream
+        let source = (client === micAudioClient) ? "mic" : "app"
+        coordLog.notice("AssemblyAI connected (\(source) stream)")
     }
 
     public func clientDidDisconnect(_ client: AssemblyAIClient) {
-        // Handle reconnection if needed
+        let source = (client === micAudioClient) ? "mic" : "app"
+        coordLog.notice("AssemblyAI disconnected (\(source) stream)")
     }
 
     public func client(_ client: AssemblyAIClient, didEncounterError error: Error) {
-        print("AssemblyAI error: \(error)")
+        coordLog.error("AssemblyAI error: \(error.localizedDescription)")
     }
 }
