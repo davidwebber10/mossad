@@ -22,6 +22,12 @@ struct ConversationListView: View {
                     selectedConversationId: $selectedConversationId,
                     scrollToUtteranceId: $scrollToUtteranceId
                 )
+            } else if conversations.isEmpty {
+                ContentUnavailableView(
+                    "No Conversations",
+                    systemImage: "bubble.left.and.bubble.right",
+                    description: Text("Conversations will appear here after your first recorded call.")
+                )
             } else {
                 List {
                     ForEach(conversations) { conversation in
@@ -30,37 +36,45 @@ struct ConversationListView: View {
                                 Image(systemName: selectedIds.contains(conversation.id) ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(selectedIds.contains(conversation.id) ? .blue : .secondary)
                                     .font(.title3)
-                                    .onTapGesture {
-                                        toggleSelection(conversation.id)
-                                    }
+                                    .contentTransition(.symbolEffect(.replace))
                             }
 
                             ConversationRow(
                                 conversation: conversation,
-                                isSelected: !isSelecting && selectedConversationId == conversation.id,
                                 speakerCount: speakerCounts[conversation.id] ?? 0
                             )
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
                             if isSelecting {
-                                toggleSelection(conversation.id)
+                                withAnimation(.snappy(duration: 0.15)) {
+                                    toggleSelection(conversation.id)
+                                }
                             } else {
                                 selectedConversationId = conversation.id
                             }
                         }
+                        .listRowBackground(
+                            !isSelecting && selectedConversationId == conversation.id
+                                ? Color.accentColor.opacity(0.15)
+                                : Color.clear
+                        )
                         .contextMenu {
-                            Button(role: .destructive) {
-                                deleteConversation(conversation)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
+                            if !isSelecting {
+                                Button(role: .destructive) {
+                                    deleteConversation(conversation)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
                             }
                         }
                         .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                deleteConversation(conversation)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
+                            if !isSelecting {
+                                Button(role: .destructive) {
+                                    deleteConversation(conversation)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
                             }
                         }
                     }
@@ -71,30 +85,47 @@ struct ConversationListView: View {
         .navigationTitle("Conversations")
         .searchable(text: $searchText, prompt: "Search conversations...")
         .toolbar {
-            ToolbarItemGroup(placement: .automatic) {
+            ToolbarItem(placement: .automatic) {
                 if isSelecting {
-                    Button("Select All") {
-                        selectedIds = Set(conversations.map(\.id))
-                    }
-
-                    Button(role: .destructive) {
-                        deleteSelected()
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) {
+                            isSelecting = false
+                            selectedIds.removeAll()
+                        }
                     } label: {
-                        Label("Delete \(selectedIds.count)", systemImage: "trash")
+                        Image(systemName: "checkmark")
                     }
-                    .disabled(selectedIds.isEmpty)
-
-                    Button("Done") {
-                        isSelecting = false
-                        selectedIds.removeAll()
-                    }
+                    .help("Done selecting")
                 } else {
                     Button {
-                        isSelecting = true
+                        withAnimation(.snappy(duration: 0.2)) {
+                            isSelecting = true
+                        }
                     } label: {
-                        Label("Select", systemImage: "checkmark.circle")
+                        Text("Select")
                     }
+                    .help("Select multiple conversations")
                 }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if isSelecting {
+                SelectionBar(
+                    count: selectedIds.count,
+                    total: conversations.count,
+                    onSelectAll: {
+                        withAnimation(.snappy(duration: 0.15)) {
+                            selectedIds = Set(conversations.map(\.id))
+                        }
+                    },
+                    onDeselectAll: {
+                        withAnimation(.snappy(duration: 0.15)) {
+                            selectedIds.removeAll()
+                        }
+                    },
+                    onDelete: deleteSelected
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .frame(minWidth: 250)
@@ -149,43 +180,87 @@ struct ConversationListView: View {
     }
 }
 
+// MARK: - Selection Bar
+
+struct SelectionBar: View {
+    let count: Int
+    let total: Int
+    let onSelectAll: () -> Void
+    let onDeselectAll: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(count == total ? "Deselect All" : "Select All") {
+                if count == total {
+                    onDeselectAll()
+                } else {
+                    onSelectAll()
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.blue)
+
+            Spacer()
+
+            if count > 0 {
+                Text("\(count) selected")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+            }
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
+    }
+}
+
+// MARK: - Conversation Row
+
 struct ConversationRow: View {
     let conversation: Conversation
-    let isSelected: Bool
     let speakerCount: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(conversation.title)
                 .font(.subheadline)
-                .fontWeight(.semibold)
+                .fontWeight(.medium)
                 .lineLimit(1)
 
-            HStack {
-                Text(conversation.startedAt, style: .date)
-                Text("·")
+            HStack(spacing: 4) {
+                Text(conversation.startedAt, format: .dateTime.month(.abbreviated).day())
                 if let duration = conversation.durationSeconds {
+                    Text("·")
                     Text(formatDuration(duration))
                 }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            HStack {
-                Label(conversation.platform.capitalized, systemImage: platformIcon(conversation.platform))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            HStack(spacing: 4) {
+                Image(systemName: platformIcon(conversation.platform))
+                Text(conversation.platform.capitalized)
                 if speakerCount > 0 {
                     Text("·")
-                        .foregroundStyle(.tertiary)
                     Text("\(speakerCount) speakers")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
                 }
             }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
