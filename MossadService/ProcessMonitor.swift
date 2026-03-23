@@ -129,12 +129,13 @@ public final class ProcessMonitor {
     }
 
     public func detectMeetInBrowsers() -> String? {
-        monitorLog.debug("Checking browsers for Meet tabs...")
-        if let url = queryBrowserTabs(appName: "Google Chrome") { return url }
-        if let url = queryBrowserTabs(appName: "Arc") { return url }
-        if let url = queryBrowserTabs(appName: "Microsoft Edge") { return url }
-        if let url = querySafariTabs() { return url }
-        monitorLog.debug("No Meet tabs found in any browser")
+        // Only check browsers that are actually running
+        let apps = NSWorkspace.shared.runningApplications
+        let runningBundleIds = Set(apps.compactMap { $0.bundleIdentifier })
+
+        if runningBundleIds.contains("com.google.Chrome") {
+            if let url = queryBrowserTabs(appName: "Google Chrome") { return url }
+        }
         return nil
     }
 
@@ -165,24 +166,4 @@ public final class ProcessMonitor {
         return result.stringValue
     }
 
-    private func querySafariTabs() -> String? {
-        let script = """
-            tell application "Safari"
-                repeat with w in windows
-                    repeat with t in tabs of w
-                        set tabURL to URL of t
-                        if tabURL starts with "https://meet.google.com/" then
-                            return tabURL
-                        end if
-                    end repeat
-                end repeat
-            end tell
-            return missing value
-            """
-        guard let appleScript = NSAppleScript(source: script) else { return nil }
-        var error: NSDictionary?
-        let result = appleScript.executeAndReturnError(&error)
-        guard error == nil, result.stringValue != nil else { return nil }
-        return result.stringValue
-    }
 }
