@@ -49,6 +49,7 @@ public final class AppState: NSObject, ObservableObject {
 
     private let eventStore = EKEventStore()
     private var refreshTimer: Timer?
+    private var coordinator: SessionCoordinator?
     let store: ConversationStore
 
     override init() {
@@ -58,6 +59,17 @@ public final class AppState: NSObject, ObservableObject {
         let savedDisabled = UserDefaults.standard.stringArray(forKey: "disabledEventIds") ?? []
         self.disabledEventIds = Set(savedDisabled)
         super.init()
+
+        // Start the session coordinator in-process
+        do {
+            coordinator = try SessionCoordinator()
+            coordinator?.delegate = self
+            coordinator?.startMonitoring()
+            print("[Mossad] SessionCoordinator started, monitoring for calls...")
+        } catch {
+            print("[Mossad] Failed to start SessionCoordinator: \(error)")
+        }
+
         refreshUpcomingEvents()
         // Refresh every 5 minutes as a fallback
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
@@ -203,11 +215,11 @@ public final class AppState: NSObject, ObservableObject {
     }
 
     func pauseRecording() {
-        // TODO: wire to in-process SessionCoordinator
+        coordinator?.pauseRecording()
     }
 
     func resumeRecording() {
-        // TODO: wire to in-process SessionCoordinator
+        coordinator?.resumeRecording()
     }
 
     var elapsedFormatted: String {
@@ -217,6 +229,7 @@ public final class AppState: NSObject, ObservableObject {
     }
 
     func handleStateChange(_ snapshot: ServiceSnapshot) {
+        print("[Mossad] State changed: \(snapshot.recordingState.rawValue) - \(snapshot.currentMeetingTitle ?? "no meeting")")
         let wasRecording = self.recordingState == .recording
         let nowIdle = snapshot.recordingState == .idle || snapshot.recordingState == .detecting
 
@@ -236,5 +249,17 @@ public final class AppState: NSObject, ObservableObject {
         }
 
         self.currentConversationId = snapshot.currentConversationId
+    }
+}
+
+extension AppState: SessionCoordinatorDelegate {
+    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didChangeState snapshot: ServiceSnapshot) {
+        Task { @MainActor in
+            self.handleStateChange(snapshot)
+        }
+    }
+
+    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didReceiveUtterance utteranceData: Data) {
+        // Could use for live transcript display
     }
 }

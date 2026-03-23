@@ -39,6 +39,12 @@ targets:
     deploymentTarget: "26.0"
     sources:
       - Mossad
+      - path: MossadService
+        excludes:
+          - "main.swift"
+          - "ServiceDelegate.swift"
+          - "MossadServiceImpl.swift"
+          - "Info.plist"
     info:
       path: Mossad/Info.plist
       properties:

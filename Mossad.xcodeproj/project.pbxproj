@@ -10,10 +10,12 @@
 		00E730B3FC58258DCF60E1BE /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1648E3F4C7066D9070A13FC8 /* TranscriptView.swift */; };
 		035CA066A4B9515F26396278 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48C5017133D9DAE4C84AEDC /* ConversationListView.swift */; };
 		05174560A2D27FC6093C11A0 /* MenuBarPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EEC6BD96CD56F4FFAEA8DF5 /* MenuBarPopover.swift */; };
+		05AFC81CE94A48149E12508D /* CalendarMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7647697C98AC05F5C1740A0F /* CalendarMatcher.swift */; };
 		067C4DC3A3AAEC5D83AE5CB7 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 3951CB861743C462D024AA3D /* GRDB */; };
 		0A248043605472C4B2A6C343 /* SearchResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84908F4E327C0B94635348CA /* SearchResultsView.swift */; };
 		0DBB61C64DC9D2A8E606DAC0 /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
 		0FF2F13167B85511955CAE5F /* MossadShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		192AA2078249A0A689C4F737 /* SessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09544F5E7AA92E427109D78E /* SessionCoordinator.swift */; };
 		1F3907CBB1E0292253A998D6 /* ConversationStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571FDD2E044FA52C90D260B0 /* ConversationStoreTests.swift */; };
 		1FE63D323F641D63598113B0 /* ProcessMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E7C31ABC50BBE27BFBD3C1 /* ProcessMonitorTests.swift */; };
 		249910C612D200FF1CD4AE4D /* AssemblyAIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A76746C95208DC066E0EE21 /* AssemblyAIClientTests.swift */; };
@@ -24,6 +26,7 @@
 		36D6B3C52207DC7770E8B58E /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3611AB543E255A4625DBC9 /* Conversation.swift */; };
 		39077B27F40EFF0CC9B8921A /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
 		3C2EDD9787057354D591C640 /* CalendarMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7647697C98AC05F5C1740A0F /* CalendarMatcher.swift */; };
+		453FE6914B80E76A0C678B1B /* AudioCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5CAE026615549E2C671C432 /* AudioCaptureManager.swift */; };
 		49D4D59634DB3B2596D26172 /* MossadShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; };
 		52C7BE53956F8E767E5FC10D /* ConversationSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD544FB5C0185640B5B7C70A /* ConversationSpeaker.swift */; };
 		66FBE158FDAE02069EE45181 /* DatabaseManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624F59415D0020D4F22F0D87 /* DatabaseManagerTests.swift */; };
@@ -44,12 +47,14 @@
 		C781784541210454A3E3A553 /* MossadShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7DA14CBC649C1A1921435C3F /* MossadShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D24191C9ABC2E53D80E46C24 /* DatabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B913BF2AEC707AF5050F0A /* DatabaseManager.swift */; };
 		D24AE6483B4AB0A8B9AC0C0C /* UpcomingEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD3F48C69DCBD84FA1BEA593 /* UpcomingEventsView.swift */; };
+		D2DD24622B7EEB5F15CD177D /* AssemblyAIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFFF18E4D37FFA23427A5D9 /* AssemblyAIClient.swift */; };
 		D3114D6334F8B28F4CA0B544 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BE1EE70FF9A93E820BB57D60 /* GRDB */; };
 		D320E46E270486590E71E24D /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 418BF5166969F8172B493803 /* AppState.swift */; };
 		DDA3D373C7CE86CB7CD3D1E3 /* ServiceState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C8F250649926662A6D852C /* ServiceState.swift */; };
 		DEE4BB9686E77181356EC872 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E78A62369D673F43B2EED6A7 /* OnboardingView.swift */; };
 		E1AD164BED3AAAEB516D7089 /* MossadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D90495786750C710F1612F /* MossadTests.swift */; };
 		EF83B14A377D526E67D7C98D /* AssemblyAIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFFF18E4D37FFA23427A5D9 /* AssemblyAIClient.swift */; };
+		F27528C9D6AD2A7C4D40D6D6 /* ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46571234AAB7CD8C8309EFEA /* ProcessMonitor.swift */; };
 		F45B85DCB8242AD8713ED258 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D922E64DE2F3851372EB24C6 /* ConversationStore.swift */; };
 		F7BD4A824A78B400E586D65D /* ServiceDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F05A2ED976472E9E652B5ED /* ServiceDelegate.swift */; };
 /* End PBXBuildFile section */
@@ -111,11 +116,11 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		222E5B8FC123E08E3D6FAFEE /* Embed XPC Services */ = {
+		222E5B8FC123E08E3D6FAFEE /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 16;
+			dstSubfolderSpec = 13;
 			files = (
 				6F02EBAE2EF9AF1B021D9739 /* MossadService.bundle in Embed Dependencies */,
 			);
@@ -529,13 +534,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				D320E46E270486590E71E24D /* AppState.swift in Sources */,
+				D2DD24622B7EEB5F15CD177D /* AssemblyAIClient.swift in Sources */,
+				453FE6914B80E76A0C678B1B /* AudioCaptureManager.swift in Sources */,
+				05AFC81CE94A48149E12508D /* CalendarMatcher.swift in Sources */,
 				9086D81C3B0DAA60629F7D61 /* ConversationBrowserWindow.swift in Sources */,
 				035CA066A4B9515F26396278 /* ConversationListView.swift in Sources */,
 				6943E5D1E00A81F9A9AA0BF0 /* EventDetailSheet.swift in Sources */,
 				05174560A2D27FC6093C11A0 /* MenuBarPopover.swift in Sources */,
 				2D279D8F4E3541B29E74B4BF /* MossadApp.swift in Sources */,
 				DEE4BB9686E77181356EC872 /* OnboardingView.swift in Sources */,
+				F27528C9D6AD2A7C4D40D6D6 /* ProcessMonitor.swift in Sources */,
 				0A248043605472C4B2A6C343 /* SearchResultsView.swift in Sources */,
+				192AA2078249A0A689C4F737 /* SessionCoordinator.swift in Sources */,
 				9D584236611E3C991AE209A4 /* SettingsView.swift in Sources */,
 				738AEE5244A934E898F26122 /* SpeakerLabelingSheet.swift in Sources */,
 				00E730B3FC58258DCF60E1BE /* TranscriptView.swift in Sources */,
