@@ -70,7 +70,7 @@ public final class AssemblyAIClient {
     }
 
     public func connect() {
-        let urlString = "wss://streaming.assemblyai.com/v3/ws?speech_model=u3-rt-pro&sample_rate=16000&speaker_labels=true"
+        let urlString = "wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000"
         guard let url = URL(string: urlString) else { return }
         var request = URLRequest(url: url)
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
