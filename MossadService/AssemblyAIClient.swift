@@ -68,18 +68,34 @@ public final class AssemblyAIClient {
     public weak var delegate: AssemblyAIClientDelegate?
     private var isConnected = false
 
+    private class SessionDelegate: NSObject, URLSessionWebSocketDelegate {
+        func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+            aaiLog.notice("WebSocket didOpen with protocol: \(`protocol` ?? "none", privacy: .public)")
+        }
+        func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+            let reasonStr = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "none"
+            aaiLog.notice("WebSocket didClose: code=\(closeCode.rawValue, privacy: .public) reason=\(reasonStr, privacy: .public)")
+        }
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+            if let error {
+                aaiLog.error("URLSession task error: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+    private let sessionDelegate = SessionDelegate()
+
     public init(apiKey: String) {
         self.apiKey = apiKey
-        self.session = URLSession(configuration: .default)
+        self.session = URLSession(configuration: .default, delegate: nil, delegateQueue: nil)
     }
 
     public func connect() {
-        // URLSessionWebSocketTask doesn't reliably send custom headers on WebSocket upgrade.
-        // Pass API key as token query param instead.
-        let urlString = "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&token=\(apiKey)"
+        let urlString = "wss://streaming.assemblyai.com/v3/ws?speech_model=u3-rt-pro&sample_rate=16000&token=\(apiKey)"
         guard let url = URL(string: urlString) else { return }
         aaiLog.notice("Connecting to AssemblyAI streaming...")
-        webSocketTask = session.webSocketTask(with: url)
+        // Create a dedicated session with delegate for this connection
+        let delegateSession = URLSession(configuration: .default, delegate: sessionDelegate, delegateQueue: nil)
+        webSocketTask = delegateSession.webSocketTask(with: url)
         webSocketTask?.resume()
         receiveMessage()
     }
