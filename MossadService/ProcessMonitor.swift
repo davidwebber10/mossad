@@ -50,37 +50,13 @@ public final class ProcessMonitor {
     }
 
     private func poll() {
-        monitorLog.notice("Polling for meetings...")
         let apps = NSWorkspace.shared.runningApplications
 
-        // Check for Zoom
-        if let zoom = apps.first(where: { Self.zoomBundleIds.contains($0.bundleIdentifier ?? "") }),
-           Self.processHasActiveAudio(pid: zoom.processIdentifier) {
-            if currentMeeting?.platform != .zoom {
-                let meeting = DetectedMeeting(platform: .zoom, processIdentifier: zoom.processIdentifier, meetingUrl: nil, bundleIdentifier: zoom.bundleIdentifier)
-                currentMeeting = meeting
-                onMeetingDetected?(meeting)
-            }
-            return
-        }
-
-        // Check for Teams
-        if let teams = apps.first(where: { Self.teamsBundleIds.contains($0.bundleIdentifier ?? "") }),
-           Self.processHasActiveAudio(pid: teams.processIdentifier) {
-            if currentMeeting?.platform != .teams {
-                let meeting = DetectedMeeting(platform: .teams, processIdentifier: teams.processIdentifier, meetingUrl: nil, bundleIdentifier: teams.bundleIdentifier)
-                currentMeeting = meeting
-                onMeetingDetected?(meeting)
-            }
-            return
-        }
-
-        // Check for Google Meet in browser tabs
+        // Check for Google Meet first (most reliable — URL-based detection)
         let meetUrl = detectMeetInBrowsers()
         if let meetUrl {
             monitorLog.notice("Detected Meet URL: \(meetUrl)")
             if currentMeeting?.platform != .meet {
-                // Find the browser process for ScreenCaptureKit
                 let browserApp = apps.first(where: { Self.meetBrowserBundleIds.contains($0.bundleIdentifier ?? "") })
                 let meeting = DetectedMeeting(
                     platform: .meet,
@@ -94,8 +70,31 @@ public final class ProcessMonitor {
             return
         }
 
+        // Check for Zoom (only if it's the frontmost app — heuristic for "in a call")
+        if let zoom = apps.first(where: { Self.zoomBundleIds.contains($0.bundleIdentifier ?? "") }),
+           zoom.isActive {
+            if currentMeeting?.platform != .zoom {
+                let meeting = DetectedMeeting(platform: .zoom, processIdentifier: zoom.processIdentifier, meetingUrl: nil, bundleIdentifier: zoom.bundleIdentifier)
+                currentMeeting = meeting
+                onMeetingDetected?(meeting)
+            }
+            return
+        }
+
+        // Check for Teams (only if it's the frontmost app)
+        if let teams = apps.first(where: { Self.teamsBundleIds.contains($0.bundleIdentifier ?? "") }),
+           teams.isActive {
+            if currentMeeting?.platform != .teams {
+                let meeting = DetectedMeeting(platform: .teams, processIdentifier: teams.processIdentifier, meetingUrl: nil, bundleIdentifier: teams.bundleIdentifier)
+                currentMeeting = meeting
+                onMeetingDetected?(meeting)
+            }
+            return
+        }
+
         // No meeting detected — if we had one, it ended
         if currentMeeting != nil {
+            monitorLog.notice("Meeting ended")
             currentMeeting = nil
             onMeetingEnded?()
         }
@@ -130,10 +129,12 @@ public final class ProcessMonitor {
     }
 
     public func detectMeetInBrowsers() -> String? {
+        monitorLog.debug("Checking browsers for Meet tabs...")
         if let url = queryBrowserTabs(appName: "Google Chrome") { return url }
         if let url = queryBrowserTabs(appName: "Arc") { return url }
         if let url = queryBrowserTabs(appName: "Microsoft Edge") { return url }
         if let url = querySafariTabs() { return url }
+        monitorLog.debug("No Meet tabs found in any browser")
         return nil
     }
 
@@ -151,11 +152,14 @@ public final class ProcessMonitor {
             end tell
             return missing value
             """
-        guard let appleScript = NSAppleScript(source: script) else { return nil }
+        guard let appleScript = NSAppleScript(source: script) else {
+            monitorLog.error("Failed to create NSAppleScript for \(appName)")
+            return nil
+        }
         var error: NSDictionary?
         let result = appleScript.executeAndReturnError(&error)
         if let error = error {
-            monitorLog.error("AppleScript error for \(appName): \(error)")
+            monitorLog.error("AppleScript error for \(appName): \(error.description)")
         }
         guard error == nil, result.stringValue != nil else { return nil }
         return result.stringValue
