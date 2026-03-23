@@ -67,6 +67,8 @@ public final class AssemblyAIClient {
     private let session: URLSession
     public weak var delegate: AssemblyAIClientDelegate?
     private var isConnected = false
+    private var audioBuffer = Data()
+    private let minChunkSize = 3200  // 100ms at 16kHz 16-bit mono (must be >= 50ms per AssemblyAI)
 
     private class SessionDelegate: NSObject, URLSessionWebSocketDelegate {
         func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
@@ -107,12 +109,17 @@ public final class AssemblyAIClient {
         delegate?.clientDidDisconnect(self)
     }
 
-    /// Send raw PCM audio data as binary
+    /// Send raw PCM audio data as binary, buffering to meet minimum chunk size
     public func sendAudio(_ pcmData: Data) {
         guard isConnected else { return }
-        let message = URLSessionWebSocketTask.Message.data(pcmData)
-        webSocketTask?.send(message) { [weak self] error in
-            if let error { self.map { self?.delegate?.client($0, didEncounterError: error) } }
+        audioBuffer.append(pcmData)
+        while audioBuffer.count >= minChunkSize {
+            let chunk = audioBuffer.prefix(minChunkSize)
+            audioBuffer.removeFirst(minChunkSize)
+            let message = URLSessionWebSocketTask.Message.data(Data(chunk))
+            webSocketTask?.send(message) { [weak self] error in
+                if let error { self.map { self?.delegate?.client($0, didEncounterError: error) } }
+            }
         }
     }
 
