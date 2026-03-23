@@ -199,15 +199,22 @@ public final class SessionCoordinator {
             return
         }
 
-        coordLog.notice("Connecting to AssemblyAI (mic-only stream)...")
+        coordLog.notice("Connecting to AssemblyAI (2 streams: mic + app)...")
 
-        // Mic captures everything — your voice + other voices from speakers
-        // This avoids the duplication problem of separate mic + app audio streams
-        let client = AssemblyAIClient(apiKey: apiKey)
-        client.delegate = self
-        client.connect()
-        self.micAudioClient = client
-        self.appAudioClient = nil  // don't send app audio separately
+        // Mic stream (my voice only — echo cancellation removes speaker bleed)
+        let micClient = AssemblyAIClient(apiKey: apiKey)
+        micClient.delegate = self
+        micClient.connect()
+        self.micAudioClient = micClient
+
+        // App audio stream (everyone else via ScreenCaptureKit)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            let appClient = AssemblyAIClient(apiKey: apiKey)
+            appClient.delegate = self
+            appClient.connect()
+            self.appAudioClient = appClient
+        }
     }
 
     // MARK: - State Management
@@ -261,14 +268,34 @@ extension SessionCoordinator: AudioCaptureDelegate {
 
 extension SessionCoordinator: AssemblyAIClientDelegate {
     public func client(_ client: AssemblyAIClient, didReceiveFinalTranscript transcript: FinalTranscriptData) {
-        coordLog.notice("Transcript: \(transcript.text)")
+        let isMe = (client === micAudioClient)
+        coordLog.notice("Transcript (\(isMe ? "me" : "them")): \(transcript.text)")
         guard let convId = currentConversationId else { return }
 
         let startOffset = Double(transcript.audioStartMs) / 1000.0
         let endOffset = Double(transcript.audioEndMs) / 1000.0
 
-        // Single mic stream captures everyone in the room
-        let speakerId = meSpeaker?.id ?? "unknown"
+        let speakerId: String
+        let speakerName: String
+        if isMe {
+            speakerId = meSpeaker?.id ?? "unknown"
+            speakerName = meSpeaker?.name ?? "Me"
+        } else {
+            if let existingId = speakerMap["them"] {
+                speakerId = existingId
+            } else {
+                let speaker = try? store.getOrCreateSpeaker(name: "Other")
+                speakerId = speaker?.id ?? "unknown"
+                speakerMap["them"] = speakerId
+                try? store.addConversationSpeaker(
+                    conversationId: convId,
+                    speakerId: speakerId,
+                    diarizationLabel: "them"
+                )
+                updateState { $0.speakerCount = 2 }
+            }
+            speakerName = "Other"
+        }
 
         try? store.insertUtterance(
             conversationId: convId,
@@ -278,7 +305,7 @@ extension SessionCoordinator: AssemblyAIClientDelegate {
             endedAt: endOffset
         )
 
-        delegate?.coordinator(self, didTranscribe: transcript.text, speaker: "", timestamp: startOffset)
+        delegate?.coordinator(self, didTranscribe: transcript.text, speaker: speakerName, timestamp: startOffset)
     }
 
     public func client(_ client: AssemblyAIClient, didReceivePartialTranscript text: String) {
