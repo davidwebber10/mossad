@@ -233,44 +233,54 @@ struct ConversationRow: View {
     let speakerCount: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(conversation.title)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .lineLimit(1)
-
-            HStack(spacing: 4) {
+        HStack(spacing: 12) {
+            // Time column
+            VStack(spacing: 2) {
+                Text(conversation.startedAt, format: .dateTime.hour().minute())
+                    .font(.caption)
+                    .fontWeight(.medium)
                 Text(conversation.startedAt, format: .dateTime.month(.abbreviated).day())
-                if let duration = conversation.durationSeconds {
-                    Text("·")
-                    Text(formatDuration(duration))
-                }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .frame(width: 50)
 
-            HStack(spacing: 4) {
-                Image(systemName: platformIcon(conversation.platform))
-                Text(conversation.platform.capitalized)
-                if speakerCount > 0 {
+            // Details
+            VStack(alignment: .leading, spacing: 3) {
+                Text(conversation.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+
+                HStack(spacing: 4) {
+                    if let duration = conversation.durationSeconds {
+                        Text(formatDuration(duration))
+                    }
                     Text("·")
-                    Text("\(speakerCount) speakers")
+                    Image(systemName: platformIcon(conversation.platform))
+                    Text(conversation.platform.capitalized)
+                    if speakerCount > 0 {
+                        Text("·")
+                        Text("\(speakerCount) speakers")
+                    }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func formatDuration(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
         if seconds >= 3600 {
             let h = seconds / 3600
-            let m = (seconds % 3600) / 60
-            return "\(h)h \(m)m"
+            let rm = (seconds % 3600) / 60
+            return "\(h)h \(rm)m"
         }
-        return "\(seconds / 60)m"
+        return "\(m)m \(s)s"
     }
 
     private func platformIcon(_ platform: String) -> String {
