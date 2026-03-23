@@ -25,6 +25,8 @@ public final class ProcessMonitor {
     private var currentMeeting: DetectedMeeting?
     private var onMeetingDetected: MeetingDetectedHandler?
     private var onMeetingEnded: MeetingEndedHandler?
+    private var missedPollCount = 0
+    private let missedPollThreshold = 3 // require 3 consecutive misses (~9 seconds) before ending
 
     private static let zoomBundleIds = ["us.zoom.xos"]
     private static let teamsBundleIds = ["com.microsoft.teams", "com.microsoft.teams2"]
@@ -52,11 +54,14 @@ public final class ProcessMonitor {
     private func poll() {
         let apps = NSWorkspace.shared.runningApplications
 
+        var detected = false
+
         // Check for Google Meet first (most reliable — URL-based detection)
-        let meetUrl = detectMeetInBrowsers()
-        if let meetUrl {
-            monitorLog.notice("Detected Meet URL: \(meetUrl)")
+        if let meetUrl = detectMeetInBrowsers() {
+            detected = true
+            missedPollCount = 0
             if currentMeeting?.platform != .meet {
+                monitorLog.notice("Meeting detected: Google Meet")
                 let browserApp = apps.first(where: { Self.meetBrowserBundleIds.contains($0.bundleIdentifier ?? "") })
                 let meeting = DetectedMeeting(
                     platform: .meet,
@@ -67,36 +72,45 @@ public final class ProcessMonitor {
                 currentMeeting = meeting
                 onMeetingDetected?(meeting)
             }
-            return
         }
 
-        // Check for Zoom (only if it's the frontmost app — heuristic for "in a call")
-        if let zoom = apps.first(where: { Self.zoomBundleIds.contains($0.bundleIdentifier ?? "") }),
+        // Check for Zoom
+        if !detected,
+           let zoom = apps.first(where: { Self.zoomBundleIds.contains($0.bundleIdentifier ?? "") }),
            zoom.isActive {
+            detected = true
+            missedPollCount = 0
             if currentMeeting?.platform != .zoom {
+                monitorLog.notice("Meeting detected: Zoom")
                 let meeting = DetectedMeeting(platform: .zoom, processIdentifier: zoom.processIdentifier, meetingUrl: nil, bundleIdentifier: zoom.bundleIdentifier)
                 currentMeeting = meeting
                 onMeetingDetected?(meeting)
             }
-            return
         }
 
-        // Check for Teams (only if it's the frontmost app)
-        if let teams = apps.first(where: { Self.teamsBundleIds.contains($0.bundleIdentifier ?? "") }),
+        // Check for Teams
+        if !detected,
+           let teams = apps.first(where: { Self.teamsBundleIds.contains($0.bundleIdentifier ?? "") }),
            teams.isActive {
+            detected = true
+            missedPollCount = 0
             if currentMeeting?.platform != .teams {
+                monitorLog.notice("Meeting detected: Teams")
                 let meeting = DetectedMeeting(platform: .teams, processIdentifier: teams.processIdentifier, meetingUrl: nil, bundleIdentifier: teams.bundleIdentifier)
                 currentMeeting = meeting
                 onMeetingDetected?(meeting)
             }
-            return
         }
 
-        // No meeting detected — if we had one, it ended
-        if currentMeeting != nil {
-            monitorLog.notice("Meeting ended")
-            currentMeeting = nil
-            onMeetingEnded?()
+        // No meeting detected this poll — debounce before declaring it ended
+        if !detected && currentMeeting != nil {
+            missedPollCount += 1
+            if missedPollCount >= missedPollThreshold {
+                monitorLog.notice("Meeting ended (after \(self.missedPollCount) missed polls)")
+                currentMeeting = nil
+                missedPollCount = 0
+                onMeetingEnded?()
+            }
         }
     }
 
