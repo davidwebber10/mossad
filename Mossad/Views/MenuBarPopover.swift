@@ -5,6 +5,7 @@ import MossadShared
 struct MenuBarPopover: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -186,18 +187,21 @@ struct MenuBarPopover: View {
     }
 
     private func openUpcoming() {
+        dismiss()
         NSApp.activate(ignoringOtherApps: true)
         appState.initialTab = .upcoming
         openWindow(id: "browser")
     }
 
     private func openConversationBrowser() {
+        dismiss()
         NSApp.activate(ignoringOtherApps: true)
         appState.initialTab = .conversations
         openWindow(id: "browser")
     }
 
     private func openSettings() {
+        dismiss()
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "settings")
     }
