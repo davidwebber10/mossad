@@ -68,7 +68,7 @@ public final class AssemblyAIClient {
     public weak var delegate: AssemblyAIClientDelegate?
     private var isConnected = false
     private var audioBuffer = Data()
-    private let minChunkSize = 3200  // 100ms at 16kHz 16-bit mono (must be >= 50ms per AssemblyAI)
+    private let minChunkSize = 6400  // 200ms at 16kHz 16-bit mono (sweet spot for accuracy)
 
     private class SessionDelegate: NSObject, URLSessionWebSocketDelegate {
         func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
@@ -92,7 +92,7 @@ public final class AssemblyAIClient {
     }
 
     public func connect() {
-        let urlString = "wss://streaming.assemblyai.com/v3/ws?speech_model=u3-rt-pro&sample_rate=16000&token=\(apiKey)"
+        let urlString = "wss://streaming.assemblyai.com/v3/ws?speech_model=u3-rt-pro&sample_rate=16000&encoding=pcm_s16le&token=\(apiKey)"
         guard let url = URL(string: urlString) else { return }
         aaiLog.notice("Connecting to AssemblyAI streaming...")
         // Create a dedicated session with delegate for this connection

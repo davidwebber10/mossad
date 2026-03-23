@@ -2,6 +2,9 @@
 import AVFoundation
 import Foundation
 import ScreenCaptureKit
+import os.log
+
+private let audioLog = Logger(subsystem: "com.mossad.app", category: "AudioCapture")
 
 public protocol AudioCaptureDelegate: AnyObject {
     func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureAppAudio data: Data)
@@ -15,7 +18,7 @@ public final class AudioCaptureManager: NSObject {
     private var scStream: SCStream?
     private var audioEngine: AVAudioEngine?
 
-    // Target format for AssemblyAI
+    // Target: 16kHz mono 16-bit PCM (what AssemblyAI expects)
     private let targetSampleRate: Double = 16000
     private let targetChannels: AVAudioChannelCount = 1
 
@@ -23,10 +26,18 @@ public final class AudioCaptureManager: NSObject {
         super.init()
     }
 
-    /// Start capturing audio from a specific app (via ScreenCaptureKit) and the mic.
     public func startCapture(appProcessID: pid_t) async throws {
-        try await startAppAudioCapture(processID: appProcessID)
+        // Start mic capture — this is the primary audio source
         try startMicCapture()
+        audioLog.notice("Mic capture started")
+
+        // Start app audio capture for remote participants
+        do {
+            try await startAppAudioCapture(processID: appProcessID)
+            audioLog.notice("App audio capture started")
+        } catch {
+            audioLog.error("App audio capture failed (continuing with mic only): \(error.localizedDescription)")
+        }
     }
 
     public func stopCapture() {
@@ -37,7 +48,40 @@ public final class AudioCaptureManager: NSObject {
         audioEngine = nil
     }
 
-    // MARK: - ScreenCaptureKit (app audio)
+    // MARK: - Mic capture (AVAudioEngine)
+
+    private func startMicCapture() throws {
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+
+        audioLog.notice("Mic input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch, \(inputFormat.commonFormat.rawValue)")
+
+        // Target format for AssemblyAI
+        guard let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: targetSampleRate,
+            channels: targetChannels,
+            interleaved: true
+        ) else {
+            throw AudioCaptureError.formatError
+        }
+
+        // Use a larger buffer for better quality (8192 frames ≈ 170ms at 48kHz)
+        inputNode.installTap(onBus: 0, bufferSize: 8192, format: inputFormat) { [weak self] buffer, _ in
+            guard let self else { return }
+
+            // Convert to 16kHz mono int16
+            guard let converted = self.convertBuffer(buffer, from: inputFormat, to: targetFormat) else { return }
+            self.delegate?.audioCaptureManager(self, didCaptureMicAudio: converted)
+        }
+
+        engine.prepare()
+        try engine.start()
+        self.audioEngine = engine
+    }
+
+    // MARK: - App audio capture (ScreenCaptureKit)
 
     private func startAppAudioCapture(processID: pid_t) async throws {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
@@ -50,21 +94,16 @@ public final class AudioCaptureManager: NSObject {
             throw AudioCaptureError.noDisplay
         }
 
-        let appFilter = SCContentFilter(
-            display: display,
-            including: [app],
-            exceptingWindows: []
-        )
+        let appFilter = SCContentFilter(display: display, including: [app], exceptingWindows: [])
 
         let config = SCStreamConfiguration()
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true
         config.sampleRate = Int(targetSampleRate)
         config.channelCount = Int(targetChannels)
-        // We don't need video
         config.width = 2
         config.height = 2
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 1) // 1 fps minimum
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
 
         let stream = SCStream(filter: appFilter, configuration: config, delegate: nil)
         try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
@@ -72,56 +111,42 @@ public final class AudioCaptureManager: NSObject {
         self.scStream = stream
     }
 
-    // MARK: - AVAudioEngine (mic)
+    // MARK: - Audio conversion
 
-    private func startMicCapture() throws {
-        let engine = AVAudioEngine()
-        let inputNode = engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-
-        // Convert to target format
-        guard let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt16,
-            sampleRate: targetSampleRate,
-            channels: targetChannels,
-            interleaved: true
-        ) else {
-            throw AudioCaptureError.formatError
+    private func convertBuffer(_ buffer: AVAudioPCMBuffer, from inputFormat: AVAudioFormat, to targetFormat: AVAudioFormat) -> Data? {
+        // If already at target format, just extract
+        if inputFormat.sampleRate == targetFormat.sampleRate &&
+           inputFormat.channelCount == targetFormat.channelCount &&
+           inputFormat.commonFormat == targetFormat.commonFormat {
+            return buffer.int16Data
         }
 
-        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-            throw AudioCaptureError.converterError
+        // Calculate output frame count
+        let ratio = targetFormat.sampleRate / inputFormat.sampleRate
+        let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+        guard outputFrameCount > 0 else { return nil }
+
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCount) else { return nil }
+        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else { return nil }
+
+        var error: NSError?
+        var inputConsumed = false
+        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+            if inputConsumed {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            inputConsumed = true
+            outStatus.pointee = .haveData
+            return buffer
         }
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            guard let self = self else { return }
-
-            let frameCount = AVAudioFrameCount(
-                Double(buffer.frameLength) * self.targetSampleRate / inputFormat.sampleRate
-            )
-            guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: frameCount) else {
-                return
-            }
-
-            var error: NSError?
-            converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-                outStatus.pointee = .haveData
-                return buffer
-            }
-
-            if let error = error {
-                self.delegate?.audioCaptureManager(self, didEncounterError: error)
-                return
-            }
-
-            if let data = convertedBuffer.int16Data {
-                self.delegate?.audioCaptureManager(self, didCaptureMicAudio: data)
-            }
+        if let error {
+            audioLog.error("Audio conversion error: \(error.localizedDescription)")
+            return nil
         }
 
-        engine.prepare()
-        try engine.start()
-        self.audioEngine = engine
+        return outputBuffer.int16Data
     }
 }
 
@@ -130,8 +155,41 @@ public final class AudioCaptureManager: NSObject {
 extension AudioCaptureManager: SCStreamOutput {
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio else { return }
-        guard let data = sampleBuffer.pcmData else { return }
-        delegate?.audioCaptureManager(self, didCaptureAppAudio: data)
+
+        // Convert CMSampleBuffer to PCM int16 Data
+        guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) else { return }
+
+        // Get raw audio data
+        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
+        var length = 0
+        var dataPointer: UnsafeMutablePointer<Int8>?
+        let status = CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &length, dataPointerOut: &dataPointer)
+        guard status == kCMBlockBufferNoErr, let ptr = dataPointer, length > 0 else { return }
+
+        let rawData = Data(bytes: ptr, count: length)
+
+        // SCStream with sampleRate=16000 and channelCount=1 should give us what we want,
+        // but the format might be float32 — convert to int16 if needed
+        if asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat != 0 {
+            // Float32 → Int16
+            let floatCount = length / MemoryLayout<Float32>.size
+            var int16Data = Data(count: floatCount * MemoryLayout<Int16>.size)
+            rawData.withUnsafeBytes { rawBuf in
+                int16Data.withUnsafeMutableBytes { outBuf in
+                    let floats = rawBuf.bindMemory(to: Float32.self)
+                    let ints = outBuf.bindMemory(to: Int16.self)
+                    for i in 0..<floatCount {
+                        let clamped = max(-1.0, min(1.0, floats[i]))
+                        ints[i] = Int16(clamped * Float32(Int16.max))
+                    }
+                }
+            }
+            delegate?.audioCaptureManager(self, didCaptureAppAudio: int16Data)
+        } else {
+            // Already int16 (or close enough)
+            delegate?.audioCaptureManager(self, didCaptureAppAudio: rawData)
+        }
     }
 }
 
@@ -148,17 +206,7 @@ extension AVAudioPCMBuffer {
     var int16Data: Data? {
         guard let ptr = int16ChannelData else { return nil }
         let count = Int(frameLength)
+        guard count > 0 else { return nil }
         return Data(bytes: ptr[0], count: count * MemoryLayout<Int16>.size)
-    }
-}
-
-extension CMSampleBuffer {
-    var pcmData: Data? {
-        guard let blockBuffer = CMSampleBufferGetDataBuffer(self) else { return nil }
-        var length = 0
-        var dataPointer: UnsafeMutablePointer<Int8>?
-        let status = CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &length, dataPointerOut: &dataPointer)
-        guard status == kCMBlockBufferNoErr, let ptr = dataPointer else { return nil }
-        return Data(bytes: ptr, count: length)
     }
 }
