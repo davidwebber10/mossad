@@ -199,14 +199,23 @@ public final class SessionCoordinator {
             return
         }
 
-        coordLog.notice("Connecting to AssemblyAI (single mixed stream)...")
+        coordLog.notice("Connecting to AssemblyAI (2 streams: mic + app)...")
 
-        // Single stream for both mic and app audio
-        let client = AssemblyAIClient(apiKey: apiKey)
-        client.delegate = self
-        client.connect()
-        self.appAudioClient = client
-        self.micAudioClient = client  // same client receives both streams
+        // Mic stream (my voice)
+        let micClient = AssemblyAIClient(apiKey: apiKey)
+        micClient.delegate = self
+        micClient.connect()
+        self.micAudioClient = micClient
+
+        // App audio stream (everyone else) — connect after a short delay
+        // to avoid potential race conditions with concurrent token requests
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            let appClient = AssemblyAIClient(apiKey: apiKey)
+            appClient.delegate = self
+            appClient.connect()
+            self.appAudioClient = appClient
+        }
     }
 
     // MARK: - State Management
@@ -260,15 +269,36 @@ extension SessionCoordinator: AudioCaptureDelegate {
 
 extension SessionCoordinator: AssemblyAIClientDelegate {
     public func client(_ client: AssemblyAIClient, didReceiveFinalTranscript transcript: FinalTranscriptData) {
-        coordLog.notice("Transcript: \(transcript.text)")
+        let isMe = (client === micAudioClient)
+        let source = isMe ? "me" : "them"
+        coordLog.notice("Transcript (\(source)): \(transcript.text)")
         guard let convId = currentConversationId else { return }
 
         let startOffset = Double(transcript.audioStartMs) / 1000.0
         let endOffset = Double(transcript.audioEndMs) / 1000.0
 
-        // Use "me" speaker for now — single mixed stream can't distinguish speakers
-        // TODO: when AssemblyAI v3 adds speaker diarization to Turn messages, use that
-        let speakerId = meSpeaker?.id ?? "unknown"
+        let speakerId: String
+        let speakerName: String
+        if isMe {
+            speakerId = meSpeaker?.id ?? "unknown"
+            speakerName = meSpeaker?.name ?? "Me"
+        } else {
+            // "Them" — use a generic other-speaker
+            if let existingId = speakerMap["them"] {
+                speakerId = existingId
+            } else {
+                let speaker = try? store.getOrCreateSpeaker(name: "Other")
+                speakerId = speaker?.id ?? "unknown"
+                speakerMap["them"] = speakerId
+                try? store.addConversationSpeaker(
+                    conversationId: convId,
+                    speakerId: speakerId,
+                    diarizationLabel: "them"
+                )
+                updateState { $0.speakerCount = 2 }
+            }
+            speakerName = "Other"
+        }
 
         try? store.insertUtterance(
             conversationId: convId,
@@ -278,7 +308,7 @@ extension SessionCoordinator: AssemblyAIClientDelegate {
             endedAt: endOffset
         )
 
-        delegate?.coordinator(self, didTranscribe: transcript.text, speaker: "", timestamp: startOffset)
+        delegate?.coordinator(self, didTranscribe: transcript.text, speaker: speakerName, timestamp: startOffset)
     }
 
     public func client(_ client: AssemblyAIClient, didReceivePartialTranscript text: String) {
