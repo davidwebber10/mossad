@@ -36,13 +36,16 @@ public final class ProcessMonitor {
 
     public init() {}
 
+    private let pollQueue = DispatchQueue(label: "com.mossad.processmonitor", qos: .utility)
+
     public func startMonitoring(onDetected: @escaping MeetingDetectedHandler, onEnded: @escaping MeetingEndedHandler) {
         self.onMeetingDetected = onDetected
         self.onMeetingEnded = onEnded
         monitorLog.notice("Starting poll timer (every 3s)")
-        timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in self?.poll() }
-        // Run immediately too
-        poll()
+        timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            self?.pollQueue.async { self?.poll() }
+        }
+        pollQueue.async { [weak self] in self?.poll() }
     }
 
     public func stopMonitoring() {
@@ -70,7 +73,7 @@ public final class ProcessMonitor {
                     bundleIdentifier: browserApp?.bundleIdentifier
                 )
                 currentMeeting = meeting
-                onMeetingDetected?(meeting)
+                DispatchQueue.main.async { [self] in onMeetingDetected?(meeting) }
             }
         }
 
@@ -84,7 +87,7 @@ public final class ProcessMonitor {
                 monitorLog.notice("Meeting detected: Zoom")
                 let meeting = DetectedMeeting(platform: .zoom, processIdentifier: zoom.processIdentifier, meetingUrl: nil, bundleIdentifier: zoom.bundleIdentifier)
                 currentMeeting = meeting
-                onMeetingDetected?(meeting)
+                DispatchQueue.main.async { [self] in onMeetingDetected?(meeting) }
             }
         }
 
@@ -98,7 +101,7 @@ public final class ProcessMonitor {
                 monitorLog.notice("Meeting detected: Teams")
                 let meeting = DetectedMeeting(platform: .teams, processIdentifier: teams.processIdentifier, meetingUrl: nil, bundleIdentifier: teams.bundleIdentifier)
                 currentMeeting = meeting
-                onMeetingDetected?(meeting)
+                DispatchQueue.main.async { [self] in onMeetingDetected?(meeting) }
             }
         }
 
@@ -109,7 +112,7 @@ public final class ProcessMonitor {
                 monitorLog.notice("Meeting ended (after \(self.missedPollCount) missed polls)")
                 currentMeeting = nil
                 missedPollCount = 0
-                onMeetingEnded?()
+                DispatchQueue.main.async { [self] in onMeetingEnded?() }
             }
         }
     }

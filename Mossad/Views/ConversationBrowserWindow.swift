@@ -10,6 +10,7 @@ enum BrowserTab: String, CaseIterable {
 struct ConversationBrowserWindow: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedTab: BrowserTab = .upcoming
+    @State private var didApplyInitialTab = false
     @State private var selectedConversationId: String?
     @State private var scrollToUtteranceId: Int64?
 
@@ -39,6 +40,9 @@ struct ConversationBrowserWindow: View {
             }
         }
         .frame(minWidth: 800, minHeight: 500)
+        .onReceive(appState.$initialTab) { tab in
+            selectedTab = tab
+        }
         .sheet(isPresented: $appState.showSpeakerLabeling) {
             if let convId = appState.lastEndedConversationId {
                 SpeakerLabelingSheet(

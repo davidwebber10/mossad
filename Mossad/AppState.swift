@@ -49,6 +49,7 @@ public final class AppState: NSObject, ObservableObject {
     @Published var upcomingEvents: [UpcomingEvent] = []
     @Published var disabledEventIds: Set<String> = []
     @Published var autoSkippedEventIds: Set<String> = []
+    @Published var initialTab: BrowserTab = .upcoming
 
     private let eventStore = EKEventStore()
     private var refreshTimer: Timer?

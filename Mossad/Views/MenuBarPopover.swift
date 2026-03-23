@@ -187,11 +187,13 @@ struct MenuBarPopover: View {
 
     private func openUpcoming() {
         NSApp.activate(ignoringOtherApps: true)
+        appState.initialTab = .upcoming
         openWindow(id: "browser")
     }
 
     private func openConversationBrowser() {
         NSApp.activate(ignoringOtherApps: true)
+        appState.initialTab = .conversations
         openWindow(id: "browser")
     }
 
