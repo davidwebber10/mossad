@@ -21,13 +21,11 @@ public enum AssemblyAIMessage {
     public static func parse(_ jsonString: String) throws -> AssemblyAIMessage {
         guard let data = jsonString.data(using: .utf8) else { return .unknown }
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-
-        // v3 uses "type" field
-        let messageType = json["type"] as? String ?? json["message_type"] as? String ?? ""
+        let messageType = json["type"] as? String ?? ""
 
         switch messageType {
-        case "Begin", "SessionBegins":
-            let sessionId = json["id"] as? String ?? json["session_id"] as? String ?? ""
+        case "Begin":
+            let sessionId = json["id"] as? String ?? ""
             return .begin(sessionId: sessionId)
 
         case "Turn":
@@ -35,39 +33,19 @@ public enum AssemblyAIMessage {
             let endOfTurn = json["end_of_turn"] as? Bool ?? false
             var startMs = 0
             var endMs = 0
-            var speakerLabel: String? = nil
-
             if let words = json["words"] as? [[String: Any]], !words.isEmpty {
                 startMs = words.first?["start"] as? Int ?? 0
                 endMs = words.last?["end"] as? Int ?? 0
             }
-
             return .turn(FinalTranscriptData(
-                text: text, audioStartMs: startMs, audioEndMs: endMs, speakerLabel: speakerLabel
+                text: text, audioStartMs: startMs, audioEndMs: endMs, speakerLabel: nil
             ), endOfTurn: endOfTurn)
 
-        case "Termination", "SessionTerminated":
+        case "Termination":
             return .termination
 
-        // v2 compat
-        case "FinalTranscript":
-            let text = json["text"] as? String ?? ""
-            let audioStart = json["audio_start"] as? Int ?? 0
-            let audioEnd = json["audio_end"] as? Int ?? 0
-            var speakerLabel: String? = nil
-            if let words = json["words"] as? [[String: Any]] {
-                var counts: [String: Int] = [:]
-                for word in words { if let speaker = word["speaker"] as? String { counts[speaker, default: 0] += 1 } }
-                speakerLabel = counts.max(by: { $0.value < $1.value })?.key
-            }
-            return .turn(FinalTranscriptData(text: text, audioStartMs: audioStart, audioEndMs: audioEnd, speakerLabel: speakerLabel), endOfTurn: true)
-
-        case "PartialTranscript":
-            let text = json["text"] as? String ?? ""
-            return .turn(FinalTranscriptData(text: text, audioStartMs: 0, audioEndMs: 0, speakerLabel: nil), endOfTurn: false)
-
         default:
-            aaiLog.debug("Unknown message type: \(messageType)")
+            aaiLog.debug("Unknown message type: \(messageType, privacy: .public)")
             return .unknown
         }
     }
@@ -95,59 +73,13 @@ public final class AssemblyAIClient {
         self.session = URLSession(configuration: .default)
     }
 
-    /// Connect using v3 API: get a token first, then open WebSocket
     public func connect() {
-        aaiLog.notice("Requesting streaming token...")
-        fetchToken { [weak self] token in
-            guard let self, let token else {
-                aaiLog.error("Failed to get streaming token")
-                return
-            }
-            aaiLog.notice("Token received, connecting WebSocket...")
-            self.connectWebSocket(token: token)
-        }
-    }
-
-    private func fetchToken(completion: @escaping (String?) -> Void) {
-        let urlString = "https://streaming.assemblyai.com/v3/token?expires_in_seconds=600"
-        guard let url = URL(string: urlString) else { completion(nil); return }
+        let urlString = "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000"
+        guard let url = URL(string: urlString) else { return }
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-
-        session.dataTask(with: request) { data, response, error in
-            if let error {
-                aaiLog.error("Token request failed: \(error.localizedDescription)")
-                completion(nil)
-                return
-            }
-            guard let data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let token = json["token"] as? String else {
-                let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "no body"
-                aaiLog.error("Token response parse failed: \(body)")
-                completion(nil)
-                return
-            }
-            completion(token)
-        }.resume()
-    }
-
-    private func connectWebSocket(token: String) {
-        var components = URLComponents()
-        components.scheme = "wss"
-        components.host = "streaming.assemblyai.com"
-        components.path = "/v3/ws"
-        components.queryItems = [
-            URLQueryItem(name: "sample_rate", value: "16000"),
-            URLQueryItem(name: "token", value: token),
-        ]
-        aaiLog.notice("Connecting WebSocket (token length: \(token.count, privacy: .public))...")
-        guard let url = components.url else {
-            aaiLog.error("Invalid WebSocket URL from components")
-            return
-        }
-        webSocketTask = session.webSocketTask(with: url)
+        request.setValue(apiKey, forHTTPHeaderField: "Authorization")
+        aaiLog.notice("Connecting to AssemblyAI streaming...")
+        webSocketTask = session.webSocketTask(with: request)
         webSocketTask?.resume()
         receiveMessage()
     }
