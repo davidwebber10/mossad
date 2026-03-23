@@ -11,6 +11,8 @@ struct ConversationListView: View {
     @State private var searchText = ""
     @State private var searchResults: [SearchResult] = []
     @State private var isSearching = false
+    @State private var isSelecting = false
+    @State private var selectedIds: Set<String> = []
 
     var body: some View {
         Group {
@@ -23,14 +25,29 @@ struct ConversationListView: View {
             } else {
                 List {
                     ForEach(conversations) { conversation in
-                        ConversationRow(
-                            conversation: conversation,
-                            isSelected: selectedConversationId == conversation.id,
-                            speakerCount: speakerCounts[conversation.id] ?? 0
-                        )
+                        HStack(spacing: 10) {
+                            if isSelecting {
+                                Image(systemName: selectedIds.contains(conversation.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(selectedIds.contains(conversation.id) ? .blue : .secondary)
+                                    .font(.title3)
+                                    .onTapGesture {
+                                        toggleSelection(conversation.id)
+                                    }
+                            }
+
+                            ConversationRow(
+                                conversation: conversation,
+                                isSelected: !isSelecting && selectedConversationId == conversation.id,
+                                speakerCount: speakerCounts[conversation.id] ?? 0
+                            )
+                        }
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            selectedConversationId = conversation.id
+                            if isSelecting {
+                                toggleSelection(conversation.id)
+                            } else {
+                                selectedConversationId = conversation.id
+                            }
                         }
                         .contextMenu {
                             Button(role: .destructive) {
@@ -53,6 +70,33 @@ struct ConversationListView: View {
         }
         .navigationTitle("Conversations")
         .searchable(text: $searchText, prompt: "Search conversations...")
+        .toolbar {
+            ToolbarItemGroup(placement: .automatic) {
+                if isSelecting {
+                    Button("Select All") {
+                        selectedIds = Set(conversations.map(\.id))
+                    }
+
+                    Button(role: .destructive) {
+                        deleteSelected()
+                    } label: {
+                        Label("Delete \(selectedIds.count)", systemImage: "trash")
+                    }
+                    .disabled(selectedIds.isEmpty)
+
+                    Button("Done") {
+                        isSelecting = false
+                        selectedIds.removeAll()
+                    }
+                } else {
+                    Button {
+                        isSelecting = true
+                    } label: {
+                        Label("Select", systemImage: "checkmark.circle")
+                    }
+                }
+            }
+        }
         .frame(minWidth: 250)
         .task {
             loadConversations()
@@ -60,6 +104,26 @@ struct ConversationListView: View {
         .onChange(of: searchText) {
             loadConversations()
         }
+    }
+
+    private func toggleSelection(_ id: String) {
+        if selectedIds.contains(id) {
+            selectedIds.remove(id)
+        } else {
+            selectedIds.insert(id)
+        }
+    }
+
+    private func deleteSelected() {
+        for id in selectedIds {
+            try? appState.store.deleteConversation(id: id)
+            if selectedConversationId == id {
+                selectedConversationId = nil
+            }
+        }
+        selectedIds.removeAll()
+        isSelecting = false
+        loadConversations()
     }
 
     private func deleteConversation(_ conversation: Conversation) {
@@ -74,7 +138,6 @@ struct ConversationListView: View {
         if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
             isSearching = false
             conversations = (try? appState.store.listConversations()) ?? []
-            // Load speaker counts for each conversation
             for conv in conversations {
                 let speakers = (try? appState.store.fetchSpeakers(conversationId: conv.id)) ?? []
                 speakerCounts[conv.id] = speakers.count
@@ -124,13 +187,6 @@ struct ConversationRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.selection)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private func formatDuration(_ seconds: Int) -> String {
