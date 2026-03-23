@@ -74,12 +74,12 @@ public final class AssemblyAIClient {
     }
 
     public func connect() {
-        let urlString = "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000"
+        // URLSessionWebSocketTask doesn't reliably send custom headers on WebSocket upgrade.
+        // Pass API key as token query param instead.
+        let urlString = "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&token=\(apiKey)"
         guard let url = URL(string: urlString) else { return }
-        var request = URLRequest(url: url)
-        request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         aaiLog.notice("Connecting to AssemblyAI streaming...")
-        webSocketTask = session.webSocketTask(with: request)
+        webSocketTask = session.webSocketTask(with: url)
         webSocketTask?.resume()
         receiveMessage()
     }
