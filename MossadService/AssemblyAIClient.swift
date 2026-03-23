@@ -109,7 +109,7 @@ public final class AssemblyAIClient {
     }
 
     private func fetchToken(completion: @escaping (String?) -> Void) {
-        let urlString = "https://streaming.assemblyai.com/v3/token?expires_in_seconds=3600"
+        let urlString = "https://streaming.assemblyai.com/v3/token?expires_in_seconds=600"
         guard let url = URL(string: urlString) else { completion(nil); return }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
