@@ -28,7 +28,18 @@ public final class CalendarMatcher {
     public func findMatchingEvent(platform: MeetingPlatform, detectedURL: String?, at date: Date = Date()) -> MatchedEvent? {
         let windowStart = date.addingTimeInterval(-600)
         let windowEnd = date.addingTimeInterval(600)
-        let predicate = eventStore.predicateForEvents(withStart: windowStart, end: windowEnd, calendars: nil)
+
+        // Only search the user's selected calendar
+        let selectedCalendarId = UserDefaults.standard.string(forKey: "calendarId")
+        let calendars: [EKCalendar]?
+        if let selectedCalendarId, selectedCalendarId != "all",
+           let cal = eventStore.calendar(withIdentifier: selectedCalendarId) {
+            calendars = [cal]
+        } else {
+            calendars = nil
+        }
+
+        let predicate = eventStore.predicateForEvents(withStart: windowStart, end: windowEnd, calendars: calendars)
         let events = eventStore.events(matching: predicate)
 
         if let detectedURL = detectedURL {
