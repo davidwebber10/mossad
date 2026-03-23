@@ -28,6 +28,7 @@ struct ConversationBrowserWindow: View {
                 } detail: {
                     if let id = selectedConversationId {
                         TranscriptView(conversationId: id, scrollToUtteranceId: scrollToUtteranceId)
+                            .id(id)
                             .environmentObject(appState)
                     } else {
                         ContentUnavailableView(
