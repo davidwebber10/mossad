@@ -260,35 +260,15 @@ extension SessionCoordinator: AudioCaptureDelegate {
 
 extension SessionCoordinator: AssemblyAIClientDelegate {
     public func client(_ client: AssemblyAIClient, didReceiveFinalTranscript transcript: FinalTranscriptData) {
-        let source = (client === micAudioClient) ? "mic" : "app"
-        coordLog.notice("Transcript (\(source)): \(transcript.text)")
-        guard let convId = currentConversationId,
-              let startTime = conversationStartTime else { return }
+        coordLog.notice("Transcript: \(transcript.text)")
+        guard let convId = currentConversationId else { return }
 
-        let isMyVoice = (client === micAudioClient)
         let startOffset = Double(transcript.audioStartMs) / 1000.0
         let endOffset = Double(transcript.audioEndMs) / 1000.0
 
-        let speakerId: String
-        if isMyVoice {
-            speakerId = meSpeaker?.id ?? "unknown"
-        } else {
-            let label = transcript.speakerLabel ?? "Unknown"
-            if let existingId = speakerMap[label] {
-                speakerId = existingId
-            } else {
-                // Create a new placeholder speaker
-                let speaker = try? store.getOrCreateSpeaker(name: "Speaker \(label)")
-                speakerId = speaker?.id ?? "unknown"
-                speakerMap[label] = speakerId
-                try? store.addConversationSpeaker(
-                    conversationId: convId,
-                    speakerId: speakerId,
-                    diarizationLabel: label
-                )
-                updateState { $0.speakerCount = self.speakerMap.count + 1 } // +1 for me
-            }
-        }
+        // Use "me" speaker for now — single mixed stream can't distinguish speakers
+        // TODO: when AssemblyAI v3 adds speaker diarization to Turn messages, use that
+        let speakerId = meSpeaker?.id ?? "unknown"
 
         try? store.insertUtterance(
             conversationId: convId,
@@ -298,9 +278,7 @@ extension SessionCoordinator: AssemblyAIClientDelegate {
             endedAt: endOffset
         )
 
-        // Notify delegate for live display
-        let speakerName = isMyVoice ? (meSpeaker?.name ?? "Me") : (try? store.fetchSpeaker(id: speakerId))?.name ?? "Speaker"
-        delegate?.coordinator(self, didTranscribe: transcript.text, speaker: speakerName, timestamp: startOffset)
+        delegate?.coordinator(self, didTranscribe: transcript.text, speaker: "", timestamp: startOffset)
     }
 
     public func client(_ client: AssemblyAIClient, didReceivePartialTranscript text: String) {
