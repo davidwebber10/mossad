@@ -21,13 +21,23 @@ struct ConversationListView: View {
                     scrollToUtteranceId: $scrollToUtteranceId
                 )
             } else {
-                List(conversations, selection: $selectedConversationId) { conversation in
-                    ConversationRow(
-                        conversation: conversation,
-                        isSelected: selectedConversationId == conversation.id,
-                        speakerCount: speakerCounts[conversation.id] ?? 0
-                    )
-                    .tag(conversation.id)
+                List {
+                    ForEach(conversations) { conversation in
+                        ConversationRow(
+                            conversation: conversation,
+                            isSelected: selectedConversationId == conversation.id,
+                            speakerCount: speakerCounts[conversation.id] ?? 0
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedConversationId = conversation.id
+                        }
+                        .listRowBackground(
+                            selectedConversationId == conversation.id
+                                ? Color.accentColor.opacity(0.2)
+                                : Color.clear
+                        )
+                    }
                 }
                 .listStyle(.sidebar)
             }
