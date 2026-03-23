@@ -157,13 +157,15 @@ public final class ProcessMonitor {
     }
 
     private func queryBrowserTabs(appName: String) -> String? {
+        // Returns "URL|||title" so we can check if the meeting is active
         let script = """
             tell application "\(appName)"
                 repeat with w in windows
                     repeat with t in tabs of w
                         set tabURL to URL of t
                         if tabURL starts with "https://meet.google.com/" then
-                            return tabURL
+                            set tabTitle to title of t
+                            return tabURL & "|||" & tabTitle
                         end if
                     end repeat
                 end repeat
@@ -179,8 +181,37 @@ public final class ProcessMonitor {
         if let error = error {
             monitorLog.error("AppleScript error for \(appName): \(error.description)")
         }
-        guard error == nil, result.stringValue != nil else { return nil }
-        return result.stringValue
+        guard error == nil, let combined = result.stringValue else { return nil }
+
+        let parts = combined.components(separatedBy: "|||")
+        let url = parts.first ?? ""
+        let title = parts.count > 1 ? parts[1] : ""
+
+        // Check if the tab title indicates an active call
+        // Landing/lobby pages: "Google Meet", "Meet", "Ready to join?", "Join now"
+        // Active call: "Meet - abc-defg-hij", meeting name, or participant names
+        let inactivePatterns = [
+            "google meet",
+            "ready to join",
+            "join now",
+            "meet – real-time meetings",
+            "meet - real-time meetings",
+            "your meeting is ready",
+            "check your audio and video",
+            "meeting ended",
+            "you left the meeting",
+            "return to home screen",
+        ]
+        let titleLower = title.lowercased()
+        let isInactive = inactivePatterns.contains { titleLower.contains($0) }
+
+        if isInactive {
+            monitorLog.debug("Meet tab found but not in active call (title: \(title))")
+            return nil
+        }
+
+        monitorLog.debug("Active Meet call detected (title: \(title))")
+        return url
     }
 
 }
