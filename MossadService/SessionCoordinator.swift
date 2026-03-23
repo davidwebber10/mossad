@@ -188,19 +188,14 @@ public final class SessionCoordinator {
             return
         }
 
-        coordLog.notice("Connecting to AssemblyAI (2 streams)...")
+        coordLog.notice("Connecting to AssemblyAI (single mixed stream)...")
 
-        // App audio client (others' voices, with diarization)
-        let appClient = AssemblyAIClient(apiKey: apiKey)
-        appClient.delegate = self
-        appClient.connect()
-        self.appAudioClient = appClient
-
-        // Mic audio client (my voice)
-        let micClient = AssemblyAIClient(apiKey: apiKey)
-        micClient.delegate = self
-        micClient.connect()
-        self.micAudioClient = micClient
+        // Single stream for both mic and app audio
+        let client = AssemblyAIClient(apiKey: apiKey)
+        client.delegate = self
+        client.connect()
+        self.appAudioClient = client
+        self.micAudioClient = client  // same client receives both streams
     }
 
     // MARK: - State Management
