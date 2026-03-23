@@ -54,17 +54,6 @@ public final class AudioCaptureManager: NSObject {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
-        // Enable voice processing (echo cancellation + noise suppression)
-        // This removes speaker bleed so mic only captures the user's voice
-        if inputNode.isVoiceProcessingEnabled == false {
-            do {
-                try inputNode.setVoiceProcessingEnabled(true)
-                audioLog.notice("Voice processing (echo cancellation) enabled")
-            } catch {
-                audioLog.error("Failed to enable voice processing: \(error.localizedDescription)")
-            }
-        }
-
         let inputFormat = inputNode.outputFormat(forBus: 0)
         audioLog.notice("Mic input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch, \(inputFormat.commonFormat.rawValue)")
 

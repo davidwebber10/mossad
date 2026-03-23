@@ -31,6 +31,7 @@ public enum AssemblyAIMessage {
         case "Turn":
             let text = json["transcript"] as? String ?? ""
             let endOfTurn = json["end_of_turn"] as? Bool ?? false
+            let speakerLabel = json["speaker_label"] as? String
             var startMs = 0
             var endMs = 0
             if let words = json["words"] as? [[String: Any]], !words.isEmpty {
@@ -38,7 +39,7 @@ public enum AssemblyAIMessage {
                 endMs = words.last?["end"] as? Int ?? 0
             }
             return .turn(FinalTranscriptData(
-                text: text, audioStartMs: startMs, audioEndMs: endMs, speakerLabel: nil
+                text: text, audioStartMs: startMs, audioEndMs: endMs, speakerLabel: speakerLabel
             ), endOfTurn: endOfTurn)
 
         case "Termination":
@@ -92,7 +93,7 @@ public final class AssemblyAIClient {
     }
 
     public func connect() {
-        let urlString = "wss://streaming.assemblyai.com/v3/ws?speech_model=u3-rt-pro&sample_rate=16000&encoding=pcm_s16le&token=\(apiKey)"
+        let urlString = "wss://streaming.assemblyai.com/v3/ws?speech_model=u3-rt-pro&sample_rate=16000&encoding=pcm_s16le&speaker_labels=true&token=\(apiKey)"
         guard let url = URL(string: urlString) else { return }
         aaiLog.notice("Connecting to AssemblyAI streaming...")
         // Create a dedicated session with delegate for this connection

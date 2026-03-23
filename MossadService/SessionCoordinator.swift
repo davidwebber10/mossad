@@ -199,22 +199,15 @@ public final class SessionCoordinator {
             return
         }
 
-        coordLog.notice("Connecting to AssemblyAI (2 streams: mic + app)...")
+        coordLog.notice("Connecting to AssemblyAI (single stream with diarization)...")
 
-        // Mic stream (my voice only — echo cancellation removes speaker bleed)
-        let micClient = AssemblyAIClient(apiKey: apiKey)
-        micClient.delegate = self
-        micClient.connect()
-        self.micAudioClient = micClient
-
-        // App audio stream (everyone else via ScreenCaptureKit)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self else { return }
-            let appClient = AssemblyAIClient(apiKey: apiKey)
-            appClient.delegate = self
-            appClient.connect()
-            self.appAudioClient = appClient
-        }
+        // Single stream — AssemblyAI's speaker_labels handles who said what
+        // Both mic and app audio go to the same stream
+        let client = AssemblyAIClient(apiKey: apiKey)
+        client.delegate = self
+        client.connect()
+        self.micAudioClient = client
+        self.appAudioClient = client
     }
 
     // MARK: - State Management
@@ -268,33 +261,35 @@ extension SessionCoordinator: AudioCaptureDelegate {
 
 extension SessionCoordinator: AssemblyAIClientDelegate {
     public func client(_ client: AssemblyAIClient, didReceiveFinalTranscript transcript: FinalTranscriptData) {
-        let isMe = (client === micAudioClient)
-        coordLog.notice("Transcript (\(isMe ? "me" : "them")): \(transcript.text)")
+        let label = transcript.speakerLabel ?? "UNKNOWN"
+        coordLog.notice("Transcript [Speaker \(label)]: \(transcript.text)")
         guard let convId = currentConversationId else { return }
 
         let startOffset = Double(transcript.audioStartMs) / 1000.0
         let endOffset = Double(transcript.audioEndMs) / 1000.0
 
+        // Use diarization label to track speakers
         let speakerId: String
         let speakerName: String
-        if isMe {
-            speakerId = meSpeaker?.id ?? "unknown"
-            speakerName = meSpeaker?.name ?? "Me"
+
+        if let existingId = speakerMap[label] {
+            speakerId = existingId
+            speakerName = (try? store.fetchSpeaker(id: speakerId))?.name ?? "Speaker \(label)"
         } else {
-            if let existingId = speakerMap["them"] {
-                speakerId = existingId
-            } else {
-                let speaker = try? store.getOrCreateSpeaker(name: "Other")
-                speakerId = speaker?.id ?? "unknown"
-                speakerMap["them"] = speakerId
-                try? store.addConversationSpeaker(
-                    conversationId: convId,
-                    speakerId: speakerId,
-                    diarizationLabel: "them"
-                )
-                updateState { $0.speakerCount = 2 }
-            }
-            speakerName = "Other"
+            // First utterance for this speaker — create placeholder
+            // Speaker A is typically the first/most frequent speaker
+            let name = "Speaker \(label)"
+            let speaker = try? store.getOrCreateSpeaker(name: name)
+            speakerId = speaker?.id ?? "unknown"
+            speakerMap[label] = speakerId
+            try? store.addConversationSpeaker(
+                conversationId: convId,
+                speakerId: speakerId,
+                diarizationLabel: label
+            )
+            let count = speakerMap.count
+            updateState { $0.speakerCount = count }
+            speakerName = name
         }
 
         try? store.insertUtterance(
