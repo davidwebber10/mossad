@@ -35,11 +35,15 @@ public final class SessionCoordinator {
             name: UserDefaults.standard.string(forKey: "userName") ?? "Me"
         )
 
+        NSLog("[Mossad] Starting process monitor...")
+
         processMonitor.startMonitoring(
             onDetected: { [weak self] meeting in
+                NSLog("[Mossad] Meeting detected: %@ (pid: %d, url: %@)", meeting.platform.rawValue, meeting.processIdentifier, meeting.meetingUrl ?? "none")
                 self?.handleMeetingDetected(meeting)
             },
             onEnded: { [weak self] in
+                NSLog("[Mossad] Meeting ended")
                 self?.handleMeetingEnded()
             }
         )

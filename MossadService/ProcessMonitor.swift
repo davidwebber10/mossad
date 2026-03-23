@@ -1,5 +1,8 @@
 import AppKit
 import Foundation
+import os.log
+
+private let monitorLog = Logger(subsystem: "com.mossad.app", category: "ProcessMonitor")
 
 public enum MeetingPlatform: String, Codable {
     case zoom
@@ -34,7 +37,10 @@ public final class ProcessMonitor {
     public func startMonitoring(onDetected: @escaping MeetingDetectedHandler, onEnded: @escaping MeetingEndedHandler) {
         self.onMeetingDetected = onDetected
         self.onMeetingEnded = onEnded
+        monitorLog.notice("Starting poll timer (every 3s)")
         timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in self?.poll() }
+        // Run immediately too
+        poll()
     }
 
     public func stopMonitoring() {
@@ -44,8 +50,10 @@ public final class ProcessMonitor {
     }
 
     private func poll() {
+        monitorLog.notice("Polling for meetings...")
         let apps = NSWorkspace.shared.runningApplications
 
+        // Check for Zoom
         if let zoom = apps.first(where: { Self.zoomBundleIds.contains($0.bundleIdentifier ?? "") }),
            Self.processHasActiveAudio(pid: zoom.processIdentifier) {
             if currentMeeting?.platform != .zoom {
@@ -56,6 +64,7 @@ public final class ProcessMonitor {
             return
         }
 
+        // Check for Teams
         if let teams = apps.first(where: { Self.teamsBundleIds.contains($0.bundleIdentifier ?? "") }),
            Self.processHasActiveAudio(pid: teams.processIdentifier) {
             if currentMeeting?.platform != .teams {
@@ -66,6 +75,26 @@ public final class ProcessMonitor {
             return
         }
 
+        // Check for Google Meet in browser tabs
+        let meetUrl = detectMeetInBrowsers()
+        if let meetUrl {
+            monitorLog.notice("Detected Meet URL: \(meetUrl)")
+            if currentMeeting?.platform != .meet {
+                // Find the browser process for ScreenCaptureKit
+                let browserApp = apps.first(where: { Self.meetBrowserBundleIds.contains($0.bundleIdentifier ?? "") })
+                let meeting = DetectedMeeting(
+                    platform: .meet,
+                    processIdentifier: browserApp?.processIdentifier ?? 0,
+                    meetingUrl: meetUrl,
+                    bundleIdentifier: browserApp?.bundleIdentifier
+                )
+                currentMeeting = meeting
+                onMeetingDetected?(meeting)
+            }
+            return
+        }
+
+        // No meeting detected — if we had one, it ended
         if currentMeeting != nil {
             currentMeeting = nil
             onMeetingEnded?()
@@ -125,6 +154,9 @@ public final class ProcessMonitor {
         guard let appleScript = NSAppleScript(source: script) else { return nil }
         var error: NSDictionary?
         let result = appleScript.executeAndReturnError(&error)
+        if let error = error {
+            monitorLog.error("AppleScript error for \(appName): \(error)")
+        }
         guard error == nil, result.stringValue != nil else { return nil }
         return result.stringValue
     }

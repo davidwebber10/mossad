@@ -2,7 +2,10 @@
 import EventKit
 import Foundation
 import MossadShared
+import os.log
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.mossad.app", category: "AppState")
 
 public enum AttendeeStatus: String {
     case accepted
@@ -61,13 +64,14 @@ public final class AppState: NSObject, ObservableObject {
         super.init()
 
         // Start the session coordinator in-process
+        logger.notice("AppState init — about to create SessionCoordinator")
         do {
             coordinator = try SessionCoordinator()
             coordinator?.delegate = self
             coordinator?.startMonitoring()
-            print("[Mossad] SessionCoordinator started, monitoring for calls...")
+            logger.notice("SessionCoordinator started successfully")
         } catch {
-            print("[Mossad] Failed to start SessionCoordinator: \(error)")
+            logger.error("Failed to start SessionCoordinator: \(error.localizedDescription)")
         }
 
         refreshUpcomingEvents()
