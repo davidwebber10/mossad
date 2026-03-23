@@ -20,6 +20,8 @@
 	<string>1</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Mossad checks your browser tabs to detect Google Meet calls.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Mossad reads your calendar to match meetings with transcriptions.</string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -51,6 +51,7 @@ targets:
         LSUIElement: true
         NSCalendarsUsageDescription: "Mossad reads your calendar to match meetings with transcriptions."
         NSMicrophoneUsageDescription: "Mossad uses the microphone to capture your voice during calls."
+        NSAppleEventsUsageDescription: "Mossad checks your browser tabs to detect Google Meet calls."
     entitlements:
       path: Mossad/Mossad.entitlements
     settings:
