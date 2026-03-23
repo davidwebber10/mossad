@@ -92,6 +92,9 @@ public final class SessionCoordinator {
     // MARK: - Meeting Lifecycle
 
     private func handleMeetingDetected(_ meeting: DetectedMeeting) {
+        // Don't create a new conversation if we're already recording
+        if currentConversationId != nil { return }
+
         // Match against calendar
         let matchedEvent = calendarMatcher.findMatchingEvent(
             platform: meeting.platform,
