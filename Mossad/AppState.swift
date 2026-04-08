@@ -244,18 +244,10 @@ extension AppState: SessionCoordinatorDelegate {
         Task { @MainActor in self.handleStateChange(snapshot) }
     }
 
-    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didReceiveUtterance utteranceData: Data) {}
-
-    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didTranscribe text: String, speaker: String, timestamp: Double) {
+    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didFinishTranscription conversationId: String) {
         Task { @MainActor in
-            self.liveUtterances.append((speaker: speaker, text: text, timestamp: timestamp))
-            self.livePartialText = ""
-        }
-    }
-
-    nonisolated public func coordinator(_ coordinator: SessionCoordinator, didReceivePartial text: String) {
-        Task { @MainActor in
-            self.livePartialText = text
+            logger.notice("Transcription finished for \(conversationId)")
+            // Could show a notification or refresh the conversation list
         }
     }
 }

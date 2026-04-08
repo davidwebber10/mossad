@@ -39,9 +39,11 @@
 		7CB42A23B54AF31EF31C9ECA /* LiveTranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B8E33EC82284112CDBD60CC /* LiveTranscriptView.swift */; };
 		7D561291A5BB7C21ACB3B80D /* ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46571234AAB7CD8C8309EFEA /* ProcessMonitor.swift */; };
 		8224CABEE8B5FD7226BE7761 /* CalendarMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC4BC84DC4A6FA897C7A427 /* CalendarMatcherTests.swift */; };
+		89EE719F4F9BBD1E03F45D6B /* BatchTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F399F3BC3BD876C24F5D589 /* BatchTranscriber.swift */; };
 		8FDA1D04AAE6CA372886309F /* MossadServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 375D8EE5D7EB93BAB073ACF8 /* MossadServiceProtocol.swift */; };
 		9086D81C3B0DAA60629F7D61 /* ConversationBrowserWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81DB6FB65E4C0EBBD0BDE6D2 /* ConversationBrowserWindow.swift */; };
 		9D584236611E3C991AE209A4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F05A7151F535AA20265BF018 /* SettingsView.swift */; };
+		A3C4E408F68797EED8A6E146 /* BatchTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F399F3BC3BD876C24F5D589 /* BatchTranscriber.swift */; };
 		B1F274D859B4C1E4260C0B4F /* AudioCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5CAE026615549E2C671C432 /* AudioCaptureManager.swift */; };
 		BA11CA9BBB6DBFE1598B0FC9 /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92419633F3542C7CA59D5827 /* KeychainManager.swift */; };
 		BD85F0312AC6533F695144E6 /* MossadServiceImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68AC11DFCD296F1DE9F9431F /* MossadServiceImpl.swift */; };
@@ -145,6 +147,7 @@
 		01B913BF2AEC707AF5050F0A /* DatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseManager.swift; sourceTree = "<group>"; };
 		09544F5E7AA92E427109D78E /* SessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionCoordinator.swift; sourceTree = "<group>"; };
 		0D24F0150F3709FD860F80D2 /* Utterance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utterance.swift; sourceTree = "<group>"; };
+		0F399F3BC3BD876C24F5D589 /* BatchTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchTranscriber.swift; sourceTree = "<group>"; };
 		15292B890FEEFCB31AE3AD5E /* MossadApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MossadApp.swift; sourceTree = "<group>"; };
 		1648E3F4C7066D9070A13FC8 /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
 		1A76746C95208DC066E0EE21 /* AssemblyAIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssemblyAIClientTests.swift; sourceTree = "<group>"; };
@@ -324,6 +327,7 @@
 			children = (
 				3FFFF18E4D37FFA23427A5D9 /* AssemblyAIClient.swift */,
 				E5CAE026615549E2C671C432 /* AudioCaptureManager.swift */,
+				0F399F3BC3BD876C24F5D589 /* BatchTranscriber.swift */,
 				7647697C98AC05F5C1740A0F /* CalendarMatcher.swift */,
 				F91FF5C7DAD3B234E5AC63C3 /* Info.plist */,
 				7FE4E6F302ABFCE38D476A6C /* main.swift */,
@@ -523,6 +527,7 @@
 			files = (
 				EF83B14A377D526E67D7C98D /* AssemblyAIClient.swift in Sources */,
 				B1F274D859B4C1E4260C0B4F /* AudioCaptureManager.swift in Sources */,
+				89EE719F4F9BBD1E03F45D6B /* BatchTranscriber.swift in Sources */,
 				3C2EDD9787057354D591C640 /* CalendarMatcher.swift in Sources */,
 				BD85F0312AC6533F695144E6 /* MossadServiceImpl.swift in Sources */,
 				7D561291A5BB7C21ACB3B80D /* ProcessMonitor.swift in Sources */,
@@ -539,6 +544,7 @@
 				D320E46E270486590E71E24D /* AppState.swift in Sources */,
 				D2DD24622B7EEB5F15CD177D /* AssemblyAIClient.swift in Sources */,
 				453FE6914B80E76A0C678B1B /* AudioCaptureManager.swift in Sources */,
+				A3C4E408F68797EED8A6E146 /* BatchTranscriber.swift in Sources */,
 				05AFC81CE94A48149E12508D /* CalendarMatcher.swift in Sources */,
 				9086D81C3B0DAA60629F7D61 /* ConversationBrowserWindow.swift in Sources */,
 				035CA066A4B9515F26396278 /* ConversationListView.swift in Sources */,

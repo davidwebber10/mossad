@@ -17,17 +17,27 @@ public final class AudioCaptureManager: NSObject {
 
     private var scStream: SCStream?
     private var audioEngine: AVAudioEngine?
+    private var audioFile: AVAudioFile?
+    private var audioFileURL: URL?
 
-    // Target: 16kHz mono 16-bit PCM (what AssemblyAI expects)
+    // Target: 16kHz mono 16-bit PCM
     private let targetSampleRate: Double = 16000
     private let targetChannels: AVAudioChannelCount = 1
+
+    /// The URL of the recorded WAV file (available after stopCapture)
+    public var recordedFileURL: URL? { audioFileURL }
 
     public override init() {
         super.init()
     }
 
     public func startCapture(appProcessID: pid_t) async throws {
-        // Start mic capture — this is the primary audio source
+        // Create WAV file for recording
+        let fileURL = try createAudioFile()
+        self.audioFileURL = fileURL
+        audioLog.notice("Recording to: \(fileURL.lastPathComponent, privacy: .public)")
+
+        // Start mic capture
         try startMicCapture()
         audioLog.notice("Mic capture started")
 
@@ -46,6 +56,67 @@ public final class AudioCaptureManager: NSObject {
         audioEngine?.stop()
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine = nil
+
+        // Close the audio file
+        audioFile = nil
+        if let url = audioFileURL {
+            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+            audioLog.notice("Recording saved: \(url.lastPathComponent, privacy: .public) (\(size / 1024)KB)")
+        }
+    }
+
+    // MARK: - WAV file creation
+
+    private func createAudioFile() throws -> URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("Mossad/recordings", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+        let filename = "recording-\(formatter.string(from: Date())).wav"
+        let fileURL = dir.appendingPathComponent(filename)
+
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: targetSampleRate,
+            channels: targetChannels,
+            interleaved: true
+        ) else {
+            throw AudioCaptureError.formatError
+        }
+
+        audioFile = try AVAudioFile(forWriting: fileURL, settings: format.settings)
+        return fileURL
+    }
+
+    // MARK: - Write audio to file
+
+    private func writeToFile(_ data: Data) {
+        guard let audioFile else { return }
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: targetSampleRate,
+            channels: targetChannels,
+            interleaved: true
+        ) else { return }
+
+        let frameCount = AVAudioFrameCount(data.count / MemoryLayout<Int16>.size)
+        guard frameCount > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
+
+        buffer.frameLength = frameCount
+        data.withUnsafeBytes { rawBuf in
+            if let src = rawBuf.baseAddress, let dst = buffer.int16ChannelData?[0] {
+                memcpy(dst, src, data.count)
+            }
+        }
+
+        do {
+            try audioFile.write(from: buffer)
+        } catch {
+            audioLog.error("Failed to write audio: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Mic capture (AVAudioEngine)
@@ -53,11 +124,10 @@ public final class AudioCaptureManager: NSObject {
     private func startMicCapture() throws {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
-
         let inputFormat = inputNode.outputFormat(forBus: 0)
-        audioLog.notice("Mic input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch, \(inputFormat.commonFormat.rawValue)")
 
-        // Target format for AssemblyAI
+        audioLog.notice("Mic input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch")
+
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
             sampleRate: targetSampleRate,
@@ -67,12 +137,10 @@ public final class AudioCaptureManager: NSObject {
             throw AudioCaptureError.formatError
         }
 
-        // Use a larger buffer for better quality (8192 frames ≈ 170ms at 48kHz)
         inputNode.installTap(onBus: 0, bufferSize: 8192, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
-
-            // Convert to 16kHz mono int16
             guard let converted = self.convertBuffer(buffer, from: inputFormat, to: targetFormat) else { return }
+            self.writeToFile(converted)
             self.delegate?.audioCaptureManager(self, didCaptureMicAudio: converted)
         }
 
@@ -89,13 +157,11 @@ public final class AudioCaptureManager: NSObject {
         guard let app = content.applications.first(where: { $0.processID == processID }) else {
             throw AudioCaptureError.appNotFound
         }
-
         guard let display = content.displays.first else {
             throw AudioCaptureError.noDisplay
         }
 
         let appFilter = SCContentFilter(display: display, including: [app], exceptingWindows: [])
-
         let config = SCStreamConfiguration()
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true
@@ -114,14 +180,12 @@ public final class AudioCaptureManager: NSObject {
     // MARK: - Audio conversion
 
     private func convertBuffer(_ buffer: AVAudioPCMBuffer, from inputFormat: AVAudioFormat, to targetFormat: AVAudioFormat) -> Data? {
-        // If already at target format, just extract
         if inputFormat.sampleRate == targetFormat.sampleRate &&
            inputFormat.channelCount == targetFormat.channelCount &&
            inputFormat.commonFormat == targetFormat.commonFormat {
             return buffer.int16Data
         }
 
-        // Calculate output frame count
         let ratio = targetFormat.sampleRate / inputFormat.sampleRate
         let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
         guard outputFrameCount > 0 else { return nil }
@@ -132,10 +196,7 @@ public final class AudioCaptureManager: NSObject {
         var error: NSError?
         var inputConsumed = false
         converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            if inputConsumed {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
+            if inputConsumed { outStatus.pointee = .noDataNow; return nil }
             inputConsumed = true
             outStatus.pointee = .haveData
             return buffer
@@ -145,7 +206,6 @@ public final class AudioCaptureManager: NSObject {
             audioLog.error("Audio conversion error: \(error.localizedDescription)")
             return nil
         }
-
         return outputBuffer.int16Data
     }
 }
@@ -156,11 +216,9 @@ extension AudioCaptureManager: SCStreamOutput {
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio else { return }
 
-        // Convert CMSampleBuffer to PCM int16 Data
         guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) else { return }
 
-        // Get raw audio data
         guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
         var length = 0
         var dataPointer: UnsafeMutablePointer<Int8>?
@@ -169,14 +227,12 @@ extension AudioCaptureManager: SCStreamOutput {
 
         let rawData = Data(bytes: ptr, count: length)
 
-        // SCStream with sampleRate=16000 and channelCount=1 should give us what we want,
-        // but the format might be float32 — convert to int16 if needed
+        let int16Data: Data
         if asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat != 0 {
-            // Float32 → Int16
             let floatCount = length / MemoryLayout<Float32>.size
-            var int16Data = Data(count: floatCount * MemoryLayout<Int16>.size)
+            var converted = Data(count: floatCount * MemoryLayout<Int16>.size)
             rawData.withUnsafeBytes { rawBuf in
-                int16Data.withUnsafeMutableBytes { outBuf in
+                converted.withUnsafeMutableBytes { outBuf in
                     let floats = rawBuf.bindMemory(to: Float32.self)
                     let ints = outBuf.bindMemory(to: Int16.self)
                     for i in 0..<floatCount {
@@ -185,11 +241,13 @@ extension AudioCaptureManager: SCStreamOutput {
                     }
                 }
             }
-            delegate?.audioCaptureManager(self, didCaptureAppAudio: int16Data)
+            int16Data = converted
         } else {
-            // Already int16 (or close enough)
-            delegate?.audioCaptureManager(self, didCaptureAppAudio: rawData)
+            int16Data = rawData
         }
+
+        writeToFile(int16Data)
+        delegate?.audioCaptureManager(self, didCaptureAppAudio: int16Data)
     }
 }
 
