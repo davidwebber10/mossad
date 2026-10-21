@@ -18,6 +18,14 @@ struct SettingsView: View {
                 Text("Click a red row to fix it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Recording consent") {
+                Label {
+                    Text("Mossad records every call automatically and does not tell the other people on the call. Some states and countries require the consent of every person on a call, and the strictest law of any participant can apply. Tell the people on your calls that you record them, or get their consent. Use Skip this call in the menu to stop and delete a recording. This is not legal advice.")
+                        .font(.callout)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                }
+            }
             Section("Recording") {
                 Toggle("Open Mossad at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in
