@@ -13,6 +13,9 @@ struct VoiceNamingView: View {
     @State private var player: AVAudioPlayer?
     @State private var playing: String?
     @State private var sampleLengths: [String: TimeInterval] = [:]
+    /// Which candidate line each voice's sample comes from, and that line's text.
+    @State private var choices: [String: Int] = [:]
+    @State private var sampleText: [String: String] = [:]
 
     var body: some View {
         let people = MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library)
@@ -62,9 +65,17 @@ struct VoiceNamingView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Play a sample of this voice")
+                Button { nextSample(key) } label: {
+                    Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                        .background(Theme.field, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Play a different sample")
+                .disabled(ClipExtractor.candidates(for: key, utterances: record.utterances).count < 2)
                 Text(meta(key, people: people, talk: talk)).font(.system(size: 12)).foregroundStyle(.secondary)
             }
-            if let quote = longestLine(of: key) {
+            if let quote = sampleText[key] ?? longestLine(of: key) {
                 Text("“\(quote)”").italic().font(.system(size: 13)).lineSpacing(3).lineLimit(3)
             }
             HStack(spacing: 8) {
@@ -137,6 +148,8 @@ struct VoiceNamingView: View {
     private func meta(_ key: String, people: MeetingPeople, talk: TimeInterval) -> String {
         var parts = [people.name(forKey: key), talk < 60 ? "<1 min" : "\(Int(talk / 60)) min"]
         if let sample = sampleLengths[key] { parts.append("sample \(clock(sample))") }
+        let count = ClipExtractor.candidates(for: key, utterances: record.utterances).count
+        if count > 1 { parts.append("\((choices[key] ?? 0) % count + 1) of \(count)") }
         return parts.joined(separator: " · ")
     }
 
@@ -157,9 +170,8 @@ struct VoiceNamingView: View {
         let lengths = await Task.detached(priority: .userInitiated) { () -> [String: TimeInterval] in
             var result: [String: TimeInterval] = [:]
             for (key, urls) in jobs {
-                if !FileManager.default.fileExists(atPath: urls.clip.path) {
-                    try? ClipExtractor.clip(for: key, utterances: utterances, source: urls.source, to: urls.clip)
-                }
+                // Always the first candidate, so the file matches "1 of N" after an earlier session cycled it.
+                try? ClipExtractor.clip(for: key, utterances: utterances, source: urls.source, to: urls.clip)
                 if let file = try? AVAudioFile(forReading: urls.clip) {
                     result[key] = Double(file.length) / file.fileFormat.sampleRate
                 }
@@ -167,6 +179,27 @@ struct VoiceNamingView: View {
             return result
         }.value
         sampleLengths = lengths
+    }
+
+    /// Cuts the next candidate line into the clip file and plays it.
+    private func nextSample(_ key: String) {
+        player?.stop()
+        let choice = (choices[key] ?? 0) + 1
+        let urls = clipURL(key)
+        do {
+            if let line = try ClipExtractor.clip(for: key, utterances: record.utterances, source: urls.source, to: urls.clip, choice: choice) {
+                choices[key] = choice
+                sampleText[key] = line.text
+            }
+            if let file = try? AVAudioFile(forReading: urls.clip) {
+                sampleLengths[key] = Double(file.length) / file.fileFormat.sampleRate
+            }
+            player = try AVAudioPlayer(contentsOf: urls.clip)
+            player?.play()
+            playing = key
+        } catch {
+            Log.error("Clip for \(key) failed: \(error)")
+        }
     }
 
     private func toggle(_ key: String) {
