@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository. Humans should start wi
 
 ## What this is
 
-Mossad is a macOS menu bar app (Swift 6, SwiftUI with AppKit, macOS 15+). It detects Zoom, Google Meet, and Microsoft Teams calls, records two audio tracks (the user's mic and the call app's audio), and after the call it transcribes, identifies speakers by voice, summarizes, and writes one Markdown note per call to `~/Mossad/Meetings`.
+Mossad is a macOS menu bar app (Swift 6, SwiftUI with AppKit, macOS 26+). It detects Zoom, Google Meet, and Microsoft Teams calls, records two audio tracks (the user's mic and the call app's audio), and after the call it transcribes, identifies speakers by voice, summarizes, and writes one Markdown note per call to `~/Mossad/Meetings`.
 
 The product goal is zero interaction. Any change that adds a click, a prompt, or a notification needs a strong reason.
 

@@ -2,7 +2,7 @@ name: Mossad
 options:
   bundleIdPrefix: com.dwebber
   deploymentTarget:
-    macOS: "15.0"
+    macOS: "26.0"
 packages:
   MossadCore:
     path: Packages/MossadCore
@@ -38,4 +38,4 @@ targets:
         DEVELOPMENT_TEAM: 35VNBDXR6B
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_VERSION: "6.0"
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"

@@ -21,6 +21,7 @@ final class PermissionsMonitor: ObservableObject {
     private let dragHelper = DragHelper()
 
     var allGood: Bool { items.allSatisfy { $0.state.isGood } }
+    var problemCount: Int { items.filter { !$0.state.isGood }.count }
 
     init() {
         items = Self.baseItems()
@@ -92,17 +93,17 @@ final class PermissionsMonitor: ObservableObject {
 
     private static func baseItems() -> [Item] {
         var items = [
-            Item(kind: .microphone, title: "Microphone", reason: "Records your side of the call.", state: .notAsked),
-            Item(kind: .systemAudio, title: "System Audio Recording", reason: "Records the other people on the call.", state: .notAsked),
-            Item(kind: .accessibility, title: "Accessibility", reason: "Reads Zoom and Teams window titles to see when a call starts and ends.", state: .notAsked),
-            Item(kind: .calendars, title: "Calendars", reason: "Names each meeting and its attendees from your calendar.", state: .notAsked),
-            Item(kind: .notifications, title: "Notifications", reason: "Tells you when a call has new voices to name.", state: .notAsked),
+            Item(kind: .microphone, title: "Microphone", reason: "Records your side of the call", state: .notAsked),
+            Item(kind: .systemAudio, title: "System audio recording", reason: "Needed to hear the other people on the call", state: .notAsked),
+            Item(kind: .accessibility, title: "Accessibility", reason: "Reads the window title to detect a call", state: .notAsked),
+            Item(kind: .calendars, title: "Calendars", reason: "Matches calls to invites by meeting link", state: .notAsked),
+            Item(kind: .notifications, title: "Notifications", reason: "Tells you when voices need names", state: .notAsked),
         ]
         for id in MeetingMatcher.browserBundleIDs {
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { continue }
             let name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
-            items.append(Item(kind: .automation(id), title: "Automation: \(name)",
-                              reason: "Reads the \(name) tab address to detect browser calls.", state: .notAsked))
+            items.append(Item(kind: .automation(id), title: "Automation · \(name)",
+                              reason: "Reads the meeting link from the tab", state: .notAsked))
         }
         return items
     }
@@ -183,7 +184,7 @@ final class PermissionsMonitor: ObservableObject {
             }
         default:
             NSWorkspace.shared.open(kind.settingsURL)
-            if kind.acceptsDraggedApp { dragHelper.show(for: kind, title: item.title) }
+            if kind.acceptsDraggedApp { dragHelper.show(for: kind, title: kind == .accessibility ? "Accessibility" : "Screen & System Audio Recording") }
         }
     }
 }

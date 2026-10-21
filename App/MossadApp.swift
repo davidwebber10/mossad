@@ -28,7 +28,7 @@ struct MossadApp: App {
     }
 }
 
-/// While recording, a red dot and the time since the call started; otherwise the plain waveform.
+/// The five waveform bars: a template image when idle, red bars and the elapsed time while recording.
 /// The menu bar draws one image only: a TimelineView or a mixed view there makes the item disappear.
 struct MenuBarIcon: View {
     @ObservedObject var controller: AppController
@@ -36,22 +36,48 @@ struct MenuBarIcon: View {
 
     var body: some View {
         if case .recording(_, let since) = controller.status {
-            Image(nsImage: Self.badge(elapsed(since, clock.now)))
+            Image(nsImage: Self.recording(elapsed(since, clock.now)))
         } else {
-            Image(systemName: "waveform")
+            Image(nsImage: Self.idle)
         }
     }
 
-    /// A red dot and the time. Drawn when the menu bar draws it, so the text follows its light or dark look.
-    static func badge(_ time: String) -> NSImage {
+    /// Bar x positions and spans on an 18 pt grid, from the design.
+    private static let bars: [(x: CGFloat, top: CGFloat, bottom: CGFloat)] = [
+        (2.5, 7, 11), (5.75, 4.5, 13.5), (9, 2.5, 15.5), (12.25, 5.5, 12.5), (15.5, 7.5, 10.5),
+    ]
+
+    private static func drawBars(_ color: NSColor, in rect: NSRect) {
+        color.setStroke()
+        for bar in bars {
+            let path = NSBezierPath()
+            path.lineWidth = 2.2
+            path.lineCapStyle = .round
+            // AppKit's y axis points up; the design's spans are measured from the top.
+            path.move(to: NSPoint(x: bar.x, y: rect.height - bar.top))
+            path.line(to: NSPoint(x: bar.x, y: rect.height - bar.bottom))
+            path.stroke()
+        }
+    }
+
+    static let idle: NSImage = {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            drawBars(.black, in: rect)
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Mossad"
+        return image
+    }()
+
+    /// Drawn when the menu bar draws it, so the time follows its light or dark look.
+    static func recording(_ time: String) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
         let text = NSAttributedString(string: time, attributes: [.font: font, .foregroundColor: NSColor.labelColor])
-        let dot: CGFloat = 8, gap: CGFloat = 4
-        let size = NSSize(width: ceil(dot + gap + text.size().width), height: 16)
+        let size = NSSize(width: ceil(18 + 5 + text.size().width), height: 18)
         let image = NSImage(size: size, flipped: false) { rect in
-            NSColor.systemRed.setFill()
-            NSBezierPath(ovalIn: NSRect(x: 0, y: (rect.height - dot) / 2, width: dot, height: dot)).fill()
-            text.draw(at: NSPoint(x: dot + gap, y: (rect.height - text.size().height) / 2))
+            drawBars(.systemRed, in: NSRect(x: 0, y: 0, width: 18, height: 18))
+            text.draw(at: NSPoint(x: 23, y: (rect.height - text.size().height) / 2))
             return true
         }
         image.isTemplate = false

@@ -10,7 +10,7 @@ final class DragHelper {
     private var follow: Timer?
     private var kind: PermissionKind?
     private var shownAt = Date()
-    private let size = CGSize(width: 340, height: 84)
+    private let size = CGSize(width: 300, height: 230)
 
     func show(for kind: PermissionKind, title: String) {
         close()
@@ -24,7 +24,7 @@ final class DragHelper {
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.contentView = NSHostingView(rootView: DragHelperView(title: title) { [weak self] in self?.close() })
+        panel.contentView = NSHostingView(rootView: DragHelperView(pane: title) { [weak self] in self?.close() })
         self.panel = panel
         follow = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.reposition() }
@@ -78,28 +78,27 @@ final class DragHelper {
 }
 
 private struct DragHelperView: View {
-    let title: String
+    let pane: String
     let onClose: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        VStack(spacing: 12) {
             DraggableAppIcon()
-                .frame(width: 52, height: 52)
+                .frame(width: 72, height: 72)
+                .shadow(color: Color(red: 0.16, green: 0.27, blue: 0.63).opacity(0.25), radius: 10, y: 8)
                 .help("Drag into the list")
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Drag Mossad into the list above")
-                    .font(.headline)
-                Text("Then turn on the switch for \(title).")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-            Button(action: onClose) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                .buttonStyle(.plain)
+            Text("Drag Mossad into the list").font(.system(size: 13, weight: .semibold))
+            Text("Drop the icon into System Settings › Privacy & Security › \(pane), then turn it on.")
+                .font(.system(size: 12)).foregroundStyle(.secondary).multilineTextAlignment(.center).lineSpacing(3)
+            Image(systemName: "arrow.down").foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 16)
+        .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.separator))
+        .overlay(alignment: .topTrailing) {
+            Button(action: onClose) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                .buttonStyle(.plain).padding(10)
+        }
+        .glassEffect(.regular, in: .rect(cornerRadius: 18))
     }
 }
 

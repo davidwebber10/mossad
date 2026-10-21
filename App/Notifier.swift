@@ -21,8 +21,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
     func postNewVoices(_ record: CallRecord) {
         let count = record.unknownSpeakers.count
         let content = UNMutableNotificationContent()
-        content.title = "Mossad"
-        content.body = "\(count) new \(count == 1 ? "voice" : "voices") in \(record.title)"
+        content.title = "\(count) new \(count == 1 ? "voice" : "voices") in \(record.title)"
+        content.body = count == 1 ? "Click to name it" : "Click to name them"
         content.userInfo = ["callID": record.id]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: record.id, content: content, trigger: nil))
     }

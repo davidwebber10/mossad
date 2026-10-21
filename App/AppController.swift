@@ -19,10 +19,10 @@ final class AppController: ObservableObject {
         var id: String { rawValue }
         var symbol: String {
             switch self {
-            case .meetings: "text.bubble"
-            case .voices: "person.wave.2"
+            case .meetings: "bubble.left.and.text.bubble.right"
+            case .voices: "person.2"
             case .settings: "gearshape"
-            case .log: "doc.plaintext"
+            case .log: "doc.text"
             }
         }
     }
@@ -72,36 +72,41 @@ final class AppController: ObservableObject {
         recorder = Self.makeRecorder(paths: paths)
         rebuildPipeline()
 
-        enableLaunchAtLoginOnce()
-        notifier.onOpen = { [weak self] callID in self?.openNaming(callID) }
+        // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
+        // processing, so the screens can be checked while the installed copy records a call.
+        let preview = CommandLine.arguments.contains("--ui-preview")
+        if !preview {
+            enableLaunchAtLoginOnce()
+            notifier.onOpen = { [weak self] callID in self?.openNaming(callID) }
 
-        let detection = detection
-        let recorder = recorder
-        detection.onEvent = { @Sendable [weak self] event in
-            // Read the call's audio processes on the detection queue, where they were just computed.
-            let ids = detection.audioProcessIDs
-            let meetingID = detection.meetingID
-            guard let self else { return }
-            // Recorder commands go straight from the detection queue to the capture queue, so they keep
-            // the detector's order relative to the process updates below. The UI follows on the main actor.
-            CaptureQueue.queue.async { self.capture(event, processIDs: ids, meetingID: meetingID, recorder: recorder) }
-            Task { @MainActor in self.show(event) }
-        }
-        detection.onCallProcesses = { @Sendable ids in
-            CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
-        }
-        detection.start()
-        outputWatcher = OutputDeviceWatcher { @Sendable in
-            CaptureQueue.queue.async { recorder.rebuildThem() }
-        }
-        requestPermissions()
+            let detection = detection
+            let recorder = recorder
+            detection.onEvent = { @Sendable [weak self] event in
+                // Read the call's audio processes on the detection queue, where they were just computed.
+                let ids = detection.audioProcessIDs
+                let meetingID = detection.meetingID
+                guard let self else { return }
+                // Recorder commands go straight from the detection queue to the capture queue, so they keep
+                // the detector's order relative to the process updates below. The UI follows on the main actor.
+                CaptureQueue.queue.async { self.capture(event, processIDs: ids, meetingID: meetingID, recorder: recorder) }
+                Task { @MainActor in self.show(event) }
+            }
+            detection.onCallProcesses = { @Sendable ids in
+                CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
+            }
+            detection.start()
+            outputWatcher = OutputDeviceWatcher { @Sendable in
+                CaptureQueue.queue.async { recorder.rebuildThem() }
+            }
+            requestPermissions()
 
-        ProcessingQueue(paths: paths).recoverInterrupted()
+            Task { await runHousekeeping() }
+            housekeeping = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+                Task { await self?.runHousekeeping() }
+            }
+            ProcessingQueue(paths: paths).recoverInterrupted()
+        }
         refresh()
-        Task { await runHousekeeping() }
-        housekeeping = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
-            Task { await self?.runHousekeeping() }
-        }
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
         if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }
@@ -114,6 +119,14 @@ final class AppController: ObservableObject {
     }
 
     // MARK: State
+
+    /// The calendar title of the call being recorded, when it is known already.
+    var recordingTitle: String? { meetings.first { $0.status == .recording }?.calendarTitle }
+
+    /// The step of the oldest call in progress, for the panel and the sidebar.
+    var currentStep: ProcessingStep? {
+        meetings.filter { ProcessingStep(status: $0.status) != nil }.min { $0.start < $1.start }.flatMap { ProcessingStep(status: $0.status) }
+    }
 
     var isRecording: Bool {
         if case .recording = status { return true }
@@ -140,7 +153,15 @@ final class AppController: ObservableObject {
         pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: FluidEmbeddingProvider(),
                             calendar: calendar, summarizer: summarizer, notify: { record in
                                 Task { @MainActor in notifier.postNewVoices(record) }
-                            }, ownerName: owner, voiceFingerprints: voiceFingerprints)
+                            }, ownerName: owner, voiceFingerprints: voiceFingerprints,
+                            onStep: { [weak self] record in
+                                Task { @MainActor in self?.update(record) }
+                            })
+    }
+
+    /// Puts a record saved by the pipeline into the list, so the step shows while the call is processed.
+    private func update(_ record: CallRecord) {
+        if let i = meetings.firstIndex(where: { $0.id == record.id }) { meetings[i] = record } else { refresh() }
     }
 
     // MARK: Actions
@@ -174,9 +195,9 @@ final class AppController: ObservableObject {
         showWindow()
     }
 
-    func applyNames(callID: String, names: [String: String]) {
+    func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) {
         Task {
-            await pipeline.applyNames(callID: callID, names: names)
+            await pipeline.applyNames(callID: callID, names: names, emails: emails)
             refresh()
         }
     }
@@ -288,13 +309,20 @@ final class AppController: ObservableObject {
 
     private func showWindow() {
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 700),
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 820),
                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                              backing: .buffered, defer: false)
             w.title = "Mossad"
+            // A full-height sidebar with the traffic lights inside it; pane titles live in the content.
+            w.titlebarAppearsTransparent = true
+            w.titleVisibility = .hidden
+            w.toolbarStyle = .unified
             w.isReleasedWhenClosed = false
-            w.contentViewController = NSHostingController(rootView: MainWindow().environmentObject(self).environmentObject(permissions))
-            w.setContentSize(NSSize(width: 1040, height: 700))
+            let host = NSHostingController(rootView: MainWindow().environmentObject(self).environmentObject(permissions))
+            host.sceneBridgingOptions = [.toolbars]
+            w.contentViewController = host
+            w.setContentSize(NSSize(width: 1240, height: 820))
+            w.contentMinSize = NSSize(width: 980, height: 600)
             w.delegate = windowDelegate
             w.center()
             w.setFrameAutosaveName("MossadMain")

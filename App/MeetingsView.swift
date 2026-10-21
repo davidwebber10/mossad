@@ -2,10 +2,18 @@ import AppKit
 import MossadCore
 import SwiftUI
 
+/// The Meetings pane in one of three modes: Split (list and detail), List (full-pane rows), or Calendar.
 struct MeetingsView: View {
+    enum Mode: String, CaseIterable { case split = "Split", list = "List", calendar = "Calendar" }
+
     @EnvironmentObject var controller: AppController
+    @AppStorage("meetingsMode") private var mode = Mode.split
     @State private var query = ""
     @State private var deleting: CallRecord?
+    /// The meeting opened full-pane from List or Calendar mode.
+    @State private var opened: String?
+    @State private var openedFrom = ""
+    @StateObject private var calendarState = CalendarState()
 
     private var results: [CallRecord] {
         let q = query.trimmingCharacters(in: .whitespaces)
@@ -16,47 +24,129 @@ struct MeetingsView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            List(results, id: \.id, selection: $controller.selectedMeetingID) { r in
-                MeetingRow(record: r).tag(r.id)
-                    .contextMenu {
-                        Button("Delete…", role: .destructive) { deleting = r }.disabled(!r.canDelete)
+        Group {
+            if controller.meetings.isEmpty {
+                VStack(spacing: 0) {
+                    paneHeader
+                    Divider()
+                    EmptyMeetings()
+                }
+            } else {
+                switch mode {
+                case .split: splitBody
+                case .list, .calendar:
+                    if let id = opened, let r = controller.meetings.first(where: { $0.id == id }) {
+                        fullPaneDetail(r)
+                    } else {
+                        VStack(spacing: 0) {
+                            paneHeader
+                            Divider()
+                            if mode == .list {
+                                MeetingTable(groups: MeetingGroups.group(results), selection: $controller.selectedMeetingID,
+                                             deleting: $deleting) { r in open(r, from: MeetingGroups.kind(of: r.start).title) }
+                            } else {
+                                CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting) { r, period in
+                                    open(r, from: period)
+                                }
+                            }
+                        }
                     }
-            }
-            .overlay {
-                if controller.meetings.isEmpty {
-                    ContentUnavailableView("No meetings yet", systemImage: "waveform",
-                                           description: Text("Mossad records Zoom, Meet, and Teams calls on its own."))
                 }
             }
-            .frame(width: 300)
-
-            Divider()
-
-            Group {
-                if let id = controller.selectedMeetingID, let r = controller.meetings.first(where: { $0.id == id }) {
-                    MeetingDetailView(record: r, deleting: $deleting, audioDirectory: controller.paths.callDirectory(r.id))
-                        .id(r.id)
-                } else {
-                    ContentUnavailableView("Select a meeting", systemImage: "text.bubble")
-                }
-            }
-            .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
         }
-        .searchable(text: $query, placement: .toolbar, prompt: "Search titles and transcripts")
+        .background(Color(nsColor: .windowBackgroundColor))
         .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete meeting", role: .destructive) {
-                if let id = deleting?.id { controller.deleteMeeting(id) }
+                if let id = deleting?.id {
+                    if opened == id { opened = nil }
+                    controller.deleteMeeting(id)
+                }
             }
         } message: {
             Text("Mossad deletes the note, the transcript, and the audio. Voices it learned from this call stay.")
         }
-        .onAppear {
-            if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first?.id }
-        }
         .sheet(item: Binding(get: { controller.namingCallID.flatMap { id in controller.meetings.first { $0.id == id } } },
                              set: { controller.namingCallID = $0?.id })) { r in
             VoiceNamingView(record: r)
+        }
+        .onAppear {
+            if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first?.id }
+        }
+        .onChange(of: mode) { _, _ in opened = nil }
+    }
+
+    // MARK: Split
+
+    private var splitBody: some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Meetings").font(.system(size: 18, weight: .bold)).kerning(-0.3)
+                        Spacer()
+                        ModePicker(mode: $mode, labeled: false)
+                    }
+                    SearchField(text: $query)
+                }
+                .padding(EdgeInsets(top: 12, leading: 12, bottom: 8, trailing: 12))
+                MeetingList(groups: MeetingGroups.group(results), selection: $controller.selectedMeetingID, deleting: $deleting)
+            }
+            .frame(width: 330)
+            Divider()
+            Group {
+                if let id = controller.selectedMeetingID, let r = controller.meetings.first(where: { $0.id == id }) {
+                    MeetingDetailView(record: r, style: .split, deleting: $deleting)
+                        .id(r.id)
+                } else {
+                    ContentUnavailableView("Select a meeting", systemImage: "bubble.left.and.text.bubble.right")
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: List and Calendar
+
+    private var paneHeader: some View {
+        HStack(spacing: 14) {
+            Text("Meetings").font(.system(size: 18, weight: .bold)).kerning(-0.3)
+            ModePicker(mode: $mode, labeled: true)
+            if mode == .calendar, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
+            Spacer()
+            SearchField(text: $query).frame(width: 240)
+        }
+        .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
+    }
+
+    private func open(_ r: CallRecord, from crumb: String) {
+        controller.selectedMeetingID = r.id
+        openedFrom = crumb
+        opened = r.id
+    }
+
+    private func fullPaneDetail(_ r: CallRecord) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button { opened = nil } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 12, weight: .semibold))
+                        .frame(width: 26, height: 26)
+                        .background(Theme.field, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("[", modifiers: .command)
+                .keyboardShortcut(.escape, modifiers: [])
+                Button("Meetings") { opened = nil }.buttonStyle(.plain).foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(.tertiary)
+                Button(openedFrom) { opened = nil }.buttonStyle(.plain).foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(.tertiary)
+                Text(r.title).fontWeight(.medium).lineLimit(1)
+                Spacer()
+                MeetingActions(record: r, deleting: $deleting)
+            }
+            .font(.system(size: 13))
+            .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
+            Divider()
+            MeetingDetailView(record: r, style: .list, deleting: $deleting).id(r.id)
         }
     }
 }
@@ -64,26 +154,257 @@ struct MeetingsView: View {
 extension CallRecord: @retroactive Identifiable {
     /// A call that is still recording or processing cannot be deleted; Skip this call covers the first.
     var canDelete: Bool { status == .written || status == .failed }
+
+    var badge: StatusBadge.Kind? {
+        switch status {
+        case .recording: .recording
+        case .failed: .failed
+        case .written: unknownSpeakers.isEmpty ? nil : .needsNames
+        default: .processing
+        }
+    }
+
+    /// "59 min", at least "1 min".
+    var lengthText: String { "\(max(1, Int(end.timeIntervalSince(start) / 60))) min" }
+}
+
+/// "11:31 AM" for today and yesterday, "Mon 9:00 AM" this week, "Oct 9" (with the year when not this year) earlier.
+func whenText(_ date: Date, kind: MeetingGroups.Kind) -> String {
+    switch kind {
+    case .today, .yesterday: return date.formatted(date: .omitted, time: .shortened)
+    case .thisWeek: return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+    case .earlier:
+        let sameYear = Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year)
+        return sameYear ? date.formatted(.dateTime.month(.abbreviated).day()) : date.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+}
+
+/// The length, or the live elapsed time of a call being recorded.
+struct LengthText: View {
+    let record: CallRecord
+
+    var body: some View {
+        if record.status == .recording {
+            TimelineView(.periodic(from: record.start, by: 1)) { context in
+                Text(elapsed(record.start, context.date)).foregroundStyle(Theme.recording)
+            }
+        } else {
+            Text(record.lengthText)
+        }
+    }
+}
+
+struct ModePicker: View {
+    @Binding var mode: MeetingsView.Mode
+    let labeled: Bool
+
+    var body: some View {
+        Picker("View", selection: $mode) {
+            ForEach(MeetingsView.Mode.allCases, id: \.self) { m in
+                if labeled {
+                    Label(m.rawValue, systemImage: symbol(m)).tag(m)
+                } else {
+                    Image(systemName: symbol(m)).help(m.rawValue).tag(m)
+                }
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(labeled ? .regular : .small)
+        .fixedSize()
+    }
+
+    private func symbol(_ m: MeetingsView.Mode) -> String {
+        switch m {
+        case .split: "sidebar.left"
+        case .list: "list.bullet"
+        case .calendar: "calendar"
+        }
+    }
+}
+
+struct SearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.tertiary)
+            TextField("Search titles and transcripts", text: $text).textFieldStyle(.plain)
+            if !text.isEmpty {
+                Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
+                    .buttonStyle(.plain)
+            }
+        }
+        .font(.system(size: 13))
+        .padding(.horizontal, 9)
+        .frame(height: 28)
+        .background(Theme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+/// Split mode's grouped list.
+private struct MeetingList: View {
+    @EnvironmentObject var controller: AppController
+    let groups: [MeetingGroups.Group]
+    @Binding var selection: String?
+    @Binding var deleting: CallRecord?
+
+    var body: some View {
+        List(selection: $selection) {
+            ForEach(groups, id: \.kind) { group in
+                Section {
+                    ForEach(group.records, id: \.id) { r in
+                        MeetingRow(record: r, kind: group.kind)
+                            .tag(r.id)
+                            .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
+                    }
+                } header: {
+                    Text(group.kind.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .onDeleteCommand {
+            if let id = selection, let r = controller.meetings.first(where: { $0.id == id }), r.canDelete { deleting = r }
+        }
+    }
 }
 
 private struct MeetingRow: View {
     let record: CallRecord
+    let kind: MeetingGroups.Kind
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                PlatformSquare(platform: record.platform)
+                Text(record.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                Spacer(minLength: 6)
+                LengthText(record: record).font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
+            }
             HStack {
-                Text(record.title).font(.headline).lineLimit(1)
+                Text(whenText(record.start, kind: kind)).font(.system(size: 12)).foregroundStyle(.secondary)
                 Spacer()
-                if record.status != .written {
-                    Text(record.status == .recording ? "Recording" : "Processing")
-                        .font(.caption).foregroundStyle(.orange)
-                } else if !record.unknownSpeakers.isEmpty {
-                    Image(systemName: "person.crop.circle.badge.questionmark").foregroundStyle(.secondary)
+                if let badge = record.badge { StatusBadge(kind: badge) }
+            }
+            .padding(.leading, 20)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// List mode: full-width rows with columns.
+private struct MeetingTable: View {
+    @EnvironmentObject var controller: AppController
+    let groups: [MeetingGroups.Group]
+    @Binding var selection: String?
+    @Binding var deleting: CallRecord?
+    let open: (CallRecord) -> Void
+
+    var body: some View {
+        List(selection: $selection) {
+            ForEach(groups, id: \.kind) { group in
+                Section {
+                    ForEach(group.records, id: \.id) { r in
+                        HStack(spacing: 14) {
+                            PlatformSquare(platform: r.platform).frame(width: 20)
+                            Text(r.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Group {
+                                if let badge = r.badge { StatusBadge(kind: badge) } else { Color.clear }
+                            }
+                            .frame(width: 150, alignment: .leading)
+                            Text(whenText(r.start, kind: group.kind)).frame(width: 90, alignment: .leading)
+                            LengthText(record: r).frame(width: 70, alignment: .trailing)
+                        }
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .padding(.vertical, 3)
+                        .contentShape(Rectangle())
+                        .tag(r.id)
+                        .onTapGesture(count: 2) { open(r) }
+                        .simultaneousGesture(TapGesture().onEnded { open(r) })
+                        .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
+                    }
+                } header: {
+                    Text(group.kind.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
                 }
             }
-            Text("\(record.start.formatted(date: .abbreviated, time: .shortened)) · \(record.platform.displayName) · \(Int(record.end.timeIntervalSince(record.start) / 60)) min")
-                .font(.caption).foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
+        .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .padding(.horizontal, 16)
+        .onKeyPress(.return) {
+            guard let id = selection, let r = controller.meetings.first(where: { $0.id == id }) else { return .ignored }
+            open(r)
+            return .handled
+        }
+    }
+}
+
+/// The right-click menu and the More menu share these items.
+struct MeetingMenuItems: View {
+    @EnvironmentObject var controller: AppController
+    let record: CallRecord
+    @Binding var deleting: CallRecord?
+
+    var body: some View {
+        if record.status == .recording {
+            Button("Skip and delete this call", systemImage: "xmark.bin", role: .destructive) { controller.skipCurrentCall() }
+        } else {
+            Button("Open note", systemImage: "doc.richtext") {
+                if let path = record.markdownPath { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+            }
+            .disabled(record.markdownPath == nil)
+            Button("Show note in Finder", systemImage: "folder") {
+                if let path = record.markdownPath { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
+            }
+            .disabled(record.markdownPath == nil)
+            Button("Show audio in Finder", systemImage: "folder") { NSWorkspace.shared.open(controller.paths.callDirectory(record.id)) }
+            Divider()
+            Button("Delete…", systemImage: "trash", role: .destructive) { deleting = record }.disabled(!record.canDelete)
+        }
+    }
+}
+
+/// "Name voices" and the More button, in a detail header.
+struct MeetingActions: View {
+    @EnvironmentObject var controller: AppController
+    let record: CallRecord
+    @Binding var deleting: CallRecord?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if record.status == .written, !record.unknownSpeakers.isEmpty {
+                Button { controller.namingCallID = record.id } label: {
+                    Label("Name voices", systemImage: "person.wave.2")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            Menu {
+                MeetingMenuItems(record: record, deleting: $deleting)
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .fixedSize()
+        }
+    }
+}
+
+private struct EmptyMeetings: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "waveform").font(.system(size: 34)).foregroundStyle(.tertiary)
+            Text("No meetings yet").font(.system(size: 15, weight: .semibold))
+            Text("Mossad records Zoom, Google Meet, and Microsoft Teams calls on its own. Join a call and it appears here.")
+                .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

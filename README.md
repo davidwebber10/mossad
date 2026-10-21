@@ -86,7 +86,7 @@ Notes are named like `2026-10-20 1430 - Weekly Ops Sync.md`, so they sort by dat
 
 ## Requirements
 
-- macOS 15 or later on Apple silicon
+- macOS 26 or later on Apple silicon
 - Xcode 16 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - An Apple Development signing certificate
 - An [AssemblyAI](https://www.assemblyai.com) API key for transcription
