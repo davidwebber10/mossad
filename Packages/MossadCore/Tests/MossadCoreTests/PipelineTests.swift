@@ -95,6 +95,26 @@ final class PipelineTests: XCTestCase {
                         onStep: { notifications.steps.append($0) }, onDetail: { _, text in notifications.detail(text) })
     }
 
+    func testAMicVoiceNamedLikeSomeoneOnTheCallIsTheirEcho() async throws {
+        // Alex Rivera is known; his voice (400 Hz) is on the call audio and also leaks into the mic as me:B.
+        // The owner barely speaks (only while the call audio plays), so the echo label has the most quiet-time
+        // speech and the echo filter keeps it as the owner. Only its name gives it away.
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        transcriber.result[.me] = [
+            Utterance(track: .me, speakerLabel: "A", start: 21, end: 22, text: "Okay."),
+            Utterance(track: .me, speakerLabel: "B", start: 11, end: 20, text: "It leaves Friday."),
+            Utterance(track: .me, speakerLabel: "B", start: 29, end: 32, text: "Right, it leaves Friday."),
+        ]
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 34, [(21, 22, 200), (11, 20, 400), (29, 32, 400)])
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertFalse(r.utterances.contains { $0.speakerKey == "me:B" })
+        XCTAssertNil(r.speakerNames["me:B"])
+        XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
+    }
+
     func testRegenerateSummaryWritesANewSummaryForAFinishedMeeting() async throws {
         let id = try makeRecord()
         let p = pipeline()

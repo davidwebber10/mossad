@@ -230,7 +230,24 @@ public actor Pipeline {
         r.speakerNames = result.names
         r.unknownSpeakers = result.unknown
         r.speakerEmbeddings = result.embeddings
+        dropNamedEcho(&r)
         r.status = .identified
+    }
+
+    /// A mic voice recognized as someone who is also on the call audio is that person through the speakers.
+    /// The echo filter cannot see it when the owner hardly spoke, because then the echo has the most
+    /// quiet-time speech on the mic. Someone in the room with the owner is never on the call audio, so stays.
+    private func dropNamedEcho(_ r: inout CallRecord) {
+        let remote = Set(r.speakerNames.filter { $0.key.hasPrefix("them:") }.values)
+        let echo = Set(r.speakerNames.filter { $0.key.hasPrefix("me:") && remote.contains($0.value) && $0.value != ownerName }.keys)
+        guard !echo.isEmpty else { return }
+        r.utterances.removeAll { echo.contains($0.speakerKey) }
+        for key in echo {
+            r.speakerNames[key] = nil
+            r.speakerEmbeddings[key] = nil
+        }
+        r.unknownSpeakers.removeAll { echo.contains($0) }
+        Log.info("Dropped \(echo.count) mic voices that are people on the call audio")
     }
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.

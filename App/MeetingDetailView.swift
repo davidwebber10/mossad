@@ -85,7 +85,7 @@ struct MeetingDetailView: View {
             }
             if record.status != .recording, !people.speakers.isEmpty {
                 FlowLayout(spacing: 6) {
-                    ForEach(people.speakers, id: \.key) { SpeakerChip(speaker: $0) }
+                    ForEach(people.speakers, id: \.key) { SpeakerChip(speaker: $0, callID: record.id, editable: record.status == .written) }
                 }
             }
         }
@@ -231,10 +231,52 @@ struct MeetingPeople {
     }
 }
 
+/// A speaker in the header. Click to name the voice or correct its name, with an email.
 private struct SpeakerChip: View {
+    @EnvironmentObject var controller: AppController
     let speaker: MeetingPeople.Speaker
+    let callID: String
+    let editable: Bool
+    @State private var editing = false
+    @State private var name = ""
+    @State private var email = ""
 
     var body: some View {
+        Button {
+            name = speaker.isUnknown ? "" : speaker.name
+            email = speaker.email ?? ""
+            editing = true
+        } label: { chip }
+        .buttonStyle(.plain)
+        .disabled(!editable)
+        .help(speaker.isUnknown ? "Name this voice" : "Change who this is")
+        .popover(isPresented: $editing, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(speaker.isUnknown ? "Who is \(speaker.name)?" : "Who is this voice?").font(.headline)
+                TextField("Name", text: $name).textFieldStyle(.roundedBorder)
+                TextField("Email (optional)", text: $email).textFieldStyle(.roundedBorder)
+                Text("Mossad saves this voice under the name and recognizes it in later calls.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Spacer()
+                    Button("Cancel") { editing = false }
+                    Button("Save") {
+                        let trimmedEmail = email.trimmingCharacters(in: .whitespaces)
+                        controller.applyNames(callID: callID, names: [speaker.key: name],
+                                              emails: trimmedEmail.isEmpty ? [:] : [speaker.key: trimmedEmail])
+                        editing = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .padding(16)
+            .frame(width: 300)
+        }
+    }
+
+    private var chip: some View {
         HStack(spacing: 6) {
             Circle().fill(speaker.color).frame(width: 8, height: 8)
             Text(speaker.isOwner ? "\(speaker.name) (you)" : speaker.name).fontWeight(.medium)
