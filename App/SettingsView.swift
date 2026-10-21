@@ -55,8 +55,21 @@ struct SettingsView: View {
                             Log.error("Launch at login change failed: \(error)")
                         }
                     }
-                Stepper("Keep raw tracks for \(controller.retentionDays) days", value: $controller.retentionDays, in: 1...365)
-                Text("Notes, transcripts, and a compressed recording of each meeting (about 14 MB an hour) are kept forever. The raw tracks (about 230 MB an hour) are only needed to learn voices after a call.")
+                Toggle("Delete recordings after a period of time", isOn: $controller.deleteRecordings)
+                if controller.deleteRecordings {
+                    LabeledContent("Delete after") {
+                        HStack(spacing: 6) {
+                            TextField("Days", value: $controller.recordingDays, format: .number)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 60)
+                            Stepper("", value: $controller.recordingDays, in: 1...3650).labelsHidden()
+                            Text(controller.recordingDays == 1 ? "day" : "days")
+                        }
+                    }
+                }
+                Text(controller.deleteRecordings
+                     ? "Mossad deletes a meeting's recording \(controller.recordingDays) days after the call. The note and the transcript stay."
+                     : "Mossad keeps each meeting's recording (about 14 MB an hour) so you can listen again. Notes and transcripts are always kept.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Folders") {

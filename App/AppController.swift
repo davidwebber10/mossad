@@ -50,7 +50,8 @@ final class AppController: ObservableObject {
     private var outputWatcher: OutputDeviceWatcher?
     private var browserLaunchObserver: NSObjectProtocol?
 
-    @AppStorage("retentionDays") var retentionDays = 30
+    @AppStorage("deleteRecordings") var deleteRecordings = false
+    @AppStorage("recordingDays") var recordingDays = 90
     @AppStorage("ownerName") var ownerName = NSFullUserName()
     @AppStorage("organization") var organization = ""
     @AppStorage("voiceFingerprints") var voiceFingerprints = true
@@ -158,6 +159,12 @@ final class AppController: ObservableObject {
         showWindow()
     }
 
+    func openMeeting(_ callID: String) {
+        section = .meetings
+        selectedMeetingID = callID
+        showWindow()
+    }
+
     func openNaming(_ callID: String) {
         section = .meetings
         selectedMeetingID = callID
@@ -231,10 +238,10 @@ final class AppController: ObservableObject {
     private func runHousekeeping() async {
         await track { await self.pipeline.runPending() }
         // Encoding an hour of audio takes seconds, so this stays off the main actor.
-        let audio = paths.audio, days = retentionDays
+        let audio = paths.audio, days = deleteRecordings ? max(1, recordingDays) : nil
         await Task.detached(priority: .utility) {
             Recording.backfill(audioRoot: audio)
-            Retention.sweep(audioRoot: audio, olderThan: days)
+            Retention.sweep(audioRoot: audio, recordingsAfterDays: days)
         }.value
     }
 

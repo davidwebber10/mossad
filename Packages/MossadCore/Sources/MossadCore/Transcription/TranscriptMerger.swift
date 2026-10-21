@@ -32,7 +32,9 @@ public enum TranscriptMerger {
             talk[u.speakerLabel, default: (0, 0)].total += length
             talk[u.speakerLabel, default: (0, 0)].overlap += min(length, themSound.sound(from: u.start, to: u.end))
         }
-        guard let owner = talk.max(by: { ($0.value.total - $0.value.overlap) < ($1.value.total - $1.value.overlap) })?.key else { return [] }
+        // Most quiet-time speech wins; on a tie (the call audio never stops), the one who talks most.
+        func rank(_ t: (total: TimeInterval, overlap: TimeInterval)) -> (TimeInterval, TimeInterval) { (t.total - t.overlap, t.total) }
+        guard let owner = talk.max(by: { rank($0.value) < rank($1.value) })?.key else { return [] }
         return Set(talk.filter { $0.key != owner && $0.value.total > 0 && $0.value.overlap / $0.value.total >= echoLabelOverlap }.keys)
     }
 

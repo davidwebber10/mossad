@@ -25,34 +25,51 @@ final class RetentionTests: XCTestCase {
 
     func testKeepsRawTracksUntilTheRecordingExists() throws {
         let dir = try call("old", .written, endedDaysAgo: 31)
-        Retention.sweep(audioRoot: paths.audio, olderThan: 30, now: now)
+        Retention.sweep(audioRoot: paths.audio, now: now)
         XCTAssertTrue(exists(dir, "me.caf") && exists(dir, "them.caf"))
+    }
+
+    func testDeletesOldRecordingsWhenTheSettingIsOn() throws {
+        let old = try call("old", .written, endedDaysAgo: 91)
+        let recent = try call("recent", .written, endedDaysAgo: 89)
+        for dir in [old, recent] { try Data([1]).write(to: dir.appendingPathComponent("recording.m4a")) }
+        Retention.sweep(audioRoot: paths.audio, recordingsAfterDays: 90, now: now)
+        XCTAssertFalse(exists(old, "recording.m4a"))
+        XCTAssertTrue(exists(recent, "recording.m4a"))
+        XCTAssertTrue(exists(old, "call.json"))
+    }
+
+    func testOldRecordingSettingAlsoDeletesRawTracksWithoutARecording() throws {
+        // A call whose recording could not be made still loses its audio when the person asked for that.
+        let dir = try call("old", .written, endedDaysAgo: 100)
+        Retention.sweep(audioRoot: paths.audio, recordingsAfterDays: 90, now: now)
+        XCTAssertFalse(exists(dir, "me.caf"))
     }
 
     func testNeverDeletesTheRecording() throws {
         let dir = try call("old", .written, endedDaysAgo: 400)
         try Data([1]).write(to: dir.appendingPathComponent("recording.m4a"))
-        Retention.sweep(audioRoot: paths.audio, olderThan: 30, now: now)
+        Retention.sweep(audioRoot: paths.audio, now: now)
         XCTAssertTrue(exists(dir, "recording.m4a"))
     }
 
     func testDeletesOldWrittenAudioKeepsJSON() throws {
         let dir = try call("old", .written, endedDaysAgo: 31)
         try Data([1]).write(to: dir.appendingPathComponent("recording.m4a"))
-        Retention.sweep(audioRoot: paths.audio, olderThan: 30, now: now)
+        Retention.sweep(audioRoot: paths.audio, now: now)
         XCTAssertFalse(exists(dir, "me.caf") || exists(dir, "them.caf") || exists(dir, "clip-them-A.caf"))
         XCTAssertTrue(exists(dir, "call.json"))
     }
 
     func testKeepsUnwrittenEvenIfOld() throws {
         let dir = try call("stuck", .recorded, endedDaysAgo: 40)
-        Retention.sweep(audioRoot: paths.audio, olderThan: 30, now: now)
+        Retention.sweep(audioRoot: paths.audio, now: now)
         XCTAssertTrue(exists(dir, "me.caf"))
     }
 
     func testKeepsRecent() throws {
         let dir = try call("new", .written, endedDaysAgo: 29)
-        Retention.sweep(audioRoot: paths.audio, olderThan: 30, now: now)
+        Retention.sweep(audioRoot: paths.audio, now: now)
         XCTAssertTrue(exists(dir, "them.caf"))
     }
 }

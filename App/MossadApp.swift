@@ -23,14 +23,34 @@ struct MossadApp: App {
         } label: {
             MenuBarIcon(controller: controller)
         }
+        .menuBarExtraStyle(.window)
 
     }
 }
 
+/// While recording, a red dot and the time since the call started; otherwise the plain waveform.
 struct MenuBarIcon: View {
     @ObservedObject var controller: AppController
 
     var body: some View {
-        Image(systemName: controller.isRecording ? "waveform.circle.fill" : "waveform")
+        if case .recording(_, let since) = controller.status {
+            TimelineView(.periodic(from: since, by: 1)) { context in
+                HStack(spacing: 3) {
+                    Image(nsImage: Self.redDot)
+                    Text(elapsed(since, context.date)).monospacedDigit()
+                }
+            }
+        } else {
+            Image(systemName: "waveform")
+        }
     }
+
+    /// Menu bar images are drawn as templates (one color); this one keeps its red.
+    private static let redDot: NSImage = {
+        let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+        let image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "Recording")!
+            .withSymbolConfiguration(config)!
+        image.isTemplate = false
+        return image
+    }()
 }
