@@ -22,7 +22,7 @@ public enum MarkdownWriter {
         let names = displayNames(r)
         var lines = r.utterances.map { (start: $0.start, text: "[\(timestamp($0.start))] \(names[$0.speakerKey] ?? $0.speakerKey): \($0.text)") }
         // Where a later recording of a merged meeting begins.
-        lines += MeetingMerge.partBreaks(r).map { (start: $0.offset, text: "[\(timestamp($0.offset))] (\($0.text))") }
+        lines += r.transcriptMarkers.map { (start: $0.offset, text: "[\(timestamp($0.offset))] (\($0.text))") }
         return lines.enumerated().sorted { ($0.element.start, $0.offset) < ($1.element.start, $1.offset) }.map(\.element.text)
             .joined(separator: "\n")
     }

@@ -53,6 +53,47 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).meetingID, "abc-defg-hij")
     }
 
+    func testPauseStopsBothSourcesAndTicksDoNotRestartThem() throws {
+        _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        recorder.pause()
+        XCTAssertTrue(recorder.isPaused)
+        XCTAssertTrue(them.stopped && me.stopped)
+        let starts = (them.startCalls, me.startCalls)
+        now = t0.addingTimeInterval(60)
+        recorder.updateThemProcesses([1, 2])
+        recorder.rebuildThem()
+        XCTAssertEqual(them.startCalls, starts.0)
+        XCTAssertEqual(me.startCalls, starts.1)
+    }
+
+    func testPauseAndResumeLeaveAMarkerAtThePausePoint() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        now = t0.addingTimeInterval(120)
+        recorder.pause()
+        now = t0.addingTimeInterval(300)
+        recorder.resume()
+        let markers = try CallRecord.load(from: paths.callDirectory(id)).markers
+        XCTAssertEqual(markers.count, 1)
+        XCTAssertTrue(markers[0].text.hasPrefix("Paused from "), markers[0].text)
+        XCTAssertTrue(markers[0].text.hasSuffix("(3 min)"), markers[0].text)
+    }
+
+    func testStopByThePersonLeavesAMarkerAtTheEnd() throws {
+        _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        now = t0.addingTimeInterval(600)
+        let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil, byPerson: true))
+        XCTAssertTrue(r.markers.last?.text.hasPrefix("Recording stopped at ") == true)
+    }
+
+    func testResumeStartsBothSourcesAgain() throws {
+        _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        recorder.pause()
+        recorder.resume()
+        XCTAssertFalse(recorder.isPaused)
+        XCTAssertEqual(them.startCalls, 2)
+        XCTAssertEqual(me.startCalls, 2)
+    }
+
     func testCalendarDetailsDuringTheCallAreSaved() throws {
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], meetingID: "abc-defg-hij", at: t0)
         recorder.setCalendar(title: "Tech Team Monthly Sync", attendees: ["a@example.com"], forCall: id)

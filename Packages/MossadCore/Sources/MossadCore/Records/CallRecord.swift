@@ -58,6 +58,18 @@ public struct CallPart: Codable, Equatable, Sendable {
     }
 }
 
+/// A line in the transcript for something that happened to the recording, such as a pause.
+public struct TranscriptMarker: Codable, Equatable, Sendable {
+    /// Seconds into the recording.
+    public var offset: TimeInterval
+    public var text: String
+
+    public init(offset: TimeInterval, text: String) {
+        self.offset = offset
+        self.text = text
+    }
+}
+
 /// Everything known about one call; saved as `call.json` in the call's audio directory.
 public struct CallRecord: Codable, Equatable, Sendable {
     public var id: String
@@ -94,6 +106,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var markdownPath: String?
     /// The recordings joined into this meeting, oldest first; empty for a single recording.
     public var parts: [CallPart] = []
+    /// Pauses and stops by the person, shown in the transcript.
+    public var markers: [TranscriptMarker] = []
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -105,6 +119,11 @@ public struct CallRecord: Codable, Equatable, Sendable {
     }
 
     public var title: String { calendarTitle ?? "\(platform.displayName) call" }
+
+    /// Every marker line of the transcript in time order: pauses, stops, and where a merged part begins.
+    public var transcriptMarkers: [TranscriptMarker] {
+        (markers + MeetingMerge.partBreaks(self).map { TranscriptMarker(offset: $0.offset, text: $0.text) }).sorted { $0.offset < $1.offset }
+    }
 
     static let fileName = "call.json"
 
@@ -148,5 +167,6 @@ extension CallRecord {
         headline = try c.decodeIfPresent(String.self, forKey: .headline)
         markdownPath = try c.decodeIfPresent(String.self, forKey: .markdownPath)
         parts = try c.decodeIfPresent([CallPart].self, forKey: .parts) ?? []
+        markers = try c.decodeIfPresent([TranscriptMarker].self, forKey: .markers) ?? []
     }
 }

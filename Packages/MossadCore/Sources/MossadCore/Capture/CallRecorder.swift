@@ -43,6 +43,11 @@ public final class CallRecorder: @unchecked Sendable {
     private var nextThemRetry = Date.distantPast
     private var nextMeRetry = Date.distantPast
     private var loggedNoSystemAudio = false
+    public private(set) var isPaused = false
+    private var pauseStart: (date: Date, offset: TimeInterval)?
+    /// Live loudness of each track, for the waveform. Constant objects, so the UI can read them from any thread.
+    public let meMeter = LevelMeter()
+    public let themMeter = LevelMeter()
 
     public init(paths: Paths, makeThem: @escaping ([AudioObjectID]) -> TrackSource, makeMe: @escaping () -> TrackSource,
                 clock: @escaping () -> Date = Date.init, systemAudioAllowed: @escaping () -> Bool = { true }) {
@@ -75,8 +80,10 @@ public final class CallRecorder: @unchecked Sendable {
         try r.save(to: dir)
         let themWriter: TrackWriter, meWriter: TrackWriter
         do {
-            themWriter = try TrackWriter(url: dir.appendingPathComponent(Track.them.fileName), startTime: start, clock: clock)
-            meWriter = try TrackWriter(url: dir.appendingPathComponent(Track.me.fileName), startTime: start, clock: clock)
+            meMeter.reset()
+            themMeter.reset()
+            themWriter = try TrackWriter(url: dir.appendingPathComponent(Track.them.fileName), startTime: start, clock: clock, meter: themMeter)
+            meWriter = try TrackWriter(url: dir.appendingPathComponent(Track.me.fileName), startTime: start, clock: clock, meter: meMeter)
         } catch {
             try? FileManager.default.removeItem(at: dir)
             throw error
@@ -94,7 +101,7 @@ public final class CallRecorder: @unchecked Sendable {
     /// Rebuilds the tap when the meeting app's audio processes change (for example a browser audio helper restarts).
     /// Runs on every detection tick during a call, so a source that failed to start is tried again.
     public func updateThemProcesses(_ ids: [AudioObjectID]) {
-        guard isRecording else { return }
+        guard isRecording, !isPaused else { return }
         let now = clock()
         if meSource == nil, now >= nextMeRetry { startMe() }
         let ids = ids.isEmpty ? themProcessIDs : ids
@@ -109,7 +116,7 @@ public final class CallRecorder: @unchecked Sendable {
 
     /// Recreates the tap with the same processes, for example after the default output device changed.
     public func rebuildThem() {
-        guard isRecording else { return }
+        guard isRecording, !isPaused else { return }
         Log.info("Output device changed; rebuilding tap")
         themSource?.stop()
         startThem(themProcessIDs)
@@ -159,8 +166,14 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     /// Stops recording. Returns the saved record, or nil when the call was shorter than the minimum and was deleted.
-    public func end(at time: Date, trimTo: Date?) -> CallRecord? {
+    public func end(at time: Date, trimTo: Date?, byPerson: Bool = false) -> CallRecord? {
         guard var r = record else { return nil }
+        if let pause = pauseStart {
+            r.markers.append(TranscriptMarker(offset: pause.offset, text: "Paused at \(Self.time(pause.date)); the recording ended while paused"))
+        } else if byPerson {
+            r.markers.append(TranscriptMarker(offset: recordedLength, text: "Recording stopped at \(Self.time(time))"))
+        }
+        pauseStart = nil
         // The app releasing the mic does not mean the call ended: keep any sound on either track after it.
         let lastSound = [themWriter?.lastSound, meWriter?.lastSound].compactMap { $0 }.max().map { r.start.addingTimeInterval($0 + 1) }
         stopAll()
@@ -185,6 +198,43 @@ public final class CallRecorder: @unchecked Sendable {
         return r
     }
 
+    /// Stops both sources but keeps the files open. The paused time is left out of both tracks.
+    public func pause() {
+        guard isRecording, !isPaused else { return }
+        isPaused = true
+        pauseStart = (clock(), recordedLength)
+        themWriter?.pause()
+        meWriter?.pause()
+        themSource?.stop()
+        meSource?.stop()
+        themSource = nil
+        meSource = nil
+        Log.info("Recording paused")
+    }
+
+    public func resume() {
+        guard isRecording, isPaused else { return }
+        isPaused = false
+        if let pause = pauseStart, var r = record {
+            let seconds = clock().timeIntervalSince(pause.date)
+            let length = seconds < 60 ? "\(Int(seconds)) s" : "\(Int((seconds / 60).rounded())) min"
+            r.markers.append(TranscriptMarker(offset: pause.offset, text: "Paused from \(Self.time(pause.date)) to \(Self.time(clock())) (\(length))"))
+            record = r
+            do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
+        }
+        pauseStart = nil
+        themWriter?.resume()
+        meWriter?.resume()
+        startMe()
+        startThem(themProcessIDs)
+        Log.info("Recording resumed")
+    }
+
+    /// Seconds recorded so far: the longer of the two tracks.
+    private var recordedLength: TimeInterval { max(meWriter?.duration ?? 0, themWriter?.duration ?? 0) }
+
+    static func time(_ date: Date) -> String { date.formatted(date: .omitted, time: .shortened) }
+
     /// The invite found while the call runs, so the live call already shows its real title.
     /// Ignored when that call has ended meanwhile; the pipeline matches the calendar again anyway.
     public func setCalendar(title: String, attendees: [String], forCall id: String) {
@@ -204,6 +254,7 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     private func stopAll() {
+        isPaused = false
         themSource?.stop()
         meSource?.stop()
         themWriter?.close()

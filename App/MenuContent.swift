@@ -7,7 +7,6 @@ struct MenuContent: View {
     @ObservedObject var controller: AppController
     @ObservedObject var permissions: PermissionsMonitor
     @Environment(\.dismiss) private var dismiss
-    @State private var confirmSkip = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -57,11 +56,24 @@ struct MenuContent: View {
         .font(.system(size: 13))
         .padding(8)
         .frame(width: 320)
+        .environmentObject(controller)
     }
 
     @ViewBuilder
     private var statusSection: some View {
         switch controller.status {
+        case .idle where !controller.isOn:
+            HStack(alignment: .top, spacing: 10) {
+                StatusDot(color: Theme.unknown, size: 9).padding(.top, 5)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mossad is off").font(.system(size: 14, weight: .semibold))
+                    Text(controller.offUntilDate.map { "Until \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Until you turn it on")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Turn on") { controller.turnOn() }.buttonStyle(.borderedProminent).controlSize(.small)
+            }
+            .padding(EdgeInsets(top: 12, leading: 14, bottom: 10, trailing: 14))
         case .idle:
             HStack(alignment: .top, spacing: 10) {
                 StatusDot(color: Theme.listening, size: 9)
@@ -71,13 +83,15 @@ struct MenuContent: View {
                     Text("Waiting for a call").font(.system(size: 14, weight: .semibold))
                     Text("Zoom, Google Meet, and Microsoft Teams").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
+                Spacer()
+                TurnOffMenu().controlSize(.small)
             }
             .padding(EdgeInsets(top: 12, leading: 14, bottom: 10, trailing: 14))
         case .recording(let platform, let since):
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    StatusDot(color: Theme.recording, size: 10, pulsing: true)
-                    Text("Recording").font(.system(size: 14, weight: .semibold))
+                    StatusDot(color: controller.isPaused ? Theme.unknown : Theme.recording, size: 10, pulsing: !controller.isPaused)
+                    Text(controller.isPaused ? "Paused" : "Recording").font(.system(size: 14, weight: .semibold))
                     Spacer()
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         Text(elapsed(since, context.date)).font(.system(size: 14, weight: .medium)).monospacedDigit()
@@ -89,21 +103,7 @@ struct MenuContent: View {
                     Text("\(platform.displayName) · started \(since.formatted(date: .omitted, time: .shortened))")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
-                Button {
-                    if confirmSkip {
-                        controller.skipCurrentCall()
-                        confirmSkip = false
-                    } else {
-                        confirmSkip = true
-                    }
-                } label: {
-                    Text(confirmSkip ? "Click again to delete this recording" : "Skip and delete this call")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.recording)
-                        .padding(.horizontal, 11).padding(.vertical, 5)
-                        .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                }
-                .buttonStyle(.plain)
+                CallControls(compact: true)
             }
             .padding(EdgeInsets(top: 14, leading: 14, bottom: 12, trailing: 14))
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))

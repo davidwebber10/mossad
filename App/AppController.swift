@@ -28,6 +28,13 @@ final class AppController: ObservableObject {
     }
 
     @Published private(set) var status: Status = .idle
+    @Published private(set) var isPaused = false
+    /// 0 means on. Otherwise Mossad is off until this time (seconds since 1970; `.infinity` for "until I turn it on").
+    @AppStorage("offUntil") private var offUntil: Double = 0
+    private var resumeTimer: Timer?
+
+    var isOn: Bool { offUntil == 0 }
+    var offUntilDate: Date? { offUntil == 0 || offUntil == .infinity ? nil : Date(timeIntervalSince1970: offUntil) }
     @Published private(set) var meetings: [CallRecord] = []
     @Published private(set) var processing = 0
     @Published var section: Section = .meetings
@@ -94,7 +101,12 @@ final class AppController: ObservableObject {
             detection.onCallProcesses = { @Sendable ids in
                 CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
             }
-            detection.start()
+            if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
+                offUntil = 0
+                detection.start()
+            } else {
+                scheduleTurnOn()
+            }
             outputWatcher = OutputDeviceWatcher { @Sendable in
                 CaptureQueue.queue.async { recorder.rebuildThem() }
             }
@@ -182,6 +194,63 @@ final class AppController: ObservableObject {
         let recorder = recorder
         CaptureQueue.queue.async { recorder.skip() }
         status = .idle
+        isPaused = false
+    }
+
+    /// Ends the recording now and processes it. The detector still sees this call, so it does not start a
+    /// new recording until the call really ends.
+    func stopCurrentCall() {
+        let recorder = recorder
+        CaptureQueue.queue.async {
+            guard let record = recorder.end(at: Date(), trimTo: nil) else { return }
+            Task { @MainActor in
+                self.refresh()
+                await self.track { await self.pipeline.process(record.id) }
+            }
+        }
+        status = .idle
+        isPaused = false
+    }
+
+    func pauseCurrentCall() {
+        let recorder = recorder
+        CaptureQueue.queue.async { recorder.pause() }
+        isPaused = true
+    }
+
+    func resumeCurrentCall() {
+        let recorder = recorder
+        CaptureQueue.queue.async { recorder.resume() }
+        isPaused = false
+    }
+
+    /// Turns detection and recording off until a time (nil: until turned on again). A call being recorded
+    /// ends normally and is processed.
+    func turnOff(until date: Date?) {
+        offUntil = date?.timeIntervalSince1970 ?? .infinity
+        if isRecording { stopCurrentCall() }
+        detection.stop()
+        scheduleTurnOn()
+        objectWillChange.send()
+        Log.info("Mossad turned off" + (date.map { " until \($0.formatted())" } ?? ""))
+    }
+
+    func turnOn() {
+        offUntil = 0
+        resumeTimer?.invalidate()
+        resumeTimer = nil
+        detection.start()
+        objectWillChange.send()
+        Log.info("Mossad turned on")
+    }
+
+    /// Turns Mossad back on when an "off until" time passes, also after a restart.
+    private func scheduleTurnOn() {
+        resumeTimer?.invalidate()
+        guard let date = offUntilDate else { return }
+        resumeTimer = Timer.scheduledTimer(withTimeInterval: max(1, date.timeIntervalSinceNow), repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.turnOn() }
+        }
     }
 
     func open(_ section: Section) {
@@ -303,7 +372,9 @@ final class AppController: ObservableObject {
     private func show(_ event: DetectorEvent) {
         switch event {
         case .started(let platform, _, let at): status = .recording(platform, since: at)
-        case .ended: status = .idle
+        case .ended:
+            status = .idle
+            isPaused = false
         }
     }
 

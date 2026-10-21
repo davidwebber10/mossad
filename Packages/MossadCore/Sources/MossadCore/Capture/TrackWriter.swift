@@ -29,13 +29,30 @@ public final class TrackWriter: @unchecked Sendable {
     private var stalled = false
     /// Below this RMS level a buffer counts as silence (about -54 dBFS).
     static let soundThreshold: Float = 0.002
-    private let startTime: Date
+    private var startTime: Date
     private let clock: () -> Date
+    private let meter: LevelMeter?
+    private var pausedAt: Date?
 
-    public init(url: URL, startTime: Date, clock: @escaping () -> Date = Date.init) throws {
+    public init(url: URL, startTime: Date, clock: @escaping () -> Date = Date.init, meter: LevelMeter? = nil) throws {
         file = try AVAudioFile(forWriting: url, settings: Self.fileSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
         self.startTime = startTime
         self.clock = clock
+        self.meter = meter
+    }
+
+    /// A paused recording leaves the paused time out: on resume the timeline moves on by the pause, so no
+    /// silence is written and a long pause cannot look like a stalled track. Both tracks pause together.
+    public func pause() {
+        lock.withLock { if pausedAt == nil { pausedAt = clock() } }
+    }
+
+    public func resume() {
+        lock.withLock {
+            guard let pausedAt else { return }
+            startTime = startTime.addingTimeInterval(clock().timeIntervalSince(pausedAt))
+            self.pausedAt = nil
+        }
     }
 
     public var duration: TimeInterval {
@@ -49,7 +66,7 @@ public final class TrackWriter: @unchecked Sendable {
 
     public func append(_ buffer: AVAudioPCMBuffer) throws {
         try lock.withLock {
-            guard file != nil, !stalled, buffer.frameLength > 0, let mono = Self.downmix(buffer) else { return }
+            guard file != nil, !stalled, pausedAt == nil, buffer.frameLength > 0, let mono = Self.downmix(buffer) else { return }
             let converted = try convert(mono)
             guard converted.frameLength > 0 else { return }
             let bufferStart = clock().timeIntervalSince(startTime) - Double(converted.frameLength) / Self.sampleRate
@@ -64,7 +81,9 @@ public final class TrackWriter: @unchecked Sendable {
                 try writeSilence(frames: expected - written)
             }
             try write(converted)
-            if Self.rms(converted) >= Self.soundThreshold { lastSoundFrame = written }
+            let level = Self.rms(converted)
+            meter?.record(level)
+            if level >= Self.soundThreshold { lastSoundFrame = written }
         }
     }
 

@@ -4,7 +4,7 @@ import SwiftUI
 
 /// The Meetings pane in one of three modes: Split (list and detail), List (full-pane rows), or Calendar.
 struct MeetingsView: View {
-    enum Mode: String, CaseIterable { case split = "Split", list = "List", calendar = "Calendar" }
+    enum Mode: String, CaseIterable { case split = "Split", calendar = "Calendar" }
 
     @EnvironmentObject var controller: AppController
     @AppStorage("meetingsMode") private var mode = Mode.split
@@ -35,20 +35,15 @@ struct MeetingsView: View {
             } else {
                 switch mode {
                 case .split: splitBody
-                case .list, .calendar:
+                case .calendar:
                     if let id = opened, let r = controller.meetings.first(where: { $0.id == id }) {
                         fullPaneDetail(r)
                     } else {
                         VStack(spacing: 0) {
                             paneHeader
                             Divider()
-                            if mode == .list {
-                                MeetingTable(groups: MeetingGroups.group(results), selection: $controller.selectedMeetingID,
-                                             deleting: $deleting) { r in open(r, from: MeetingGroups.kind(of: r.start).title) }
-                            } else {
-                                CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting) { r, period in
-                                    open(r, from: period)
-                                }
+                            CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting) { r, period in
+                                open(r, from: period)
                             }
                         }
                     }
@@ -115,7 +110,7 @@ struct MeetingsView: View {
     private var paneHeader: some View {
         HStack(spacing: 14) {
             Text("Meetings").font(.system(size: 18, weight: .bold)).kerning(-0.3)
-            ModePicker(mode: $mode, labeled: true)
+            ModePicker(mode: $mode, labeled: false)
             if mode == .calendar, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
             Spacer()
             SearchField(text: $query).frame(width: 240)
@@ -152,7 +147,7 @@ struct MeetingsView: View {
             .font(.system(size: 13))
             .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
             Divider()
-            MeetingDetailView(record: r, style: .list, deleting: $deleting).id(r.id)
+            MeetingDetailView(record: r, style: .fullPage, deleting: $deleting).id(r.id)
         }
     }
 }
@@ -226,7 +221,6 @@ struct ModePicker: View {
     private func symbol(_ m: MeetingsView.Mode) -> String {
         switch m {
         case .split: "sidebar.left"
-        case .list: "list.bullet"
         case .calendar: "calendar"
         }
     }
@@ -306,56 +300,6 @@ private struct MeetingRow: View {
             .padding(.leading, 20)
         }
         .padding(.vertical, 4)
-    }
-}
-
-/// List mode: full-width rows with columns.
-private struct MeetingTable: View {
-    @EnvironmentObject var controller: AppController
-    let groups: [MeetingGroups.Group]
-    @Binding var selection: String?
-    @Binding var deleting: CallRecord?
-    let open: (CallRecord) -> Void
-
-    var body: some View {
-        List(selection: $selection) {
-            ForEach(groups, id: \.kind) { group in
-                Section {
-                    ForEach(group.records, id: \.id) { r in
-                        HStack(spacing: 14) {
-                            PlatformSquare(platform: r.platform).frame(width: 20)
-                            Text(r.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Group {
-                                if let badge = r.badge { StatusBadge(kind: badge) } else { Color.clear }
-                            }
-                            .frame(width: 150, alignment: .leading)
-                            Text(whenText(r.start, kind: group.kind)).frame(width: 90, alignment: .leading)
-                            LengthText(record: r).frame(width: 70, alignment: .trailing)
-                        }
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .padding(.vertical, 3)
-                        .contentShape(Rectangle())
-                        .tag(r.id)
-                        .onTapGesture(count: 2) { open(r) }
-                        .simultaneousGesture(TapGesture().onEnded { open(r) })
-                        .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
-                    }
-                } header: {
-                    Text(group.kind.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
-                }
-            }
-        }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
-        .padding(.horizontal, 16)
-        .onKeyPress(.return) {
-            guard let id = selection, let r = controller.meetings.first(where: { $0.id == id }) else { return .ignored }
-            open(r)
-            return .handled
-        }
     }
 }
 

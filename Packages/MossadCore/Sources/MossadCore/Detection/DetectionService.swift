@@ -37,6 +37,7 @@ public final class DetectionService: @unchecked Sendable {
     }
 
     public func start() {
+        guard timer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now(), repeating: interval)
         timer.setEventHandler { [weak self] in self?.tick(at: Date()) }

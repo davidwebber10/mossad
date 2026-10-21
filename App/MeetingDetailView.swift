@@ -4,7 +4,7 @@ import SwiftUI
 
 /// One meeting: header, banner, player, and the Summary and Transcript tabs. Clicking a time plays from there.
 struct MeetingDetailView: View {
-    enum Style { case split, list }
+    enum Style { case split, fullPage }
     enum Tab: String, CaseIterable { case summary = "Summary", transcript = "Transcript" }
 
     @EnvironmentObject var controller: AppController
@@ -33,19 +33,19 @@ struct MeetingDetailView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        if style == .list { header(people).padding(.horizontal, -24) }
+                        if style == .fullPage { header(people).padding(.horizontal, -24) }
                         banner
                         PlayerBar(player: player, record: record, people: people, retentionDays: controller.deleteRecordings ? controller.recordingDays : nil)
                             .padding(.top, 12)
                         tabs
                         switch tab {
-                        case .summary: SummaryTab(record: record, people: people, columns: style == .list ? [1.4, 1] : nil)
+                        case .summary: SummaryTab(record: record, people: people, columns: style == .fullPage ? [1.4, 1] : nil)
                         case .transcript: TranscriptTab(record: record, people: people, player: player)
                         }
                     }
-                    .padding(.horizontal, style == .list ? 32 : 16)
+                    .padding(.horizontal, style == .fullPage ? 32 : 16)
                     .padding(.bottom, 24)
-                    .frame(maxWidth: style == .list ? 900 : .infinity)
+                    .frame(maxWidth: style == .fullPage ? 900 : .infinity)
                     .frame(maxWidth: .infinity)
                 }
             }
@@ -57,7 +57,7 @@ struct MeetingDetailView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(record.title)
-                        .font(.system(size: style == .list ? 24 : 20, weight: .bold)).kerning(style == .list ? -0.4 : -0.3)
+                        .font(.system(size: style == .fullPage ? 24 : 20, weight: .bold)).kerning(style == .fullPage ? -0.4 : -0.3)
                         .textSelection(.enabled)
                     Text(subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
                 }
