@@ -15,11 +15,12 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
+        case meetings = "Meetings", chat = "Chat", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
         var id: String { rawValue }
         var symbol: String {
             switch self {
             case .meetings: "bubble.left.and.text.bubble.right"
+            case .chat: "sparkles"
             case .people: "person.2"
             case .analytics: "chart.bar.xaxis"
             case .settings: "gearshape"
@@ -64,7 +65,9 @@ final class AppController: ObservableObject {
     var personToOpen: String?
     /// The Meetings search text; a tag click sets it to "#Tag".
     @Published var meetingQuery = ""
-    @Published var askOpen = false
+    /// Set to open the Chat tab on a new chat.
+    @Published var newChatRequest = 0
+    lazy var chats = ChatStore(directory: paths.chats)
     /// A meeting to open and play from a time; the meeting view takes it when it appears.
     @Published var seekRequest: SeekRequest?
 
@@ -418,9 +421,21 @@ final class AppController: ObservableObject {
     }
 
 
-    func ask(_ question: String, history: [MeetingQA.Turn]) async throws -> MeetingQA.Answer {
+    func startChat() {
+        newChatRequest += 1
+        open(.chat)
+    }
+
+    func chatAnswer(_ question: String, history: [ChatMessage], onStep: @escaping @Sendable (String) -> Void) async throws -> String {
         guard let key = keychain.get(.anthropic) else { throw SummaryError.http(0, "The Anthropic key is missing. Add it in Settings.") }
-        return try await MeetingQA(apiKey: key, ownerName: ownerName, usage: usage).ask(question, records: meetings, history: history)
+        return try await ChatAgent(apiKey: key, ownerName: ownerName, usage: usage).answer(question, history: history, records: meetings, onStep: onStep)
+    }
+
+    /// Opens a `mossad://call/<id>?t=<seconds>` link from a chat answer.
+    func openLink(_ url: URL) -> Bool {
+        guard let link = ChatLink.parse(url), meetings.contains(where: { $0.id == link.callID }) else { return false }
+        if let at = link.at { openMeeting(link.callID, at: at) } else { openMeeting(link.callID) }
+        return true
     }
 
     /// Shows every meeting with this tag.

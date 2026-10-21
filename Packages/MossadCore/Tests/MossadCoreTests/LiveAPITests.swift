@@ -110,25 +110,19 @@ final class LiveAPITests: XCTestCase {
         XCTAssertFalse(digest.focus.isEmpty)
     }
 
-    func testClaudeAnswersAQuestionWithCitations() async throws {
+    func testChatAgentFindsWhatSomeoneAgreedToAndAnswersAFollowUp() async throws {
         guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
-        let answer = try await MeetingQA(apiKey: key, ownerName: "David Webber").ask("When does the freight leave?", records: [syntheticCall()])
-        print("LIVE answer: \(answer.text) | \(answer.citations)")
-        XCTAssertTrue(answer.text.lowercased().contains("friday"))
-        XCTAssertEqual(answer.citations.first?.callID, "live")
-    }
-
-    func testClaudeAnswersWhatSomeoneAgreedToAndAFollowUp() async throws {
-        guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
-        let qa = MeetingQA(apiKey: key, ownerName: "David Webber")
+        let agent = ChatAgent(apiKey: key, ownerName: "David Webber")
         let records = [syntheticCall()]
-        let first = try await qa.ask("What did Alex agree to do last call, and was there a deadline?", records: records)
-        print("LIVE agreed: \(first.text) | meetings: \(first.meetings)")
-        XCTAssertEqual(first.meetings, ["live"])
-        let follow = try await qa.ask("And when does the freight leave?", records: records,
-                                      history: [MeetingQA.Turn(question: "What did Alex agree to do last call, and was there a deadline?", answer: first.text)])
-        print("LIVE follow-up: \(follow.text)")
-        XCTAssertTrue(follow.text.lowercased().contains("friday"))
+        let question = "What did Alex agree to do last call, and was there a deadline?"
+        let first = try await agent.answer(question, history: [], records: records) { print("LIVE step: \($0)") }
+        print("LIVE chat: \(first)")
+        XCTAssertTrue(first.contains("mossad://call/live"))
+        let follow = try await agent.answer("And when does the freight leave?", history: [ChatMessage(role: .user, text: question),
+                                                                                         ChatMessage(role: .assistant, text: first)],
+                                            records: records) { print("LIVE step: \($0)") }
+        print("LIVE follow-up: \(follow)")
+        XCTAssertTrue(follow.lowercased().contains("friday"))
     }
 
     /// Full pipeline on synthetic voices: me = Samantha, them = Daniel then Karen.

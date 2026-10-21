@@ -20,6 +20,7 @@ struct MainWindow: View {
             Group {
                 switch controller.section {
                 case .meetings: MeetingsView()
+                case .chat: ChatView()
                 case .people: PeopleView()
                 case .analytics: AnalyticsView()
                 case .settings: SettingsView()
@@ -30,7 +31,7 @@ struct MainWindow: View {
             .ignoresSafeArea(.container, edges: .top)
         }
         .frame(minWidth: 980, minHeight: 600)
-        .sheet(isPresented: $controller.askOpen) { AskView() }
+
     }
 }
 
