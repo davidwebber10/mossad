@@ -79,6 +79,10 @@ final class ProcessingQueueTests: XCTestCase {
         try writeTestAudio(paths.callDirectory("bad").appendingPathComponent("me.caf"), seconds: 5)
         ProcessingQueue(paths: paths).recoverInterrupted()
         XCTAssertTrue(FileManager.default.fileExists(atPath: paths.callDirectory("bad").appendingPathComponent("them.caf").path))
+        // Not stuck as "recording": failed at the first processing step, so Retry works.
+        let r = try CallRecord.load(from: paths.callDirectory("bad"))
+        XCTAssertEqual(r.status, .failed)
+        XCTAssertEqual(r.failedStep, .recorded)
     }
 
     func testRecoverKeepsCallWhenOnlyMicTrackIsShort() throws {

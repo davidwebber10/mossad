@@ -33,6 +33,14 @@ final class CallDetectorTests: XCTestCase {
         XCTAssertFalse(d.isInCall)
     }
 
+    func testAnUnknownTickDoesNotResetTheGoneCount() {
+        var d = CallDetector()
+        started(&d)
+        XCTAssertNil(d.process(snap(2, [meet(mic: true, present: false)])))
+        XCTAssertNil(d.process(snap(4, [meet(mic: true, present: nil)])))
+        XCTAssertEqual(d.process(snap(6, [meet(mic: true, present: false)])), .ended(at: t0.addingTimeInterval(6), trimTo: nil))
+    }
+
     func testDoesNotStartWithoutMic() {
         var d = CallDetector()
         XCTAssertNil(d.process(snap(0, [zoom(mic: false, present: true)])))

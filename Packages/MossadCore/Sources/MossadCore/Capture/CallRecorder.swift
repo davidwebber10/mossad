@@ -8,12 +8,25 @@ public protocol TrackSource: AnyObject {
     func stop()
 }
 
+/// The one serial queue for capture work: starting, stopping, and trimming can wait on Core Audio,
+/// so none of it runs on the main thread. Every CallRecorder call and every source restart goes through it.
+public enum CaptureQueue {
+    public static let queue = DispatchQueue(label: "com.dwebber.mossad.capture", qos: .userInitiated)
+    static let operations: OperationQueue = {
+        let q = OperationQueue()
+        q.underlyingQueue = queue
+        return q
+    }()
+}
+
 /// Records one call: the "them" tap and the "me" mic, each to its own file, plus `call.json`.
 public final class CallRecorder: @unchecked Sendable {
     private let paths: Paths
     private let makeThem: ([AudioObjectID]) -> TrackSource
     private let makeMe: () -> TrackSource
     private let clock: () -> Date
+    private let systemAudioAllowed: () -> Bool
+    public static let retryInterval: TimeInterval = 10
 
     private var record: CallRecord?
     private var themSource: TrackSource?
@@ -21,9 +34,13 @@ public final class CallRecorder: @unchecked Sendable {
     private var themWriter: TrackWriter?
     private var meWriter: TrackWriter?
     private var themProcessIDs: [AudioObjectID] = []
+    private var nextThemRetry = Date.distantPast
+    private var nextMeRetry = Date.distantPast
+    private var loggedNoSystemAudio = false
 
     public init(paths: Paths, makeThem: @escaping ([AudioObjectID]) -> TrackSource, makeMe: @escaping () -> TrackSource,
-                clock: @escaping () -> Date = Date.init) {
+                clock: @escaping () -> Date = Date.init, systemAudioAllowed: @escaping () -> Bool = { true }) {
+        self.systemAudioAllowed = systemAudioAllowed
         self.paths = paths
         self.makeThem = makeThem
         self.makeMe = makeMe
@@ -65,10 +82,11 @@ public final class CallRecorder: @unchecked Sendable {
     /// Runs on every detection tick during a call, so a source that failed to start is tried again.
     public func updateThemProcesses(_ ids: [AudioObjectID]) {
         guard isRecording else { return }
-        if meSource == nil { startMe() }
+        let now = clock()
+        if meSource == nil, now >= nextMeRetry { startMe() }
         let ids = ids.isEmpty ? themProcessIDs : ids
         if themSource == nil {
-            startThem(ids)
+            if now >= nextThemRetry { startThem(ids) } else { themProcessIDs = ids }
         } else if !ids.isEmpty, Set(ids) != Set(themProcessIDs) {
             Log.info("Meeting audio processes changed; rebuilding tap")
             themSource?.stop()
@@ -89,12 +107,20 @@ public final class CallRecorder: @unchecked Sendable {
         guard let writer = themWriter else { return }
         themProcessIDs = ids
         themSource = nil
+        // Without the permission, creating a tap can stall in Core Audio. Wait for the permission instead.
+        guard systemAudioAllowed() else {
+            if !loggedNoSystemAudio { Log.error("System Audio Recording is not allowed; the other side is not recorded") }
+            loggedNoSystemAudio = true
+            nextThemRetry = clock().addingTimeInterval(Self.retryInterval)
+            return
+        }
         let source = makeThem(ids)
         do {
             try source.start { buffer in try? writer.append(buffer) }
             themSource = source
         } catch {
             source.stop()
+            nextThemRetry = clock().addingTimeInterval(Self.retryInterval)
             Log.error("Meeting audio tap failed to start: \(error)")
         }
     }
@@ -107,6 +133,7 @@ public final class CallRecorder: @unchecked Sendable {
             meSource = source
         } catch {
             source.stop()
+            nextMeRetry = clock().addingTimeInterval(Self.retryInterval)
             Log.error("Mic capture failed to start: \(error)")
         }
     }
@@ -114,11 +141,11 @@ public final class CallRecorder: @unchecked Sendable {
     /// Stops recording. Returns the saved record, or nil when the call was shorter than the minimum and was deleted.
     public func end(at time: Date, trimTo: Date?) -> CallRecord? {
         guard var r = record else { return nil }
-        // The mic going quiet does not mean the call did: keep the other side's speech after it.
-        let themSound = themWriter?.lastSound.map { r.start.addingTimeInterval($0 + 1) }
+        // The app releasing the mic does not mean the call ended: keep any sound on either track after it.
+        let lastSound = [themWriter?.lastSound, meWriter?.lastSound].compactMap { $0 }.max().map { r.start.addingTimeInterval($0 + 1) }
         stopAll()
         let dir = paths.callDirectory(r.id)
-        let end = trimTo.map { min(time, max($0, themSound ?? $0)) } ?? time
+        let end = trimTo.map { min(time, max($0, lastSound ?? $0)) } ?? time
         guard end.timeIntervalSince(r.start) >= ProcessingQueue.minimumCallDuration else {
             try? FileManager.default.removeItem(at: dir)
             Log.info("Discarded short call \(r.id)")
@@ -156,6 +183,9 @@ public final class CallRecorder: @unchecked Sendable {
         themWriter = nil
         meWriter = nil
         themProcessIDs = []
+        nextThemRetry = .distantPast
+        nextMeRetry = .distantPast
+        loggedNoSystemAudio = false
         record = nil
     }
 }

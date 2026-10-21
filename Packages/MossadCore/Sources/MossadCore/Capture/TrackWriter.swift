@@ -8,8 +8,6 @@ public final class TrackWriter: @unchecked Sendable {
     static let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
     /// Gaps shorter than this are ignored (normal buffer jitter).
     static let gapTolerance: Double = 0.5
-    /// Longest silence written for one gap (for example, the Mac slept with a meeting window open).
-    public static let maxGapPadding: Double = 600
     /// On disk: 16-bit integer PCM (half the size of Float32, same transcription quality).
     static var fileSettings: [String: Any] { [
         AVFormatIDKey: kAudioFormatLinearPCM,
@@ -25,8 +23,6 @@ public final class TrackWriter: @unchecked Sendable {
     private var file: AVAudioFile?
     private var converter: AVAudioConverter?
     private var written: AVAudioFramePosition = 0
-    /// Wall-clock frames left out when a gap was longer than `maxGapPadding`.
-    private var skipped: AVAudioFramePosition = 0
     private var lastSoundFrame: AVAudioFramePosition?
     /// Below this RMS level a buffer counts as silence (about -46 dBFS).
     static let soundThreshold: Float = 0.005
@@ -54,12 +50,10 @@ public final class TrackWriter: @unchecked Sendable {
             let converted = try convert(mono)
             guard converted.frameLength > 0 else { return }
             let bufferStart = clock().timeIntervalSince(startTime) - Double(converted.frameLength) / Self.sampleRate
-            let expected = AVAudioFramePosition(bufferStart * Self.sampleRate) - skipped
+            // Pad every gap in full: both tracks must share one timeline. Silence is written in small chunks.
+            let expected = AVAudioFramePosition(bufferStart * Self.sampleRate)
             if Double(expected - written) > Self.gapTolerance * Self.sampleRate {
-                let cap = AVAudioFramePosition(Self.maxGapPadding * Self.sampleRate)
-                let gap = expected - written
-                if gap > cap { skipped += gap - cap }
-                try writeSilence(frames: min(gap, cap))
+                try writeSilence(frames: expected - written)
             }
             try write(converted)
             if Self.rms(converted) >= Self.soundThreshold { lastSoundFrame = written }

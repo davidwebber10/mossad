@@ -64,10 +64,8 @@ public actor Pipeline {
                 try r.save(to: dir)
             }
         } catch is MissingAPIKey {
-            // Not the call's fault: wait for the key without using up attempts.
+            // Not the call's fault: wait for the key without using up attempts or a backoff delay.
             Log.error("Processing \(id) waits for an API key")
-            r.nextAttempt = now().addingTimeInterval(3600)
-            try? r.save(to: dir)
         } catch {
             Log.error("Processing \(id) failed at \(r.status.rawValue): \(error)")
             queue.markFailure(&r, now: now())

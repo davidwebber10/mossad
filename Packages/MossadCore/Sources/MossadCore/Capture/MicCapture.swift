@@ -17,7 +17,7 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
         self.onBuffer = onBuffer
         // The engine stops itself when the input or output hardware changes (AirPods connect, a USB mic is
         // unplugged). Restart it on the new device; TrackWriter fills the short gap with silence.
-        observer = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+        observer = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: CaptureQueue.operations) { [weak self] _ in
             guard let self else { return }
             Log.info("Audio configuration changed; restarting mic")
             self.engine.inputNode.removeTap(onBus: 0)

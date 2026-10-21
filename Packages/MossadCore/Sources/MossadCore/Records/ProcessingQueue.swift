@@ -37,8 +37,13 @@ public struct ProcessingQueue: Sendable {
             }
             let duration = durations.compactMap { $0 }.max() ?? 0
             if durations.contains(where: { $0 == nil }) && duration < Self.minimumCallDuration {
-                // A track that cannot be read may hold the call. Never delete it; leave it for a person to check.
+                // A track that cannot be read may hold the call. Never delete it: mark it failed at the
+                // first processing step, so it shows in Meetings with a Retry button.
                 Log.error("Interrupted call \(r.id) has an unreadable track; keeping it")
+                r.end = r.start.addingTimeInterval(duration)
+                r.status = .failed
+                r.failedStep = .recorded
+                try? r.save(to: dir)
                 continue
             }
             if duration < Self.minimumCallDuration {

@@ -53,6 +53,16 @@ public enum Permissions {
         state == .needsApp ? (lastKnown ?? .needsApp) : state
     }
 
+    /// The state to keep for a browser after a check: a real answer replaces it, "not asked" clears it
+    /// (the permission was reset), and a closed browser leaves it as it was.
+    public static func remembered(after state: PermissionState, previous: PermissionState?) -> PermissionState? {
+        switch state {
+        case .granted, .denied: state
+        case .notAsked: nil
+        case .needsApp: previous
+        }
+    }
+
     /// Maps TCCAccessPreflight: 0 granted, 1 denied, anything else not asked yet.
     public static func tccState(preflight: Int?) -> PermissionState {
         switch preflight {

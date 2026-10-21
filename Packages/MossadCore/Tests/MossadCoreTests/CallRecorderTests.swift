@@ -80,6 +80,7 @@ final class CallRecorderTests: XCTestCase {
         them.seconds = 120
         them.amplitude = 0
         me.seconds = 120
+        me.amplitude = 0
         now = t0.addingTimeInterval(120)
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         let r = try XCTUnwrap(recorder.end(at: t0.addingTimeInterval(280), trimTo: t0.addingTimeInterval(100)))
@@ -99,10 +100,41 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(try audioDuration(paths.callDirectory(id).appendingPathComponent("them.caf")), 150, accuracy: 1)
     }
 
+    func testFallbackEndKeepsOwnSpeechAfterTheAppReleasedTheMic() throws {
+        them.seconds = 120
+        them.amplitude = 0
+        me.seconds = 120
+        now = t0.addingTimeInterval(120)
+        _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [1], at: t0)
+        let r = try XCTUnwrap(recorder.end(at: t0.addingTimeInterval(300), trimTo: t0.addingTimeInterval(30)))
+        XCTAssertEqual(r.end.timeIntervalSince(t0), 120, accuracy: 1)
+    }
+
+    func testFailedTapStartWaitsBeforeTryingAgain() throws {
+        them.failStarts = 1
+        _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5], at: t0)
+        now = t0.addingTimeInterval(2)
+        recorder.updateThemProcesses([5])
+        XCTAssertEqual(them.startCalls, 1)
+    }
+
+    func testTapIsNotStartedWithoutSystemAudioPermission() throws {
+        var allowed = false
+        let recorder = CallRecorder(paths: paths, makeThem: { self.themMade.append($0); return self.them }, makeMe: { self.me },
+                                    clock: { self.now }, systemAudioAllowed: { allowed })
+        _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5], at: t0)
+        XCTAssertEqual(themMade, [])
+        allowed = true
+        now = t0.addingTimeInterval(CallRecorder.retryInterval)
+        recorder.updateThemProcesses([5])
+        XCTAssertEqual(themMade, [[5]])
+    }
+
     func testFailedTapStartIsRetriedOnTheNextTick() throws {
         them.failStarts = 1
         _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5], at: t0)
         XCTAssertFalse(them.started)
+        now = t0.addingTimeInterval(CallRecorder.retryInterval)
         recorder.updateThemProcesses([5])
         XCTAssertTrue(them.started)
         XCTAssertEqual(themMade, [[5], [5]])
@@ -112,6 +144,7 @@ final class CallRecorderTests: XCTestCase {
         me.failStarts = 1
         _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5], at: t0)
         XCTAssertFalse(me.started)
+        now = t0.addingTimeInterval(CallRecorder.retryInterval)
         recorder.updateThemProcesses([5])
         XCTAssertTrue(me.started)
     }

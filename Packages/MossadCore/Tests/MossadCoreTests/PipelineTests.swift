@@ -201,7 +201,8 @@ final class PipelineTests: XCTestCase {
         await pipeline().process(id)
         let r = try load(id)
         XCTAssertEqual(r.attempts, 0)
-        XCTAssertNotNil(r.nextAttempt)
+        // Tried again at the next run (launch or hourly), with no backoff delay.
+        XCTAssertEqual(ProcessingQueue(paths: paths).pending(now: start).map(\.id), [id])
     }
 
     func testConcurrentProcessOfOneCallRunsOnce() async throws {

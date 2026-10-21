@@ -65,10 +65,10 @@ final class PermissionsMonitor: ObservableObject {
         case "denied": .denied
         default: nil
         }
-        switch state {
+        switch Permissions.remembered(after: state, previous: lastKnown) {
         case .granted: UserDefaults.standard.set("granted", forKey: key)
         case .denied: UserDefaults.standard.set("denied", forKey: key)
-        default: break
+        default: UserDefaults.standard.removeObject(forKey: key)
         }
         return Permissions.resolve(state, lastKnown: lastKnown)
     }
@@ -189,7 +189,7 @@ final class PermissionsMonitor: ObservableObject {
 }
 
 /// The private TCC calls that read and request System Audio Recording. macOS has no public API for this permission.
-private enum TCC {
+enum TCC {
     private typealias PreflightFn = @convention(c) (CFString, CFDictionary?) -> Int
     private typealias RequestFn = @convention(c) (CFString, CFDictionary?, @escaping @convention(block) (Bool) -> Void) -> Void
 

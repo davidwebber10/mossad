@@ -42,7 +42,8 @@ final class AppController: ObservableObject {
     private let calendar = EventKitCalendarSource()
     private let notifier = Notifier()
     private var pipeline: Pipeline!
-    private var recorder: CallRecorder!
+    /// Used only on `CaptureQueue.queue`.
+    private nonisolated let recorder: CallRecorder
     private var window: NSWindow?
     private let windowDelegate = WindowDelegate()
     private var housekeeping: Timer?
@@ -55,7 +56,8 @@ final class AppController: ObservableObject {
         try? paths.ensureDirectories()
         Log.directory = paths.logs
         library = VoiceLibrary(directory: paths.voices)
-        recorder = CallRecorder(paths: paths, makeThem: { ProcessTap(processObjectIDs: $0) }, makeMe: { MicCapture() })
+        recorder = CallRecorder(paths: paths, makeThem: { ProcessTap(processObjectIDs: $0) }, makeMe: { MicCapture() },
+                                systemAudioAllowed: { TCC.preflight("kTCCServiceAudioCapture").map { $0 == 0 } ?? true })
         rebuildPipeline()
 
         enableLaunchAtLoginOnce()
@@ -68,11 +70,13 @@ final class AppController: ObservableObject {
             Task { @MainActor in self?.handle(event, processIDs: ids) }
         }
         detection.onCallProcesses = { [weak self] ids in
-            Task { @MainActor in self?.recorder.updateThemProcesses(ids) }
+            guard let recorder = self?.recorder else { return }
+            CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
         }
         detection.start()
         outputWatcher = OutputDeviceWatcher { [weak self] in
-            Task { @MainActor in self?.recorder.rebuildThem() }
+            guard let recorder = self?.recorder else { return }
+            CaptureQueue.queue.async { recorder.rebuildThem() }
         }
         requestPermissions()
 
@@ -122,7 +126,8 @@ final class AppController: ObservableObject {
     // MARK: Actions
 
     func skipCurrentCall() {
-        recorder.skip()
+        let recorder = recorder
+        CaptureQueue.queue.async { recorder.skip() }
         status = .idle
     }
 
@@ -157,18 +162,26 @@ final class AppController: ObservableObject {
         switch event {
         case .started(let platform, let bundleID, let at):
             Log.info("Call started: \(platform.displayName) (\(bundleID))")
-            do {
-                try recorder.begin(platform: platform, bundleID: bundleID, processIDs: processIDs, at: at)
-                status = .recording(platform, since: at)
-            } catch {
-                Log.error("Could not start recording: \(error)")
+            status = .recording(platform, since: at)
+            let recorder = recorder
+            CaptureQueue.queue.async {
+                do {
+                    try recorder.begin(platform: platform, bundleID: bundleID, processIDs: processIDs, at: at)
+                } catch {
+                    Log.error("Could not start recording: \(error)")
+                    Task { @MainActor in self.status = .idle }
+                }
             }
         case .ended(let at, let trimTo):
             Log.info("Call ended")
             status = .idle
-            if let record = recorder.end(at: at, trimTo: trimTo) {
-                refresh()
-                Task { await track { await self.pipeline.process(record.id) } }
+            let recorder = recorder
+            CaptureQueue.queue.async {
+                guard let record = recorder.end(at: at, trimTo: trimTo) else { return }
+                Task { @MainActor in
+                    self.refresh()
+                    await self.track { await self.pipeline.process(record.id) }
+                }
             }
         }
     }

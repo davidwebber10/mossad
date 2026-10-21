@@ -16,6 +16,10 @@ public struct SpeakerIdentifier: Sendable {
     static let maximumPiece: TimeInterval = 10
     /// Only confident automatic matches teach the library, so one wrong match cannot drift a profile.
     static let learnThreshold: Float = 0.8
+    /// Echo can trail the other side's speech by a moment; mic speech this close to theirs does not count.
+    static let echoMargin: TimeInterval = 0.5
+    /// Clean mic speech needed before a voice is enrolled as the owner.
+    static let minimumOwnerSpeech: TimeInterval = 5
 
     private let library: VoiceLibrary
     private let provider: EmbeddingProvider
@@ -45,11 +49,13 @@ public struct SpeakerIdentifier: Sendable {
             let them = utterances.filter { $0.track == .them }
             let talk = { (key: String) in
                 utterances.filter { $0.speakerKey == key }.reduce(0.0) { sum, u in
-                    let overlap = them.reduce(0.0) { $0 + max(0, min(u.end, $1.end) - max(u.start, $1.start)) }
+                    let overlap = them.reduce(0.0) {
+                        $0 + max(0, min(u.end, $1.end + Self.echoMargin) - max(u.start, $1.start - Self.echoMargin))
+                    }
                     return sum + max(0, u.end - u.start - overlap)
                 }
             }
-            if let dominant = meKeys.max(by: { talk($0) < talk($1) }), talk(dominant) > 0 {
+            if let dominant = meKeys.max(by: { talk($0) < talk($1) }), talk(dominant) >= Self.minimumOwnerSpeech {
                 result.names[dominant] = ownerName
                 if let e = result.embeddings[dominant] { try library.add(e, to: ownerName, isOwner: true) }
             }

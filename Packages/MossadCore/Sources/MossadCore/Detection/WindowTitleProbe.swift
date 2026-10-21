@@ -22,7 +22,7 @@ public final class WindowTitleProbe: WindowTitleProbing {
                 var title: CFTypeRef?
                 switch AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &title) {
                 case .success: if let t = title as? String { titles.append(t) }
-                case .noValue, .attributeUnsupported: continue
+                case .noValue, .attributeUnsupported, .invalidUIElement: continue  // The window closed meanwhile.
                 default: return nil
                 }
             }

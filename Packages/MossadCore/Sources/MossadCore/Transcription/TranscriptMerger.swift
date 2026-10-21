@@ -23,9 +23,21 @@ public enum TranscriptMerger {
         guard covered / duration >= minimumOverlap else { return false }
         let mine = words(m.text)
         guard mine.count >= minimumWords else { return false }
-        let theirs = overlapping.flatMap { words($0.text) }
+        // Echo is heard when it is said: only their words said near this time count. A word's time is
+        // estimated by its position in the utterance, with a margin for that estimate.
+        let theirs = overlapping.flatMap { t -> [String] in
+            let w = words(t.text)
+            let step = (t.end - t.start) / Double(max(w.count, 1))
+            return w.indices.compactMap { i in
+                let at = t.start + step * Double(i)
+                return at >= m.start - alignmentMargin && at <= m.end + alignmentMargin ? w[i] : nil
+            }
+        }
         return Double(lcs(mine, theirs)) / Double(mine.count) >= minimumSimilarity
     }
+
+    /// How far an estimated word time may be from the "me" utterance and still count as its echo.
+    static let alignmentMargin: TimeInterval = 2
 
     static func lcs(_ x: [String], _ y: [String]) -> Int {
         guard !x.isEmpty, !y.isEmpty else { return 0 }

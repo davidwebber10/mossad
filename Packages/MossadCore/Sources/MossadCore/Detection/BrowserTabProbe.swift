@@ -2,11 +2,18 @@ import AppKit
 import Foundation
 
 /// Reads every tab's URL and title from a running browser via AppleScript.
-public final class BrowserTabProbe: BrowserTabProbing {
+public final class BrowserTabProbe: BrowserTabProbing, @unchecked Sendable {
+    /// After a failed read, a browser is not asked again for this long (unknown meanwhile), so a hung
+    /// browser cannot hold the main thread on every tick.
+    static let failureBackoff: TimeInterval = 30
+    private let lock = NSLock()
+    private var skipUntil: [String: Date] = [:]
+
     public init() {}
 
     public func tabs(browserBundleID: String) -> [BrowserTab]? {
         guard !NSRunningApplication.runningApplications(withBundleIdentifier: browserBundleID).isEmpty,
+              lock.withLock({ (skipUntil[browserBundleID] ?? .distantPast) <= Date() }),
               Self.canAutomate(browserBundleID) else { return nil }
         let safari = browserBundleID == "com.apple.Safari"
         let titleProperty = safari ? "name" : "title"
@@ -39,7 +46,10 @@ public final class BrowserTabProbe: BrowserTabProbing {
             if let error { Log.debug("Tab probe \(browserBundleID) failed: \(error)") }
             return result?.stringValue
         }
-        guard let output else { return nil }
+        guard let output else {
+            lock.withLock { skipUntil[browserBundleID] = Date().addingTimeInterval(Self.failureBackoff) }
+            return nil
+        }
         return output.split(separator: "\n").map { line in
             let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
             // Titles may contain tabs: the URL is first and the active flag is last.

@@ -12,8 +12,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
     }
 
     func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, _ in
-            if !granted { Log.error("Notifications not allowed") }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, error in
+            if let error { Log.error("Notification permission request failed: \(error)") }
+            else if !granted { Log.error("Notifications not allowed") }
         }
     }
 

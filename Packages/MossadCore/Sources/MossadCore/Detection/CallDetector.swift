@@ -64,9 +64,9 @@ public struct CallDetector: Sendable {
         if candidate == nil || candidate?.meetingPresent == false {
             goneCount += 1
             if goneCount >= config.goneConfirmTicks { return end(at: snapshot.time, trimTo: nil) }
-        } else {
+        } else if candidate?.meetingPresent == true {
             goneCount = 0
-        }
+        }  // Unknown (nil) leaves the count as it was.
 
         if candidate?.micActive == true {
             lastMicActive = snapshot.time

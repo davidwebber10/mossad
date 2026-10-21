@@ -23,6 +23,12 @@ final class PermissionsTests: XCTestCase {
         XCTAssertEqual(Permissions.resolve(.denied, lastKnown: .granted), .denied)
     }
 
+    func testTheCacheForgetsAGrantThatWasReset() {
+        XCTAssertEqual(Permissions.remembered(after: .granted, previous: nil), .granted)
+        XCTAssertEqual(Permissions.remembered(after: .needsApp, previous: .granted), .granted)
+        XCTAssertNil(Permissions.remembered(after: .notAsked, previous: .granted))
+    }
+
     func testOnlyGrantedIsGood() {
         XCTAssertTrue(PermissionState.granted.isGood)
         for s in [PermissionState.denied, .notAsked, .needsApp] { XCTAssertFalse(s.isGood) }

@@ -41,6 +41,15 @@ final class SpeakerIdentifierTests: XCTestCase {
         XCTAssertNotEqual(result.names["me:A"], "David Webber")
     }
 
+    func testOwnerIsNotEnrolledFromSlightlyLateEcho() async throws {
+        // David only listens; the echo on his mic is 0.1 s late.
+        try writeSegments(meURL, total: 60, [(0.1, 30.1, 600)])
+        try writeSegments(themURL, total: 60, [(0, 30, 400)])
+        let result = try await identify([u(.me, "A", 0.1, 30.1), u(.them, "A", 0, 30)])
+        XCTAssertNotEqual(result.names["me:A"], "David Webber")
+        XCTAssertNil(library.owner)
+    }
+
     func testOwnerMatchedByVoiceOnMeTrack() async throws {
         try library.add([1, 0, 0, 0], to: "David Webber", isOwner: true)
         try writeSegments(meURL, total: 30, [(0, 3, 600), (5, 20, 200)])
