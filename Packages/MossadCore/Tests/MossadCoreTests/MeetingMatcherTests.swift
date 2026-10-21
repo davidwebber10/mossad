@@ -61,3 +61,10 @@ final class MeetingMatcherTests: XCTestCase {
         XCTAssertEqual(Platform.teams.displayName, "Microsoft Teams")
     }
 }
+
+final class MeetingMatcherHelperTests: XCTestCase {
+    func testNativeAppHelpersMapToApp() {
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.microsoft.teams2.helper"), .teamsApp)
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "us.zoom.xos.Helper"), .zoomApp)
+    }
+}

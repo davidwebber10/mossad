@@ -13,8 +13,8 @@ public enum MeetingMatcher {
     ]
 
     public static func appKind(bundleID: String) -> AppKind? {
-        if bundleID == zoomBundleID { return .zoomApp }
-        if bundleID == teamsBundleID { return .teamsApp }
+        if bundleID == zoomBundleID || bundleID.hasPrefix(zoomBundleID + ".") { return .zoomApp }
+        if bundleID == teamsBundleID || bundleID.hasPrefix(teamsBundleID + ".") { return .teamsApp }
         // Safari plays audio through the shared WebKit GPU process.
         if bundleID.hasPrefix("com.apple.WebKit") { return .browser("com.apple.Safari") }
         for browser in browserBundleIDs where bundleID == browser || bundleID.hasPrefix(browser + ".") {

@@ -7,9 +7,10 @@ public enum Log {
     private static let queue = DispatchQueue(label: "com.dwebber.mossad.log")
     private static let maxBytes = 5 * 1024 * 1024
     private static let keep = 3
-    nonisolated(unsafe) public static var directory: URL = Paths.live.logs
+    /// File logging starts when the app sets this; until then only the unified log is used.
+    nonisolated(unsafe) public static var directory: URL?
 
-    public static var fileURL: URL { directory.appendingPathComponent("mossad.log") }
+    public static var fileURL: URL? { directory?.appendingPathComponent("mossad.log") }
 
     public static func info(_ message: String) { write("INFO", message); logger.info("\(message, privacy: .public)") }
     public static func error(_ message: String) { write("ERROR", message); logger.error("\(message, privacy: .public)") }
@@ -17,10 +18,11 @@ public enum Log {
 
     private static func write(_ level: String, _ message: String) {
         let line = "\(ISO8601DateFormatter().string(from: Date())) \(level) \(message)\n"
+        guard let directory, let fileURL else { return }
         queue.async {
             let fm = FileManager.default
             try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
-            rotateIfNeeded()
+            rotateIfNeeded(directory: directory, fileURL: fileURL)
             if let handle = try? FileHandle(forWritingTo: fileURL) {
                 handle.seekToEndOfFile()
                 handle.write(Data(line.utf8))
@@ -31,7 +33,7 @@ public enum Log {
         }
     }
 
-    private static func rotateIfNeeded() {
+    private static func rotateIfNeeded(directory: URL, fileURL: URL) {
         let fm = FileManager.default
         guard let size = (try? fm.attributesOfItem(atPath: fileURL.path))?[.size] as? Int, size > maxBytes else { return }
         for i in stride(from: keep - 1, through: 1, by: -1) {

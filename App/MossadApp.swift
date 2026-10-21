@@ -15,10 +15,11 @@ struct MossadEntry {
 }
 
 struct MossadApp: App {
+    @StateObject private var controller = AppController()
+
     var body: some Scene {
         MenuBarExtra("Mossad", systemImage: "waveform") {
-            Button("Quit Mossad") { NSApp.terminate(nil) }
-                .keyboardShortcut("q")
+            MenuContent(controller: controller)
         }
     }
 }
