@@ -118,6 +118,19 @@ final class LiveAPITests: XCTestCase {
         XCTAssertEqual(answer.citations.first?.callID, "live")
     }
 
+    func testClaudeAnswersWhatSomeoneAgreedToAndAFollowUp() async throws {
+        guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
+        let qa = MeetingQA(apiKey: key, ownerName: "David Webber")
+        let records = [syntheticCall()]
+        let first = try await qa.ask("What did Alex agree to do last call, and was there a deadline?", records: records)
+        print("LIVE agreed: \(first.text) | meetings: \(first.meetings)")
+        XCTAssertEqual(first.meetings, ["live"])
+        let follow = try await qa.ask("And when does the freight leave?", records: records,
+                                      history: [MeetingQA.Turn(question: "What did Alex agree to do last call, and was there a deadline?", answer: first.text)])
+        print("LIVE follow-up: \(follow.text)")
+        XCTAssertTrue(follow.text.lowercased().contains("friday"))
+    }
+
     /// Full pipeline on synthetic voices: me = Samantha, them = Daniel then Karen.
     func testEndToEndPipeline() async throws {
         let env = ProcessInfo.processInfo.environment

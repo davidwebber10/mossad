@@ -418,9 +418,9 @@ final class AppController: ObservableObject {
     }
 
 
-    func ask(_ question: String) async throws -> MeetingQA.Answer {
+    func ask(_ question: String, history: [MeetingQA.Turn]) async throws -> MeetingQA.Answer {
         guard let key = keychain.get(.anthropic) else { throw SummaryError.http(0, "The Anthropic key is missing. Add it in Settings.") }
-        return try await MeetingQA(apiKey: key, ownerName: ownerName, usage: usage).ask(question, records: meetings)
+        return try await MeetingQA(apiKey: key, ownerName: ownerName, usage: usage).ask(question, records: meetings, history: history)
     }
 
     /// Shows every meeting with this tag.
