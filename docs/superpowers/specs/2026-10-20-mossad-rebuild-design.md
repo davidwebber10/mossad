@@ -111,10 +111,18 @@ module imports and strings). Findings that shape this design:
     `*.zoom.us/wc/`) (AX window titles / tab URL).
   - Other call apps (Slack huddles, Webex, FaceTime) are out of scope; David
     does not use them for work calls.
-- A call **ends** when the meeting app has not used the mic for 20 seconds.
-  Short mutes, headset changes, and device switches must not split a call.
-  (Note: some apps keep the mic open while muted; that is fine — it just
-  extends the call.)
+- A call **ends** primarily when the meeting itself is gone (checked every
+  ~2 s via AX): the Zoom or Teams meeting window closes, or the browser
+  meeting tab closes or navigates away from the meeting. Meet's post-call
+  page ("You left the meeting", same URL) counts as gone — detect it by the
+  window/tab title. (David found a pure mic-idle timeout too aggressive;
+  confirmed.)
+- Mic activity alone never ends a call while the meeting window/tab is
+  still present. Mutes, headset changes, and device switches do not split a
+  call.
+- Fallback: if the meeting window lingers but the meeting app has not used
+  the mic for 3 minutes, the call ends, and trailing silence is trimmed from
+  both tracks.
 - Recordings shorter than ~60 s are discarded (accidental mic checks).
 - Only one call is recorded at a time.
 
@@ -236,6 +244,8 @@ module imports and strings). Findings that shape this design:
 4. After naming a colleague once, the next call with them labels them
    automatically.
 5. Muting for a minute mid-call does not split the call into two files.
+6. Leaving the meeting (closing the window or tab, or Meet's "You left the
+   meeting" page) ends the recording within a few seconds.
 
 ## Decided by David
 
