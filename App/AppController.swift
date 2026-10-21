@@ -226,7 +226,10 @@ final class AppController: ObservableObject {
 
     func skipCurrentCall() {
         let recorder = recorder
-        CaptureQueue.queue.async { recorder.skip() }
+        CaptureQueue.queue.async {
+            recorder.skip()
+            Task { @MainActor in self.refresh() }
+        }
         status = .idle
         isPaused = false
         stopLive()
@@ -237,7 +240,10 @@ final class AppController: ObservableObject {
     func stopCurrentCall() {
         let recorder = recorder
         CaptureQueue.queue.async {
-            guard let record = recorder.end(at: Date(), trimTo: nil, byPerson: true) else { return }
+            guard let record = recorder.end(at: Date(), trimTo: nil, byPerson: true) else {
+                Task { @MainActor in self.refresh() }
+                return
+            }
             Task { @MainActor in
                 self.refresh()
                 await self.track { await self.pipeline.process(record.id) }
@@ -250,6 +256,7 @@ final class AppController: ObservableObject {
     }
 
     func pauseCurrentCall() {
+        guard case .recording = status else { return }
         let recorder = recorder
         CaptureQueue.queue.async { recorder.pause() }
         isPaused = true
@@ -257,6 +264,7 @@ final class AppController: ObservableObject {
     }
 
     func resumeCurrentCall() {
+        guard case .recording = status else { return }
         let recorder = recorder
         CaptureQueue.queue.async { recorder.resume() }
         isPaused = false
@@ -452,7 +460,11 @@ final class AppController: ObservableObject {
             }
         case .ended(let at, let trimTo):
             Log.info("Call ended")
-            guard let record = recorder.end(at: at, trimTo: trimTo) else { return }
+            guard let record = recorder.end(at: at, trimTo: trimTo) else {
+                // A short call is deleted, so its row must leave the list too, or it still looks live.
+                Task { @MainActor in self.refresh() }
+                return
+            }
             Task { @MainActor in
                 self.refresh()
                 await self.track { await self.pipeline.process(record.id) }
@@ -475,6 +487,8 @@ final class AppController: ObservableObject {
         switch event {
         case .started(let platform, _, let at):
             status = .recording(platform, since: at)
+            isPaused = false
+            isMuted = false
             startLive(reset: true)
         case .ended:
             status = .idle
