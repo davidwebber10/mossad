@@ -226,6 +226,15 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Joins the meetings into the earliest one and opens it.
+    func mergeMeetings(_ ids: [String]) {
+        Task {
+            let merged = await pipeline.merge(callIDs: ids)
+            refresh()
+            if let merged { selectedMeetingID = merged }
+        }
+    }
+
     /// A person's new name reaches every past meeting and note.
     func renamePerson(_ old: String, to new: String) {
         Task {

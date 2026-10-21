@@ -32,8 +32,17 @@ struct TranscriptTab: View {
                                  message: record.status == .written ? "The call was recorded, but nobody spoke." : "The transcript appears when processing is done.")
             } else {
                 ScrollViewReader { proxy in
+                    let breaks = MeetingMerge.partBreaks(record)
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(blocks) { block in
+                            if let line = breaks.first(where: { b in b.offset <= block.start && b.offset > (blocks.last { $0.id < block.id }?.end ?? -1) }) {
+                                HStack(spacing: 10) {
+                                    Rectangle().fill(Theme.separator).frame(height: 1)
+                                    Text(line.text).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).fixedSize()
+                                    Rectangle().fill(Theme.separator).frame(height: 1)
+                                }
+                                .padding(.vertical, 4)
+                            }
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 6) {
                                     Circle().fill(people.color(forKey: block.speakerKey)).frame(width: 7, height: 7)

@@ -10,6 +10,7 @@ struct MeetingsView: View {
     @AppStorage("meetingsMode") private var mode = Mode.split
     @State private var query = ""
     @State private var deleting: CallRecord?
+    @State private var merging: CallRecord?
     /// The meeting opened full-pane from List or Calendar mode.
     @State private var opened: String?
     @State private var openedFrom = ""
@@ -64,6 +65,10 @@ struct MeetingsView: View {
             }
         } message: {
             Text("Mossad deletes the note, the transcript, and the audio. Voices it learned from this call stay.")
+        }
+        .sheet(item: $merging) { r in MergeSheet(record: r) }
+        .onReceive(NotificationCenter.default.publisher(for: .mergeMeeting)) { note in
+            merging = controller.meetings.first { $0.id == note.object as? String }
         }
         .sheet(item: Binding(get: { controller.namingCallID.flatMap { id in controller.meetings.first { $0.id == id } } },
                              set: { controller.namingCallID = $0?.id })) { r in
@@ -373,6 +378,10 @@ struct MeetingMenuItems: View {
             }
             .disabled(record.markdownPath == nil)
             Button("Show audio in Finder", systemImage: "folder") { NSWorkspace.shared.open(controller.paths.callDirectory(record.id)) }
+            Button("Merge with…", systemImage: "arrow.triangle.merge") {
+                NotificationCenter.default.post(name: .mergeMeeting, object: record.id)
+            }
+            .disabled(!record.canDelete)
             Divider()
             Button("Delete…", systemImage: "trash", role: .destructive) { deleting = record }.disabled(!record.canDelete)
         }
@@ -416,5 +425,60 @@ private struct EmptyMeetings: View {
                 .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension Notification.Name {
+    /// Opens the merge sheet for a meeting, from any menu that lists the meeting.
+    static let mergeMeeting = Notification.Name("mergeMeeting")
+}
+
+/// Pick the meetings to join with this one. Mossad joins the audio and transcripts into the earliest one,
+/// keeps the speaker names, and writes one new summary and note.
+private struct MergeSheet: View {
+    @EnvironmentObject var controller: AppController
+    @Environment(\.dismiss) private var dismiss
+    let record: CallRecord
+    @State private var chosen: Set<String> = []
+
+    /// Finished meetings, the ones closest in time first.
+    private var candidates: [CallRecord] {
+        controller.meetings.filter { $0.id != record.id && $0.canDelete }
+            .sorted { abs($0.start.timeIntervalSince(record.start)) < abs($1.start.timeIntervalSince(record.start)) }
+            .prefix(12).map { $0 }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Merge with “\(record.title)”").font(.system(size: 16, weight: .bold))
+            Text("Mossad joins the audio and the transcripts into one meeting, keeps the speaker names, and writes a new summary and note. The other meetings are removed.")
+                .font(.system(size: 13)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            List(candidates, id: \.id) { r in
+                Toggle(isOn: Binding(get: { chosen.contains(r.id) }, set: { if $0 { chosen.insert(r.id) } else { chosen.remove(r.id) } })) {
+                    HStack(spacing: 8) {
+                        PlatformSquare(platform: r.platform)
+                        Text(r.title).fontWeight(.medium).lineLimit(1)
+                        Spacer()
+                        Text("\(dayWord(r.start)) \(r.start.formatted(date: .omitted, time: .shortened)) · \(r.lengthText)")
+                            .foregroundStyle(.secondary).monospacedDigit()
+                    }
+                }
+                .toggleStyle(.checkbox)
+            }
+            .frame(height: 260)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button(chosen.count > 1 ? "Merge \(chosen.count + 1) meetings" : "Merge") {
+                    controller.mergeMeetings([record.id] + Array(chosen))
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(chosen.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
     }
 }

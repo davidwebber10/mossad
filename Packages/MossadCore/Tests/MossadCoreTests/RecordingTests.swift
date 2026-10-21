@@ -88,6 +88,15 @@ final class TranscriptBlockTests: XCTestCase {
         XCTAssertEqual(talk.map(\.seconds), [10, 5])
     }
 
+    func testAPartOfAMergedMeetingStartsANewBlock() {
+        var r = record([
+            Utterance(track: .me, speakerLabel: "A", start: 0, end: 2, text: "Before."),
+            Utterance(track: .me, speakerLabel: "A", start: 5, end: 7, text: "After."),
+        ])
+        r.parts = [CallPart(start: Date(), end: Date(), offset: 0), CallPart(start: Date(), end: Date(), offset: 4)]
+        XCTAssertEqual(TranscriptBlock.blocks(r).count, 2)
+    }
+
     func testALongPauseStartsANewBlock() {
         let r = record([
             Utterance(track: .me, speakerLabel: "A", start: 0, end: 2, text: "First."),
