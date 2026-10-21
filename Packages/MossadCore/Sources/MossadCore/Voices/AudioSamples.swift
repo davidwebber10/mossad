@@ -2,6 +2,10 @@ import AVFoundation
 import Foundation
 
 enum AudioSamples {
+    static func sampleRate(_ url: URL) throws -> Double {
+        try AVAudioFile(forReading: url).processingFormat.sampleRate
+    }
+
     /// Reads mono Float32 samples between two times (seconds) from a track file.
     static func read(_ url: URL, from start: TimeInterval, to end: TimeInterval) throws -> [Float] {
         let file = try AVAudioFile(forReading: url)

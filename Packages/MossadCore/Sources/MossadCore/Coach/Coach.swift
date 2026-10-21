@@ -6,7 +6,7 @@ public struct CoachResult: Sendable, Equatable {
 }
 
 public protocol Coaching: Sendable {
-    func review(record: CallRecord, profile: CoachProfile) async throws -> CoachResult
+    func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?) async throws -> CoachResult
 }
 
 /// Reviews one call with Claude, given the coach's profile of the owner.
@@ -49,8 +49,9 @@ public struct ClaudeCoach: Coaching {
         ])
     }
 
-    public func review(record: CallRecord, profile: CoachProfile) async throws -> CoachResult {
-        let delivery = DeliveryStats(record: record, owner: ownerName)
+    public func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?) async throws -> CoachResult {
+        var delivery = DeliveryStats(record: record, owner: ownerName)
+        delivery.tone = tone
         let out = try await client.call(system: CoachPrompt.system(owner: ownerName),
                                         user: CoachPrompt.user(record: record, owner: ownerName, profile: profile, delivery: delivery),
                                         schema: Self.schema, effort: "high", as: Output.self)

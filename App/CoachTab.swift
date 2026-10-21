@@ -182,6 +182,10 @@ private struct DeliveryCard: View {
                 tile("Longest turn", clock(stats.longestTurnSeconds), nil)
                 tile("Questions", "\(stats.questions)", nil)
                 tile("Cut-ins", "\(stats.interruptions) / \(stats.interrupted)", "by you / by others")
+                if let t = stats.tone {
+                    tile("Pitch range", String(format: "%.1f st", t.pitchVariation), t.pitchVariation < 2 ? "sounds flat" : "around \(Int(t.medianPitch)) Hz")
+                    tile("Turn ends", String(format: "%+.0f dB", -t.endDrop), t.endDrop > 4 ? "trailing off" : "steady")
+                }
             }
         }
     }

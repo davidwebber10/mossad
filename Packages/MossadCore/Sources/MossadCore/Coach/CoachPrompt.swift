@@ -35,7 +35,11 @@ enum CoachPrompt {
         Delivery numbers come from the transcript timing because you cannot hear the audio: words per minute (about \
         140 to 160 is a typical conversational pace; above 180 is fast), filler words per minute, the longest turn, \
         questions, and interruptions in both directions. Use them when they explain something in the transcript, and \
-        compare them with the owner's own history more than with general norms.
+        compare them with the owner's own history more than with general norms. Voice numbers, when present, are \
+        measured from the mic audio: pitch variation below about 2 semitones sounds flat and can lose a room, \
+        while 3 to 5 sounds engaged; turn ends more than about 4 dB quieter than the rest means trailing off, so \
+        key points at the end of a sentence get lost. The mic level depends on the microphone, so compare it only \
+        with the owner's history.
 
         The transcript comes from speech recognition. Names, numbers, and terms can be wrong, and a line can be given \
         to the wrong speaker. Do not coach on something that looks like a recognition error. "Speaker A" and similar \
@@ -126,6 +130,10 @@ enum CoachPrompt {
          "\(d.questions) questions",
          "interrupted others \(d.interruptions) times",
          "was interrupted \(d.interrupted) times"].joined(separator: ", ")
+            + (d.tone.map { t in
+                String(format: "; voice: pitch %.0f Hz, pitch variation %.1f semitones, level %.0f dBFS, loudness range %.0f dB, turn ends %.1f dB quieter",
+                       t.medianPitch, t.pitchVariation, t.level, t.loudnessRange, t.endDrop)
+            } ?? "")
     }
 
     private static func day(_ date: Date) -> String {

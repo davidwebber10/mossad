@@ -109,6 +109,16 @@ final class CoachTests: XCTestCase {
         XCTAssertGreaterThan(d.wordsPerMinute, 100)
     }
 
+    func testDeliveryNumbersIncludeTheToneWhenMeasured() {
+        var d = DeliveryStats(record: record("c", start: Date()), owner: "David Webber")
+        XCTAssertFalse(CoachPrompt.numbers(d).contains("pitch"))
+        d.tone = VoiceTone(medianPitch: 118, pitchVariation: 1.6, level: -24, loudnessRange: 9, endDrop: 4.2)
+        let text = CoachPrompt.numbers(d)
+        XCTAssertTrue(text.contains("pitch 118 Hz"), text)
+        XCTAssertTrue(text.contains("pitch variation 1.6 semitones"), text)
+        XCTAssertTrue(text.contains("turn ends 4.2 dB quieter"), text)
+    }
+
     // MARK: Prompt
 
     func testPromptCarriesTheProfileOnlyTheseAttendeesNotesAndTheTranscript() {
@@ -226,7 +236,7 @@ final class CoachTests: XCTestCase {
         let text = String(decoding: json(output), as: UTF8.self)
         StubURLProtocol.handler = { _ in (200, self.reply(text)) }
         let coach = ClaudeCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
-        let result = try await coach.review(record: record("c", start: Date()), profile: CoachProfile())
+        let result = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
         XCTAssertEqual(result.review.headline, "Clear plan")
         XCTAssertEqual(result.review.improvements.first?.tryInstead, "Say X")
         XCTAssertEqual(result.review.improvements.first?.at, 90)
@@ -246,7 +256,7 @@ final class CoachTests: XCTestCase {
         StubURLProtocol.handler = { _ in (200, self.reply("nope")) }
         let coach = ClaudeCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
         do {
-            _ = try await coach.review(record: record("c", start: Date()), profile: CoachProfile())
+            _ = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
             XCTFail("expected an error")
         } catch {}
     }
@@ -256,7 +266,7 @@ final class CoachTests: XCTestCase {
     private final class FakeCoach: Coaching, @unchecked Sendable {
         var seen: [(id: String, focus: String)] = []
         var failOn: String?
-        func review(record: CallRecord, profile: CoachProfile) async throws -> CoachResult {
+        func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?) async throws -> CoachResult {
             seen.append((record.id, profile.focus))
             if record.id == failOn { throw SummaryError.malformed }
             return CoachResult(review: CoachReview(headline: "H \(record.id)", overview: "O", strengths: [], improvements: [], focusProgress: nil),

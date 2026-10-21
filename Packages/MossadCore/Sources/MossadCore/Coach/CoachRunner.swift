@@ -17,6 +17,17 @@ public actor CoachRunner {
         self.since = since
     }
 
+    /// The owner's voice from the mic track; nil when the track is gone (deleted by retention) or silent.
+    private func measureTone(_ r: CallRecord) -> VoiceTone? {
+        let keys = Set(r.speakerNames.filter { $0.value == owner }.keys)
+        let turns = r.utterances.filter { $0.track == .me && keys.contains($0.speakerKey) }
+        do {
+            return try VoiceTone.measure(url: paths.callDirectory(r.id).appendingPathComponent(Track.me.fileName), turns: turns)
+        } catch {
+            return nil
+        }
+    }
+
     static func pending(_ records: [CallRecord], owner: String, since: Date, reviewed: Set<String>) -> [CallRecord] {
         records.filter { r in
             r.status == .written && r.start >= since && !reviewed.contains(r.id)
@@ -37,8 +48,8 @@ public actor CoachRunner {
         var done = 0
         for r in Self.pending(records, owner: owner, since: since, reviewed: reviewed) {
             do {
-                let current = profile
-                let result = try await UsageContext.$callID.withValue(r.id) { try await coach.review(record: r, profile: current) }
+                let current = profile, tone = measureTone(r)
+                let result = try await UsageContext.$callID.withValue(r.id) { try await coach.review(record: r, profile: current, tone: tone) }
                 try result.review.save(in: paths.callDirectory(r.id))
                 profile.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start)
                 try profile.save(to: paths.coach)

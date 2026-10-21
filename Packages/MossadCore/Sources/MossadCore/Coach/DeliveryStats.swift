@@ -18,6 +18,8 @@ public struct DeliveryStats: Codable, Equatable, Sendable, Hashable {
     public var interruptions: Int
     /// Times someone else started while the owner was still speaking.
     public var interrupted: Int
+    /// From the audio, when the mic track could be read.
+    public var tone: VoiceTone?
 
     static let minimumTurnWords = 15
     /// An overlap shorter than this is a quick "yeah" or a hand-off, not a cut-in.
