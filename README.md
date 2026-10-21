@@ -2,7 +2,7 @@
 
 A quiet macOS menu bar app that records your Zoom, Google Meet, and Microsoft Teams calls, transcribes them after the call ends, figures out who said what, and saves a clean Markdown note for every meeting.
 
-No buttons to press. No bot joins your call. You take your meetings like normal, and a searchable record of every conversation builds up in a folder on your Mac. Later you can point an AI agent at that folder and say "read Tuesday's call with Alex and build the thing he asked for."
+No buttons to press. No bot joins your call. You take your meetings like normal, and a searchable record of every conversation builds up in a folder on your Mac. Later you can point an AI agent at that folder and say "read Tuesday's planning call and build the tool we talked about."
 
 > **Before you use it:** Mossad records calls without announcing itself. Read [Recording consent](#recording-consent) first.
 
@@ -60,8 +60,8 @@ end: "15:02"
 duration_minutes: 32
 platform: Google Meet
 title: "Weekly Ops Sync"
-attendees: ["Alex Rivera", "Amy Lee"]
-speakers: ["David Webber", "Alex Rivera", "Speaker A"]
+attendees: ["Jamie Ortiz", "Amy Lee"]
+speakers: ["David Webber", "Jamie Ortiz", "Speaker A"]
 audio: ~/Mossad/Audio/20261020-143000
 ---
 # Weekly Ops Sync
@@ -72,12 +72,12 @@ The team confirmed the Friday cushion shipment.
 
 ## Action items
 
-- [ ] Alex Rivera: confirm freight
+- [ ] Jamie Ortiz: confirm freight
 
 ## Transcript
 
 [00:00:05] David Webber: Morning, everyone.
-[00:04:12] Alex Rivera: Cushions ship Friday.
+[00:04:12] Jamie Ortiz: Cushions ship Friday.
 [01:02:05] Speaker A: Who owns freight?
 ```
 
