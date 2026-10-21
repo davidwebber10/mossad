@@ -635,12 +635,56 @@ private struct LivePanel: View {
                 .padding(16)
                 .frame(maxWidth: 620)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            Text("Recording your microphone and the call audio. The transcript and summary appear after the call ends.")
-                .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
             CallControls()
+            if controller.liveTranscriptEnabled {
+                LiveTranscriptView().frame(maxWidth: 620)
+            } else {
+                Text("Recording your microphone and the call audio. The transcript and summary appear after the call ends.")
+                    .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// The streaming transcript while the call runs. The note uses the full transcription after the call.
+private struct LiveTranscriptView: View {
+    @EnvironmentObject var controller: AppController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("LIVE TRANSCRIPT").font(.system(size: 11, weight: .semibold)).kerning(0.4).foregroundStyle(.tertiary)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        if controller.live.lines.isEmpty {
+                            Text(controller.isPaused ? "Paused." : "Listening…").foregroundStyle(.secondary)
+                        }
+                        ForEach(controller.live.lines) { line in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text(line.source == .me ? "You" : "Call")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Theme.speakerPalette[line.source == .me ? 0 : 1])
+                                    .frame(width: 34, alignment: .leading)
+                                Text(line.text)
+                                    .foregroundStyle(line.isFinal ? Color.primary : Color.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .font(.system(size: 13))
+                            .id(line.id)
+                        }
+                    }
+                    .textSelection(.enabled)
+                    .padding(12)
+                }
+                .onChange(of: controller.live.lines.last?.text) { _, _ in
+                    if let last = controller.live.lines.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                }
+            }
+            .frame(minHeight: 140, maxHeight: 260)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
     }
 }
 

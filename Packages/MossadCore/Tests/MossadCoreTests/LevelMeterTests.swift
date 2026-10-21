@@ -42,3 +42,21 @@ final class TrackWriterPauseTests: XCTestCase {
         XCTAssertEqual(writer.duration, 2, accuracy: 0.05)
     }
 }
+
+final class AudioSinkTests: XCTestCase {
+    func testTheWriterSendsItsAudioToTheSink() throws {
+        let sink = AudioSink()
+        let count = Box()
+        sink.set { buffer in count.add(Int(buffer.frameLength)) }
+        let writer = try TrackWriter(url: tempDirectory().appendingPathComponent("t.caf"), startTime: Date(), clock: { Date() }, sink: sink)
+        try writer.append(sineBuffer(seconds: 0.5, sampleRate: 16_000, channels: 1))
+        XCTAssertEqual(count.value, 8_000)
+    }
+
+    private final class Box: @unchecked Sendable {
+        private let lock = NSLock()
+        private var total = 0
+        func add(_ n: Int) { lock.withLock { total += n } }
+        var value: Int { lock.withLock { total } }
+    }
+}

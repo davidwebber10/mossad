@@ -32,13 +32,15 @@ public final class TrackWriter: @unchecked Sendable {
     private var startTime: Date
     private let clock: () -> Date
     private let meter: LevelMeter?
+    private let sink: AudioSink?
     private var pausedAt: Date?
 
-    public init(url: URL, startTime: Date, clock: @escaping () -> Date = Date.init, meter: LevelMeter? = nil) throws {
+    public init(url: URL, startTime: Date, clock: @escaping () -> Date = Date.init, meter: LevelMeter? = nil, sink: AudioSink? = nil) throws {
         file = try AVAudioFile(forWriting: url, settings: Self.fileSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
         self.startTime = startTime
         self.clock = clock
         self.meter = meter
+        self.sink = sink
     }
 
     /// A paused recording leaves the paused time out: on resume the timeline moves on by the pause, so no
@@ -83,6 +85,7 @@ public final class TrackWriter: @unchecked Sendable {
             try write(converted)
             let level = Self.rms(converted)
             meter?.record(level)
+            sink?.send(converted)
             if level >= Self.soundThreshold { lastSoundFrame = written }
         }
     }

@@ -29,6 +29,11 @@ final class AppController: ObservableObject {
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var isPaused = false
+    /// What was said so far, from AssemblyAI streaming; shown while the call runs, not used for the note.
+    @Published private(set) var live = LiveTranscript()
+    @AppStorage("liveTranscript") var liveTranscriptEnabled = true
+    private var liveSessions: [LiveTranscriber] = []
+    private var liveStart = Date()
     /// 0 means on. Otherwise Mossad is off until this time (seconds since 1970; `.infinity` for "until I turn it on").
     @AppStorage("offUntil") private var offUntil: Double = 0
     private var resumeTimer: Timer?
@@ -200,6 +205,7 @@ final class AppController: ObservableObject {
         CaptureQueue.queue.async { recorder.skip() }
         status = .idle
         isPaused = false
+        stopLive()
     }
 
     /// Ends the recording now and processes it. The detector still sees this call, so it does not start a
@@ -215,18 +221,46 @@ final class AppController: ObservableObject {
         }
         status = .idle
         isPaused = false
+        stopLive()
     }
 
     func pauseCurrentCall() {
         let recorder = recorder
         CaptureQueue.queue.async { recorder.pause() }
         isPaused = true
+        stopLive()
     }
 
     func resumeCurrentCall() {
         let recorder = recorder
         CaptureQueue.queue.async { recorder.resume() }
         isPaused = false
+        startLive(reset: false)
+    }
+
+    /// Opens one streaming session per track. Billed while open, so only while recording and not paused.
+    private func startLive(reset: Bool) {
+        stopLive()
+        if reset { live = LiveTranscript() }
+        guard liveTranscriptEnabled, case .recording(_, let since) = status, let key = keychain.get(.assemblyai) else { return }
+        liveStart = since
+        for (track, sink) in [(Track.me, recorder.meSink), (.them, recorder.themSink)] {
+            let session = LiveTranscriber(apiKey: key) { [weak self] message in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.live.apply(message, source: track, at: Date().timeIntervalSince(self.liveStart))
+                }
+            }
+            sink.set { buffer in session.send(buffer) }
+            liveSessions.append(session)
+        }
+    }
+
+    private func stopLive() {
+        recorder.meSink.set(nil)
+        recorder.themSink.set(nil)
+        liveSessions.forEach { $0.stop() }
+        liveSessions = []
     }
 
     /// Turns detection and recording off until a time (nil: until turned on again). A call being recorded
@@ -376,10 +410,13 @@ final class AppController: ObservableObject {
 
     private func show(_ event: DetectorEvent) {
         switch event {
-        case .started(let platform, _, let at): status = .recording(platform, since: at)
+        case .started(let platform, _, let at):
+            status = .recording(platform, since: at)
+            startLive(reset: true)
         case .ended:
             status = .idle
             isPaused = false
+            stopLive()
         }
     }
 

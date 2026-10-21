@@ -150,6 +150,8 @@ struct SettingsView: View {
                     Log.error("Launch at login change failed: \(error)")
                 }
             }
+        switchRow("Live transcript while recording", $controller.liveTranscriptEnabled)
+            .help("Shows what is said as the call runs, with AssemblyAI streaming. AssemblyAI bills the time a call records with this on. The note still uses the full transcription after the call.")
         VStack(alignment: .leading, spacing: 6) {
             Toggle("Delete recordings after a period of time", isOn: $controller.deleteRecordings).toggleStyle(.checkbox)
             if controller.deleteRecordings {

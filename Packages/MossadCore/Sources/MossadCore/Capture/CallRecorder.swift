@@ -48,6 +48,9 @@ public final class CallRecorder: @unchecked Sendable {
     /// Live loudness of each track, for the waveform. Constant objects, so the UI can read them from any thread.
     public let meMeter = LevelMeter()
     public let themMeter = LevelMeter()
+    /// Each track's audio for the live transcript; the app sets the handlers.
+    public let meSink = AudioSink()
+    public let themSink = AudioSink()
 
     public init(paths: Paths, makeThem: @escaping ([AudioObjectID]) -> TrackSource, makeMe: @escaping () -> TrackSource,
                 clock: @escaping () -> Date = Date.init, systemAudioAllowed: @escaping () -> Bool = { true }) {
@@ -82,8 +85,8 @@ public final class CallRecorder: @unchecked Sendable {
         do {
             meMeter.reset()
             themMeter.reset()
-            themWriter = try TrackWriter(url: dir.appendingPathComponent(Track.them.fileName), startTime: start, clock: clock, meter: themMeter)
-            meWriter = try TrackWriter(url: dir.appendingPathComponent(Track.me.fileName), startTime: start, clock: clock, meter: meMeter)
+            themWriter = try TrackWriter(url: dir.appendingPathComponent(Track.them.fileName), startTime: start, clock: clock, meter: themMeter, sink: themSink)
+            meWriter = try TrackWriter(url: dir.appendingPathComponent(Track.me.fileName), startTime: start, clock: clock, meter: meMeter, sink: meSink)
         } catch {
             try? FileManager.default.removeItem(at: dir)
             throw error
