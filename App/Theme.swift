@@ -92,6 +92,8 @@ struct StatusDot: View {
 struct StatusBadge: View {
     enum Kind { case needsNames, processing, failed, recording }
     let kind: Kind
+    /// Replaces the word "Processing" with the live sub-step.
+    var text: String?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -101,7 +103,7 @@ struct StatusBadge: View {
             case .recording: StatusDot(color: Theme.recording, size: 6, pulsing: true)
             case .failed: EmptyView()
             }
-            Text(label)
+            Text(text ?? label).lineLimit(1)
         }
         .font(.system(size: 11, weight: .medium))
         .foregroundStyle(foreground)

@@ -1,7 +1,18 @@
 import Foundation
 
+/// Where a track is in AssemblyAI's batch process, for the progress line.
+public enum TranscriptionStage: Sendable {
+    case uploading, queued, transcribing
+}
+
 public protocol Transcribing: Sendable {
-    func transcribe(file: URL, track: Track) async throws -> [Utterance]
+    func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance]
+}
+
+extension Transcribing {
+    public func transcribe(file: URL, track: Track) async throws -> [Utterance] {
+        try await transcribe(file: file, track: track, progress: { _ in })
+    }
 }
 
 /// Batch transcription with speaker labels through the AssemblyAI v2 REST API.
@@ -18,7 +29,8 @@ public struct AssemblyAIClient: Transcribing {
         self.pollInterval = pollInterval
     }
 
-    public func transcribe(file: URL, track: Track) async throws -> [Utterance] {
+    public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        progress(.uploading)
         let uploadURL: UploadResponse = try await send(request("upload", method: "POST"), file: file)
         let create = try JSONSerialization.data(withJSONObject: [
             "audio_url": uploadURL.upload_url,
@@ -34,6 +46,7 @@ public struct AssemblyAIClient: Transcribing {
             case "error":
                 throw TranscriptionError.failed(job.error ?? "unknown error")
             default:
+                progress(job.status == "queued" ? .queued : .transcribing)
                 try await Task.sleep(for: pollInterval)
                 job = try await send(request("transcript/\(job.id)", method: "GET"), body: nil)
             }

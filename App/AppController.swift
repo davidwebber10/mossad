@@ -31,6 +31,8 @@ final class AppController: ObservableObject {
     @Published private(set) var isPaused = false
     /// Muted in the call app: the mic track records silence meanwhile.
     @Published private(set) var isMuted = false
+    /// The sub-step each call is in while processing, such as "AssemblyAI is transcribing".
+    @Published private(set) var stepDetails: [String: String] = [:]
     /// What was said so far, from AssemblyAI streaming; shown while the call runs, not used for the note.
     @Published private(set) var live = LiveTranscript()
     @AppStorage("liveTranscript") var liveTranscriptEnabled = true
@@ -199,6 +201,9 @@ final class AppController: ObservableObject {
                             }, ownerName: owner, voiceFingerprints: voiceFingerprints,
                             onStep: { [weak self] record in
                                 Task { @MainActor in self?.update(record) }
+                            },
+                            onDetail: { [weak self] id, text in
+                                Task { @MainActor in self?.stepDetails[id] = text }
                             })
     }
 
@@ -365,9 +370,21 @@ final class AppController: ObservableObject {
     func syncCloud() {
         guard let archive = cloudArchive else { return }
         let days = cloudKeepLocalDays
+        cloudSyncing = true
         Task.detached(priority: .utility) {
-            if await archive.sync(keepLocalDays: days) > 0 { await MainActor.run { self.refresh() } }
+            let uploaded = await archive.sync(keepLocalDays: days)
+            await MainActor.run {
+                self.cloudSyncing = false
+                if uploaded > 0 { self.refresh() }
+            }
         }
+    }
+
+    @Published private(set) var cloudSyncing = false
+
+    /// The text for a call in progress: the live sub-step, or the step name.
+    func progressText(_ r: CallRecord) -> String? {
+        stepDetails[r.id] ?? ProcessingStep(status: r.status)?.title
     }
 
     /// Joins the meetings into the earliest one and opens it.
@@ -552,5 +569,7 @@ private final class WindowDelegate: NSObject, NSWindowDelegate {
 
 /// Used when no AssemblyAI key is stored: the call stays queued until a key exists.
 struct MissingKeyTranscriber: Transcribing {
-    func transcribe(file: URL, track: Track) async throws -> [Utterance] { throw MissingAPIKey(service: "AssemblyAI") }
+    func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        throw MissingAPIKey(service: "AssemblyAI")
+    }
 }

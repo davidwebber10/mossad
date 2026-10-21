@@ -9,8 +9,10 @@ final class FakeTranscriber: Transcribing, @unchecked Sendable {
     private let lock = NSLock()
     private var _calls: [Track] = []
     var calls: [Track] { lock.withLock { _calls } }
-    func transcribe(file: URL, track: Track) async throws -> [Utterance] {
+    func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
         lock.withLock { _calls.append(track) }
+        progress(.uploading)
+        progress(.transcribing)
         if delay > .zero { try await Task.sleep(for: delay) }
         if let error { throw error }
         if failingTracks.contains(track) { throw Boom() }
@@ -44,6 +46,10 @@ struct Boom: Error {}
 final class Notifications: @unchecked Sendable {
     var records: [CallRecord] = []
     var steps: [CallRecord] = []
+    private let lock = NSLock()
+    private var _details: [String] = []
+    var details: [String] { lock.withLock { _details } }
+    func detail(_ text: String?) { if let text { lock.withLock { _details.append(text) } } }
 }
 
 final class PipelineTests: XCTestCase {
@@ -86,7 +92,19 @@ final class PipelineTests: XCTestCase {
         return Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
                         calendar: calendar, summarizer: summarizer, notify: { notifications.records.append($0) },
                         now: { later }, ownerName: "David Webber", voiceFingerprints: voiceFingerprints,
-                        onStep: { notifications.steps.append($0) })
+                        onStep: { notifications.steps.append($0) }, onDetail: { _, text in notifications.detail(text) })
+    }
+
+    func testDetailsDescribeEachSubStep() async throws {
+        // Like the real service, the transcription takes a moment after its stage updates.
+        transcriber.delay = .milliseconds(50)
+        let id = try makeRecord()
+        await pipeline().process(id)
+        let details = notifications.details
+        for expected in ["Uploading", "AssemblyAI is transcribing", "Joining the two tracks", "Identifying speakers",
+                         "Finding the calendar invite", "Claude is writing the summary", "Writing the note"] {
+            XCTAssertTrue(details.contains { $0.contains(expected) }, "missing \(expected) in \(details)")
+        }
     }
 
     func testOnStepReportsEachSavedStep() async throws {

@@ -12,6 +12,16 @@ struct MenuContent: View {
         VStack(alignment: .leading, spacing: 4) {
             statusSection
             if controller.processing > 0 { processingRow }
+            if controller.cloudSyncing, controller.processing == 0 {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    Text("Uploading recordings to the cloud").fontWeight(.medium)
+                    Spacer()
+                }
+                .padding(.horizontal, 8).padding(.vertical, 9)
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .padding(.horizontal, 6)
+            }
             if !permissions.allGood { permissionsRow }
             let recent = controller.meetings.filter { $0.status != .recording }.prefix(3)
             if !recent.isEmpty {
@@ -116,8 +126,9 @@ struct MenuContent: View {
             ProgressView().controlSize(.small)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Processing \(controller.processing) \(controller.processing == 1 ? "call" : "calls")").fontWeight(.medium)
-                if let step = controller.currentStep {
-                    Text(step.title).font(.system(size: 12)).foregroundStyle(.secondary)
+                if let r = controller.meetings.filter({ ProcessingStep(status: $0.status) != nil }).min(by: { $0.start < $1.start }),
+                   let text = controller.progressText(r) {
+                    Text(text).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Spacer()

@@ -315,6 +315,7 @@ private struct CurrentCallRow: View {
 }
 
 private struct MeetingRow: View {
+    @EnvironmentObject var controller: AppController
     let record: CallRecord
     let kind: MeetingGroups.Kind
 
@@ -329,7 +330,9 @@ private struct MeetingRow: View {
             HStack {
                 Text(whenText(record.start, kind: kind)).font(.system(size: 12)).foregroundStyle(.secondary)
                 Spacer()
-                if let badge = record.badge { StatusBadge(kind: badge) }
+                if let badge = record.badge {
+                    StatusBadge(kind: badge, text: badge == .processing ? controller.progressText(record) : nil)
+                }
             }
             .padding(.leading, 20)
         }

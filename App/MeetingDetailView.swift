@@ -100,7 +100,12 @@ struct MeetingDetailView: View {
         if let step = ProcessingStep(status: record.status) {
             HStack(spacing: 9) {
                 ProgressView().controlSize(.small)
-                Text(processingText(step))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(processingText(step))
+                    if let detail = controller.stepDetails[record.id], detail != step.title {
+                        Text(detail).font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                }
                 Spacer()
                 if record.attempts > 0 { Button("Retry now") { controller.retry(record.id) }.controlSize(.small) }
             }
