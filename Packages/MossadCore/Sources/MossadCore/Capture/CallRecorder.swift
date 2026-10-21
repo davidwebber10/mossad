@@ -185,6 +185,16 @@ public final class CallRecorder: @unchecked Sendable {
         return r
     }
 
+    /// The invite found while the call runs, so the live call already shows its real title.
+    /// Ignored when that call has ended meanwhile; the pipeline matches the calendar again anyway.
+    public func setCalendar(title: String, attendees: [String], forCall id: String) {
+        guard var r = record, r.id == id else { return }
+        r.calendarTitle = title
+        r.attendees = attendees
+        record = r
+        do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
+    }
+
     /// Stops recording and deletes everything for the current call.
     public func skip() {
         guard let r = record else { return }

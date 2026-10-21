@@ -267,7 +267,11 @@ final class AppController: ObservableObject {
         case .started(let platform, let bundleID, let at):
             Log.info("Call started: \(platform.displayName) (\(bundleID))")
             do {
-                try recorder.begin(platform: platform, bundleID: bundleID, processIDs: processIDs, meetingID: meetingID, at: at)
+                let id = try recorder.begin(platform: platform, bundleID: bundleID, processIDs: processIDs, meetingID: meetingID, at: at)
+                Task { @MainActor in
+                    self.refresh()
+                    await self.findInvite(callID: id, platform: platform, meetingID: meetingID, start: at, recorder: recorder)
+                }
             } catch {
                 Log.error("Could not start recording: \(error)")
                 Task { @MainActor in
@@ -282,6 +286,17 @@ final class AppController: ObservableObject {
                 self.refresh()
                 await self.track { await self.pipeline.process(record.id) }
             }
+        }
+    }
+
+    /// The live call's invite, so it shows its real title while it runs instead of "Google Meet call".
+    private func findInvite(callID: String, platform: Platform, meetingID: String?, start: Date, recorder: CallRecorder) async {
+        let events = await calendar.events(from: start.addingTimeInterval(-900), to: start.addingTimeInterval(5400))
+        guard let event = CalendarMatcher.bestEvent(for: platform, meetingID: meetingID, start: start,
+                                                    end: start.addingTimeInterval(1800), in: events) else { return }
+        CaptureQueue.queue.async {
+            recorder.setCalendar(title: event.title, attendees: event.attendees, forCall: callID)
+            Task { @MainActor in self.refresh() }
         }
     }
 

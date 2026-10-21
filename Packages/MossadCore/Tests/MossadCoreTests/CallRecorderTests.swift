@@ -53,6 +53,20 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).meetingID, "abc-defg-hij")
     }
 
+    func testCalendarDetailsDuringTheCallAreSaved() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], meetingID: "abc-defg-hij", at: t0)
+        recorder.setCalendar(title: "Tech Team Monthly Sync", attendees: ["a@example.com"], forCall: id)
+        let r = try CallRecord.load(from: paths.callDirectory(id))
+        XCTAssertEqual(r.calendarTitle, "Tech Team Monthly Sync")
+        XCTAssertEqual(r.attendees, ["a@example.com"])
+        XCTAssertEqual(recorder.currentRecord?.calendarTitle, "Tech Team Monthly Sync")
+    }
+
+    func testCalendarDetailsForAnEndedCallAreIgnored() throws {
+        recorder.setCalendar(title: "Old", attendees: [], forCall: "20000101-000000")
+        XCTAssertNil(recorder.currentRecord)
+    }
+
     func testBeginWritesRecordWithStatusRecording() throws {
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         let r = try CallRecord.load(from: paths.callDirectory(id))
