@@ -73,19 +73,19 @@ final class CallDetectorTests: XCTestCase {
             event = d.process(snap(s, [meet(mic: false, present: true)]))
             if event == nil { s += 2 }
         }
-        XCTAssertEqual(s, 30)
-        XCTAssertEqual(event, .ended(at: t0.addingTimeInterval(30), trimTo: t0.addingTimeInterval(10)))
+        XCTAssertEqual(s, 16)
+        XCTAssertEqual(event, .ended(at: t0.addingTimeInterval(16), trimTo: t0.addingTimeInterval(10)))
     }
 
     func testMeetShortMicGapDoesNotEnd() {
         // An audio device change stops the mic for a moment.
         var d = CallDetector()
         started(&d)
-        for s in stride(from: 2.0, through: 16, by: 2) {
+        for s in stride(from: 2.0, through: 4, by: 2) {
             XCTAssertNil(d.process(snap(s, [meet(mic: false, present: true)])))
         }
-        XCTAssertNil(d.process(snap(18, [meet(mic: true, present: true)])))
-        XCTAssertNil(d.process(snap(36, [meet(mic: false, present: true)])))
+        XCTAssertNil(d.process(snap(6, [meet(mic: true, present: true)])))
+        XCTAssertNil(d.process(snap(10, [meet(mic: false, present: true)])))
         XCTAssertTrue(d.isInCall)
     }
 

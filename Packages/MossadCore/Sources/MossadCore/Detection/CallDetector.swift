@@ -38,8 +38,9 @@ public struct CallDetector: Sendable {
         public var goneConfirmTicks = 2
         public var micIdleFallback: TimeInterval = 180
         /// Meet keeps the mic open while muted, and its page after you leave keeps the meeting title,
-        /// so a stopped mic is the sign that you left.
-        public var meetMicIdle: TimeInterval = 20
+        /// so a stopped mic is the sign that you left. Short: a call ended too early by a brief mic gap is
+        /// joined again by the automatic continuation when it restarts.
+        public var meetMicIdle: TimeInterval = 6
         public init() {}
     }
 
