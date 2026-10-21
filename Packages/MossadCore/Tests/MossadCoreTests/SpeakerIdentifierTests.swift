@@ -32,6 +32,15 @@ final class SpeakerIdentifierTests: XCTestCase {
         XCTAssertEqual(result.unknown, ["me:B"])
     }
 
+    func testOwnerIsNotEnrolledFromEchoOfTheOtherSide() async throws {
+        // me:A is the other side leaking into the mic: it talks most, but only while them:A talks.
+        try writeSegments(meURL, total: 60, [(0, 30, 600), (40, 50, 200)])
+        try writeSegments(themURL, total: 60, [(0, 30, 400)])
+        let result = try await identify([u(.me, "A", 0, 30), u(.them, "A", 0, 30), u(.me, "B", 40, 50)])
+        XCTAssertEqual(result.names["me:B"], "David Webber")
+        XCTAssertNotEqual(result.names["me:A"], "David Webber")
+    }
+
     func testOwnerMatchedByVoiceOnMeTrack() async throws {
         try library.add([1, 0, 0, 0], to: "David Webber", isOwner: true)
         try writeSegments(meURL, total: 30, [(0, 3, 600), (5, 20, 200)])

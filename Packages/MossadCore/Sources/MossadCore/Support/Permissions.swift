@@ -48,6 +48,11 @@ public enum Permissions {
         }
     }
 
+    /// macOS can check a browser only while it runs. A closed browser keeps the last state that was seen.
+    public static func resolve(_ state: PermissionState, lastKnown: PermissionState?) -> PermissionState {
+        state == .needsApp ? (lastKnown ?? .needsApp) : state
+    }
+
     /// Maps TCCAccessPreflight: 0 granted, 1 denied, anything else not asked yet.
     public static func tccState(preflight: Int?) -> PermissionState {
         switch preflight {

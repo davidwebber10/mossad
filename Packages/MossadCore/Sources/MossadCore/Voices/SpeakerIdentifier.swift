@@ -38,11 +38,18 @@ public struct SpeakerIdentifier: Sendable {
             if let e = try await embedding(for: own, in: url) { result.embeddings[key] = e }
         }
 
-        // Without an enrolled owner, the speaker who talks most on the mic is David.
+        // Without an enrolled owner, the speaker who talks most on the mic is David. Only count time
+        // when the other side is quiet, so echo of the other side on the mic cannot become the owner.
         if library.owner == nil {
             let meKeys = keys.filter { $0.hasPrefix("me:") }
-            let talk = { (key: String) in utterances.filter { $0.speakerKey == key }.reduce(0) { $0 + $1.end - $1.start } }
-            if let dominant = meKeys.max(by: { talk($0) < talk($1) }) {
+            let them = utterances.filter { $0.track == .them }
+            let talk = { (key: String) in
+                utterances.filter { $0.speakerKey == key }.reduce(0.0) { sum, u in
+                    let overlap = them.reduce(0.0) { $0 + max(0, min(u.end, $1.end) - max(u.start, $1.start)) }
+                    return sum + max(0, u.end - u.start - overlap)
+                }
+            }
+            if let dominant = meKeys.max(by: { talk($0) < talk($1) }), talk(dominant) > 0 {
                 result.names[dominant] = ownerName
                 if let e = result.embeddings[dominant] { try library.add(e, to: ownerName, isOwner: true) }
             }

@@ -5,11 +5,16 @@ import XCTest
 
 final class FakeSource: TrackSource, @unchecked Sendable {
     var seconds: Double = 0
+    var amplitude: Double = 0.5
+    var failStarts = 0
     private(set) var started = false
     private(set) var stopped = false
+    private(set) var startCalls = 0
     func start(_ onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws {
+        startCalls += 1
+        if failStarts > 0 { failStarts -= 1; throw Boom() }
         started = true
-        if seconds > 0 { onBuffer(sineBuffer(seconds: seconds, sampleRate: 16_000, channels: 1)) }
+        if seconds > 0 { onBuffer(sineBuffer(seconds: seconds, sampleRate: 16_000, channels: 1, amplitude: amplitude)) }
     }
     func stop() { stopped = true }
 }
@@ -73,6 +78,7 @@ final class CallRecorderTests: XCTestCase {
 
     func testFallbackEndTrimsBothTracks() throws {
         them.seconds = 120
+        them.amplitude = 0
         me.seconds = 120
         now = t0.addingTimeInterval(120)
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
@@ -81,6 +87,33 @@ final class CallRecorderTests: XCTestCase {
         for track in [Track.me, .them] {
             XCTAssertEqual(try audioDuration(paths.callDirectory(id).appendingPathComponent(track.fileName)), 100, accuracy: 0.05)
         }
+    }
+
+    func testFallbackEndKeepsRemoteSpeechAfterTheMicWentIdle() throws {
+        them.seconds = 150
+        me.seconds = 100
+        now = t0.addingTimeInterval(150)
+        let id = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [1], at: t0)
+        let r = try XCTUnwrap(recorder.end(at: t0.addingTimeInterval(330), trimTo: t0.addingTimeInterval(30)))
+        XCTAssertEqual(r.end.timeIntervalSince(t0), 150, accuracy: 1)
+        XCTAssertEqual(try audioDuration(paths.callDirectory(id).appendingPathComponent("them.caf")), 150, accuracy: 1)
+    }
+
+    func testFailedTapStartIsRetriedOnTheNextTick() throws {
+        them.failStarts = 1
+        _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5], at: t0)
+        XCTAssertFalse(them.started)
+        recorder.updateThemProcesses([5])
+        XCTAssertTrue(them.started)
+        XCTAssertEqual(themMade, [[5], [5]])
+    }
+
+    func testFailedMicStartIsRetriedOnTheNextTick() throws {
+        me.failStarts = 1
+        _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5], at: t0)
+        XCTAssertFalse(me.started)
+        recorder.updateThemProcesses([5])
+        XCTAssertTrue(me.started)
     }
 
     func testBeginWhileRecordingKeepsThePreviousCall() throws {

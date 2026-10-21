@@ -25,6 +25,11 @@ public final class TrackWriter: @unchecked Sendable {
     private var file: AVAudioFile?
     private var converter: AVAudioConverter?
     private var written: AVAudioFramePosition = 0
+    /// Wall-clock frames left out when a gap was longer than `maxGapPadding`.
+    private var skipped: AVAudioFramePosition = 0
+    private var lastSoundFrame: AVAudioFramePosition?
+    /// Below this RMS level a buffer counts as silence (about -46 dBFS).
+    static let soundThreshold: Float = 0.005
     private let startTime: Date
     private let clock: () -> Date
 
@@ -38,17 +43,26 @@ public final class TrackWriter: @unchecked Sendable {
         lock.withLock { Double(written) / Self.sampleRate }
     }
 
+    /// Seconds into the file where the last non-silent buffer ended, or nil when the track has had no sound.
+    public var lastSound: TimeInterval? {
+        lock.withLock { lastSoundFrame.map { Double($0) / Self.sampleRate } }
+    }
+
     public func append(_ buffer: AVAudioPCMBuffer) throws {
         try lock.withLock {
             guard file != nil, buffer.frameLength > 0, let mono = Self.downmix(buffer) else { return }
             let converted = try convert(mono)
             guard converted.frameLength > 0 else { return }
             let bufferStart = clock().timeIntervalSince(startTime) - Double(converted.frameLength) / Self.sampleRate
-            let expected = AVAudioFramePosition(bufferStart * Self.sampleRate)
+            let expected = AVAudioFramePosition(bufferStart * Self.sampleRate) - skipped
             if Double(expected - written) > Self.gapTolerance * Self.sampleRate {
-                try writeSilence(frames: min(expected - written, AVAudioFramePosition(Self.maxGapPadding * Self.sampleRate)))
+                let cap = AVAudioFramePosition(Self.maxGapPadding * Self.sampleRate)
+                let gap = expected - written
+                if gap > cap { skipped += gap - cap }
+                try writeSilence(frames: min(gap, cap))
             }
             try write(converted)
+            if Self.rms(converted) >= Self.soundThreshold { lastSoundFrame = written }
         }
     }
 
@@ -65,6 +79,14 @@ public final class TrackWriter: @unchecked Sendable {
             file?.close()
             file = nil
         }
+    }
+
+    static func rms(_ buffer: AVAudioPCMBuffer) -> Float {
+        guard let data = buffer.floatChannelData, buffer.frameLength > 0 else { return 0 }
+        let n = Int(buffer.frameLength)
+        var sum: Float = 0
+        for i in 0..<n { sum += data[0][i] * data[0][i] }
+        return (sum / Float(n)).squareRoot()
     }
 
     private func write(_ buffer: AVAudioPCMBuffer) throws {

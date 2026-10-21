@@ -46,9 +46,45 @@ final class PermissionsMonitor: ObservableObject {
             for kind in kinds { states[kind] = await Self.check(kind) }
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                for i in self.items.indices { self.items[i].state = states[self.items[i].kind] ?? self.items[i].state }
+                for i in self.items.indices {
+                    let kind = self.items[i].kind
+                    guard let state = states[kind] else { continue }
+                    self.items[i].state = Self.remember(state, for: kind)
+                }
                 self.dragHelper.closeIfGranted(states)
             }
+        }
+    }
+
+    /// Keeps the last state seen while a browser ran, so closing a browser does not turn its row red.
+    private static func remember(_ state: PermissionState, for kind: PermissionKind) -> PermissionState {
+        guard case .automation(let id) = kind else { return state }
+        let key = "automationState.\(id)"
+        let lastKnown: PermissionState? = switch UserDefaults.standard.string(forKey: key) {
+        case "granted": .granted
+        case "denied": .denied
+        default: nil
+        }
+        switch state {
+        case .granted: UserDefaults.standard.set("granted", forKey: key)
+        case .denied: UserDefaults.standard.set("denied", forKey: key)
+        default: break
+        }
+        return Permissions.resolve(state, lastKnown: lastKnown)
+    }
+
+    /// Shows the System Audio Recording prompt when macOS has not asked yet.
+    func requestSystemAudioIfNeeded() {
+        guard Permissions.tccState(preflight: TCC.preflight("kTCCServiceAudioCapture")) == .notAsked else { return }
+        TCC.request("kTCCServiceAudioCapture") { Task { @MainActor in self.refresh() } }
+    }
+
+    /// Shows a browser's Automation prompt when macOS has not asked yet. Off the main thread: the prompt waits for an answer.
+    func askAutomationIfNeeded(_ bundleID: String) {
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+            guard Permissions.automationState(osStatus: Self.automationStatus(bundleID, ask: false)) == .notAsked else { return }
+            _ = Self.automationStatus(bundleID, ask: true)
+            Task { @MainActor in self.refresh() }
         }
     }
 

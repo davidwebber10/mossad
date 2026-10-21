@@ -41,6 +41,13 @@ final class TranscriptMergerTests: XCTestCase {
         XCTAssertEqual(merged.map(\.track), [.them])
     }
 
+    func testKeepsAShortReplyDuringTheirSpeech() {
+        let merged = TranscriptMerger.merge(
+            me: [u(.me, "A", 19, 19.5, "Yes.")],
+            them: [u(.them, "A", 10, 20, "Yes, we can ship Friday once finance approves.")])
+        XCTAssertEqual(merged.count, 2)
+    }
+
     func testKeepsOwnSpeechThatRepeatsAWord() {
         let merged = TranscriptMerger.merge(
             me: [u(.me, "A", 252.5, 255, "Wait, which cushions, the deep seating ones?")],

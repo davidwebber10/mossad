@@ -196,17 +196,11 @@ final class AppController: ObservableObject {
         }
         notifier.requestAuthorization()
 
-        // System Audio Recording: a short global tap shows the one-time prompt now, not in the first call.
-        // Off the main thread: creating the tap waits until the prompt is answered.
-        DispatchQueue.global(qos: .utility).async {
-            let probe = ProcessTap(processObjectIDs: [])
-            do { try probe.start { _ in } } catch { Log.error("System audio capture unavailable: \(error)") }
-            probe.stop()
-            Log.info("System audio capture checked")
-        }
+        // System Audio Recording: show the one-time prompt now, not in the first call.
+        permissions.requestSystemAudioIfNeeded()
 
-        // Automation: ask each browser for its tabs once, now and whenever a browser starts,
-        // so its one-time prompt never blocks detection during a call.
+        // Automation: ask each browser once, now and whenever a browser starts. The tab probe
+        // itself never asks, so a prompt can never block detection during a call.
         for app in NSWorkspace.shared.runningApplications { primeAutomation(app.bundleIdentifier) }
         browserLaunchObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
@@ -218,12 +212,7 @@ final class AppController: ObservableObject {
 
     private func primeAutomation(_ bundleID: String?) {
         guard let bundleID, case .browser(let base) = MeetingMatcher.appKind(bundleID: bundleID), base == bundleID else { return }
-        let primed = "primedAutomation.\(bundleID)"
-        guard !UserDefaults.standard.bool(forKey: primed) else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            _ = BrowserTabProbe().tabs(browserBundleID: bundleID)
-            UserDefaults.standard.set(true, forKey: primed)
-        }
+        permissions.askAutomationIfNeeded(bundleID)
     }
 
     private func enableLaunchAtLoginOnce() {
@@ -266,9 +255,5 @@ private final class WindowDelegate: NSObject, NSWindowDelegate {
 
 /// Used when no AssemblyAI key is stored: the call stays queued until a key exists.
 struct MissingKeyTranscriber: Transcribing {
-    struct MissingKey: Error, CustomStringConvertible {
-        var description: String { "No AssemblyAI key in the Keychain. Run scripts/import-keys.sh." }
-    }
-
-    func transcribe(file: URL, track: Track) async throws -> [Utterance] { throw MissingKey() }
+    func transcribe(file: URL, track: Track) async throws -> [Utterance] { throw MissingAPIKey(service: "AssemblyAI") }
 }

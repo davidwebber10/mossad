@@ -7,18 +7,37 @@ public final class WindowTitleProbe: WindowTitleProbing {
 
     public func windowTitles(bundleID: String) -> [String]? {
         guard AXIsProcessTrusted() else { return nil }
-        return NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).flatMap { app -> [String] in
+        return Self.combine(NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map { app -> [String]? in
             let element = AXUIElementCreateApplication(app.processIdentifier)
             AXUIElementSetMessagingTimeout(element, 0.5)
             var windows: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString, &windows) == .success,
-                  let list = windows as? [AXUIElement] else { return [] }
-            return list.compactMap { window in
-                var title: CFTypeRef?
-                guard AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &title) == .success else { return nil }
-                return title as? String
+            switch AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString, &windows) {
+            case .success: break
+            case .noValue: return []
+            default: return nil  // The app did not answer: unknown, not "no windows".
             }
+            guard let list = windows as? [AXUIElement] else { return [] }
+            var titles: [String] = []
+            for window in list {
+                var title: CFTypeRef?
+                switch AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &title) {
+                case .success: if let t = title as? String { titles.append(t) }
+                case .noValue, .attributeUnsupported: continue
+                default: return nil
+                }
+            }
+            return titles
+        })
+    }
+
+    /// The titles of all of an app's processes, or nil when any of them could not be read.
+    static func combine(_ perProcess: [[String]?]) -> [String]? {
+        var all: [String] = []
+        for titles in perProcess {
+            guard let titles else { return nil }
+            all += titles
         }
+        return all
     }
 
     public func isRunning(bundleID: String) -> Bool {

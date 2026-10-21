@@ -29,9 +29,18 @@ public struct ProcessingQueue: Sendable {
         for var r in allRecords() where r.status == .recording {
             let dir = paths.callDirectory(r.id)
             // The longer track: one track can be empty when its capture failed to start.
-            let duration = [Track.me, .them].compactMap { track in
-                (try? AVAudioFile(forReading: dir.appendingPathComponent(track.fileName))).map { Double($0.length) / $0.fileFormat.sampleRate }
-            }.max() ?? 0
+            // A missing file is an empty track; a file that exists but cannot be read is unknown (nil).
+            let durations = [Track.me, .them].map { track -> Double? in
+                let url = dir.appendingPathComponent(track.fileName)
+                guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
+                return (try? AVAudioFile(forReading: url)).map { Double($0.length) / $0.fileFormat.sampleRate }
+            }
+            let duration = durations.compactMap { $0 }.max() ?? 0
+            if durations.contains(where: { $0 == nil }) && duration < Self.minimumCallDuration {
+                // A track that cannot be read may hold the call. Never delete it; leave it for a person to check.
+                Log.error("Interrupted call \(r.id) has an unreadable track; keeping it")
+                continue
+            }
             if duration < Self.minimumCallDuration {
                 try? FileManager.default.removeItem(at: dir)
                 Log.info("Discarded interrupted call \(r.id) (\(Int(duration)) s)")

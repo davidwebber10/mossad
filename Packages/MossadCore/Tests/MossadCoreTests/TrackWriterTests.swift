@@ -2,7 +2,7 @@ import AVFoundation
 import XCTest
 @testable import MossadCore
 
-func sineBuffer(seconds: Double, sampleRate: Double, channels: AVAudioChannelCount) -> AVAudioPCMBuffer {
+func sineBuffer(seconds: Double, sampleRate: Double, channels: AVAudioChannelCount, amplitude: Double = 0.5) -> AVAudioPCMBuffer {
     let format = channels <= 2
         ? AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: channels)!
         : AVAudioFormat(standardFormatWithSampleRate: sampleRate,
@@ -11,7 +11,7 @@ func sineBuffer(seconds: Double, sampleRate: Double, channels: AVAudioChannelCou
     let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
     buffer.frameLength = frames
     for c in 0..<Int(channels) {
-        for i in 0..<Int(frames) { buffer.floatChannelData![c][i] = Float(sin(2 * .pi * 440 * Double(i) / sampleRate) * 0.5) }
+        for i in 0..<Int(frames) { buffer.floatChannelData![c][i] = Float(sin(2 * .pi * 440 * Double(i) / sampleRate) * amplitude) }
     }
     return buffer
 }
@@ -84,5 +84,28 @@ final class TrackWriterTests: XCTestCase {
         try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
         writer.close()
         XCTAssertEqual(try audioDuration(url), 2 + TrackWriter.maxGapPadding, accuracy: 0.05)
+    }
+
+    func testCappedGapIsNotPaddedAgainOnTheNextBuffer() throws {
+        let url = dir.appendingPathComponent("cap2.caf")
+        var now = t0.addingTimeInterval(1)
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        now = t0.addingTimeInterval(3 * 3600)
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        now = now.addingTimeInterval(1)
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 3 + TrackWriter.maxGapPadding, accuracy: 0.05)
+    }
+
+    func testRemembersWhenTheTrackLastHadSound() throws {
+        let url = dir.appendingPathComponent("loud.caf")
+        var now = t0.addingTimeInterval(10)
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        try writer.append(sineBuffer(seconds: 10, sampleRate: 16_000, channels: 1))
+        now = t0.addingTimeInterval(20)
+        try writer.append(sineBuffer(seconds: 10, sampleRate: 16_000, channels: 1, amplitude: 0))
+        XCTAssertEqual(try XCTUnwrap(writer.lastSound), 10, accuracy: 0.05)
     }
 }

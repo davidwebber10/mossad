@@ -73,6 +73,14 @@ final class ProcessingQueueTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory("short").path))
     }
 
+    func testRecoverKeepsCallWhenATrackCannotBeRead() throws {
+        try record("bad", .recording, start: t0)
+        try Data(repeating: 7, count: 4096).write(to: paths.callDirectory("bad").appendingPathComponent("them.caf"))
+        try writeTestAudio(paths.callDirectory("bad").appendingPathComponent("me.caf"), seconds: 5)
+        ProcessingQueue(paths: paths).recoverInterrupted()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.callDirectory("bad").appendingPathComponent("them.caf").path))
+    }
+
     func testRecoverKeepsCallWhenOnlyMicTrackIsShort() throws {
         try record("micfail", .recording, start: t0)
         try writeTestAudio(paths.callDirectory("micfail").appendingPathComponent("me.caf"), seconds: 0.1)

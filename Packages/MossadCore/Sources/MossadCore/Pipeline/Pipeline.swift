@@ -63,6 +63,11 @@ public actor Pipeline {
                 r.nextAttempt = nil
                 try r.save(to: dir)
             }
+        } catch is MissingAPIKey {
+            // Not the call's fault: wait for the key without using up attempts.
+            Log.error("Processing \(id) waits for an API key")
+            r.nextAttempt = now().addingTimeInterval(3600)
+            try? r.save(to: dir)
         } catch {
             Log.error("Processing \(id) failed at \(r.status.rawValue): \(error)")
             queue.markFailure(&r, now: now())
@@ -105,7 +110,14 @@ public actor Pipeline {
     private func transcribeIfNeeded(_ done: [Utterance]?, track: Track, dir: URL) async -> Result<[Utterance], Error> {
         if let done { return .success(done) }
         let url = dir.appendingPathComponent(track.fileName)
-        let duration = (try? AVAudioFile(forReading: url)).map { Double($0.length) / $0.fileFormat.sampleRate } ?? 0
+        let duration: Double
+        do {
+            let file = try AVAudioFile(forReading: url)
+            duration = Double(file.length) / file.fileFormat.sampleRate
+        } catch {
+            // Unreadable is not empty: retry instead of writing an empty transcript.
+            return .failure(error)
+        }
         if duration < Self.minimumTrackDuration {
             Log.info("\(track.rawValue) track is empty; skipping transcription")
             return .success([])
@@ -168,12 +180,19 @@ public actor Pipeline {
                 do { try library.add(e, to: name) } catch { Log.error("Saving voice for \(name) failed: \(error)") }
             }
         }
-        if let summarizer, r.status == .written, !r.utterances.isEmpty {
-            if let s = try? await summarizer.summarize(transcript: MarkdownWriter.transcript(r), title: r.title) {
-                r.summary = s.summary
-                r.actionItems = s.actionItems
-            }
-        }
+        // Save the names before the summary request, so a second save made meanwhile starts from them.
+        save(&r, dir: dir)
+        guard let summarizer, r.status == .written, !r.utterances.isEmpty else { return }
+        let names = r.speakerNames
+        guard let s = try? await summarizer.summarize(transcript: MarkdownWriter.transcript(r), title: r.title),
+              var latest = try? CallRecord.load(from: dir), latest.speakerNames == names else { return }
+        // Names changed during the request: that save's own summary is newer.
+        latest.summary = s.summary
+        latest.actionItems = s.actionItems
+        save(&latest, dir: dir)
+    }
+
+    private func save(_ r: inout CallRecord, dir: URL) {
         do {
             if r.status == .written {
                 let url = paths.meetings.appendingPathComponent(MarkdownWriter.fileName(for: r))
@@ -182,7 +201,14 @@ public actor Pipeline {
             }
             try r.save(to: dir)
         } catch {
-            Log.error("Applying names to \(callID) failed: \(error)")
+            Log.error("Applying names to \(r.id) failed: \(error)")
         }
     }
+}
+
+/// Thrown when a service has no API key. The pipeline waits for the key instead of counting a failed attempt.
+public struct MissingAPIKey: Error, CustomStringConvertible {
+    public let service: String
+    public init(service: String) { self.service = service }
+    public var description: String { "No \(service) API key. Run scripts/import-keys.sh, then reopen Mossad." }
 }

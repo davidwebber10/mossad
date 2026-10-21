@@ -56,23 +56,24 @@ public final class CallRecorder: @unchecked Sendable {
         self.themWriter = themWriter
         self.meWriter = meWriter
         startThem(processIDs)
-        let me = makeMe()
-        meSource = me
-        do {
-            try me.start { buffer in try? meWriter.append(buffer) }
-        } catch {
-            Log.error("Mic capture failed to start: \(error)")
-        }
+        startMe()
         Log.info("Recording \(id) (\(platform.displayName))")
         return id
     }
 
     /// Rebuilds the tap when the meeting app's audio processes change (for example a browser audio helper restarts).
+    /// Runs on every detection tick during a call, so a source that failed to start is tried again.
     public func updateThemProcesses(_ ids: [AudioObjectID]) {
-        guard isRecording, !ids.isEmpty, Set(ids) != Set(themProcessIDs) else { return }
-        Log.info("Meeting audio processes changed; rebuilding tap")
-        themSource?.stop()
-        startThem(ids)
+        guard isRecording else { return }
+        if meSource == nil { startMe() }
+        let ids = ids.isEmpty ? themProcessIDs : ids
+        if themSource == nil {
+            startThem(ids)
+        } else if !ids.isEmpty, Set(ids) != Set(themProcessIDs) {
+            Log.info("Meeting audio processes changed; rebuilding tap")
+            themSource?.stop()
+            startThem(ids)
+        }
     }
 
     /// Recreates the tap with the same processes, for example after the default output device changed.
@@ -83,24 +84,41 @@ public final class CallRecorder: @unchecked Sendable {
         startThem(themProcessIDs)
     }
 
+    /// On failure the source stays nil, and the next tick tries again.
     private func startThem(_ ids: [AudioObjectID]) {
         guard let writer = themWriter else { return }
         themProcessIDs = ids
+        themSource = nil
         let source = makeThem(ids)
-        themSource = source
         do {
             try source.start { buffer in try? writer.append(buffer) }
+            themSource = source
         } catch {
+            source.stop()
             Log.error("Meeting audio tap failed to start: \(error)")
+        }
+    }
+
+    private func startMe() {
+        guard let writer = meWriter else { return }
+        let source = makeMe()
+        do {
+            try source.start { buffer in try? writer.append(buffer) }
+            meSource = source
+        } catch {
+            source.stop()
+            Log.error("Mic capture failed to start: \(error)")
         }
     }
 
     /// Stops recording. Returns the saved record, or nil when the call was shorter than the minimum and was deleted.
     public func end(at time: Date, trimTo: Date?) -> CallRecord? {
         guard var r = record else { return nil }
+        // The mic going quiet does not mean the call did: keep the other side's speech after it.
+        let themSound = themWriter?.lastSound.map { r.start.addingTimeInterval($0 + 1) }
         stopAll()
         let dir = paths.callDirectory(r.id)
-        let end = trimTo ?? time
+        let end = trimTo.map { min(time, max($0, themSound ?? $0)) } ?? time
         guard end.timeIntervalSince(r.start) >= ProcessingQueue.minimumCallDuration else {
             try? FileManager.default.removeItem(at: dir)
             Log.info("Discarded short call \(r.id)")

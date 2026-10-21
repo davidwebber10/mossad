@@ -6,6 +6,8 @@ public enum TranscriptMerger {
     static let minimumOverlap = 0.5
     /// …and nearly all of its words appear in what "them" said.
     static let minimumSimilarity = 0.8
+    /// Shorter "me" utterances are always kept: a real "yes" matters more than a stray echoed word.
+    static let minimumWords = 3
 
     public static func merge(me: [Utterance], them: [Utterance]) -> [Utterance] {
         let kept = me.filter { !isBleed(me: $0, them: them) }
@@ -20,7 +22,7 @@ public enum TranscriptMerger {
         let covered = overlapping.reduce(0) { $0 + min(m.end, $1.end) - max(m.start, $1.start) }
         guard covered / duration >= minimumOverlap else { return false }
         let mine = words(m.text)
-        guard !mine.isEmpty else { return false }
+        guard mine.count >= minimumWords else { return false }
         let theirs = overlapping.flatMap { words($0.text) }
         return Double(lcs(mine, theirs)) / Double(mine.count) >= minimumSimilarity
     }

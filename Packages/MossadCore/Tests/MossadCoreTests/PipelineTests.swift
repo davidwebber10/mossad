@@ -22,11 +22,14 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
     var fail = false
     var calls = 0
     var lastTranscript = ""
+    var delayOnCall: [Int: Duration] = [:]
     func summarize(transcript: String, title: String) async throws -> MeetingSummary {
         calls += 1
+        let call = calls
         lastTranscript = transcript
+        if let delay = delayOnCall[call] { try await Task.sleep(for: delay) }
         if fail { throw SummaryError.malformed }
-        return MeetingSummary(summary: "Summary \(calls)", actionItems: ["Alex Rivera: send forecast"])
+        return MeetingSummary(summary: "Summary \(call)", actionItems: ["Alex Rivera: send forecast"])
     }
 }
 
@@ -164,6 +167,41 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(md.contains("Amy Lee: I can book freight."))
         XCTAssertEqual(library.bestMatch([0, 0, 0, 1])?.name, "Amy Lee")
         XCTAssertEqual(library.bestMatch([0, 1, 0, 0])?.name, "Alex Rivera")
+    }
+
+    func testOverlappingNameSavesKeepBothNames() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        summarizer.delayOnCall[2] = .milliseconds(300)
+        async let first: Void = p.applyNames(callID: id, names: ["them:A": "Alex Rivera"])
+        try await Task.sleep(for: .milliseconds(50))
+        await p.applyNames(callID: id, names: ["them:B": "Amy Lee"])
+        _ = await first
+        let r = try load(id)
+        XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
+        XCTAssertEqual(r.speakerNames["them:B"], "Amy Lee")
+        XCTAssertEqual(r.summary, "Summary 3")
+        let md = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertTrue(md.contains("Alex Rivera: It leaves Friday.") && md.contains("Amy Lee: I can book freight."))
+    }
+
+    func testUnreadableTrackIsAFailureNotAnEmptyTrack() async throws {
+        let id = try makeRecord()
+        try Data(repeating: 7, count: 4096).write(to: paths.callDirectory(id).appendingPathComponent("me.caf"))
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.status, .recorded)
+        XCTAssertEqual(r.attempts, 1)
+    }
+
+    func testMissingKeyDoesNotUseUpAttempts() async throws {
+        transcriber.error = MissingAPIKey(service: "AssemblyAI")
+        let id = try makeRecord()
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.attempts, 0)
+        XCTAssertNotNil(r.nextAttempt)
     }
 
     func testConcurrentProcessOfOneCallRunsOnce() async throws {

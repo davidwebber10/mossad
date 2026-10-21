@@ -17,6 +17,12 @@ final class PermissionsTests: XCTestCase {
         XCTAssertEqual(Permissions.tccState(preflight: nil), .notAsked)
     }
 
+    func testAClosedBrowserKeepsItsLastKnownState() {
+        XCTAssertEqual(Permissions.resolve(.needsApp, lastKnown: .granted), .granted)
+        XCTAssertEqual(Permissions.resolve(.needsApp, lastKnown: nil), .needsApp)
+        XCTAssertEqual(Permissions.resolve(.denied, lastKnown: .granted), .denied)
+    }
+
     func testOnlyGrantedIsGood() {
         XCTAssertTrue(PermissionState.granted.isGood)
         for s in [PermissionState.denied, .notAsked, .needsApp] { XCTAssertFalse(s.isGood) }
