@@ -19,7 +19,7 @@ public struct AssemblyAIClient: Transcribing {
     }
 
     public func transcribe(file: URL, track: Track) async throws -> [Utterance] {
-        let uploadURL: UploadResponse = try await send(request("upload", method: "POST"), body: try Data(contentsOf: file))
+        let uploadURL: UploadResponse = try await send(request("upload", method: "POST"), file: file)
         let create = try JSONSerialization.data(withJSONObject: [
             "audio_url": uploadURL.upload_url,
             "speaker_labels": true,
@@ -49,8 +49,11 @@ public struct AssemblyAIClient: Transcribing {
         return r
     }
 
-    private func send<T: Decodable>(_ request: URLRequest, body: Data?) async throws -> T {
-        let (data, response) = if let body {
+    /// Uploads stream from disk, so an hour-long track is never held in memory.
+    private func send<T: Decodable>(_ request: URLRequest, body: Data? = nil, file: URL? = nil) async throws -> T {
+        let (data, response) = if let file {
+            try await session.upload(for: request, fromFile: file)
+        } else if let body {
             try await session.upload(for: request, from: body)
         } else {
             try await session.data(for: request)

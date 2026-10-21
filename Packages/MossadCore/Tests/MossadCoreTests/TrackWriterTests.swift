@@ -64,4 +64,25 @@ final class TrackWriterTests: XCTestCase {
         try trimAudioFile(url, to: 4)
         XCTAssertEqual(try audioDuration(url), 4, accuracy: 0.01)
     }
+
+    func testWritesInt16File() throws {
+        let url = dir.appendingPathComponent("i.caf")
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { self.t0.addingTimeInterval(1) })
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        writer.close()
+        let f = try AVAudioFile(forReading: url)
+        XCTAssertEqual(f.fileFormat.settings[AVLinearPCMBitDepthKey] as? Int, 16)
+        XCTAssertEqual(f.fileFormat.settings[AVLinearPCMIsFloatKey] as? Bool, false)
+    }
+
+    func testGapPaddingIsCapped() throws {
+        let url = dir.appendingPathComponent("cap.caf")
+        var now = t0.addingTimeInterval(1)
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        now = t0.addingTimeInterval(3 * 3600)
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 2 + TrackWriter.maxGapPadding, accuracy: 0.05)
+    }
 }

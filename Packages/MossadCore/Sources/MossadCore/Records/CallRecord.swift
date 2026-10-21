@@ -42,6 +42,11 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var calendarTitle: String?
     public var attendees: [String] = []
     public var utterances: [Utterance] = []
+    /// Per-track results, kept so a failed track does not force the other one to be transcribed again.
+    public var meUtterances: [Utterance]?
+    public var themUtterances: [Utterance]?
+    /// The step that failed when `status` is `.failed`.
+    public var failedStep: CallStatus?
     /// Speaker key (`me:A`, `them:B`) → person name.
     public var speakerNames: [String: String] = [:]
     public var unknownSpeakers: [String] = []

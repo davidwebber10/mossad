@@ -8,6 +8,18 @@ public final class TrackWriter: @unchecked Sendable {
     static let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
     /// Gaps shorter than this are ignored (normal buffer jitter).
     static let gapTolerance: Double = 0.5
+    /// Longest silence written for one gap (for example, the Mac slept with a meeting window open).
+    public static let maxGapPadding: Double = 600
+    /// On disk: 16-bit integer PCM (half the size of Float32, same transcription quality).
+    static var fileSettings: [String: Any] { [
+        AVFormatIDKey: kAudioFormatLinearPCM,
+        AVSampleRateKey: sampleRate,
+        AVNumberOfChannelsKey: 1,
+        AVLinearPCMBitDepthKey: 16,
+        AVLinearPCMIsFloatKey: false,
+        AVLinearPCMIsBigEndianKey: false,
+        AVLinearPCMIsNonInterleaved: false,
+    ] }
 
     private let lock = NSLock()
     private var file: AVAudioFile?
@@ -17,7 +29,7 @@ public final class TrackWriter: @unchecked Sendable {
     private let clock: () -> Date
 
     public init(url: URL, startTime: Date, clock: @escaping () -> Date = Date.init) throws {
-        file = try AVAudioFile(forWriting: url, settings: Self.outputFormat.settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+        file = try AVAudioFile(forWriting: url, settings: Self.fileSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
         self.startTime = startTime
         self.clock = clock
     }
@@ -34,7 +46,7 @@ public final class TrackWriter: @unchecked Sendable {
             let bufferStart = clock().timeIntervalSince(startTime) - Double(converted.frameLength) / Self.sampleRate
             let expected = AVAudioFramePosition(bufferStart * Self.sampleRate)
             if Double(expected - written) > Self.gapTolerance * Self.sampleRate {
-                try writeSilence(frames: expected - written)
+                try writeSilence(frames: min(expected - written, AVAudioFramePosition(Self.maxGapPadding * Self.sampleRate)))
             }
             try write(converted)
         }

@@ -139,7 +139,7 @@ private struct MeetingDetail: View {
         case .transcribed: "Identifying speakers…"
         case .identified: "Writing summary…"
         case .summarized: "Writing file…"
-        case .failed: "Failed"
+        case .failed: "Mossad gave up after \(record.attempts) attempts. Check the log, then retry."
         case .written: ""
         }
     }

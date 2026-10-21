@@ -141,7 +141,7 @@ final class AppController: ObservableObject {
 
     func retry(_ callID: String) {
         Task {
-            await track { await self.pipeline.process(callID) }
+            await track { await self.pipeline.retry(callID) }
         }
     }
 

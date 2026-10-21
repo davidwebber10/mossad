@@ -1,9 +1,16 @@
+import AVFoundation
 import Foundation
 
 /// Turns recorded calls into named, summarized Markdown files. Each step saves `call.json`,
 /// so a call resumes where it stopped after a failure or a restart.
 public actor Pipeline {
     static let maxSummaryAttempts = 3
+    /// After this many failed attempts at one step (about four days of backoff) the call is marked failed.
+    public static let maxAttempts = 8
+    /// Tracks shorter than this have no speech worth uploading.
+    static let minimumTrackDuration: TimeInterval = 1
+
+    private var inFlight: Set<String> = []
 
     private let paths: Paths
     private let queue: ProcessingQueue
@@ -34,6 +41,9 @@ public actor Pipeline {
     }
 
     public func process(_ id: String) async {
+        // `process` suspends at every await; without this a timer run and a call-end run could overlap.
+        guard inFlight.insert(id).inserted else { return }
+        defer { inFlight.remove(id) }
         let dir = paths.callDirectory(id)
         guard var r = try? CallRecord.load(from: dir) else { return }
         do {
@@ -56,16 +66,51 @@ public actor Pipeline {
         } catch {
             Log.error("Processing \(id) failed at \(r.status.rawValue): \(error)")
             queue.markFailure(&r, now: now())
+            if r.attempts >= Self.maxAttempts {
+                r.failedStep = r.status
+                r.status = .failed
+                Log.error("Gave up on \(id) after \(r.attempts) attempts")
+            }
             try? r.save(to: dir)
         }
     }
 
+    /// Starts a failed or waiting call again now.
+    public func retry(_ id: String) async {
+        let dir = paths.callDirectory(id)
+        guard var r = try? CallRecord.load(from: dir) else { return }
+        if r.status == .failed, let step = r.failedStep {
+            r.status = step
+            r.failedStep = nil
+        }
+        r.attempts = 0
+        r.nextAttempt = nil
+        try? r.save(to: dir)
+        await process(id)
+    }
+
     private func transcribe(_ r: inout CallRecord, dir: URL) async throws {
-        async let me = transcriber.transcribe(file: dir.appendingPathComponent(Track.me.fileName), track: .me)
-        async let them = transcriber.transcribe(file: dir.appendingPathComponent(Track.them.fileName), track: .them)
-        r.utterances = TranscriptMerger.merge(me: try await me, them: try await them)
+        async let me = transcribeIfNeeded(r.meUtterances, track: .me, dir: dir)
+        async let them = transcribeIfNeeded(r.themUtterances, track: .them, dir: dir)
+        let (meResult, themResult) = await (me, them)
+        // Keep whichever track succeeded, then fail if either did.
+        if case .success(let u) = meResult { r.meUtterances = u }
+        if case .success(let u) = themResult { r.themUtterances = u }
+        try r.save(to: dir)
+        r.utterances = TranscriptMerger.merge(me: try meResult.get(), them: try themResult.get())
         r.status = .transcribed
         Log.info("Transcribed \(r.id): \(r.utterances.count) utterances")
+    }
+
+    private func transcribeIfNeeded(_ done: [Utterance]?, track: Track, dir: URL) async -> Result<[Utterance], Error> {
+        if let done { return .success(done) }
+        let url = dir.appendingPathComponent(track.fileName)
+        let duration = (try? AVAudioFile(forReading: url)).map { Double($0.length) / $0.fileFormat.sampleRate } ?? 0
+        if duration < Self.minimumTrackDuration {
+            Log.info("\(track.rawValue) track is empty; skipping transcription")
+            return .success([])
+        }
+        do { return .success(try await transcriber.transcribe(file: url, track: track)) } catch { return .failure(error) }
     }
 
     private func identify(_ r: inout CallRecord, dir: URL) async throws {

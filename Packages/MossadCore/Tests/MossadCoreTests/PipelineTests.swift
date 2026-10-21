@@ -4,8 +4,16 @@ import XCTest
 final class FakeTranscriber: Transcribing, @unchecked Sendable {
     var result: [Track: [Utterance]] = [:]
     var error: Error?
+    var failingTracks: Set<Track> = []
+    var delay: Duration = .zero
+    private let lock = NSLock()
+    private var _calls: [Track] = []
+    var calls: [Track] { lock.withLock { _calls } }
     func transcribe(file: URL, track: Track) async throws -> [Utterance] {
+        lock.withLock { _calls.append(track) }
+        if delay > .zero { try await Task.sleep(for: delay) }
         if let error { throw error }
+        if failingTracks.contains(track) { throw Boom() }
         return result[track] ?? []
     }
 }
@@ -156,5 +164,52 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(md.contains("Amy Lee: I can book freight."))
         XCTAssertEqual(library.bestMatch([0, 0, 0, 1])?.name, "Amy Lee")
         XCTAssertEqual(library.bestMatch([0, 1, 0, 0])?.name, "Alex Rivera")
+    }
+
+    func testConcurrentProcessOfOneCallRunsOnce() async throws {
+        transcriber.delay = .milliseconds(200)
+        let id = try makeRecord()
+        let p = pipeline()
+        async let a: Void = p.process(id)
+        async let b: Void = p.process(id)
+        _ = await (a, b)
+        XCTAssertEqual(transcriber.calls.count, 2)
+        XCTAssertEqual(notified.count, 1)
+    }
+
+    func testCompletedTrackIsNotTranscribedAgain() async throws {
+        transcriber.failingTracks = [.me]
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        XCTAssertEqual(try load(id).status, .recorded)
+        transcriber.failingTracks = []
+        await p.process(id)
+        XCTAssertEqual(try load(id).status, .written)
+        XCTAssertEqual(transcriber.calls.filter { $0 == .them }.count, 1)
+        XCTAssertEqual(transcriber.calls.filter { $0 == .me }.count, 2)
+    }
+
+    func testNearEmptyTrackIsNotUploaded() async throws {
+        let id = try makeRecord()
+        try writeSegments(paths.callDirectory(id).appendingPathComponent("me.caf"), total: 0.5, [])
+        await pipeline().process(id)
+        XCTAssertEqual(transcriber.calls, [.them])
+        XCTAssertEqual(try load(id).status, .written)
+    }
+
+    func testGivesUpAfterMaxAttemptsAndRetryResumes() async throws {
+        transcriber.error = Boom()
+        let id = try makeRecord()
+        let p = pipeline()
+        for _ in 0..<Pipeline.maxAttempts { await p.process(id) }
+        var r = try load(id)
+        XCTAssertEqual(r.status, .failed)
+        XCTAssertEqual(r.failedStep, .recorded)
+        XCTAssertTrue(ProcessingQueue(paths: paths).pending(now: .distantFuture).isEmpty)
+        transcriber.error = nil
+        await p.retry(id)
+        r = try load(id)
+        XCTAssertEqual(r.status, .written)
     }
 }
