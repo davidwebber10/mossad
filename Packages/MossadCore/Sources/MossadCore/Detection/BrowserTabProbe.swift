@@ -10,13 +10,18 @@ public final class BrowserTabProbe: BrowserTabProbing, @unchecked Sendable {
     private let lock = NSLock()
     private var skipUntil: [String: Date] = [:]
     private var failures: [String: Int] = [:]
+    private var blocked: Set<String> = []
 
     public init() {}
 
     public func tabs(browserBundleID: String) -> [BrowserTab]? {
         guard !NSRunningApplication.runningApplications(withBundleIdentifier: browserBundleID).isEmpty,
-              lock.withLock({ (skipUntil[browserBundleID] ?? .distantPast) <= Date() }),
-              Self.canAutomate(browserBundleID) else { return nil }
+              lock.withLock({ (skipUntil[browserBundleID] ?? .distantPast) <= Date() }) else { return nil }
+        let allowed = Self.canAutomate(browserBundleID)
+        // Log only when the state changes, so a missing grant shows once instead of on every tick.
+        let changed = lock.withLock { allowed ? blocked.remove(browserBundleID) != nil : blocked.insert(browserBundleID).inserted }
+        if changed { Log.info("Automation for \(browserBundleID) \(allowed ? "allowed" : "not allowed; its tabs are unknown")") }
+        guard allowed else { return nil }
         let safari = browserBundleID == "com.apple.Safari"
         let titleProperty = safari ? "name" : "title"
         let activeIndex = safari ? "index of current tab of w" : "active tab index of w"

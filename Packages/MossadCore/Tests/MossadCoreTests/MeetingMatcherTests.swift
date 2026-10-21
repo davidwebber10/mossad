@@ -18,6 +18,8 @@ final class MeetingMatcherTests: XCTestCase {
     func testTabURLPlatforms() {
         XCTAssertEqual(MeetingMatcher.platform(forTabURL: "https://meet.google.com/abc-defg-hij"), .meet)
         XCTAssertEqual(MeetingMatcher.platform(forTabURL: "https://meet.google.com/abc-defg-hij?authuser=1"), .meet)
+        XCTAssertEqual(MeetingMatcher.platform(forTabURL: "https://meet.google.com/meet/abc-defg-hij"), .meet)
+        XCTAssertNil(MeetingMatcher.platform(forTabURL: "https://meet.google.com/meet/"))
         XCTAssertNil(MeetingMatcher.platform(forTabURL: "https://meet.google.com/"))
         XCTAssertNil(MeetingMatcher.platform(forTabURL: "https://meet.google.com/landing"))
         XCTAssertEqual(MeetingMatcher.platform(forTabURL: "https://teams.microsoft.com/v2/"), .teams)

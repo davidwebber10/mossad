@@ -27,7 +27,7 @@ public enum MeetingMatcher {
         guard let url = URL(string: string), let host = url.host?.lowercased() else { return nil }
         let path = url.path
         if host == "meet.google.com" {
-            return path.range(of: #"^/[a-z]{3}-[a-z]{4}-[a-z]{3}"#, options: .regularExpression) != nil ? .meet : nil
+            return path.range(of: #"^/(meet/)?[a-z]{3}-[a-z]{4}-[a-z]{3}"#, options: .regularExpression) != nil ? .meet : nil
         }
         if host == "teams.microsoft.com" || host == "teams.cloud.microsoft" || host == "teams.live.com" {
             return .teams
