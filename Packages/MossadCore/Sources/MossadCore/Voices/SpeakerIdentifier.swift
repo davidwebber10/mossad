@@ -14,6 +14,8 @@ public struct SpeakerIdentifier: Sendable {
     static let minimumSegment: TimeInterval = 2
     static let maximumSpeechPerSpeaker: TimeInterval = 60
     static let maximumPiece: TimeInterval = 10
+    /// Only confident automatic matches teach the library, so one wrong match cannot drift a profile.
+    static let learnThreshold: Float = 0.8
 
     private let library: VoiceLibrary
     private let provider: EmbeddingProvider
@@ -52,7 +54,7 @@ public struct SpeakerIdentifier: Sendable {
                 continue
             }
             result.names[key] = match.name
-            try library.add(e, to: match.name)
+            if match.score >= Self.learnThreshold { try library.add(e, to: match.name) }
         }
         return result
     }

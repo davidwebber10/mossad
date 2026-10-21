@@ -28,9 +28,10 @@ public struct ProcessingQueue: Sendable {
     public func recoverInterrupted() {
         for var r in allRecords() where r.status == .recording {
             let dir = paths.callDirectory(r.id)
-            let duration = (try? AVAudioFile(forReading: dir.appendingPathComponent(Track.me.fileName))).map {
-                Double($0.length) / $0.fileFormat.sampleRate
-            } ?? 0
+            // The longer track: one track can be empty when its capture failed to start.
+            let duration = [Track.me, .them].compactMap { track in
+                (try? AVAudioFile(forReading: dir.appendingPathComponent(track.fileName))).map { Double($0.length) / $0.fileFormat.sampleRate }
+            }.max() ?? 0
             if duration < Self.minimumCallDuration {
                 try? FileManager.default.removeItem(at: dir)
                 Log.info("Discarded interrupted call \(r.id) (\(Int(duration)) s)")

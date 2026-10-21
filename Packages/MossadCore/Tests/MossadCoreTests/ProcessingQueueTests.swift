@@ -72,4 +72,14 @@ final class ProcessingQueueTests: XCTestCase {
         XCTAssertEqual(recovered.end.timeIntervalSince(t0), 90, accuracy: 0.1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory("short").path))
     }
+
+    func testRecoverKeepsCallWhenOnlyMicTrackIsShort() throws {
+        try record("micfail", .recording, start: t0)
+        try writeTestAudio(paths.callDirectory("micfail").appendingPathComponent("me.caf"), seconds: 0.1)
+        try writeTestAudio(paths.callDirectory("micfail").appendingPathComponent("them.caf"), seconds: 120)
+        ProcessingQueue(paths: paths).recoverInterrupted()
+        let r = try CallRecord.load(from: paths.callDirectory("micfail"))
+        XCTAssertEqual(r.status, .recorded)
+        XCTAssertEqual(r.end.timeIntervalSince(t0), 120, accuracy: 0.1)
+    }
 }

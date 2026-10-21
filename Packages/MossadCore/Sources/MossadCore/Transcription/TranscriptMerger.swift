@@ -4,24 +4,28 @@ import Foundation
 public enum TranscriptMerger {
     /// A "me" utterance is speaker bleed when a "them" utterance covers at least this share of it…
     static let minimumOverlap = 0.5
-    /// …and says nearly the same words.
+    /// …and nearly all of its words appear in what "them" said.
     static let minimumSimilarity = 0.8
 
     public static func merge(me: [Utterance], them: [Utterance]) -> [Utterance] {
-        let kept = me.filter { m in !them.contains { isBleed(me: m, them: $0) } }
+        let kept = me.filter { !isBleed(me: $0, them: them) }
         return (kept + them).sorted { $0.start < $1.start }
     }
 
-    static func isBleed(me m: Utterance, them t: Utterance) -> Bool {
+    /// Bleed: "them" speech covers most of the "me" utterance's time, and nearly all of its words
+    /// appear, in order, in what "them" said then. Echo cancellation often leaves only a fragment.
+    static func isBleed(me m: Utterance, them: [Utterance]) -> Bool {
         let duration = max(m.end - m.start, 0.001)
-        let overlap = min(m.end, t.end) - max(m.start, t.start)
-        guard overlap / duration >= minimumOverlap else { return false }
-        return similarity(m.text, t.text) >= minimumSimilarity
+        let overlapping = them.filter { min(m.end, $0.end) > max(m.start, $0.start) }
+        let covered = overlapping.reduce(0) { $0 + min(m.end, $1.end) - max(m.start, $1.start) }
+        guard covered / duration >= minimumOverlap else { return false }
+        let mine = words(m.text)
+        guard !mine.isEmpty else { return false }
+        let theirs = overlapping.flatMap { words($0.text) }
+        return Double(lcs(mine, theirs)) / Double(mine.count) >= minimumSimilarity
     }
 
-    /// 2·LCS / (|a| + |b|) over normalized words.
-    static func similarity(_ a: String, _ b: String) -> Double {
-        let x = words(a), y = words(b)
+    static func lcs(_ x: [String], _ y: [String]) -> Int {
         guard !x.isEmpty, !y.isEmpty else { return 0 }
         var previous = [Int](repeating: 0, count: y.count + 1)
         for i in 1...x.count {
@@ -31,7 +35,7 @@ public enum TranscriptMerger {
             }
             previous = current
         }
-        return 2 * Double(previous[y.count]) / Double(x.count + y.count)
+        return previous[y.count]
     }
 
     static func words(_ s: String) -> [String] {

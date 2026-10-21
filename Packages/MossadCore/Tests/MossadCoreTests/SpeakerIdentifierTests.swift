@@ -78,4 +78,14 @@ final class SpeakerIdentifierTests: XCTestCase {
         XCTAssertEqual(result.unknown, ["them:A"])
         XCTAssertNil(result.embeddings["them:A"])
     }
+
+    func testWeakMatchNamesButDoesNotLearn() async throws {
+        // [0.7, 0.71, 0, 0]-ish: the 400 Hz voice scores ~0.71 against this profile — above 0.65, below 0.8.
+        try library.add([0.7, 0.71, 0, 0], to: "Alex Rivera")
+        try writeSegments(meURL, total: 20, [(0, 5, 200)])
+        try writeSegments(themURL, total: 20, [(6, 12, 400)])
+        let result = try await identify([u(.me, "A", 0, 5), u(.them, "A", 6, 12)])
+        XCTAssertEqual(result.names["them:A"], "Alex Rivera")
+        XCTAssertEqual(library.profiles.first { $0.name == "Alex Rivera" }?.embeddings.count, 1)
+    }
 }
