@@ -51,6 +51,9 @@ final class AppController: ObservableObject {
     private var browserLaunchObserver: NSObjectProtocol?
 
     @AppStorage("retentionDays") var retentionDays = 30
+    @AppStorage("ownerName") var ownerName = NSFullUserName()
+    @AppStorage("organization") var organization = ""
+    @AppStorage("voiceFingerprints") var voiceFingerprints = true
 
     init() {
         try? paths.ensureDirectories()
@@ -117,18 +120,25 @@ final class AppController: ObservableObject {
 
     func hasKey(_ key: APIKey) -> Bool { keychain.get(key) != nil }
 
-    /// Recreates the pipeline with the current keys (after a key import).
+    /// Recreates the pipeline with the current keys and settings.
     func rebuildPipeline() {
+        let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
+        let organization = organization.trimmingCharacters(in: .whitespaces)
         let transcriber: Transcribing = keychain.get(.assemblyai).map { AssemblyAIClient(apiKey: $0) } ?? MissingKeyTranscriber()
-        let summarizer: Summarizing? = keychain.get(.anthropic).map { ClaudeSummarizer(apiKey: $0) }
+        let summarizer: Summarizing? = keychain.get(.anthropic).map { ClaudeSummarizer(apiKey: $0, ownerName: owner, organization: organization) }
         let notifier = notifier
         pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: FluidEmbeddingProvider(),
                             calendar: calendar, summarizer: summarizer, notify: { record in
                                 Task { @MainActor in notifier.postNewVoices(record) }
-                            })
+                            }, ownerName: owner, voiceFingerprints: voiceFingerprints)
     }
 
     // MARK: Actions
+
+    func deleteAllVoices() {
+        do { try library.deleteAll() } catch { Log.error("Deleting voices failed: \(error)") }
+        objectWillChange.send()
+    }
 
     func skipCurrentCall() {
         let recorder = recorder

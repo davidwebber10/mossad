@@ -6,6 +6,15 @@ final class VoiceLibraryTests: XCTestCase {
     override func setUp() { dir = tempDirectory() }
     override func tearDown() { try? FileManager.default.removeItem(at: dir) }
 
+    func testDeleteAllRemovesEveryVoice() throws {
+        let library = VoiceLibrary(directory: dir)
+        try library.add([1, 0, 0], to: "A", isOwner: true)
+        try library.add([0, 1, 0], to: "B")
+        try library.deleteAll()
+        XCTAssertTrue(library.profiles.isEmpty)
+        XCTAssertTrue(VoiceLibrary(directory: dir).profiles.isEmpty)
+    }
+
     func testBestMatchAboveThreshold() throws {
         let lib = VoiceLibrary(directory: dir)
         try lib.add([1, 0, 0], to: "Alex Rivera")

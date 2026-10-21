@@ -25,7 +25,7 @@ public struct SpeakerIdentifier: Sendable {
     private let provider: EmbeddingProvider
     private let ownerName: String
 
-    public init(library: VoiceLibrary, provider: EmbeddingProvider, ownerName: String = "David Webber") {
+    public init(library: VoiceLibrary, provider: EmbeddingProvider, ownerName: String = "Me") {
         self.library = library
         self.provider = provider
         self.ownerName = ownerName

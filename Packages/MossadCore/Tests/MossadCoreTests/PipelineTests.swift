@@ -77,12 +77,24 @@ final class PipelineTests: XCTestCase {
         return id
     }
 
-    func pipeline(calendar: FakeCalendar = FakeCalendar()) -> Pipeline {
+    func pipeline(calendar: FakeCalendar = FakeCalendar(), voiceFingerprints: Bool = true) -> Pipeline {
         let notifications = notifications
         let later = start.addingTimeInterval(3600)
         return Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
                         calendar: calendar, summarizer: summarizer, notify: { notifications.records.append($0) },
-                        now: { later })
+                        now: { later }, ownerName: "David Webber", voiceFingerprints: voiceFingerprints)
+    }
+
+    func testWithoutVoiceFingerprintsNoVoiceIsStoredOrMatched() async throws {
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        let id = try makeRecord()
+        await pipeline(voiceFingerprints: false).process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.speakerNames, ["me:A": "David Webber"])
+        XCTAssertEqual(r.speakerEmbeddings, [:])
+        XCTAssertEqual(library.profiles.map(\.name), ["Alex Rivera"])
+        XCTAssertTrue(notified.isEmpty)
     }
 
     func load(_ id: String) throws -> CallRecord { try CallRecord.load(from: paths.callDirectory(id)) }

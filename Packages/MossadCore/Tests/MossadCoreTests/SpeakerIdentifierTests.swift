@@ -20,7 +20,7 @@ final class SpeakerIdentifierTests: XCTestCase {
     }
 
     func identify(_ utterances: [Utterance]) async throws -> SpeakerIdentification {
-        try await SpeakerIdentifier(library: library, provider: provider).identify(utterances: utterances, meURL: meURL, themURL: themURL)
+        try await SpeakerIdentifier(library: library, provider: provider, ownerName: "David Webber").identify(utterances: utterances, meURL: meURL, themURL: themURL)
     }
 
     func testOwnerEnrolledFromDominantMeSpeakerWhenLibraryHasNoOwner() async throws {

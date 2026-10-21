@@ -21,15 +21,19 @@ public actor Pipeline {
     private let summarizer: Summarizing?
     private let notify: @Sendable (CallRecord) -> Void
     private let now: @Sendable () -> Date
+    private let ownerName: String
+    private let voiceFingerprints: Bool
 
     public init(paths: Paths, transcriber: Transcribing, library: VoiceLibrary, embeddings: EmbeddingProvider,
                 calendar: CalendarSource, summarizer: Summarizing?, notify: @escaping @Sendable (CallRecord) -> Void,
-                now: @escaping @Sendable () -> Date = Date.init) {
+                now: @escaping @Sendable () -> Date = Date.init, ownerName: String = "Me", voiceFingerprints: Bool = true) {
         self.paths = paths
         self.queue = ProcessingQueue(paths: paths)
         self.transcriber = transcriber
         self.library = library
-        self.identifier = SpeakerIdentifier(library: library, provider: embeddings)
+        self.identifier = SpeakerIdentifier(library: library, provider: embeddings, ownerName: ownerName)
+        self.ownerName = ownerName
+        self.voiceFingerprints = voiceFingerprints
         self.calendar = calendar
         self.summarizer = summarizer
         self.notify = notify
@@ -124,6 +128,18 @@ public actor Pipeline {
     }
 
     private func identify(_ r: inout CallRecord, dir: URL) async throws {
+        guard voiceFingerprints else {
+            // No fingerprints: the speaker who talks most on the mic is the owner; everyone else stays a letter.
+            let talk = Dictionary(r.utterances.map { ($0.speakerKey, $0.end - $0.start) }, uniquingKeysWith: +)
+            let owner = talk.filter { $0.key.hasPrefix("me:") }.max { $0.value < $1.value }?.key
+            r.speakerNames = owner.map { [$0: ownerName] } ?? [:]
+            var keys: [String] = []
+            for u in r.utterances where u.speakerKey != owner && !keys.contains(u.speakerKey) { keys.append(u.speakerKey) }
+            r.unknownSpeakers = keys
+            r.speakerEmbeddings = [:]
+            r.status = .identified
+            return
+        }
         let result = try await identifier.identify(utterances: r.utterances, meURL: dir.appendingPathComponent(Track.me.fileName),
                                                    themURL: dir.appendingPathComponent(Track.them.fileName))
         r.speakerNames = result.names
@@ -162,7 +178,8 @@ public actor Pipeline {
         r.markdownPath = url.path
         r.status = .written
         Log.info("Wrote \(url.lastPathComponent)")
-        if !r.unknownSpeakers.isEmpty { notify(r) }
+        // Without fingerprints a name is never learned, so asking after every call would only nag.
+        if voiceFingerprints, !r.unknownSpeakers.isEmpty { notify(r) }
     }
 
     /// Applies names chosen by David, learns those voices, and rewrites the summary and the file.

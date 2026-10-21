@@ -17,14 +17,24 @@ public struct ClaudeSummarizer: Summarizing {
     private let model: String
     private let session: URLSession
 
-    public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared) {
+    private let ownerName: String
+    private let organization: String
+
+    public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared,
+                ownerName: String = "the user", organization: String = "") {
+        self.ownerName = ownerName
+        self.organization = organization
         self.apiKey = apiKey
         self.model = model
         self.session = session
     }
 
-    static let system = """
-    You summarize internal POLYWOOD meeting transcripts for David Webber. The summary is read later by David \
+    static func systemPrompt(owner: String, organization: String) -> String {
+        let source = organization.isEmpty ? "meeting transcripts" : "internal \(organization) meeting transcripts"
+        return "You summarize \(source) for \(owner). The summary is read later by \(owner) " + rules
+    }
+
+    static let rules = """
     and by AI agents that act on it, so be concrete: decisions, numbers, dates, owners, and open questions. \
     Write the summary as 3 to 8 short sentences. List every request, commitment, or follow-up as an action item \
     in the form "Owner: task". Use the speaker names exactly as they appear in the transcript; when the owner \
@@ -43,7 +53,7 @@ public struct ClaudeSummarizer: Summarizing {
             "model": model,
             "max_tokens": 16_000,
             "fallbacks": "default",
-            "system": Self.system,
+            "system": Self.systemPrompt(owner: ownerName, organization: organization),
             "output_config": [
                 "effort": "medium",
                 "format": [

@@ -6,6 +6,12 @@ final class SummarizerTests: XCTestCase {
         ClaudeSummarizer(apiKey: "ant-key", session: StubURLProtocol.session())
     }
 
+    func testPromptNamesTheOwnerAndOrganization() {
+        XCTAssertTrue(ClaudeSummarizer.systemPrompt(owner: "Jordan Lee", organization: "Acme").contains("internal Acme meeting transcripts for Jordan Lee"))
+        XCTAssertTrue(ClaudeSummarizer.systemPrompt(owner: "Jordan Lee", organization: "").contains("meeting transcripts for Jordan Lee"))
+        XCTAssertFalse(ClaudeSummarizer.systemPrompt(owner: "Jordan Lee", organization: "").contains("internal"))
+    }
+
     func reply(_ text: String, stop: String = "end_turn") -> Data {
         json(["id": "msg_1", "type": "message", "role": "assistant", "stop_reason": stop,
               "content": [["type": "thinking", "thinking": "", "signature": "x"], ["type": "text", "text": text]]])

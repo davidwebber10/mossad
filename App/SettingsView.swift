@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var confirmDeleteVoices = false
 
     var body: some View {
         Form {
@@ -25,6 +26,25 @@ struct SettingsView: View {
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 }
+            }
+            Section {
+                TextField("Your name", text: $controller.ownerName)
+                    .onSubmit { controller.rebuildPipeline() }
+                TextField("Company (optional)", text: $controller.organization)
+                    .onSubmit { controller.rebuildPipeline() }
+                Toggle("Recognize voices", isOn: $controller.voiceFingerprints)
+                    .onChange(of: controller.voiceFingerprints) { _, _ in controller.rebuildPipeline() }
+                Button("Delete all saved voices…", role: .destructive) { confirmDeleteVoices = true }
+                    .confirmationDialog("Delete every saved voice?", isPresented: $confirmDeleteVoices) {
+                        Button("Delete all voices", role: .destructive) { controller.deleteAllVoices() }
+                    } message: {
+                        Text("Mossad forgets every voice it learned, including yours. Meeting notes keep their names.")
+                    }
+            } header: {
+                Text("You and voices")
+            } footer: {
+                Text("Your name labels your side of each call. With Recognize voices on, Mossad saves a voice fingerprint for each person it hears so it can name them in later calls. Some laws treat voice fingerprints as biometric data. Turn it off to keep no fingerprints; speakers are then labeled Speaker A, Speaker B.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Recording") {
                 Toggle("Open Mossad at login", isOn: $launchAtLogin)
@@ -56,7 +76,10 @@ struct SettingsView: View {
             permissions.refresh()
             permissions.setInterval(1)
         }
-        .onDisappear { permissions.setInterval(10) }
+        .onDisappear {
+            permissions.setInterval(10)
+            controller.rebuildPipeline()
+        }
     }
 
     private func permissionRow(_ item: PermissionsMonitor.Item) -> some View {

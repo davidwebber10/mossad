@@ -66,6 +66,13 @@ public final class VoiceLibrary: @unchecked Sendable {
         try rename(name, to: target)
     }
 
+    public func deleteAll() throws {
+        try lock.withLock {
+            storage = []
+            try save()
+        }
+    }
+
     public func delete(_ name: String) throws {
         try lock.withLock {
             storage.removeAll { $0.name == name }
