@@ -260,10 +260,18 @@ private struct MeetingList: View {
     @Binding var deleting: CallRecord?
 
     var body: some View {
+        let live = groups.flatMap(\.records).filter { $0.status == .recording }
         List(selection: $selection) {
+            if !live.isEmpty {
+                Section {
+                    ForEach(live, id: \.id) { r in CurrentCallRow(record: r).tag(r.id) }
+                } header: {
+                    Text("Now").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.recording)
+                }
+            }
             ForEach(groups, id: \.kind) { group in
                 Section {
-                    ForEach(group.records, id: \.id) { r in
+                    ForEach(group.records.filter { $0.status != .recording }, id: \.id) { r in
                         MeetingRow(record: r, kind: group.kind)
                             .tag(r.id)
                             .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
@@ -278,6 +286,31 @@ private struct MeetingList: View {
         .onDeleteCommand {
             if let id = selection, let r = controller.meetings.first(where: { $0.id == id }), r.canDelete { deleting = r }
         }
+    }
+}
+
+/// The call being recorded: tinted, with a pulsing dot, the running time, and a small live waveform.
+private struct CurrentCallRow: View {
+    @EnvironmentObject var controller: AppController
+    let record: CallRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                StatusDot(color: controller.isPaused ? Theme.unknown : Theme.recording, size: 8, pulsing: !controller.isPaused)
+                Text(record.calendarTitle ?? "Current call").font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Spacer(minLength: 6)
+                LengthText(record: record).font(.system(size: 12, weight: .medium)).monospacedDigit()
+            }
+            HStack(spacing: 8) {
+                Text(controller.isPaused ? "Paused" : "\(record.platform.displayName) · recording")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                LiveWaveform(bars: 28, rowHeight: 8, showLabels: false).frame(maxWidth: 120)
+            }
+            .padding(.leading, 16)
+        }
+        .padding(.vertical, 6).padding(.horizontal, 4)
+        .background(Theme.recording.opacity(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }
 
