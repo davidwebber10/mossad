@@ -18,8 +18,15 @@ final class KeychainTests: XCTestCase {
         XCTAssertNil(keychain.get(.assemblyai))
     }
 
-    func testImportKeysMapsDopplerNames() {
-        let stored = importKeys(from: ["ASSEMBLYAI": "aai", "ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS": "ant", "OTHER": "x"], into: keychain)
+    func testImportKeysUsesStandardNames() {
+        let stored = importKeys(from: ["ASSEMBLYAI_API_KEY": "aai", "ANTHROPIC_API_KEY": "ant", "OTHER": "x"], into: keychain)
+        XCTAssertEqual(stored, [.assemblyai, .anthropic])
+        XCTAssertEqual(keychain.get(.assemblyai), "aai")
+        XCTAssertEqual(keychain.get(.anthropic), "ant")
+    }
+
+    func testImportKeysAcceptsANamedAnthropicKey() {
+        let stored = importKeys(from: ["ASSEMBLYAI": "aai", "ANTHROPIC_API_KEY_TEAM": "ant", "OTHER": "x"], into: keychain)
         XCTAssertEqual(stored, [.assemblyai, .anthropic])
         XCTAssertEqual(keychain.get(.assemblyai), "aai")
         XCTAssertEqual(keychain.get(.anthropic), "ant")

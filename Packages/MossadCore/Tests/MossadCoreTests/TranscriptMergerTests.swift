@@ -37,7 +37,7 @@ final class TranscriptMergerTests: XCTestCase {
     func testDropsPartialBleedFragment() {
         let merged = TranscriptMerger.merge(
             me: [u(.me, "A", 252.5, 253.4, "ship the cushions")],
-            them: [u(.them, "A", 250, 258, "So the plan is that we ship the cushions on Friday from Syracuse and the chairs next week.")])
+            them: [u(.them, "A", 250, 258, "So the plan is that we ship the cushions on Friday from the north plant and the chairs next week.")])
         XCTAssertEqual(merged.map(\.track), [.them])
     }
 
@@ -76,7 +76,7 @@ final class TranscriptMergerTests: XCTestCase {
     func testKeepsOwnSpeechThatRepeatsAWord() {
         let merged = TranscriptMerger.merge(
             me: [u(.me, "A", 252.5, 255, "Wait, which cushions, the deep seating ones?")],
-            them: [u(.them, "A", 250, 258, "So the plan is that we ship the cushions on Friday from Syracuse and the chairs next week.")])
+            them: [u(.them, "A", 250, 258, "So the plan is that we ship the cushions on Friday from the north plant and the chairs next week.")])
         XCTAssertEqual(merged.count, 2)
     }
 }

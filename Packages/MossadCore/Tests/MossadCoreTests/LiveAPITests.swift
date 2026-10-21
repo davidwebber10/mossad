@@ -45,9 +45,9 @@ final class LiveAPITests: XCTestCase {
             let samples = Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
             return try await provider.embedding(for: samples)
         }
-        let a1 = try await embed("Samantha", "The cushions ship on Friday from the Syracuse plant, and the chairs follow next week.")
+        let a1 = try await embed("Samantha", "The cushions ship on Friday from the north plant, and the chairs follow next week.")
         let a2 = try await embed("Samantha", "Can you send me the forecast for the outdoor dining collection before the meeting?")
-        let b1 = try await embed("Daniel", "The cushions ship on Friday from the Syracuse plant, and the chairs follow next week.")
+        let b1 = try await embed("Daniel", "The cushions ship on Friday from the north plant, and the chairs follow next week.")
         let same = VoiceLibrary.cosine(a1, a2)
         let different = VoiceLibrary.cosine(a1, b1)
         print("LIVE same-voice \(same) different-voice \(different)")
@@ -56,10 +56,10 @@ final class LiveAPITests: XCTestCase {
     }
 
     func testClaudeSummarizesTranscript() async throws {
-        guard let key = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS"] else { throw XCTSkip("key not set") }
+        guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
         let transcript = """
         [00:00:05] David Webber: Where are we on the cushion shipment?
-        [00:00:09] Alex Rivera: Freight is booked. It leaves the Syracuse plant on Friday.
+        [00:00:09] Alex Rivera: Freight is booked. It leaves the north plant on Friday.
         [00:00:15] David Webber: Good. Can you send me the updated forecast by Thursday?
         [00:00:19] Alex Rivera: Yes, I will send it Thursday morning.
         """
@@ -72,7 +72,7 @@ final class LiveAPITests: XCTestCase {
     /// Full pipeline on synthetic voices: me = Samantha, them = Daniel then Karen.
     func testEndToEndPipeline() async throws {
         let env = ProcessInfo.processInfo.environment
-        guard let aai = env["ASSEMBLYAI"], let ant = env["ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS"] else { throw XCTSkip("keys not set") }
+        guard let aai = APIKey.assemblyai.value(in: env), let ant = APIKey.anthropic.value(in: env) else { throw XCTSkip("keys not set") }
         let paths = Paths(root: env["MOSSAD_E2E_ROOT"].map { URL(fileURLWithPath: $0) } ?? tempDirectory())
         try paths.ensureDirectories()
         let id = "20261020-143000"
@@ -104,7 +104,7 @@ final class LiveAPITests: XCTestCase {
             try AVAudioFile(forWriting: url, settings: fmt.settings, commonFormat: .pcmFormatFloat32, interleaved: false).write(from: b)
         }
         let me1 = try speech("Samantha", "Good morning. Where are we on the cushion shipment for the Dallas store?")
-        let them1 = try speech("Daniel", "Freight is booked. The truck leaves the Syracuse plant on Friday afternoon, and it should arrive on Tuesday.")
+        let them1 = try speech("Daniel", "Freight is booked. The truck leaves the north plant on Friday afternoon, and it should arrive on Tuesday.")
         let them2 = try speech("Karen", "I still need the final count of the Adirondack chairs before I can confirm the second truck.")
         let me2 = try speech("Samantha", "Okay. Daniel, please send me the updated forecast by Thursday morning.")
         try place([(1, me1), (40, me2)], total: 52, to: dir.appendingPathComponent("me.caf"))

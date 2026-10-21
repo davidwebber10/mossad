@@ -23,7 +23,7 @@ final class CalendarMatcherTests: XCTestCase {
 
     func testZoomAndTeamsLinks() {
         let events = [
-            event("Vendor call", 0, 1800, text: "https://polywood.zoom.us/j/123456"),
+            event("Vendor call", 0, 1800, text: "https://example.zoom.us/j/123456"),
             event("Finance review", 0, 1800, text: "https://teams.microsoft.com/l/meetup-join/xyz"),
         ]
         XCTAssertEqual(best(.zoom, events), "Vendor call")

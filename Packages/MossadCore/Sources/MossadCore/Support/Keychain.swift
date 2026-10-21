@@ -5,12 +5,14 @@ public enum APIKey: String, CaseIterable, Sendable {
     case assemblyai
     case anthropic
 
-    /// The Doppler secret name each key is imported from.
-    var dopplerName: String {
-        switch self {
-        case .assemblyai: "ASSEMBLYAI"
-        case .anthropic: "ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS"
+    /// Finds the key in an environment: the standard name first, then a common variant
+    /// (`ASSEMBLYAI`, or a named Anthropic key such as `ANTHROPIC_API_KEY_TEAM`).
+    func value(in env: [String: String]) -> String? {
+        let found: String? = switch self {
+        case .assemblyai: env["ASSEMBLYAI_API_KEY"] ?? env["ASSEMBLYAI"]
+        case .anthropic: env["ANTHROPIC_API_KEY"] ?? env.keys.filter { $0.hasPrefix("ANTHROPIC_API_KEY_") }.sorted().first.flatMap { env[$0] }
         }
+        return found?.isEmpty == false ? found : nil
     }
 }
 
@@ -65,7 +67,7 @@ public struct KeychainError: Error, CustomStringConvertible {
 @discardableResult
 public func importKeys(from env: [String: String], into keychain: Keychain) -> [APIKey] {
     APIKey.allCases.compactMap { key in
-        guard let value = env[key.dopplerName], !value.isEmpty else { return nil }
+        guard let value = key.value(in: env) else { return nil }
         do {
             try keychain.set(value, for: key)
             return key
