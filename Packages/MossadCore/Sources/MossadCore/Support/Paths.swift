@@ -16,13 +16,15 @@ public struct Paths: Sendable {
     public var audio: URL { root.appendingPathComponent("Audio") }
     public var voices: URL { root.appendingPathComponent("Voices") }
     public var logs: URL { root.appendingPathComponent("Logs") }
+    /// The coach's profile of the owner: patterns, the current focus, and notes on each person.
+    public var coach: URL { root.appendingPathComponent("Coach") }
 
     public func callDirectory(_ id: String) -> URL {
         audio.appendingPathComponent(id)
     }
 
     public func ensureDirectories() throws {
-        for dir in [meetings, audio, voices, logs] {
+        for dir in [meetings, audio, voices, logs, coach] {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }

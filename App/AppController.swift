@@ -81,6 +81,16 @@ final class AppController: ObservableObject {
     @AppStorage("ownerName") var ownerName = NSFullUserName()
     @AppStorage("organization") var organization = ""
     @AppStorage("voiceFingerprints") var voiceFingerprints = true
+    @AppStorage("coachEnabled") var coachEnabled = false
+    /// Calls that start before this (seconds since 1970) are not coached, so turning the coach on does not review years of calls.
+    @AppStorage("coachSince") var coachSince: Double = 0
+    @AppStorage("coachEmailEnabled") var coachEmailEnabled = false
+    @AppStorage("coachEmailTo") var coachEmailTo = ""
+    @AppStorage("coachEmailFrom") var coachEmailFrom = ""
+    @AppStorage("coachLastEmail") var coachLastEmail: Double = 0
+    @Published var coaching = false
+    /// Bumped after each review so open Coach tabs reload from disk.
+    @Published var coachVersion = 0
 
     /// The mic is recorded raw: when Chrome also uses voice processing, macOS gives a second voice-processing
     /// client silence. Echo from the speakers is dropped later by TranscriptMerger.
@@ -503,6 +513,7 @@ final class AppController: ObservableObject {
         refresh()
         await work()
         syncCloud()
+        runCoach()
         processing -= 1
         refresh()
     }
@@ -515,6 +526,7 @@ final class AppController: ObservableObject {
             Recording.backfill(audioRoot: audio)
             Retention.sweep(audioRoot: audio, recordingsAfterDays: days)
         }.value
+        runCoach()
     }
 
     private func requestPermissions() {

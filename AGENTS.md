@@ -20,6 +20,7 @@ The product goal is zero interaction. Any change that adds a click, a prompt, or
 | `.../Pipeline/Pipeline.swift` | Actor that moves a call through `recorded → transcribed → identified → summarized → written`, with retries. |
 | `.../Transcription/` | AssemblyAI REST client and `TranscriptMerger` (merges tracks, drops echo). |
 | `.../Voices/` | `VoiceLibrary`, FluidAudio embeddings, `SpeakerIdentifier`, and `PersonStatistics` (the People page's numbers). |
+| `.../Coach/` | The communication coach: `DeliveryStats` (pace, fillers, turns from transcript timing), `CoachPrompt`, `ClaudeCoach`, `CoachProfile` (memory across calls in `~/Mossad/Coach`), `CoachRunner` (oldest call first), and `WeeklyEmail` (Resend). Reviews are saved as `coach.json` next to `call.json`. |
 | `.../Summary/Summarizer.swift` | Claude Messages API over raw HTTP with a JSON schema response. |
 | `.../Output/MarkdownWriter.swift` | The note format. The golden test in `MarkdownWriterTests` is the contract. |
 | `docs/superpowers/specs/` | Design documents. The newest spec is the source of truth for behavior. |

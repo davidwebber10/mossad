@@ -5,7 +5,7 @@ import SwiftUI
 /// One meeting: header, banner, player, and the Summary and Transcript tabs. Clicking a time plays from there.
 struct MeetingDetailView: View {
     enum Style { case split, fullPage }
-    enum Tab: String, CaseIterable { case summary = "Summary", transcript = "Transcript" }
+    enum Tab: String, CaseIterable { case summary = "Summary", transcript = "Transcript", coach = "Coach" }
 
     @EnvironmentObject var controller: AppController
     let record: CallRecord
@@ -59,6 +59,14 @@ struct MeetingDetailView: View {
                 case .transcript:
                     TranscriptTab(record: record, people: people, player: player, horizontalPadding: style == .fullPage ? 32 : 16,
                                   maxWidth: style == .fullPage ? 900 : .infinity)
+                case .coach:
+                    ScrollView {
+                        CoachTab(record: record, player: player)
+                            .padding(.horizontal, style == .fullPage ? 32 : 16)
+                            .padding(.bottom, 24)
+                            .frame(maxWidth: style == .fullPage ? 900 : .infinity)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
             }
         }

@@ -35,6 +35,8 @@ public struct AssemblyAIClient: Transcribing {
         let create = try JSONSerialization.data(withJSONObject: [
             "audio_url": uploadURL.upload_url,
             "speaker_labels": true,
+            // Keeps "um" and "uh" so the coach can count them.
+            "disfluencies": true,
             "language_detection": false,
             "language_code": "en_us",
         ])

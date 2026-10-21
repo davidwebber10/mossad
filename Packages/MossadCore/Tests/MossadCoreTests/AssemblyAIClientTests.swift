@@ -43,6 +43,8 @@ final class AssemblyAIClientTests: XCTestCase {
         XCTAssertEqual(create["audio_url"] as? String, "https://cdn.assemblyai.com/upload/abc")
         XCTAssertEqual(create["speaker_labels"] as? Bool, true)
         XCTAssertEqual(create["language_code"] as? String, "en_us")
+        // Fillers ("um", "uh") stay in, so the coach can count them.
+        XCTAssertEqual(create["disfluencies"] as? Bool, true)
     }
 
     func testErrorStatusThrows() async {

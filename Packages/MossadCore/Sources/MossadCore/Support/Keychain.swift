@@ -6,6 +6,8 @@ public enum APIKey: String, CaseIterable, Sendable {
     case anthropic
     /// The secret access key of the cloud bucket (Cloudflare R2 or Amazon S3).
     case cloudSecret
+    /// Sends the coach's weekly email.
+    case resend
 
     /// Finds the key in an environment: the standard name first, then a common variant
     /// (`ASSEMBLYAI`, or a named Anthropic key such as `ANTHROPIC_API_KEY_TEAM`).
@@ -14,6 +16,7 @@ public enum APIKey: String, CaseIterable, Sendable {
         case .assemblyai: env["ASSEMBLYAI_API_KEY"] ?? env["ASSEMBLYAI"]
         case .anthropic: env["ANTHROPIC_API_KEY"] ?? env.keys.filter { $0.hasPrefix("ANTHROPIC_API_KEY_") }.sorted().first.flatMap { env[$0] }
         case .cloudSecret: env["MOSSAD_CLOUD_SECRET"]
+        case .resend: env["RESEND_API_KEY"]
         }
         return found?.isEmpty == false ? found : nil
     }

@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var confirmDeleteVoices = false
     @State private var editingKey: APIKey?
+    @State private var sending = false
 
     var body: some View {
         ScrollView {
@@ -36,6 +37,7 @@ struct SettingsView: View {
                         }
                     }
                 }
+                group("Communication coach", footer: "Reviews use your Anthropic key. The coach's notes stay on this Mac in the Coach folder.") { coach }
                 group("Storage") { StorageSettings() }
             }
             .font(.system(size: 12))
@@ -170,6 +172,48 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var coach: some View {
+        switchRow("Review each call", $controller.coachEnabled)
+            .help("After each note, Claude reviews how you communicated and gives advice tied to moments in the call. It keeps notes over time, so it tracks your progress and your history with each person.")
+            .onChange(of: controller.coachEnabled) { _, on in if on { controller.turnOnCoach() } }
+        if controller.coachEnabled {
+            let focus = controller.coachProfile.focus
+            if !focus.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Current focus").foregroundStyle(.secondary)
+                    Text(focus).fontWeight(.medium)
+                }
+            }
+            switchRow("Weekly email on Monday", $controller.coachEmailEnabled)
+            if controller.coachEmailEnabled {
+                HStack {
+                    Text("Send to")
+                    Spacer()
+                    TextField("you@example.com", text: $controller.coachEmailTo).frame(width: 240)
+                }
+                HStack {
+                    Text("Send from ") + Text("a sender verified in Resend").foregroundStyle(.tertiary)
+                    Spacer()
+                    TextField("Mossad <coach@yourdomain.com>", text: $controller.coachEmailFrom).frame(width: 240)
+                }
+                keyRow("Resend", "Sends the weekly email with your own account", .resend)
+                HStack {
+                    Spacer()
+                    Button(sending ? "Sending…" : "Send last week's email now") {
+                        sending = true
+                        Task {
+                            await controller.sendCoachEmail(now: true)
+                            sending = false
+                        }
+                    }
+                    .controlSize(.small)
+                    .disabled(sending || controller.coachEmailTo.isEmpty || controller.coachEmailFrom.isEmpty || !controller.hasKey(.resend))
+                }
+            }
+        }
+    }
+
     private func switchRow(_ title: String, _ isOn: Binding<Bool>) -> some View {
         HStack {
             Text(title)
@@ -222,9 +266,18 @@ private struct KeySheet: View {
     let key: APIKey
     @State private var value = ""
 
+    private var title: String {
+        switch key {
+        case .assemblyai: "AssemblyAI key"
+        case .anthropic: "Anthropic key"
+        case .resend: "Resend key"
+        case .cloudSecret: "Secret access key"
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(key == .assemblyai ? "AssemblyAI key" : "Anthropic key").font(.headline)
+            Text(title).font(.headline)
             SecureField("Paste the key", text: $value).textFieldStyle(.roundedBorder)
             HStack {
                 Spacer()
