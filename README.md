@@ -1,10 +1,10 @@
 # Mossad
 
-A quiet macOS menu bar app that records your Zoom, Google Meet, and Microsoft Teams calls, transcribes them after the call ends, figures out who said what, and saves a clean Markdown note for every meeting.
+Automatic meeting notes for your Mac. Mossad is a menu bar app that records your Zoom, Google Meet, and Microsoft Teams calls, transcribes them after the call ends, works out who said what, and saves a Markdown note for every meeting.
 
-No buttons to press. No bot joins your call. You take your meetings like normal, and a searchable record of every conversation builds up in a folder on your Mac. Later you can point an AI agent at that folder and say "read Tuesday's planning call and build the tool we talked about."
+There are no buttons to press and no bot joins your call. You take your meetings as usual, and a searchable record of each conversation builds up in a folder on your Mac. Later you can point an AI agent at that folder and say "read Tuesday's planning call and build the tool we talked about."
 
-> **Before you use it:** Mossad records calls without announcing itself. Read [Recording consent](#recording-consent) first.
+> **Before you use it:** Mossad does not announce itself on the call, so telling people is your job. Let the people on your calls know that you record and transcribe them, and read [Recording consent](#recording-consent) first.
 
 ## Contents
 
@@ -19,6 +19,7 @@ No buttons to press. No bot joins your call. You take your meetings like normal,
 - [Development](#development)
 - [Recording consent](#recording-consent)
 - [Status and known limits](#status-and-known-limits)
+- [License](#license)
 
 ## What it does
 
@@ -26,7 +27,7 @@ No buttons to press. No bot joins your call. You take your meetings like normal,
 - **Knows when the call is over.** It watches for the meeting window or tab to close instead of guessing from a few seconds of silence.
 - **Keeps you and them apart.** Your microphone and the call's audio are recorded as two separate tracks. Your mic uses Apple's echo cancellation, so the other side coming out of your laptop speakers does not end up labeled as you.
 - **Transcribes after the call.** Nothing is transcribed live. When the call ends, the audio goes to AssemblyAI in one batch.
-- **Learns voices.** Each speaker gets a voice fingerprint. Name a new voice once and Mossad recognizes that person on later calls.
+- **Learns voices (optional).** Each speaker gets a voice fingerprint. Name a new voice once and Mossad recognizes that person on later calls. You can turn this off in Settings.
 - **Summarizes.** Claude writes a short summary and a list of action items for each call.
 - **Uses your calendar.** The meeting title and attendee list come from the matching event in the macOS Calendar app.
 - **Asks for one thing at most.** If a call had voices it has never heard, you get a single notification to name them. That is the only time it asks for anything.
@@ -106,14 +107,16 @@ Notes are named like `2026-10-20 1430 - Weekly Ops Sync.md`, so they sort by dat
 3. **Add your API keys.** Mossad reads its keys from the macOS Keychain. To store them, run the app once with the keys in its environment:
 
    ```sh
-   ASSEMBLYAI=your-assemblyai-key \
-   ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS=your-anthropic-key \
+   ASSEMBLYAI_API_KEY=your-assemblyai-key \
+   ANTHROPIC_API_KEY=your-anthropic-key \
    /Applications/Mossad.app/Contents/MacOS/Mossad --import-keys
    ```
 
-   If you use Doppler, `scripts/import-keys.sh` does the same thing from a Doppler project.
+   If you use Doppler, `scripts/import-keys.sh` does the same thing from a Doppler project. Set `MOSSAD_DOPPLER_PROJECT` and `MOSSAD_DOPPLER_CONFIG` to point it at yours.
 
 4. **Turn on permissions.** Click the waveform icon in the menu bar, open **Settings**, and click each red row until it turns green. For Accessibility and System Audio Recording, a small panel appears under System Settings with the Mossad icon. Drag the icon into the list and flip the switch.
+
+5. **Tell Mossad who you are.** In **Settings**, enter your name (it labels your side of each call) and, if you like, your company name (it gives the summaries context). Turn off **Recognize voices** if you do not want voice fingerprints stored.
 
 That's it. Mossad starts at login and stays out of the way.
 
@@ -129,7 +132,7 @@ Most days you will not touch it. When you do:
 | Meetings | Browse and search every call, read summaries, retry a failed one |
 | Name voices | Put names on new voices from a recent call |
 | Voices | Rename, merge, or delete saved voices |
-| Settings | Permissions, login item, how long to keep audio, folders, key status |
+| Settings | Permissions, your name and company, voice recognition, login item, how long to keep audio, folders, key status |
 | Log | The last few hundred lines of the app log |
 
 To name a voice, play its five second clip, type the name or pick someone from the meeting's attendee list, and save. The note and summary update right away, and that voice is recognized from then on.
@@ -189,7 +192,7 @@ Mossad records calls automatically and does not tell the other people on the cal
 - **Consent laws differ.** Some US states and many countries require the consent of every person on a call before it is recorded (for example California, Florida, Illinois, Maryland, Massachusetts, Pennsylvania, and Washington, and much of the EU under the GDPR). Other places require only one person's consent. On a call, the strictest law of any participant's location can apply.
 - **Tell people.** Let the other participants know you record and transcribe calls, or get their consent. A line in your calendar invites or a quick mention at the start of the call works.
 - **Employer and customer rules.** Company policies and contracts can forbid recording even where the law allows it.
-- **Voice data.** Mossad stores voice fingerprints of the people it hears. Some laws treat voiceprints as biometric data with extra rules (for example the Illinois Biometric Information Privacy Act). Delete a person's voice in **Voices** if you do not have the right to keep it.
+- **Voice data.** Mossad stores voice fingerprints of the people it hears. Some laws treat voiceprints as biometric data with extra rules (for example the Illinois Biometric Information Privacy Act). Delete a person's voice in **Voices** if you do not have the right to keep it, use **Delete all saved voices** in Settings, or turn off **Recognize voices** so no fingerprints are stored at all.
 - **Third-party services.** Audio goes to AssemblyAI and transcripts go to Anthropic.
 - **Skip a call.** **Skip this call** in the menu stops the recording and deletes it.
 
@@ -202,3 +205,7 @@ Mossad is a personal tool and is still being tested on real calls.
 - The Teams and Meet end-of-call rules are based on window and tab titles and still need tuning against real calls.
 - Echo removal relies on Apple's voice processing. On laptop speakers in a loud room, some of the other side can still leak into your track.
 - Only Zoom, Google Meet, and Microsoft Teams are detected. Supported browsers are Chrome, Safari, Arc, Edge, and Brave.
+
+## License
+
+Mossad is released under the [MIT License](LICENSE). It is provided "as is", without warranty of any kind, and the authors are not liable for how it is used. You are responsible for following the recording, privacy, and biometric laws that apply to you and to the people on your calls.

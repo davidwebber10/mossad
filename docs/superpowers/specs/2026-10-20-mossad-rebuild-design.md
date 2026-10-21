@@ -6,7 +6,7 @@ Replaces: `2026-03-20-mossad-design.md` (the old app is torn down; no code is re
 
 ## Intent
 
-David has remote calls on Zoom, Google Meet, and Microsoft Teams with POLYWOOD
+David has remote calls on Zoom, Google Meet, and Microsoft Teams with work
 colleagues. He wants a permanent, searchable record of what was said in every
 call, so that afterwards he can tell Claude Code "review this morning's meeting
 and build the thing Josh mentioned" (or research it, or implement changes).
@@ -173,7 +173,7 @@ module imports and strings). Findings that shape this design:
 
 ### Meeting metadata
 
-- David's POLYWOOD calendar syncs to the macOS Calendar app (confirmed), so
+- David's work calendar syncs to the macOS Calendar app (confirmed), so
   EventKit is the only calendar source needed.
 - Read the Mac's calendars (EventKit) for an event overlapping the call. If
   one matches (prefer one whose meeting link matches the platform), use its
@@ -182,7 +182,7 @@ module imports and strings). Findings that shape this design:
 ### Summary
 
 - After transcription and naming, send the transcript to Claude (key from
-  Doppler `ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS`) for a short summary and a
+  Doppler `ANTHROPIC_API_KEY`) for a short summary and a
   list of action items/requests, placed at the top of the file.
 - If renaming speakers later, the summary is regenerated.
 
@@ -201,7 +201,7 @@ module imports and strings). Findings that shape this design:
 ### Secrets
 
 - AssemblyAI key: Doppler `ASSEMBLYAI` (project `dispatch`, config `prd`).
-  Anthropic key: Doppler `ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS`.
+  Anthropic key: Doppler `ANTHROPIC_API_KEY`.
 - The app reads keys from the macOS Keychain. A one-time setup step copies
   them from Doppler into the Keychain. Keys are never written to files or the
   repo.

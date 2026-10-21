@@ -17,7 +17,7 @@
 - No code from the old app is reused. The old targets are deleted in Task 1.
 - Zero clicks: nothing may require user action to start or stop a recording. No window opens on its own; errors go to the log only.
 - Paths: `~/Mossad/Meetings/` (Markdown), `~/Mossad/Audio/<callID>/` (audio + `call.json`), `~/Mossad/Voices/` (voice library), `~/Mossad/Logs/`.
-- Keys: Keychain service `com.dwebber.mossad`, accounts `assemblyai` and `anthropic`. Source: Doppler `dispatch/prd` secrets `ASSEMBLYAI` and `ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS`. Keys never in files, args, logs, or the repo.
+- Keys: Keychain service `com.dwebber.mossad`, accounts `assemblyai` and `anthropic`. Source: Doppler `dispatch/prd` secrets `ASSEMBLYAI` and `ANTHROPIC_API_KEY`. Keys never in files, args, logs, or the repo.
 - Detection tick: 2 s. Meeting-gone confirmation: 2 consecutive ticks. Mic-idle fallback end: 180 s (trailing silence trimmed). Minimum kept call: 60 s.
 - Audio retention: 30 days. Voice clip for naming: 5 s.
 - Owner name: "David Webber".
@@ -100,7 +100,7 @@ Packages/MossadCore/
 - Test: `Tests/MossadCoreTests/KeychainTests.swift`
 
 **Interfaces:**
-- Produces: `enum APIKey: String { case assemblyai, anthropic }`; `struct Keychain { init(service: String = "com.dwebber.mossad"); func set(_ value: String, for: APIKey) throws; func get(_ key: APIKey) -> String? ; func delete(_ key: APIKey) }`; `func importKeys(from env: [String: String], into: Keychain) -> [APIKey]` (maps `ASSEMBLYAI` → `.assemblyai`, `ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS` → `.anthropic`, returns which were stored).
+- Produces: `enum APIKey: String { case assemblyai, anthropic }`; `struct Keychain { init(service: String = "com.dwebber.mossad"); func set(_ value: String, for: APIKey) throws; func get(_ key: APIKey) -> String? ; func delete(_ key: APIKey) }`; `func importKeys(from env: [String: String], into: Keychain) -> [APIKey]` (maps `ASSEMBLYAI` → `.assemblyai`, `ANTHROPIC_API_KEY` → `.anthropic`, returns which were stored).
 
 - [ ] **Step 1:** Tests: `testRoundTrip` (service `com.dwebber.mossad.tests`, set/get/delete), `testImportKeysMapsDopplerNames` (env with both names → both stored, returns `[.assemblyai, .anthropic]`; empty env → `[]`, nothing stored).
 - [ ] **Step 2:** `swift test --filter KeychainTests` → FAIL.
