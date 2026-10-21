@@ -20,7 +20,8 @@ final class CallRecorderTests: XCTestCase {
     let me = FakeSource()
     let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     var now: Date!
-    lazy var recorder = CallRecorder(paths: paths, makeThem: { _ in self.them }, makeMe: { self.me }, clock: { self.now })
+    var themMade: [[AudioObjectID]] = []
+    lazy var recorder = CallRecorder(paths: paths, makeThem: { self.themMade.append($0); return self.them }, makeMe: { self.me }, clock: { self.now })
 
     override func setUp() {
         paths = Paths(root: tempDirectory())
@@ -87,5 +88,17 @@ final class CallRecorderTests: XCTestCase {
         now = t0.addingTimeInterval(300)
         _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [2], at: t0.addingTimeInterval(300))
         XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(first)).status, .recorded)
+    }
+
+    func testRebuildThemRestartsTapWithSameProcesses() throws {
+        _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5, 6], at: t0)
+        recorder.rebuildThem()
+        XCTAssertEqual(themMade, [[5, 6], [5, 6]])
+        XCTAssertTrue(them.stopped)
+    }
+
+    func testRebuildThemWhenIdleDoesNothing() {
+        recorder.rebuildThem()
+        XCTAssertEqual(themMade, [])
     }
 }

@@ -80,7 +80,7 @@ public final class ProcessTap: TrackSource, @unchecked Sendable {
     private func defaultOutputDeviceUID() throws -> String {
         var deviceID = AudioObjectID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultSystemOutputDevice, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         try check(AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID), "default output device")
         var uid: Unmanaged<CFString>?
         size = UInt32(MemoryLayout<CFString?>.size)
@@ -105,4 +105,20 @@ public enum CaptureError: Error, CustomStringConvertible {
 
 func check(_ status: OSStatus, _ what: String) throws {
     guard status == noErr else { throw CaptureError.status(status, what) }
+}
+
+/// Calls back when the default output device changes (headphones connected, USB headset unplugged).
+public final class OutputDeviceWatcher: @unchecked Sendable {
+    private var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                                                     mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    private let block: AudioObjectPropertyListenerBlock
+
+    public init(onChange: @escaping @Sendable () -> Void) {
+        block = { _, _ in onChange() }
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
+    }
+
+    deinit {
+        AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
+    }
 }

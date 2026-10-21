@@ -20,7 +20,7 @@ public final class CallRecorder: @unchecked Sendable {
     private var meSource: TrackSource?
     private var themWriter: TrackWriter?
     private var meWriter: TrackWriter?
-    private var themProcessIDs: Set<AudioObjectID> = []
+    private var themProcessIDs: [AudioObjectID] = []
 
     public init(paths: Paths, makeThem: @escaping ([AudioObjectID]) -> TrackSource, makeMe: @escaping () -> TrackSource,
                 clock: @escaping () -> Date = Date.init) {
@@ -69,15 +69,23 @@ public final class CallRecorder: @unchecked Sendable {
 
     /// Rebuilds the tap when the meeting app's audio processes change (for example a browser audio helper restarts).
     public func updateThemProcesses(_ ids: [AudioObjectID]) {
-        guard isRecording, !ids.isEmpty, Set(ids) != themProcessIDs else { return }
+        guard isRecording, !ids.isEmpty, Set(ids) != Set(themProcessIDs) else { return }
         Log.info("Meeting audio processes changed; rebuilding tap")
         themSource?.stop()
         startThem(ids)
     }
 
+    /// Recreates the tap with the same processes, for example after the default output device changed.
+    public func rebuildThem() {
+        guard isRecording else { return }
+        Log.info("Output device changed; rebuilding tap")
+        themSource?.stop()
+        startThem(themProcessIDs)
+    }
+
     private func startThem(_ ids: [AudioObjectID]) {
         guard let writer = themWriter else { return }
-        themProcessIDs = Set(ids)
+        themProcessIDs = ids
         let source = makeThem(ids)
         themSource = source
         do {

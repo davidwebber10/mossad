@@ -45,6 +45,8 @@ final class AppController: ObservableObject {
     private var window: NSWindow?
     private let windowDelegate = WindowDelegate()
     private var housekeeping: Timer?
+    private var outputWatcher: OutputDeviceWatcher?
+    private var browserLaunchObserver: NSObjectProtocol?
 
     @AppStorage("retentionDays") var retentionDays = 30
 
@@ -69,6 +71,9 @@ final class AppController: ObservableObject {
             Task { @MainActor in self?.recorder.updateThemProcesses(ids) }
         }
         detection.start()
+        outputWatcher = OutputDeviceWatcher { [weak self] in
+            Task { @MainActor in self?.recorder.rebuildThem() }
+        }
 
         ProcessingQueue(paths: paths).recoverInterrupted()
         refresh()
@@ -189,6 +194,31 @@ final class AppController: ObservableObject {
             if !(await calendar.requestAccess()) { Log.error("Calendar access denied") }
         }
         notifier.requestAuthorization()
+
+        // System Audio Recording: a short global tap shows the one-time prompt now, not in the first call.
+        let probe = ProcessTap(processObjectIDs: [])
+        do { try probe.start { _ in } } catch { Log.error("System audio capture unavailable: \(error)") }
+        probe.stop()
+
+        // Automation: ask each browser for its tabs once, now and whenever a browser starts,
+        // so its one-time prompt never blocks detection during a call.
+        for app in NSWorkspace.shared.runningApplications { primeAutomation(app.bundleIdentifier) }
+        browserLaunchObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let id = app?.bundleIdentifier
+            Task { @MainActor in self?.primeAutomation(id) }
+        }
+    }
+
+    private func primeAutomation(_ bundleID: String?) {
+        guard let bundleID, case .browser(let base) = MeetingMatcher.appKind(bundleID: bundleID), base == bundleID else { return }
+        let primed = "primedAutomation.\(bundleID)"
+        guard !UserDefaults.standard.bool(forKey: primed) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            _ = BrowserTabProbe().tabs(browserBundleID: bundleID)
+            UserDefaults.standard.set(true, forKey: primed)
+        }
     }
 
     private func enableLaunchAtLoginOnce() {
