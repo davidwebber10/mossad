@@ -25,7 +25,7 @@ There are no buttons to press and no bot joins your call. You take your meetings
 
 - **Finds your calls on its own.** It notices when Zoom, Teams, or a Meet or Teams tab in your browser is using the microphone for a real meeting, and starts recording.
 - **Knows when the call is over.** It watches for the meeting window or tab to close instead of guessing from a few seconds of silence.
-- **Keeps you and them apart.** Your microphone and the call's audio are recorded as two separate tracks. Your mic uses Apple's echo cancellation, so the other side coming out of your laptop speakers does not end up labeled as you.
+- **Keeps you and them apart.** Your microphone and the call's audio are recorded as two separate tracks. When the other side comes out of your laptop speakers and your mic picks it up, Mossad finds those words in both tracks and drops them from yours, so they are not labeled as you.
 - **Transcribes after the call.** Nothing is transcribed live. When the call ends, the audio goes to AssemblyAI in one batch.
 - **Learns voices (optional).** Each speaker gets a voice fingerprint. Name a new voice once and Mossad recognizes that person on later calls. You can turn this off in Settings.
 - **Summarizes.** Claude writes a short summary and a list of action items for each call.
@@ -43,7 +43,7 @@ There are no buttons to press and no bot joins your call. You take your meetings
 ```
 
 1. **Detection.** Every two seconds Mossad checks which apps are using the microphone (Core Audio), reads Zoom and Teams window titles (Accessibility), and reads browser tab addresses (AppleScript). A call starts when a meeting app is on the mic and a meeting window or tab is open.
-2. **Recording.** The "me" track comes from the microphone with voice processing on. The "them" track comes from a Core Audio process tap on the call app, so only the call's audio is captured, not your music or notifications. Both are saved as 16 kHz mono files.
+2. **Recording.** The "me" track comes from the raw microphone. The "them" track comes from a Core Audio process tap on the call app, so only the call's audio is captured, not your music or notifications. Both are saved as 16 kHz mono files.
 3. **End of call.** The call ends when the meeting window or tab closes. If that signal is missing, a fallback ends it after three minutes with no mic activity. Calls shorter than one minute are thrown away.
 4. **Processing.** Each track is uploaded to AssemblyAI with speaker labels. The two transcripts are merged by time, and any echo of the other side that leaked into your mic is removed.
 5. **Speaker ID.** FluidAudio turns each speaker's audio into a voice embedding, which is compared against your saved voices.

@@ -55,10 +55,12 @@ final class AppController: ObservableObject {
     @AppStorage("organization") var organization = ""
     @AppStorage("voiceFingerprints") var voiceFingerprints = true
 
+    /// The mic is recorded raw: when Chrome also uses voice processing, macOS gives a second voice-processing
+    /// client silence. Echo from the speakers is dropped later by TranscriptMerger.
     /// The recorder calls these closures on the capture queue. Built outside the main actor so Swift does not
     /// tie them to the main thread and stop the app when they run there.
     nonisolated private static func makeRecorder(paths: Paths) -> CallRecorder {
-        CallRecorder(paths: paths, makeThem: { ProcessTap(processObjectIDs: $0) }, makeMe: { MicCapture() },
+        CallRecorder(paths: paths, makeThem: { ProcessTap(processObjectIDs: $0) }, makeMe: { MicCapture(voiceProcessing: false) },
                      systemAudioAllowed: { TCC.preflight("kTCCServiceAudioCapture").map { $0 == 0 } ?? true })
     }
 

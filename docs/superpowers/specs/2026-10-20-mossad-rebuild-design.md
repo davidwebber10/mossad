@@ -139,6 +139,9 @@ module imports and strings). Findings that shape this design:
   track, switch to WebRTC AEC3 with the them-track as the reference, as
   Granola does. Which one ships is decided by a quick test on David's
   MacBook with laptop speakers (see Acceptance).
+  Outcome (2026-10-21): with Chrome in a Meet call, Apple voice processing gave
+  Mossad's mic silence for the whole call. The me track is now the raw mic, and
+  the transcript echo rule in `TranscriptMerger` removes speaker bleed.
 - Both tracks share one start timestamp so they can be aligned.
 - Audio is written incrementally so a crash or sleep loses at most a few
   seconds, and a partially recorded call is still processed on next launch.
