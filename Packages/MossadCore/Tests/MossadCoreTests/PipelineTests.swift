@@ -66,14 +66,15 @@ final class PipelineTests: XCTestCase {
 
     override func tearDown() { try? FileManager.default.removeItem(at: paths.root) }
 
-    func makeRecord() throws -> String {
+    func makeRecord(meetingID: String? = nil) throws -> String {
         let id = "20261020-143000"
         let dir = paths.callDirectory(id)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try writeSegments(dir.appendingPathComponent("me.caf"), total: 30, [(0, 10, 200)])
         try writeSegments(dir.appendingPathComponent("them.caf"), total: 30, [(11, 20, 400), (21, 28, 800)])
-        try CallRecord(id: id, platform: .meet, bundleID: "com.google.Chrome", start: start, end: start.addingTimeInterval(1800), status: .recorded)
-            .save(to: dir)
+        var r = CallRecord(id: id, platform: .meet, bundleID: "com.google.Chrome", start: start, end: start.addingTimeInterval(1800), status: .recorded)
+        r.meetingID = meetingID
+        try r.save(to: dir)
         return id
     }
 
@@ -98,6 +99,16 @@ final class PipelineTests: XCTestCase {
     }
 
     func load(_ id: String) throws -> CallRecord { try CallRecord.load(from: paths.callDirectory(id)) }
+
+    func testCalendarMatchUsesTheCallsMeetingID() async throws {
+        let id = try makeRecord(meetingID: "abc-defg-hij")
+        func event(_ title: String, _ code: String) -> CalendarEventInfo {
+            CalendarEventInfo(title: title, start: start, end: start.addingTimeInterval(1800), attendees: [],
+                              text: "https://meet.google.com/\(code)", isAllDay: false)
+        }
+        await pipeline(calendar: FakeCalendar(events: [event("Other meeting", "xyz-wxyz-xyz")])).process(id)
+        XCTAssertNil(try load(id).calendarTitle)
+    }
 
     func testHappyPathWritesMarkdownAndNotifiesUnknowns() async throws {
         try library.add([0, 1, 0, 0], to: "Alex Rivera")

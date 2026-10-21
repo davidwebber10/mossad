@@ -77,10 +77,11 @@ final class AppController: ObservableObject {
         detection.onEvent = { @Sendable [weak self] event in
             // Read the call's audio processes on the detection queue, where they were just computed.
             let ids = detection.audioProcessIDs
+            let meetingID = detection.meetingID
             guard let self else { return }
             // Recorder commands go straight from the detection queue to the capture queue, so they keep
             // the detector's order relative to the process updates below. The UI follows on the main actor.
-            CaptureQueue.queue.async { self.capture(event, processIDs: ids, recorder: recorder) }
+            CaptureQueue.queue.async { self.capture(event, processIDs: ids, meetingID: meetingID, recorder: recorder) }
             Task { @MainActor in self.show(event) }
         }
         detection.onCallProcesses = { @Sendable ids in
@@ -178,12 +179,12 @@ final class AppController: ObservableObject {
     // MARK: Internals
 
     /// Runs on the capture queue.
-    private nonisolated func capture(_ event: DetectorEvent, processIDs: [AudioObjectID], recorder: CallRecorder) {
+    private nonisolated func capture(_ event: DetectorEvent, processIDs: [AudioObjectID], meetingID: String?, recorder: CallRecorder) {
         switch event {
         case .started(let platform, let bundleID, let at):
             Log.info("Call started: \(platform.displayName) (\(bundleID))")
             do {
-                try recorder.begin(platform: platform, bundleID: bundleID, processIDs: processIDs, at: at)
+                try recorder.begin(platform: platform, bundleID: bundleID, processIDs: processIDs, meetingID: meetingID, at: at)
             } catch {
                 Log.error("Could not start recording: \(error)")
                 Task { @MainActor in

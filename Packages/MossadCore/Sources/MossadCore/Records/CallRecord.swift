@@ -55,6 +55,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var status: CallStatus
     public var attempts = 0
     public var nextAttempt: Date?
+    /// The meeting's ID from its link (Meet code, Zoom number, Teams meeting ID), when the call ran in a browser.
+    public var meetingID: String?
     public var calendarTitle: String?
     public var attendees: [String] = []
     public var utterances: [Utterance] = []

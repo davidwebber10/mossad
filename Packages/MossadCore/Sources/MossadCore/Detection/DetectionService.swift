@@ -13,6 +13,9 @@ public final class DetectionService: @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private var currentPlatform: Platform?
     private var lastProcesses: [AudioProcess] = []
+    private var activeMeetingIDs: [String: String] = [:]
+    /// The current call's meeting ID from its browser tab, for matching the calendar invite.
+    public private(set) var meetingID: String?
 
     public var onEvent: (DetectorEvent) -> Void = { _ in }
     /// Called after every tick during a call with the call app's audio process IDs.
@@ -50,8 +53,12 @@ public final class DetectionService: @unchecked Sendable {
         let snapshot = snapshot(at: time)
         if let event = detector.process(snapshot) {
             switch event {
-            case .started(let platform, _, _): currentPlatform = platform
-            case .ended: currentPlatform = nil
+            case .started(let platform, let bundleID, _):
+                currentPlatform = platform
+                meetingID = activeMeetingIDs[bundleID]
+            case .ended:
+                currentPlatform = nil
+                meetingID = nil
             }
             onEvent(event)
         }
@@ -61,6 +68,7 @@ public final class DetectionService: @unchecked Sendable {
     public func snapshot(at time: Date) -> DetectionSnapshot {
         let processes = mic.processes()
         lastProcesses = processes
+        activeMeetingIDs = [:]
         var micByApp: [String: Bool] = [:]
         var order: [String] = []
         for p in processes {
@@ -124,6 +132,7 @@ public final class DetectionService: @unchecked Sendable {
         // To start a call the meeting tab must be the selected tab: a pinned background Teams or Meet tab
         // must not turn dictation or another site's mic use into a call.
         guard let first = meetingTabs.first(where: { $0.1.isActive }) else { return nil }
+        activeMeetingIDs[group] = MeetingMatcher.meetingID(forTabURL: first.1.url)
         return MeetingCandidate(platform: first.0, bundleID: group, micActive: micActive, meetingPresent: true)
     }
 

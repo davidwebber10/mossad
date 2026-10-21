@@ -48,6 +48,11 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(CallRecorder.callID(for: start), "20261020-143005")
     }
 
+    func testBeginSavesTheMeetingID() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], meetingID: "abc-defg-hij", at: t0)
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).meetingID, "abc-defg-hij")
+    }
+
     func testBeginWritesRecordWithStatusRecording() throws {
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         let r = try CallRecord.load(from: paths.callDirectory(id))

@@ -41,6 +41,16 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(s.candidates, [MeetingCandidate(platform: .meet, bundleID: "com.google.Chrome", micActive: true, meetingPresent: true)])
     }
 
+    func testStartedCallKeepsTheMeetingIDOfTheActiveTab() {
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        tabs.tabs["com.google.Chrome"] = [
+            BrowserTab(url: "https://meet.google.com/xyz-wxyz-xyz", title: "Meet - xyz-wxyz-xyz"),
+            BrowserTab(url: "https://meet.google.com/meet/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true),
+        ]
+        service.tick(at: now)
+        XCTAssertEqual(service.meetingID, "abc-defg-hij")
+    }
+
     func testBrowserMicWithoutMeetingTabHasNoCandidate() {
         mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
         tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://www.youtube.com/watch?v=x", title: "YouTube")]

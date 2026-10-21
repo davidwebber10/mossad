@@ -33,13 +33,20 @@ public enum CalendarMatcher {
         }
     }
 
-    /// The overlapping event with this platform's meeting link, else the one with the largest overlap.
-    public static func bestEvent(for platform: Platform, start: Date, end: Date, in events: [CalendarEventInfo]) -> CalendarEventInfo? {
+    /// With a meeting ID, the nearby event whose link carries that ID. Without one (the Zoom and Teams apps),
+    /// the overlapping event with this platform's link. An event that only shares the time is a different
+    /// meeting, so it never matches.
+    public static func bestEvent(for platform: Platform, meetingID: String?, start: Date, end: Date,
+                                 in events: [CalendarEventInfo]) -> CalendarEventInfo? {
         func overlap(_ e: CalendarEventInfo) -> TimeInterval { min(end, e.end).timeIntervalSince(max(start, e.start)) }
-        let candidates = events.filter { !$0.isAllDay && overlap($0) > 0 }
+        func text(_ e: CalendarEventInfo) -> String { (e.text.removingPercentEncoding ?? e.text).lowercased() }
+        let timed = events.filter { !$0.isAllDay }
+        if let meetingID {
+            let id = meetingID.lowercased()
+            return timed.filter { text($0).contains(id) }.max { overlap($0) < overlap($1) }
+        }
         let markers = linkMarkers(platform)
-        let linked = candidates.filter { e in markers.contains { e.text.lowercased().contains($0) } }
-        return (linked.isEmpty ? candidates : linked).max { overlap($0) < overlap($1) }
+        return timed.filter { e in overlap(e) > 0 && markers.contains { text(e).contains($0) } }.max { overlap($0) < overlap($1) }
     }
 }
 

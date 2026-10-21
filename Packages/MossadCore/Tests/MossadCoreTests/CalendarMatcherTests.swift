@@ -9,8 +9,8 @@ final class CalendarMatcherTests: XCTestCase {
                           attendees: ["Alex Rivera"], text: text, isAllDay: allDay)
     }
 
-    func best(_ platform: Platform, _ events: [CalendarEventInfo]) -> String? {
-        CalendarMatcher.bestEvent(for: platform, start: t0.addingTimeInterval(60), end: t0.addingTimeInterval(1800), in: events)?.title
+    func best(_ platform: Platform, _ events: [CalendarEventInfo], id: String? = nil) -> String? {
+        CalendarMatcher.bestEvent(for: platform, meetingID: id, start: t0.addingTimeInterval(60), end: t0.addingTimeInterval(1800), in: events)?.title
     }
 
     func testPicksOverlappingEventWithPlatformLink() {
@@ -30,13 +30,49 @@ final class CalendarMatcherTests: XCTestCase {
         XCTAssertEqual(best(.teams, events), "Finance review")
     }
 
-    func testFallsBackToLargestOverlap() {
-        let events = [event("Short", 1500, 2000), event("Planning", 0, 1800)]
+    func testWithoutAnIDPrefersTheLargestOverlapAmongLinkedEvents() {
+        let events = [event("Short", 1500, 2000, text: "https://zoom.us/j/1"), event("Planning", 0, 1800, text: "https://zoom.us/j/2")]
         XCTAssertEqual(best(.zoom, events), "Planning")
     }
 
+    func testAnEventWithoutAMeetingLinkNeverMatches() {
+        XCTAssertNil(best(.zoom, [event("Planning", 0, 1800)]))
+        XCTAssertNil(best(.meet, [event("Lunch hold", 0, 3600)], id: "abc-defg-hij"))
+    }
+
+    func testMeetingIDPicksTheEventWithThatLink() {
+        let events = [
+            event("Team sync", 0, 1800, text: "https://meet.google.com/xyz-wxyz-xyz"),
+            event("Ad hoc", 600, 1200, text: "Join: https://meet.google.com/abc-defg-hij"),
+        ]
+        XCTAssertEqual(best(.meet, events, id: "abc-defg-hij"), "Ad hoc")
+    }
+
+    func testMeetingIDWithNoMatchingEventReturnsNil() {
+        let events = [event("Team sync", 0, 1800, text: "https://meet.google.com/xyz-wxyz-xyz")]
+        XCTAssertNil(best(.meet, events, id: "abc-defg-hij"))
+    }
+
+    func testMeetingIDMatchesAnEventThatStartsSoonAfterTheCall() {
+        // Joined five minutes early: the event does not overlap yet but has the same link.
+        let events = [event("Early join", 1860, 3600, text: "https://meet.google.com/abc-defg-hij")]
+        XCTAssertEqual(best(.meet, events, id: "abc-defg-hij"), "Early join")
+    }
+
+    func testZoomAndTeamsMeetingIDs() {
+        let events = [
+            event("Vendor call", 0, 1800, text: "https://example.zoom.us/j/81234567890?pwd=abc"),
+            event("Other Zoom", 0, 1800, text: "https://example.zoom.us/j/99999999999"),
+            event("Finance review", 0, 1800, text: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_NjQ1ZDk2%40thread.v2/0"),
+            event("Other Teams", 0, 1800, text: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_OTHER%40thread.v2/0"),
+        ]
+        XCTAssertEqual(best(.zoom, events, id: "81234567890"), "Vendor call")
+        XCTAssertEqual(best(.teams, events, id: "meeting_NjQ1ZDk2"), "Finance review")
+    }
+
     func testIgnoresAllDayAndNonOverlapping() {
-        let events = [event("Out of office", -86_400, 86_400, allDay: true), event("Tomorrow", 90_000, 93_600)]
+        let events = [event("Out of office", -86_400, 86_400, text: "https://meet.google.com/abc-defg-hij", allDay: true),
+                      event("Tomorrow", 90_000, 93_600, text: "https://meet.google.com/abc-defg-hij")]
         XCTAssertNil(best(.meet, events))
     }
 

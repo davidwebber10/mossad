@@ -64,13 +64,14 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     @discardableResult
-    public func begin(platform: Platform, bundleID: String, processIDs: [AudioObjectID], at start: Date) throws -> String {
+    public func begin(platform: Platform, bundleID: String, processIDs: [AudioObjectID], meetingID: String? = nil, at start: Date) throws -> String {
         // Never delete a call here: close the previous one so it is processed like any other.
         if isRecording, let previous = record { _ = end(at: start, trimTo: nil); Log.info("Closed \(previous.id) for a new call") }
         let id = Self.callID(for: start)
         let dir = paths.callDirectory(id)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let r = CallRecord(id: id, platform: platform, bundleID: bundleID, start: start, end: start, status: .recording)
+        var r = CallRecord(id: id, platform: platform, bundleID: bundleID, start: start, end: start, status: .recording)
+        r.meetingID = meetingID
         try r.save(to: dir)
         let themWriter: TrackWriter, meWriter: TrackWriter
         do {

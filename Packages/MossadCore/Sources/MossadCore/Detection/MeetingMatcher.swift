@@ -48,6 +48,20 @@ public enum MeetingMatcher {
         return head.contains("Meeting") || head.hasPrefix("Call")
     }
 
+    /// The meeting's own ID from a tab URL, as it also appears in the calendar invite's link.
+    /// Nil when the URL does not carry one (the Teams app shell, for example).
+    public static func meetingID(forTabURL string: String) -> String? {
+        guard let platform = platform(forTabURL: string) else { return nil }
+        let pattern = switch platform {
+        case .meet: #"(?<=meet\.google\.com/)(meet/)?[a-z]{3}-[a-z]{4}-[a-z]{3}"#
+        case .zoom: #"(?<=/wc/)(join/)?\d{9,12}"#
+        case .teams: #"meeting_[A-Za-z0-9_-]+"#
+        }
+        let text = string.removingPercentEncoding ?? string
+        guard let range = text.range(of: pattern, options: .regularExpression) else { return nil }
+        return String(text[range]).replacingOccurrences(of: "meet/", with: "").replacingOccurrences(of: "join/", with: "")
+    }
+
     /// Meet keeps the same URL on its post-call page; in a call the title carries the meeting code or name.
     public static func meetTabLeftMeeting(title: String) -> Bool {
         let t = title.trimmingCharacters(in: .whitespaces)

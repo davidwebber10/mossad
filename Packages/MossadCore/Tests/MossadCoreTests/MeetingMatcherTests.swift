@@ -15,6 +15,16 @@ final class MeetingMatcherTests: XCTestCase {
         XCTAssertNil(MeetingMatcher.appKind(bundleID: "com.spotify.client"))
     }
 
+    func testMeetingIDFromTabURL() {
+        XCTAssertEqual(MeetingMatcher.meetingID(forTabURL: "https://meet.google.com/abc-defg-hij?authuser=1"), "abc-defg-hij")
+        XCTAssertEqual(MeetingMatcher.meetingID(forTabURL: "https://meet.google.com/meet/zpg-fuzw-ejj"), "zpg-fuzw-ejj")
+        XCTAssertEqual(MeetingMatcher.meetingID(forTabURL: "https://app.zoom.us/wc/81234567890/join?pwd=x"), "81234567890")
+        XCTAssertEqual(MeetingMatcher.meetingID(forTabURL: "https://example.zoom.us/wc/join/81234567890"), "81234567890")
+        XCTAssertEqual(MeetingMatcher.meetingID(forTabURL: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_NjQ1ZDk2%40thread.v2/0?context=x"), "meeting_NjQ1ZDk2")
+        XCTAssertNil(MeetingMatcher.meetingID(forTabURL: "https://teams.microsoft.com/v2/"))
+        XCTAssertNil(MeetingMatcher.meetingID(forTabURL: "https://www.youtube.com/watch?v=x"))
+    }
+
     func testTabURLPlatforms() {
         XCTAssertEqual(MeetingMatcher.platform(forTabURL: "https://meet.google.com/abc-defg-hij"), .meet)
         XCTAssertEqual(MeetingMatcher.platform(forTabURL: "https://meet.google.com/abc-defg-hij?authuser=1"), .meet)
