@@ -22,8 +22,10 @@ public struct AssemblyAIClient: Transcribing {
     private let apiKey: String
     private let session: URLSession
     private let pollInterval: Duration
+    private let usage: UsageLog?
 
-    public init(apiKey: String, session: URLSession = .shared, pollInterval: Duration = .seconds(5)) {
+    public init(apiKey: String, session: URLSession = .shared, pollInterval: Duration = .seconds(5), usage: UsageLog? = nil) {
+        self.usage = usage
         self.apiKey = apiKey
         self.session = session
         self.pollInterval = pollInterval
@@ -44,6 +46,7 @@ public struct AssemblyAIClient: Transcribing {
         while true {
             switch job.status {
             case "completed":
+                usage?.record(service: .assemblyai, purpose: .transcription, model: job.speech_model, audioSeconds: job.audio_duration)
                 return (job.utterances ?? []).flatMap { Self.split($0, track: track) }
             case "error":
                 throw TranscriptionError.failed(job.error ?? "unknown error")
@@ -87,6 +90,9 @@ public struct AssemblyAIClient: Transcribing {
         let status: String
         let error: String?
         let utterances: [RawUtterance]?
+        /// What AssemblyAI bills, in seconds.
+        let audio_duration: Double?
+        let speech_model: String?
     }
 
     /// Splits an utterance where the words pause longer than this (AssemblyAI joins a speaker's

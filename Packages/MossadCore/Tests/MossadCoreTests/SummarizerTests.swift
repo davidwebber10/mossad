@@ -94,4 +94,23 @@ final class SummarizerTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("529"))
         }
     }
+
+    func testLogsTokensWithTheModelThatAnswered() async throws {
+        StubURLProtocol.handler = { _ in
+            (200, json(["stop_reason": "end_turn", "model": "claude-opus-5-5",
+                        "usage": ["input_tokens": 1200, "output_tokens": 300, "cache_read_input_tokens": 10, "cache_creation_input_tokens": 20],
+                        "content": [["type": "text", "text": #"{"summary":"S","topics":[],"action_items":[],"decisions":[],"headline":"H","kind":"K","has_outcomes":false}"#]]]))
+        }
+        let log = UsageLog(directory: tempDirectory())
+        let s = ClaudeSummarizer(apiKey: "k", session: StubURLProtocol.session(), usage: log)
+        _ = try await UsageContext.$callID.withValue("call-2") { try await s.summarize(transcript: "x", title: "T") }
+        let e = try XCTUnwrap(log.all().first)
+        XCTAssertEqual(e.callID, "call-2")
+        XCTAssertEqual(e.purpose, .summary)
+        XCTAssertEqual(e.model, "claude-opus-5-5")
+        XCTAssertEqual(e.inputTokens, 1200)
+        XCTAssertEqual(e.outputTokens, 300)
+        XCTAssertEqual(e.cacheReadTokens, 10)
+        XCTAssertEqual(e.cacheWriteTokens, 20)
+    }
 }

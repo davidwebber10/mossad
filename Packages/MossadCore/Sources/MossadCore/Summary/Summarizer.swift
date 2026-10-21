@@ -60,9 +60,11 @@ public struct ClaudeSummarizer: Summarizing {
 
     private let ownerName: String
     private let organization: String
+    private let usage: UsageLog?
 
     public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared,
-                ownerName: String = "the user", organization: String = "") {
+                ownerName: String = "the user", organization: String = "", usage: UsageLog? = nil) {
+        self.usage = usage
         self.ownerName = ownerName
         self.organization = organization
         self.apiKey = apiKey
@@ -102,7 +104,7 @@ public struct ClaudeSummarizer: Summarizing {
             "kind": Schema.string,
             "has_outcomes": ["type": "boolean"],
         ])
-        let result = try await ClaudeJSON(apiKey: apiKey, model: model, session: session)
+        let result = try await ClaudeJSON(apiKey: apiKey, model: model, session: session, usage: usage, purpose: .summary)
             .call(system: Self.systemPrompt(owner: ownerName, organization: organization),
                   user: "Meeting: \(title)\n\nTranscript:\n\(transcript)", schema: schema, as: Output.self)
         let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -15,12 +15,13 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", people = "People", settings = "Settings", log = "Log"
+        case meetings = "Meetings", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
         var id: String { rawValue }
         var symbol: String {
             switch self {
             case .meetings: "bubble.left.and.text.bubble.right"
             case .people: "person.2"
+            case .analytics: "chart.bar.xaxis"
             case .settings: "gearshape"
             case .log: "doc.text"
             }
@@ -45,6 +46,8 @@ final class AppController: ObservableObject {
     @AppStorage("cloudKeepLocalDays") var cloudKeepLocalDays = 30
     private var liveSessions: [LiveTranscriber] = []
     private var liveStart = Date()
+    /// When the open streaming sessions started, to log the time AssemblyAI bills.
+    private var liveOpened: Date?
     /// 0 means on. Otherwise Mossad is off until this time (seconds since 1970; `.infinity` for "until I turn it on").
     @AppStorage("offUntil") private var offUntil: Double = 0
     private var resumeTimer: Timer?
@@ -58,10 +61,13 @@ final class AppController: ObservableObject {
     @Published var section: Section = .meetings
     @Published var selectedMeetingID: String?
     @Published var namingCallID: String?
+    var personToOpen: String?
 
     let paths = Paths.live
     let library: VoiceLibrary
     let keychain = Keychain()
+    /// Every billed AssemblyAI and Claude request, for the costs in Analytics.
+    let usage = UsageLog(directory: Paths.live.usage)
     let permissions = PermissionsMonitor()
     private let detection = DetectionService(mic: MicUsageProbe(), tabs: BrowserTabProbe(), windows: WindowTitleProbe(),
                                              mute: AccessibilityMuteProbe())
@@ -207,8 +213,8 @@ final class AppController: ObservableObject {
     func rebuildPipeline() {
         let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
         let organization = organization.trimmingCharacters(in: .whitespaces)
-        let transcriber: Transcribing = keychain.get(.assemblyai).map { AssemblyAIClient(apiKey: $0) } ?? MissingKeyTranscriber()
-        let summarizer: Summarizing? = keychain.get(.anthropic).map { ClaudeSummarizer(apiKey: $0, ownerName: owner, organization: organization) }
+        let transcriber: Transcribing = keychain.get(.assemblyai).map { AssemblyAIClient(apiKey: $0, usage: usage) } ?? MissingKeyTranscriber()
+        let summarizer: Summarizing? = keychain.get(.anthropic).map { ClaudeSummarizer(apiKey: $0, ownerName: owner, organization: organization, usage: usage) }
         let notifier = notifier
         pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: FluidEmbeddingProvider(),
                             calendar: calendar, summarizer: summarizer, notify: { record in
@@ -297,12 +303,19 @@ final class AppController: ObservableObject {
             sink.set { buffer in session.send(buffer) }
             liveSessions.append(session)
         }
+        liveOpened = Date()
     }
 
     private func stopLive() {
         recorder.meSink.set(nil)
         recorder.themSink.set(nil)
         liveSessions.forEach { $0.stop() }
+        if let opened = liveOpened, !liveSessions.isEmpty {
+            let seconds = Date().timeIntervalSince(opened) * Double(liveSessions.count)
+            let id = meetings.first { $0.status == .recording }?.id
+            UsageContext.$callID.withValue(id) { usage.record(service: .assemblyai, purpose: .live, model: nil, audioSeconds: seconds) }
+        }
+        liveOpened = nil
         liveSessions = []
     }
 
@@ -338,6 +351,12 @@ final class AppController: ObservableObject {
     func open(_ section: Section) {
         self.section = section
         showWindow()
+    }
+
+    /// Opens the People page on one person; the page picks the name up when it loads.
+    func openPerson(_ name: String) {
+        personToOpen = name
+        open(.people)
     }
 
     func openMeeting(_ callID: String) {

@@ -7,6 +7,8 @@ struct ClaudeJSON: Sendable {
     let apiKey: String
     let model: String
     let session: URLSession
+    var usage: UsageLog?
+    var purpose: UsageEvent.Purpose
 
     func call<Output: Decodable>(system: String, user: String, schema: [String: Any], effort: String = "medium",
                                  as: Output.Type) async throws -> Output {
@@ -33,6 +35,10 @@ struct ClaudeJSON: Sendable {
             throw SummaryError.http(status, String(decoding: data.prefix(500), as: UTF8.self))
         }
         let message = try JSONDecoder().decode(Message.self, from: data)
+        if let u = message.usage {
+            usage?.record(service: .claude, purpose: purpose, model: message.model ?? model, inputTokens: u.input_tokens,
+                          outputTokens: u.output_tokens, cacheReadTokens: u.cache_read_input_tokens, cacheWriteTokens: u.cache_creation_input_tokens)
+        }
         if message.stop_reason == "refusal" { throw SummaryError.refused }
         guard let text = message.content.first(where: { $0.type == "text" })?.text,
               let result = try? JSONDecoder().decode(Output.self, from: Data(text.utf8)) else {
@@ -44,6 +50,16 @@ struct ClaudeJSON: Sendable {
     private struct Message: Decodable {
         let stop_reason: String?
         let content: [Block]
+        /// The model that answered; a fallback can differ from the one asked for.
+        let model: String?
+        let usage: Usage?
+    }
+
+    private struct Usage: Decodable {
+        let input_tokens: Int?
+        let output_tokens: Int?
+        let cache_read_input_tokens: Int?
+        let cache_creation_input_tokens: Int?
     }
 
     private struct Block: Decodable {

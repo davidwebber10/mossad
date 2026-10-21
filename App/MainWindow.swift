@@ -21,6 +21,7 @@ struct MainWindow: View {
                 switch controller.section {
                 case .meetings: MeetingsView()
                 case .people: PeopleView()
+                case .analytics: AnalyticsView()
                 case .settings: SettingsView()
                 case .log: LogView()
                 }

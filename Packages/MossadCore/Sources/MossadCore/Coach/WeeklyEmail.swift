@@ -77,8 +77,8 @@ public protocol DigestWriting: Sendable {
 public struct ClaudeDigestWriter: DigestWriting {
     private let client: ClaudeJSON
 
-    public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared) {
-        client = ClaudeJSON(apiKey: apiKey, model: model, session: session)
+    public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared, usage: UsageLog? = nil) {
+        client = ClaudeJSON(apiKey: apiKey, model: model, session: session, usage: usage, purpose: .weeklyEmail)
     }
 
     public func digest(owner: String, reviews: [(title: String, date: Date, review: CoachReview)], profile: CoachProfile) async throws -> WeeklyDigest {

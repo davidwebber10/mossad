@@ -160,6 +160,10 @@ struct PeopleView: View {
             return la != lb ? la > lb : a.name < b.name
         }
         loaded = true
+        if let wanted = controller.personToOpen {
+            controller.personToOpen = nil
+            if profiles.contains(where: { $0.name == wanted }) { selection = wanted }
+        }
         if selected == nil { selection = profiles.first?.name }
     }
 

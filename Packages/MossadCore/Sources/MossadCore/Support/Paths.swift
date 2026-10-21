@@ -18,6 +18,8 @@ public struct Paths: Sendable {
     public var logs: URL { root.appendingPathComponent("Logs") }
     /// The coach's profile of the owner: patterns, the current focus, and notes on each person.
     public var coach: URL { root.appendingPathComponent("Coach") }
+    /// `usage.jsonl`: each billed request, for the costs in Analytics.
+    public var usage: URL { root.appendingPathComponent("Usage") }
 
     public func callDirectory(_ id: String) -> URL {
         audio.appendingPathComponent(id)

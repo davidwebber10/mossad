@@ -121,4 +121,25 @@ final class AssemblyAISplitTests: XCTestCase {
         XCTAssertEqual(u.first?.words, [Word(text: "Ship", start: 1.0, end: 1.3), Word(text: "it", start: 1.3, end: 1.5),
                                         Word(text: "Friday", start: 1.5, end: 2.0)])
     }
+
+    func testLogsTheBilledAudioAndModelForTheCall() async throws {
+        StubURLProtocol.handler = { r in
+            switch (r.method, r.url.path) {
+            case ("POST", "/v2/upload"): return (200, json(["upload_url": "u"]))
+            case ("POST", "/v2/transcript"): return (200, json(["id": "t9", "status": "queued"]))
+            default: return (200, json(["id": "t9", "status": "completed", "audio_duration": 1800, "speech_model": "universal-2", "utterances": NSNull()]))
+            }
+        }
+        let log = UsageLog(directory: tempDirectory())
+        let audio = tempDirectory().appendingPathComponent("me.caf")
+        try Data("audio".utf8).write(to: audio)
+        let c = AssemblyAIClient(apiKey: "k", session: StubURLProtocol.session(), pollInterval: .zero, usage: log)
+        _ = try await UsageContext.$callID.withValue("call-1") { try await c.transcribe(file: audio, track: .me) }
+        let e = try XCTUnwrap(log.all().first)
+        XCTAssertEqual(e.callID, "call-1")
+        XCTAssertEqual(e.service, .assemblyai)
+        XCTAssertEqual(e.purpose, .transcription)
+        XCTAssertEqual(e.audioSeconds, 1800)
+        XCTAssertEqual(e.model, "universal-2")
+    }
 }

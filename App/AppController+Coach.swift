@@ -18,7 +18,7 @@ extension AppController {
     func runCoach() {
         guard coachEnabled, !coaching, let key = keychain.get(.anthropic) else { return }
         coaching = true
-        let runner = CoachRunner(paths: paths, coach: ClaudeCoach(apiKey: key, ownerName: ownerName), owner: ownerName,
+        let runner = CoachRunner(paths: paths, coach: ClaudeCoach(apiKey: key, ownerName: ownerName, usage: usage), owner: ownerName,
                                  since: Date(timeIntervalSince1970: coachSince))
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
@@ -33,7 +33,7 @@ extension AppController {
               let anthropic = keychain.get(.anthropic), let resend = keychain.get(.resend) else { return }
         let last = now || coachLastEmail == 0 ? nil : Date(timeIntervalSince1970: coachLastEmail)
         if let sent = await WeeklyEmail.sendIfDue(paths: paths, owner: ownerName, to: to, lastSent: last,
-                                                  writer: ClaudeDigestWriter(apiKey: anthropic), mailer: ResendMailer(apiKey: resend, from: from)) {
+                                                  writer: ClaudeDigestWriter(apiKey: anthropic, usage: usage), mailer: ResendMailer(apiKey: resend, from: from)) {
             coachLastEmail = sent.timeIntervalSince1970
         }
     }

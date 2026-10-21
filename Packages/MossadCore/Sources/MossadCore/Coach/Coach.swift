@@ -14,8 +14,8 @@ public struct ClaudeCoach: Coaching {
     private let client: ClaudeJSON
     private let ownerName: String
 
-    public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared, ownerName: String) {
-        client = ClaudeJSON(apiKey: apiKey, model: model, session: session)
+    public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared, ownerName: String, usage: UsageLog? = nil) {
+        client = ClaudeJSON(apiKey: apiKey, model: model, session: session, usage: usage, purpose: .coach)
         self.ownerName = ownerName
     }
 

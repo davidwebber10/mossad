@@ -1,0 +1,193 @@
+import Foundation
+
+public enum AnalyticsRange: Hashable, Sendable {
+    case last7Days, last30Days, last90Days, thisMonth, yearToDate, all
+    /// Whole days, both inclusive.
+    case custom(Date, Date)
+
+    public func interval(now: Date = Date(), calendar: Calendar = .current, earliest: Date? = nil) -> DateInterval {
+        let today = calendar.startOfDay(for: now)
+        func daysBack(_ n: Int) -> Date { calendar.date(byAdding: .day, value: -(n - 1), to: today)! }
+        let start: Date = switch self {
+        case .last7Days: daysBack(7)
+        case .last30Days: daysBack(30)
+        case .last90Days: daysBack(90)
+        case .thisMonth: calendar.dateInterval(of: .month, for: now)!.start
+        case .yearToDate: calendar.dateInterval(of: .year, for: now)!.start
+        case .all: calendar.startOfDay(for: min(earliest ?? today, today))
+        case .custom(let a, _): calendar.startOfDay(for: a)
+        }
+        if case .custom(_, let b) = self {
+            return DateInterval(start: start, end: max(start, calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: b))!))
+        }
+        return DateInterval(start: start, end: max(start, now))
+    }
+
+    /// The period of the same length just before, for the comparison figures.
+    public static func previous(_ i: DateInterval) -> DateInterval {
+        DateInterval(start: i.start.addingTimeInterval(-i.duration), duration: i.duration)
+    }
+}
+
+/// Everything the Analytics tab shows for one period. Pure, so it is tested without the app.
+public struct AnalyticsReport: Sendable {
+    public enum Bucket: Sendable { case day, week, month }
+
+    public struct Bar: Sendable, Identifiable {
+        public var id: Date { date }
+        public var date: Date
+        public var seconds: TimeInterval = 0
+        public var calls = 0
+        public var cost: [UsageEvent.Service: Double] = [:]
+    }
+
+    public struct HeatCell: Sendable, Hashable {
+        /// 1 is Sunday, as in `Calendar`.
+        public var weekday: Int
+        public var hour: Int
+        public var seconds: TimeInterval
+    }
+
+    public struct Slice: Sendable, Identifiable {
+        public var id: String { name }
+        public var name: String
+        public var seconds: TimeInterval
+        public var calls: Int
+    }
+
+    public struct PersonTime: Sendable, Identifiable {
+        public var id: String { name }
+        public var name: String
+        public var seconds: TimeInterval
+        public var calls: Int
+    }
+
+    public struct DeliveryPoint: Sendable, Identifiable {
+        public var id: String { callID }
+        public var callID: String
+        public var date: Date
+        public var wordsPerMinute: Double
+        public var fillersPerMinute: Double
+        public var talkShare: Double
+    }
+
+    public struct Cost: Sendable {
+        public var total = 0.0
+        public var byService: [UsageEvent.Service: Double] = [:]
+        public var byPurpose: [UsageEvent.Purpose: Double] = [:]
+        /// The part of the total that is estimated, 0 to 1.
+        public var estimatedShare = 0.0
+        public var perCall = 0.0
+        public var perCallHour = 0.0
+    }
+
+    public let interval: DateInterval
+    public let bucket: Bucket
+    public let records: [CallRecord]
+    public var calls: Int { records.count }
+    public let callSeconds: TimeInterval
+    public var averageSeconds: TimeInterval { calls > 0 ? callSeconds / Double(calls) : 0 }
+    public let longest: CallRecord?
+    public let actionItems: Int
+    /// The owner's part of all speech, nil when nobody spoke.
+    public let talkShare: Double?
+    public let people: [PersonTime]
+    public let platforms: [Slice]
+    public let kinds: [Slice]
+    public let days: [Bar]
+    public let heat: [HeatCell]
+    public let delivery: [DeliveryPoint]
+    public let cost: Cost
+
+    public init(records all: [CallRecord], usage: [UsageEvent], owner: String, interval: DateInterval,
+                reviews: [String: CoachReview] = [:], calendar: Calendar = .current) {
+        self.interval = interval
+        let span = interval.duration / 86_400
+        bucket = span > 400 ? .month : span > 62 ? .week : .day
+        records = all.filter { $0.status != .recording && interval.contains($0.start) }.sorted { $0.start < $1.start }
+        func length(_ r: CallRecord) -> TimeInterval { max(0, r.end.timeIntervalSince(r.start)) }
+        callSeconds = records.map(length).reduce(0, +)
+        longest = records.max { length($0) < length($1) }
+        actionItems = records.map(\.actionItems.count).reduce(0, +)
+
+        var mine = 0.0, speech = 0.0
+        var people: [String: PersonTime] = [:]
+        var platforms: [String: Slice] = [:], kinds: [String: Slice] = [:]
+        for r in records {
+            for u in r.utterances {
+                let d = max(0, u.end - u.start)
+                speech += d
+                if r.speakerNames[u.speakerKey] == owner { mine += d }
+            }
+            for name in Set(r.speakerNames.values) where name != owner {
+                people[name, default: PersonTime(name: name, seconds: 0, calls: 0)].seconds += length(r)
+                people[name]!.calls += 1
+            }
+            platforms[r.platform.displayName, default: Slice(name: r.platform.displayName, seconds: 0, calls: 0)].seconds += length(r)
+            platforms[r.platform.displayName]!.calls += 1
+            if let k = r.kind {
+                kinds[k, default: Slice(name: k, seconds: 0, calls: 0)].seconds += length(r)
+                kinds[k]!.calls += 1
+            }
+        }
+        talkShare = speech > 0 ? mine / speech : nil
+        self.people = people.values.sorted { ($0.seconds, $1.name) > ($1.seconds, $0.name) }
+        self.platforms = platforms.values.sorted { $0.seconds > $1.seconds }
+        self.kinds = kinds.values.sorted { $0.seconds > $1.seconds }
+
+        // Buckets across the whole period, empty ones included, so the chart's time axis is even.
+        let component: Calendar.Component = switch bucket { case .day: .day; case .week: .weekOfYear; case .month: .month }
+        func bucketStart(_ d: Date) -> Date { calendar.dateInterval(of: component, for: d)?.start ?? d }
+        var bars: [Date: Bar] = [:]
+        var cursor = bucketStart(interval.start)
+        while cursor < interval.end {
+            bars[cursor] = Bar(date: cursor)
+            cursor = calendar.date(byAdding: component, value: 1, to: cursor)!
+        }
+        var heat: [HeatCell] = []
+        var heatIndex: [Int: Int] = [:]
+        for r in records {
+            bars[bucketStart(r.start), default: Bar(date: bucketStart(r.start))].seconds += length(r)
+            bars[bucketStart(r.start)]!.calls += 1
+            // Spread the call over the hours it covers.
+            var t = r.start
+            while t < r.end {
+                let hourEnd = calendar.dateInterval(of: .hour, for: t)!.end
+                let slice = min(hourEnd, r.end).timeIntervalSince(t)
+                let key = calendar.component(.weekday, from: t) * 100 + calendar.component(.hour, from: t)
+                if let i = heatIndex[key] { heat[i].seconds += slice } else {
+                    heatIndex[key] = heat.count
+                    heat.append(HeatCell(weekday: key / 100, hour: key % 100, seconds: slice))
+                }
+                t = hourEnd
+            }
+        }
+        self.heat = heat
+
+        let starts = Dictionary(records.map { ($0.id, $0.start) }, uniquingKeysWith: { a, _ in a })
+        let events = usage.filter { interval.contains($0.date) } + Pricing.estimates(for: records, logged: usage)
+        var cost = Cost()
+        var estimated = 0.0
+        for e in events {
+            let c = Pricing.cost(e)
+            cost.total += c
+            cost.byService[e.service, default: 0] += c
+            cost.byPurpose[e.purpose, default: 0] += c
+            if e.estimated { estimated += c }
+            // Charge a call's processing to the bucket of the call, so cost lines up with the time bars.
+            let when = e.callID.flatMap { starts[$0] } ?? e.date
+            bars[bucketStart(when), default: Bar(date: bucketStart(when))].cost[e.service, default: 0] += c
+        }
+        cost.estimatedShare = cost.total > 0 ? estimated / cost.total : 0
+        cost.perCall = records.isEmpty ? 0 : cost.total / Double(records.count)
+        cost.perCallHour = callSeconds > 0 ? cost.total / (callSeconds / 3600) : 0
+        self.cost = cost
+        self.days = bars.values.sorted { $0.date < $1.date }
+
+        delivery = records.compactMap { r in
+            reviews[r.id]?.delivery.map {
+                DeliveryPoint(callID: r.id, date: r.start, wordsPerMinute: $0.wordsPerMinute, fillersPerMinute: $0.fillersPerMinute, talkShare: $0.talkShare)
+            }
+        }
+    }
+}

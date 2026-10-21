@@ -37,7 +37,8 @@ public actor CoachRunner {
         var done = 0
         for r in Self.pending(records, owner: owner, since: since, reviewed: reviewed) {
             do {
-                let result = try await coach.review(record: r, profile: profile)
+                let current = profile
+                let result = try await UsageContext.$callID.withValue(r.id) { try await coach.review(record: r, profile: current) }
                 try result.review.save(in: paths.callDirectory(r.id))
                 profile.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start)
                 try profile.save(to: paths.coach)

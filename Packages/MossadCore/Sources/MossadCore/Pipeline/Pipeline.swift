@@ -186,8 +186,10 @@ public actor Pipeline {
             return .success([])
         }
         do {
-            return .success(try await transcriber.transcribe(file: url, track: track) { stage in
-                Task { await self.stageChanged(callID, track, stage) }
+            return .success(try await UsageContext.$callID.withValue(callID) {
+                try await transcriber.transcribe(file: url, track: track) { stage in
+                    Task { await self.stageChanged(callID, track, stage) }
+                }
             })
         } catch { return .failure(error) }
     }
@@ -261,7 +263,8 @@ public actor Pipeline {
         if summarizer != nil, !r.utterances.isEmpty { onDetail(r.id, "Claude is writing the summary") }
         if let summarizer, !r.utterances.isEmpty {
             do {
-                let s = try await summarizer.summarize(transcript: MarkdownWriter.transcript(r), title: r.title)
+                let transcript = MarkdownWriter.transcript(r), title = r.title
+                let s = try await UsageContext.$callID.withValue(r.id) { try await summarizer.summarize(transcript: transcript, title: title) }
                 r.apply(s)
             } catch {
                 Log.error("Summary for \(r.id) failed: \(error)")
@@ -311,7 +314,8 @@ public actor Pipeline {
         save(&r, dir: dir)
         guard let summarizer, r.status == .written, !r.utterances.isEmpty else { return }
         let names = r.speakerNames
-        guard let s = try? await summarizer.summarize(transcript: MarkdownWriter.transcript(r), title: r.title),
+        let transcript = MarkdownWriter.transcript(r), title = r.title, id = r.id
+        guard let s = try? await UsageContext.$callID.withValue(id, operation: { try await summarizer.summarize(transcript: transcript, title: title) }),
               var latest = try? CallRecord.load(from: dir), latest.speakerNames == names else { return }
         // Names changed during the request: that save's own summary is newer.
         latest.apply(s)
