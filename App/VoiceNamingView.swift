@@ -101,23 +101,20 @@ struct VoiceNamingView: View {
             HStack(spacing: 8) {
                 TextField("Name", text: Binding(get: { names[key, default: ""] }, set: { names[key] = $0 }))
                     .textFieldStyle(.roundedBorder)
+                // Typed by hand when the invite only lists a group address, or has no invite at all.
+                TextField("Email (optional)", text: Binding(get: { emails[key, default: ""] },
+                                                            set: { emails[key] = $0.isEmpty ? nil : $0 }))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 190)
                 // Pick only when the call's own meeting link matched an invite; a time match can be another meeting.
                 if record.hasInviteLink, !record.attendees.isEmpty {
                     Menu {
                         picks(for: key)
                     } label: {
-                        Text(emails[key] ?? "Pick")
+                        Text("Pick")
                     }
                     .fixedSize()
                 }
-            }
-            if let email = emails[key] {
-                HStack(spacing: 4) {
-                    Image(systemName: "envelope").font(.system(size: 10))
-                    Text(email)
-                    Button { emails[key] = nil } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain)
-                }
-                .font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
