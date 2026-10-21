@@ -49,6 +49,12 @@ public actor Pipeline {
     }
 
     public func process(_ id: String) async {
+        await processSteps(id)
+        // Outside `processSteps`, so this call is no longer in flight when the merge processes the joined record.
+        await continueSplitMeeting(id)
+    }
+
+    private func processSteps(_ id: String) async {
         // `process` suspends at every await; without this a timer run and a call-end run could overlap.
         guard inFlight.insert(id).inserted else { return }
         defer { inFlight.remove(id) }
@@ -240,6 +246,82 @@ public actor Pipeline {
         // Names changed during the request: that save's own summary is newer.
         latest.apply(s)
         save(&latest, dir: dir)
+    }
+
+    /// A recording of the same meeting link that ended or started within `MeetingMerge.continuationGap`
+    /// of this one is the same meeting, split by a restart or a crash: join them.
+    func continueSplitMeeting(_ id: String) async {
+        guard let r = try? CallRecord.load(from: paths.callDirectory(id)), r.status == .written, let meetingID = r.meetingID else { return }
+        let sibling = queue.allRecords().first { other in
+            other.id != r.id && other.status == .written && other.meetingID == meetingID
+                && (abs(r.start.timeIntervalSince(other.end)) <= MeetingMerge.continuationGap
+                    || abs(other.start.timeIntervalSince(r.end)) <= MeetingMerge.continuationGap)
+        }
+        guard let sibling else { return }
+        Log.info("Continuing \(sibling.id) and \(r.id): the same meeting, split by a restart")
+        await merge(callIDs: [sibling.id, r.id])
+    }
+
+    /// Joins finished or failed meetings into the earliest one: audio, transcript, and speakers. The others
+    /// are deleted with their notes, and the joined meeting gets a new summary and note. Returns its ID.
+    @discardableResult
+    public func merge(callIDs: [String]) async -> String? {
+        let records = callIDs.compactMap { try? CallRecord.load(from: paths.callDirectory($0)) }.sorted { $0.start < $1.start }
+        guard records.count >= 2, records.count == Set(callIDs).count,
+              records.allSatisfy({ $0.status == .written || $0.status == .failed }) else { return nil }
+        let target = records[0]
+        let dir = paths.callDirectory(target.id)
+        var durations: [String: TimeInterval] = [:]
+        for r in records { durations[r.id] = Self.audioLength(paths.callDirectory(r.id)) ?? r.end.timeIntervalSince(r.start) }
+        let lengths = records.map { durations[$0.id]! }
+        do {
+            // Joined into temporary files first: the target's own tracks are inputs too.
+            var joined: [(URL, URL)] = []
+            for name in [Track.me.fileName, Track.them.fileName, Recording.fileName] {
+                let inputs = records.map { r -> URL? in
+                    let url = paths.callDirectory(r.id).appendingPathComponent(name)
+                    return FileManager.default.fileExists(atPath: url.path) ? url : nil
+                }
+                guard inputs.contains(where: { $0 != nil }) else { continue }
+                let temp = dir.appendingPathComponent("joined-" + name)
+                try AudioJoin.join(inputs, durations: lengths, to: temp)
+                joined.append((temp, dir.appendingPathComponent(name)))
+            }
+            for (temp, final) in joined {
+                try? FileManager.default.removeItem(at: final)
+                try FileManager.default.moveItem(at: temp, to: final)
+            }
+        } catch {
+            Log.error("Merging \(callIDs) failed: \(error)")
+            for name in [Track.me.fileName, Track.them.fileName, Recording.fileName] {
+                try? FileManager.default.removeItem(at: dir.appendingPathComponent("joined-" + name))
+            }
+            return nil
+        }
+        // Old samples point into the old tracks.
+        for file in (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        where file.lastPathComponent.hasPrefix("clip-") { try? FileManager.default.removeItem(at: file) }
+        var merged = MeetingMerge.combine(records, durations: durations)
+        do { try store(merged, dir: dir) } catch {
+            Log.error("Saving merged \(target.id) failed: \(error)")
+            return nil
+        }
+        for r in records.dropFirst() {
+            if let note = r.markdownPath { try? FileManager.default.removeItem(atPath: note) }
+            try? FileManager.default.removeItem(at: paths.callDirectory(r.id))
+        }
+        Log.info("Merged \(records.map(\.id).joined(separator: ", ")) into \(target.id)")
+        await process(target.id)
+        if let latest = try? CallRecord.load(from: dir) { merged = latest }
+        return merged.id
+    }
+
+    /// The longest of the call's audio files, in seconds.
+    static func audioLength(_ dir: URL) -> TimeInterval? {
+        [Track.me.fileName, Track.them.fileName, Recording.fileName].compactMap { name -> TimeInterval? in
+            guard let file = try? AVAudioFile(forReading: dir.appendingPathComponent(name)) else { return nil }
+            return Double(file.length) / file.processingFormat.sampleRate
+        }.max()
     }
 
     /// Skipped voices stay in the transcript as letters, but the call stops asking for them.

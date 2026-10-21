@@ -200,6 +200,68 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(try load(id).unknownSpeakers, ["them:A"])
     }
 
+    /// A second written recording of the same meeting, `gap` seconds after the first one ended.
+    func makeSecondPart(after firstID: String, gap: TimeInterval, meetingID: String?) throws -> String {
+        let first = try load(firstID)
+        let start = first.end.addingTimeInterval(gap)
+        let id = "20261020-153000"
+        let dir = paths.callDirectory(id)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 20, [(0, 8, 200)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 20, [(9, 18, 400)])
+        var r = CallRecord(id: id, platform: .meet, bundleID: "com.google.Chrome", start: start, end: start.addingTimeInterval(20), status: .recorded)
+        r.meetingID = meetingID
+        try r.save(to: dir)
+        return id
+    }
+
+    func testMergeJoinsMeetingsIntoTheEarliestOne() async throws {
+        let first = try makeRecord()
+        let p = pipeline()
+        await p.process(first)
+        let second = try makeSecondPart(after: first, gap: 600, meetingID: nil)
+        await p.process(second)
+        let firstNote = try XCTUnwrap(try load(first).markdownPath)
+        let secondNote = try XCTUnwrap(try load(second).markdownPath)
+
+        let merged = await p.merge(callIDs: [second, first])
+
+        XCTAssertEqual(merged, first)
+        let r = try load(first)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.parts.count, 2)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory(second).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: secondNote))
+        XCTAssertEqual(try audioDuration(paths.callDirectory(first).appendingPathComponent("me.caf")), 50, accuracy: 0.1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: paths.callDirectory(first)).path))
+        let note = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertEqual(r.markdownPath, firstNote)
+        XCTAssertTrue(note.contains("Joined with a recording from"), note)
+    }
+
+    func testARecordingSplitByARestartContinuesOnItsOwn() async throws {
+        let first = try makeRecord(meetingID: "abc-defg-hij")
+        let p = pipeline()
+        await p.process(first)
+        let second = try makeSecondPart(after: first, gap: 3, meetingID: "abc-defg-hij")
+        await p.process(second)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory(second).path))
+        let r = try load(first)
+        XCTAssertEqual(r.parts.count, 2)
+        let note = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertTrue(note.contains("Recording resumed at"), note)
+    }
+
+    func testDifferentMeetingsAreNotJoinedOnTheirOwn() async throws {
+        let first = try makeRecord(meetingID: "abc-defg-hij")
+        let p = pipeline()
+        await p.process(first)
+        let second = try makeSecondPart(after: first, gap: 3, meetingID: "xyz-wxyz-xyz")
+        await p.process(second)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.callDirectory(second).path))
+    }
+
     func testWritingTheNoteAlsoMakesTheRecording() async throws {
         let id = try makeRecord()
         await pipeline().process(id)

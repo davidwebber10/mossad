@@ -45,6 +45,19 @@ public struct Utterance: Codable, Equatable, Sendable {
     }
 }
 
+/// One recording inside a merged meeting: when it ran, and where it begins in the joined audio.
+public struct CallPart: Codable, Equatable, Sendable {
+    public var start: Date
+    public var end: Date
+    public var offset: TimeInterval
+
+    public init(start: Date, end: Date, offset: TimeInterval) {
+        self.start = start
+        self.end = end
+        self.offset = offset
+    }
+}
+
 /// Everything known about one call; saved as `call.json` in the call's audio directory.
 public struct CallRecord: Codable, Equatable, Sendable {
     public var id: String
@@ -79,6 +92,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// One sentence, at most about 140 characters.
     public var headline: String?
     public var markdownPath: String?
+    /// The recordings joined into this meeting, oldest first; empty for a single recording.
+    public var parts: [CallPart] = []
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -132,5 +147,6 @@ extension CallRecord {
         decisions = try c.decodeIfPresent([String].self, forKey: .decisions) ?? []
         headline = try c.decodeIfPresent(String.self, forKey: .headline)
         markdownPath = try c.decodeIfPresent(String.self, forKey: .markdownPath)
+        parts = try c.decodeIfPresent([CallPart].self, forKey: .parts) ?? []
     }
 }

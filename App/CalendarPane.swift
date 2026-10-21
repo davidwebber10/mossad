@@ -195,10 +195,8 @@ private struct HourGrid: View {
             eventLabel(r, active: active, height: height)
                 .padding(.horizontal, isDay ? 12 : 7).padding(.vertical, isDay ? 7 : 4)
                 .frame(width: slot - 2, height: height, alignment: .topLeading)
+                .clipped()
                 .background(active ? Color.accentColor : Theme.surface, in: RoundedRectangle(cornerRadius: isDay ? 9 : 7, style: .continuous))
-                .overlay(alignment: .leading) {
-                    UnevenRoundedRectangle(topLeadingRadius: 7, bottomLeadingRadius: 7).fill(r.platform.color).frame(width: 3)
-                }
                 .shadow(color: .black.opacity(active ? 0.2 : 0.12), radius: active ? 8 : 1.5, y: active ? 3 : 1)
         }
         .buttonStyle(.plain)
@@ -214,10 +212,15 @@ private struct HourGrid: View {
         if isDay {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(r.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                        .accessibilityAddTraits(.isHeader)
-                    Text("\((r.start..<max(r.end, r.start)).formatted(.interval.hour().minute())) · \(r.platform.displayName)\(r.badge.map { " · " + badgeWord($0) } ?? "")")
-                        .font(.system(size: 12)).foregroundStyle(active ? .white.opacity(0.8) : .secondary)
+                    HStack(spacing: 6) {
+                        PlatformSquare(platform: r.platform, size: 10)
+                        Text(r.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    }
+                    .accessibilityAddTraits(.isHeader)
+                    if height >= 40 {
+                        Text("\((r.start..<max(r.end, r.start)).formatted(.interval.hour().minute())) · \(r.platform.displayName)\(r.badge.map { " · " + badgeWord($0) } ?? "")")
+                            .font(.system(size: 12)).foregroundStyle(active ? .white.opacity(0.8) : .secondary)
+                    }
                 }
                 Spacer()
                 if height >= 44 {
@@ -233,7 +236,10 @@ private struct HourGrid: View {
             .foregroundStyle(active ? .white : .primary)
         } else {
             VStack(alignment: .leading, spacing: 1) {
-                Text(r.title).font(.system(size: 11, weight: .semibold)).lineLimit(height > 30 ? 2 : 1)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    PlatformSquare(platform: r.platform, size: 8)
+                    Text(r.title).font(.system(size: 11, weight: .semibold)).lineLimit(height > 30 ? 2 : 1)
+                }
                 if height > 28 {
                     HStack(spacing: 4) {
                         if r.status == .recording { StatusDot(color: Theme.recording, size: 6, pulsing: true) }
