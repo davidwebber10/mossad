@@ -15,12 +15,12 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", voices = "Voices", settings = "Settings", log = "Log"
+        case meetings = "Meetings", people = "People", settings = "Settings", log = "Log"
         var id: String { rawValue }
         var symbol: String {
             switch self {
             case .meetings: "bubble.left.and.text.bubble.right"
-            case .voices: "person.2"
+            case .people: "person.2"
             case .settings: "gearshape"
             case .log: "doc.text"
             }
@@ -117,7 +117,7 @@ final class AppController: ObservableObject {
         if CommandLine.arguments.contains("--open-naming"), let first = callsNeedingNames.first {
             DispatchQueue.main.async { self.openNaming(first.id) }
         }
-        // Development hook: `--open-window [Meetings|Voices|Settings|Log]`.
+        // Development hook: `--open-window [Meetings|People|Settings|Log]`.
         if let i = CommandLine.arguments.firstIndex(of: "--open-window") {
             let name = CommandLine.arguments.dropFirst(i + 1).first
             let section = Section.allCases.first { $0.rawValue == name } ?? .meetings

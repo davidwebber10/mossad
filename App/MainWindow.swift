@@ -19,7 +19,7 @@ struct MainWindow: View {
         } detail: {
             switch controller.section {
             case .meetings: MeetingsView()
-            case .voices: VoicesView()
+            case .people: PeopleView()
             case .settings: SettingsView()
             case .log: LogView()
             }

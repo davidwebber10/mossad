@@ -35,6 +35,8 @@ public struct PersonStats: Equatable, Sendable {
     /// Most shared meetings first, then by name.
     public var oftenWith: [CoSpeaker] = []
 
+    public init() {}
+
     public var totalTalk: TimeInterval { meetings.reduce(0) { $0 + $1.talk } }
     public var firstHeard: Date? { meetings.last?.start }
     public var lastHeard: Date? { meetings.first?.start }
