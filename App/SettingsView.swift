@@ -55,8 +55,8 @@ struct SettingsView: View {
                             Log.error("Launch at login change failed: \(error)")
                         }
                     }
-                Stepper("Keep audio for \(controller.retentionDays) days", value: $controller.retentionDays, in: 1...365)
-                Text("Transcripts are kept forever. Audio is kept so voices can be learned after a call.")
+                Stepper("Keep raw tracks for \(controller.retentionDays) days", value: $controller.retentionDays, in: 1...365)
+                Text("Notes, transcripts, and a compressed recording of each meeting (about 14 MB an hour) are kept forever. The raw tracks (about 230 MB an hour) are only needed to learn voices after a call.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Folders") {

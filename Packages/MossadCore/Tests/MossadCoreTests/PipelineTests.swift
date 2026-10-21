@@ -100,6 +100,12 @@ final class PipelineTests: XCTestCase {
 
     func load(_ id: String) throws -> CallRecord { try CallRecord.load(from: paths.callDirectory(id)) }
 
+    func testWritingTheNoteAlsoMakesTheRecording() async throws {
+        let id = try makeRecord()
+        await pipeline().process(id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: paths.callDirectory(id)).path))
+    }
+
     func testDeleteRemovesTheNoteAndTheAudio() async throws {
         let id = try makeRecord()
         let p = pipeline()

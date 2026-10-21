@@ -230,7 +230,12 @@ final class AppController: ObservableObject {
 
     private func runHousekeeping() async {
         await track { await self.pipeline.runPending() }
-        Retention.sweep(audioRoot: paths.audio, olderThan: retentionDays)
+        // Encoding an hour of audio takes seconds, so this stays off the main actor.
+        let audio = paths.audio, days = retentionDays
+        await Task.detached(priority: .utility) {
+            Recording.backfill(audioRoot: audio)
+            Retention.sweep(audioRoot: audio, olderThan: days)
+        }.value
     }
 
     private func requestPermissions() {

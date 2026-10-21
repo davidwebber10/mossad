@@ -23,8 +23,22 @@ final class RetentionTests: XCTestCase {
 
     func exists(_ dir: URL, _ f: String) -> Bool { FileManager.default.fileExists(atPath: dir.appendingPathComponent(f).path) }
 
+    func testKeepsRawTracksUntilTheRecordingExists() throws {
+        let dir = try call("old", .written, endedDaysAgo: 31)
+        Retention.sweep(audioRoot: paths.audio, olderThan: 30, now: now)
+        XCTAssertTrue(exists(dir, "me.caf") && exists(dir, "them.caf"))
+    }
+
+    func testNeverDeletesTheRecording() throws {
+        let dir = try call("old", .written, endedDaysAgo: 400)
+        try Data([1]).write(to: dir.appendingPathComponent("recording.m4a"))
+        Retention.sweep(audioRoot: paths.audio, olderThan: 30, now: now)
+        XCTAssertTrue(exists(dir, "recording.m4a"))
+    }
+
     func testDeletesOldWrittenAudioKeepsJSON() throws {
         let dir = try call("old", .written, endedDaysAgo: 31)
+        try Data([1]).write(to: dir.appendingPathComponent("recording.m4a"))
         Retention.sweep(audioRoot: paths.audio, olderThan: 30, now: now)
         XCTAssertFalse(exists(dir, "me.caf") || exists(dir, "them.caf") || exists(dir, "clip-them-A.caf"))
         XCTAssertTrue(exists(dir, "call.json"))

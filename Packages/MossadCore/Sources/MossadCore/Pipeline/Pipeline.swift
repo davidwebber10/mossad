@@ -192,6 +192,7 @@ public actor Pipeline {
         r.markdownPath = url.path
         r.status = .written
         Log.info("Wrote \(url.lastPathComponent)")
+        Recording.makeIfMissing(in: paths.callDirectory(r.id))
         // Without fingerprints a name is never learned, so asking after every call would only nag.
         if voiceFingerprints, !r.unknownSpeakers.isEmpty { notify(r) }
     }

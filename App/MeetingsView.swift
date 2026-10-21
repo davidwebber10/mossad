@@ -35,12 +35,13 @@ struct MeetingsView: View {
 
             Group {
                 if let id = controller.selectedMeetingID, let r = controller.meetings.first(where: { $0.id == id }) {
-                    MeetingDetail(record: r, deleting: $deleting)
+                    MeetingDetailView(record: r, deleting: $deleting, audioDirectory: controller.paths.callDirectory(r.id))
+                        .id(r.id)
                 } else {
                     ContentUnavailableView("Select a meeting", systemImage: "text.bubble")
                 }
             }
-            .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
         }
         .searchable(text: $query, placement: .toolbar, prompt: "Search titles and transcripts")
         .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
@@ -84,90 +85,5 @@ private struct MeetingRow: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
-    }
-}
-
-private struct MeetingDetail: View {
-    @EnvironmentObject var controller: AppController
-    let record: CallRecord
-    @Binding var deleting: CallRecord?
-
-    var body: some View {
-        let names = MarkdownWriter.displayNames(record)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(record.title).font(.title2.bold())
-                        Text("\(record.start.formatted(date: .complete, time: .shortened)) · \(record.platform.displayName)")
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if !record.unknownSpeakers.isEmpty, record.status == .written {
-                        Button("Name voices") { controller.namingCallID = record.id }
-                    }
-                    if let path = record.markdownPath {
-                        Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
-                    }
-                    if record.canDelete {
-                        Button("Delete…", role: .destructive) { deleting = record }
-                    }
-                }
-
-                if record.status != .written {
-                    HStack {
-                        Text(statusText).foregroundStyle(.secondary)
-                        if record.attempts > 0 || record.status == .failed { Button("Retry now") { controller.retry(record.id) } }
-                    }
-                }
-
-                if let summary = record.summary {
-                    section("Summary") { Text(summary).textSelection(.enabled) }
-                    section("Action items") {
-                        if record.actionItems.isEmpty {
-                            Text("None.").foregroundStyle(.secondary)
-                        } else {
-                            ForEach(record.actionItems, id: \.self) { Label($0, systemImage: "circle").textSelection(.enabled) }
-                        }
-                    }
-                }
-
-                let speakers = Array(Set(record.utterances.map { names[$0.speakerKey] ?? $0.speakerKey })).sorted()
-                if !speakers.isEmpty {
-                    section("Speakers") { Text(speakers.joined(separator: ", ")) }
-                }
-
-                if !record.utterances.isEmpty {
-                    section("Transcript") {
-                        Text(MarkdownWriter.transcript(record))
-                            .font(.system(.body, design: .default))
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var statusText: String {
-        switch record.status {
-        case .recording: "Recording…"
-        case .recorded: record.attempts > 0 ? "Transcription failed \(record.attempts)×; Mossad will retry." : "Waiting for transcription…"
-        case .transcribed: "Identifying speakers…"
-        case .identified: "Writing summary…"
-        case .summarized: "Writing file…"
-        case .failed where record.attempts == 0: "The recording was interrupted, and a track could not be read. Check the log, then retry."
-        case .failed: "Mossad gave up after \(record.attempts) attempts. Check the log, then retry."
-        case .written: ""
-        }
-    }
-
-    @ViewBuilder
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
-            content()
-        }
     }
 }

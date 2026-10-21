@@ -144,7 +144,7 @@ Everything stays in your home folder.
 | Path | Contents |
 | --- | --- |
 | `~/Mossad/Meetings/` | One Markdown note per call. Kept forever. |
-| `~/Mossad/Audio/<call id>/` | The two audio tracks and `call.json` with the processing state. Audio is deleted after 30 days by default. |
+| `~/Mossad/Audio/<call id>/` | `recording.m4a` (both sides mixed, kept forever, about 14 MB an hour), the two raw tracks (deleted after 30 days by default), and `call.json` with the processing state. |
 | `~/Mossad/Voices/voices.json` | Saved voice fingerprints and names |
 | `~/Mossad/Logs/mossad.log` | The app log, rotated at 5 MB |
 
