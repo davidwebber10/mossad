@@ -242,6 +242,31 @@ public actor Pipeline {
         save(&latest, dir: dir)
     }
 
+    /// Renames a person in every meeting: speaker names, action item owners, and the notes. An email
+    /// address is also replaced inside the summary text, where it cannot be part of another word.
+    @discardableResult
+    public func renamePerson(_ old: String, to new: String) -> Int {
+        let new = new.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !new.isEmpty, new != old else { return 0 }
+        var changed = 0
+        for record in ProcessingQueue(paths: paths).allRecords() where record.mentions(old) {
+            var r = record
+            for (key, name) in r.speakerNames where name == old { r.speakerNames[key] = new }
+            r.actionItems = r.actionItems.map { ActionItem(owner: $0.owner == old ? new : $0.owner, task: $0.task) }
+            if old.contains("@") {
+                func swap(_ text: String) -> String { text.replacingOccurrences(of: old, with: new) }
+                r.summary = r.summary.map(swap)
+                r.headline = r.headline.map(swap)
+                r.decisions = r.decisions.map(swap)
+                r.actionItems = r.actionItems.map { ActionItem(owner: $0.owner, task: swap($0.task)) }
+            }
+            save(&r, dir: paths.callDirectory(r.id))
+            changed += 1
+        }
+        if changed > 0 { Log.info("Renamed \(old) to \(new) in \(changed) meetings") }
+        return changed
+    }
+
     private func save(_ r: inout CallRecord, dir: URL) {
         do {
             if r.status == .written {
@@ -261,4 +286,10 @@ public struct MissingAPIKey: Error, CustomStringConvertible {
     public let service: String
     public init(service: String) { self.service = service }
     public var description: String { "No \(service) API key. Run scripts/import-keys.sh, then reopen Mossad." }
+}
+
+private extension CallRecord {
+    func mentions(_ name: String) -> Bool {
+        speakerNames.values.contains(name) || actionItems.contains { $0.owner == name }
+    }
 }

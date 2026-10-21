@@ -107,6 +107,7 @@ final class AppController: ObservableObject {
             ProcessingQueue(paths: paths).recoverInterrupted()
         }
         refresh()
+        if !preview { relinkEmails() }
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
         if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }
@@ -214,6 +215,24 @@ final class AppController: ObservableObject {
                 if selectedMeetingID == callID { selectedMeetingID = nil }
                 refresh()
             }
+        }
+    }
+
+    /// A person's new name reaches every past meeting and note.
+    func renamePerson(_ old: String, to new: String) {
+        Task {
+            await pipeline.renamePerson(old, to: new)
+            refresh()
+        }
+    }
+
+    /// Meetings that used a saved person's email as the name get the person's name instead.
+    func relinkEmails() {
+        let pairs = library.profiles.compactMap { p in p.email.map { ($0, p.name) } }
+        guard !pairs.isEmpty else { return }
+        Task {
+            for (email, name) in pairs where email != name { await pipeline.renamePerson(email, to: name) }
+            refresh()
         }
     }
 

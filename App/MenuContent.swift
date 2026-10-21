@@ -68,7 +68,7 @@ struct MenuContent: View {
                     .background(Circle().fill(Theme.listening.opacity(0.2)).frame(width: 15, height: 15))
                     .padding(.top, 5)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Listening for calls").font(.system(size: 14, weight: .semibold))
+                    Text("Waiting for a call").font(.system(size: 14, weight: .semibold))
                     Text("Zoom, Google Meet, and Microsoft Teams").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }

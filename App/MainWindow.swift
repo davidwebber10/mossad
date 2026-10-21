@@ -49,7 +49,7 @@ private struct SidebarStatus: View {
                 Text("Processing \(controller.processing) \(controller.processing == 1 ? "call" : "calls")")
             } else {
                 StatusDot(color: Theme.listening)
-                Text("Listening for calls")
+                Text("Waiting for a call")
             }
             Spacer(minLength: 0)
         }

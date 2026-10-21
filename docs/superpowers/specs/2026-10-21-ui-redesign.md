@@ -180,7 +180,7 @@ Top section, one of:
 
 **Idle**
 - Padding 12 / 14 / 10. A 9 pt green dot (`#30d158`) with a 3 pt 20% green ring, 5 pt from the top.
-- "Listening for calls" (14 semibold).
+- "Waiting for a call" (14 semibold).
 - "Zoom, Google Meet, and Microsoft Teams" (12, `text2`).
 
 **Recording** (a card: `surface` background, radius 15, padding 14 / 14 / 12, gap 10, shadow `0 1 2 rgba(0,0,0,.06)`)
@@ -230,7 +230,7 @@ Light and dark differ only by tokens.
 - Sidebar icons change: Meetings `bubble.left.and.text.bubble.right` (today `text.bubble`), Voices `person.2` (today `person.wave.2`), Settings `gearshape`, Log `doc.text` (today `doc.plaintext`). Update `AppController.Section.symbol`.
 
 **Sidebar footer status** (pinned to the bottom, padding 8 x 10, gap 8, 12 pt, `text2`). Use `.safeAreaInset(edge: .bottom)` on the sidebar list.
-- Idle: an 8 pt green dot, "Listening for calls". (This is the only footer state the design shows.)
+- Idle: an 8 pt green dot, "Waiting for a call". (This is the only footer state the design shows.)
 - Recording: an 8 pt pulsing red dot, "Recording 12:34". (Extrapolated.)
 - Processing: a mini spinner, "Processing 1 call". (Extrapolated.)
 - Permissions: an 8 pt orange dot, "2 permissions need attention". Click opens Settings. (Extrapolated.)

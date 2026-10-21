@@ -156,6 +156,41 @@ final class PipelineTests: XCTestCase {
         XCTAssertFalse(try load(id).utterances.contains { $0.track == .me && $0.speakerLabel == "B" })
     }
 
+    func testRenamePersonUpdatesEveryMeetingAndItsNote() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.speakerNames["them:A"] = "jo@example.com"
+        r.actionItems = [ActionItem(owner: "jo@example.com", task: "send the forecast")]
+        r.summary = "jo@example.com will send the forecast."
+        try r.save(to: paths.callDirectory(id))
+
+        let changed = await p.renamePerson("jo@example.com", to: "Jo Lee")
+        XCTAssertEqual(changed, 1)
+        r = try load(id)
+        XCTAssertEqual(r.speakerNames["them:A"], "Jo Lee")
+        XCTAssertEqual(r.actionItems.first?.owner, "Jo Lee")
+        XCTAssertEqual(r.summary, "Jo Lee will send the forecast.")
+        let note = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertTrue(note.contains("Jo Lee"))
+        XCTAssertFalse(note.contains("jo@example.com"))
+    }
+
+    func testRenamePersonLeavesOtherTextAloneForPlainNames() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.speakerNames["them:A"] = "Jo"
+        r.summary = "Jo said Joe would call."
+        try r.save(to: paths.callDirectory(id))
+        await p.renamePerson("Jo", to: "Jo Lee")
+        r = try load(id)
+        XCTAssertEqual(r.speakerNames["them:A"], "Jo Lee")
+        XCTAssertEqual(r.summary, "Jo said Joe would call.", "a short name can be part of other words")
+    }
+
     func testWritingTheNoteAlsoMakesTheRecording() async throws {
         let id = try makeRecord()
         await pipeline().process(id)

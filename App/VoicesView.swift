@@ -25,7 +25,10 @@ struct VoicesView: View {
                     Section("Merge into") {
                         ForEach(profiles.filter { $0.name != selection }, id: \.name) { target in
                             Button(target.name) {
-                                if let p = selected { edit { try controller.library.merge(p.name, into: target.name) } }
+                                if let p = selected {
+                                    edit { try controller.library.merge(p.name, into: target.name) }
+                                    controller.renamePerson(p.name, to: target.name)
+                                }
                             }
                         }
                     }
@@ -130,6 +133,8 @@ struct VoicesView: View {
                         if !name.isEmpty, name != p.name { try controller.library.rename(p.name, to: name) }
                         try controller.library.setEmail(email.isEmpty ? nil : email, for: name.isEmpty ? p.name : name)
                     }
+                    if !name.isEmpty, name != p.name { controller.renamePerson(p.name, to: name) }
+                    controller.relinkEmails()
                     editing = nil
                 }
                 .keyboardShortcut(.defaultAction)
