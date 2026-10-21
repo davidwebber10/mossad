@@ -103,6 +103,8 @@ final class AppController: ObservableObject {
             Task { await self?.runHousekeeping() }
         }
         Log.info("Mossad started")
+        // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
+        if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }
         // Development hook: `--open-window [Meetings|Voices|Settings|Log]`.
         if let i = CommandLine.arguments.firstIndex(of: "--open-window") {
             let name = CommandLine.arguments.dropFirst(i + 1).first

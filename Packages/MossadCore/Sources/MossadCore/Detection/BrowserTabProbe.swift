@@ -24,12 +24,12 @@ public final class BrowserTabProbe: BrowserTabProbing, @unchecked Sendable {
         guard allowed else { return nil }
         let source = Self.script(browserBundleID: browserBundleID)
         let began = Date()
-        let output: String? = onMain {
+        let output = onMain { () -> String? in
             var error: NSDictionary?
             let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
             if let error { Log.debug("Tab probe \(browserBundleID) failed: \(error)") }
             return result?.stringValue
-        }
+        } ?? nil
         let slow = Date().timeIntervalSince(began) > Self.slowRead
         lock.withLock {
             if output == nil || slow {
@@ -90,7 +90,24 @@ extension BrowserTabProbe {
     }
 }
 
-/// NSAppleScript must run on the main thread.
-func onMain<T>(_ body: () -> T) -> T {
-    Thread.isMainThread ? body() : DispatchQueue.main.sync(execute: body)
+/// NSAppleScript must run on the main thread. Detection never waits more than `timeout` for it: a busy
+/// or stuck main thread makes the answer unknown (nil) instead of stopping detection.
+func onMain<T: Sendable>(timeout: TimeInterval = 5, _ body: @escaping @MainActor () -> T) -> T? {
+    if Thread.isMainThread { return MainActor.assumeIsolated { body() } }
+    let result = MainResult<T>()
+    let done = DispatchSemaphore(value: 0)
+    DispatchQueue.main.async {
+        result.value = MainActor.assumeIsolated { body() }
+        done.signal()
+    }
+    guard done.wait(timeout: .now() + timeout) == .success else {
+        Log.error("Main thread did not answer within \(Int(timeout)) s; tabs are unknown")
+        return nil
+    }
+    return result.value
+}
+
+/// Written on the main thread before the semaphore signals, read after the wait.
+private final class MainResult<T>: @unchecked Sendable {
+    var value: T?
 }
