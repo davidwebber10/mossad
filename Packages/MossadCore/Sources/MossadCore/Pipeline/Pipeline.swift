@@ -164,7 +164,8 @@ public actor Pipeline {
             let owner = talk.filter { $0.key.hasPrefix("me:") }.max { $0.value < $1.value }?.key
             r.speakerNames = owner.map { [$0: ownerName] } ?? [:]
             var keys: [String] = []
-            for u in r.utterances where u.speakerKey != owner && !keys.contains(u.speakerKey) { keys.append(u.speakerKey) }
+            for u in r.utterances where u.speakerKey != owner && !keys.contains(u.speakerKey)
+                && talk[u.speakerKey, default: 0] >= SpeakerIdentifier.minimumNamedSpeech { keys.append(u.speakerKey) }
             r.unknownSpeakers = keys
             r.speakerEmbeddings = [:]
             r.status = .identified
@@ -240,6 +241,24 @@ public actor Pipeline {
         // Names changed during the request: that save's own summary is newer.
         latest.apply(s)
         save(&latest, dir: dir)
+    }
+
+    /// "Not a person": the voices stay in the transcript as letters, but the call stops asking for them.
+    public func dismissSpeakers(callID: String, keys: [String]) {
+        let dir = paths.callDirectory(callID)
+        guard var r = try? CallRecord.load(from: dir) else { return }
+        r.unknownSpeakers.removeAll { keys.contains($0) }
+        save(&r, dir: dir)
+    }
+
+    /// Calls processed before the minimum speech rule may still ask for a stray word; stop asking.
+    public func dropShortUnknownSpeakers() {
+        for r in ProcessingQueue(paths: paths).allRecords() where !r.unknownSpeakers.isEmpty {
+            let short = r.unknownSpeakers.filter { key in
+                r.utterances.filter { $0.speakerKey == key }.reduce(0.0) { $0 + $1.end - $1.start } < SpeakerIdentifier.minimumNamedSpeech
+            }
+            if !short.isEmpty { dismissSpeakers(callID: r.id, keys: short) }
+        }
     }
 
     /// Renames a person in every meeting: speaker names, action item owners, and the notes. An email

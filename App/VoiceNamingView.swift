@@ -16,6 +16,8 @@ struct VoiceNamingView: View {
     /// Which candidate line each voice's sample comes from, and that line's text.
     @State private var choices: [String: Int] = [:]
     @State private var sampleText: [String: String] = [:]
+    /// Voices marked "Not a person" in this session; saved when the sheet closes with Save or Later.
+    @State private var dismissed: Set<String> = []
 
     var body: some View {
         let people = MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library)
@@ -25,7 +27,7 @@ struct VoiceNamingView: View {
             Text(subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
             ScrollView {
                 VStack(spacing: 10) {
-                    ForEach(record.unknownSpeakers, id: \.self) { key in
+                    ForEach(record.unknownSpeakers.filter { !dismissed.contains($0) }, id: \.self) { key in
                         card(key, people: people, talk: talk[people.name(forKey: key)] ?? 0)
                     }
                 }
@@ -33,14 +35,20 @@ struct VoiceNamingView: View {
             .frame(maxHeight: 460)
             HStack(spacing: 8) {
                 Spacer()
-                Button("Later") { dismiss() }
+                Button("Later") {
+                    if !dismissed.isEmpty { controller.dismissSpeakers(callID: record.id, keys: Array(dismissed)) }
+                    dismiss()
+                }
                 Button("Save") {
-                    controller.applyNames(callID: record.id, names: names, emails: emails)
+                    if !dismissed.isEmpty { controller.dismissSpeakers(callID: record.id, keys: Array(dismissed)) }
+                    if names.values.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                        controller.applyNames(callID: record.id, names: names, emails: emails)
+                    }
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(names.values.allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty })
+                .disabled(names.values.allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty } && dismissed.isEmpty)
             }
         }
         .padding(EdgeInsets(top: 20, leading: 20, bottom: 16, trailing: 20))
@@ -76,6 +84,16 @@ struct VoiceNamingView: View {
                 .accessibilityLabel("Next sample")
                 .disabled(ClipExtractor.candidates(for: key, utterances: record.utterances).count < 2)
                 Text(meta(key, people: people, talk: talk)).font(.system(size: 12)).foregroundStyle(.secondary)
+                Spacer()
+                Button("Not a person") {
+                    dismissed.insert(key)
+                    names[key] = nil
+                    emails[key] = nil
+                    if playing == key { player?.stop(); playing = nil }
+                }
+                .buttonStyle(.link)
+                .font(.system(size: 12))
+                .help("Echo, noise, or a voice you cannot tell. Mossad stops asking for it.")
             }
             if let quote = sampleText[key] ?? longestLine(of: key) {
                 Text("“\(quote)”").italic().font(.system(size: 13)).lineSpacing(3).lineLimit(3)

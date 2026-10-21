@@ -191,6 +191,27 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(r.summary, "Jo said Joe would call.", "a short name can be part of other words")
     }
 
+    func testNotAPersonRemovesTheVoiceFromTheNameRequest() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        XCTAssertEqual(try load(id).unknownSpeakers, ["them:A", "them:B"])
+        await p.dismissSpeakers(callID: id, keys: ["them:B"])
+        XCTAssertEqual(try load(id).unknownSpeakers, ["them:A"])
+    }
+
+    func testOldTinyVoicesAreDroppedFromNameRequests() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.utterances.append(Utterance(track: .them, speakerLabel: "C", start: 29, end: 29.6, text: "Yeah."))
+        r.unknownSpeakers = ["them:B", "them:C"]
+        try r.save(to: paths.callDirectory(id))
+        await p.dropShortUnknownSpeakers()
+        XCTAssertEqual(try load(id).unknownSpeakers, ["them:B"])
+    }
+
     func testWritingTheNoteAlsoMakesTheRecording() async throws {
         let id = try makeRecord()
         await pipeline().process(id)

@@ -107,7 +107,13 @@ final class AppController: ObservableObject {
             ProcessingQueue(paths: paths).recoverInterrupted()
         }
         refresh()
-        if !preview { relinkEmails() }
+        if !preview {
+            relinkEmails()
+            Task {
+                await pipeline.dropShortUnknownSpeakers()
+                refresh()
+            }
+        }
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
         if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }
@@ -215,6 +221,14 @@ final class AppController: ObservableObject {
                 if selectedMeetingID == callID { selectedMeetingID = nil }
                 refresh()
             }
+        }
+    }
+
+    /// The voices stay in the transcript as letters, but the call stops asking for their names.
+    func dismissSpeakers(callID: String, keys: [String]) {
+        Task {
+            await pipeline.dismissSpeakers(callID: callID, keys: keys)
+            refresh()
         }
     }
 

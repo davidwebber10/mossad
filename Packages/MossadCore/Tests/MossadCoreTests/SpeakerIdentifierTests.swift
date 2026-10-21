@@ -32,6 +32,14 @@ final class SpeakerIdentifierTests: XCTestCase {
         XCTAssertEqual(result.unknown, ["me:B"])
     }
 
+    func testAVoiceWithAFewWordsIsNotAskedFor() async throws {
+        // A single "Yeah." split off by diarization is not a person anyone can name.
+        try writeSegments(meURL, total: 30, [(0, 10, 200)])
+        try writeSegments(themURL, total: 30, [(12, 22, 400), (25, 25.7, 600)])
+        let result = try await identify([u(.me, "A", 0, 10), u(.them, "A", 12, 22), u(.them, "B", 25, 25.7)])
+        XCTAssertEqual(result.unknown, ["them:A"])
+    }
+
     func testOwnerIsNotEnrolledFromEchoOfTheOtherSide() async throws {
         // me:A is the other side leaking into the mic: it talks most, but only while them:A talks.
         try writeSegments(meURL, total: 60, [(0, 30, 600), (40, 50, 200)])
@@ -96,13 +104,13 @@ final class SpeakerIdentifierTests: XCTestCase {
         XCTAssertEqual(library.profiles.first { $0.name == "Alex Rivera" }?.embeddings.count, 2)
     }
 
-    func testSpeakerWithUnderTwoSecondsIsUnknown() async throws {
+    func testSpeakerWithUnderTwoSecondsIsNeitherNamedNorAskedFor() async throws {
         try library.add([0, 1, 0, 0], to: "Alex Rivera")
         try writeSegments(meURL, total: 20, [(0, 5, 200)])
         try writeSegments(themURL, total: 20, [(6, 7.5, 400)])
         let result = try await identify([u(.me, "A", 0, 5), u(.them, "A", 6, 7.5)])
         XCTAssertNil(result.names["them:A"])
-        XCTAssertEqual(result.unknown, ["them:A"])
+        XCTAssertEqual(result.unknown, [])
         XCTAssertNil(result.embeddings["them:A"])
     }
 
