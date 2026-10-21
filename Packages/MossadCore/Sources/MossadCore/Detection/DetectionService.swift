@@ -15,6 +15,8 @@ public final class DetectionService: @unchecked Sendable {
     private var lastProcesses: [AudioProcess] = []
 
     public var onEvent: (DetectorEvent) -> Void = { _ in }
+    /// Called after every tick during a call with the call app's audio process IDs.
+    public var onCallProcesses: ([AudioObjectID]) -> Void = { _ in }
 
     public init(mic: MicUsageProbing, tabs: BrowserTabProbing, windows: WindowTitleProbing,
                 detector: CallDetector = CallDetector(), tick: TimeInterval = 2) {
@@ -46,12 +48,14 @@ public final class DetectionService: @unchecked Sendable {
 
     public func tick(at time: Date) {
         let snapshot = snapshot(at: time)
-        guard let event = detector.process(snapshot) else { return }
-        switch event {
-        case .started(let platform, _, _): currentPlatform = platform
-        case .ended: currentPlatform = nil
+        if let event = detector.process(snapshot) {
+            switch event {
+            case .started(let platform, _, _): currentPlatform = platform
+            case .ended: currentPlatform = nil
+            }
+            onEvent(event)
         }
-        onEvent(event)
+        if detector.isInCall { onCallProcesses(audioProcessIDs) }
     }
 
     public func snapshot(at time: Date) -> DetectionSnapshot {

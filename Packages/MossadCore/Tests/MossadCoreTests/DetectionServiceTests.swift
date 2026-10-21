@@ -93,4 +93,15 @@ final class DetectionServiceTests: XCTestCase {
         service.tick(at: now)
         XCTAssertEqual(service.audioProcessIDs, [1, 2])
     }
+
+    func testReportsCallProcessesEachTick() {
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij")]
+        var reports: [[AudioObjectID]] = []
+        service.onCallProcesses = { reports.append($0) }
+        service.tick(at: now)
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true), proc(7, "com.google.Chrome.helper", input: false)]
+        service.tick(at: now.addingTimeInterval(2))
+        XCTAssertEqual(reports, [[2], [2, 7]])
+    }
 }

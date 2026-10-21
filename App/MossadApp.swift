@@ -18,8 +18,10 @@ struct MossadApp: App {
     @StateObject private var controller = AppController()
 
     var body: some Scene {
-        MenuBarExtra("Mossad", systemImage: "waveform") {
+        MenuBarExtra {
             MenuContent(controller: controller)
+        } label: {
+            Image(systemName: controller.isRecording ? "waveform.circle.fill" : "waveform")
         }
     }
 }
