@@ -45,6 +45,41 @@ final class VoiceLibraryTests: XCTestCase {
         XCTAssertEqual(profile.embeddings.last, [1, 24, 0])
     }
 
+    func testEmailIsStoredAndFoundIgnoringCase() throws {
+        let lib = VoiceLibrary(directory: dir)
+        try lib.add([1, 0, 0], to: "Alex Rivera")
+        try lib.setEmail("Alex@Example.com", for: "Alex Rivera")
+        XCTAssertEqual(VoiceLibrary(directory: dir).name(forEmail: "alex@example.com"), "Alex Rivera")
+        XCTAssertNil(lib.name(forEmail: "amy@example.com"))
+        try lib.setEmail(nil, for: "Alex Rivera")
+        XCTAssertNil(lib.name(forEmail: "alex@example.com"))
+    }
+
+    func testSetEmailForANewNameMakesAProfileWithoutVoice() throws {
+        let lib = VoiceLibrary(directory: dir)
+        try lib.setEmail("amy@example.com", for: "Amy Lee")
+        XCTAssertEqual(lib.profiles.map(\.name), ["Amy Lee"])
+        XCTAssertEqual(lib.profiles.first?.embeddings, [])
+        XCTAssertNil(lib.bestMatch([1, 0, 0]))
+    }
+
+    func testRenameKeepsTheEmail() throws {
+        let lib = VoiceLibrary(directory: dir)
+        try lib.add([1, 0, 0], to: "Alex")
+        try lib.setEmail("alex@example.com", for: "Alex")
+        try lib.add([1, 0, 0], to: "Alex Rivera")
+        try lib.merge("Alex", into: "Alex Rivera")
+        XCTAssertEqual(lib.name(forEmail: "alex@example.com"), "Alex Rivera")
+    }
+
+    func testOldFileWithoutEmailsLoads() throws {
+        let json = #"[{"name":"Alex Rivera","isOwner":false,"embeddings":[[1,0,0]]}]"#
+        try Data(json.utf8).write(to: dir.appendingPathComponent("voices.json"))
+        let lib = VoiceLibrary(directory: dir)
+        XCTAssertEqual(lib.profiles.map(\.name), ["Alex Rivera"])
+        XCTAssertNil(lib.profiles.first?.email)
+    }
+
     func testPersistsAcrossInstances() throws {
         try VoiceLibrary(directory: dir).add([0, 0, 1], to: "David Webber", isOwner: true)
         let reloaded = VoiceLibrary(directory: dir)

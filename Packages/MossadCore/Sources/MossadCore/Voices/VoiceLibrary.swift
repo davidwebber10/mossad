@@ -5,6 +5,8 @@ public struct VoiceProfile: Codable, Equatable, Sendable {
     public var isOwner: Bool
     /// Newest last; at most `VoiceLibrary.maxEmbeddings`.
     public var embeddings: [[Float]]
+    /// Picked by the owner from the call's attendees when naming the speaker.
+    public var email: String? = nil
 }
 
 /// Known voices, stored as `voices.json` in the Voices directory.
@@ -47,12 +49,36 @@ public final class VoiceLibrary: @unchecked Sendable {
         }
     }
 
+    /// A blank email clears it. A name with no profile gets one without voice samples, so the email is kept
+    /// even when voice fingerprints are off.
+    public func setEmail(_ email: String?, for name: String) throws {
+        let trimmed = email?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = trimmed?.isEmpty == false ? trimmed : nil
+        try lock.withLock {
+            if let i = storage.firstIndex(where: { $0.name == name }) {
+                storage[i].email = value
+            } else if let value {
+                storage.append(VoiceProfile(name: name, isOwner: false, embeddings: [], email: value))
+            } else {
+                return
+            }
+            try save()
+        }
+    }
+
+    /// The profile name stored with this email, ignoring case.
+    public func name(forEmail email: String) -> String? {
+        let key = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return profiles.first { $0.email?.lowercased() == key }?.name
+    }
+
     public func rename(_ from: String, to: String) throws {
         try lock.withLock {
             guard let i = storage.firstIndex(where: { $0.name == from }) else { return }
             if let j = storage.firstIndex(where: { $0.name == to }), j != i {
                 storage[j].embeddings = Array((storage[j].embeddings + storage[i].embeddings).suffix(Self.maxEmbeddings))
                 storage[j].isOwner = storage[j].isOwner || storage[i].isOwner
+                storage[j].email = storage[j].email ?? storage[i].email
                 storage.remove(at: i)
             } else {
                 storage[i].name = to

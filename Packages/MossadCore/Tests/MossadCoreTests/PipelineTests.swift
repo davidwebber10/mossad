@@ -278,6 +278,25 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(library.bestMatch([0, 1, 0, 0])?.name, "Alex Rivera")
     }
 
+    func testApplyNamesStoresEmailsOnTheProfiles() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        await p.applyNames(callID: id, names: ["them:A": "Alex Rivera", "them:B": "Amy Lee"],
+                           emails: ["them:A": " alex@example.com ", "them:B": ""])
+        XCTAssertEqual(library.name(forEmail: "ALEX@example.com"), "Alex Rivera")
+        XCTAssertEqual(library.profiles.first { $0.name == "Amy Lee" }?.email, nil)
+    }
+
+    func testApplyNamesStoresAnEmailWithoutAVoice() async throws {
+        let id = try makeRecord()
+        let p = pipeline(voiceFingerprints: false)
+        await p.process(id)
+        await p.applyNames(callID: id, names: ["them:B": "Amy Lee"], emails: ["them:B": "amy@example.com"])
+        XCTAssertEqual(library.name(forEmail: "amy@example.com"), "Amy Lee")
+        XCTAssertEqual(try load(id).speakerNames["them:B"], "Amy Lee")
+    }
+
     func testOverlappingNameSavesKeepBothNames() async throws {
         let id = try makeRecord()
         let p = pipeline()

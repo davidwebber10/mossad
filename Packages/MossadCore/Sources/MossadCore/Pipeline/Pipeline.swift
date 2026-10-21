@@ -214,7 +214,8 @@ public actor Pipeline {
     }
 
     /// Applies names chosen by David, learns those voices, and rewrites the summary and the file.
-    public func applyNames(callID: String, names: [String: String]) async {
+    /// `emails` uses the same speaker keys as `names`; each email is stored on that person's voice profile.
+    public func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) async {
         let dir = paths.callDirectory(callID)
         guard var r = try? CallRecord.load(from: dir) else { return }
         for (key, raw) in names {
@@ -225,6 +226,10 @@ public actor Pipeline {
             if let e = r.speakerEmbeddings[key] {
                 do { try library.add(e, to: name) } catch { Log.error("Saving voice for \(name) failed: \(error)") }
             }
+        }
+        for (key, email) in emails {
+            guard let name = r.speakerNames[key] else { continue }
+            do { try library.setEmail(email, for: name) } catch { Log.error("Saving email for \(name) failed: \(error)") }
         }
         // Save the names before the summary request, so a second save made meanwhile starts from them.
         save(&r, dir: dir)
