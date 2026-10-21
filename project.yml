@@ -1,115 +1,40 @@
 name: Mossad
 options:
-  bundleIdPrefix: com.mossad
+  bundleIdPrefix: com.dwebber
   deploymentTarget:
-    macOS: "26.0"
-  xcodeVersion: "16.0"
-  createIntermediateGroups: true
-  groupSortPosition: top
-
+    macOS: "15.0"
 packages:
-  GRDB:
-    url: https://github.com/groue/GRDB.swift
-    from: "6.0.0"
-
+  MossadCore:
+    path: Packages/MossadCore
 targets:
-
-  # ── MossadShared Framework ─────────────────────────────────────────────────
-  MossadShared:
-    type: framework
-    platform: macOS
-    deploymentTarget: "26.0"
-    sources:
-      - MossadShared
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mossad.shared
-        SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "26.0"
-        CODE_SIGN_IDENTITY: ""
-        CODE_SIGNING_REQUIRED: "NO"
-    dependencies:
-      - package: GRDB
-        product: GRDB
-
-  # ── Mossad App ─────────────────────────────────────────────────────────────
   Mossad:
     type: application
     platform: macOS
-    deploymentTarget: "26.0"
-    sources:
-      - Mossad
-      - path: MossadService
-        excludes:
-          - "main.swift"
-          - "ServiceDelegate.swift"
-          - "MossadServiceImpl.swift"
-          - "Info.plist"
+    sources: [App]
+    dependencies:
+      - package: MossadCore
     info:
-      path: Mossad/Info.plist
+      path: App/Info.plist
       properties:
+        CFBundleDisplayName: Mossad
+        CFBundleShortVersionString: "2.0"
+        CFBundleVersion: "1"
         LSUIElement: true
-        NSCalendarsUsageDescription: "Mossad reads your calendar to match meetings with transcriptions."
-        NSMicrophoneUsageDescription: "Mossad uses the microphone to capture your voice during calls."
-        NSAppleEventsUsageDescription: "Mossad checks your browser tabs to detect Google Meet calls."
+        NSMicrophoneUsageDescription: Mossad records your microphone during meetings to transcribe what you say.
+        NSAudioCaptureUsageDescription: Mossad records the meeting app's audio to transcribe what other people say.
+        NSCalendarsFullAccessUsageDescription: Mossad reads your calendar to name meetings and list attendees.
+        NSAppleEventsUsageDescription: Mossad reads browser tab addresses to detect Google Meet, Teams, and Zoom web calls.
     entitlements:
-      path: Mossad/Mossad.entitlements
+      path: App/Mossad.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+        com.apple.security.automation.apple-events: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mossad.app
-        SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "26.0"
-        CODE_SIGN_IDENTITY: ""
-        CODE_SIGNING_REQUIRED: "NO"
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwebber.mossad
         CODE_SIGN_STYLE: Manual
-    dependencies:
-      - target: MossadShared
-        embed: true
-        codeSign: false
-      - target: MossadService
-        embed: true
-        link: false
-        codeSign: false
-        copy:
-          destination: plugins
-
-  # ── MossadService XPC Service ──────────────────────────────────────────────
-  MossadService:
-    type: bundle
-    platform: macOS
-    deploymentTarget: "26.0"
-    sources:
-      - MossadService
-    info:
-      path: MossadService/Info.plist
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mossad.app.MossadService
-        SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "26.0"
-        CODE_SIGN_IDENTITY: ""
-        CODE_SIGNING_REQUIRED: "NO"
-        MACH_O_TYPE: mh_execute
-        WRAPPER_EXTENSION: xpc
-    dependencies:
-      - target: MossadShared
-        embed: false
-
-  # ── MossadTests ────────────────────────────────────────────────────────────
-  MossadTests:
-    type: bundle.unit-test
-    platform: macOS
-    deploymentTarget: "26.0"
-    sources:
-      - MossadTests
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mossad.tests
-        SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "26.0"
-    dependencies:
-      - target: Mossad
-      - target: MossadShared
-      - target: MossadService
-      - package: GRDB
-        product: GRDB
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: 35VNBDXR6B
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"

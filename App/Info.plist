@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Mossad</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,16 +17,18 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>2.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Mossad checks your browser tabs to detect Google Meet calls.</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Mossad reads your calendar to match meetings with transcriptions.</string>
+	<string>Mossad reads browser tab addresses to detect Google Meet, Teams, and Zoom web calls.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Mossad records the meeting app's audio to transcribe what other people say.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Mossad reads your calendar to name meetings and list attendees.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Mossad uses the microphone to capture your voice during calls.</string>
+	<string>Mossad records your microphone during meetings to transcribe what you say.</string>
 </dict>
 </plist>
