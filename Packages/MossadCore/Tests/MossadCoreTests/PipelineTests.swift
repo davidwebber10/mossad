@@ -100,6 +100,14 @@ final class PipelineTests: XCTestCase {
 
     func load(_ id: String) throws -> CallRecord { try CallRecord.load(from: paths.callDirectory(id)) }
 
+    func testDropsAMicVoiceHeardOnlyWhileTheCallAudioPlays() async throws {
+        // The them track (from makeRecord) has sound at 11–20 s and 21–28 s.
+        transcriber.result[.me]!.append(Utterance(track: .me, speakerLabel: "B", start: 22, end: 23, text: "Yeah."))
+        let id = try makeRecord()
+        await pipeline().process(id)
+        XCTAssertFalse(try load(id).utterances.contains { $0.track == .me && $0.speakerLabel == "B" })
+    }
+
     func testWritingTheNoteAlsoMakesTheRecording() async throws {
         let id = try makeRecord()
         await pipeline().process(id)

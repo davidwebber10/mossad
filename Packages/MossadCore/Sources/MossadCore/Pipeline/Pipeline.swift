@@ -118,7 +118,9 @@ public actor Pipeline {
         if case .success(let u) = meResult { r.meUtterances = u }
         if case .success(let u) = themResult { r.themUtterances = u }
         try r.save(to: dir)
-        r.utterances = TranscriptMerger.merge(me: try meResult.get(), them: try themResult.get())
+        // Without the them track (deleted or unreadable) only the word rule removes echo.
+        let themSound = try? SoundTimeline.measure(url: dir.appendingPathComponent(Track.them.fileName))
+        r.utterances = TranscriptMerger.merge(me: try meResult.get(), them: try themResult.get(), themSound: themSound)
         r.status = .transcribed
         Log.info("Transcribed \(r.id): \(r.utterances.count) utterances")
     }

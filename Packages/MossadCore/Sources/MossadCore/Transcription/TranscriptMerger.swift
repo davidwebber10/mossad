@@ -9,9 +9,31 @@ public enum TranscriptMerger {
     /// Shorter "me" utterances are always kept: a real "yes" matters more than a stray echoed word.
     static let minimumWords = 3
 
-    public static func merge(me: [Utterance], them: [Utterance]) -> [Utterance] {
-        let kept = me.filter { !isBleed(me: $0, them: them) }
+    /// A mic voice that talks this share of its time while the call audio has sound is the speakers' echo.
+    static let echoLabelOverlap = 0.8
+    /// Above this share of sound in the call audio (a fan, music) the timeline cannot tell anything apart.
+    static let maximumSoundCoverage = 0.9
+
+    public static func merge(me: [Utterance], them: [Utterance], themSound: SoundTimeline? = nil) -> [Utterance] {
+        let echo = themSound.map { echoLabels(me: me, themSound: $0) } ?? []
+        let kept = me.filter { !echo.contains($0.speakerLabel) && !isBleed(me: $0, them: them) }
         return (kept + them).sorted { $0.start < $1.start }
+    }
+
+    /// Mic speaker labels that are the other side heard through the speakers. Decided per label, not per
+    /// utterance: the owner's own backchannels often fall during their speech, and short echoed replies
+    /// ("Yeah.") are often missing from their transcript, so words cannot match them. The owner, the label
+    /// with the most speech while the call audio is quiet, is never dropped.
+    static func echoLabels(me: [Utterance], themSound: SoundTimeline) -> Set<String> {
+        guard themSound.coverage <= maximumSoundCoverage else { return [] }
+        var talk: [String: (total: TimeInterval, overlap: TimeInterval)] = [:]
+        for u in me {
+            let length = max(0, u.end - u.start)
+            talk[u.speakerLabel, default: (0, 0)].total += length
+            talk[u.speakerLabel, default: (0, 0)].overlap += min(length, themSound.sound(from: u.start, to: u.end))
+        }
+        guard let owner = talk.max(by: { ($0.value.total - $0.value.overlap) < ($1.value.total - $1.value.overlap) })?.key else { return [] }
+        return Set(talk.filter { $0.key != owner && $0.value.total > 0 && $0.value.overlap / $0.value.total >= echoLabelOverlap }.keys)
     }
 
     /// Bleed: "them" speech covers most of the "me" utterance's time, and nearly all of its words
