@@ -17,12 +17,16 @@ struct MainWindow: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
             .safeAreaInset(edge: .bottom) { SidebarStatus() }
         } detail: {
-            switch controller.section {
-            case .meetings: MeetingsView()
-            case .people: PeopleView()
-            case .settings: SettingsView()
-            case .log: LogView()
+            Group {
+                switch controller.section {
+                case .meetings: MeetingsView()
+                case .people: PeopleView()
+                case .settings: SettingsView()
+                case .log: LogView()
+                }
             }
+            // The panes have no toolbar items, so they start at the top edge like the design, not under an empty toolbar.
+            .ignoresSafeArea(.container, edges: .top)
         }
         .frame(minWidth: 980, minHeight: 600)
     }
