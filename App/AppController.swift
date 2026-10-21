@@ -170,6 +170,15 @@ final class AppController: ObservableObject {
         }
     }
 
+    func deleteMeeting(_ callID: String) {
+        Task {
+            if await pipeline.delete(callID: callID) {
+                if selectedMeetingID == callID { selectedMeetingID = nil }
+                refresh()
+            }
+        }
+    }
+
     func retry(_ callID: String) {
         Task {
             await track { await self.pipeline.retry(callID) }

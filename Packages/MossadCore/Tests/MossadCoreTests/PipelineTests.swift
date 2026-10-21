@@ -100,6 +100,25 @@ final class PipelineTests: XCTestCase {
 
     func load(_ id: String) throws -> CallRecord { try CallRecord.load(from: paths.callDirectory(id)) }
 
+    func testDeleteRemovesTheNoteAndTheAudio() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        let note = try XCTUnwrap(try load(id).markdownPath)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: note))
+        let deleted = await p.delete(callID: id)
+        XCTAssertTrue(deleted)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: note))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory(id).path))
+    }
+
+    func testDeleteRefusesACallThatIsStillInProgress() async throws {
+        let id = try makeRecord()
+        let deleted = await pipeline().delete(callID: id)
+        XCTAssertFalse(deleted)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.callDirectory(id).path))
+    }
+
     func testCalendarMatchUsesTheCallsMeetingID() async throws {
         let id = try makeRecord(meetingID: "abc-defg-hij")
         func event(_ title: String, _ code: String) -> CalendarEventInfo {

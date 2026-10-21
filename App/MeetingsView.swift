@@ -5,6 +5,7 @@ import SwiftUI
 struct MeetingsView: View {
     @EnvironmentObject var controller: AppController
     @State private var query = ""
+    @State private var deleting: CallRecord?
 
     private var results: [CallRecord] {
         let q = query.trimmingCharacters(in: .whitespaces)
@@ -18,6 +19,9 @@ struct MeetingsView: View {
         HStack(spacing: 0) {
             List(results, id: \.id, selection: $controller.selectedMeetingID) { r in
                 MeetingRow(record: r).tag(r.id)
+                    .contextMenu {
+                        Button("Delete…", role: .destructive) { deleting = r }.disabled(!r.canDelete)
+                    }
             }
             .overlay {
                 if controller.meetings.isEmpty {
@@ -31,7 +35,7 @@ struct MeetingsView: View {
 
             Group {
                 if let id = controller.selectedMeetingID, let r = controller.meetings.first(where: { $0.id == id }) {
-                    MeetingDetail(record: r)
+                    MeetingDetail(record: r, deleting: $deleting)
                 } else {
                     ContentUnavailableView("Select a meeting", systemImage: "text.bubble")
                 }
@@ -39,6 +43,13 @@ struct MeetingsView: View {
             .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
         .searchable(text: $query, placement: .toolbar, prompt: "Search titles and transcripts")
+        .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Delete meeting", role: .destructive) {
+                if let id = deleting?.id { controller.deleteMeeting(id) }
+            }
+        } message: {
+            Text("Mossad deletes the note, the transcript, and the audio. Voices it learned from this call stay.")
+        }
         .onAppear {
             if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first?.id }
         }
@@ -49,7 +60,10 @@ struct MeetingsView: View {
     }
 }
 
-extension CallRecord: @retroactive Identifiable {}
+extension CallRecord: @retroactive Identifiable {
+    /// A call that is still recording or processing cannot be deleted; Skip this call covers the first.
+    var canDelete: Bool { status == .written || status == .failed }
+}
 
 private struct MeetingRow: View {
     let record: CallRecord
@@ -76,6 +90,7 @@ private struct MeetingRow: View {
 private struct MeetingDetail: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
+    @Binding var deleting: CallRecord?
 
     var body: some View {
         let names = MarkdownWriter.displayNames(record)
@@ -93,6 +108,9 @@ private struct MeetingDetail: View {
                     }
                     if let path = record.markdownPath {
                         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
+                    }
+                    if record.canDelete {
+                        Button("Delete…", role: .destructive) { deleting = record }
                     }
                 }
 

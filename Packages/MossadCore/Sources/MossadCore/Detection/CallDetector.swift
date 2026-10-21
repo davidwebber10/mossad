@@ -37,11 +37,15 @@ public struct CallDetector: Sendable {
     public struct Config: Sendable {
         public var goneConfirmTicks = 2
         public var micIdleFallback: TimeInterval = 180
+        /// Meet keeps the mic open while muted, and its page after you leave keeps the meeting title,
+        /// so a stopped mic is the sign that you left.
+        public var meetMicIdle: TimeInterval = 20
         public init() {}
     }
 
     private let config: Config
     public private(set) var currentBundleID: String?
+    private var currentPlatform: Platform?
     private var lastMicActive: Date?
     private var goneCount = 0
 
@@ -55,6 +59,7 @@ public struct CallDetector: Sendable {
         guard let bundleID = currentBundleID else {
             guard let c = snapshot.candidates.first(where: { $0.micActive && $0.meetingPresent != false }) else { return nil }
             currentBundleID = c.bundleID
+            currentPlatform = c.platform
             lastMicActive = snapshot.time
             goneCount = 0
             return .started(platform: c.platform, bundleID: c.bundleID, at: snapshot.time)
@@ -70,7 +75,8 @@ public struct CallDetector: Sendable {
 
         if candidate?.micActive == true {
             lastMicActive = snapshot.time
-        } else if let last = lastMicActive, snapshot.time.timeIntervalSince(last) >= config.micIdleFallback {
+        } else if let last = lastMicActive,
+                  snapshot.time.timeIntervalSince(last) >= (currentPlatform == .meet ? config.meetMicIdle : config.micIdleFallback) {
             return end(at: snapshot.time, trimTo: last)
         }
         return nil
@@ -78,6 +84,7 @@ public struct CallDetector: Sendable {
 
     private mutating func end(at time: Date, trimTo: Date?) -> DetectorEvent {
         currentBundleID = nil
+        currentPlatform = nil
         lastMicActive = nil
         goneCount = 0
         return .ended(at: time, trimTo: trimTo)

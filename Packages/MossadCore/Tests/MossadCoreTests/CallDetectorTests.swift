@@ -52,12 +52,40 @@ final class CallDetectorTests: XCTestCase {
         XCTAssertEqual(d.process(snap(0, [teams])), .started(platform: .teams, bundleID: "com.microsoft.teams2", at: t0))
     }
 
-    func testMicReleaseWithWindowPresentDoesNotEnd() {
+    func testZoomMicReleaseWithWindowPresentDoesNotEnd() {
+        // Zoom can release the mic while muted, so a short mic gap must not end its call.
+        var d = CallDetector()
+        XCTAssertNotNil(d.process(snap(0, [zoom(mic: true, present: true)])))
+        for s in stride(from: 2.0, through: 170, by: 2) {
+            XCTAssertNil(d.process(snap(s, [zoom(mic: false, present: true)])), "ended at \(s)")
+        }
+        XCTAssertTrue(d.isInCall)
+    }
+
+    func testMeetEndsSoonAfterTheMicStopsEvenWithTheTabOpen() {
+        // Meet keeps the mic open while muted and keeps its title on the page shown after you leave.
         var d = CallDetector()
         started(&d)
-        for s in stride(from: 2.0, through: 170, by: 2) {
-            XCTAssertNil(d.process(snap(s, [meet(mic: false, present: true)])), "ended at \(s)")
+        XCTAssertNil(d.process(snap(10, [meet(mic: true, present: true)])))
+        var event: DetectorEvent?
+        var s = 12.0
+        while event == nil && s < 400 {
+            event = d.process(snap(s, [meet(mic: false, present: true)]))
+            if event == nil { s += 2 }
         }
+        XCTAssertEqual(s, 30)
+        XCTAssertEqual(event, .ended(at: t0.addingTimeInterval(30), trimTo: t0.addingTimeInterval(10)))
+    }
+
+    func testMeetShortMicGapDoesNotEnd() {
+        // An audio device change stops the mic for a moment.
+        var d = CallDetector()
+        started(&d)
+        for s in stride(from: 2.0, through: 16, by: 2) {
+            XCTAssertNil(d.process(snap(s, [meet(mic: false, present: true)])))
+        }
+        XCTAssertNil(d.process(snap(18, [meet(mic: true, present: true)])))
+        XCTAssertNil(d.process(snap(36, [meet(mic: false, present: true)])))
         XCTAssertTrue(d.isInCall)
     }
 
@@ -80,12 +108,12 @@ final class CallDetectorTests: XCTestCase {
 
     func testEndsByMicIdleFallback() {
         var d = CallDetector()
-        started(&d)
-        XCTAssertNil(d.process(snap(10, [meet(mic: true, present: true)])))
+        XCTAssertNotNil(d.process(snap(0, [zoom(mic: true, present: true)])))
+        XCTAssertNil(d.process(snap(10, [zoom(mic: true, present: true)])))
         var event: DetectorEvent?
         var s = 12.0
         while event == nil && s < 400 {
-            event = d.process(snap(s, [meet(mic: false, present: nil)]))
+            event = d.process(snap(s, [zoom(mic: false, present: nil)]))
             if event == nil { s += 2 }
         }
         XCTAssertEqual(s, 190)

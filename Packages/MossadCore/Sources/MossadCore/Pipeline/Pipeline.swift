@@ -96,6 +96,20 @@ public actor Pipeline {
         await process(id)
     }
 
+    /// Deletes a finished or failed call: its note, audio, and record. A call that is still recording or
+    /// processing is refused, so the pipeline never writes into a folder that is gone.
+    public func delete(callID: String) -> Bool {
+        let dir = paths.callDirectory(callID)
+        guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed else { return false }
+        if let note = r.markdownPath { try? FileManager.default.removeItem(atPath: note) }
+        do { try FileManager.default.removeItem(at: dir) } catch {
+            Log.error("Deleting \(callID) failed: \(error)")
+            return false
+        }
+        Log.info("Deleted call \(callID)")
+        return true
+    }
+
     private func transcribe(_ r: inout CallRecord, dir: URL) async throws {
         async let me = transcribeIfNeeded(r.meUtterances, track: .me, dir: dir)
         async let them = transcribeIfNeeded(r.themUtterances, track: .them, dir: dir)
