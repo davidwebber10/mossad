@@ -23,10 +23,14 @@ public actor Pipeline {
     private let now: @Sendable () -> Date
     private let ownerName: String
     private let voiceFingerprints: Bool
+    private let onStep: @Sendable (CallRecord) -> Void
 
+    /// `onStep` receives the record after every save of `call.json`, so the UI can show the live step.
     public init(paths: Paths, transcriber: Transcribing, library: VoiceLibrary, embeddings: EmbeddingProvider,
                 calendar: CalendarSource, summarizer: Summarizing?, notify: @escaping @Sendable (CallRecord) -> Void,
-                now: @escaping @Sendable () -> Date = Date.init, ownerName: String = "Me", voiceFingerprints: Bool = true) {
+                now: @escaping @Sendable () -> Date = Date.init, ownerName: String = "Me", voiceFingerprints: Bool = true,
+                onStep: @escaping @Sendable (CallRecord) -> Void = { _ in }) {
+        self.onStep = onStep
         self.paths = paths
         self.queue = ProcessingQueue(paths: paths)
         self.transcriber = transcriber
@@ -57,7 +61,7 @@ public actor Pipeline {
                 case .transcribed: try await identify(&r, dir: dir)
                 case .identified:
                     guard await summarize(&r) else {
-                        try r.save(to: dir)
+                        try store(r, dir: dir)
                         return
                     }
                 case .summarized: try write(&r)
@@ -65,20 +69,24 @@ public actor Pipeline {
                 }
                 r.attempts = 0
                 r.nextAttempt = nil
-                try r.save(to: dir)
+                r.failureReason = nil
+                try store(r, dir: dir)
             }
-        } catch is MissingAPIKey {
+        } catch let error as MissingAPIKey {
             // Not the call's fault: wait for the key without using up attempts or a backoff delay.
             Log.error("Processing \(id) waits for an API key")
+            r.failureReason = Self.failureReason(error)
+            try? store(r, dir: dir)
         } catch {
             Log.error("Processing \(id) failed at \(r.status.rawValue): \(error)")
+            r.failureReason = Self.failureReason(error)
             queue.markFailure(&r, now: now())
             if r.attempts >= Self.maxAttempts {
                 r.failedStep = r.status
                 r.status = .failed
                 Log.error("Gave up on \(id) after \(r.attempts) attempts")
             }
-            try? r.save(to: dir)
+            try? store(r, dir: dir)
         }
     }
 
@@ -92,8 +100,14 @@ public actor Pipeline {
         }
         r.attempts = 0
         r.nextAttempt = nil
-        try? r.save(to: dir)
+        r.failureReason = nil
+        try? store(r, dir: dir)
         await process(id)
+    }
+
+    private func store(_ r: CallRecord, dir: URL) throws {
+        try r.save(to: dir)
+        onStep(r)
     }
 
     /// Deletes a finished or failed call: its note, audio, and record. A call that is still recording or
@@ -117,7 +131,7 @@ public actor Pipeline {
         // Keep whichever track succeeded, then fail if either did.
         if case .success(let u) = meResult { r.meUtterances = u }
         if case .success(let u) = themResult { r.themUtterances = u }
-        try r.save(to: dir)
+        try store(r, dir: dir)
         // Without the them track (deleted or unreadable) only the word rule removes echo.
         let themSound = try? SoundTimeline.measure(url: dir.appendingPathComponent(Track.them.fileName))
         r.utterances = TranscriptMerger.merge(me: try meResult.get(), them: try themResult.get(), themSound: themSound)
@@ -177,6 +191,7 @@ public actor Pipeline {
                 r.apply(s)
             } catch {
                 Log.error("Summary for \(r.id) failed: \(error)")
+                r.failureReason = Self.failureReason(error)
                 queue.markFailure(&r, now: now())
                 if r.attempts < Self.maxSummaryAttempts { return false }
                 Log.info("Writing \(r.id) without a summary after \(r.attempts) attempts")
@@ -229,7 +244,7 @@ public actor Pipeline {
                 try MarkdownWriter.render(r).write(to: url, atomically: true, encoding: .utf8)
                 r.markdownPath = url.path
             }
-            try r.save(to: dir)
+            try store(r, dir: dir)
         } catch {
             Log.error("Applying names to \(r.id) failed: \(error)")
         }

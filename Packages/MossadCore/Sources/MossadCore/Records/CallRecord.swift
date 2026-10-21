@@ -65,6 +65,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var themUtterances: [Utterance]?
     /// The step that failed when `status` is `.failed`.
     public var failedStep: CallStatus?
+    /// Short text for the last error, such as "AssemblyAI key missing"; nil once a step succeeds.
+    public var failureReason: String?
     /// Speaker key (`me:A`, `them:B`) → person name.
     public var speakerNames: [String: String] = [:]
     public var unknownSpeakers: [String] = []
@@ -121,6 +123,7 @@ extension CallRecord {
         meUtterances = try c.decodeIfPresent([Utterance].self, forKey: .meUtterances)
         themUtterances = try c.decodeIfPresent([Utterance].self, forKey: .themUtterances)
         failedStep = try c.decodeIfPresent(CallStatus.self, forKey: .failedStep)
+        failureReason = try c.decodeIfPresent(String.self, forKey: .failureReason)
         speakerNames = try c.decodeIfPresent([String: String].self, forKey: .speakerNames) ?? [:]
         unknownSpeakers = try c.decodeIfPresent([String].self, forKey: .unknownSpeakers) ?? []
         speakerEmbeddings = try c.decodeIfPresent([String: [Float]].self, forKey: .speakerEmbeddings) ?? [:]

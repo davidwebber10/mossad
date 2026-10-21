@@ -43,6 +43,7 @@ struct Boom: Error {}
 
 final class Notifications: @unchecked Sendable {
     var records: [CallRecord] = []
+    var steps: [CallRecord] = []
 }
 
 final class PipelineTests: XCTestCase {
@@ -84,7 +85,53 @@ final class PipelineTests: XCTestCase {
         let later = start.addingTimeInterval(3600)
         return Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
                         calendar: calendar, summarizer: summarizer, notify: { notifications.records.append($0) },
-                        now: { later }, ownerName: "David Webber", voiceFingerprints: voiceFingerprints)
+                        now: { later }, ownerName: "David Webber", voiceFingerprints: voiceFingerprints,
+                        onStep: { notifications.steps.append($0) })
+    }
+
+    func testOnStepReportsEachSavedStep() async throws {
+        let id = try makeRecord()
+        await pipeline().process(id)
+        let statuses = notifications.steps.map(\.status)
+        XCTAssertEqual(statuses.filter { $0 != .recorded }, [.transcribed, .identified, .summarized, .written])
+        XCTAssertEqual(notifications.steps.last, try load(id))
+    }
+
+    func testOnStepReportsAFailedAttempt() async throws {
+        transcriber.error = Boom()
+        let id = try makeRecord()
+        await pipeline().process(id)
+        XCTAssertEqual(notifications.steps.last?.attempts, 1)
+    }
+
+    func testFailureReasonForAMissingKey() async throws {
+        transcriber.error = MissingAPIKey(service: "AssemblyAI")
+        let id = try makeRecord()
+        await pipeline().process(id)
+        XCTAssertEqual(try load(id).failureReason, "AssemblyAI key missing")
+    }
+
+    func testFailureReasonIsSetAndClearedOnSuccess() async throws {
+        transcriber.error = TranscriptionError.http(401, "Unauthorized")
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        XCTAssertEqual(try load(id).failureReason, "invalid API key")
+        transcriber.error = nil
+        await p.retry(id)
+        let r = try load(id)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertNil(r.failureReason)
+    }
+
+    func testFailureReasonText() {
+        XCTAssertEqual(Pipeline.failureReason(MissingAPIKey(service: "Anthropic")), "Anthropic key missing")
+        XCTAssertEqual(Pipeline.failureReason(SummaryError.http(401, "x")), "invalid API key")
+        XCTAssertEqual(Pipeline.failureReason(TranscriptionError.http(500, "x")), "AssemblyAI error 500")
+        XCTAssertEqual(Pipeline.failureReason(SummaryError.http(529, "x")), "Anthropic error 529")
+        XCTAssertEqual(Pipeline.failureReason(SummaryError.refused), "Claude refused to summarize this transcript")
+        XCTAssertEqual(Pipeline.failureReason(URLError(.notConnectedToInternet)), "no network connection")
+        XCTAssertEqual(Pipeline.failureReason(Boom()), "unexpected error")
     }
 
     func testWithoutVoiceFingerprintsNoVoiceIsStoredOrMatched() async throws {
