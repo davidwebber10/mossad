@@ -13,7 +13,8 @@ public enum Retention {
         for dir in (try? fm.contentsOfDirectory(at: audioRoot, includingPropertiesForKeys: nil)) ?? [] {
             guard let r = try? CallRecord.load(from: dir), r.status == .written else { continue }
             let expired = recordingsAfterDays.map { r.end < cutoff($0) } ?? false
-            let hasRecording = fm.fileExists(atPath: Recording.url(in: dir).path)
+            // A recording archived in the cloud counts too: its local copy may be gone already.
+            let hasRecording = fm.fileExists(atPath: Recording.url(in: dir).path) || r.cloudKey != nil
             guard expired || (hasRecording && r.end < cutoff(rawTracksAfterDays)) else { continue }
             for file in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
             where file.pathExtension == "caf" || (expired && file.lastPathComponent == Recording.fileName) {

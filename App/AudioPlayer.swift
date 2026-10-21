@@ -46,10 +46,7 @@ final class AudioPlayer: ObservableObject {
                 else { continue }
                 try? target.insertTimeRange(range, of: source, at: .zero)
             }
-            guard !composition.tracks.isEmpty else {
-                Log.info("No audio to play in \(dir.lastPathComponent)")
-                return
-            }
+            guard !composition.tracks.isEmpty else { return }
             asset = composition
         }
         let seconds: Double
@@ -58,6 +55,23 @@ final class AudioPlayer: ObservableObject {
             return
         }
         guard seconds > 0 else { return }
+        let item = AVPlayerItem(asset: asset)
+        player.replaceCurrentItem(with: item)
+        endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.isPlaying = false }
+        }
+        duration = seconds
+        isAvailable = true
+    }
+
+    /// Streams the recording from the cloud archive when no local audio exists.
+    func loadRemote(_ url: URL) async {
+        guard !isAvailable else { return }
+        let asset = AVURLAsset(url: url)
+        guard let seconds = try? await asset.load(.duration).seconds, seconds > 0 else {
+            Log.error("The archived recording could not be loaded")
+            return
+        }
         let item = AVPlayerItem(asset: asset)
         player.replaceCurrentItem(with: item)
         endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in

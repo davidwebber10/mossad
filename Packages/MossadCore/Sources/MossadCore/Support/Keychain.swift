@@ -4,6 +4,8 @@ import Security
 public enum APIKey: String, CaseIterable, Sendable {
     case assemblyai
     case anthropic
+    /// The secret access key of the cloud bucket (Cloudflare R2 or Amazon S3).
+    case cloudSecret
 
     /// Finds the key in an environment: the standard name first, then a common variant
     /// (`ASSEMBLYAI`, or a named Anthropic key such as `ANTHROPIC_API_KEY_TEAM`).
@@ -11,6 +13,7 @@ public enum APIKey: String, CaseIterable, Sendable {
         let found: String? = switch self {
         case .assemblyai: env["ASSEMBLYAI_API_KEY"] ?? env["ASSEMBLYAI"]
         case .anthropic: env["ANTHROPIC_API_KEY"] ?? env.keys.filter { $0.hasPrefix("ANTHROPIC_API_KEY_") }.sorted().first.flatMap { env[$0] }
+        case .cloudSecret: env["MOSSAD_CLOUD_SECRET"]
         }
         return found?.isEmpty == false ? found : nil
     }

@@ -36,6 +36,7 @@ struct SettingsView: View {
                         }
                     }
                 }
+                group("Storage") { StorageSettings() }
             }
             .font(.system(size: 12))
             .padding(EdgeInsets(top: 8, leading: 24, bottom: 24, trailing: 24))

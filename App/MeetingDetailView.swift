@@ -37,6 +37,11 @@ struct MeetingDetailView: View {
                     banner
                     PlayerBar(player: player, record: record, people: people, retentionDays: controller.deleteRecordings ? controller.recordingDays : nil)
                         .padding(.top, 12)
+                        .task(id: record.cloudKey) {
+                            // Local audio loads first; give it a moment before falling back to the archive.
+                            try? await Task.sleep(for: .milliseconds(600))
+                            if !player.isAvailable, let url = controller.cloudArchive?.playbackURL(for: record) { await player.loadRemote(url) }
+                        }
                     tabs
                 }
                 .padding(.horizontal, style == .fullPage ? 32 : 16)

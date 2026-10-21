@@ -32,6 +32,13 @@ final class AppController: ObservableObject {
     /// What was said so far, from AssemblyAI streaming; shown while the call runs, not used for the note.
     @Published private(set) var live = LiveTranscript()
     @AppStorage("liveTranscript") var liveTranscriptEnabled = true
+    /// "local", "r2", or "s3". The secret lives in the Keychain; the rest is not secret.
+    @AppStorage("storage") var storage = "local"
+    @AppStorage("cloudEndpoint") var cloudEndpoint = ""
+    @AppStorage("cloudBucket") var cloudBucket = ""
+    @AppStorage("cloudRegion") var cloudRegion = "us-east-1"
+    @AppStorage("cloudAccessKeyID") var cloudAccessKeyID = ""
+    @AppStorage("cloudKeepLocalDays") var cloudKeepLocalDays = 30
     private var liveSessions: [LiveTranscriber] = []
     private var liveStart = Date()
     /// 0 means on. Otherwise Mossad is off until this time (seconds since 1970; `.infinity` for "until I turn it on").
@@ -318,7 +325,10 @@ final class AppController: ObservableObject {
     }
 
     func deleteMeeting(_ callID: String) {
+        let archived = meetings.first { $0.id == callID }
+        let archive = cloudArchive
         Task {
+            if let archived, let archive { await archive.delete(archived) }
             if await pipeline.delete(callID: callID) {
                 if selectedMeetingID == callID { selectedMeetingID = nil }
                 refresh()
@@ -331,6 +341,24 @@ final class AppController: ObservableObject {
         Task {
             await pipeline.dismissSpeakers(callID: callID, keys: keys)
             refresh()
+        }
+    }
+
+    /// The bucket to archive recordings in, when one is set up completely.
+    var cloudArchive: CloudArchive? {
+        guard storage != "local", let endpoint = URL(string: cloudEndpoint), endpoint.host != nil, !cloudBucket.isEmpty,
+              !cloudAccessKeyID.isEmpty, let secret = keychain.get(.cloudSecret) else { return nil }
+        let config = S3Config(endpoint: endpoint, bucket: cloudBucket, region: storage == "r2" ? "auto" : cloudRegion,
+                              accessKeyID: cloudAccessKeyID, secret: secret, pathStyle: storage == "r2")
+        return CloudArchive(config: config, paths: paths)
+    }
+
+    /// Uploads finished recordings and removes old local copies, off the main actor.
+    func syncCloud() {
+        guard let archive = cloudArchive else { return }
+        let days = cloudKeepLocalDays
+        Task.detached(priority: .utility) {
+            if await archive.sync(keepLocalDays: days) > 0 { await MainActor.run { self.refresh() } }
         }
     }
 
@@ -424,6 +452,7 @@ final class AppController: ObservableObject {
         processing += 1
         refresh()
         await work()
+        syncCloud()
         processing -= 1
         refresh()
     }

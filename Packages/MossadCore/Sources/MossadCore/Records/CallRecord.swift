@@ -108,6 +108,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var parts: [CallPart] = []
     /// Pauses and stops by the person, shown in the transcript.
     public var markers: [TranscriptMarker] = []
+    /// Where the recording is archived in the bucket, once uploaded.
+    public var cloudKey: String?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -168,5 +170,6 @@ extension CallRecord {
         markdownPath = try c.decodeIfPresent(String.self, forKey: .markdownPath)
         parts = try c.decodeIfPresent([CallPart].self, forKey: .parts) ?? []
         markers = try c.decodeIfPresent([TranscriptMarker].self, forKey: .markers) ?? []
+        cloudKey = try c.decodeIfPresent(String.self, forKey: .cloudKey)
     }
 }
