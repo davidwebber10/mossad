@@ -52,7 +52,7 @@ scripts/build.sh --no-launch                  # full app build and install to /A
 
 If you were asked to act on a meeting, the notes are in `~/Mossad/Meetings/`, one file per call, named `YYYY-MM-DD HHMM - Title.md`.
 
-Each note has YAML front matter (`date`, `start`, `end`, `duration_minutes`, `platform`, `title`, `attendees`, `speakers`, `audio`) followed by `## Summary`, `## Action items` (a checklist), and `## Transcript`. Transcript lines look like `[HH:MM:SS] Name: text`.
+Each note has YAML front matter (`date`, `start`, `end`, `duration_minutes`, `platform`, `title`, `attendees`, `speakers`, `audio`, and `kind` such as "Monthly update" when known) followed by `## Summary` (a short overview, then one `###` section per topic), `## Action items` (a checklist; left out for meetings that only share information), `## Decisions` (when any), and `## Transcript`. Transcript lines look like `[HH:MM:SS] Name: text`.
 
 - The note owner's lines use their own name. Unnamed people appear as `Speaker A`, `Speaker B`, and so on, lettered by first appearance.
 - The summary and action items are generated. When they disagree with the transcript, trust the transcript.

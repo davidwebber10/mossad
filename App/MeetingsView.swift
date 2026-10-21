@@ -359,6 +359,8 @@ struct MeetingMenuItems: View {
             }
             .disabled(record.markdownPath == nil)
             Button("Show audio in Finder", systemImage: "folder") { NSWorkspace.shared.open(controller.paths.callDirectory(record.id)) }
+            Button("Regenerate summary", systemImage: "arrow.clockwise") { controller.regenerateSummary(record.id) }
+                .disabled(record.status != .written || record.utterances.isEmpty)
             Button("Merge with…", systemImage: "arrow.triangle.merge") {
                 NotificationCenter.default.post(name: .mergeMeeting, object: record.id)
             }

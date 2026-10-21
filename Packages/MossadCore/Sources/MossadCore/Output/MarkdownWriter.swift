@@ -44,15 +44,18 @@ public enum MarkdownWriter {
             "attendees: [\(r.attendees.map(quoted).joined(separator: ", "))]",
             "speakers: [\(speakers.map(quoted).joined(separator: ", "))]",
             "audio: ~/Mossad/Audio/\(r.id)",
-            "---",
-            "# \(r.title)",
-            "",
         ]
+        if let kind = r.kind { lines.insert("kind: \(quoted(kind))", at: lines.count - 4) }
+        lines += ["---", "# \(r.title)", ""]
         if let summary = r.summary {
             lines += ["## Summary", "", summary, ""]
-            lines += ["## Action items", ""]
-            lines += r.actionItems.isEmpty ? ["None."] : r.actionItems.map { "- [ ] \($0.text)" }
-            lines.append("")
+            for topic in r.topics { lines += ["### \(topic.title)", "", topic.summary, ""] }
+            // An update meeting has no outcomes; leave the section out instead of writing "None.".
+            if r.hasOutcomes != false || !r.actionItems.isEmpty {
+                lines += ["## Action items", ""]
+                lines += r.actionItems.isEmpty ? ["None."] : r.actionItems.map { "- [ ] \($0.text)" }
+                lines.append("")
+            }
             if !r.decisions.isEmpty {
                 lines += ["## Decisions", ""] + r.decisions.map { "- \($0)" } + [""]
             }

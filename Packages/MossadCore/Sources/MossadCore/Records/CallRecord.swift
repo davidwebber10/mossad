@@ -99,6 +99,10 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var speakerEmbeddings: [String: [Float]] = [:]
     /// Markdown; older records hold plain sentences.
     public var summary: String?
+    public var topics: [SummaryTopic] = []
+    public var kind: String?
+    /// False for a meeting that only shares information; nil for records from before this field.
+    public var hasOutcomes: Bool?
     public var actionItems: [ActionItem] = []
     public var decisions: [String] = []
     /// One sentence, at most about 140 characters.
@@ -166,6 +170,9 @@ extension CallRecord {
         summary = try c.decodeIfPresent(String.self, forKey: .summary)
         actionItems = try c.decodeIfPresent([ActionItem].self, forKey: .actionItems) ?? []
         decisions = try c.decodeIfPresent([String].self, forKey: .decisions) ?? []
+        topics = try c.decodeIfPresent([SummaryTopic].self, forKey: .topics) ?? []
+        kind = try c.decodeIfPresent(String.self, forKey: .kind)
+        hasOutcomes = try c.decodeIfPresent(Bool.self, forKey: .hasOutcomes)
         headline = try c.decodeIfPresent(String.self, forKey: .headline)
         markdownPath = try c.decodeIfPresent(String.self, forKey: .markdownPath)
         parts = try c.decodeIfPresent([CallPart].self, forKey: .parts) ?? []

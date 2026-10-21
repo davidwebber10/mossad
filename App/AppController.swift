@@ -149,6 +149,11 @@ final class AppController: ObservableObject {
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
         if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }
+        // Development hook: `--regenerate-summaries` writes new summaries for today's finished meetings.
+        if !preview, CommandLine.arguments.contains("--regenerate-summaries") {
+            let today = meetings.filter { Calendar.current.isDateInToday($0.start) && $0.status == .written }.map(\.id)
+            Task { for id in today { await track { await self.pipeline.regenerateSummary(id) } } }
+        }
         // Development hook: `--light` shows the UI in light mode, to check both looks.
         if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
         // Development hook: `--open-naming` opens "Who is speaking?" for the first call that needs names.
@@ -385,6 +390,11 @@ final class AppController: ObservableObject {
     /// The text for a call in progress: the live sub-step, or the step name.
     func progressText(_ r: CallRecord) -> String? {
         stepDetails[r.id] ?? ProcessingStep(status: r.status)?.title
+    }
+
+    /// A new summary from Claude for a finished meeting; the transcript and names stay.
+    func regenerateSummary(_ id: String) {
+        Task { await track { await self.pipeline.regenerateSummary(id) } }
     }
 
     /// Joins the meetings into the earliest one and opens it.

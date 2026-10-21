@@ -98,4 +98,23 @@ final class MarkdownWriterTests: XCTestCase {
         r.calendarTitle = nil
         XCTAssertTrue(MarkdownWriter.render(r).contains("# Google Meet call"))
     }
+
+    func testTopicsFollowTheOverviewAsSections() {
+        var r = CallRecord(id: "x", platform: .meet, bundleID: "b", start: Date(timeIntervalSince1970: 1_800_000_000),
+                           end: Date(timeIntervalSince1970: 1_800_000_600), status: .written)
+        r.summary = "A short overview."
+        r.topics = [SummaryTopic(title: "Freight", summary: "Rates went up.")]
+        let md = MarkdownWriter.render(r)
+        XCTAssertTrue(md.contains("## Summary\n\nA short overview.\n\n### Freight\n\nRates went up.\n"), md)
+    }
+
+    func testAnUpdateMeetingHasNoActionItemsSection() {
+        var r = CallRecord(id: "x", platform: .meet, bundleID: "b", start: Date(timeIntervalSince1970: 1_800_000_000),
+                           end: Date(timeIntervalSince1970: 1_800_000_600), status: .written)
+        r.summary = "The monthly update."
+        r.hasOutcomes = false
+        let md = MarkdownWriter.render(r)
+        XCTAssertFalse(md.contains("## Action items"), md)
+        XCTAssertFalse(md.contains("## Decisions"), md)
+    }
 }

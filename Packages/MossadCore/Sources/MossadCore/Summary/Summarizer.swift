@@ -1,26 +1,50 @@
 import Foundation
 
-public struct MeetingSummary: Sendable, Equatable {
-    /// Markdown: a lead paragraph, then optional `###` sections, `**bold**`, and `-` lists.
+/// One subject of a longer meeting, shown collapsed under the overview.
+public struct SummaryTopic: Codable, Equatable, Sendable, Hashable {
+    public var title: String
+    /// Short Markdown: a few sentences or a `-` list, `**bold**` for key numbers and dates.
     public var summary: String
+
+    public init(title: String, summary: String) {
+        self.title = title
+        self.summary = summary
+    }
+}
+
+public struct MeetingSummary: Sendable, Equatable {
+    /// The overview: 3 to 4 sentences on what the call was. Older records hold longer Markdown.
+    public var summary: String
+    public var topics: [SummaryTopic]
     public var actionItems: [ActionItem]
     public var decisions: [String]
     public var headline: String?
+    /// What sort of meeting this was, in 1 to 3 words ("Monthly update", "Working session").
+    public var kind: String?
+    /// Whether the meeting is the kind that makes decisions or assigns work; an update call is not.
+    public var hasOutcomes: Bool?
 
-    public init(summary: String, actionItems: [ActionItem], decisions: [String] = [], headline: String? = nil) {
+    public init(summary: String, topics: [SummaryTopic] = [], actionItems: [ActionItem], decisions: [String] = [], headline: String? = nil,
+                kind: String? = nil, hasOutcomes: Bool? = nil) {
         self.summary = summary
+        self.topics = topics
         self.actionItems = actionItems
         self.decisions = decisions
         self.headline = headline
+        self.kind = kind
+        self.hasOutcomes = hasOutcomes
     }
 }
 
 extension CallRecord {
     mutating func apply(_ s: MeetingSummary) {
         summary = s.summary
+        topics = s.topics
         actionItems = s.actionItems
         decisions = s.decisions
         headline = s.headline
+        kind = s.kind
+        hasOutcomes = s.hasOutcomes
     }
 }
 
@@ -55,14 +79,19 @@ public struct ClaudeSummarizer: Summarizing {
 
     static let rules = """
     and by AI agents that act on it, so be concrete: decisions, numbers, dates, owners, and open questions. \
-    Write the summary in Markdown: start with a short lead paragraph of 2 to 4 sentences. For a longer meeting, \
-    add sections that each start with a "### Heading" line. Use **bold** for key numbers and dates, and "- " \
-    bullet lists where a list reads better than prose. Do not use other headings, tables, or links. \
+    The summary is an overview a person reads in ten seconds: 3 to 4 plain sentences on what the call was, who it \
+    was with, and its main outcome. No headings, no lists, no details that belong in a topic. Put the details in \
+    topics: none for a short or simple call, otherwise 2 to 6, one per subject that was discussed, in the order \
+    they came up. Each topic has a title of 2 to 6 words and a summary of 2 to 5 sentences or a short "- " list. \
+    Use **bold** for key numbers and dates. Do not use headings, tables, or links inside a topic. \
     List every request, commitment, or follow-up as an action item with its owner and the task. Use the speaker \
     names exactly as they appear in the transcript; when the owner is unclear, set the owner to null. Return no \
     action items when there are none. List each decision the meeting made as one short sentence; return no \
     decisions when none were made. Write a headline: one plain sentence of at most 140 characters that says \
-    what the meeting was about and its main outcome.
+    what the meeting was about and its main outcome. Name the kind of meeting in 1 to 3 words, such as \
+    "Monthly update", "Working session", "Planning", "1:1", or "Interview". Set has_outcomes to false for a \
+    meeting that only shares information (an update, a demo, a briefing) and made no decisions and assigned no \
+    work; then return no action items and no decisions.
     """
 
     public func summarize(transcript: String, title: String) async throws -> MeetingSummary {
@@ -86,6 +115,15 @@ public struct ClaudeSummarizer: Summarizing {
                         "type": "object",
                         "properties": [
                             "summary": ["type": "string"],
+                            "topics": [
+                                "type": "array",
+                                "items": [
+                                    "type": "object",
+                                    "properties": ["title": ["type": "string"], "summary": ["type": "string"]],
+                                    "required": ["title", "summary"],
+                                    "additionalProperties": false,
+                                ] as [String: Any],
+                            ] as [String: Any],
                             "action_items": [
                                 "type": "array",
                                 "items": [
@@ -100,8 +138,10 @@ public struct ClaudeSummarizer: Summarizing {
                             ] as [String: Any],
                             "decisions": ["type": "array", "items": ["type": "string"]],
                             "headline": ["type": "string"],
+                            "kind": ["type": "string"],
+                            "has_outcomes": ["type": "boolean"],
                         ] as [String: Any],
-                        "required": ["summary", "action_items", "decisions", "headline"],
+                        "required": ["summary", "topics", "action_items", "decisions", "headline", "kind", "has_outcomes"],
                         "additionalProperties": false,
                     ],
                 ],
@@ -122,8 +162,9 @@ public struct ClaudeSummarizer: Summarizing {
             throw SummaryError.malformed
         }
         let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)
-        return MeetingSummary(summary: result.summary, actionItems: result.action_items, decisions: result.decisions,
-                              headline: headline.isEmpty ? nil : headline)
+        return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items, decisions: result.decisions,
+                              headline: headline.isEmpty ? nil : headline,
+                              kind: result.kind.isEmpty ? nil : result.kind, hasOutcomes: result.has_outcomes)
     }
 
     private struct Message: Decodable {
@@ -138,9 +179,12 @@ public struct ClaudeSummarizer: Summarizing {
 
     private struct Output: Decodable {
         let summary: String
+        let topics: [SummaryTopic]
         let action_items: [ActionItem]
         let decisions: [String]
         let headline: String
+        let kind: String
+        let has_outcomes: Bool
     }
 }
 

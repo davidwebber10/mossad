@@ -95,6 +95,18 @@ final class PipelineTests: XCTestCase {
                         onStep: { notifications.steps.append($0) }, onDetail: { _, text in notifications.detail(text) })
     }
 
+    func testRegenerateSummaryWritesANewSummaryForAFinishedMeeting() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        XCTAssertEqual(try load(id).summary, "Summary 1")
+        await p.regenerateSummary(id)
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "Summary 2")
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(transcriber.calls.count, 2, "no new transcription")
+    }
+
     func testDetailsDescribeEachSubStep() async throws {
         // Like the real service, the transcription takes a moment after its stage updates.
         transcriber.delay = .milliseconds(50)

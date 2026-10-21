@@ -18,7 +18,7 @@ final class SummarizerTests: XCTestCase {
     }
 
     func testSendsModelHeadersAndSchema() async throws {
-        StubURLProtocol.handler = { _ in (200, self.reply(#"{"summary":"S","action_items":[],"decisions":[],"headline":"H"}"#)) }
+        StubURLProtocol.handler = { _ in (200, self.reply(#"{"summary":"S","topics":[],"action_items":[],"decisions":[],"headline":"H","kind":"Status update","has_outcomes":false}"#)) }
         _ = try await summarizer().summarize(transcript: "[00:00:01] David Webber: Hi", title: "Weekly Ops Sync")
         let r = try XCTUnwrap(StubURLProtocol.requests.first)
         XCTAssertEqual(r.url.absoluteString, "https://api.anthropic.com/v1/messages")
@@ -32,7 +32,10 @@ final class SummarizerTests: XCTestCase {
         let format = (body["output_config"] as? [String: Any])?["format"] as? [String: Any]
         XCTAssertEqual(format?["type"] as? String, "json_schema")
         let schema = format?["schema"] as? [String: Any]
-        XCTAssertEqual(Set(schema?["required"] as? [String] ?? []), ["summary", "action_items", "decisions", "headline"])
+        XCTAssertEqual(Set(schema?["required"] as? [String] ?? []),
+                       ["summary", "topics", "action_items", "decisions", "headline", "kind", "has_outcomes"])
+        let topic = ((schema?["properties"] as? [String: Any])?["topics"] as? [String: Any])?["items"] as? [String: Any]
+        XCTAssertEqual(Set(topic?["required"] as? [String] ?? []), ["title", "summary"])
         let props = schema?["properties"] as? [String: Any]
         let item = (props?["action_items"] as? [String: Any])?["items"] as? [String: Any]
         XCTAssertEqual(Set(item?["required"] as? [String] ?? []), ["owner", "task"])
@@ -42,19 +45,24 @@ final class SummarizerTests: XCTestCase {
 
     func testParsesSummaryAndActionItems() async throws {
         StubURLProtocol.handler = { _ in
-            (200, self.reply(#"{"summary":"Agreed to ship cushions **Friday**.","action_items":[{"owner":"Alex Rivera","task":"confirm freight"},{"owner":null,"task":"update forecast"}],"decisions":["Ship Friday"],"headline":"Cushions ship Friday."}"#))
+            (200, self.reply(#"{"summary":"Agreed to ship cushions **Friday**.","topics":[{"title":"Freight","summary":"Rates went up **8%**."}],"action_items":[{"owner":"Alex Rivera","task":"confirm freight"},{"owner":null,"task":"update forecast"}],"decisions":["Ship Friday"],"headline":"Cushions ship Friday.","kind":"Planning","has_outcomes":true}"#))
         }
         let result = try await summarizer().summarize(transcript: "t", title: "x")
         XCTAssertEqual(result.summary, "Agreed to ship cushions **Friday**.")
+        XCTAssertEqual(result.topics, [SummaryTopic(title: "Freight", summary: "Rates went up **8%**.")])
         XCTAssertEqual(result.actionItems, [ActionItem(owner: "Alex Rivera", task: "confirm freight"), ActionItem(owner: nil, task: "update forecast")])
         XCTAssertEqual(result.decisions, ["Ship Friday"])
         XCTAssertEqual(result.headline, "Cushions ship Friday.")
+        XCTAssertEqual(result.kind, "Planning")
+        XCTAssertEqual(result.hasOutcomes, true)
     }
 
-    func testPromptAsksForMarkdownDecisionsAndHeadline() {
+    func testPromptAsksForAShortOverviewTopicsDecisionsAndHeadline() {
         let p = ClaudeSummarizer.systemPrompt(owner: "Jordan Lee", organization: "")
-        XCTAssertTrue(p.contains("###"))
+        XCTAssertTrue(p.contains("3 to 4 plain sentences"))
+        XCTAssertTrue(p.contains("topics"))
         XCTAssertTrue(p.contains("**bold**"))
+        XCTAssertTrue(p.contains("kind"))
         XCTAssertTrue(p.contains("decision"))
         XCTAssertTrue(p.contains("140"))
     }

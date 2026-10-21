@@ -71,7 +71,14 @@ struct MeetingDetailView: View {
                     Text(record.title)
                         .font(.system(size: style == .fullPage ? 24 : 20, weight: .bold)).kerning(style == .fullPage ? -0.4 : -0.3)
                         .textSelection(.enabled)
-                    Text(subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Text(subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
+                        if let kind = record.kind {
+                            Text(kind).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Theme.field, in: Capsule())
+                        }
+                    }
                 }
                 Spacer()
                 if style == .split { MeetingActions(record: record, deleting: $deleting) }
@@ -219,8 +226,8 @@ struct MeetingPeople {
         if let s = speakers.first(where: { $0.name.caseInsensitiveCompare(owner) == .orderedSame }) { return s.color }
         // A first-name match only for real names: "Speaker C" must not match "Speaker A".
         guard !owner.hasPrefix("Speaker ") else { return nil }
-        let first = shortName(owner)
-        return speakers.first { shortName($0.name).caseInsensitiveCompare(first) == .orderedSame }?.color
+        let first = firstName(owner)
+        return speakers.first { firstName($0.name).caseInsensitiveCompare(first) == .orderedSame }?.color
     }
 }
 
@@ -437,6 +444,12 @@ private struct SummaryTab: View {
                 }
                 .frame(maxWidth: 680, alignment: .leading)
                 .textSelection(.enabled)
+                if !record.topics.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(record.topics, id: \.self) { topic in TopicRow(topic: topic, inline: inline) }
+                    }
+                    .padding(.top, 6)
+                }
             }
         } else if record.status == .written {
             Card("Summary") {
@@ -450,14 +463,15 @@ private struct SummaryTab: View {
         }
     }
 
-    private func inline(_ text: String) -> Text {
+    func inline(_ text: String) -> Text {
         let attributed = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
         return Text(attributed).font(.system(size: 13))
     }
 
     @ViewBuilder
     private var actionItemsCard: some View {
-        if record.summary != nil {
+        // A meeting that only shared information has no action items section at all.
+        if record.summary != nil, record.hasOutcomes != false || !record.actionItems.isEmpty {
             Card("Action items") {
                 if record.actionItems.isEmpty {
                     Text("None.").foregroundStyle(.secondary)
@@ -491,7 +505,7 @@ private struct SummaryTab: View {
                     ForEach(talk, id: \.speaker) { entry in
                         HStack(spacing: 10) {
                             Text(shortName(entry.speaker))
-                                .fontWeight(.medium).lineLimit(1).frame(width: 72, alignment: .leading).help(entry.speaker)
+                                .fontWeight(.medium).lineLimit(1).frame(width: 90, alignment: .leading).help(entry.speaker)
                             GeometryReader { g in
                                 ZStack(alignment: .leading) {
                                     Capsule().fill(Theme.field)
@@ -546,6 +560,50 @@ private struct SummaryTab: View {
                 }
             }
         }
+    }
+}
+
+/// One topic of the summary, collapsed until clicked.
+private struct TopicRow: View {
+    let topic: SummaryTopic
+    let inline: (String) -> Text
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { open.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
+                        .rotationEffect(.degrees(open ? 90 : 0)).foregroundStyle(.secondary).frame(width: 12)
+                    Text(topic.title).font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if open {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(SummaryBlock.parse(topic.summary).enumerated()), id: \.offset) { _, block in
+                        switch block {
+                        case .paragraph(let text), .heading(let text): inline(text)
+                        case .bullets(let items):
+                            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text("•").foregroundStyle(.secondary)
+                                    inline(item)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.leading, 18)
+                .textSelection(.enabled)
+            }
+        }
+        .padding(.vertical, 6)
+        .overlay(alignment: .top) { Rectangle().fill(Theme.separator).frame(height: 1) }
     }
 }
 

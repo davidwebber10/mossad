@@ -108,6 +108,16 @@ public actor Pipeline {
         }
     }
 
+    /// Asks Claude for a new summary of a finished meeting, for example after the summary format changed.
+    /// The transcript and speakers stay; only the summary step and the note run again.
+    public func regenerateSummary(_ id: String) async {
+        let dir = paths.callDirectory(id)
+        guard var r = try? CallRecord.load(from: dir), r.status == .written, !r.utterances.isEmpty else { return }
+        r.status = .identified
+        do { try store(r, dir: dir) } catch { return }
+        await process(id)
+    }
+
     /// Starts a failed or waiting call again now.
     public func retry(_ id: String) async {
         let dir = paths.callDirectory(id)
