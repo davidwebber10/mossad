@@ -80,3 +80,17 @@ final class CalendarMatcherTests: XCTestCase {
         XCTAssertNil(best(.meet, []))
     }
 }
+
+final class CalendarAccessTests: XCTestCase {
+    func testANewStoreOnlyWhenAccessTurnsOnWhileRunning() {
+        var access = CalendarAccess(allowedAtStart: false)
+        XCTAssertFalse(access.needsNewStore(allowed: false))
+        XCTAssertTrue(access.needsNewStore(allowed: true))
+        XCTAssertFalse(access.needsNewStore(allowed: true), "only once")
+    }
+
+    func testNoNewStoreWhenAccessWasThereAtStart() {
+        var access = CalendarAccess(allowedAtStart: true)
+        XCTAssertFalse(access.needsNewStore(allowed: true))
+    }
+}

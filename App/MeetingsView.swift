@@ -54,7 +54,7 @@ struct MeetingsView: View {
                 }
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Theme.background)
         .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete meeting", role: .destructive) {
                 if let id = deleting?.id {
@@ -133,6 +133,7 @@ struct MeetingsView: View {
                         .background(Theme.field, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Back")
                 .keyboardShortcut("[", modifiers: .command)
                 .keyboardShortcut(.escape, modifiers: [])
                 Button("Meetings") { opened = nil }.buttonStyle(.plain).foregroundStyle(.secondary)
@@ -163,6 +164,9 @@ extension CallRecord: @retroactive Identifiable {
         default: .processing
         }
     }
+
+    /// The call's own meeting link matched a calendar invite, so the invite's people are this call's people.
+    var hasInviteLink: Bool { meetingID != nil && calendarTitle != nil }
 
     /// "59 min", at least "1 min".
     var lengthText: String { "\(max(1, Int(end.timeIntervalSince(start) / 60))) min" }
@@ -225,20 +229,26 @@ struct ModePicker: View {
 
 struct SearchField: View {
     @Binding var text: String
+    @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.tertiary)
-            TextField("Search titles and transcripts", text: $text).textFieldStyle(.plain)
+            TextField("Search titles and transcripts", text: $text).textFieldStyle(.plain).focused($focused)
             if !text.isEmpty {
                 Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
             }
         }
         .font(.system(size: 13))
         .padding(.horizontal, 9)
         .frame(height: 28)
         .background(Theme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background {
+            // ⌘F puts the cursor in the search field.
+            Button("Search") { focused = true }.keyboardShortcut("f").opacity(0).allowsHitTesting(false)
+        }
     }
 }
 
@@ -386,7 +396,7 @@ struct MeetingActions: View {
             Menu {
                 MeetingMenuItems(record: record, deleting: $deleting)
             } label: {
-                Image(systemName: "ellipsis")
+                Image(systemName: "ellipsis").accessibilityLabel("More")
             }
             .menuStyle(.button)
             .menuIndicator(.hidden)

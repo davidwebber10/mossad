@@ -60,7 +60,7 @@ struct LogView: View {
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.separator))
             .padding(EdgeInsets(top: 0, leading: 20, bottom: 20, trailing: 20))
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Theme.background)
         .task {
             while !Task.isCancelled {
                 load()

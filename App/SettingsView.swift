@@ -41,7 +41,7 @@ struct SettingsView: View {
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Theme.background)
         .onAppear {
             permissions.refresh()
             permissions.setInterval(1)

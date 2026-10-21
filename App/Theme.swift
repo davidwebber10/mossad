@@ -4,6 +4,12 @@ import SwiftUI
 
 /// The redesign's tokens (docs/superpowers/specs/2026-10-21-ui-redesign.md, section 1).
 enum Theme {
+    /// The content background: light gray in light mode so white cards stand out.
+    static let background = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? .windowBackgroundColor
+            : NSColor(red: 0xf6 / 255, green: 0xf6 / 255, blue: 0xf8 / 255, alpha: 1)
+    })
     static let field = Color.primary.opacity(0.06)
     static let hover = Color.primary.opacity(0.07)
     /// Cards and tables: white in light mode, a step above the window in dark mode.

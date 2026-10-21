@@ -12,7 +12,7 @@ struct MeetingDetailView: View {
     let style: Style
     @Binding var deleting: CallRecord?
     @StateObject private var player: AudioPlayer
-    @State private var tab = Tab.summary
+    @AppStorage("detailTab") private var tab = Tab.summary
 
     init(record: CallRecord, style: Style, deleting: Binding<CallRecord?>) {
         self.record = record
@@ -242,7 +242,7 @@ private struct PlayerBar: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
                 HStack(spacing: 4) {
-                    circleButton("gobackward.15", size: 30) { player.skip(-15) }
+                    circleButton("gobackward.15", size: 30) { player.skip(-15) }.accessibilityLabel("Back 15 seconds")
                     Button { player.toggle() } label: {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 14))
                             .foregroundStyle(Color(nsColor: .windowBackgroundColor))
@@ -251,7 +251,8 @@ private struct PlayerBar: View {
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.space, modifiers: [])
-                    circleButton("goforward.15", size: 30) { player.skip(15) }
+                    .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                    circleButton("goforward.15", size: 30) { player.skip(15) }.accessibilityLabel("Forward 15 seconds")
                 }
                 Text(enabled ? clock(player.time) : "0:00").timeLabel()
                 Scrubber(player: player, segments: segments, enabled: enabled)

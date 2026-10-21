@@ -59,7 +59,7 @@ struct VoicesView: View {
             .font(.system(size: 12)).foregroundStyle(.secondary)
             .padding(EdgeInsets(top: 14, leading: 20, bottom: 16, trailing: 20))
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Theme.background)
         .task { await reload() }
         .sheet(item: Binding(get: { editing.map(Wrapped.init) }, set: { editing = $0?.profile })) { item in editSheet(item.profile) }
         .confirmationDialog("Delete \(deleting?.name ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {

@@ -39,10 +39,10 @@ struct CalendarControls: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            navButton("chevron.left") { state.move(-1) }
+            navButton("chevron.left") { state.move(-1) }.accessibilityLabel("Previous")
             Button("Today") { state.anchor = Date() }
                 .font(.system(size: 12, weight: .medium)).buttonStyle(.bordered).controlSize(.small)
-            navButton("chevron.right") { state.move(1) }
+            navButton("chevron.right") { state.move(1) }.accessibilityLabel("Next")
             Text(state.title).font(.system(size: 13, weight: .semibold)).padding(.leading, 6).fixedSize()
             Picker("Scope", selection: $state.scope) {
                 ForEach(CalendarState.Scope.allCases, id: \.self) { Text($0.rawValue) }
@@ -215,10 +215,20 @@ private struct HourGrid: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(r.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
                     Text("\((r.start..<max(r.end, r.start)).formatted(.interval.hour().minute())) · \(r.platform.displayName)\(r.badge.map { " · " + badgeWord($0) } ?? "")")
                         .font(.system(size: 12)).foregroundStyle(active ? .white.opacity(0.8) : .secondary)
                 }
                 Spacer()
+                if height >= 44 {
+                    HStack(spacing: 4) {
+                        ForEach(speakerNames(r), id: \.self) { name in
+                            Text(name).font(.system(size: 11)).lineLimit(1)
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(active ? Color.white.opacity(0.22) : Theme.field, in: Capsule())
+                        }
+                    }
+                }
             }
             .foregroundStyle(active ? .white : .primary)
         } else {
@@ -233,6 +243,17 @@ private struct HourGrid: View {
             }
             .foregroundStyle(active ? .white : .primary)
         }
+    }
+
+    /// Speaker names in order of first appearance.
+    private func speakerNames(_ r: CallRecord) -> [String] {
+        let names = MarkdownWriter.displayNames(r)
+        var order: [String] = []
+        for u in r.utterances {
+            let name = names[u.speakerKey] ?? u.speakerKey
+            if !order.contains(name) { order.append(name) }
+        }
+        return order
     }
 
     private func badgeWord(_ kind: StatusBadge.Kind) -> String {

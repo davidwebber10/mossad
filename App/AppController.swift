@@ -110,6 +110,8 @@ final class AppController: ObservableObject {
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
         if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }
+        // Development hook: `--light` shows the UI in light mode, to check both looks.
+        if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
         // Development hook: `--open-naming` opens "Who is speaking?" for the first call that needs names.
         if CommandLine.arguments.contains("--open-naming"), let first = callsNeedingNames.first {
             DispatchQueue.main.async { self.openNaming(first.id) }

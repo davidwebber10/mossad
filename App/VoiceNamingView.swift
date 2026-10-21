@@ -65,6 +65,7 @@ struct VoiceNamingView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Play a sample of this voice")
+                .accessibilityLabel(playing == key ? "Stop sample" : "Play sample")
                 Button { nextSample(key) } label: {
                     Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
                         .frame(width: 28, height: 28)
@@ -72,6 +73,7 @@ struct VoiceNamingView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Play a different sample")
+                .accessibilityLabel("Next sample")
                 .disabled(ClipExtractor.candidates(for: key, utterances: record.utterances).count < 2)
                 Text(meta(key, people: people, talk: talk)).font(.system(size: 12)).foregroundStyle(.secondary)
             }
@@ -81,12 +83,15 @@ struct VoiceNamingView: View {
             HStack(spacing: 8) {
                 TextField("Name", text: Binding(get: { names[key, default: ""] }, set: { names[key] = $0 }))
                     .textFieldStyle(.roundedBorder)
-                Menu {
-                    picks(for: key)
-                } label: {
-                    Text(emails[key] ?? "Pick")
+                // Pick only when the call's own meeting link matched an invite; a time match can be another meeting.
+                if record.hasInviteLink, !record.attendees.isEmpty {
+                    Menu {
+                        picks(for: key)
+                    } label: {
+                        Text(emails[key] ?? "Pick")
+                    }
+                    .fixedSize()
                 }
-                .fixedSize()
             }
             if let email = emails[key] {
                 HStack(spacing: 4) {
@@ -103,45 +108,25 @@ struct VoiceNamingView: View {
         .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
     }
 
-    /// "Invited to this meeting" picks an email (and its saved name); "Known voices" picks a saved person.
+    /// The invite's people. Picking one sets the email, and the saved name for that email when there is one.
     @ViewBuilder
     private func picks(for key: String) -> some View {
         let used = Set(emails.filter { $0.key != key }.values)
-        let invited = record.attendees.filter { !used.contains($0) }
-        let profiles = controller.library.profiles.filter { !$0.isOwner }
-        if !invited.isEmpty {
-            Section("Invited to this meeting") {
-                ForEach(invited, id: \.self) { attendee in
-                    let saved = attendee.contains("@") ? controller.library.name(forEmail: attendee) : nil
-                    Button {
-                        if attendee.contains("@") {
-                            emails[key] = attendee
-                            if let saved, names[key, default: ""].isEmpty { names[key] = saved }
-                        } else {
-                            names[key] = attendee
-                        }
-                    } label: {
-                        Text(saved ?? attendee)
-                        if saved != nil { Text(attendee) }
+        Section("Invited to this meeting") {
+            ForEach(record.attendees.filter { !used.contains($0) }, id: \.self) { attendee in
+                let saved = attendee.contains("@") ? controller.library.name(forEmail: attendee) : nil
+                Button {
+                    if attendee.contains("@") {
+                        emails[key] = attendee
+                        if let saved, names[key, default: ""].isEmpty { names[key] = saved }
+                    } else {
+                        names[key] = attendee
                     }
+                } label: {
+                    Text(saved ?? attendee)
+                    if saved != nil { Text(attendee) }
                 }
             }
-        }
-        if !profiles.isEmpty {
-            Section("Known voices") {
-                ForEach(profiles, id: \.name) { profile in
-                    Button {
-                        names[key] = profile.name
-                        emails[key] = profile.email
-                    } label: {
-                        Text(profile.name)
-                        if let email = profile.email { Text(email) }
-                    }
-                }
-            }
-        }
-        if invited.isEmpty, profiles.isEmpty {
-            Text("No invite or saved voices")
         }
     }
 

@@ -50,18 +50,43 @@ public enum CalendarMatcher {
     }
 }
 
+/// An event store made before Calendar access was granted can stay blind after the grant
+/// (the status says allowed, but it returns no events). This decides when to make a new one.
+struct CalendarAccess {
+    private var allowed: Bool
+
+    init(allowedAtStart: Bool) { allowed = allowedAtStart }
+
+    mutating func needsNewStore(allowed now: Bool) -> Bool {
+        defer { allowed = now }
+        return now && !allowed
+    }
+}
+
 /// Reads events from the Mac's calendars.
 public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
-    private let store = EKEventStore()
+    private let lock = NSLock()
+    private var store = EKEventStore()
+    private var access = CalendarAccess(allowedAtStart: EKEventStore.authorizationStatus(for: .event) == .fullAccess)
 
     public init() {}
 
     public func requestAccess() async -> Bool {
-        (try? await store.requestFullAccessToEvents()) ?? false
+        (try? await currentStore().requestFullAccessToEvents()) ?? false
+    }
+
+    /// The store, replaced once when access was granted after it was made.
+    private func currentStore() -> EKEventStore {
+        let allowed = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        return lock.withLock {
+            if access.needsNewStore(allowed: allowed) { store = EKEventStore() }
+            return store
+        }
     }
 
     public func events(from: Date, to: Date) async -> [CalendarEventInfo] {
         guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return [] }
+        let store = currentStore()
         let predicate = store.predicateForEvents(withStart: from, end: to, calendars: nil)
         return store.events(matching: predicate).map { e in
             CalendarEventInfo(
