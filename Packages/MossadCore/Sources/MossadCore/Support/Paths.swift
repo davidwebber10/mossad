@@ -8,7 +8,9 @@ public struct Paths: Sendable {
         self.root = root
     }
 
-    public static let live = Paths(root: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Mossad"))
+    /// `~/Mossad`, or `$MOSSAD_ROOT` when set (for trying the app against a demo folder).
+    public static let live = Paths(root: ProcessInfo.processInfo.environment["MOSSAD_ROOT"].map { URL(fileURLWithPath: $0) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Mossad"))
 
     public var meetings: URL { root.appendingPathComponent("Meetings") }
     public var audio: URL { root.appendingPathComponent("Audio") }

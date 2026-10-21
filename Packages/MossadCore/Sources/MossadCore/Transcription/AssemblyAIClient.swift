@@ -30,9 +30,7 @@ public struct AssemblyAIClient: Transcribing {
         while true {
             switch job.status {
             case "completed":
-                return (job.utterances ?? []).map {
-                    Utterance(track: track, speakerLabel: $0.speaker, start: Double($0.start) / 1000, end: Double($0.end) / 1000, text: $0.text)
-                }
+                return (job.utterances ?? []).flatMap { Self.split($0, track: track) }
             case "error":
                 throw TranscriptionError.failed(job.error ?? "unknown error")
             default:
@@ -73,11 +71,38 @@ public struct AssemblyAIClient: Transcribing {
         let utterances: [RawUtterance]?
     }
 
-    private struct RawUtterance: Decodable {
+    /// Splits an utterance where the words pause longer than this (AssemblyAI joins a speaker's
+    /// sentences across long silences, which on a single-speaker track can span minutes).
+    static let maxWordGap = 1.5
+
+    /// Times come from the words: an utterance's own start can include the silence before it.
+    static func split(_ u: RawUtterance, track: Track) -> [Utterance] {
+        guard let words = u.words, !words.isEmpty else {
+            return [Utterance(track: track, speakerLabel: u.speaker, start: Double(u.start) / 1000, end: Double(u.end) / 1000, text: u.text)]
+        }
+        var groups: [[RawWord]] = [[words[0]]]
+        for (previous, word) in zip(words, words.dropFirst()) {
+            if Double(word.start - previous.end) / 1000 > maxWordGap { groups.append([]) }
+            groups[groups.count - 1].append(word)
+        }
+        return groups.map { g in
+            Utterance(track: track, speakerLabel: u.speaker, start: Double(g.first!.start) / 1000, end: Double(g.last!.end) / 1000,
+                      text: g.map(\.text).joined(separator: " "))
+        }
+    }
+
+    struct RawUtterance: Decodable {
         let speaker: String
         let start: Int
         let end: Int
         let text: String
+        let words: [RawWord]?
+    }
+
+    struct RawWord: Decodable {
+        let text: String
+        let start: Int
+        let end: Int
     }
 }
 

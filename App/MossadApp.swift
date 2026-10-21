@@ -21,7 +21,16 @@ struct MossadApp: App {
         MenuBarExtra {
             MenuContent(controller: controller)
         } label: {
-            Image(systemName: controller.isRecording ? "waveform.circle.fill" : "waveform")
+            MenuBarIcon(controller: controller)
         }
+
+    }
+}
+
+struct MenuBarIcon: View {
+    @ObservedObject var controller: AppController
+
+    var body: some View {
+        Image(systemName: controller.isRecording ? "waveform.circle.fill" : "waveform")
     }
 }

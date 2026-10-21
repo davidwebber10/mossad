@@ -6,9 +6,20 @@ struct MenuContent: View {
 
     var body: some View {
         Text(statusLine)
+        if controller.processing > 0 {
+            Text("Processing \(controller.processing) call\(controller.processing == 1 ? "" : "s")…")
+        }
         if controller.isRecording {
             Button("Skip this call") { controller.skipCurrentCall() }
         }
+        Divider()
+        Button("Meetings…") { controller.open(.meetings) }
+        if let first = controller.callsNeedingNames.first {
+            Button("Name voices…") { controller.openNaming(first.id) }
+        }
+        Button("Voices…") { controller.open(.voices) }
+        Button("Settings…") { controller.open(.settings) }
+        Button("Log…") { controller.open(.log) }
         Divider()
         Button("Quit Mossad") { NSApp.terminate(nil) }
             .keyboardShortcut("q")

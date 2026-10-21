@@ -82,4 +82,26 @@ final class AssemblyAIClientTests: XCTestCase {
         let result = try await client().transcribe(file: file, track: .me)
         XCTAssertEqual(result, [])
     }
+
+    func testUsesWordTimesAndSplitsAtLongPauses() async throws {
+        func w(_ text: String, _ start: Int, _ end: Int) -> [String: Any] { ["text": text, "start": start, "end": end] }
+        StubURLProtocol.handler = { r in
+            switch r.url.path {
+            case "/v2/upload": return (200, json(["upload_url": "u"]))
+            case "/v2/transcript": return (200, json(["id": "t4", "status": "queued"]))
+            default: return (200, json(["id": "t4", "status": "completed", "utterances": [
+                ["speaker": "A", "start": 0, "end": 45000, "text": "Good morning. Okay, send it.",
+                 "words": [w("Good", 1000, 1300), w("morning.", 1300, 1900), w("Okay,", 40000, 40400), w("send", 40500, 40800), w("it.", 40800, 41000)]],
+                ["speaker": "B", "start": 14193, "end": 26754, "text": "I still need it.",
+                 "words": [w("I", 22062, 22200), w("still", 22200, 22500), w("need", 22500, 22900), w("it.", 22900, 26754)]],
+            ]]))
+            }
+        }
+        let result = try await client().transcribe(file: file, track: .me)
+        XCTAssertEqual(result, [
+            Utterance(track: .me, speakerLabel: "A", start: 1.0, end: 1.9, text: "Good morning."),
+            Utterance(track: .me, speakerLabel: "A", start: 40.0, end: 41.0, text: "Okay, send it."),
+            Utterance(track: .me, speakerLabel: "B", start: 22.062, end: 26.754, text: "I still need it."),
+        ])
+    }
 }

@@ -47,6 +47,32 @@ public final class VoiceLibrary: @unchecked Sendable {
         }
     }
 
+    public func rename(_ from: String, to: String) throws {
+        try lock.withLock {
+            guard let i = storage.firstIndex(where: { $0.name == from }) else { return }
+            if let j = storage.firstIndex(where: { $0.name == to }), j != i {
+                storage[j].embeddings = Array((storage[j].embeddings + storage[i].embeddings).suffix(Self.maxEmbeddings))
+                storage[j].isOwner = storage[j].isOwner || storage[i].isOwner
+                storage.remove(at: i)
+            } else {
+                storage[i].name = to
+            }
+            try save()
+        }
+    }
+
+    /// Moves `name`'s voice samples into `target` (one person split into two profiles).
+    public func merge(_ name: String, into target: String) throws {
+        try rename(name, to: target)
+    }
+
+    public func delete(_ name: String) throws {
+        try lock.withLock {
+            storage.removeAll { $0.name == name }
+            try save()
+        }
+    }
+
     private func save() throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(storage).write(to: url, options: .atomic)
