@@ -29,28 +29,46 @@ struct MossadApp: App {
 }
 
 /// While recording, a red dot and the time since the call started; otherwise the plain waveform.
+/// The menu bar draws one image only: a TimelineView or a mixed view there makes the item disappear.
 struct MenuBarIcon: View {
     @ObservedObject var controller: AppController
+    @StateObject private var clock = SecondsClock()
 
     var body: some View {
         if case .recording(_, let since) = controller.status {
-            TimelineView(.periodic(from: since, by: 1)) { context in
-                HStack(spacing: 3) {
-                    Image(nsImage: Self.redDot)
-                    Text(elapsed(since, context.date)).monospacedDigit()
-                }
-            }
+            Image(nsImage: Self.badge(elapsed(since, clock.now)))
         } else {
             Image(systemName: "waveform")
         }
     }
 
-    /// Menu bar images are drawn as templates (one color); this one keeps its red.
-    private static let redDot: NSImage = {
-        let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-        let image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "Recording")!
-            .withSymbolConfiguration(config)!
+    /// A red dot and the time. Drawn when the menu bar draws it, so the text follows its light or dark look.
+    static func badge(_ time: String) -> NSImage {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        let text = NSAttributedString(string: time, attributes: [.font: font, .foregroundColor: NSColor.labelColor])
+        let dot: CGFloat = 8, gap: CGFloat = 4
+        let size = NSSize(width: ceil(dot + gap + text.size().width), height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSColor.systemRed.setFill()
+            NSBezierPath(ovalIn: NSRect(x: 0, y: (rect.height - dot) / 2, width: dot, height: dot)).fill()
+            text.draw(at: NSPoint(x: dot + gap, y: (rect.height - text.size().height) / 2))
+            return true
+        }
         image.isTemplate = false
+        image.accessibilityDescription = "Recording \(time)"
         return image
-    }()
+    }
+}
+
+/// Publishes the time once a second.
+@MainActor
+final class SecondsClock: ObservableObject {
+    @Published private(set) var now = Date()
+    private var timer: Timer?
+
+    init() {
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.now = Date() }
+        }
+    }
 }
