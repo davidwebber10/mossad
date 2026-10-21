@@ -31,22 +31,29 @@ struct MeetingDetailView: View {
             if record.status == .recording {
                 LivePanel(record: record)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if style == .fullPage { header(people).padding(.horizontal, -24) }
-                        banner
-                        PlayerBar(player: player, record: record, people: people, retentionDays: controller.deleteRecordings ? controller.recordingDays : nil)
-                            .padding(.top, 12)
-                        tabs
-                        switch tab {
-                        case .summary: SummaryTab(record: record, people: people, columns: style == .fullPage ? [1.4, 1] : nil)
-                        case .transcript: TranscriptTab(record: record, people: people, player: player)
-                        }
+                // The player, the tabs, and the transcript tools stay put; only the tab's content scrolls.
+                VStack(alignment: .leading, spacing: 0) {
+                    if style == .fullPage { header(people).padding(.horizontal, -24) }
+                    banner
+                    PlayerBar(player: player, record: record, people: people, retentionDays: controller.deleteRecordings ? controller.recordingDays : nil)
+                        .padding(.top, 12)
+                    tabs
+                }
+                .padding(.horizontal, style == .fullPage ? 32 : 16)
+                .frame(maxWidth: style == .fullPage ? 900 : .infinity)
+                .frame(maxWidth: .infinity)
+                switch tab {
+                case .summary:
+                    ScrollView {
+                        SummaryTab(record: record, people: people, columns: style == .fullPage ? [1.4, 1] : nil)
+                            .padding(.horizontal, style == .fullPage ? 32 : 16)
+                            .padding(.bottom, 24)
+                            .frame(maxWidth: style == .fullPage ? 900 : .infinity)
+                            .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, style == .fullPage ? 32 : 16)
-                    .padding(.bottom, 24)
-                    .frame(maxWidth: style == .fullPage ? 900 : .infinity)
-                    .frame(maxWidth: .infinity)
+                case .transcript:
+                    TranscriptTab(record: record, people: people, player: player, horizontalPadding: style == .fullPage ? 32 : 16,
+                                  maxWidth: style == .fullPage ? 900 : .infinity)
                 }
             }
         }
@@ -610,35 +617,29 @@ struct DetailEmptyState: View {
 private struct LivePanel: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
-    @State private var confirmSkip = false
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .bottom, spacing: 5) {
-                ForEach([20, 44, 64, 34, 52, 24, 40, 16], id: \.self) { h in
-                    RoundedRectangle(cornerRadius: 3).fill(Theme.recording).frame(width: 6, height: CGFloat(h))
-                }
+        VStack(spacing: 18) {
+            HStack(spacing: 8) {
+                StatusDot(color: controller.isPaused ? Theme.unknown : Theme.recording, size: 9, pulsing: !controller.isPaused)
+                Text(controller.isPaused ? "Paused" : "Current call")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(controller.isPaused ? Color.secondary : Theme.recording)
             }
-            .frame(height: 64, alignment: .bottom)
-            HStack(spacing: 10) {
-                StatusDot(color: Theme.recording, size: 10, pulsing: true)
-                TimelineView(.periodic(from: record.start, by: 1)) { context in
-                    Text(elapsed(record.start, context.date)).font(.system(size: 40, weight: .semibold)).kerning(-1).monospacedDigit()
-                }
+            .padding(.horizontal, 12).padding(.vertical, 5)
+            .background((controller.isPaused ? Color.secondary : Theme.recording).opacity(0.12), in: Capsule())
+            TimelineView(.periodic(from: record.start, by: 1)) { context in
+                Text(elapsed(record.start, context.date)).font(.system(size: 40, weight: .semibold)).kerning(-1).monospacedDigit()
             }
+            LiveWaveform(bars: 72, rowHeight: 40)
+                .padding(16)
+                .frame(maxWidth: 620)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             Text("Recording your microphone and the call audio. The transcript and summary appear after the call ends.")
-                .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
-            Button {
-                if confirmSkip { controller.skipCurrentCall() } else { confirmSkip = true }
-            } label: {
-                Text(confirmSkip ? "Click again to delete this recording" : "Skip and delete this call")
-                    .font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.recording)
-                    .padding(.horizontal, 14).padding(.vertical, 6)
-                    .background(Theme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 8)
+                .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
+            CallControls()
         }
+        .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

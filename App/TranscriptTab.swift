@@ -6,6 +6,8 @@ struct TranscriptTab: View {
     let record: CallRecord
     let people: MeetingPeople
     @ObservedObject var player: AudioPlayer
+    var horizontalPadding: CGFloat = 16
+    var maxWidth: CGFloat = .infinity
     @State private var find = ""
     @State private var matchIndex = 0
     @State private var follow = true
@@ -27,12 +29,17 @@ struct TranscriptTab: View {
                 }
             }
             .padding(.vertical, 8)
+            .padding(.horizontal, horizontalPadding)
+            .frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity)
             if record.utterances.isEmpty {
                 DetailEmptyState(symbol: "text.bubble", title: record.status == .written ? "No speech detected" : "No transcript yet",
                                  message: record.status == .written ? "The call was recorded, but nobody spoke." : "The transcript appears when processing is done.")
             } else {
                 ScrollViewReader { proxy in
                     let breaks = record.transcriptMarkers
+                    ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(blocks) { block in
                             let previousEnd = blocks.last { $0.id < block.id }?.end ?? -1
@@ -70,7 +77,13 @@ struct TranscriptTab: View {
                     ForEach(Array(breaks.filter { $0.offset > (blocks.last?.end ?? -1) }.enumerated()), id: \.offset) { _, line in
                         MarkerLine(text: line.text)
                     }
+                    }
                     .textSelection(.enabled)
+                    .padding(.horizontal, horizontalPadding)
+                    .padding(.bottom, 24)
+                    .frame(maxWidth: maxWidth)
+                    .frame(maxWidth: .infinity)
+                    }
                     .onChange(of: current) { _, line in
                         guard follow, player.isPlaying, let line else { return }
                         withAnimation { proxy.scrollTo(line, anchor: .center) }

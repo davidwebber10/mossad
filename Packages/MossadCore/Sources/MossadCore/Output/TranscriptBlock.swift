@@ -26,7 +26,7 @@ public struct TranscriptBlock: Equatable, Sendable, Identifiable {
     public static func blocks(_ r: CallRecord, gap: TimeInterval = 30) -> [TranscriptBlock] {
         let names = MarkdownWriter.displayNames(r)
         var result: [TranscriptBlock] = []
-        for u in r.utterances {
+        for u in Transcript.interleaved(r.utterances) {
             let line = Line(start: u.start, text: u.text)
             // A marker (a join, a pause) starts a new block, so its line sits between blocks.
             let crossesPart = r.transcriptMarkers.contains { $0.offset > (result.last?.end ?? .infinity) && $0.offset <= u.start }

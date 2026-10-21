@@ -14,6 +14,12 @@ public final class DetectionService: @unchecked Sendable {
     private var currentPlatform: Platform?
     private var lastProcesses: [AudioProcess] = []
     private var activeMeetingIDs: [String: String] = [:]
+    /// During a call the tab read is the costly part of a tick (AppleScript on the main thread), and the mic
+    /// already shows when the call ends; so the tabs of the call's browser are read at most this often.
+    static let tabRefreshDuringCall: TimeInterval = 10
+    private var tabCache: [String: (time: Date, tabs: [BrowserTab]?)] = [:]
+    private var tickTime = Date()
+    private var lastLogged: [String: String] = [:]
     /// The current call's meeting ID from its browser tab, for matching the calendar invite.
     public private(set) var meetingID: String?
 
@@ -67,6 +73,7 @@ public final class DetectionService: @unchecked Sendable {
     }
 
     public func snapshot(at time: Date) -> DetectionSnapshot {
+        tickTime = time
         let processes = mic.processes()
         lastProcesses = processes
         activeMeetingIDs = [:]
@@ -89,7 +96,7 @@ public final class DetectionService: @unchecked Sendable {
             return candidate(group: group, micActive: micActive, isCurrent: group == current)
         }
         if current != nil, let c = candidates.first(where: { $0.bundleID == current }) {
-            Log.debug("tick \(c.bundleID) mic=\(c.micActive) present=\(String(describing: c.meetingPresent))")
+            logChange("tick", "tick \(c.bundleID) mic=\(c.micActive) present=\(String(describing: c.meetingPresent))")
         }
         return DetectionSnapshot(time: time, candidates: candidates)
     }
@@ -98,12 +105,12 @@ public final class DetectionService: @unchecked Sendable {
         switch MeetingMatcher.appKind(bundleID: group) {
         case .zoomApp:
             let titles = windows.windowTitles(bundleID: group)
-            if isCurrent, let titles { Log.debug("zoom windows: \(titles)") }
+            if isCurrent, let titles { logChange("zoom", "zoom windows: \(titles)") }
             let present = titles.map { $0.contains(where: MeetingMatcher.zoomWindowIsMeeting) }
             return MeetingCandidate(platform: .zoom, bundleID: group, micActive: micActive, meetingPresent: present)
         case .teamsApp:
             let titles = windows.windowTitles(bundleID: group)
-            if isCurrent, let titles { Log.debug("teams windows: \(titles)") }
+            if isCurrent, let titles { logChange("teams", "teams windows: \(titles)") }
             // Teams meeting-window titles are not reliable yet: a match means present, anything else is unknown.
             let present: Bool? = titles?.contains(where: MeetingMatcher.teamsWindowIsMeeting) == true ? true : nil
             return MeetingCandidate(platform: .teams, bundleID: group, micActive: micActive, meetingPresent: present)
@@ -115,7 +122,7 @@ public final class DetectionService: @unchecked Sendable {
     }
 
     private func browserCandidate(group: String, micActive: Bool, isCurrent: Bool) -> MeetingCandidate? {
-        guard let list = tabs.tabs(browserBundleID: group) else {
+        guard let list = readTabs(group, isCurrent: isCurrent) else {
             // Unreadable tabs never start a call; during a call they count as unknown.
             guard isCurrent, let platform = currentPlatform else { return nil }
             return MeetingCandidate(platform: platform, bundleID: group, micActive: micActive, meetingPresent: nil)
@@ -125,7 +132,7 @@ public final class DetectionService: @unchecked Sendable {
             if platform == .meet, MeetingMatcher.meetTabLeftMeeting(title: tab.title) { return nil }
             return (platform, tab)
         }
-        if isCurrent { Log.debug("browser tabs: \(list.filter { MeetingMatcher.platform(forTabURL: $0.url) != nil }.map(\.title))") }
+        if isCurrent { logChange("tabs", "browser tabs: \(list.filter { MeetingMatcher.platform(forTabURL: $0.url) != nil }.map(\.title))") }
         if let platform = isCurrent ? currentPlatform : nil {
             let present = meetingTabs.contains { $0.0 == platform }
             return MeetingCandidate(platform: platform, bundleID: group, micActive: micActive, meetingPresent: present)
@@ -135,6 +142,22 @@ public final class DetectionService: @unchecked Sendable {
         guard let first = meetingTabs.first(where: { $0.1.isActive }) else { return nil }
         activeMeetingIDs[group] = MeetingMatcher.meetingID(forTabURL: first.1.url)
         return MeetingCandidate(platform: first.0, bundleID: group, micActive: micActive, meetingPresent: true)
+    }
+
+    private func readTabs(_ group: String, isCurrent: Bool) -> [BrowserTab]? {
+        if isCurrent, let cached = tabCache[group], tickTime.timeIntervalSince(cached.time) < Self.tabRefreshDuringCall {
+            return cached.tabs
+        }
+        let list = tabs.tabs(browserBundleID: group)
+        tabCache[group] = (tickTime, list)
+        return list
+    }
+
+    /// Debug lines only when they change, so a long call does not write one line every tick.
+    private func logChange(_ key: String, _ message: String) {
+        guard lastLogged[key] != message else { return }
+        lastLogged[key] = message
+        Log.debug(message)
     }
 
     /// The app a process belongs to: the browser for browser helpers, the app ID for Zoom and Teams.

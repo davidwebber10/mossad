@@ -34,6 +34,8 @@ final class AppController: ObservableObject {
     private var resumeTimer: Timer?
 
     var isOn: Bool { offUntil == 0 }
+    /// Live loudness of your mic and of the call audio, for the waveform.
+    var meters: (me: LevelMeter, them: LevelMeter) { (recorder.meMeter, recorder.themMeter) }
     var offUntilDate: Date? { offUntil == 0 || offUntil == .infinity ? nil : Date(timeIntervalSince1970: offUntil) }
     @Published private(set) var meetings: [CallRecord] = []
     @Published private(set) var processing = 0
@@ -119,7 +121,10 @@ final class AppController: ObservableObject {
             ProcessingQueue(paths: paths).recoverInterrupted()
         }
         refresh()
-        if !preview { relinkEmails() }
+        if !preview {
+            relinkEmails()
+            Task { await track { await self.pipeline.continueSplitMeetings() } }
+        }
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
         if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }

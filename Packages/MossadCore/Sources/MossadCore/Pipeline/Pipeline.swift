@@ -262,6 +262,13 @@ public actor Pipeline {
         await merge(callIDs: [sibling.id, r.id])
     }
 
+    /// Joins meetings that a restart split before automatic continuation existed.
+    public func continueSplitMeetings() async {
+        for r in queue.allRecords() where r.status == .written && r.meetingID != nil {
+            await continueSplitMeeting(r.id)
+        }
+    }
+
     /// Joins finished or failed meetings into the earliest one: audio, transcript, and speakers. The others
     /// are deleted with their notes, and the joined meeting gets a new summary and note. Returns its ID.
     @discardableResult

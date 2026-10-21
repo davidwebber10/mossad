@@ -72,17 +72,17 @@ struct StatusDot: View {
     var size: CGFloat = 8
     var pulsing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var animate = false
 
     var body: some View {
         Circle().fill(color).frame(width: size, height: size)
             .overlay {
                 if pulsing, !reduceMotion {
+                    // A phase animation changes only scale and opacity, so the ring cannot drift when the
+                    // dot moves during layout (a repeating implicit animation also animated its position).
                     Circle().stroke(color.opacity(0.5), lineWidth: 2)
-                        .scaleEffect(animate ? (size + 14) / size : 1)
-                        .opacity(animate ? 0 : 1)
-                        .animation(.easeOut(duration: 1.6).repeatForever(autoreverses: false), value: animate)
-                        .onAppear { animate = true }
+                        .phaseAnimator([false, true]) { ring, grown in
+                            ring.scaleEffect(grown ? (size + 14) / size : 1).opacity(grown ? 0 : 1)
+                        } animation: { grown in grown ? .easeOut(duration: 1.6) : nil }
                 }
             }
     }

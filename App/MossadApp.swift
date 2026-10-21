@@ -32,22 +32,32 @@ struct MossadApp: App {
 /// The menu bar draws one image only: a TimelineView or a mixed view there makes the item disappear.
 struct MenuBarIcon: View {
     @ObservedObject var controller: AppController
-    @StateObject private var clock = SecondsClock()
 
     var body: some View {
         if case .recording(_, let since) = controller.status {
-            Image(nsImage: Self.recording(elapsed(since, clock.now)))
+            RecordingMenuBarIcon(since: since)
         } else {
-            Image(nsImage: Self.idle)
+            Image(nsImage: controller.isOn ? Self.idle : Self.off)
         }
     }
+
+    /// Dimmed bars while Mossad is turned off.
+    static let off: NSImage = {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            drawBars(.black.withAlphaComponent(0.35), in: rect)
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Mossad is off"
+        return image
+    }()
 
     /// Bar x positions and spans on an 18 pt grid, from the design.
     private static let bars: [(x: CGFloat, top: CGFloat, bottom: CGFloat)] = [
         (2.5, 7, 11), (5.75, 4.5, 13.5), (9, 2.5, 15.5), (12.25, 5.5, 12.5), (15.5, 7.5, 10.5),
     ]
 
-    private static func drawBars(_ color: NSColor, in rect: NSRect) {
+    fileprivate static func drawBars(_ color: NSColor, in rect: NSRect) {
         color.setStroke()
         for bar in bars {
             let path = NSBezierPath()
@@ -83,6 +93,16 @@ struct MenuBarIcon: View {
         image.isTemplate = false
         image.accessibilityDescription = "Recording \(time)"
         return image
+    }
+}
+
+/// The recording icon with its clock. A separate view, so the 1 s timer only exists while recording.
+private struct RecordingMenuBarIcon: View {
+    let since: Date
+    @StateObject private var clock = SecondsClock()
+
+    var body: some View {
+        Image(nsImage: MenuBarIcon.recording(elapsed(since, clock.now)))
     }
 }
 

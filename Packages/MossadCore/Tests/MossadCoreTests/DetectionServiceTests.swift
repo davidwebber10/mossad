@@ -51,6 +51,23 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(service.meetingID, "abc-defg-hij")
     }
 
+    func testDuringACallTheTabsAreReadAtMostEveryTenSeconds() {
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        service.tick(at: now)
+        tabs.queried = []
+        for s in stride(from: 2.0, through: 18, by: 2) { service.tick(at: now.addingTimeInterval(s)) }
+        // Ticks at 2..18 s: reads at 10 s and 20 s at the earliest, so only one in this window.
+        XCTAssertEqual(tabs.queried.count, 1)
+    }
+
+    func testBeforeACallTheTabsAreReadOnEveryTick() {
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://www.youtube.com/watch?v=x", title: "YouTube", isActive: true)]
+        for s in stride(from: 0.0, through: 8, by: 2) { service.tick(at: now.addingTimeInterval(s)) }
+        XCTAssertEqual(tabs.queried.count, 5)
+    }
+
     func testBrowserMicWithoutMeetingTabHasNoCandidate() {
         mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
         tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://www.youtube.com/watch?v=x", title: "YouTube")]
@@ -95,7 +112,8 @@ final class DetectionServiceTests: XCTestCase {
         tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
         service.tick(at: now)
         tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet")]
-        XCTAssertEqual(service.snapshot(at: now).candidates.first?.meetingPresent, false)
+        // During a call the tabs are read again after `tabRefreshDuringCall`.
+        XCTAssertEqual(service.snapshot(at: now.addingTimeInterval(DetectionService.tabRefreshDuringCall)).candidates.first?.meetingPresent, false)
     }
 
     func testAudioProcessIDsForCurrentCall() {
