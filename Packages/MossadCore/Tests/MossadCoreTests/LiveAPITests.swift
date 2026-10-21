@@ -27,4 +27,31 @@ final class LiveAPITests: XCTestCase {
         XCTAssertTrue(text.contains("cushions"), text)
         XCTAssertTrue(text.contains("friday"), text)
     }
+
+    /// Same synthetic voice should score well above the match threshold; different voices below it.
+    func testFluidEmbeddingsSeparateVoices() async throws {
+        guard ProcessInfo.processInfo.environment["ASSEMBLYAI"] != nil else { throw XCTSkip("live tests not enabled") }
+        let provider = FluidEmbeddingProvider()
+        func embed(_ voice: String, _ text: String) async throws -> [Float] {
+            let aiff = tempDirectory().appendingPathComponent("v.caf")
+            let say = Process()
+            say.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+            say.arguments = ["-v", voice, "-o", aiff.path, "--data-format=LEF32@16000", text]
+            try say.run()
+            say.waitUntilExit()
+            let file = try AVAudioFile(forReading: aiff)
+            let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
+            try file.read(into: buffer)
+            let samples = Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
+            return try await provider.embedding(for: samples)
+        }
+        let a1 = try await embed("Samantha", "The cushions ship on Friday from the Syracuse plant, and the chairs follow next week.")
+        let a2 = try await embed("Samantha", "Can you send me the forecast for the outdoor dining collection before the meeting?")
+        let b1 = try await embed("Daniel", "The cushions ship on Friday from the Syracuse plant, and the chairs follow next week.")
+        let same = VoiceLibrary.cosine(a1, a2)
+        let different = VoiceLibrary.cosine(a1, b1)
+        print("LIVE same-voice \(same) different-voice \(different)")
+        XCTAssertGreaterThan(same, 0.65)
+        XCTAssertLessThan(different, 0.65)
+    }
 }
