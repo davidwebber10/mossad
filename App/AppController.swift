@@ -62,6 +62,9 @@ final class AppController: ObservableObject {
     @Published var selectedMeetingID: String?
     @Published var namingCallID: String?
     var personToOpen: String?
+    /// When the last bookmark was made, so the controls can confirm it.
+    @Published private(set) var lastBookmark: Date?
+    private var bookmarkKey: GlobalHotKey?
 
     let paths = Paths.live
     let library: VoiceLibrary
@@ -150,6 +153,7 @@ final class AppController: ObservableObject {
                 CaptureQueue.queue.async { recorder.rebuildThem() }
             }
             requestPermissions()
+            bookmarkKey = GlobalHotKey { [weak self] in self?.bookmarkCurrentCall() }
 
             Task { await runHousekeeping() }
             housekeeping = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
@@ -269,6 +273,17 @@ final class AppController: ObservableObject {
         status = .idle
         isPaused = false
         stopLive()
+    }
+
+    /// Marks this moment of the call as important. Also bound to ⌃⌥B everywhere.
+    func bookmarkCurrentCall() {
+        guard case .recording = status, !isPaused else { return }
+        let recorder = recorder
+        CaptureQueue.queue.async {
+            recorder.bookmark()
+            Task { @MainActor in self.refresh() }
+        }
+        lastBookmark = Date()
     }
 
     func pauseCurrentCall() {

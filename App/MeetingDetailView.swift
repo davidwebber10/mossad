@@ -329,7 +329,8 @@ private struct PlayerBar: View {
                     circleButton("goforward.15", size: 30) { player.skip(15) }.accessibilityLabel("Forward 15 seconds")
                 }
                 Text(enabled ? clock(player.time) : "0:00").timeLabel()
-                Scrubber(player: player, segments: segments, enabled: enabled)
+                Scrubber(player: player, segments: segments, enabled: enabled,
+                         bookmarks: record.transcriptMarkers.filter(\.isBookmark).map(\.offset))
                 Text(enabled ? clock(player.duration) : clock(record.end.timeIntervalSince(record.start))).timeLabel()
                 Picker("Speed", selection: $player.rate) {
                     ForEach([Float(1), 1.25, 1.5, 2], id: \.self) { Text($0 == 1 ? "1×" : "\($0.formatted())×").tag($0) }
@@ -379,6 +380,7 @@ private struct Scrubber: View {
     @ObservedObject var player: AudioPlayer
     let segments: [(start: Double, end: Double, color: Color)]
     let enabled: Bool
+    var bookmarks: [Double] = []
     @State private var dragging: Double?
 
     var body: some View {
@@ -389,6 +391,11 @@ private struct Scrubber: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.field).frame(height: 6)
                     Capsule().fill(Color.primary.opacity(0.85)).frame(width: max(0, g.size.width * position), height: 6)
+                    ForEach(Array(bookmarks.enumerated()), id: \.offset) { _, t in
+                        Image(systemName: "star.fill").font(.system(size: 8)).foregroundStyle(.yellow)
+                            .offset(x: g.size.width * t / duration - 4, y: -9)
+                            .help("Bookmarked at \(clock(t))")
+                    }
                     if enabled {
                         Circle().fill(.white).frame(width: 14, height: 14)
                             .shadow(color: .black.opacity(0.35), radius: 2, y: 1)

@@ -113,4 +113,8 @@ final class SummarizerTests: XCTestCase {
         XCTAssertEqual(e.cacheReadTokens, 10)
         XCTAssertEqual(e.cacheWriteTokens, 20)
     }
+
+    func testPromptGivesBookmarkedMomentsWeight() {
+        XCTAssertTrue(ClaudeSummarizer.systemPrompt(owner: "David Webber", organization: "").contains("★ Bookmarked"))
+    }
 }

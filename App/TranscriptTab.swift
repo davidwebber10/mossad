@@ -44,7 +44,7 @@ struct TranscriptTab: View {
                         ForEach(blocks) { block in
                             let previousEnd = blocks.last { $0.id < block.id }?.end ?? -1
                             ForEach(Array(breaks.filter { $0.offset > previousEnd && $0.offset <= block.start }.enumerated()), id: \.offset) { _, line in
-                                MarkerLine(text: line.text)
+                                MarkerLine(text: line.text, bookmark: line.isBookmark)
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 6) {
@@ -75,7 +75,7 @@ struct TranscriptTab: View {
                         }
                     }
                     ForEach(Array(breaks.filter { $0.offset > (blocks.last?.end ?? -1) }.enumerated()), id: \.offset) { _, line in
-                        MarkerLine(text: line.text)
+                        MarkerLine(text: line.text, bookmark: line.isBookmark)
                     }
                     }
                     .textSelection(.enabled)
@@ -161,12 +161,13 @@ struct TranscriptTab: View {
 /// A pause, a stop, or a join, drawn across the transcript.
 private struct MarkerLine: View {
     let text: String
+    var bookmark = false
 
     var body: some View {
         HStack(spacing: 10) {
-            Rectangle().fill(Theme.separator).frame(height: 1)
-            Text(text).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).fixedSize()
-            Rectangle().fill(Theme.separator).frame(height: 1)
+            Rectangle().fill(bookmark ? Color.yellow.opacity(0.5) : Theme.separator).frame(height: 1)
+            Text(text).font(.system(size: 11, weight: .medium)).foregroundStyle(bookmark ? Color.yellow : .secondary).fixedSize()
+            Rectangle().fill(bookmark ? Color.yellow.opacity(0.5) : Theme.separator).frame(height: 1)
         }
         .padding(.vertical, 4)
     }

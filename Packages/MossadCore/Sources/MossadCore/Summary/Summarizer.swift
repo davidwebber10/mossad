@@ -91,7 +91,8 @@ public struct ClaudeSummarizer: Summarizing {
     what the meeting was about and its main outcome. Name the kind of meeting in 1 to 3 words, such as \
     "Monthly update", "Working session", "Planning", "1:1", or "Interview". Set has_outcomes to false for a \
     meeting that only shares information (an update, a demo, a briefing) and made no decisions and assigned no \
-    work; then return no action items and no decisions.
+    work; then return no action items and no decisions. A line such as "(★ Bookmarked at 2:31 PM)" marks a \
+    moment the owner flagged as important during the call: make sure the summary covers what was said around it.
     """
 
     public func summarize(transcript: String, title: String) async throws -> MeetingSummary {

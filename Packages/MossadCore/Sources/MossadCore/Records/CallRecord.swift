@@ -63,10 +63,20 @@ public struct TranscriptMarker: Codable, Equatable, Sendable {
     /// Seconds into the recording.
     public var offset: TimeInterval
     public var text: String
+    /// A moment the owner marked as important during the call.
+    public var isBookmark = false
 
-    public init(offset: TimeInterval, text: String) {
+    public init(offset: TimeInterval, text: String, isBookmark: Bool = false) {
         self.offset = offset
         self.text = text
+        self.isBookmark = isBookmark
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        offset = try c.decode(TimeInterval.self, forKey: .offset)
+        text = try c.decode(String.self, forKey: .text)
+        isBookmark = try c.decodeIfPresent(Bool.self, forKey: .isBookmark) ?? false
     }
 }
 

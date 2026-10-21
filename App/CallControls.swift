@@ -6,6 +6,7 @@ struct CallControls: View {
     @EnvironmentObject var controller: AppController
     var compact = false
     @State private var confirmSkip = false
+    @State private var justBookmarked = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -14,6 +15,11 @@ struct CallControls: View {
             } else {
                 control("Pause", "pause.fill", tint: .primary) { controller.pauseCurrentCall() }
             }
+            control(justBookmarked ? "Bookmarked" : "Bookmark", justBookmarked ? "star.fill" : "star", tint: justBookmarked ? .yellow : .primary) {
+                controller.bookmarkCurrentCall()
+            }
+            .disabled(controller.isPaused)
+            .help("Mark this moment as important (⌃⌥B from any app)")
             control("Stop", "stop.fill", tint: .primary) { controller.stopCurrentCall() }
                 .help("End the recording now and write the note")
             control(confirmSkip ? "Click again to delete" : "Skip and delete", "trash", tint: Theme.recording) {
@@ -22,6 +28,13 @@ struct CallControls: View {
             .help("Stop recording and delete this call")
         }
         .onChange(of: controller.isRecording) { _, _ in confirmSkip = false }
+        .onChange(of: controller.lastBookmark) { _, _ in
+            justBookmarked = true
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                justBookmarked = false
+            }
+        }
     }
 
     private func control(_ title: String, _ symbol: String, tint: Color, _ action: @escaping () -> Void) -> some View {

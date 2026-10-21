@@ -221,9 +221,16 @@ public final class CallRecorder: @unchecked Sendable {
         }
     }
 
-    private func addMarker(at offset: TimeInterval, _ text: String) {
+    /// Marks this moment as important. The summary gives it weight, and the player shows it.
+    public func bookmark() {
+        guard isRecording, !isPaused else { return }
+        addMarker(at: recordedLength, "★ Bookmarked at \(Self.time(clock()))", isBookmark: true)
+        Log.info("Bookmarked the call")
+    }
+
+    private func addMarker(at offset: TimeInterval, _ text: String, isBookmark: Bool = false) {
         guard var r = record else { return }
-        r.markers.append(TranscriptMarker(offset: offset, text: text))
+        r.markers.append(TranscriptMarker(offset: offset, text: text, isBookmark: isBookmark))
         record = r
         do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
     }

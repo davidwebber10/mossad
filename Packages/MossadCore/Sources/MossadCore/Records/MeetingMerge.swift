@@ -39,7 +39,7 @@ public enum MeetingMerge {
             // A record that was itself merged keeps its own parts.
             let own = r.parts.isEmpty ? [CallPart(start: r.start, end: r.end, offset: 0)] : r.parts
             merged.parts += own.map { CallPart(start: $0.start, end: $0.end, offset: $0.offset + offset) }
-            merged.markers += r.markers.map { TranscriptMarker(offset: $0.offset + offset, text: $0.text) }
+            merged.markers += r.markers.map { TranscriptMarker(offset: $0.offset + offset, text: $0.text, isBookmark: $0.isBookmark) }
             if merged.meetingID == nil { merged.meetingID = r.meetingID }
             if merged.calendarTitle == nil { merged.calendarTitle = r.calendarTitle }
             for a in r.attendees where !merged.attendees.contains(a) { merged.attendees.append(a) }
