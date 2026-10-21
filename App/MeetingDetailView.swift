@@ -23,6 +23,18 @@ struct MeetingDetailView: View {
 
     var body: some View {
         let people = MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library)
+        content(people)
+            .task(id: controller.seekRequest) {
+                guard let seek = controller.seekRequest, seek.callID == record.id else { return }
+                controller.seekRequest = nil
+                tab = .transcript
+                // The audio loads when the view appears; give it a moment, as the cloud fallback does.
+                for _ in 0..<20 where !player.isAvailable { try? await Task.sleep(for: .milliseconds(100)) }
+                player.play(from: seek.at)
+            }
+    }
+
+    private func content(_ people: MeetingPeople) -> some View {
         VStack(spacing: 0) {
             if style == .split {
                 header(people)

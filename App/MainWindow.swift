@@ -30,6 +30,7 @@ struct MainWindow: View {
             .ignoresSafeArea(.container, edges: .top)
         }
         .frame(minWidth: 980, minHeight: 600)
+        .sheet(isPresented: $controller.askOpen) { AskView() }
     }
 }
 

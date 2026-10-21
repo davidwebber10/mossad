@@ -529,7 +529,7 @@ private struct CostSection: View {
 
     private static let services: [(UsageEvent.Service, String, Color)] = [(.assemblyai, "AssemblyAI", Color(hex: 0x2545d3)), (.claude, "Claude", Color(hex: 0xd97757))]
     private static let purposes: [(UsageEvent.Purpose, String)] = [
-        (.transcription, "Transcription"), (.live, "Live transcript"), (.summary, "Summaries"), (.coach, "Coach reviews"), (.weeklyEmail, "Weekly email"),
+        (.transcription, "Transcription"), (.live, "Live transcript"), (.summary, "Summaries"), (.coach, "Coach reviews"), (.weeklyEmail, "Weekly email"), (.question, "Questions"),
     ]
 
     private var unit: Calendar.Component {

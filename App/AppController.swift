@@ -64,6 +64,14 @@ final class AppController: ObservableObject {
     var personToOpen: String?
     /// The Meetings search text; a tag click sets it to "#Tag".
     @Published var meetingQuery = ""
+    @Published var askOpen = false
+    /// A meeting to open and play from a time; the meeting view takes it when it appears.
+    @Published var seekRequest: SeekRequest?
+
+    struct SeekRequest: Equatable {
+        let callID: String
+        let at: TimeInterval
+    }
     /// When the last bookmark was made, so the controls can confirm it.
     @Published private(set) var lastBookmark: Date?
     private var bookmarkKey: GlobalHotKey?
@@ -401,6 +409,18 @@ final class AppController: ObservableObject {
             await pipeline.setTags(callID: callID, tags)
             refresh()
         }
+    }
+
+    /// Opens a meeting and plays it from a time.
+    func openMeeting(_ callID: String, at time: TimeInterval) {
+        seekRequest = SeekRequest(callID: callID, at: time)
+        openMeeting(callID)
+    }
+
+
+    func ask(_ question: String) async throws -> MeetingQA.Answer {
+        guard let key = keychain.get(.anthropic) else { throw SummaryError.http(0, "The Anthropic key is missing. Add it in Settings.") }
+        return try await MeetingQA(apiKey: key, ownerName: ownerName, usage: usage).ask(question, records: meetings)
     }
 
     /// Shows every meeting with this tag.

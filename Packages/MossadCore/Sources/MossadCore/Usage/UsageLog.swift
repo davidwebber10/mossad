@@ -3,7 +3,7 @@ import Foundation
 /// One billed request to AssemblyAI or Claude, as the service reported it.
 public struct UsageEvent: Codable, Equatable, Sendable {
     public enum Service: String, Codable, Sendable, CaseIterable { case assemblyai, claude }
-    public enum Purpose: String, Codable, Sendable, CaseIterable { case transcription, live, summary, coach, weeklyEmail }
+    public enum Purpose: String, Codable, Sendable, CaseIterable { case transcription, live, summary, coach, weeklyEmail, question }
 
     public var date: Date
     public var callID: String?

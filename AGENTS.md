@@ -20,8 +20,9 @@ The product goal is zero interaction. Any change that adds a click, a prompt, or
 | `.../Pipeline/Pipeline.swift` | Actor that moves a call through `recorded → transcribed → identified → summarized → written`, with retries. |
 | `.../Transcription/` | AssemblyAI REST client and `TranscriptMerger` (merges tracks, drops echo). |
 | `.../Voices/` | `VoiceLibrary`, FluidAudio embeddings, `SpeakerIdentifier`, and `PersonStatistics` (the People page's numbers). |
-| `.../Coach/` | The communication coach: `DeliveryStats` (pace, fillers, turns from transcript timing), `CoachPrompt`, `ClaudeCoach`, `CoachProfile` (memory across calls in `~/Mossad/Coach`), `CoachRunner` (oldest call first), and `WeeklyEmail` (Resend). Reviews are saved as `coach.json` next to `call.json`. |
+| `.../Coach/` | The communication coach: `DeliveryStats` (pace, fillers, turns from transcript timing), `CoachPrompt`, `ClaudeCoach`, `CoachProfile` (memory across calls in `~/Mossad/Coach`), `CoachRunner` (oldest call first), `VoiceTone` (pitch, loudness, and trailing off from the mic track), `MeetingValue` (the coach's rating of a meeting's worth), and `WeeklyEmail` (Resend). Reviews are saved as `coach.json` next to `call.json`. |
 | `.../Usage/`, `.../Analytics/` | `UsageLog` (every billed AssemblyAI and Claude request in `~/Mossad/Usage/usage.jsonl`, tied to a call through `UsageContext.callID`), `Pricing` (list prices and estimates for older calls), and `AnalyticsReport` (the Analytics tab's numbers for a period). |
+| `.../Summary/MeetingQA.swift` | Ask your meetings: ranks meetings by the question's words on this Mac, then asks Claude with citations. |
 | `.../Summary/Summarizer.swift` | Claude Messages API over raw HTTP with a JSON schema response. |
 | `.../Output/MarkdownWriter.swift` | The note format. The golden test in `MarkdownWriterTests` is the contract. |
 | `docs/superpowers/specs/` | Design documents. The newest spec is the source of truth for behavior. |
@@ -54,7 +55,7 @@ scripts/build.sh --no-launch                  # full app build and install to /A
 
 If you were asked to act on a meeting, the notes are in `~/Mossad/Meetings/`, one file per call, named `YYYY-MM-DD HHMM - Title.md`.
 
-Each note has YAML front matter (`date`, `start`, `end`, `duration_minutes`, `platform`, `title`, `attendees`, `speakers`, `audio`, and `kind` such as "Monthly update" when known) followed by `## Summary` (a short overview, then one `###` section per topic), `## Action items` (a checklist; left out for meetings that only share information), `## Decisions` (when any), and `## Transcript`. Transcript lines look like `[HH:MM:SS] Name: text`.
+Each note has YAML front matter (`date`, `start`, `end`, `duration_minutes`, `platform`, `title`, `attendees`, `speakers`, `audio`, `kind` such as "Monthly update" when known, and `tags` such as ["Databricks", "Budget"] when known) followed by `## Summary` (a short overview, then one `###` section per topic), `## Action items` (a checklist; left out for meetings that only share information), `## Decisions` (when any), and `## Transcript`. Transcript lines look like `[HH:MM:SS] Name: text`.
 
 - The note owner's lines use their own name. Unnamed people appear as `Speaker A`, `Speaker B`, and so on, lettered by first appearance.
 - The summary and action items are generated. When they disagree with the transcript, trust the transcript.

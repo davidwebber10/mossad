@@ -79,6 +79,7 @@ struct MeetingsView: View {
                     HStack {
                         Text("Meetings").font(.system(size: 18, weight: .bold)).kerning(-0.3)
                         Spacer()
+                        AskButton()
                         ModePicker(mode: $mode, labeled: false)
                     }
                     SearchField(text: $controller.meetingQuery)
@@ -108,6 +109,7 @@ struct MeetingsView: View {
             ModePicker(mode: $mode, labeled: false)
             if mode == .calendar, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
             Spacer()
+            AskButton()
             SearchField(text: $controller.meetingQuery).frame(width: 240)
         }
         .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))

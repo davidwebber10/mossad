@@ -70,6 +70,54 @@ final class LiveAPITests: XCTestCase {
         XCTAssertNotNil(result.headline)
     }
 
+    private func syntheticCall() -> CallRecord {
+        var r = CallRecord(id: "live", platform: .meet, bundleID: "", start: Date().addingTimeInterval(-1800), end: Date(), status: .written)
+        r.calendarTitle = "Cushion check-in"
+        r.speakerNames = ["me:A": "David Webber", "them:A": "Alex Rivera"]
+        let lines: [(Track, String)] = [
+            (.me, "So um, I wanted to, uh, go through a lot of things today, the freight, the forecast, the chairs, and also the budget, and the hiring plan, and, uh, where we are on cushions in general, so let me start with some background on how we got here."),
+            (.them, "Sure. Freight is booked. It leaves the north plant on Friday."),
+            (.me, "OK cool. And the forecast, yeah, whenever."),
+            (.them, "I can send it. Do you need it by a certain day?"),
+            (.me, "No rush. Anyway the budget, so the way the budget works is we have two lines and they roll up into a third one that finance owns."),
+        ]
+        r.utterances = lines.enumerated().map { i, l in
+            Utterance(track: l.0, speakerLabel: "A", start: Double(i * 40), end: Double(i * 40 + 35), text: l.1)
+        }
+        r.tags = ["Freight", "Forecast"]
+        r.summary = "Freight leaves Friday; the forecast has no date."
+        return r
+    }
+
+    func testClaudeCoachReviewsACall() async throws {
+        guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
+        let result = try await ClaudeCoach(apiKey: key, ownerName: "David Webber").review(record: syntheticCall(), profile: CoachProfile(), tone: nil)
+        print("LIVE coach: \(result.review.headline) | value: \(String(describing: result.review.value)) | improve: \(result.review.improvements.map(\.title))")
+        XCTAssertFalse(result.review.improvements.isEmpty)
+        XCTAssertNotNil(result.review.value)
+        XCTAssertFalse(result.update.focus.isEmpty)
+    }
+
+    func testClaudeWritesTheWeeklyDigest() async throws {
+        guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
+        let review = CoachReview(headline: "Long openings", overview: "You took 90 s to reach the point.", strengths: [],
+                                 improvements: [CoachPoint(title: "Lead with the ask", observation: "O", quote: "Q", at: 3, principle: "BLUF", tryInstead: "T")],
+                                 focusProgress: nil)
+        let digest = try await ClaudeDigestWriter(apiKey: key).digest(owner: "David Webber", reviews: [(title: "Cushion check-in", date: Date(), review: review)],
+                                                                    profile: CoachProfile())
+        print("LIVE digest: \(digest.subject) | \(digest.focus)")
+        XCTAssertFalse(digest.subject.isEmpty)
+        XCTAssertFalse(digest.focus.isEmpty)
+    }
+
+    func testClaudeAnswersAQuestionWithCitations() async throws {
+        guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
+        let answer = try await MeetingQA(apiKey: key, ownerName: "David Webber").ask("When does the freight leave?", records: [syntheticCall()])
+        print("LIVE answer: \(answer.text) | \(answer.citations)")
+        XCTAssertTrue(answer.text.lowercased().contains("friday"))
+        XCTAssertEqual(answer.citations.first?.callID, "live")
+    }
+
     /// Full pipeline on synthetic voices: me = Samantha, them = Daniel then Karen.
     func testEndToEndPipeline() async throws {
         let env = ProcessInfo.processInfo.environment
