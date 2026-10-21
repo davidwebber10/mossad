@@ -111,6 +111,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var summary: String?
     public var topics: [SummaryTopic] = []
     public var kind: String?
+    /// Short topic tags, such as "Databricks" or "Budget", spelled the same across meetings.
+    public var tags: [String] = []
     /// False for a meeting that only shares information; nil for records from before this field.
     public var hasOutcomes: Bool?
     public var actionItems: [ActionItem] = []
@@ -182,6 +184,7 @@ extension CallRecord {
         decisions = try c.decodeIfPresent([String].self, forKey: .decisions) ?? []
         topics = try c.decodeIfPresent([SummaryTopic].self, forKey: .topics) ?? []
         kind = try c.decodeIfPresent(String.self, forKey: .kind)
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         hasOutcomes = try c.decodeIfPresent(Bool.self, forKey: .hasOutcomes)
         headline = try c.decodeIfPresent(String.self, forKey: .headline)
         markdownPath = try c.decodeIfPresent(String.self, forKey: .markdownPath)

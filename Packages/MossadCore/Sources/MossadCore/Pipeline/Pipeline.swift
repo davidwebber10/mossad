@@ -263,8 +263,10 @@ public actor Pipeline {
         if summarizer != nil, !r.utterances.isEmpty { onDetail(r.id, "Claude is writing the summary") }
         if let summarizer, !r.utterances.isEmpty {
             do {
-                let transcript = MarkdownWriter.transcript(r), title = r.title
-                let s = try await UsageContext.$callID.withValue(r.id) { try await summarizer.summarize(transcript: transcript, title: title) }
+                let transcript = MarkdownWriter.transcript(r), title = r.title, known = knownTags()
+                let s = try await UsageContext.$callID.withValue(r.id) {
+                    try await summarizer.summarize(transcript: transcript, title: title, knownTags: known)
+                }
                 r.apply(s)
             } catch {
                 Log.error("Summary for \(r.id) failed: \(error)")
@@ -277,6 +279,8 @@ public actor Pipeline {
         r.status = .summarized
         return true
     }
+
+    private func knownTags() -> [String] { Tags.known(queue.allRecords()) }
 
     private func write(_ r: inout CallRecord) throws {
         onDetail(r.id, "Writing the note")
@@ -314,8 +318,10 @@ public actor Pipeline {
         save(&r, dir: dir)
         guard let summarizer, r.status == .written, !r.utterances.isEmpty else { return }
         let names = r.speakerNames
-        let transcript = MarkdownWriter.transcript(r), title = r.title, id = r.id
-        guard let s = try? await UsageContext.$callID.withValue(id, operation: { try await summarizer.summarize(transcript: transcript, title: title) }),
+        let transcript = MarkdownWriter.transcript(r), title = r.title, id = r.id, known = knownTags()
+        guard let s = try? await UsageContext.$callID.withValue(id, operation: {
+            try await summarizer.summarize(transcript: transcript, title: title, knownTags: known)
+        }),
               var latest = try? CallRecord.load(from: dir), latest.speakerNames == names else { return }
         // Names changed during the request: that save's own summary is newer.
         latest.apply(s)
@@ -406,6 +412,15 @@ public actor Pipeline {
     }
 
     /// Skipped voices stay in the transcript as letters, but the call stops asking for them.
+    /// Replaces a meeting's tags, without case duplicates, and rewrites its note.
+    public func setTags(callID: String, _ tags: [String]) {
+        let dir = paths.callDirectory(callID)
+        guard var r = try? CallRecord.load(from: dir) else { return }
+        var seen = Set<String>()
+        r.tags = tags.compactMap(\.nonBlank).filter { seen.insert($0.lowercased()).inserted }
+        save(&r, dir: dir)
+    }
+
     public func dismissSpeakers(callID: String, keys: [String]) {
         let dir = paths.callDirectory(callID)
         guard var r = try? CallRecord.load(from: dir) else { return }

@@ -94,6 +94,8 @@ public struct AnalyticsReport: Sendable {
     public let people: [PersonTime]
     public let platforms: [Slice]
     public let kinds: [Slice]
+    /// Time per topic tag; a call with three tags counts toward each.
+    public let tags: [Slice]
     public let days: [Bar]
     public let heat: [HeatCell]
     public let delivery: [DeliveryPoint]
@@ -112,7 +114,7 @@ public struct AnalyticsReport: Sendable {
 
         var mine = 0.0, speech = 0.0
         var people: [String: PersonTime] = [:]
-        var platforms: [String: Slice] = [:], kinds: [String: Slice] = [:]
+        var platforms: [String: Slice] = [:], kinds: [String: Slice] = [:], tags: [String: Slice] = [:]
         for r in records {
             for u in r.utterances {
                 let d = max(0, u.end - u.start)
@@ -125,6 +127,10 @@ public struct AnalyticsReport: Sendable {
             }
             platforms[r.platform.displayName, default: Slice(name: r.platform.displayName, seconds: 0, calls: 0)].seconds += length(r)
             platforms[r.platform.displayName]!.calls += 1
+            for t in Set(r.tags) {
+                tags[t, default: Slice(name: t, seconds: 0, calls: 0)].seconds += length(r)
+                tags[t]!.calls += 1
+            }
             if let k = r.kind {
                 kinds[k, default: Slice(name: k, seconds: 0, calls: 0)].seconds += length(r)
                 kinds[k]!.calls += 1
@@ -134,6 +140,7 @@ public struct AnalyticsReport: Sendable {
         self.people = people.values.sorted { ($0.seconds, $1.name) > ($1.seconds, $0.name) }
         self.platforms = platforms.values.sorted { $0.seconds > $1.seconds }
         self.kinds = kinds.values.sorted { $0.seconds > $1.seconds }
+        self.tags = tags.values.sorted { ($0.seconds, $1.name) > ($1.seconds, $0.name) }
 
         // Buckets across the whole period, empty ones included, so the chart's time axis is even.
         let component: Calendar.Component = switch bucket { case .day: .day; case .week: .weekOfYear; case .month: .month }

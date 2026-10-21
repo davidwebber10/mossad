@@ -33,7 +33,7 @@ final class SummarizerTests: XCTestCase {
         XCTAssertEqual(format?["type"] as? String, "json_schema")
         let schema = format?["schema"] as? [String: Any]
         XCTAssertEqual(Set(schema?["required"] as? [String] ?? []),
-                       ["summary", "topics", "action_items", "decisions", "headline", "kind", "has_outcomes"])
+                       ["summary", "topics", "action_items", "decisions", "headline", "kind", "has_outcomes", "tags"])
         let topic = ((schema?["properties"] as? [String: Any])?["topics"] as? [String: Any])?["items"] as? [String: Any]
         XCTAssertEqual(Set(topic?["required"] as? [String] ?? []), ["title", "summary"])
         let props = schema?["properties"] as? [String: Any]
@@ -116,5 +116,14 @@ final class SummarizerTests: XCTestCase {
 
     func testPromptGivesBookmarkedMomentsWeight() {
         XCTAssertTrue(ClaudeSummarizer.systemPrompt(owner: "David Webber", organization: "").contains("★ Bookmarked"))
+    }
+
+    func testSendsKnownTagsAndParsesTags() async throws {
+        StubURLProtocol.handler = { _ in (200, self.reply(#"{"summary":"S","topics":[],"action_items":[],"decisions":[],"headline":"H","kind":"K","has_outcomes":false,"tags":["Databricks"," Budget ",""]}"#)) }
+        let result = try await summarizer().summarize(transcript: "t", title: "x", knownTags: ["Databricks", "Triple Whale"])
+        XCTAssertEqual(result.tags, ["Databricks", "Budget"])
+        let body = try JSONSerialization.jsonObject(with: XCTUnwrap(StubURLProtocol.requests.first).body) as! [String: Any]
+        let content = ((body["messages"] as? [[String: Any]])?.first?["content"] as? String) ?? ""
+        XCTAssertTrue(content.contains("Known tags: Databricks, Triple Whale"), content)
     }
 }

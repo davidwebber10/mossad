@@ -16,8 +16,6 @@ public struct MeetingIndex: Sendable {
     public func search(_ query: String) -> [CallRecord] {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return all() }
-        return all().filter { r in
-            r.title.localizedCaseInsensitiveContains(q) || r.utterances.contains { $0.text.localizedCaseInsensitiveContains(q) }
-        }
+        return all().filter { MeetingSearch.matches($0, q) }
     }
 }

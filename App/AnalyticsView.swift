@@ -159,6 +159,7 @@ struct AnalyticsView: View {
                 .frame(width: 300)
         }
         Card("API costs") { CostSection(report: r) }
+        Card("Topics") { TopicsChart(slices: r.tags) }
         HStack(alignment: .top, spacing: 12) {
             Card("Meeting kinds") { KindsChart(slices: r.kinds) }
                 .frame(width: 380)
@@ -388,6 +389,44 @@ private struct KindsChart: View {
             }
             .chartXAxis(.hidden)
             .frame(height: CGFloat(min(slices.count, 8)) * 30 + 10)
+        }
+    }
+}
+
+/// Time per tag. Click a topic to see its meetings.
+private struct TopicsChart: View {
+    @EnvironmentObject var controller: AppController
+    let slices: [AnalyticsReport.Slice]
+
+    var body: some View {
+        if slices.isEmpty {
+            Text("Tags come with each new summary. Regenerate an older meeting's summary to tag it.").font(.system(size: 12)).foregroundStyle(.secondary)
+        } else {
+            let top = slices.prefix(12)
+            let peak = max(top.first?.seconds ?? 1, 1)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 24), GridItem(.flexible(), spacing: 24)], alignment: .leading, spacing: 10) {
+                ForEach(Array(top)) { s in
+                    Button { controller.showTag(s.name) } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("#\(s.name)").foregroundStyle(Color.accentColor).lineLimit(1)
+                                Spacer()
+                                Text("\(s.calls) · \(hours(s.seconds))").foregroundStyle(.secondary).monospacedDigit()
+                            }
+                            GeometryReader { g in
+                                Capsule().fill(Theme.field).overlay(alignment: .leading) {
+                                    Capsule().fill(Color.accentColor.opacity(0.8)).frame(width: g.size.width * s.seconds / peak)
+                                }
+                            }
+                            .frame(height: 5)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .help("Show the meetings tagged \(s.name)")
+                }
+            }
         }
     }
 }

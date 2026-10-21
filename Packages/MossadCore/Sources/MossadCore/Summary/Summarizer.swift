@@ -23,9 +23,11 @@ public struct MeetingSummary: Sendable, Equatable {
     public var kind: String?
     /// Whether the meeting is the kind that makes decisions or assigns work; an update call is not.
     public var hasOutcomes: Bool?
+    public var tags: [String]
 
     public init(summary: String, topics: [SummaryTopic] = [], actionItems: [ActionItem], decisions: [String] = [], headline: String? = nil,
-                kind: String? = nil, hasOutcomes: Bool? = nil) {
+                kind: String? = nil, hasOutcomes: Bool? = nil, tags: [String] = []) {
+        self.tags = tags
         self.summary = summary
         self.topics = topics
         self.actionItems = actionItems
@@ -45,11 +47,19 @@ extension CallRecord {
         headline = s.headline
         kind = s.kind
         hasOutcomes = s.hasOutcomes
+        tags = s.tags
     }
 }
 
 public protocol Summarizing: Sendable {
-    func summarize(transcript: String, title: String) async throws -> MeetingSummary
+    /// `knownTags` are the tags of earlier meetings, so the same topic keeps one spelling.
+    func summarize(transcript: String, title: String, knownTags: [String]) async throws -> MeetingSummary
+}
+
+extension Summarizing {
+    public func summarize(transcript: String, title: String) async throws -> MeetingSummary {
+        try await summarize(transcript: transcript, title: title, knownTags: [])
+    }
 }
 
 /// Writes the summary and action items with the Claude Messages API (raw HTTP; there is no Swift SDK).
@@ -91,11 +101,14 @@ public struct ClaudeSummarizer: Summarizing {
     what the meeting was about and its main outcome. Name the kind of meeting in 1 to 3 words, such as \
     "Monthly update", "Working session", "Planning", "1:1", or "Interview". Set has_outcomes to false for a \
     meeting that only shares information (an update, a demo, a briefing) and made no decisions and assigned no \
-    work; then return no action items and no decisions. A line such as "(★ Bookmarked at 2:31 PM)" marks a \
+    work; then return no action items and no decisions. Give 2 to 5 tags: short topic labels of 1 to 3 words in \
+    Title Case for the projects, systems, vendors, and themes the meeting was about, such as "Databricks", \
+    "Budget", or "Hiring". Use a known tag, with its exact spelling, whenever it fits; make a new one only for a new \
+    topic. Do not use people's names or the meeting kind as tags. A line such as "(★ Bookmarked at 2:31 PM)" marks a \
     moment the owner flagged as important during the call: make sure the summary covers what was said around it.
     """
 
-    public func summarize(transcript: String, title: String) async throws -> MeetingSummary {
+    public func summarize(transcript: String, title: String, knownTags: [String]) async throws -> MeetingSummary {
         let schema = Schema.object([
             "summary": Schema.string,
             "topics": Schema.array(Schema.object(["title": Schema.string, "summary": Schema.string])),
@@ -104,14 +117,17 @@ public struct ClaudeSummarizer: Summarizing {
             "headline": Schema.string,
             "kind": Schema.string,
             "has_outcomes": ["type": "boolean"],
+            "tags": Schema.array(Schema.string),
         ])
+        let known = knownTags.isEmpty ? "" : "Known tags: \(knownTags.joined(separator: ", "))\n\n"
         let result = try await ClaudeJSON(apiKey: apiKey, model: model, session: session, usage: usage, purpose: .summary)
             .call(system: Self.systemPrompt(owner: ownerName, organization: organization),
-                  user: "Meeting: \(title)\n\nTranscript:\n\(transcript)", schema: schema, as: Output.self)
+                  user: "\(known)Meeting: \(title)\n\nTranscript:\n\(transcript)", schema: schema, as: Output.self)
         let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)
         return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items, decisions: result.decisions,
                               headline: headline.isEmpty ? nil : headline,
-                              kind: result.kind.isEmpty ? nil : result.kind, hasOutcomes: result.has_outcomes)
+                              kind: result.kind.isEmpty ? nil : result.kind, hasOutcomes: result.has_outcomes,
+                              tags: (result.tags ?? []).compactMap(\.nonBlank))
     }
 
     private struct Output: Decodable {
@@ -122,6 +138,7 @@ public struct ClaudeSummarizer: Summarizing {
         let headline: String
         let kind: String
         let has_outcomes: Bool
+        let tags: [String]?
     }
 }
 

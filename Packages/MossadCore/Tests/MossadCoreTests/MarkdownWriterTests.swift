@@ -74,6 +74,13 @@ final class MarkdownWriterTests: XCTestCase {
         XCTAssertTrue(md.contains("## Transcript"))
     }
 
+    func testTagsGoInTheFrontMatterWhenThereAreAny() {
+        var r = fixture()
+        XCTAssertFalse(MarkdownWriter.render(r).contains("tags:"))
+        r.tags = ["Databricks", "Budget"]
+        XCTAssertTrue(MarkdownWriter.render(r).contains("\ntags: [\"Databricks\", \"Budget\"]\n"))
+    }
+
     func testNoDecisionsSectionWhenEmpty() {
         var r = fixture()
         r.decisions = []

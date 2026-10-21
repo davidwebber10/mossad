@@ -62,6 +62,8 @@ final class AppController: ObservableObject {
     @Published var selectedMeetingID: String?
     @Published var namingCallID: String?
     var personToOpen: String?
+    /// The Meetings search text; a tag click sets it to "#Tag".
+    @Published var meetingQuery = ""
     /// When the last bookmark was made, so the controls can confirm it.
     @Published private(set) var lastBookmark: Date?
     private var bookmarkKey: GlobalHotKey?
@@ -392,6 +394,19 @@ final class AppController: ObservableObject {
             await pipeline.applyNames(callID: callID, names: names, emails: emails)
             refresh()
         }
+    }
+
+    func setTags(callID: String, _ tags: [String]) {
+        Task {
+            await pipeline.setTags(callID: callID, tags)
+            refresh()
+        }
+    }
+
+    /// Shows every meeting with this tag.
+    func showTag(_ tag: String) {
+        meetingQuery = "#\(tag)"
+        open(.meetings)
     }
 
     func deleteMeeting(_ callID: String) {

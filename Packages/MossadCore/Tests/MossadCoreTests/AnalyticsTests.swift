@@ -135,4 +135,36 @@ final class AnalyticsTests: XCTestCase {
         XCTAssertEqual(r.bucket, .week)
         XCTAssertLessThan(r.days.count, 20)
     }
+
+    // MARK: Tags
+
+    func testKnownTagsAreTheMostUsedFirstWithOneSpelling() {
+        var a = call("a", date(10, 1), minutes: 10); a.tags = ["Budget", "Databricks"]
+        var b = call("b", date(10, 2), minutes: 10); b.tags = ["databricks"]
+        var c = call("c", date(10, 3), minutes: 10); c.tags = ["Hiring"]
+        XCTAssertEqual(Tags.known([a, b, c]), ["Databricks", "Budget", "Hiring"])
+    }
+
+    func testSearchMatchesTagsWithAHashAndInPlainText() {
+        var r = call("a", date(10, 1), minutes: 10)
+        r.calendarTitle = "Weekly sync"
+        r.tags = ["Triple Whale"]
+        XCTAssertTrue(MeetingSearch.matches(r, "#triple whale"))
+        XCTAssertFalse(MeetingSearch.matches(r, "#triple"))
+        XCTAssertTrue(MeetingSearch.matches(r, "whale"))
+        XCTAssertTrue(MeetingSearch.matches(r, "weekly"))
+        XCTAssertTrue(MeetingSearch.matches(r, "word"))
+        XCTAssertFalse(MeetingSearch.matches(r, "nothing here"))
+        XCTAssertTrue(MeetingSearch.matches(r, " "))
+    }
+
+    func testReportCountsTimePerTag() {
+        var a = call("a", date(10, 19), minutes: 30); a.tags = ["Budget", "Databricks"]
+        var b = call("b", date(10, 20), minutes: 60); b.tags = ["Databricks"]
+        let r = AnalyticsReport(records: [a, b], usage: [], owner: "David Webber",
+                                interval: DateInterval(start: date(10, 15, 0), end: date(10, 22, 0)), calendar: cal)
+        XCTAssertEqual(r.tags.map(\.name), ["Databricks", "Budget"])
+        XCTAssertEqual(r.tags.first?.calls, 2)
+        XCTAssertEqual(r.tags.first?.seconds, 5400)
+    }
 }

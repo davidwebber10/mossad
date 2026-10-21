@@ -8,7 +8,6 @@ struct MeetingsView: View {
 
     @EnvironmentObject var controller: AppController
     @AppStorage("meetingsMode") private var mode = Mode.split
-    @State private var query = ""
     @State private var deleting: CallRecord?
     @State private var merging: CallRecord?
     /// The meeting opened full-pane from List or Calendar mode.
@@ -17,11 +16,7 @@ struct MeetingsView: View {
     @StateObject private var calendarState = CalendarState()
 
     private var results: [CallRecord] {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return controller.meetings }
-        return controller.meetings.filter { r in
-            r.title.localizedCaseInsensitiveContains(q) || r.utterances.contains { $0.text.localizedCaseInsensitiveContains(q) }
-        }
+        controller.meetings.filter { MeetingSearch.matches($0, controller.meetingQuery) }
     }
 
     var body: some View {
@@ -86,7 +81,7 @@ struct MeetingsView: View {
                         Spacer()
                         ModePicker(mode: $mode, labeled: false)
                     }
-                    SearchField(text: $query)
+                    SearchField(text: $controller.meetingQuery)
                 }
                 .padding(EdgeInsets(top: 12, leading: 12, bottom: 8, trailing: 12))
                 MeetingList(groups: MeetingGroups.group(results), selection: $controller.selectedMeetingID, deleting: $deleting)
@@ -113,7 +108,7 @@ struct MeetingsView: View {
             ModePicker(mode: $mode, labeled: false)
             if mode == .calendar, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
             Spacer()
-            SearchField(text: $query).frame(width: 240)
+            SearchField(text: $controller.meetingQuery).frame(width: 240)
         }
         .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
     }

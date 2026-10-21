@@ -46,6 +46,7 @@ public enum MarkdownWriter {
             "audio: ~/Mossad/Audio/\(r.id)",
         ]
         if let kind = r.kind { lines.insert("kind: \(quoted(kind))", at: lines.count - 4) }
+        if !r.tags.isEmpty { lines.insert("tags: [\(r.tags.map(quoted).joined(separator: ", "))]", at: lines.count - 4) }
         lines += ["---", "# \(r.title)", ""]
         if let summary = r.summary {
             lines += ["## Summary", "", summary, ""]

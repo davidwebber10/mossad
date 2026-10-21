@@ -25,7 +25,9 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
     var calls = 0
     var lastTranscript = ""
     var delayOnCall: [Int: Duration] = [:]
-    func summarize(transcript: String, title: String) async throws -> MeetingSummary {
+    var lastKnownTags: [String] = []
+    func summarize(transcript: String, title: String, knownTags: [String]) async throws -> MeetingSummary {
+        lastKnownTags = knownTags
         calls += 1
         let call = calls
         lastTranscript = transcript
@@ -125,6 +127,26 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(r.summary, "Summary 2")
         XCTAssertEqual(r.status, .written)
         XCTAssertEqual(transcriber.calls.count, 2, "no new transcription")
+    }
+
+    func testSetTagsCleansThemAndRewritesTheNote() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        await p.setTags(callID: id, ["Budget", " budget ", "", "Databricks"])
+        let r = try load(id)
+        XCTAssertEqual(r.tags, ["Budget", "Databricks"])
+        let note = try String(contentsOfFile: XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertTrue(note.contains("tags: [\"Budget\", \"Databricks\"]"))
+    }
+
+    func testTheSummaryGetsTheTagsOfEarlierMeetings() async throws {
+        let first = try makeRecord()
+        let p = pipeline()
+        await p.process(first)
+        await p.setTags(callID: first, ["Freight"])
+        await p.regenerateSummary(first)
+        XCTAssertEqual(summarizer.lastKnownTags, ["Freight"])
     }
 
     func testDetailsDescribeEachSubStep() async throws {

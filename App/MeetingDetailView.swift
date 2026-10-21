@@ -96,6 +96,7 @@ struct MeetingDetailView: View {
                     ForEach(people.speakers, id: \.key) { SpeakerChip(speaker: $0, callID: record.id, editable: record.status == .written) }
                 }
             }
+            if record.status == .written { TagRow(record: record) }
         }
         .padding(EdgeInsets(top: style == .split ? 18 : 20, leading: 24, bottom: 14, trailing: 24))
         .frame(maxWidth: .infinity, alignment: .leading)
