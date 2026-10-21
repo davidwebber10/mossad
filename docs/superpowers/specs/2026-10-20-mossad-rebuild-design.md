@@ -37,7 +37,6 @@ This is a personal tool for one user on one Mac. It is not distributed.
 ## Non-goals (step 1)
 
 - Live transcription or a live transcript view.
-- A meeting browser window, search UI, or editor.
 - An MCP server (a plain folder of Markdown is enough for Claude Code now).
 - Analysis of people, speech style, sentiment, etc. (likely later steps).
 - Screen-vision speaker identification. Voice fingerprints come first; screen
@@ -216,8 +215,19 @@ module imports and strings). Findings that shape this design:
   (stops recording and deletes all audio for the current call; nothing is
   uploaded — builder's call, settled during review), Settings (output folder, audio retention days, launch at
   login), "View log", Quit.
-- No windows open on their own except the voice-naming panel after the user
-  clicks the notification.
+- Menu items open a normal app **window** (only when David clicks; it never
+  opens on its own). The window has a sidebar with:
+  - **Meetings:** list of calls (newest first, with a search field over title
+    and transcript text) and a reader for the selected transcript (summary,
+    action items, transcript, speakers). Unknown speakers can be named from
+    here, and "Reveal in Finder" opens the Markdown file.
+  - **Voices:** the voice library — rename, merge, or delete a person.
+  - **Settings:** output folder, audio retention days, launch at login,
+    key status (set / missing).
+  - **Log:** recent log lines.
+  (Added by David after design approval.)
+- Clicking the post-call notification opens the window on that meeting's
+  voice-naming view. No windows open on their own.
 
 ### Errors and logging
 
@@ -255,6 +265,7 @@ module imports and strings). Findings that shape this design:
 - One notification after a call with new voices is acceptable.
 - Step 1 is capture quality; agents read the results later.
 - Fresh rebuild; old app is torn down.
+- Menu bar options open an app window with Meetings, Voices, Settings, Log.
 - Calendar comes from the macOS Calendar app (EventKit).
 - Recording while muted in the meeting app is fine.
 - Platforms: Zoom, Meet, Teams — native apps and each one in a browser.

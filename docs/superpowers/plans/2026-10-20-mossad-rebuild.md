@@ -44,8 +44,12 @@ App/
   MossadApp.swift                   @main, MenuBarExtra, --import-keys mode
   AppController.swift               wires detector → recorder → pipeline, owns state
   MenuContent.swift                 menu items and status line
-  VoiceNamingPanel.swift            NSPanel + SwiftUI form for unknown voices
-  SettingsView.swift                folder, retention days, launch at login
+  MainWindow.swift                  Window scene: sidebar Meetings / Voices / Settings / Log
+  MeetingsView.swift                list + search + transcript reader
+  VoiceNamingView.swift             name unknown voices for one call (clips + fields)
+  VoicesView.swift                  voice library: rename, merge, delete
+  SettingsView.swift                folder, retention days, launch at login, key status
+  LogView.swift                     tail of mossad.log
   Notifier.swift                    UserNotifications post-call notice
   Info.plist, Mossad.entitlements
 Packages/MossadCore/
@@ -342,22 +346,23 @@ Packages/MossadCore/
 - [ ] **Step 3:** → FAIL. **Step 4:** Implement: steps run by status (`recorded` → transcribe both tracks → merge → `transcribed` → identify → `identified` → calendar + summary → `summarized` → write → `written`), saving `call.json` after each step.
 - [ ] **Step 5:** → PASS. **Step 6:** Commit `feat: markdown output and processing pipeline`.
 
-### Task 13: Menu bar app, voice naming, settings, retention
+### Task 13: Menu bar app, app window, voice naming, settings, retention
 
 **Files:**
-- Create: `App/VoiceNamingPanel.swift`, `App/SettingsView.swift`, `App/Notifier.swift`, `Sources/MossadCore/Support/Retention.swift`
+- Create: `App/MainWindow.swift`, `App/MeetingsView.swift`, `App/VoiceNamingView.swift`, `App/VoicesView.swift`, `App/SettingsView.swift`, `App/LogView.swift`, `App/Notifier.swift`, `Sources/MossadCore/Support/Retention.swift`, `Sources/MossadCore/Records/MeetingIndex.swift`
 - Modify: `App/AppController.swift`, `App/MenuContent.swift`, `App/MossadApp.swift`
-- Test: `Tests/MossadCoreTests/RetentionTests.swift`
+- Test: `Tests/MossadCoreTests/RetentionTests.swift`, `MeetingIndexTests.swift`
 
 **Interfaces:**
 - Consumes: `Pipeline.applyNames`, `ClipExtractor`, `CallRecord.unknownSpeakers`, `CallRecord.attendees`.
 - Produces: `enum Retention { static func sweep(audioRoot: URL, olderThan days: Int = 30, now: Date) }` — deletes `them.caf`/`me.caf`/clips in call dirs whose record is `.written` and `end` is older than `days`; keeps `call.json`.
+  `struct MeetingIndex { init(paths: Paths); func all() -> [CallRecord] /* newest first */; func search(_ q: String) -> [CallRecord] /* case-insensitive over title + utterance text */ }`; `VoiceLibrary.rename(_ from: String, to: String)`, `merge(_ a: String, into b: String)`, `delete(_ name: String)`.
 
-- [ ] **Step 1:** Retention tests: `testDeletesOldWrittenAudioKeepsJSON`; `testKeepsUnwrittenEvenIfOld`; `testKeepsRecent`.
+- [ ] **Step 1:** Retention tests: `testDeletesOldWrittenAudioKeepsJSON`; `testKeepsUnwrittenEvenIfOld`; `testKeepsRecent`. Index tests: `testAllNewestFirst`; `testSearchMatchesTitleAndText`. Library tests: `testRenameMergeDelete`.
 - [ ] **Step 2:** → FAIL. **Step 3:** Implement. **Step 4:** → PASS.
-- [ ] **Step 5:** `Notifier`: post exactly one notification per processed call with unknowns: title "Mossad", body "<n> new voice(s) in <title>". Clicking it opens `VoiceNamingPanel` for that call.
-- [ ] **Step 6:** `VoiceNamingPanel`: one row per unknown speaker with a play button (5 s clip via `ClipExtractor`, `AVAudioPlayer`), a name `TextField` with attendee names as suggestions, and Save → `applyNames`. Floating `NSPanel`, closes on Save.
-- [ ] **Step 7:** Menu: status line (Idle / Recording "<title or platform>" mm:ss / Processing n), Open Meetings Folder, Name voices… (submenu of recent calls with unknowns; hidden if none), Skip this call (only while recording), Settings…, View Log, Quit. `SettingsView`: retention days (default 30), launch at login toggle (`SMAppService.mainApp`, on by default at first launch). On launch: `Paths.ensureDirectories`, `queue.recoverInterrupted()`, `pipeline.runPending()`, `Retention.sweep`, then every hour `runPending` + `sweep`.
+- [ ] **Step 5:** `Notifier`: post exactly one notification per processed call with unknowns: title "Mossad", body "<n> new voice(s) in <title>". Clicking it opens the main window on that call's `VoiceNamingView`.
+- [ ] **Step 6:** `MainWindow`: SwiftUI `Window` scene (id `main`) with `NavigationSplitView` sidebar Meetings / Voices / Settings / Log. Opening it calls `NSApp.activate`; while open the app may show a Dock icon (`NSApp.setActivationPolicy(.regular)`), returning to `.accessory` when it closes. `MeetingsView`: searchable list (`MeetingIndex`), reader with summary, action items, transcript, speakers, "Name voices" (if unknowns) and "Reveal in Finder". `VoiceNamingView`: one row per unknown speaker with a play button (5 s clip via `ClipExtractor`, `AVAudioPlayer`), a name `TextField` with attendee names as suggestions, Save → `applyNames`. `VoicesView`: list of profiles with rename / merge / delete. `LogView`: last 500 lines of `mossad.log`. `SettingsView`: retention days (default 30), launch at login (`SMAppService.mainApp`, on by default at first launch), key status for both keys.
+- [ ] **Step 7:** Menu: status line (Idle / Recording "<title or platform>" mm:ss / Processing n), Meetings…, Name voices… (hidden if none pending), Skip this call (only while recording), Voices…, Settings…, Log…, Quit. Each "…" item opens the main window on that section. On launch: `Paths.ensureDirectories`, `queue.recoverInterrupted()`, `pipeline.runPending()`, `Retention.sweep`, then every hour `runPending` + `sweep`.
 - [ ] **Step 8:** Build and run; check every menu item. Commit `feat: menu bar UI, voice naming panel, settings, retention`.
 
 ### Task 14: End-to-end acceptance
