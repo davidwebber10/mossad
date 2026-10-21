@@ -16,7 +16,7 @@ struct VoiceNamingView: View {
     /// Which candidate line each voice's sample comes from, and that line's text.
     @State private var choices: [String: Int] = [:]
     @State private var sampleText: [String: String] = [:]
-    /// Voices marked "Not a person" in this session; saved when the sheet closes with Save or Later.
+    /// Voices skipped in this session; saved when the sheet closes with Save or Later.
     @State private var dismissed: Set<String> = []
 
     var body: some View {
@@ -85,7 +85,7 @@ struct VoiceNamingView: View {
                 .disabled(ClipExtractor.candidates(for: key, utterances: record.utterances).count < 2)
                 Text(meta(key, people: people, talk: talk)).font(.system(size: 12)).foregroundStyle(.secondary)
                 Spacer()
-                Button("Not a person") {
+                Button("Skip") {
                     dismissed.insert(key)
                     names[key] = nil
                     emails[key] = nil
@@ -93,7 +93,7 @@ struct VoiceNamingView: View {
                 }
                 .buttonStyle(.link)
                 .font(.system(size: 12))
-                .help("Echo, noise, or a voice you cannot tell. Mossad stops asking for it.")
+                .help("Stop asking for this voice. Its lines stay in the transcript.")
             }
             if let quote = sampleText[key] ?? longestLine(of: key) {
                 Text("“\(quote)”").italic().font(.system(size: 13)).lineSpacing(3).lineLimit(3)

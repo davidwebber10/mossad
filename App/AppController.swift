@@ -107,13 +107,7 @@ final class AppController: ObservableObject {
             ProcessingQueue(paths: paths).recoverInterrupted()
         }
         refresh()
-        if !preview {
-            relinkEmails()
-            Task {
-                await pipeline.dropShortUnknownSpeakers()
-                refresh()
-            }
-        }
+        if !preview { relinkEmails() }
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
         if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }

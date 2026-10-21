@@ -20,8 +20,6 @@ public struct SpeakerIdentifier: Sendable {
     static let echoMargin: TimeInterval = 0.5
     /// Clean mic speech needed before a voice is enrolled as the owner.
     static let minimumOwnerSpeech: TimeInterval = 5
-    /// Less speech than this is a stray word split off by diarization, not a person worth naming.
-    public static let minimumNamedSpeech: TimeInterval = 3
 
     private let library: VoiceLibrary
     private let provider: EmbeddingProvider
@@ -68,8 +66,7 @@ public struct SpeakerIdentifier: Sendable {
 
         for key in keys where result.names[key] == nil {
             guard let e = result.embeddings[key], let match = library.bestMatch(e) else {
-                let speech = utterances.filter { $0.speakerKey == key }.reduce(0.0) { $0 + $1.end - $1.start }
-                if speech >= Self.minimumNamedSpeech { result.unknown.append(key) }
+                result.unknown.append(key)
                 continue
             }
             result.names[key] = match.name
