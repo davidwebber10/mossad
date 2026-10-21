@@ -55,12 +55,18 @@ final class AppController: ObservableObject {
     @AppStorage("organization") var organization = ""
     @AppStorage("voiceFingerprints") var voiceFingerprints = true
 
+    /// The recorder calls these closures on the capture queue. Built outside the main actor so Swift does not
+    /// tie them to the main thread and stop the app when they run there.
+    nonisolated private static func makeRecorder(paths: Paths) -> CallRecorder {
+        CallRecorder(paths: paths, makeThem: { ProcessTap(processObjectIDs: $0) }, makeMe: { MicCapture() },
+                     systemAudioAllowed: { TCC.preflight("kTCCServiceAudioCapture").map { $0 == 0 } ?? true })
+    }
+
     init() {
         try? paths.ensureDirectories()
         Log.directory = paths.logs
         library = VoiceLibrary(directory: paths.voices)
-        recorder = CallRecorder(paths: paths, makeThem: { ProcessTap(processObjectIDs: $0) }, makeMe: { MicCapture() },
-                                systemAudioAllowed: { TCC.preflight("kTCCServiceAudioCapture").map { $0 == 0 } ?? true })
+        recorder = Self.makeRecorder(paths: paths)
         rebuildPipeline()
 
         enableLaunchAtLoginOnce()
@@ -68,7 +74,7 @@ final class AppController: ObservableObject {
 
         let detection = detection
         let recorder = recorder
-        detection.onEvent = { [weak self] event in
+        detection.onEvent = { @Sendable [weak self] event in
             // Read the call's audio processes on the detection queue, where they were just computed.
             let ids = detection.audioProcessIDs
             guard let self else { return }
@@ -77,13 +83,11 @@ final class AppController: ObservableObject {
             CaptureQueue.queue.async { self.capture(event, processIDs: ids, recorder: recorder) }
             Task { @MainActor in self.show(event) }
         }
-        detection.onCallProcesses = { [weak self] ids in
-            guard let recorder = self?.recorder else { return }
+        detection.onCallProcesses = { @Sendable ids in
             CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
         }
         detection.start()
-        outputWatcher = OutputDeviceWatcher { [weak self] in
-            guard let recorder = self?.recorder else { return }
+        outputWatcher = OutputDeviceWatcher { @Sendable in
             CaptureQueue.queue.async { recorder.rebuildThem() }
         }
         requestPermissions()

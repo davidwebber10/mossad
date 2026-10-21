@@ -22,31 +22,7 @@ public final class BrowserTabProbe: BrowserTabProbing, @unchecked Sendable {
         let changed = lock.withLock { allowed ? blocked.remove(browserBundleID) != nil : blocked.insert(browserBundleID).inserted }
         if changed { Log.info("Automation for \(browserBundleID) \(allowed ? "allowed" : "not allowed; its tabs are unknown")") }
         guard allowed else { return nil }
-        let safari = browserBundleID == "com.apple.Safari"
-        let titleProperty = safari ? "name" : "title"
-        let activeIndex = safari ? "index of current tab of w" : "active tab index of w"
-        // Only the selected tab of the front window counts as active. A short timeout keeps a busy
-        // browser from holding the main thread (the default Apple event timeout is two minutes).
-        let source = """
-        with timeout of 3 seconds
-            tell application id "\(browserBundleID)"
-                set out to ""
-                set wi to 0
-                repeat with w in windows
-                    set wi to wi + 1
-                    set ai to \(activeIndex)
-                    set urls to URL of every tab of w
-                    set titles to \(titleProperty) of every tab of w
-                    repeat with i from 1 to count of urls
-                        set flag to "0"
-                        if wi = 1 and i = ai then set flag to "1"
-                        set out to out & (item i of urls) & tab & (item i of titles) & tab & flag & linefeed
-                    end repeat
-                end repeat
-                return out
-            end tell
-        end timeout
-        """
+        let source = Self.script(browserBundleID: browserBundleID)
         let began = Date()
         let output: String? = onMain {
             var error: NSDictionary?
@@ -75,6 +51,37 @@ public final class BrowserTabProbe: BrowserTabProbing, @unchecked Sendable {
 }
 
 extension BrowserTabProbe {
+    static func script(browserBundleID: String) -> String {
+        let safari = browserBundleID == "com.apple.Safari"
+        let titleProperty = safari ? "name" : "title"
+        let activeIndex = safari ? "index of current tab of w" : "active tab index of w"
+        // Only the selected tab of the front window counts as active. A short timeout keeps a busy
+        // browser from holding the main thread (the default Apple event timeout is two minutes).
+        // Inside the tell block `tab` means the browser's tab class, so the separators are made before it.
+        return """
+        set sep to character id 9
+        set nl to character id 10
+        with timeout of 3 seconds
+            tell application id "\(browserBundleID)"
+                set out to ""
+                set wi to 0
+                repeat with w in windows
+                    set wi to wi + 1
+                    set ai to \(activeIndex)
+                    set urls to URL of every tab of w
+                    set titles to \(titleProperty) of every tab of w
+                    repeat with i from 1 to count of urls
+                        set flag to "0"
+                        if wi = 1 and i = ai then set flag to "1"
+                        set out to out & (item i of urls) & sep & (item i of titles) & sep & flag & nl
+                    end repeat
+                end repeat
+                return out
+            end tell
+        end timeout
+        """
+    }
+
     /// True when Automation for this browser is already allowed. Never shows a prompt, so the probe
     /// cannot wait on a consent dialog nobody answers. Settings asks for the permission.
     static func canAutomate(_ bundleID: String) -> Bool {
