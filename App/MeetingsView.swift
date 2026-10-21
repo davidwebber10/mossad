@@ -228,12 +228,13 @@ struct ModePicker: View {
 
 struct SearchField: View {
     @Binding var text: String
+    var prompt = "Search titles and transcripts"
     @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.tertiary)
-            TextField("Search titles and transcripts", text: $text).textFieldStyle(.plain).focused($focused)
+            TextField(prompt, text: $text).textFieldStyle(.plain).focused($focused)
             if !text.isEmpty {
                 Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
                     .buttonStyle(.plain)

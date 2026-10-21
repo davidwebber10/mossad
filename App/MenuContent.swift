@@ -42,7 +42,7 @@ struct MenuContent: View {
                         .background(Color.primary, in: Capsule())
                 }
             }
-            navigationRow("Voices", "person.2") { controller.open(.voices) }
+            navigationRow("People", "person.2") { controller.open(.people) }
             navigationRow("Settings", "gearshape") { controller.open(.settings) }
             navigationRow("Log", "doc.text") { controller.open(.log) }
             PanelSeparator()

@@ -131,7 +131,7 @@ Most days you will not touch it. When you do:
 | Fix permissions | Appears only when a permission is missing |
 | Meetings | Browse and search every call, read summaries, retry a failed one |
 | Name voices | Put names on new voices from a recent call |
-| Voices | Rename, merge, or delete saved voices |
+| People | Everyone Mossad knows by voice, with a profile for each: meetings, talk time, who they meet with, and their action items. Rename, merge, or delete a person here |
 | Settings | Permissions, your name and company, voice recognition, login item, how long to keep audio, folders, key status |
 | Log | The last few hundred lines of the app log |
 
@@ -181,7 +181,7 @@ The tests cover detection, recording, merging, voice matching, the pipeline, and
 Two hooks help when testing by hand:
 
 - `MOSSAD_ROOT=/some/folder` makes the app use a different data folder instead of `~/Mossad`.
-- `--open-window Settings` (or `Meetings`, `Voices`, `Log`) opens the window on launch.
+- `--open-window Settings` (or `Meetings`, `People`, `Log`) opens the window on launch.
 
 The design is written up in [`docs/superpowers/specs/2026-10-20-mossad-rebuild-design.md`](docs/superpowers/specs/2026-10-20-mossad-rebuild-design.md). If you are an AI agent working in this repo, start with [`AGENTS.md`](AGENTS.md).
 
@@ -192,7 +192,7 @@ Mossad records calls automatically and does not tell the other people on the cal
 - **Consent laws differ.** Some US states and many countries require the consent of every person on a call before it is recorded (for example California, Florida, Illinois, Maryland, Massachusetts, Pennsylvania, and Washington, and much of the EU under the GDPR). Other places require only one person's consent. On a call, the strictest law of any participant's location can apply.
 - **Tell people.** Let the other participants know you record and transcribe calls, or get their consent. A line in your calendar invites or a quick mention at the start of the call works.
 - **Employer and customer rules.** Company policies and contracts can forbid recording even where the law allows it.
-- **Voice data.** Mossad stores voice fingerprints of the people it hears. Some laws treat voiceprints as biometric data with extra rules (for example the Illinois Biometric Information Privacy Act). Delete a person's voice in **Voices** if you do not have the right to keep it, use **Delete all saved voices** in Settings, or turn off **Recognize voices** so no fingerprints are stored at all.
+- **Voice data.** Mossad stores voice fingerprints of the people it hears. Some laws treat voiceprints as biometric data with extra rules (for example the Illinois Biometric Information Privacy Act). Delete a person's voice in **People** if you do not have the right to keep it, use **Delete all saved voices** in Settings, or turn off **Recognize voices** so no fingerprints are stored at all.
 - **Third-party services.** Audio goes to AssemblyAI and transcripts go to Anthropic.
 - **Skip a call.** **Skip this call** in the menu stops the recording and deletes it.
 
