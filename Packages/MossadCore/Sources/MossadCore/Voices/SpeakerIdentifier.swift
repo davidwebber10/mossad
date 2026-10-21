@@ -47,7 +47,7 @@ public struct SpeakerIdentifier: Sendable {
         if library.owner == nil {
             let meKeys = keys.filter { $0.hasPrefix("me:") }
             let them = utterances.filter { $0.track == .them }
-            let talk = { (key: String) in
+            let clean = { (key: String) in
                 utterances.filter { $0.speakerKey == key }.reduce(0.0) { sum, u in
                     let overlap = them.reduce(0.0) {
                         $0 + max(0, min(u.end, $1.end + Self.echoMargin) - max(u.start, $1.start - Self.echoMargin))
@@ -55,7 +55,10 @@ public struct SpeakerIdentifier: Sendable {
                     return sum + max(0, u.end - u.start - overlap)
                 }
             }
-            if let dominant = meKeys.max(by: { talk($0) < talk($1) }), talk(dominant) >= Self.minimumOwnerSpeech {
+            let total = { (key: String) in utterances.filter { $0.speakerKey == key }.reduce(0.0) { $0 + $1.end - $1.start } }
+            // The fingerprint uses all of the speaker's audio, so most of it must be clean too.
+            if let dominant = meKeys.max(by: { clean($0) < clean($1) }), clean(dominant) >= Self.minimumOwnerSpeech,
+               clean(dominant) >= total(dominant) / 2 {
                 result.names[dominant] = ownerName
                 if let e = result.embeddings[dominant] { try library.add(e, to: ownerName, isOwner: true) }
             }

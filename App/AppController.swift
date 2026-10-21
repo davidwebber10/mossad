@@ -64,10 +64,15 @@ final class AppController: ObservableObject {
         notifier.onOpen = { [weak self] callID in self?.openNaming(callID) }
 
         let detection = detection
+        let recorder = recorder
         detection.onEvent = { [weak self] event in
             // Read the call's audio processes on the detection queue, where they were just computed.
             let ids = detection.audioProcessIDs
-            Task { @MainActor in self?.handle(event, processIDs: ids) }
+            guard let self else { return }
+            // Recorder commands go straight from the detection queue to the capture queue, so they keep
+            // the detector's order relative to the process updates below. The UI follows on the main actor.
+            CaptureQueue.queue.async { self.capture(event, processIDs: ids, recorder: recorder) }
+            Task { @MainActor in self.show(event) }
         }
         detection.onCallProcesses = { [weak self] ids in
             guard let recorder = self?.recorder else { return }
@@ -158,31 +163,34 @@ final class AppController: ObservableObject {
 
     // MARK: Internals
 
-    private func handle(_ event: DetectorEvent, processIDs: [AudioObjectID]) {
+    /// Runs on the capture queue.
+    private nonisolated func capture(_ event: DetectorEvent, processIDs: [AudioObjectID], recorder: CallRecorder) {
         switch event {
         case .started(let platform, let bundleID, let at):
             Log.info("Call started: \(platform.displayName) (\(bundleID))")
-            status = .recording(platform, since: at)
-            let recorder = recorder
-            CaptureQueue.queue.async {
-                do {
-                    try recorder.begin(platform: platform, bundleID: bundleID, processIDs: processIDs, at: at)
-                } catch {
-                    Log.error("Could not start recording: \(error)")
-                    Task { @MainActor in self.status = .idle }
+            do {
+                try recorder.begin(platform: platform, bundleID: bundleID, processIDs: processIDs, at: at)
+            } catch {
+                Log.error("Could not start recording: \(error)")
+                Task { @MainActor in
+                    // Only clear the status of this call, never of a newer one.
+                    if case .recording(_, let since) = self.status, since == at { self.status = .idle }
                 }
             }
         case .ended(let at, let trimTo):
             Log.info("Call ended")
-            status = .idle
-            let recorder = recorder
-            CaptureQueue.queue.async {
-                guard let record = recorder.end(at: at, trimTo: trimTo) else { return }
-                Task { @MainActor in
-                    self.refresh()
-                    await self.track { await self.pipeline.process(record.id) }
-                }
+            guard let record = recorder.end(at: at, trimTo: trimTo) else { return }
+            Task { @MainActor in
+                self.refresh()
+                await self.track { await self.pipeline.process(record.id) }
             }
+        }
+    }
+
+    private func show(_ event: DetectorEvent) {
+        switch event {
+        case .started(let platform, _, let at): status = .recording(platform, since: at)
+        case .ended: status = .idle
         }
     }
 

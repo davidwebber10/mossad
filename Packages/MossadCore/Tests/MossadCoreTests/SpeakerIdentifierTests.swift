@@ -50,6 +50,15 @@ final class SpeakerIdentifierTests: XCTestCase {
         XCTAssertNil(library.owner)
     }
 
+    func testOwnerIsNotEnrolledWhenMostOfTheSpeechIsEcho() async throws {
+        // One mic label holds 60 s of echo and 6 s alone: the fingerprint would be mostly the other voice.
+        try writeSegments(meURL, total: 80, [(0, 60, 600), (70, 76, 200)])
+        try writeSegments(themURL, total: 80, [(0, 60, 400)])
+        let result = try await identify([u(.me, "A", 0, 60), u(.them, "A", 0, 60), u(.me, "A", 70, 76)])
+        XCTAssertNotEqual(result.names["me:A"], "David Webber")
+        XCTAssertNil(library.owner)
+    }
+
     func testOwnerMatchedByVoiceOnMeTrack() async throws {
         try library.add([1, 0, 0, 0], to: "David Webber", isOwner: true)
         try writeSegments(meURL, total: 30, [(0, 3, 600), (5, 20, 200)])

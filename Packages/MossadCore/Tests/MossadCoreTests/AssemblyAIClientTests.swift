@@ -30,7 +30,7 @@ final class AssemblyAIClientTests: XCTestCase {
             }
         }
         let utterances = try await client().transcribe(file: file, track: .them)
-        XCTAssertEqual(utterances, [
+        XCTAssertEqual(utterances.map(\.withoutWords), [
             Utterance(track: .them, speakerLabel: "A", start: 4.12, end: 6.0, text: "Hello there."),
             Utterance(track: .them, speakerLabel: "B", start: 6.5, end: 9.0, text: "Hi."),
         ])
@@ -98,10 +98,25 @@ final class AssemblyAIClientTests: XCTestCase {
             }
         }
         let result = try await client().transcribe(file: file, track: .me)
-        XCTAssertEqual(result, [
+        XCTAssertEqual(result.map(\.withoutWords), [
             Utterance(track: .me, speakerLabel: "A", start: 1.0, end: 1.9, text: "Good morning."),
             Utterance(track: .me, speakerLabel: "A", start: 40.0, end: 41.0, text: "Okay, send it."),
             Utterance(track: .me, speakerLabel: "B", start: 22.062, end: 26.754, text: "I still need it."),
         ])
+    }
+}
+
+extension Utterance {
+    var withoutWords: Utterance { Utterance(track: track, speakerLabel: speakerLabel, start: start, end: end, text: text) }
+}
+
+final class AssemblyAISplitTests: XCTestCase {
+    func testSplitKeepsWordTimes() {
+        let raw = AssemblyAIClient.RawUtterance(speaker: "A", start: 0, end: 3000, text: "Ship it Friday", words: [
+            .init(text: "Ship", start: 1000, end: 1300), .init(text: "it", start: 1300, end: 1500), .init(text: "Friday", start: 1500, end: 2000),
+        ])
+        let u = AssemblyAIClient.split(raw, track: .me)
+        XCTAssertEqual(u.first?.words, [Word(text: "Ship", start: 1.0, end: 1.3), Word(text: "it", start: 1.3, end: 1.5),
+                                        Word(text: "Friday", start: 1.5, end: 2.0)])
     }
 }

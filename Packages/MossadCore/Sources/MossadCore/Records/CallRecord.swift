@@ -10,17 +10,33 @@ public enum Track: String, Codable, Sendable {
     public var fileName: String { "\(rawValue).caf" }
 }
 
+/// One recognised word with its time in the track, in seconds.
+public struct Word: Codable, Equatable, Sendable {
+    public var text: String
+    public var start: TimeInterval
+    public var end: TimeInterval
+
+    public init(text: String, start: TimeInterval, end: TimeInterval) {
+        self.text = text
+        self.start = start
+        self.end = end
+    }
+}
+
 public struct Utterance: Codable, Equatable, Sendable {
     public var track: Track
     public var speakerLabel: String
     public var start: TimeInterval
     public var end: TimeInterval
     public var text: String
+    /// Word times, when the transcriber gave them (older records have none).
+    public var words: [Word]?
 
     /// Key used for speaker naming, e.g. `them:A`.
     public var speakerKey: String { "\(track.rawValue):\(speakerLabel)" }
 
-    public init(track: Track, speakerLabel: String, start: TimeInterval, end: TimeInterval, text: String) {
+    public init(track: Track, speakerLabel: String, start: TimeInterval, end: TimeInterval, text: String, words: [Word]? = nil) {
+        self.words = words
         self.track = track
         self.speakerLabel = speakerLabel
         self.start = start

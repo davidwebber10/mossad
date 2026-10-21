@@ -10,8 +10,13 @@ final class FakeSource: TrackSource, @unchecked Sendable {
     private(set) var started = false
     private(set) var stopped = false
     private(set) var startCalls = 0
+    var log: ((String) -> Void)?
+    var name = ""
+    var failureHandler: (() -> Void)?
+    func onFailure(_ handler: @escaping () -> Void) { failureHandler = handler }
     func start(_ onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws {
         startCalls += 1
+        log?(name)
         if failStarts > 0 { failStarts -= 1; throw Boom() }
         started = true
         if seconds > 0 { onBuffer(sineBuffer(seconds: seconds, sampleRate: 16_000, channels: 1, amplitude: amplitude)) }
@@ -147,6 +152,29 @@ final class CallRecorderTests: XCTestCase {
         now = t0.addingTimeInterval(CallRecorder.retryInterval)
         recorder.updateThemProcesses([5])
         XCTAssertTrue(me.started)
+    }
+
+    func testMicStartsBeforeTheTap() throws {
+        var order: [String] = []
+        me.name = "me"; them.name = "them"
+        me.log = { order.append($0) }; them.log = { order.append($0) }
+        _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5], at: t0)
+        XCTAssertEqual(order, ["me", "them"])
+    }
+
+    func testAFailedMicRestartIsRetried() throws {
+        _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5], at: t0)
+        me.failureHandler?()
+        now = t0.addingTimeInterval(CallRecorder.retryInterval)
+        recorder.updateThemProcesses([5])
+        XCTAssertEqual(me.startCalls, 2)
+    }
+
+    func testBeginThatCannotCreateItsFilesLeavesNoCall() throws {
+        let id = CallRecorder.callID(for: t0)
+        try FileManager.default.createDirectory(at: paths.callDirectory(id).appendingPathComponent("me.caf"), withIntermediateDirectories: true)
+        XCTAssertThrowsError(try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [5], at: t0))
+        XCTAssertFalse(recorder.isRecording)
     }
 
     func testBeginWhileRecordingKeepsThePreviousCall() throws {

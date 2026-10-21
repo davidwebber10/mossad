@@ -23,6 +23,13 @@ public enum TranscriptMerger {
         guard covered / duration >= minimumOverlap else { return false }
         let mine = words(m.text)
         guard mine.count >= minimumWords else { return false }
+        // With word times on both sides, a word is echo only if they said it at the same moment.
+        if let myWords = m.words, overlapping.allSatisfy({ $0.words != nil }) {
+            let x = timedWords(myWords)
+            let y = overlapping.flatMap { timedWords($0.words!) }
+            let matched = lcs(x, y) { $0.text == $1.text && abs($0.start - $1.start) <= echoDelay }
+            return Double(matched) / Double(max(x.count, 1)) >= minimumSimilarity
+        }
         // Echo is heard when it is said: only their words said near this time count. A word's time is
         // estimated by its position in the utterance, with a margin for that estimate.
         let theirs = overlapping.flatMap { t -> [String] in
@@ -39,13 +46,22 @@ public enum TranscriptMerger {
     /// How far an estimated word time may be from the "me" utterance and still count as its echo.
     static let alignmentMargin: TimeInterval = 2
 
-    static func lcs(_ x: [String], _ y: [String]) -> Int {
+    /// Echo reaches the mic within a fraction of a second of the original word.
+    static let echoDelay: TimeInterval = 0.5
+
+    static func timedWords(_ w: [Word]) -> [Word] {
+        w.flatMap { word in words(word.text).map { Word(text: $0, start: word.start, end: word.end) } }
+    }
+
+    static func lcs(_ x: [String], _ y: [String]) -> Int { lcs(x, y, ==) }
+
+    static func lcs<T>(_ x: [T], _ y: [T], _ same: (T, T) -> Bool) -> Int {
         guard !x.isEmpty, !y.isEmpty else { return 0 }
         var previous = [Int](repeating: 0, count: y.count + 1)
         for i in 1...x.count {
             var current = [Int](repeating: 0, count: y.count + 1)
             for j in 1...y.count {
-                current[j] = x[i - 1] == y[j - 1] ? previous[j - 1] + 1 : max(previous[j], current[j - 1])
+                current[j] = same(x[i - 1], y[j - 1]) ? previous[j - 1] + 1 : max(previous[j], current[j - 1])
             }
             previous = current
         }

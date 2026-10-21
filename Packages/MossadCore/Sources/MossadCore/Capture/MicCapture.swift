@@ -8,6 +8,7 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
     private let voiceProcessing: Bool
     private var onBuffer: ((AVAudioPCMBuffer) -> Void)?
     private var observer: NSObjectProtocol?
+    private var failureHandler: (() -> Void)?
 
     public init(voiceProcessing: Bool = true) {
         self.voiceProcessing = voiceProcessing
@@ -22,7 +23,10 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
             Log.info("Audio configuration changed; restarting mic")
             self.engine.inputNode.removeTap(onBus: 0)
             self.engine.stop()
-            do { try self.configureAndStart() } catch { Log.error("Mic restart failed: \(error)") }
+            do { try self.configureAndStart() } catch {
+                Log.error("Mic restart failed: \(error)")
+                self.failureHandler?()
+            }
         }
         try configureAndStart()
     }
@@ -41,6 +45,8 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
         try engine.start()
         Log.info("Mic started (\(format.sampleRate) Hz, \(format.channelCount) ch, voice processing \(voiceProcessing))")
     }
+
+    public func onFailure(_ handler: @escaping () -> Void) { failureHandler = handler }
 
     public func stop() {
         if let observer { NotificationCenter.default.removeObserver(observer) }

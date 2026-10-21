@@ -55,6 +55,24 @@ final class TranscriptMergerTests: XCTestCase {
         XCTAssertEqual(merged.count, 2)
     }
 
+    func timed(_ track: Track, _ words: [(String, Double)]) -> Utterance {
+        let w = words.map { Word(text: $0.0, start: $0.1, end: $0.1 + 0.2) }
+        return Utterance(track: track, speakerLabel: "A", start: w.first!.start, end: w.last!.end,
+                         text: words.map(\.0).joined(separator: " "), words: w)
+    }
+
+    func testKeepsAReplyThatRepeatsWordsSaidASecondEarlier() {
+        let them = timed(.them, [("Can", 10), ("we", 10.4), ("ship", 11), ("it", 11.5), ("Friday", 12), ("once", 12.5), ("finance", 13), ("approves", 13.6)])
+        let me = timed(.me, [("Ship", 12.6), ("it", 12.8), ("Friday", 13.0)])
+        XCTAssertEqual(TranscriptMerger.merge(me: [me], them: [them]).count, 2)
+    }
+
+    func testDropsEchoWhoseWordsArriveWithTheirs() {
+        let them = timed(.them, [("Can", 10), ("we", 10.4), ("ship", 11), ("it", 11.5), ("Friday", 12), ("once", 12.5)])
+        let me = timed(.me, [("ship", 11.2), ("it", 11.7), ("Friday", 12.2)])
+        XCTAssertEqual(TranscriptMerger.merge(me: [me], them: [them]).map(\.track), [.them])
+    }
+
     func testKeepsOwnSpeechThatRepeatsAWord() {
         let merged = TranscriptMerger.merge(
             me: [u(.me, "A", 252.5, 255, "Wait, which cushions, the deep seating ones?")],

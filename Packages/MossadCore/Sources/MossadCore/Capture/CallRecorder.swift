@@ -6,6 +6,12 @@ import Foundation
 public protocol TrackSource: AnyObject {
     func start(_ onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws
     func stop()
+    /// Called when a running source stops by itself and could not restart.
+    func onFailure(_ handler: @escaping () -> Void)
+}
+
+public extension TrackSource {
+    func onFailure(_ handler: @escaping () -> Void) {}
 }
 
 /// The one serial queue for capture work: starting, stopping, and trimming can wait on Core Audio,
@@ -66,14 +72,20 @@ public final class CallRecorder: @unchecked Sendable {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let r = CallRecord(id: id, platform: platform, bundleID: bundleID, start: start, end: start, status: .recording)
         try r.save(to: dir)
+        let themWriter: TrackWriter, meWriter: TrackWriter
+        do {
+            themWriter = try TrackWriter(url: dir.appendingPathComponent(Track.them.fileName), startTime: start, clock: clock)
+            meWriter = try TrackWriter(url: dir.appendingPathComponent(Track.me.fileName), startTime: start, clock: clock)
+        } catch {
+            try? FileManager.default.removeItem(at: dir)
+            throw error
+        }
         record = r
-
-        let themWriter = try TrackWriter(url: dir.appendingPathComponent(Track.them.fileName), startTime: start, clock: clock)
-        let meWriter = try TrackWriter(url: dir.appendingPathComponent(Track.me.fileName), startTime: start, clock: clock)
         self.themWriter = themWriter
         self.meWriter = meWriter
-        startThem(processIDs)
+        // The mic first: it is fast, and a slow tap start must not cost David's first words.
         startMe()
+        startThem(processIDs)
         Log.info("Recording \(id) (\(platform.displayName))")
         return id
     }
@@ -128,6 +140,13 @@ public final class CallRecorder: @unchecked Sendable {
     private func startMe() {
         guard let writer = meWriter else { return }
         let source = makeMe()
+        source.onFailure { [weak self, weak source] in
+            // Runs on the capture queue. Only the current source counts; the next tick restarts it.
+            guard let self, let source, self.meSource === source else { return }
+            source.stop()
+            self.meSource = nil
+            self.nextMeRetry = self.clock().addingTimeInterval(Self.retryInterval)
+        }
         do {
             try source.start { buffer in try? writer.append(buffer) }
             meSource = source

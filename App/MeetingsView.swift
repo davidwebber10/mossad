@@ -99,7 +99,7 @@ private struct MeetingDetail: View {
                 if record.status != .written {
                     HStack {
                         Text(statusText).foregroundStyle(.secondary)
-                        if record.attempts > 0 { Button("Retry now") { controller.retry(record.id) } }
+                        if record.attempts > 0 || record.status == .failed { Button("Retry now") { controller.retry(record.id) } }
                     }
                 }
 
@@ -139,6 +139,7 @@ private struct MeetingDetail: View {
         case .transcribed: "Identifying speakers…"
         case .identified: "Writing summary…"
         case .summarized: "Writing file…"
+        case .failed where record.attempts == 0: "The recording was interrupted, and a track could not be read. Check the log, then retry."
         case .failed: "Mossad gave up after \(record.attempts) attempts. Check the log, then retry."
         case .written: ""
         }

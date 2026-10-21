@@ -8,6 +8,8 @@ public final class TrackWriter: @unchecked Sendable {
     static let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
     /// Gaps shorter than this are ignored (normal buffer jitter).
     static let gapTolerance: Double = 0.5
+    /// A longer gap means the Mac slept through the call; the writer then stops, and the call end trims.
+    public static let maxGap: Double = 1800
     /// On disk: 16-bit integer PCM (half the size of Float32, same transcription quality).
     static var fileSettings: [String: Any] { [
         AVFormatIDKey: kAudioFormatLinearPCM,
@@ -24,8 +26,9 @@ public final class TrackWriter: @unchecked Sendable {
     private var converter: AVAudioConverter?
     private var written: AVAudioFramePosition = 0
     private var lastSoundFrame: AVAudioFramePosition?
-    /// Below this RMS level a buffer counts as silence (about -46 dBFS).
-    static let soundThreshold: Float = 0.005
+    private var stalled = false
+    /// Below this RMS level a buffer counts as silence (about -54 dBFS).
+    static let soundThreshold: Float = 0.002
     private let startTime: Date
     private let clock: () -> Date
 
@@ -46,12 +49,17 @@ public final class TrackWriter: @unchecked Sendable {
 
     public func append(_ buffer: AVAudioPCMBuffer) throws {
         try lock.withLock {
-            guard file != nil, buffer.frameLength > 0, let mono = Self.downmix(buffer) else { return }
+            guard file != nil, !stalled, buffer.frameLength > 0, let mono = Self.downmix(buffer) else { return }
             let converted = try convert(mono)
             guard converted.frameLength > 0 else { return }
             let bufferStart = clock().timeIntervalSince(startTime) - Double(converted.frameLength) / Self.sampleRate
             // Pad every gap in full: both tracks must share one timeline. Silence is written in small chunks.
             let expected = AVAudioFramePosition(bufferStart * Self.sampleRate)
+            if Double(expected - written) > Self.maxGap * Self.sampleRate {
+                stalled = true
+                Log.info("Audio gap longer than \(Int(Self.maxGap)) s; this track stops here")
+                return
+            }
             if Double(expected - written) > Self.gapTolerance * Self.sampleRate {
                 try writeSilence(frames: expected - written)
             }

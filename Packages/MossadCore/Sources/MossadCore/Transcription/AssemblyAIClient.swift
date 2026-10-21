@@ -90,7 +90,8 @@ public struct AssemblyAIClient: Transcribing {
         }
         return groups.map { g in
             Utterance(track: track, speakerLabel: u.speaker, start: Double(g.first!.start) / 1000, end: Double(g.last!.end) / 1000,
-                      text: g.map(\.text).joined(separator: " "))
+                      text: g.map(\.text).joined(separator: " "),
+                      words: g.map { Word(text: $0.text, start: Double($0.start) / 1000, end: Double($0.end) / 1000) })
         }
     }
 

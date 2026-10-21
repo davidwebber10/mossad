@@ -3,11 +3,13 @@ import Foundation
 
 /// Reads every tab's URL and title from a running browser via AppleScript.
 public final class BrowserTabProbe: BrowserTabProbing, @unchecked Sendable {
-    /// After a failed read, a browser is not asked again for this long (unknown meanwhile), so a hung
-    /// browser cannot hold the main thread on every tick.
-    static let failureBackoff: TimeInterval = 30
+    /// After a failed or slow read, a browser is not asked again for a while (unknown meanwhile), so a hung
+    /// browser cannot hold the main thread on every tick. Short at first, so one hiccup does not delay a call start.
+    static let backoff: [TimeInterval] = [4, 10, 30]
+    static let slowRead: TimeInterval = 3
     private let lock = NSLock()
     private var skipUntil: [String: Date] = [:]
+    private var failures: [String: Int] = [:]
 
     public init() {}
 
@@ -40,16 +42,24 @@ public final class BrowserTabProbe: BrowserTabProbing, @unchecked Sendable {
             end tell
         end timeout
         """
+        let began = Date()
         let output: String? = onMain {
             var error: NSDictionary?
             let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
             if let error { Log.debug("Tab probe \(browserBundleID) failed: \(error)") }
             return result?.stringValue
         }
-        guard let output else {
-            lock.withLock { skipUntil[browserBundleID] = Date().addingTimeInterval(Self.failureBackoff) }
-            return nil
+        let slow = Date().timeIntervalSince(began) > Self.slowRead
+        lock.withLock {
+            if output == nil || slow {
+                let n = (failures[browserBundleID] ?? 0) + 1
+                failures[browserBundleID] = n
+                skipUntil[browserBundleID] = Date().addingTimeInterval(Self.backoff[min(n, Self.backoff.count) - 1])
+            } else {
+                failures[browserBundleID] = nil
+            }
         }
+        guard let output else { return nil }
         return output.split(separator: "\n").map { line in
             let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
             // Titles may contain tabs: the URL is first and the active flag is last.

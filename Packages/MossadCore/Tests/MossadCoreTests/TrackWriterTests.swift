@@ -88,6 +88,17 @@ final class TrackWriterTests: XCTestCase {
         XCTAssertEqual(try audioDuration(url), 1202, accuracy: 0.05)
     }
 
+    func testStopsWritingAfterAGapLongerThanTheLimit() throws {
+        let url = dir.appendingPathComponent("sleep.caf")
+        var now = t0.addingTimeInterval(1)
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        now = t0.addingTimeInterval(1 + TrackWriter.maxGap + 60)
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 1, accuracy: 0.05)
+    }
+
     func testRemembersWhenTheTrackLastHadSound() throws {
         let url = dir.appendingPathComponent("loud.caf")
         var now = t0.addingTimeInterval(10)
