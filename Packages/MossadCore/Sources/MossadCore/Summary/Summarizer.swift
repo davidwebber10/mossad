@@ -1,8 +1,27 @@
 import Foundation
 
 public struct MeetingSummary: Sendable, Equatable {
+    /// Markdown: a lead paragraph, then optional `###` sections, `**bold**`, and `-` lists.
     public var summary: String
-    public var actionItems: [String]
+    public var actionItems: [ActionItem]
+    public var decisions: [String]
+    public var headline: String?
+
+    public init(summary: String, actionItems: [ActionItem], decisions: [String] = [], headline: String? = nil) {
+        self.summary = summary
+        self.actionItems = actionItems
+        self.decisions = decisions
+        self.headline = headline
+    }
+}
+
+extension CallRecord {
+    mutating func apply(_ s: MeetingSummary) {
+        summary = s.summary
+        actionItems = s.actionItems
+        decisions = s.decisions
+        headline = s.headline
+    }
 }
 
 public protocol Summarizing: Sendable {
@@ -36,9 +55,14 @@ public struct ClaudeSummarizer: Summarizing {
 
     static let rules = """
     and by AI agents that act on it, so be concrete: decisions, numbers, dates, owners, and open questions. \
-    Write the summary as 3 to 8 short sentences. List every request, commitment, or follow-up as an action item \
-    in the form "Owner: task". Use the speaker names exactly as they appear in the transcript; when the owner \
-    is unclear, write "Unassigned". Return no action items when there are none.
+    Write the summary in Markdown: start with a short lead paragraph of 2 to 4 sentences. For a longer meeting, \
+    add sections that each start with a "### Heading" line. Use **bold** for key numbers and dates, and "- " \
+    bullet lists where a list reads better than prose. Do not use other headings, tables, or links. \
+    List every request, commitment, or follow-up as an action item with its owner and the task. Use the speaker \
+    names exactly as they appear in the transcript; when the owner is unclear, set the owner to null. Return no \
+    action items when there are none. List each decision the meeting made as one short sentence; return no \
+    decisions when none were made. Write a headline: one plain sentence of at most 140 characters that says \
+    what the meeting was about and its main outcome.
     """
 
     public func summarize(transcript: String, title: String) async throws -> MeetingSummary {
@@ -62,9 +86,22 @@ public struct ClaudeSummarizer: Summarizing {
                         "type": "object",
                         "properties": [
                             "summary": ["type": "string"],
-                            "action_items": ["type": "array", "items": ["type": "string"]],
-                        ],
-                        "required": ["summary", "action_items"],
+                            "action_items": [
+                                "type": "array",
+                                "items": [
+                                    "type": "object",
+                                    "properties": [
+                                        "owner": ["anyOf": [["type": "string"], ["type": "null"]]],
+                                        "task": ["type": "string"],
+                                    ],
+                                    "required": ["owner", "task"],
+                                    "additionalProperties": false,
+                                ] as [String: Any],
+                            ] as [String: Any],
+                            "decisions": ["type": "array", "items": ["type": "string"]],
+                            "headline": ["type": "string"],
+                        ] as [String: Any],
+                        "required": ["summary", "action_items", "decisions", "headline"],
                         "additionalProperties": false,
                     ],
                 ],
@@ -84,7 +121,9 @@ public struct ClaudeSummarizer: Summarizing {
               let result = try? JSONDecoder().decode(Output.self, from: Data(text.utf8)) else {
             throw SummaryError.malformed
         }
-        return MeetingSummary(summary: result.summary, actionItems: result.action_items)
+        let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)
+        return MeetingSummary(summary: result.summary, actionItems: result.action_items, decisions: result.decisions,
+                              headline: headline.isEmpty ? nil : headline)
     }
 
     private struct Message: Decodable {
@@ -99,7 +138,9 @@ public struct ClaudeSummarizer: Summarizing {
 
     private struct Output: Decodable {
         let summary: String
-        let action_items: [String]
+        let action_items: [ActionItem]
+        let decisions: [String]
+        let headline: String
     }
 }
 

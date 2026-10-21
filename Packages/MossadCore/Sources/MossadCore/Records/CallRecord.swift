@@ -70,8 +70,12 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var unknownSpeakers: [String] = []
     /// Voice fingerprints per speaker key, kept so a speaker named later can be learned.
     public var speakerEmbeddings: [String: [Float]] = [:]
+    /// Markdown; older records hold plain sentences.
     public var summary: String?
-    public var actionItems: [String] = []
+    public var actionItems: [ActionItem] = []
+    public var decisions: [String] = []
+    /// One sentence, at most about 140 characters.
+    public var headline: String?
     public var markdownPath: String?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
@@ -98,5 +102,32 @@ public struct CallRecord: Codable, Equatable, Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(CallRecord.self, from: Data(contentsOf: dir.appendingPathComponent(fileName)))
+    }
+}
+
+extension CallRecord {
+    // Fields added over time are missing from older call.json files, so each one falls back to its default.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(id: try c.decode(String.self, forKey: .id), platform: try c.decode(Platform.self, forKey: .platform),
+                  bundleID: try c.decode(String.self, forKey: .bundleID), start: try c.decode(Date.self, forKey: .start),
+                  end: try c.decode(Date.self, forKey: .end), status: try c.decode(CallStatus.self, forKey: .status))
+        attempts = try c.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
+        nextAttempt = try c.decodeIfPresent(Date.self, forKey: .nextAttempt)
+        meetingID = try c.decodeIfPresent(String.self, forKey: .meetingID)
+        calendarTitle = try c.decodeIfPresent(String.self, forKey: .calendarTitle)
+        attendees = try c.decodeIfPresent([String].self, forKey: .attendees) ?? []
+        utterances = try c.decodeIfPresent([Utterance].self, forKey: .utterances) ?? []
+        meUtterances = try c.decodeIfPresent([Utterance].self, forKey: .meUtterances)
+        themUtterances = try c.decodeIfPresent([Utterance].self, forKey: .themUtterances)
+        failedStep = try c.decodeIfPresent(CallStatus.self, forKey: .failedStep)
+        speakerNames = try c.decodeIfPresent([String: String].self, forKey: .speakerNames) ?? [:]
+        unknownSpeakers = try c.decodeIfPresent([String].self, forKey: .unknownSpeakers) ?? []
+        speakerEmbeddings = try c.decodeIfPresent([String: [Float]].self, forKey: .speakerEmbeddings) ?? [:]
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+        actionItems = try c.decodeIfPresent([ActionItem].self, forKey: .actionItems) ?? []
+        decisions = try c.decodeIfPresent([String].self, forKey: .decisions) ?? []
+        headline = try c.decodeIfPresent(String.self, forKey: .headline)
+        markdownPath = try c.decodeIfPresent(String.self, forKey: .markdownPath)
     }
 }

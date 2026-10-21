@@ -66,7 +66,8 @@ final class LiveAPITests: XCTestCase {
         let result = try await ClaudeSummarizer(apiKey: key).summarize(transcript: transcript, title: "Cushion check-in")
         print("LIVE summary: \(result.summary) | items: \(result.actionItems)")
         XCTAssertFalse(result.summary.isEmpty)
-        XCTAssertTrue(result.actionItems.contains { $0.contains("Alex Rivera") && $0.lowercased().contains("forecast") })
+        XCTAssertTrue(result.actionItems.contains { $0.owner == "Alex Rivera" && $0.task.lowercased().contains("forecast") })
+        XCTAssertNotNil(result.headline)
     }
 
     /// Full pipeline on synthetic voices: me = Samantha, them = Daniel then Karen.

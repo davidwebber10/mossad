@@ -48,8 +48,11 @@ public enum MarkdownWriter {
         if let summary = r.summary {
             lines += ["## Summary", "", summary, ""]
             lines += ["## Action items", ""]
-            lines += r.actionItems.isEmpty ? ["None."] : r.actionItems.map { "- [ ] \($0)" }
+            lines += r.actionItems.isEmpty ? ["None."] : r.actionItems.map { "- [ ] \($0.text)" }
             lines.append("")
+            if !r.decisions.isEmpty {
+                lines += ["## Decisions", ""] + r.decisions.map { "- \($0)" } + [""]
+            }
         }
         lines += ["## Transcript", "", transcript(r), ""]
         return lines.joined(separator: "\n")

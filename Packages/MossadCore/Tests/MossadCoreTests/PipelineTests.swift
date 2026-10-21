@@ -29,7 +29,8 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
         lastTranscript = transcript
         if let delay = delayOnCall[call] { try await Task.sleep(for: delay) }
         if fail { throw SummaryError.malformed }
-        return MeetingSummary(summary: "Summary \(call)", actionItems: ["Alex Rivera: send forecast"])
+        return MeetingSummary(summary: "Summary \(call)", actionItems: [ActionItem(owner: "Alex Rivera", task: "send forecast")],
+                              decisions: ["Decision \(call)"], headline: "Headline \(call)")
     }
 }
 
@@ -156,6 +157,9 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(r.unknownSpeakers, ["them:B"])
         XCTAssertEqual(r.calendarTitle, "Weekly Ops Sync")
         XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.actionItems, [ActionItem(owner: "Alex Rivera", task: "send forecast")])
+        XCTAssertEqual(r.decisions, ["Decision 1"])
+        XCTAssertEqual(r.headline, "Headline 1")
         let md = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
         XCTAssertTrue(md.contains("[00:00:11] Alex Rivera: It leaves Friday."))
         XCTAssertTrue(md.contains("Speaker A: I can book freight."))
@@ -219,6 +223,8 @@ final class PipelineTests: XCTestCase {
         let r = try load(id)
         XCTAssertEqual(r.unknownSpeakers, [])
         XCTAssertEqual(r.summary, "Summary 2")
+        XCTAssertEqual(r.decisions, ["Decision 2"])
+        XCTAssertEqual(r.headline, "Headline 2")
         let md = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
         XCTAssertTrue(md.contains("Amy Lee: I can book freight."))
         XCTAssertEqual(library.bestMatch([0, 0, 0, 1])?.name, "Amy Lee")

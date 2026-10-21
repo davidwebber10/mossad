@@ -21,7 +21,8 @@ final class MarkdownWriterTests: XCTestCase {
         r.speakerNames = ["me:A": "David Webber", "them:A": "Alex Rivera"]
         r.unknownSpeakers = ["them:C"]
         r.summary = "The team confirmed the Friday cushion shipment."
-        r.actionItems = ["Alex Rivera: confirm freight"]
+        r.actionItems = [ActionItem(owner: "Alex Rivera", task: "confirm freight"), ActionItem(owner: nil, task: "book a room")]
+        r.decisions = ["Cushions ship Friday."]
         return r
     }
 
@@ -47,6 +48,11 @@ final class MarkdownWriterTests: XCTestCase {
         ## Action items
 
         - [ ] Alex Rivera: confirm freight
+        - [ ] book a room
+
+        ## Decisions
+
+        - Cushions ship Friday.
 
         ## Transcript
 
@@ -66,6 +72,12 @@ final class MarkdownWriterTests: XCTestCase {
         XCTAssertFalse(md.contains("## Summary"))
         XCTAssertFalse(md.contains("## Action items"))
         XCTAssertTrue(md.contains("## Transcript"))
+    }
+
+    func testNoDecisionsSectionWhenEmpty() {
+        var r = fixture()
+        r.decisions = []
+        XCTAssertFalse(MarkdownWriter.render(r).contains("## Decisions"))
     }
 
     func testFileNameSanitized() {

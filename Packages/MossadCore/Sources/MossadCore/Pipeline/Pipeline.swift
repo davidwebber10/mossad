@@ -174,8 +174,7 @@ public actor Pipeline {
         if let summarizer, !r.utterances.isEmpty {
             do {
                 let s = try await summarizer.summarize(transcript: MarkdownWriter.transcript(r), title: r.title)
-                r.summary = s.summary
-                r.actionItems = s.actionItems
+                r.apply(s)
             } catch {
                 Log.error("Summary for \(r.id) failed: \(error)")
                 queue.markFailure(&r, now: now())
@@ -219,8 +218,7 @@ public actor Pipeline {
         guard let s = try? await summarizer.summarize(transcript: MarkdownWriter.transcript(r), title: r.title),
               var latest = try? CallRecord.load(from: dir), latest.speakerNames == names else { return }
         // Names changed during the request: that save's own summary is newer.
-        latest.summary = s.summary
-        latest.actionItems = s.actionItems
+        latest.apply(s)
         save(&latest, dir: dir)
     }
 
