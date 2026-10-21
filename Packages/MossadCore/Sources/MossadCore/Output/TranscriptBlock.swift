@@ -28,8 +28,8 @@ public struct TranscriptBlock: Equatable, Sendable, Identifiable {
         var result: [TranscriptBlock] = []
         for u in r.utterances {
             let line = Line(start: u.start, text: u.text)
-            // A later part of a merged meeting starts its own block, so the join line sits between blocks.
-            let crossesPart = r.parts.dropFirst().contains { $0.offset > (result.last?.end ?? .infinity) && $0.offset <= u.start }
+            // A marker (a join, a pause) starts a new block, so its line sits between blocks.
+            let crossesPart = r.transcriptMarkers.contains { $0.offset > (result.last?.end ?? .infinity) && $0.offset <= u.start }
             if var last = result.last, last.speakerKey == u.speakerKey, u.start - last.end <= gap, !crossesPart {
                 last.lines.append(line)
                 last.end = max(last.end, u.end)

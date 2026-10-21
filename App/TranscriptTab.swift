@@ -32,16 +32,12 @@ struct TranscriptTab: View {
                                  message: record.status == .written ? "The call was recorded, but nobody spoke." : "The transcript appears when processing is done.")
             } else {
                 ScrollViewReader { proxy in
-                    let breaks = MeetingMerge.partBreaks(record)
+                    let breaks = record.transcriptMarkers
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(blocks) { block in
-                            if let line = breaks.first(where: { b in b.offset <= block.start && b.offset > (blocks.last { $0.id < block.id }?.end ?? -1) }) {
-                                HStack(spacing: 10) {
-                                    Rectangle().fill(Theme.separator).frame(height: 1)
-                                    Text(line.text).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).fixedSize()
-                                    Rectangle().fill(Theme.separator).frame(height: 1)
-                                }
-                                .padding(.vertical, 4)
+                            let previousEnd = blocks.last { $0.id < block.id }?.end ?? -1
+                            ForEach(Array(breaks.filter { $0.offset > previousEnd && $0.offset <= block.start }.enumerated()), id: \.offset) { _, line in
+                                MarkerLine(text: line.text)
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 6) {
@@ -70,6 +66,9 @@ struct TranscriptTab: View {
                                 }
                             }
                         }
+                    }
+                    ForEach(Array(breaks.filter { $0.offset > (blocks.last?.end ?? -1) }.enumerated()), id: \.offset) { _, line in
+                        MarkerLine(text: line.text)
                     }
                     .textSelection(.enabled)
                     .onChange(of: current) { _, line in
@@ -143,5 +142,19 @@ struct TranscriptTab: View {
             for (i, line) in block.lines.enumerated() where line.start <= player.time { found = LineID(block: block.id, line: i) }
         }
         return found
+    }
+}
+
+/// A pause, a stop, or a join, drawn across the transcript.
+private struct MarkerLine: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Rectangle().fill(Theme.separator).frame(height: 1)
+            Text(text).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).fixedSize()
+            Rectangle().fill(Theme.separator).frame(height: 1)
+        }
+        .padding(.vertical, 4)
     }
 }
