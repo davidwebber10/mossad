@@ -19,7 +19,7 @@ struct MossadApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(controller: controller)
+            MenuContent(controller: controller, permissions: controller.permissions)
         } label: {
             MenuBarIcon(controller: controller)
         }

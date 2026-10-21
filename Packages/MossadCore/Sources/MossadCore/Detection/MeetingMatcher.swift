@@ -4,7 +4,7 @@ import Foundation
 public enum MeetingMatcher {
     static let zoomBundleID = "us.zoom.xos"
     static let teamsBundleID = "com.microsoft.teams2"
-    static let browserBundleIDs = [
+    public static let browserBundleIDs = [
         "com.google.Chrome",
         "company.thebrowser.Browser",
         "com.apple.Safari",

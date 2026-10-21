@@ -37,6 +37,7 @@ final class AppController: ObservableObject {
     let paths = Paths.live
     let library: VoiceLibrary
     let keychain = Keychain()
+    let permissions = PermissionsMonitor()
     private let detection = DetectionService(mic: MicUsageProbe(), tabs: BrowserTabProbe(), windows: WindowTitleProbe())
     private let calendar = EventKitCalendarSource()
     private let notifier = Notifier()
@@ -242,7 +243,7 @@ final class AppController: ObservableObject {
                              backing: .buffered, defer: false)
             w.title = "Mossad"
             w.isReleasedWhenClosed = false
-            w.contentViewController = NSHostingController(rootView: MainWindow().environmentObject(self))
+            w.contentViewController = NSHostingController(rootView: MainWindow().environmentObject(self).environmentObject(permissions))
             w.setContentSize(NSSize(width: 1040, height: 700))
             w.delegate = windowDelegate
             w.center()

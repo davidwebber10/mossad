@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MenuContent: View {
     @ObservedObject var controller: AppController
+    @ObservedObject var permissions: PermissionsMonitor
 
     var body: some View {
         Text(statusLine)
@@ -11,6 +12,9 @@ struct MenuContent: View {
         }
         if controller.isRecording {
             Button("Skip this call") { controller.skipCurrentCall() }
+        }
+        if !permissions.allGood {
+            Button("Fix permissions…") { controller.open(.settings) }
         }
         Divider()
         Button("Meetings…") { controller.open(.meetings) }

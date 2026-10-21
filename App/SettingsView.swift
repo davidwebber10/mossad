@@ -5,10 +5,19 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var controller: AppController
+    @EnvironmentObject var permissions: PermissionsMonitor
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         Form {
+            Section {
+                ForEach(permissions.items) { item in permissionRow(item) }
+            } header: {
+                Text("Permissions")
+            } footer: {
+                Text("Click a red row to fix it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Recording") {
                 Toggle("Open Mossad at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in
@@ -35,6 +44,37 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            permissions.refresh()
+            permissions.setInterval(1)
+        }
+        .onDisappear { permissions.setInterval(10) }
+    }
+
+    private func permissionRow(_ item: PermissionsMonitor.Item) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: item.state.isGood ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(item.state.isGood ? .green : .red)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title)
+                Text(item.reason).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !item.state.isGood {
+                Button(fixLabel(item)) { permissions.fix(item) }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { permissions.fix(item) }
+    }
+
+    private func fixLabel(_ item: PermissionsMonitor.Item) -> String {
+        switch item.state {
+        case .notAsked: "Allow…"
+        case .needsApp: "Open browser"
+        default: "Open Settings…"
+        }
     }
 
     private func folderRow(_ title: String, _ url: URL) -> some View {
