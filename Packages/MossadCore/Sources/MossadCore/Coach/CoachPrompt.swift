@@ -41,6 +41,16 @@ enum CoachPrompt {
         to the wrong speaker. Do not coach on something that looks like a recognition error. "Speaker A" and similar \
         labels are people whose names are not known.
 
+        Rate the meeting's value for \(owner): was this a good use of their time? Judge by what the meeting needed \
+        from them and what it produced, using the facts given: their talk share, the decisions, the action items they \
+        took, the number of people, the length, and how often the same meeting has come up before. A meeting where \
+        \(owner) said little, decided nothing, and took no work is usually low value for them, even if it was useful \
+        to others. A one-way status update is often better as a written update. A recurring meeting that rates low \
+        again and again deserves a firm suggestion. The action is one of: keep, shorten, async (a written update \
+        instead), delegate (someone else attends), decline, or restructure (keep it, change its format or agenda). \
+        The suggestion says exactly what to do, for example the message to send to the organizer. Rate high when \
+        the meeting clearly mattered; do not mark meetings low to seem rigorous.
+
         Then update the profile:
         - summary: 2 to 4 sentences on \(owner) as a communicator, rewritten to include what this call showed.
         - focus: the single most valuable thing to work on next. Keep the current focus until there is clear, \
@@ -95,6 +105,12 @@ enum CoachPrompt {
         if let k = r.kind { meeting.append("Kind: \(k)") }
         if !r.attendees.isEmpty { meeting.append("Invited: \(r.attendees.joined(separator: ", "))") }
         if let h = r.headline { meeting.append("Summary: \(h)") }
+        meeting.append("People who spoke: \(Set(r.speakerNames.values).count), including \(owner)")
+        meeting.append("Decisions: \(r.decisions.count)")
+        meeting.append("Action items for \(owner): \(r.actionItems.filter { $0.owner == owner }.count) of \(r.actionItems.count)")
+        let earlier = profile.history.filter { $0.callID != r.id && $0.title.caseInsensitiveCompare(r.title) == .orderedSame }
+        meeting.append("Earlier coached meetings with this title: \(earlier.count)"
+                       + (earlier.compactMap(\.value).isEmpty ? "" : " (rated \(earlier.compactMap(\.value).map(\.rawValue).joined(separator: ", ")))"))
         parts.append("## This meeting\n" + meeting.joined(separator: "\n"))
         parts.append("## \(owner)'s delivery in this call\n" + numbers(delivery))
         parts.append("## Transcript\n" + MarkdownWriter.transcript(r))

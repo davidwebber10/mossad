@@ -167,4 +167,23 @@ final class AnalyticsTests: XCTestCase {
         XCTAssertEqual(r.tags.first?.calls, 2)
         XCTAssertEqual(r.tags.first?.seconds, 5400)
     }
+
+    // MARK: Meeting value
+
+    func testReportAddsUpLowValueTimeAndRepeatOffenders() {
+        func review(_ rating: MeetingValue.Rating) -> CoachReview {
+            CoachReview(headline: "", overview: "", strengths: [], improvements: [], focusProgress: nil,
+                        value: MeetingValue(rating: rating, reason: "", action: .keep, suggestion: ""))
+        }
+        var a = call("a", date(10, 16), minutes: 30); a.calendarTitle = "Weekly Sync"
+        var b = call("b", date(10, 19), minutes: 30); b.calendarTitle = "Weekly Sync"
+        var c = call("c", date(10, 20), minutes: 60); c.calendarTitle = "Planning"
+        let r = AnalyticsReport(records: [a, b, c], usage: [], owner: "David Webber",
+                                interval: DateInterval(start: date(10, 15, 0), end: date(10, 22, 0)),
+                                reviews: ["a": review(.low), "b": review(.low), "c": review(.high)], calendar: cal)
+        XCTAssertEqual(r.valueSeconds[.low], 3600)
+        XCTAssertEqual(r.valueSeconds[.high], 3600)
+        XCTAssertEqual(r.lowValueRepeats.map(\.name), ["Weekly Sync"])
+        XCTAssertEqual(r.lowValueRepeats.first?.calls, 2)
+    }
 }

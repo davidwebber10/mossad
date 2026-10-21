@@ -31,6 +31,12 @@ public struct ClaudeCoach: Coaching {
             "strengths": Schema.array(point),
             "improvements": Schema.array(point),
             "focus_progress": Schema.nullableString,
+            "meeting_value": Schema.object([
+                "rating": Schema.oneOf(MeetingValue.Rating.allCases.map(\.rawValue)),
+                "reason": Schema.string,
+                "action": Schema.oneOf(MeetingValue.Action.allCases.map(\.rawValue)),
+                "suggestion": Schema.string,
+            ]),
             "profile": Schema.object([
                 "summary": Schema.string,
                 "focus": Schema.string,
@@ -49,7 +55,8 @@ public struct ClaudeCoach: Coaching {
                                         user: CoachPrompt.user(record: record, owner: ownerName, profile: profile, delivery: delivery),
                                         schema: Self.schema, effort: "high", as: Output.self)
         let review = CoachReview(headline: out.headline, overview: out.overview, strengths: out.strengths.map(\.point),
-                                 improvements: out.improvements.map(\.point), focusProgress: out.focus_progress?.nonBlank, delivery: delivery)
+                                 improvements: out.improvements.map(\.point), focusProgress: out.focus_progress?.nonBlank,
+                                 value: out.meeting_value, delivery: delivery)
         return CoachResult(review: review, update: out.profile)
     }
 
@@ -59,6 +66,7 @@ public struct ClaudeCoach: Coaching {
         let strengths: [Point]
         let improvements: [Point]
         let focus_progress: String?
+        let meeting_value: MeetingValue?
         let profile: CoachProfileUpdate
     }
 

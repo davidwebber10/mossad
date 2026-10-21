@@ -24,6 +24,25 @@ public struct CoachPoint: Codable, Equatable, Sendable, Hashable {
     }
 }
 
+/// Whether a meeting was a good use of the owner's time, and what to change about it.
+public struct MeetingValue: Codable, Equatable, Sendable, Hashable {
+    public enum Rating: String, Codable, Sendable, CaseIterable { case high, medium, low }
+    public enum Action: String, Codable, Sendable, CaseIterable { case keep, shorten, async, delegate, decline, restructure }
+
+    public var rating: Rating
+    public var reason: String
+    public var action: Action
+    /// The concrete change, in one or two sentences.
+    public var suggestion: String
+
+    public init(rating: Rating, reason: String, action: Action, suggestion: String) {
+        self.rating = rating
+        self.reason = reason
+        self.action = action
+        self.suggestion = suggestion
+    }
+}
+
 /// The coach's review of one call, saved as `coach.json` next to `call.json`.
 public struct CoachReview: Codable, Equatable, Sendable {
     public static let fileName = "coach.json"
@@ -34,10 +53,12 @@ public struct CoachReview: Codable, Equatable, Sendable {
     public var improvements: [CoachPoint]
     /// How the call went against the focus the owner was working on, when there was one.
     public var focusProgress: String?
+    public var value: MeetingValue?
     public var delivery: DeliveryStats?
 
     public init(headline: String, overview: String, strengths: [CoachPoint], improvements: [CoachPoint],
-                focusProgress: String?, delivery: DeliveryStats? = nil) {
+                focusProgress: String?, value: MeetingValue? = nil, delivery: DeliveryStats? = nil) {
+        self.value = value
         self.headline = headline
         self.overview = overview
         self.strengths = strengths

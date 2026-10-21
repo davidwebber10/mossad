@@ -125,6 +125,21 @@ final class CoachTests: XCTestCase {
         XCTAssertTrue(CoachPrompt.system(owner: "David Webber").contains("David Webber"))
     }
 
+    func testPromptGivesTheFactsForRatingTheMeetingsValue() {
+        var profile = CoachProfile()
+        profile.apply(CoachProfileUpdate(summary: "", focus: "", patterns: [], people: []), review: review(), callID: "x", title: "Weekly Sync", at: Date())
+        profile.apply(CoachProfileUpdate(summary: "", focus: "", patterns: [], people: []), review: review(), callID: "y", title: "weekly sync", at: Date())
+        var r = record("c", start: Date())
+        r.calendarTitle = "Weekly Sync"
+        r.actionItems = [ActionItem(owner: "David Webber", task: "a"), ActionItem(owner: "Mitch Haus", task: "b")]
+        r.decisions = ["d"]
+        let text = CoachPrompt.user(record: r, owner: "David Webber", profile: profile)
+        XCTAssertTrue(text.contains("Action items for David Webber: 1 of 2"), text)
+        XCTAssertTrue(text.contains("Decisions: 1"))
+        XCTAssertTrue(text.contains("People who spoke: 2"))
+        XCTAssertTrue(text.contains("Earlier coached meetings with this title: 2"))
+    }
+
     // MARK: Which calls
 
     func testPendingCallsAreWrittenSinceTheStartWithEnoughOwnerSpeechAndNoReviewOldestFirst() {
@@ -203,6 +218,7 @@ final class CoachTests: XCTestCase {
             "strengths": [["title": "Goal first", "observation": "O", "quote": "Q", "at_seconds": 3, "principle": "P", "try_instead": NSNull()]],
             "improvements": [["title": "Close", "observation": "O2", "quote": "Q2", "at_seconds": 90, "principle": "P2", "try_instead": "Say X"]],
             "focus_progress": "Better than last week.",
+            "meeting_value": ["rating": "low", "reason": "Status only; you said nothing.", "action": "async", "suggestion": "Ask for a written update."],
             "profile": ["summary": "S", "focus": "F",
                         "patterns": [["name": "Interrupts", "kind": "growth", "note": "N", "trend": "improving"]],
                         "people": [["name": "Mitch Haus", "note": "Likes data"]]],
@@ -222,7 +238,8 @@ final class CoachTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "claude-opus-5-5")
         let schema = ((body["output_config"] as? [String: Any])?["format"] as? [String: Any])?["schema"] as? [String: Any]
         XCTAssertEqual(Set(schema?["required"] as? [String] ?? []),
-                       ["headline", "overview", "strengths", "improvements", "focus_progress", "profile"])
+                       ["headline", "overview", "strengths", "improvements", "focus_progress", "meeting_value", "profile"])
+        XCTAssertEqual(result.review.value, MeetingValue(rating: .low, reason: "Status only; you said nothing.", action: .async, suggestion: "Ask for a written update."))
     }
 
     func testCoachMalformedReplyThrows() async {

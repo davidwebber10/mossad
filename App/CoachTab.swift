@@ -1,3 +1,4 @@
+import AppKit
 import MossadCore
 import SwiftUI
 
@@ -34,6 +35,7 @@ struct CoachTab: View {
                 }
                 .textSelection(.enabled)
             }
+            if let value = review.value { ValueCard(value: value) }
             if let progress = review.focusProgress {
                 focusCard(progress)
             }
@@ -110,6 +112,60 @@ private struct PointView: View {
             }
         }
         .textSelection(.enabled)
+    }
+}
+
+/// Whether the meeting was worth your time, and the change to make.
+private struct ValueCard: View {
+    let value: MeetingValue
+    @State private var copied = false
+
+    private var tint: Color {
+        switch value.rating {
+        case .high: .green
+        case .medium: .secondary
+        case .low: Theme.warning
+        }
+    }
+
+    private var action: String {
+        switch value.action {
+        case .keep: "Keep it"
+        case .shorten: "Make it shorter"
+        case .async: "Make it a written update"
+        case .delegate: "Send someone else"
+        case .decline: "Decline it"
+        case .restructure: "Change the format"
+        }
+    }
+
+    var body: some View {
+        Card("Meeting value") {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(value.rating.rawValue.capitalized)
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(tint)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(tint.opacity(0.14), in: Capsule())
+                    Text(action).fontWeight(.medium)
+                }
+                Text(value.reason).foregroundStyle(.secondary)
+                if value.action != .keep {
+                    HStack(alignment: .top) {
+                        Text(value.suggestion).frame(maxWidth: .infinity, alignment: .leading)
+                        Button(copied ? "Copied" : "Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(value.suggestion, forType: .string)
+                            copied = true
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .background(Theme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+            .textSelection(.enabled)
+        }
     }
 }
 

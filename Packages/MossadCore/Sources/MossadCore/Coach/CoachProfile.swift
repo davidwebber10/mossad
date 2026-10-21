@@ -45,6 +45,7 @@ public struct CoachHistoryEntry: Codable, Equatable, Sendable, Hashable {
     public var headline: String
     public var focusProgress: String?
     public var delivery: DeliveryStats?
+    public var value: MeetingValue.Rating?
 }
 
 public struct CoachPatternUpdate: Codable, Equatable, Sendable {
@@ -121,7 +122,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
             people[p.name] = CoachPerson(note: note, calls: (people[p.name]?.calls ?? 0) + 1, lastSeen: at)
         }
         history.append(CoachHistoryEntry(callID: callID, title: title, date: at, headline: review.headline,
-                                         focusProgress: review.focusProgress, delivery: review.delivery))
+                                         focusProgress: review.focusProgress, delivery: review.delivery, value: review.value?.rating))
         history = Array(history.suffix(Self.historyLimit))
     }
 

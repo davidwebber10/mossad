@@ -99,6 +99,10 @@ public struct AnalyticsReport: Sendable {
     public let days: [Bar]
     public let heat: [HeatCell]
     public let delivery: [DeliveryPoint]
+    /// Time in coached calls by the coach's value rating.
+    public let valueSeconds: [MeetingValue.Rating: TimeInterval]
+    /// Meeting titles rated low more than once in the period: the first ones to change.
+    public let lowValueRepeats: [Slice]
     public let cost: Cost
 
     public init(records all: [CallRecord], usage: [UsageEvent], owner: String, interval: DateInterval,
@@ -190,6 +194,19 @@ public struct AnalyticsReport: Sendable {
         cost.perCallHour = callSeconds > 0 ? cost.total / (callSeconds / 3600) : 0
         self.cost = cost
         self.days = bars.values.sorted { $0.date < $1.date }
+
+        var valueSeconds: [MeetingValue.Rating: TimeInterval] = [:]
+        var lows: [String: Slice] = [:]
+        for r in records {
+            guard let rating = reviews[r.id]?.value?.rating else { continue }
+            valueSeconds[rating, default: 0] += length(r)
+            if rating == .low {
+                lows[r.title.lowercased(), default: Slice(name: r.title, seconds: 0, calls: 0)].seconds += length(r)
+                lows[r.title.lowercased()]!.calls += 1
+            }
+        }
+        self.valueSeconds = valueSeconds
+        lowValueRepeats = lows.values.filter { $0.calls > 1 }.sorted { $0.seconds > $1.seconds }
 
         delivery = records.compactMap { r in
             reviews[r.id]?.delivery.map {

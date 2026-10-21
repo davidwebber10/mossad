@@ -160,6 +160,7 @@ struct AnalyticsView: View {
         }
         Card("API costs") { CostSection(report: r) }
         Card("Topics") { TopicsChart(slices: r.tags) }
+        if !r.valueSeconds.isEmpty { Card("Meeting value") { ValueSection(report: r) } }
         HStack(alignment: .top, spacing: 12) {
             Card("Meeting kinds") { KindsChart(slices: r.kinds) }
                 .frame(width: 380)
@@ -389,6 +390,62 @@ private struct KindsChart: View {
             }
             .chartXAxis(.hidden)
             .frame(height: CGFloat(min(slices.count, 8)) * 30 + 10)
+        }
+    }
+}
+
+/// How much of your coached call time the coach rated worth it, and the meetings to change first.
+private struct ValueSection: View {
+    @EnvironmentObject var controller: AppController
+    let report: AnalyticsReport
+
+    private static let ratings: [(MeetingValue.Rating, String, Color)] = [(.high, "High", .green), (.medium, "Medium", .gray), (.low, "Low", Theme.warning)]
+
+    var body: some View {
+        let total = max(report.valueSeconds.values.reduce(0, +), 1)
+        HStack(alignment: .top, spacing: 24) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("\(hours(report.valueSeconds[.low] ?? 0)) in low-value meetings")
+                    .font(.system(size: 20, weight: .semibold)).monospacedDigit()
+                GeometryReader { g in
+                    HStack(spacing: 2) {
+                        ForEach(Self.ratings, id: \.1) { r in
+                            Rectangle().fill(r.2).frame(width: max(0, g.size.width * (report.valueSeconds[r.0] ?? 0) / total - 2))
+                        }
+                    }
+                    .clipShape(Capsule())
+                }
+                .frame(height: 10)
+                HStack(spacing: 14) {
+                    ForEach(Self.ratings, id: \.1) { r in
+                        HStack(spacing: 5) {
+                            Circle().fill(r.2).frame(width: 8, height: 8)
+                            Text("\(r.1) \(hours(report.valueSeconds[r.0] ?? 0))").foregroundStyle(.secondary).monospacedDigit()
+                        }
+                    }
+                }
+                .font(.system(size: 12))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Rated low more than once").font(.system(size: 12, weight: .medium))
+                if report.lowValueRepeats.isEmpty {
+                    Text("None in this period.").font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                ForEach(report.lowValueRepeats.prefix(6)) { s in
+                    Button { controller.meetingQuery = s.name; controller.open(.meetings) } label: {
+                        HStack {
+                            Text(s.name).lineLimit(1)
+                            Spacer()
+                            Text("\(s.calls)× · \(hours(s.seconds))").foregroundStyle(.secondary).monospacedDigit()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                }
+            }
+            .frame(width: 340)
         }
     }
 }
