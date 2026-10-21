@@ -45,6 +45,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// Speaker key (`me:A`, `them:B`) → person name.
     public var speakerNames: [String: String] = [:]
     public var unknownSpeakers: [String] = []
+    /// Voice fingerprints per speaker key, kept so a speaker named later can be learned.
+    public var speakerEmbeddings: [String: [Float]] = [:]
     public var summary: String?
     public var actionItems: [String] = []
     public var markdownPath: String?
