@@ -4,6 +4,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 xcodegen generate --quiet
 xcodebuild -project Mossad.xcodeproj -scheme Mossad -configuration Release -derivedDataPath build build -quiet
+# Never restart Mossad in the middle of a call: the recording would split in two.
+if [ "${MOSSAD_FORCE_INSTALL:-}" != "1" ] && pgrep -x Mossad >/dev/null \
+   && grep -l '"status" : "recording"' "${MOSSAD_ROOT:-$HOME/Mossad}"/Audio/*/call.json >/dev/null 2>&1; then
+  echo "Mossad is recording a call. Install after the call ends, or set MOSSAD_FORCE_INSTALL=1." >&2
+  exit 2
+fi
 pkill -x Mossad || true
 rm -rf /Applications/Mossad.app
 cp -R build/Build/Products/Release/Mossad.app /Applications/
