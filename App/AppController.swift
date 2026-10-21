@@ -57,7 +57,6 @@ final class AppController: ObservableObject {
         recorder = CallRecorder(paths: paths, makeThem: { ProcessTap(processObjectIDs: $0) }, makeMe: { MicCapture() })
         rebuildPipeline()
 
-        requestPermissions()
         enableLaunchAtLoginOnce()
         notifier.onOpen = { [weak self] callID in self?.openNaming(callID) }
 
@@ -74,6 +73,7 @@ final class AppController: ObservableObject {
         outputWatcher = OutputDeviceWatcher { [weak self] in
             Task { @MainActor in self?.recorder.rebuildThem() }
         }
+        requestPermissions()
 
         ProcessingQueue(paths: paths).recoverInterrupted()
         refresh()
@@ -196,9 +196,13 @@ final class AppController: ObservableObject {
         notifier.requestAuthorization()
 
         // System Audio Recording: a short global tap shows the one-time prompt now, not in the first call.
-        let probe = ProcessTap(processObjectIDs: [])
-        do { try probe.start { _ in } } catch { Log.error("System audio capture unavailable: \(error)") }
-        probe.stop()
+        // Off the main thread: creating the tap waits until the prompt is answered.
+        DispatchQueue.global(qos: .utility).async {
+            let probe = ProcessTap(processObjectIDs: [])
+            do { try probe.start { _ in } } catch { Log.error("System audio capture unavailable: \(error)") }
+            probe.stop()
+            Log.info("System audio capture checked")
+        }
 
         // Automation: ask each browser for its tabs once, now and whenever a browser starts,
         // so its one-time prompt never blocks detection during a call.
