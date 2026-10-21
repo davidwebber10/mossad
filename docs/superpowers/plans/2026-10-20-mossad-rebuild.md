@@ -21,7 +21,7 @@
 - Detection tick: 2 s. Meeting-gone confirmation: 2 consecutive ticks. Mic-idle fallback end: 180 s (trailing silence trimmed). Minimum kept call: 60 s.
 - Audio retention: 30 days. Voice clip for naming: 5 s.
 - Owner name: "David Webber".
-- Summary model: `claude-sonnet-5-5`.
+- Summary model: `claude-opus-5-5` (changed from claude-sonnet-5-5 during execution; see ledger).
 - No AI attribution in commits, code, or comments.
 
 ## Review Focus

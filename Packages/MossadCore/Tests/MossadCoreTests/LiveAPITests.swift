@@ -54,4 +54,18 @@ final class LiveAPITests: XCTestCase {
         XCTAssertGreaterThan(same, 0.65)
         XCTAssertLessThan(different, 0.65)
     }
+
+    func testClaudeSummarizesTranscript() async throws {
+        guard let key = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY_POLYWOOD_ANALYTICS"] else { throw XCTSkip("key not set") }
+        let transcript = """
+        [00:00:05] David Webber: Where are we on the cushion shipment?
+        [00:00:09] Alex Rivera: Freight is booked. It leaves the Syracuse plant on Friday.
+        [00:00:15] David Webber: Good. Can you send me the updated forecast by Thursday?
+        [00:00:19] Alex Rivera: Yes, I will send it Thursday morning.
+        """
+        let result = try await ClaudeSummarizer(apiKey: key).summarize(transcript: transcript, title: "Cushion check-in")
+        print("LIVE summary: \(result.summary) | items: \(result.actionItems)")
+        XCTAssertFalse(result.summary.isEmpty)
+        XCTAssertTrue(result.actionItems.contains { $0.contains("Alex Rivera") && $0.lowercased().contains("forecast") })
+    }
 }
