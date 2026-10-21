@@ -21,6 +21,10 @@ public final class WindowTitleProbe: WindowTitleProbing {
         }
     }
 
+    public func isRunning(bundleID: String) -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+    }
+
     /// Shows the system Accessibility prompt once if the app is not trusted.
     public static func requestAccess() {
         let key = "AXTrustedCheckOptionPrompt"

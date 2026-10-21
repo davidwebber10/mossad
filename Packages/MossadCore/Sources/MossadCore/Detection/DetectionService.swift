@@ -70,6 +70,10 @@ public final class DetectionService: @unchecked Sendable {
         }
 
         let current = detector.currentBundleID
+        // An app can drop out of the Core Audio list during an audio reset; while it still runs, keep it as a candidate.
+        if let current, !order.contains(current), windows.isRunning(bundleID: current) {
+            order.append(current)
+        }
         let candidates = order.compactMap { group -> MeetingCandidate? in
             let micActive = micByApp[group] ?? false
             guard micActive || group == current else { return nil }
@@ -117,7 +121,9 @@ public final class DetectionService: @unchecked Sendable {
             let present = meetingTabs.contains { $0.0 == platform }
             return MeetingCandidate(platform: platform, bundleID: group, micActive: micActive, meetingPresent: present)
         }
-        guard let first = meetingTabs.first else { return nil }
+        // To start a call the meeting tab must be the selected tab: a pinned background Teams or Meet tab
+        // must not turn dictation or another site's mic use into a call.
+        guard let first = meetingTabs.first(where: { $0.1.isActive }) else { return nil }
         return MeetingCandidate(platform: first.0, bundleID: group, micActive: micActive, meetingPresent: true)
     }
 

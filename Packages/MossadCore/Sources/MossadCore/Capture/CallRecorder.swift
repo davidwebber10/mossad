@@ -42,7 +42,8 @@ public final class CallRecorder: @unchecked Sendable {
 
     @discardableResult
     public func begin(platform: Platform, bundleID: String, processIDs: [AudioObjectID], at start: Date) throws -> String {
-        if isRecording { skip() }
+        // Never delete a call here: close the previous one so it is processed like any other.
+        if isRecording, let previous = record { _ = end(at: start, trimTo: nil); Log.info("Closed \(previous.id) for a new call") }
         let id = Self.callID(for: start)
         let dir = paths.callDirectory(id)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

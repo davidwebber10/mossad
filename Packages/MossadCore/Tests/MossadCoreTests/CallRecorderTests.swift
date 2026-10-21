@@ -81,4 +81,11 @@ final class CallRecorderTests: XCTestCase {
             XCTAssertEqual(try audioDuration(paths.callDirectory(id).appendingPathComponent(track.fileName)), 100, accuracy: 0.05)
         }
     }
+
+    func testBeginWhileRecordingKeepsThePreviousCall() throws {
+        let first = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [1], at: t0)
+        now = t0.addingTimeInterval(300)
+        _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [2], at: t0.addingTimeInterval(300))
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(first)).status, .recorded)
+    }
 }

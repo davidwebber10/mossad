@@ -21,10 +21,13 @@ public struct AudioProcess: Equatable, Sendable {
 public struct BrowserTab: Equatable, Sendable {
     public var url: String
     public var title: String
+    /// The selected tab of its window.
+    public var isActive: Bool
 
-    public init(url: String, title: String) {
+    public init(url: String, title: String, isActive: Bool = false) {
         self.url = url
         self.title = title
+        self.isActive = isActive
     }
 }
 
@@ -40,4 +43,5 @@ public protocol BrowserTabProbing: AnyObject {
 public protocol WindowTitleProbing: AnyObject {
     /// `nil` when window titles cannot be read (Accessibility not granted).
     func windowTitles(bundleID: String) -> [String]?
+    func isRunning(bundleID: String) -> Bool
 }
