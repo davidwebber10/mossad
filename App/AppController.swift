@@ -29,6 +29,8 @@ final class AppController: ObservableObject {
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var isPaused = false
+    /// Muted in the call app: the mic track records silence meanwhile.
+    @Published private(set) var isMuted = false
     /// What was said so far, from AssemblyAI streaming; shown while the call runs, not used for the note.
     @Published private(set) var live = LiveTranscript()
     @AppStorage("liveTranscript") var liveTranscriptEnabled = true
@@ -59,7 +61,8 @@ final class AppController: ObservableObject {
     let library: VoiceLibrary
     let keychain = Keychain()
     let permissions = PermissionsMonitor()
-    private let detection = DetectionService(mic: MicUsageProbe(), tabs: BrowserTabProbe(), windows: WindowTitleProbe())
+    private let detection = DetectionService(mic: MicUsageProbe(), tabs: BrowserTabProbe(), windows: WindowTitleProbe(),
+                                             mute: AccessibilityMuteProbe())
     private let calendar = EventKitCalendarSource()
     private let notifier = Notifier()
     private var pipeline: Pipeline!
@@ -111,6 +114,10 @@ final class AppController: ObservableObject {
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
                 CaptureQueue.queue.async { self.capture(event, processIDs: ids, meetingID: meetingID, recorder: recorder) }
                 Task { @MainActor in self.show(event) }
+            }
+            detection.onMuteChange = { @Sendable [weak self] muted in
+                CaptureQueue.queue.async { recorder.setMuted(muted) }
+                Task { @MainActor in self?.isMuted = muted }
             }
             detection.onCallProcesses = { @Sendable ids in
                 CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
@@ -220,12 +227,13 @@ final class AppController: ObservableObject {
     func stopCurrentCall() {
         let recorder = recorder
         CaptureQueue.queue.async {
-            guard let record = recorder.end(at: Date(), trimTo: nil) else { return }
+            guard let record = recorder.end(at: Date(), trimTo: nil, byPerson: true) else { return }
             Task { @MainActor in
                 self.refresh()
                 await self.track { await self.pipeline.process(record.id) }
             }
         }
+        isMuted = false
         status = .idle
         isPaused = false
         stopLive()
@@ -444,6 +452,7 @@ final class AppController: ObservableObject {
         case .ended:
             status = .idle
             isPaused = false
+            isMuted = false
             stopLive()
         }
     }

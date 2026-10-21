@@ -627,7 +627,7 @@ private struct LivePanel: View {
         VStack(spacing: 18) {
             HStack(spacing: 8) {
                 StatusDot(color: controller.isPaused ? Theme.unknown : Theme.recording, size: 9, pulsing: !controller.isPaused)
-                Text(controller.isPaused ? "Paused" : "Current call")
+                Text(controller.isPaused ? "Paused" : controller.isMuted ? "Current call · you are muted" : "Current call")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(controller.isPaused ? Color.secondary : Theme.recording)
             }

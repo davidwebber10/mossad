@@ -16,6 +16,15 @@ final class FakeTabs: BrowserTabProbing {
     }
 }
 
+final class FakeMute: MuteProbing {
+    var labels: [String]? = nil
+    var calls = 0
+    func labels(bundleID: String, platform: Platform) -> [String]? {
+        calls += 1
+        return labels
+    }
+}
+
 final class FakeWindows: WindowTitleProbing {
     var titles: [String: [String]] = [:]
     var running: Set<String> = []
@@ -49,6 +58,32 @@ final class DetectionServiceTests: XCTestCase {
         ]
         service.tick(at: now)
         XCTAssertEqual(service.meetingID, "abc-defg-hij")
+    }
+
+    func testMuteChangesAreReportedDuringACall() {
+        let mute = FakeMute()
+        let service = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        var changes: [Bool] = []
+        service.onMuteChange = { changes.append($0) }
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        mute.labels = ["Turn off microphone"]
+        service.tick(at: now)
+        mute.labels = ["Turn on microphone"]
+        service.tick(at: now.addingTimeInterval(4))
+        service.tick(at: now.addingTimeInterval(8))
+        mute.labels = ["Leave call"]  // unknown: no change
+        service.tick(at: now.addingTimeInterval(12))
+        mute.labels = ["Turn off microphone"]
+        service.tick(at: now.addingTimeInterval(16))
+        XCTAssertEqual(changes, [false, true, false])
+    }
+
+    func testNoMuteChecksOutsideACall() {
+        let mute = FakeMute()
+        let service = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        service.tick(at: now)
+        XCTAssertEqual(mute.calls, 0)
     }
 
     func testDuringACallTheTabsAreReadAtMostEveryTenSeconds() {

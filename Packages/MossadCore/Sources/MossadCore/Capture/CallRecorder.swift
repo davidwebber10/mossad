@@ -45,6 +45,8 @@ public final class CallRecorder: @unchecked Sendable {
     private var loggedNoSystemAudio = false
     public private(set) var isPaused = false
     private var pauseStart: (date: Date, offset: TimeInterval)?
+    private var muteStart: (date: Date, offset: TimeInterval)?
+    public var isMuted: Bool { muteStart != nil }
     /// Live loudness of each track, for the waveform. Constant objects, so the UI can read them from any thread.
     public let meMeter = LevelMeter()
     public let themMeter = LevelMeter()
@@ -176,7 +178,11 @@ public final class CallRecorder: @unchecked Sendable {
         } else if byPerson {
             r.markers.append(TranscriptMarker(offset: recordedLength, text: "Recording stopped at \(Self.time(time))"))
         }
+        if let mute = muteStart {
+            r.markers.append(TranscriptMarker(offset: mute.offset, text: "Muted from \(Self.time(mute.date)) to the end of the recording"))
+        }
         pauseStart = nil
+        muteStart = nil
         // The app releasing the mic does not mean the call ended: keep any sound on either track after it.
         let lastSound = [themWriter?.lastSound, meWriter?.lastSound].compactMap { $0 }.max().map { r.start.addingTimeInterval($0 + 1) }
         stopAll()
@@ -201,6 +207,31 @@ public final class CallRecorder: @unchecked Sendable {
         return r
     }
 
+    /// Follows the call app's mute button: while muted, the mic track records silence.
+    public func setMuted(_ muted: Bool) {
+        guard isRecording, muted != isMuted else { return }
+        meWriter?.isMuted = muted
+        if muted {
+            muteStart = (clock(), recordedLength)
+            Log.info("Muted in the call; the mic track records silence")
+        } else if let mute = muteStart {
+            addMarker(at: mute.offset, "Muted from \(Self.time(mute.date)) to \(Self.time(clock())) (\(Self.length(clock().timeIntervalSince(mute.date))))")
+            muteStart = nil
+            Log.info("Unmuted in the call")
+        }
+    }
+
+    private func addMarker(at offset: TimeInterval, _ text: String) {
+        guard var r = record else { return }
+        r.markers.append(TranscriptMarker(offset: offset, text: text))
+        record = r
+        do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
+    }
+
+    static func length(_ seconds: TimeInterval) -> String {
+        seconds < 60 ? "\(Int(seconds)) s" : "\(Int((seconds / 60).rounded())) min"
+    }
+
     /// Stops both sources but keeps the files open. The paused time is left out of both tracks.
     public func pause() {
         guard isRecording, !isPaused else { return }
@@ -218,12 +249,8 @@ public final class CallRecorder: @unchecked Sendable {
     public func resume() {
         guard isRecording, isPaused else { return }
         isPaused = false
-        if let pause = pauseStart, var r = record {
-            let seconds = clock().timeIntervalSince(pause.date)
-            let length = seconds < 60 ? "\(Int(seconds)) s" : "\(Int((seconds / 60).rounded())) min"
-            r.markers.append(TranscriptMarker(offset: pause.offset, text: "Paused from \(Self.time(pause.date)) to \(Self.time(clock())) (\(length))"))
-            record = r
-            do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
+        if let pause = pauseStart {
+            addMarker(at: pause.offset, "Paused from \(Self.time(pause.date)) to \(Self.time(clock())) (\(Self.length(clock().timeIntervalSince(pause.date))))")
         }
         pauseStart = nil
         themWriter?.resume()

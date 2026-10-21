@@ -7,6 +7,10 @@ public final class DetectionService: @unchecked Sendable {
     private let mic: MicUsageProbing
     private let tabs: BrowserTabProbing
     private let windows: WindowTitleProbing
+    private let mute: MuteProbing?
+    static let muteCheckInterval: TimeInterval = 3
+    private var lastMuteCheck = Date.distantPast
+    private var muted: Bool?
     private var detector: CallDetector
     private let interval: TimeInterval
     private let queue = DispatchQueue(label: "com.dwebber.mossad.detection", qos: .utility)
@@ -26,12 +30,15 @@ public final class DetectionService: @unchecked Sendable {
     public var onEvent: (DetectorEvent) -> Void = { _ in }
     /// Called after every tick during a call with the call app's audio process IDs.
     public var onCallProcesses: ([AudioObjectID]) -> Void = { _ in }
+    /// Called when the person mutes or unmutes in the call app, during a call.
+    public var onMuteChange: (Bool) -> Void = { _ in }
 
-    public init(mic: MicUsageProbing, tabs: BrowserTabProbing, windows: WindowTitleProbing,
+    public init(mic: MicUsageProbing, tabs: BrowserTabProbing, windows: WindowTitleProbing, mute: MuteProbing? = nil,
                 detector: CallDetector = CallDetector(), tick: TimeInterval = 2) {
         self.mic = mic
         self.tabs = tabs
         self.windows = windows
+        self.mute = mute
         self.detector = detector
         self.interval = tick
     }
@@ -66,10 +73,15 @@ public final class DetectionService: @unchecked Sendable {
             case .ended:
                 currentPlatform = nil
                 meetingID = nil
+                muted = nil
+                lastMuteCheck = .distantPast
             }
             onEvent(event)
         }
-        if detector.isInCall { onCallProcesses(audioProcessIDs) }
+        if detector.isInCall {
+            onCallProcesses(audioProcessIDs)
+            checkMute(at: time)
+        }
     }
 
     public func snapshot(at time: Date) -> DetectionSnapshot {
@@ -142,6 +154,16 @@ public final class DetectionService: @unchecked Sendable {
         guard let first = meetingTabs.first(where: { $0.1.isActive }) else { return nil }
         activeMeetingIDs[group] = MeetingMatcher.meetingID(forTabURL: first.1.url)
         return MeetingCandidate(platform: first.0, bundleID: group, micActive: micActive, meetingPresent: true)
+    }
+
+    private func checkMute(at time: Date) {
+        guard let mute, let bundleID = detector.currentBundleID, let platform = currentPlatform,
+              time.timeIntervalSince(lastMuteCheck) >= Self.muteCheckInterval else { return }
+        lastMuteCheck = time
+        guard let labels = mute.labels(bundleID: bundleID, platform: platform),
+              let state = MuteState.from(labels: labels, platform: platform), state != muted else { return }
+        muted = state
+        onMuteChange(state)
     }
 
     private func readTabs(_ group: String, isCurrent: Bool) -> [BrowserTab]? {

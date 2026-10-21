@@ -40,6 +40,11 @@ public protocol BrowserTabProbing: AnyObject {
     func tabs(browserBundleID: String) -> [BrowserTab]?
 }
 
+/// Labels of the call app's controls (buttons, menu items) that can show the mute state; nil when unreadable.
+public protocol MuteProbing: AnyObject {
+    func labels(bundleID: String, platform: Platform) -> [String]?
+}
+
 public protocol WindowTitleProbing: AnyObject {
     /// `nil` when window titles cannot be read (Accessibility not granted).
     func windowTitles(bundleID: String) -> [String]?

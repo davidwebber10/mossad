@@ -34,6 +34,14 @@ public final class TrackWriter: @unchecked Sendable {
     private let meter: LevelMeter?
     private let sink: AudioSink?
     private var pausedAt: Date?
+    private var muted = false
+
+    /// While muted in the call app, the mic's sound is replaced with silence of the same length: the timeline
+    /// stays true, and what was said off the call (a phone call while muted) is not kept or transcribed.
+    public var isMuted: Bool {
+        get { lock.withLock { muted } }
+        set { lock.withLock { muted = newValue } }
+    }
 
     public init(url: URL, startTime: Date, clock: @escaping () -> Date = Date.init, meter: LevelMeter? = nil, sink: AudioSink? = nil) throws {
         file = try AVAudioFile(forWriting: url, settings: Self.fileSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
@@ -71,6 +79,7 @@ public final class TrackWriter: @unchecked Sendable {
             guard file != nil, !stalled, pausedAt == nil, buffer.frameLength > 0, let mono = Self.downmix(buffer) else { return }
             let converted = try convert(mono)
             guard converted.frameLength > 0 else { return }
+            if muted { memset(converted.floatChannelData![0], 0, Int(converted.frameLength) * MemoryLayout<Float>.size) }
             let bufferStart = clock().timeIntervalSince(startTime) - Double(converted.frameLength) / Self.sampleRate
             // Pad every gap in full: both tracks must share one timeline. Silence is written in small chunks.
             let expected = AVAudioFramePosition(bufferStart * Self.sampleRate)
@@ -85,7 +94,7 @@ public final class TrackWriter: @unchecked Sendable {
             try write(converted)
             let level = Self.rms(converted)
             meter?.record(level)
-            sink?.send(converted)
+            if !muted { sink?.send(converted) }
             if level >= Self.soundThreshold { lastSoundFrame = written }
         }
     }

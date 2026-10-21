@@ -85,6 +85,19 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertTrue(r.markers.last?.text.hasPrefix("Recording stopped at ") == true)
     }
 
+    func testMuteLeavesAMarkerFromMuteToUnmute() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        now = t0.addingTimeInterval(60)
+        recorder.setMuted(true)
+        recorder.setMuted(true)  // a repeated state changes nothing
+        now = t0.addingTimeInterval(240)
+        recorder.setMuted(false)
+        let markers = try CallRecord.load(from: paths.callDirectory(id)).markers
+        XCTAssertEqual(markers.count, 1)
+        XCTAssertTrue(markers[0].text.hasPrefix("Muted from "), markers[0].text)
+        XCTAssertTrue(markers[0].text.hasSuffix("(3 min)"), markers[0].text)
+    }
+
     func testResumeStartsBothSourcesAgain() throws {
         _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         recorder.pause()
