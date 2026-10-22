@@ -26,6 +26,8 @@ public struct Paths: Sendable {
     public var coach: URL { root.appendingPathComponent("Coach") }
     /// One JSON file per chat in the Chat tab.
     public var chats: URL { root.appendingPathComponent("Chats") }
+    /// What the iCloud sync last uploaded or fetched.
+    public var sync: URL { root.appendingPathComponent("Sync") }
     /// `usage.jsonl`: each billed request, for the costs in Analytics.
     public var usage: URL { root.appendingPathComponent("Usage") }
 
