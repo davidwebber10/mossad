@@ -56,6 +56,7 @@ public enum MeetingMatcher {
         case .meet: #"(?<=meet\.google\.com/)(meet/)?[a-z]{3}-[a-z]{4}-[a-z]{3}"#
         case .zoom: #"(?<=/wc/)(join/)?\d{9,12}"#
         case .teams: #"meeting_[A-Za-z0-9_-]+"#
+        case .inPerson: #"(?!)"#
         }
         let text = string.removingPercentEncoding ?? string
         guard let range = text.range(of: pattern, options: .regularExpression) else { return nil }

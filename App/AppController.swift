@@ -331,6 +331,29 @@ final class AppController: ObservableObject {
         lastBookmark = Date()
     }
 
+    /// Records a meeting in a room through the mic, until Stop. Detection ignores calls meanwhile.
+    func recordInPerson() {
+        guard case .idle = status, isOn else { return }
+        let start = Date()
+        status = .recording(.inPerson, since: start)
+        isPaused = false
+        isMuted = false
+        let recorder = recorder
+        CaptureQueue.queue.async {
+            do {
+                let id = try recorder.beginManual(at: start)
+                Task { @MainActor in
+                    self.refresh()
+                    await self.findInvite(callID: id, platform: .inPerson, meetingID: nil, start: start, recorder: recorder)
+                }
+            } catch {
+                Log.error("Could not start the in-person recording: \(error)")
+                Task { @MainActor in if case .recording(.inPerson, let since) = self.status, since == start { self.status = .idle } }
+            }
+        }
+        startLive(reset: true)
+    }
+
     func pauseCurrentCall() {
         guard case .recording = status else { return }
         let recorder = recorder
@@ -570,6 +593,11 @@ final class AppController: ObservableObject {
     private nonisolated func capture(_ event: DetectorEvent, processIDs: [AudioObjectID], meetingID: String?, recorder: CallRecorder) {
         switch event {
         case .started(let platform, let bundleID, let at):
+            // An in-person recording owns the mic until the person stops it.
+            if recorder.isManual {
+                Log.info("\(platform.displayName) started during an in-person recording; it keeps recording the room")
+                return
+            }
             Log.info("Call started: \(platform.displayName) (\(bundleID))")
             do {
                 let id = try recorder.begin(platform: platform, bundleID: bundleID, processIDs: processIDs, meetingID: meetingID, at: at)
@@ -585,6 +613,7 @@ final class AppController: ObservableObject {
                 }
             }
         case .ended(let at, let trimTo):
+            if recorder.isManual { return }
             Log.info("Call ended")
             guard let record = recorder.end(at: at, trimTo: trimTo) else {
                 // A short call is deleted, so its row must leave the list too, or it still looks live.
@@ -610,6 +639,7 @@ final class AppController: ObservableObject {
     }
 
     private func show(_ event: DetectorEvent) {
+        if case .recording(.inPerson, _) = status { return }
         switch event {
         case .started(let platform, _, let at):
             status = .recording(platform, since: at)

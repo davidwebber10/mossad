@@ -59,6 +59,7 @@ extension Platform {
         case .meet: Color(hex: 0x00ac47)
         case .zoom: Color(hex: 0x2d8cff)
         case .teams: Color(hex: 0x5b5fc7)
+        case .inPerson: Color(hex: 0xff9f0a)
         }
     }
 }

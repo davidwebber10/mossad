@@ -20,6 +20,7 @@ public final class AccessibilityMuteProbe: MuteProbing {
         case .meet: "Meet"
         case .zoom: "Zoom"
         case .teams: "Teams"
+        case .inPerson: "\u{0}"
         }
         var roots = isBrowser ? windows.filter { (attribute($0, kAXTitleAttribute) as? String)?.contains(marker) == true } : windows
         // Zoom and Teams also name the action in their menus.

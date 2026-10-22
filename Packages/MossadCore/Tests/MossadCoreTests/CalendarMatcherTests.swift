@@ -93,4 +93,16 @@ final class CalendarAccessTests: XCTestCase {
         var access = CalendarAccess(allowedAtStart: true)
         XCTAssertFalse(access.needsNewStore(allowed: true))
     }
+
+    func testAnInPersonMeetingMatchesAnOverlappingEventWithNoCallLink() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let room = CalendarEventInfo(title: "Budget review", start: start.addingTimeInterval(-300), end: start.addingTimeInterval(3300),
+                                     attendees: [], text: "Room 4B", isAllDay: false)
+        let call = CalendarEventInfo(title: "Vendor call", start: start, end: start.addingTimeInterval(1800),
+                                     attendees: [], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)
+        XCTAssertEqual(CalendarMatcher.bestEvent(for: .inPerson, meetingID: nil, start: start, end: start.addingTimeInterval(1800),
+                                                 in: [call, room])?.title, "Budget review")
+        XCTAssertNil(CalendarMatcher.bestEvent(for: .inPerson, meetingID: nil, start: start, end: start.addingTimeInterval(1800), in: [call]))
+        XCTAssertEqual(Platform.inPerson.displayName, "In person")
+    }
 }

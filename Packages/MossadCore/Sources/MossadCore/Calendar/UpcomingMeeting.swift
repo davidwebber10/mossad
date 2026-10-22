@@ -30,7 +30,7 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
         let urls = text.split { $0.isWhitespace || $0 == "<" || $0 == ">" || $0 == "\"" }
             .map(String.init).filter { $0.hasPrefix("https://") || $0.hasPrefix("http://") }
         for url in urls {
-            for platform in Platform.allCases where CalendarMatcher.linkMarkers(platform).contains(where: { url.lowercased().contains($0) }) {
+            for platform in Platform.callApps where CalendarMatcher.linkMarkers(platform).contains(where: { url.lowercased().contains($0) }) {
                 return (platform, URL(string: url))
             }
         }

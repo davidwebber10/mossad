@@ -64,6 +64,15 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     public var isRecording: Bool { record != nil }
+    /// Started by hand for an in-person meeting: detection neither ends it nor taps a call app for it.
+    public private(set) var isManual = false
+
+    /// Records the room through the mic until the person stops it.
+    public func beginManual(at start: Date) throws -> String {
+        let id = try begin(platform: .inPerson, bundleID: "", processIDs: [], at: start)
+        isManual = true
+        return id
+    }
     public var currentRecord: CallRecord? { record }
 
     static func callID(for date: Date) -> String {
@@ -98,7 +107,8 @@ public final class CallRecorder: @unchecked Sendable {
         self.meWriter = meWriter
         // The mic first: it is fast, and a slow tap start must not cost David's first words.
         startMe()
-        startThem(processIDs)
+        // In a room there is no call app to tap; the them track stays empty.
+        if platform != .inPerson { startThem(processIDs) }
         Log.info("Recording \(id) (\(platform.displayName))")
         return id
     }
@@ -106,7 +116,7 @@ public final class CallRecorder: @unchecked Sendable {
     /// Rebuilds the tap when the meeting app's audio processes change (for example a browser audio helper restarts).
     /// Runs on every detection tick during a call, so a source that failed to start is tried again.
     public func updateThemProcesses(_ ids: [AudioObjectID]) {
-        guard isRecording, !isPaused else { return }
+        guard isRecording, !isPaused, !isManual else { return }
         let now = clock()
         if meSource == nil, now >= nextMeRetry { startMe() }
         let ids = ids.isEmpty ? themProcessIDs : ids
@@ -121,7 +131,7 @@ public final class CallRecorder: @unchecked Sendable {
 
     /// Recreates the tap with the same processes, for example after the default output device changed.
     public func rebuildThem() {
-        guard isRecording, !isPaused else { return }
+        guard isRecording, !isPaused, !isManual else { return }
         Log.info("Output device changed; rebuilding tap")
         themSource?.stop()
         startThem(themProcessIDs)
@@ -263,7 +273,7 @@ public final class CallRecorder: @unchecked Sendable {
         themWriter?.resume()
         meWriter?.resume()
         startMe()
-        startThem(themProcessIDs)
+        if !isManual { startThem(themProcessIDs) }
         Log.info("Recording resumed")
     }
 
@@ -305,5 +315,6 @@ public final class CallRecorder: @unchecked Sendable {
         nextMeRetry = .distantPast
         loggedNoSystemAudio = false
         record = nil
+        isManual = false
     }
 }

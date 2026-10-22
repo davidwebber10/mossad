@@ -103,6 +103,19 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertTrue(try CallRecord.load(from: paths.callDirectory(id)).markers.isEmpty)
     }
 
+    func testAnInPersonRecordingUsesTheMicOnlyAndIsManual() throws {
+        let id = try recorder.beginManual(at: t0)
+        XCTAssertTrue(recorder.isManual)
+        XCTAssertTrue(me.started)
+        XCTAssertFalse(them.started)
+        recorder.updateThemProcesses([1, 2])
+        XCTAssertFalse(them.started, "an in-person recording never taps a call app")
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).platform, .inPerson)
+        now = t0.addingTimeInterval(600)
+        _ = recorder.end(at: now, trimTo: nil, byPerson: true)
+        XCTAssertFalse(recorder.isManual)
+    }
+
     func testMuteLeavesAMarkerFromMuteToUnmute() throws {
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         now = t0.addingTimeInterval(60)

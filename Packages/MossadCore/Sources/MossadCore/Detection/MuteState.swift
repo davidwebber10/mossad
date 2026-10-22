@@ -14,6 +14,8 @@ public enum MuteState {
         case .zoom:
             if has("unmute audio") || has("unmute my audio") { return true }
             if has("mute audio") || has("mute my audio") { return false }
+        case .inPerson:
+            return nil
         case .teams:
             if has("unmute") { return true }
             if has("mute (") || lower.contains("mute") { return false }

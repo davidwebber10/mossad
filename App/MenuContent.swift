@@ -111,6 +111,12 @@ struct MenuContent: View {
                 TurnOffMenu().controlSize(.small)
             }
             .padding(EdgeInsets(top: 12, leading: 14, bottom: 10, trailing: 14))
+            PanelRow(action: { controller.recordInPerson() }) {
+                Image(systemName: "record.circle").font(.system(size: 14)).foregroundStyle(Theme.recording).frame(width: 18)
+                Text("Record a meeting in person")
+                Spacer()
+            }
+            .help("Records the room through your mic until you click Stop. Use it for meetings without a call app.")
         case .recording(let platform, let since):
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
