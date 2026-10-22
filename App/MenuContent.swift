@@ -23,6 +23,20 @@ struct MenuContent: View {
                 .padding(.horizontal, 6)
             }
             if !permissions.allGood { permissionsRow }
+            if let next = controller.upcoming.first(where: { $0.start.timeIntervalSinceNow < 12 * 3600 }), !controller.isRecording {
+                PanelSeparator()
+                Text("Next").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
+                    .padding(.horizontal, 14).padding(.top, 2)
+                PanelRow(action: { go { controller.selectedMeetingID = next.id; controller.open(.meetings) } }) {
+                    if let p = next.platform { PlatformSquare(platform: p, size: 14) } else { icon("calendar") }
+                    Text(next.title).lineLimit(1).truncationMode(.tail)
+                    Spacer(minLength: 8)
+                    Text(upcomingWhen(next)).font(.system(size: 12)).foregroundStyle(.secondary)
+                    if let link = next.link {
+                        Button("Join") { NSWorkspace.shared.open(link); dismiss() }.controlSize(.small)
+                    }
+                }
+            }
             let recent = controller.meetings.filter { $0.status != .recording }.prefix(3)
             if !recent.isEmpty {
                 PanelSeparator()

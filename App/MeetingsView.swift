@@ -90,7 +90,9 @@ struct MeetingsView: View {
             .frame(width: 330)
             Divider()
             Group {
-                if let id = controller.selectedMeetingID, let r = controller.meetings.first(where: { $0.id == id }) {
+                if let id = controller.selectedMeetingID, let m = controller.upcoming.first(where: { $0.id == id }) {
+                    UpcomingDetailView(meeting: m)
+                } else if let id = controller.selectedMeetingID, let r = controller.meetings.first(where: { $0.id == id }) {
                     MeetingDetailView(record: r, style: .split, deleting: $deleting)
                         .id(r.id)
                 } else {
@@ -264,6 +266,13 @@ private struct MeetingList: View {
                     ForEach(live, id: \.id) { r in CurrentCallRow(record: r).tag(r.id) }
                 } header: {
                     Text("Now").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.recording)
+                }
+            }
+            if !controller.upcoming.isEmpty, controller.meetingQuery.isEmpty {
+                Section {
+                    ForEach(controller.upcoming.prefix(UpcomingRow.shown)) { m in UpcomingRow(meeting: m).tag(m.id) }
+                } header: {
+                    Text("Upcoming").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
                 }
             }
             ForEach(groups, id: \.kind) { group in

@@ -63,6 +63,9 @@ final class AppController: ObservableObject {
     @Published var selectedMeetingID: String?
     @Published var namingCallID: String?
     var personToOpen: String?
+    /// Calendar events still to come, for the Upcoming list and the menu bar.
+    @Published private(set) var upcoming: [UpcomingMeeting] = []
+    private var upcomingTimer: Timer?
     /// The Meetings search text; a tag click sets it to "#Tag".
     @Published var meetingQuery = ""
     /// Set to open the Chat tab on a new chat.
@@ -143,6 +146,8 @@ final class AppController: ObservableObject {
         // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
         // processing, so the screens can be checked while the installed copy records a call.
         let preview = CommandLine.arguments.contains("--ui-preview")
+        // Reading the calendar records nothing, so the preview shows the real upcoming meetings too.
+        if preview { refreshUpcoming() }
         if !preview {
             enableLaunchAtLoginOnce()
             notifier.onOpen = { [weak self] callID in self?.openNaming(callID) }
@@ -179,6 +184,10 @@ final class AppController: ObservableObject {
             bookmarkKey = GlobalHotKey { [weak self] in self?.bookmarkCurrentCall() }
 
             Task { await runHousekeeping() }
+            refreshUpcoming()
+            upcomingTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.refreshUpcoming() }
+            }
             housekeeping = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
                 Task { await self?.runHousekeeping() }
             }
@@ -672,6 +681,22 @@ final class AppController: ObservableObject {
             UserDefaults.standard.set(true, forKey: "didSetLoginItem")
         } catch {
             Log.error("Launch at login failed: \(error)")
+        }
+    }
+
+    func refreshUpcoming() {
+        let calendar = calendar
+        Task {
+            let now = Date()
+            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))
+            // Development hook: `--sample-upcoming` adds two events, since a preview build has no Calendar access.
+            if CommandLine.arguments.contains("--sample-upcoming") {
+                events += [CalendarEventInfo(title: "Mitch / David", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),
+                                             attendees: ["Mitch Haus", "David Webber"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false),
+                           CalendarEventInfo(title: "Tech Team Monthly Sync", start: now.addingTimeInterval(86_400), end: now.addingTimeInterval(90_000),
+                                             attendees: ["Ed Ng", "Adam Stoffel", "Jeff Hill"], text: "", isAllDay: false)]
+            }
+            upcoming = UpcomingMeeting.from(events, now: now)
         }
     }
 
