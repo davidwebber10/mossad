@@ -53,3 +53,35 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  MossadPhone:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources: [PhoneApp]
+    dependencies:
+      - package: MossadCore
+    info:
+      path: PhoneApp/Info.plist
+      properties:
+        CFBundleDisplayName: Mossad
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        CFBundleURLTypes: [{CFBundleURLName: com.dwebber.mossad.phone, CFBundleURLSchemes: [mossad]}]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    entitlements:
+      path: PhoneApp/MossadPhone.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.dwebber.mossad]
+        com.apple.developer.icloud-services: [CloudKit]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwebber.mossad.phone
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 35VNBDXR6B
+        SWIFT_VERSION: "6.0"
+        MARKETING_VERSION: "2.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
