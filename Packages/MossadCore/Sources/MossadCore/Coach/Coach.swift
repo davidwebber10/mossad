@@ -10,13 +10,17 @@ public protocol Coaching: Sendable {
 }
 
 /// Reviews one call with Claude, given the coach's profile of the owner.
-public struct ClaudeCoach: Coaching {
-    private let client: ClaudeJSON
+public struct LLMCoach: Coaching {
+    private let llm: any LanguageModel
     private let ownerName: String
 
-    public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared, ownerName: String, usage: UsageLog? = nil) {
-        client = ClaudeJSON(apiKey: apiKey, model: model, session: session, usage: usage, purpose: .coach)
+    public init(llm: any LanguageModel, ownerName: String) {
+        self.llm = llm
         self.ownerName = ownerName
+    }
+
+    public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared, ownerName: String, usage: UsageLog? = nil) {
+        self.init(llm: AnthropicModel(apiKey: apiKey, model: model, session: session, usage: usage), ownerName: ownerName)
     }
 
     static var schema: [String: Any] {
@@ -52,9 +56,9 @@ public struct ClaudeCoach: Coaching {
     public func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?) async throws -> CoachResult {
         var delivery = DeliveryStats(record: record, owner: ownerName)
         delivery.tone = tone
-        let out = try await client.call(system: CoachPrompt.system(owner: ownerName),
-                                        user: CoachPrompt.user(record: record, owner: ownerName, profile: profile, delivery: delivery),
-                                        schema: Self.schema, effort: "high", as: Output.self)
+        let out = try await llm.json(system: CoachPrompt.system(owner: ownerName),
+                                     user: CoachPrompt.user(record: record, owner: ownerName, profile: profile, delivery: delivery),
+                                     schema: Self.schema, effort: .high, purpose: .coach, as: Output.self)
         let review = CoachReview(headline: out.headline, overview: out.overview, strengths: out.strengths.map(\.point),
                                  improvements: out.improvements.map(\.point), focusProgress: out.focus_progress?.nonBlank,
                                  value: out.meeting_value, delivery: delivery)

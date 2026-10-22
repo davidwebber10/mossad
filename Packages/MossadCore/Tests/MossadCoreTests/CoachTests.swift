@@ -235,7 +235,7 @@ final class CoachTests: XCTestCase {
         ]
         let text = String(decoding: json(output), as: UTF8.self)
         StubURLProtocol.handler = { _ in (200, self.reply(text)) }
-        let coach = ClaudeCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
+        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
         let result = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
         XCTAssertEqual(result.review.headline, "Clear plan")
         XCTAssertEqual(result.review.improvements.first?.tryInstead, "Say X")
@@ -254,7 +254,7 @@ final class CoachTests: XCTestCase {
 
     func testCoachMalformedReplyThrows() async {
         StubURLProtocol.handler = { _ in (200, self.reply("nope")) }
-        let coach = ClaudeCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
+        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
         do {
             _ = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
             XCTFail("expected an error")

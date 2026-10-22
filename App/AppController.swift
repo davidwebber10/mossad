@@ -231,7 +231,7 @@ final class AppController: ObservableObject {
         let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
         let organization = organization.trimmingCharacters(in: .whitespaces)
         let transcriber: Transcribing = keychain.get(.assemblyai).map { AssemblyAIClient(apiKey: $0, usage: usage) } ?? MissingKeyTranscriber()
-        let summarizer: Summarizing? = keychain.get(.anthropic).map { ClaudeSummarizer(apiKey: $0, ownerName: owner, organization: organization, usage: usage) }
+        let summarizer: Summarizing? = keychain.get(.anthropic).map { LLMSummarizer(apiKey: $0, ownerName: owner, organization: organization, usage: usage) }
         let notifier = notifier
         pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: FluidEmbeddingProvider(),
                             calendar: calendar, summarizer: summarizer, notify: { record in

@@ -124,29 +124,29 @@ public struct ChatTools: Sendable {
 
     // MARK: Claude
 
-    public static var definitions: [[String: Any]] { [
-        ["name": "find_meetings",
-         "description": "Lists meetings, newest first, with call_id, title, date, length, people, tags, and a one-line summary. Every filter is optional and they combine. people matches first names, short forms (\"Jen\" finds Jennifer), last names, or full names; every person listed must be in the meeting. Dates are YYYY-MM-DD in local time; to is inclusive.",
-         "input_schema": ["type": "object", "properties": [
-            "query": ["type": "string", "description": "Words in the title, tags, summary, or transcript."],
-            "people": ["type": "array", "items": ["type": "string"]],
-            "from": ["type": "string"], "to": ["type": "string"],
-            "tag": ["type": "string"], "limit": ["type": "integer"],
-         ] as [String: Any]]],
-        ["name": "search_transcripts",
-         "description": "Finds transcript lines that contain a word or phrase, with the meeting, the time, and the speaker. Narrow by people and dates like find_meetings.",
-         "input_schema": ["type": "object", "properties": [
-            "query": ["type": "string"], "people": ["type": "array", "items": ["type": "string"]],
-            "from": ["type": "string"], "to": ["type": "string"], "limit": ["type": "integer"],
-         ] as [String: Any], "required": ["query"]]],
-        ["name": "read_meeting",
-         "description": "Reads one meeting in full: people, summary, topics, decisions, action items with owners, and the whole timestamped transcript. Use it before saying what someone said, agreed to, or committed to.",
-         "input_schema": ["type": "object", "properties": ["call_id": ["type": "string"]], "required": ["call_id"]]],
-        ["name": "action_items",
-         "description": "Lists action items from meeting summaries with their owner, meeting, and date. Filter by owner (same name matching as find_meetings) and dates.",
-         "input_schema": ["type": "object", "properties": [
-            "owner": ["type": "string"], "from": ["type": "string"], "to": ["type": "string"],
-         ] as [String: Any]]],
+    public static var definitions: [ToolSpec] { [
+        ToolSpec(name: "find_meetings",
+                 description: "Lists meetings, newest first, with call_id, title, date, length, people, tags, and a one-line summary. Every filter is optional and they combine. people matches first names, short forms (\"Jen\" finds Jennifer), last names, or full names; every person listed must be in the meeting. Dates are YYYY-MM-DD in local time; to is inclusive.",
+                 schema: ["type": "object", "properties": [
+                    "query": ["type": "string", "description": "Words in the title, tags, summary, or transcript."],
+                    "people": ["type": "array", "items": ["type": "string"]],
+                    "from": ["type": "string"], "to": ["type": "string"],
+                    "tag": ["type": "string"], "limit": ["type": "integer"],
+                 ] as [String: Any]]),
+        ToolSpec(name: "search_transcripts",
+                 description: "Finds transcript lines that contain a word or phrase, with the meeting, the time, and the speaker. Narrow by people and dates like find_meetings.",
+                 schema: ["type": "object", "properties": [
+                    "query": ["type": "string"], "people": ["type": "array", "items": ["type": "string"]],
+                    "from": ["type": "string"], "to": ["type": "string"], "limit": ["type": "integer"],
+                 ] as [String: Any], "required": ["query"]]),
+        ToolSpec(name: "read_meeting",
+                 description: "Reads one meeting in full: people, summary, topics, decisions, action items with owners, and the whole timestamped transcript. Use it before saying what someone said, agreed to, or committed to.",
+                 schema: ["type": "object", "properties": ["call_id": ["type": "string"]], "required": ["call_id"]]),
+        ToolSpec(name: "action_items",
+                 description: "Lists action items from meeting summaries with their owner, meeting, and date. Filter by owner (same name matching as find_meetings) and dates.",
+                 schema: ["type": "object", "properties": [
+                    "owner": ["type": "string"], "from": ["type": "string"], "to": ["type": "string"],
+                 ] as [String: Any]]),
     ] }
 
     /// Runs a tool call from Claude and returns its result as text.

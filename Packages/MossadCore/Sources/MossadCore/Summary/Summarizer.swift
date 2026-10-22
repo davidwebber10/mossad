@@ -62,24 +62,21 @@ extension Summarizing {
     }
 }
 
-/// Writes the summary and action items with the Claude Messages API (raw HTTP; there is no Swift SDK).
-public struct ClaudeSummarizer: Summarizing {
-    private let apiKey: String
-    private let model: String
-    private let session: URLSession
-
+/// Writes the summary, action items, and tags with the chosen AI model.
+public struct LLMSummarizer: Summarizing {
+    private let llm: any LanguageModel
     private let ownerName: String
     private let organization: String
-    private let usage: UsageLog?
+
+    public init(llm: any LanguageModel, ownerName: String = "the user", organization: String = "") {
+        self.llm = llm
+        self.ownerName = ownerName
+        self.organization = organization
+    }
 
     public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared,
                 ownerName: String = "the user", organization: String = "", usage: UsageLog? = nil) {
-        self.usage = usage
-        self.ownerName = ownerName
-        self.organization = organization
-        self.apiKey = apiKey
-        self.model = model
-        self.session = session
+        self.init(llm: AnthropicModel(apiKey: apiKey, model: model, session: session, usage: usage), ownerName: ownerName, organization: organization)
     }
 
     static func systemPrompt(owner: String, organization: String) -> String {
@@ -120,9 +117,9 @@ public struct ClaudeSummarizer: Summarizing {
             "tags": Schema.array(Schema.string),
         ])
         let known = knownTags.isEmpty ? "" : "Known tags: \(knownTags.joined(separator: ", "))\n\n"
-        let result = try await ClaudeJSON(apiKey: apiKey, model: model, session: session, usage: usage, purpose: .summary)
-            .call(system: Self.systemPrompt(owner: ownerName, organization: organization),
-                  user: "\(known)Meeting: \(title)\n\nTranscript:\n\(transcript)", schema: schema, as: Output.self)
+        let result = try await llm.json(system: Self.systemPrompt(owner: ownerName, organization: organization),
+                                        user: "\(known)Meeting: \(title)\n\nTranscript:\n\(transcript)", schema: schema,
+                                        effort: .medium, purpose: .summary, as: Output.self)
         let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)
         return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items, decisions: result.decisions,
                               headline: headline.isEmpty ? nil : headline,

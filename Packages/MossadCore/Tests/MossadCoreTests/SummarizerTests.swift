@@ -2,14 +2,14 @@ import XCTest
 @testable import MossadCore
 
 final class SummarizerTests: XCTestCase {
-    func summarizer() -> ClaudeSummarizer {
-        ClaudeSummarizer(apiKey: "ant-key", session: StubURLProtocol.session())
+    func summarizer() -> LLMSummarizer {
+        LLMSummarizer(apiKey: "ant-key", session: StubURLProtocol.session())
     }
 
     func testPromptNamesTheOwnerAndOrganization() {
-        XCTAssertTrue(ClaudeSummarizer.systemPrompt(owner: "Jordan Lee", organization: "Acme").contains("internal Acme meeting transcripts for Jordan Lee"))
-        XCTAssertTrue(ClaudeSummarizer.systemPrompt(owner: "Jordan Lee", organization: "").contains("meeting transcripts for Jordan Lee"))
-        XCTAssertFalse(ClaudeSummarizer.systemPrompt(owner: "Jordan Lee", organization: "").contains("internal"))
+        XCTAssertTrue(LLMSummarizer.systemPrompt(owner: "Jordan Lee", organization: "Acme").contains("internal Acme meeting transcripts for Jordan Lee"))
+        XCTAssertTrue(LLMSummarizer.systemPrompt(owner: "Jordan Lee", organization: "").contains("meeting transcripts for Jordan Lee"))
+        XCTAssertFalse(LLMSummarizer.systemPrompt(owner: "Jordan Lee", organization: "").contains("internal"))
     }
 
     func reply(_ text: String, stop: String = "end_turn") -> Data {
@@ -58,7 +58,7 @@ final class SummarizerTests: XCTestCase {
     }
 
     func testPromptAsksForAShortOverviewTopicsDecisionsAndHeadline() {
-        let p = ClaudeSummarizer.systemPrompt(owner: "Jordan Lee", organization: "")
+        let p = LLMSummarizer.systemPrompt(owner: "Jordan Lee", organization: "")
         XCTAssertTrue(p.contains("3 to 4 plain sentences"))
         XCTAssertTrue(p.contains("topics"))
         XCTAssertTrue(p.contains("**bold**"))
@@ -102,7 +102,7 @@ final class SummarizerTests: XCTestCase {
                         "content": [["type": "text", "text": #"{"summary":"S","topics":[],"action_items":[],"decisions":[],"headline":"H","kind":"K","has_outcomes":false}"#]]]))
         }
         let log = UsageLog(directory: tempDirectory())
-        let s = ClaudeSummarizer(apiKey: "k", session: StubURLProtocol.session(), usage: log)
+        let s = LLMSummarizer(apiKey: "k", session: StubURLProtocol.session(), usage: log)
         _ = try await UsageContext.$callID.withValue("call-2") { try await s.summarize(transcript: "x", title: "T") }
         let e = try XCTUnwrap(log.all().first)
         XCTAssertEqual(e.callID, "call-2")
@@ -115,7 +115,7 @@ final class SummarizerTests: XCTestCase {
     }
 
     func testPromptGivesBookmarkedMomentsWeight() {
-        XCTAssertTrue(ClaudeSummarizer.systemPrompt(owner: "David Webber", organization: "").contains("★ Bookmarked"))
+        XCTAssertTrue(LLMSummarizer.systemPrompt(owner: "David Webber", organization: "").contains("★ Bookmarked"))
     }
 
     func testSendsKnownTagsAndParsesTags() async throws {

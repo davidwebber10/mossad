@@ -14,30 +14,19 @@ public struct ChatLink: Equatable, Sendable {
     }
 }
 
-public enum ChatError: Error, CustomStringConvertible {
-    case tooManySteps
-
-    public var description: String { "Claude looked up too many things without an answer. Try a narrower question." }
-}
-
 /// Answers one chat message with Claude and the meeting tools: Claude decides what to look up, Mossad runs each
 /// lookup on this Mac, and the loop ends when Claude answers. Earlier turns go in as plain text.
 public struct ChatAgent: Sendable {
-    static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
-    static let maxRounds = 12
-
-    private let apiKey: String
-    private let model: String
-    private let session: URLSession
+    private let llm: any LanguageModel
     private let ownerName: String
-    private let usage: UsageLog?
+
+    public init(llm: any LanguageModel, ownerName: String) {
+        self.llm = llm
+        self.ownerName = ownerName
+    }
 
     public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared, ownerName: String, usage: UsageLog? = nil) {
-        self.apiKey = apiKey
-        self.model = model
-        self.session = session
-        self.ownerName = ownerName
-        self.usage = usage
+        self.init(llm: AnthropicModel(apiKey: apiKey, model: model, session: session, usage: usage), ownerName: ownerName)
     }
 
     static func system(owner: String, tools: ChatTools, now: Date) -> String {
@@ -69,50 +58,10 @@ public struct ChatAgent: Sendable {
     public func answer(_ question: String, history: [ChatMessage], records: [CallRecord], now: Date = Date(),
                        onStep: @escaping @Sendable (String) -> Void) async throws -> String {
         let tools = ChatTools(records: records, owner: ownerName)
-        var messages: [[String: Any]] = history.map { ["role": $0.role.rawValue, "content": $0.text] }
-        messages.append(["role": "user", "content": question])
-        let system = Self.system(owner: ownerName, tools: tools, now: now)
-        for _ in 0..<Self.maxRounds {
-            let reply = try await send(system: system, messages: messages)
-            let content = reply["content"] as? [[String: Any]] ?? []
-            if reply["stop_reason"] as? String == "refusal" { throw SummaryError.refused }
-            let calls = content.filter { $0["type"] as? String == "tool_use" }
-            guard reply["stop_reason"] as? String == "tool_use", !calls.isEmpty else {
-                return content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: "\n\n")
-            }
-            // The assistant turn goes back exactly as sent: its thinking must stay with it.
-            messages.append(["role": "assistant", "content": content])
-            let results: [[String: Any]] = calls.map { call in
-                let name = call["name"] as? String ?? "", input = call["input"] as? [String: Any] ?? [:]
-                onStep(ChatTools.step(name, input: input) { id in tools.records.first { $0.id == id }?.title })
-                return ["type": "tool_result", "tool_use_id": call["id"] as? String ?? "", "content": tools.run(name, input: input)]
-            }
-            messages.append(["role": "user", "content": results])
+        return try await llm.runTools(system: Self.system(owner: ownerName, tools: tools, now: now), history: history, question: question,
+                                      tools: ChatTools.definitions, purpose: .question) { name, input in
+            onStep(ChatTools.step(name, input: input) { id in tools.records.first { $0.id == id }?.title })
+            return tools.run(name, input: input)
         }
-        throw ChatError.tooManySteps
-    }
-
-    private func send(system: String, messages: [[String: Any]]) async throws -> [String: Any] {
-        var request = URLRequest(url: Self.endpoint)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 600
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta")
-        request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": model, "max_tokens": 16_000, "fallbacks": "default", "system": system,
-            "output_config": ["effort": "medium"], "tools": ChatTools.definitions, "messages": messages,
-        ] as [String: Any])
-        let (data, response) = try await session.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else { throw SummaryError.http(status, String(decoding: data.prefix(500), as: UTF8.self)) }
-        guard let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw SummaryError.malformed }
-        if let u = reply["usage"] as? [String: Any] {
-            usage?.record(service: .claude, purpose: .question, model: reply["model"] as? String ?? model,
-                          inputTokens: u["input_tokens"] as? Int, outputTokens: u["output_tokens"] as? Int,
-                          cacheReadTokens: u["cache_read_input_tokens"] as? Int, cacheWriteTokens: u["cache_creation_input_tokens"] as? Int)
-        }
-        return reply
     }
 }

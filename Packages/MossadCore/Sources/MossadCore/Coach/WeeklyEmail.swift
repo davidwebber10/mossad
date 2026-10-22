@@ -74,11 +74,15 @@ public protocol DigestWriting: Sendable {
 }
 
 /// Writes the weekly email with Claude from the week's reviews and the profile.
-public struct ClaudeDigestWriter: DigestWriting {
-    private let client: ClaudeJSON
+public struct LLMDigestWriter: DigestWriting {
+    private let llm: any LanguageModel
+
+    public init(llm: any LanguageModel) {
+        self.llm = llm
+    }
 
     public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared, usage: UsageLog? = nil) {
-        client = ClaudeJSON(apiKey: apiKey, model: model, session: session, usage: usage, purpose: .weeklyEmail)
+        self.init(llm: AnthropicModel(apiKey: apiKey, model: model, session: session, usage: usage))
     }
 
     public func digest(owner: String, reviews: [(title: String, date: Date, review: CoachReview)], profile: CoachProfile) async throws -> WeeklyDigest {
@@ -105,7 +109,8 @@ public struct ClaudeDigestWriter: DigestWriting {
             "subject": Schema.string, "intro": Schema.string,
             "improved": Schema.array(Schema.string), "to_work": Schema.array(Schema.string), "focus": Schema.string,
         ])
-        let out = try await client.call(system: system, user: user.joined(separator: "\n"), schema: schema, as: Output.self)
+        let out = try await llm.json(system: system, user: user.joined(separator: "\n"), schema: schema, effort: .medium,
+                                     purpose: .weeklyEmail, as: Output.self)
         return WeeklyDigest(subject: out.subject, intro: out.intro, improved: out.improved, toWork: out.to_work, focus: out.focus)
     }
 

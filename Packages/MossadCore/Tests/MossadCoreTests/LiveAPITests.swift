@@ -63,7 +63,7 @@ final class LiveAPITests: XCTestCase {
         [00:00:15] David Webber: Good. Can you send me the updated forecast by Thursday?
         [00:00:19] Alex Rivera: Yes, I will send it Thursday morning.
         """
-        let result = try await ClaudeSummarizer(apiKey: key).summarize(transcript: transcript, title: "Cushion check-in")
+        let result = try await LLMSummarizer(apiKey: key).summarize(transcript: transcript, title: "Cushion check-in")
         print("LIVE summary: \(result.summary) | items: \(result.actionItems)")
         XCTAssertFalse(result.summary.isEmpty)
         XCTAssertTrue(result.actionItems.contains { $0.owner == "Alex Rivera" && $0.task.lowercased().contains("forecast") })
@@ -89,9 +89,9 @@ final class LiveAPITests: XCTestCase {
         return r
     }
 
-    func testClaudeCoachReviewsACall() async throws {
+    func testLLMCoachReviewsACall() async throws {
         guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
-        let result = try await ClaudeCoach(apiKey: key, ownerName: "David Webber").review(record: syntheticCall(), profile: CoachProfile(), tone: nil)
+        let result = try await LLMCoach(apiKey: key, ownerName: "David Webber").review(record: syntheticCall(), profile: CoachProfile(), tone: nil)
         print("LIVE coach: \(result.review.headline) | value: \(String(describing: result.review.value)) | improve: \(result.review.improvements.map(\.title))")
         XCTAssertFalse(result.review.improvements.isEmpty)
         XCTAssertNotNil(result.review.value)
@@ -103,7 +103,7 @@ final class LiveAPITests: XCTestCase {
         let review = CoachReview(headline: "Long openings", overview: "You took 90 s to reach the point.", strengths: [],
                                  improvements: [CoachPoint(title: "Lead with the ask", observation: "O", quote: "Q", at: 3, principle: "BLUF", tryInstead: "T")],
                                  focusProgress: nil)
-        let digest = try await ClaudeDigestWriter(apiKey: key).digest(owner: "David Webber", reviews: [(title: "Cushion check-in", date: Date(), review: review)],
+        let digest = try await LLMDigestWriter(apiKey: key).digest(owner: "David Webber", reviews: [(title: "Cushion check-in", date: Date(), review: review)],
                                                                     profile: CoachProfile())
         print("LIVE digest: \(digest.subject) | \(digest.focus)")
         XCTAssertFalse(digest.subject.isEmpty)
@@ -170,7 +170,7 @@ final class LiveAPITests: XCTestCase {
 
         let library = VoiceLibrary(directory: paths.voices)
         let pipeline = Pipeline(paths: paths, transcriber: AssemblyAIClient(apiKey: aai, pollInterval: .seconds(2)), library: library,
-                                embeddings: FluidEmbeddingProvider(), calendar: FakeCalendar(), summarizer: ClaudeSummarizer(apiKey: ant),
+                                embeddings: FluidEmbeddingProvider(), calendar: FakeCalendar(), summarizer: LLMSummarizer(apiKey: ant),
                                 notify: { _ in })
         await pipeline.process(id)
         let r = try CallRecord.load(from: dir)
