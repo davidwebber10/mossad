@@ -8,6 +8,10 @@ public enum APIKey: String, CaseIterable, Sendable {
     case cloudSecret
     /// Sends the coach's weekly email.
     case resend
+    case openai, openrouter, deepgram, elevenlabs
+    case postmark, sendgrid, mailgun, brevo
+    /// The secret access key for Amazon SES.
+    case sesSecret
 
     /// Finds the key in an environment: the standard name first, then a common variant
     /// (`ASSEMBLYAI`, or a named Anthropic key such as `ANTHROPIC_API_KEY_TEAM`).
@@ -17,6 +21,15 @@ public enum APIKey: String, CaseIterable, Sendable {
         case .anthropic: env["ANTHROPIC_API_KEY"] ?? env.keys.filter { $0.hasPrefix("ANTHROPIC_API_KEY_") }.sorted().first.flatMap { env[$0] }
         case .cloudSecret: env["MOSSAD_CLOUD_SECRET"]
         case .resend: env["RESEND_API_KEY"]
+        case .openai: env["OPENAI_API_KEY"]
+        case .openrouter: env["OPENROUTER_API_KEY"]
+        case .deepgram: env["DEEPGRAM_API_KEY"]
+        case .elevenlabs: env["ELEVENLABS_API_KEY"]
+        case .postmark: env["POSTMARK_SERVER_TOKEN"]
+        case .sendgrid: env["SENDGRID_API_KEY"]
+        case .mailgun: env["MAILGUN_API_KEY"]
+        case .brevo: env["BREVO_API_KEY"]
+        case .sesSecret: env["AWS_SECRET_ACCESS_KEY"]
         }
         return found?.isEmpty == false ? found : nil
     }

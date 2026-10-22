@@ -76,9 +76,11 @@ public final class UsageLog: Sendable {
 
     public func record(service: UsageEvent.Service, purpose: UsageEvent.Purpose, model: String?, audioSeconds: Double? = nil,
                        inputTokens: Int? = nil, outputTokens: Int? = nil, cacheReadTokens: Int? = nil, cacheWriteTokens: Int? = nil,
-                       at date: Date = Date()) {
-        record(UsageEvent(date: date, callID: UsageContext.callID, service: service, purpose: purpose, model: model, audioSeconds: audioSeconds,
-                          inputTokens: inputTokens, outputTokens: outputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens))
+                       costUSD: Double? = nil, at date: Date = Date()) {
+        var event = UsageEvent(date: date, callID: UsageContext.callID, service: service, purpose: purpose, model: model, audioSeconds: audioSeconds,
+                               inputTokens: inputTokens, outputTokens: outputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
+        event.costUSD = costUSD
+        record(event)
     }
 
     public func all() -> [UsageEvent] {
