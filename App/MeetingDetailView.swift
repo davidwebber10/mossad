@@ -203,6 +203,8 @@ private extension View {
 struct MeetingPeople {
     struct Speaker {
         let key: String
+        /// Every speaker key with this name: a merged meeting has one per recording.
+        var keys: [String]
         let name: String
         let email: String?
         let color: Color
@@ -222,14 +224,24 @@ struct MeetingPeople {
         // The owner is always the first color.
         if let owner = order.firstIndex(where: { names[$0] == ownerName }) { order.insert(order.remove(at: owner), at: 0) }
         let profiles = library.profiles
-        speakers = order.enumerated().map { i, key in
+        // A named person appears once, however many keys they have; each unnamed voice stays its own speaker.
+        var list: [Speaker] = []
+        var byKey: [String: Int] = [:]
+        for key in order {
             let name = names[key] ?? key
             let known = record.speakerNames[key] != nil
-            return Speaker(key: key, name: name, email: profiles.first { $0.name == name }?.email,
-                           color: Theme.speakerPalette[i % Theme.speakerPalette.count],
-                           isOwner: name == ownerName, isUnknown: !known)
+            if known, let i = list.firstIndex(where: { !$0.isUnknown && $0.name == name }) {
+                list[i].keys.append(key)
+                byKey[key] = i
+                continue
+            }
+            byKey[key] = list.count
+            list.append(Speaker(key: key, keys: [key], name: name, email: profiles.first { $0.name == name }?.email,
+                                color: Theme.speakerPalette[list.count % Theme.speakerPalette.count],
+                                isOwner: name == ownerName, isUnknown: !known))
         }
-        byKey = Dictionary(uniqueKeysWithValues: speakers.map { ($0.key, $0) })
+        speakers = list
+        self.byKey = byKey.mapValues { list[$0] }
         self.names = names
         attendees = record.attendees.map { a in
             guard a.contains("@") else { return (a, nil) }
@@ -283,8 +295,8 @@ private struct SpeakerChip: View {
                     Button("Cancel") { editing = false }
                     Button("Save") {
                         let trimmedEmail = email.trimmingCharacters(in: .whitespaces)
-                        controller.applyNames(callID: callID, names: [speaker.key: name],
-                                              emails: trimmedEmail.isEmpty ? [:] : [speaker.key: trimmedEmail])
+                        controller.applyNames(callID: callID, names: Dictionary(uniqueKeysWithValues: speaker.keys.map { ($0, name) }),
+                                              emails: trimmedEmail.isEmpty ? [:] : Dictionary(uniqueKeysWithValues: speaker.keys.map { ($0, trimmedEmail) }))
                         editing = false
                     }
                     .buttonStyle(.borderedProminent)

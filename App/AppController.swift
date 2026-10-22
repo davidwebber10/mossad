@@ -65,6 +65,16 @@ final class AppController: ObservableObject {
     var personToOpen: String?
     /// Calendar events still to come, for the Upcoming list and the menu bar.
     @Published private(set) var upcoming: [UpcomingMeeting] = []
+    /// The Mac's calendars, for the choice in Settings.
+    @Published private(set) var calendars: [CalendarInfo] = []
+    /// The calendars Mossad reads; saved once chosen, and defaulted to the owner's own on first use.
+    @Published var chosenCalendars: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "calendarIDs") ?? []) {
+        didSet {
+            UserDefaults.standard.set(Array(chosenCalendars), forKey: "calendarIDs")
+            calendar.choose(chosenCalendars)
+            refreshUpcoming()
+        }
+    }
     private var upcomingTimer: Timer?
     /// The Meetings search text; a tag click sets it to "#Tag".
     @Published var meetingQuery = ""
@@ -143,6 +153,8 @@ final class AppController: ObservableObject {
         Log.directory = paths.logs
         library = VoiceLibrary(directory: paths.voices)
         recorder = Self.makeRecorder(paths: paths)
+        // The chosen calendars apply before anything matches a call to an invite.
+        calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
 
         // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
@@ -721,6 +733,13 @@ final class AppController: ObservableObject {
 
     func refreshUpcoming() {
         let calendar = calendar
+        calendars = calendar.calendars()
+        if UserDefaults.standard.stringArray(forKey: "calendarIDs") == nil, !calendars.isEmpty {
+            // The first time, read only the owner's own calendars, not shared or subscribed ones.
+            chosenCalendars = CalendarInfo.defaults(calendars, ownerName: ownerName)
+            return
+        }
+        calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         Task {
             let now = Date()
             var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))

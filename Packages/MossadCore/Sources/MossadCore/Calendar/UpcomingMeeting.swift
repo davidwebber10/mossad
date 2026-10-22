@@ -18,11 +18,13 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
         let horizon = now.addingTimeInterval(Double(days) * 86_400)
         return events.filter { !$0.isAllDay && $0.end > now && $0.start < horizon }
             .sorted { $0.start < $1.start }
-            .prefix(limit)
-            .map { e in
+            .compactMap { e in
+                // Only calls: an event without a call link (lunch, a focus block) is not one.
                 let (platform, link) = callLink(in: e.text)
+                guard platform != nil else { return nil }
                 return UpcomingMeeting(title: e.title, start: e.start, end: e.end, attendees: e.attendees, platform: platform, link: link)
             }
+            .prefix(limit).map { $0 }
     }
 
     /// The first URL in the event's location, notes, or URL that points at a call app.

@@ -10,12 +10,25 @@ final class UpcomingTests: XCTestCase {
                           attendees: attendees, text: text, isAllDay: allDay)
     }
 
-    func testShowsTimedEventsThatHaveNotEndedSoonestFirst() {
+    func testShowsTimedCallsThatHaveNotEndedSoonestFirst() {
+        let link = "https://meet.google.com/abc-defg-hij"
         let events = [
-            event("Later", in: 120), event("Running", in: -10), event("Done", in: -60), event("Holiday", in: 0, length: 1440, allDay: true),
-            event("Far", in: 60 * 24 * 9), event("Soon", in: 15),
+            event("Later", in: 120, text: link), event("Running", in: -10, text: link), event("Done", in: -60, text: link),
+            event("Holiday", in: 0, length: 1440, text: link, allDay: true), event("Far", in: 60 * 24 * 9, text: link), event("Soon", in: 15, text: link),
+            event("Lunch", in: 30, text: "Cafe"),
         ]
+        // Lunch has no call link, so it is not a call.
         XCTAssertEqual(UpcomingMeeting.from(events, now: now).map(\.title), ["Running", "Soon", "Later"])
+    }
+
+    func testTheDefaultCalendarsAreTheOwnersOwn() {
+        let all = [CalendarInfo(id: "1", title: "David Webber", account: "dwebber@polywood.com"),
+                   CalendarInfo(id: "2", title: "Ecom Schedules", account: "dwebber@polywood.com"),
+                   CalendarInfo(id: "3", title: "dwebber@polywood.com", account: "dwebber@polywood.com"),
+                   CalendarInfo(id: "4", title: "US Holidays", account: "Other")]
+        XCTAssertEqual(CalendarInfo.defaults(all, ownerName: "David Webber"), ["1", "3"])
+        // With no calendar of their own, every calendar is read rather than none.
+        XCTAssertEqual(CalendarInfo.defaults([all[1], all[3]], ownerName: "David Webber"), ["2", "4"])
     }
 
     func testFindsTheCallLinkAndPlatform() throws {
@@ -24,9 +37,7 @@ final class UpcomingTests: XCTestCase {
         XCTAssertEqual(m.link?.absoluteString, "https://meet.google.com/abc-defg-hij?authuser=0")
         let zoom = try XCTUnwrap(UpcomingMeeting.from([event("Z", in: 5, text: "https://us02web.zoom.us/j/123456789?pwd=x")], now: now).first)
         XCTAssertEqual(zoom.platform, .zoom)
-        let none = try XCTUnwrap(UpcomingMeeting.from([event("Lunch", in: 5, text: "Cafe")], now: now).first)
-        XCTAssertNil(none.platform)
-        XCTAssertNil(none.link)
+        XCTAssertTrue(UpcomingMeeting.from([event("Lunch", in: 5, text: "Cafe")], now: now).isEmpty)
     }
 
     func testEarlierMeetingsOfTheSameSeriesNewestFirst() {
@@ -37,7 +48,7 @@ final class UpcomingTests: XCTestCase {
             return r
         }
         let records = [record("a", "Weekly Sync", daysAgo: 14), record("b", "weekly sync", daysAgo: 7), record("c", "Other", daysAgo: 1)]
-        let m = UpcomingMeeting.from([event("Weekly Sync", in: 30)], now: now)[0]
+        let m = UpcomingMeeting.from([event("Weekly Sync", in: 30, text: "https://zoom.us/j/123456789")], now: now)[0]
         XCTAssertEqual(m.earlier(in: records).map(\.id), ["b", "a"])
     }
 }

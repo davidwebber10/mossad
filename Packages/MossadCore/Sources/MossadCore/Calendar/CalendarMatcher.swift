@@ -20,6 +20,30 @@ public struct CalendarEventInfo: Sendable, Equatable {
     }
 }
 
+/// One calendar on the Mac, for choosing which ones Mossad reads.
+public struct CalendarInfo: Identifiable, Equatable, Sendable, Hashable {
+    public var id: String
+    public var title: String
+    /// The account it belongs to, such as an email address.
+    public var account: String
+
+    public init(id: String, title: String, account: String) {
+        self.id = id
+        self.title = title
+        self.account = account
+    }
+
+    /// The owner's own calendars: titled with their name, or the account's main calendar (titled with the
+    /// account's own address). All of them when there is none, so matching never silently stops.
+    public static func defaults(_ calendars: [CalendarInfo], ownerName: String) -> Set<String> {
+        let own = calendars.filter {
+            $0.title.caseInsensitiveCompare(ownerName) == .orderedSame
+                || ($0.title.contains("@") && $0.title.caseInsensitiveCompare($0.account) == .orderedSame)
+        }
+        return Set((own.isEmpty ? calendars : own).map(\.id))
+    }
+}
+
 public protocol CalendarSource: Sendable {
     func events(from: Date, to: Date) async -> [CalendarEventInfo]
 }
@@ -90,10 +114,26 @@ public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
         }
     }
 
+    /// The calendars to read; nil reads every calendar.
+    private var chosen: Set<String>?
+
+    public func choose(_ ids: Set<String>?) {
+        lock.withLock { chosen = ids }
+    }
+
+    public func calendars() -> [CalendarInfo] {
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return [] }
+        return currentStore().calendars(for: .event).map { CalendarInfo(id: $0.calendarIdentifier, title: $0.title, account: $0.source?.title ?? "") }
+            .sorted { ($0.account, $0.title) < ($1.account, $1.title) }
+    }
+
     public func events(from: Date, to: Date) async -> [CalendarEventInfo] {
         guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return [] }
         let store = currentStore()
-        let predicate = store.predicateForEvents(withStart: from, end: to, calendars: nil)
+        let ids = lock.withLock { chosen }
+        let calendars = ids.map { ids in store.calendars(for: .event).filter { ids.contains($0.calendarIdentifier) } }
+        if calendars?.isEmpty == true { return [] }
+        let predicate = store.predicateForEvents(withStart: from, end: to, calendars: calendars)
         return store.events(matching: predicate).map { e in
             CalendarEventInfo(
                 title: e.title ?? "Untitled",

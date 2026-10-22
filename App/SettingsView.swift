@@ -33,6 +33,9 @@ struct SettingsView: View {
                         group("Recording") { recording }
                     }
                 }
+                group("Calendars", footer: "Mossad reads only the checked calendars, to name calls from their invites and to list upcoming calls.") {
+                    calendarChoices
+                }
                 group("Providers", footer: "Keys are stored in the Keychain. Each provider bills your own account.") { providers }
                 group("Communication coach", footer: "Reviews use the AI provider above. The coach's notes stay on this Mac in the Coach folder.") { coach }
                 group("Use your meetings in other AI apps",
@@ -170,6 +173,25 @@ struct SettingsView: View {
             }
             Text("Notes and transcripts are always kept. A recording uses about 14 MB an hour.")
                 .font(.system(size: 11)).foregroundStyle(.tertiary).padding(.leading, 22)
+        }
+    }
+
+    @ViewBuilder
+    private var calendarChoices: some View {
+        if controller.calendars.isEmpty {
+            Text("Allow Calendars above to choose them.").foregroundStyle(.secondary)
+        }
+        ForEach(Array(Dictionary(grouping: controller.calendars, by: \.account).sorted { $0.key < $1.key }), id: \.key) { account, list in
+            VStack(alignment: .leading, spacing: 4) {
+                Text(account.isEmpty ? "On this Mac" : account).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                ForEach(list) { c in
+                    Toggle(c.title, isOn: Binding(get: { controller.chosenCalendars.contains(c.id) },
+                                                  set: { on in
+                                                      if on { controller.chosenCalendars.insert(c.id) } else { controller.chosenCalendars.remove(c.id) }
+                                                  }))
+                    .toggleStyle(.checkbox)
+                }
+            }
         }
     }
 
