@@ -23,6 +23,7 @@ extension AppController {
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
             coaching = false
+            syncToICloud()
             await sendCoachEmail()
         }
     }

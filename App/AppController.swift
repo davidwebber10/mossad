@@ -139,6 +139,10 @@ final class AppController: ObservableObject {
     @AppStorage("mailEurope") var mailEurope = false
     @AppStorage("mailRegion") var mailRegion = "us-east-1"
     @AppStorage("mailAccessKeyID") var mailAccessKeyID = ""
+    @AppStorage("iCloudSync") var iCloudSyncEnabled = true
+    var iCloudSyncing = false
+    var iCloudSyncAgain = false
+    lazy var cloudSync = CloudSync(paths: paths)
     @AppStorage("coachEnabled") var coachEnabled = false
     /// Calls that start before this (seconds since 1970) are not coached, so turning the coach on does not review years of calls.
     @AppStorage("coachSince") var coachSince: Double = 0
@@ -693,6 +697,7 @@ final class AppController: ObservableObject {
         await work()
         syncCloud()
         runCoach()
+        syncToICloud()
         processing -= 1
         refresh()
     }
@@ -706,6 +711,7 @@ final class AppController: ObservableObject {
             Retention.sweep(audioRoot: audio, recordingsAfterDays: days)
         }.value
         runCoach()
+        syncToICloud()
     }
 
     private func requestPermissions() {

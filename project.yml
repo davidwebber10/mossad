@@ -39,10 +39,14 @@ targets:
         com.apple.security.device.audio-input: true
         com.apple.security.automation.apple-events: true
         com.apple.security.personal-information.calendars: true
+        # The iPhone app reads finished meetings from this container.
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.dwebber.mossad]
+        com.apple.developer.icloud-services: [CloudKit]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dwebber.mossad
-        CODE_SIGN_STYLE: Manual
+        # iCloud needs a provisioning profile; Xcode makes it (build with -allowProvisioningUpdates).
+        CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 35VNBDXR6B
         ENABLE_HARDENED_RUNTIME: YES

@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 xcodegen generate --quiet
 # Local builds carry the same numbers as a release of this commit, so the updater only offers newer ones.
 VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)
-xcodebuild -project Mossad.xcodeproj -scheme Mossad -configuration Release -derivedDataPath build \
+xcodebuild -project Mossad.xcodeproj -scheme Mossad -configuration Release -derivedDataPath build -allowProvisioningUpdates \
   MARKETING_VERSION="${VERSION:-2.0}" CURRENT_PROJECT_VERSION="$(git rev-list --count HEAD)" build -quiet
 # Never restart Mossad in the middle of a call: the recording would split in two.
 if [ "${MOSSAD_FORCE_INSTALL:-}" != "1" ] && pgrep -x Mossad >/dev/null \

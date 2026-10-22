@@ -16,7 +16,7 @@ NOTES=${2:-$(git log --pretty='- %s' "$PREVIOUS"..HEAD)}
 BUILD=$(git rev-list --count HEAD)
 
 xcodegen generate --quiet
-xcodebuild -project Mossad.xcodeproj -scheme Mossad -configuration Release -derivedDataPath build \
+xcodebuild -project Mossad.xcodeproj -scheme Mossad -configuration Release -derivedDataPath build -allowProvisioningUpdates \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" build -quiet
 
 OUT=build/release

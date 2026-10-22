@@ -43,6 +43,10 @@ struct SettingsView: View {
                     MCPSetup()
                 }
                 group("Storage") { StorageSettings() }
+                group("iPhone", footer: "Finished meetings, their summaries and transcripts, and the coach's notes go to your private iCloud, where Mossad for iPhone reads them. Audio stays where it is.") {
+                    switchRow("Sync meetings to iCloud", $controller.iCloudSyncEnabled)
+                        .onChange(of: controller.iCloudSyncEnabled) { _, on in if on { controller.syncToICloud() } }
+                }
                 group("Updates", footer: "New versions come from the Mossad releases on GitHub. Each one is signed, and an update never installs during a call.") {
                     UpdateSettings(updater: controller.updater)
                 }
