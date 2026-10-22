@@ -164,11 +164,21 @@ public struct ResendMailer: Mailing {
     }
 }
 
-/// Sends the weekly email when it is due. Returns the time to store as "last sent", or nil to try again later.
+/// Sends the weekly email when it is due. It only ever goes to the owner: one address, typed in Settings,
+/// never one taken from a meeting. Returns the time to store as "last sent", or nil to try again later.
 public enum WeeklyEmail {
+    /// One plain address such as me@example.com: no lists, no display names, no separators.
+    public static func isSingleAddress(_ s: String) -> Bool {
+        s.trimmingCharacters(in: .whitespaces).wholeMatch(of: /[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+/) != nil
+    }
+
     public static func sendIfDue(paths: Paths, owner: String, to: String, lastSent: Date?, now: Date = Date(),
                                  writer: any DigestWriting, mailer: any Mailing, calendar: Calendar = .current) async -> Date? {
         guard WeeklySchedule.isDue(lastSent: lastSent, now: now, calendar: calendar) else { return nil }
+        guard isSingleAddress(to) else {
+            Log.error("The weekly email needs exactly one address, your own; nothing was sent")
+            return nil
+        }
         let start = WeeklySchedule.weekStart(before: now, calendar: calendar), end = WeeklySchedule.weekEnd(before: now, calendar: calendar)
         let reviews = ProcessingQueue(paths: paths).allRecords()
             .filter { $0.start >= start && $0.start < end }
@@ -178,7 +188,7 @@ public enum WeeklyEmail {
         do {
             let profile = try CoachProfile.load(from: paths.coach)
             let digest = try await writer.digest(owner: owner, reviews: reviews, profile: profile)
-            try await mailer.send(to: to, subject: digest.subject, html: digest.html, text: digest.text)
+            try await mailer.send(to: to.trimmingCharacters(in: .whitespaces), subject: digest.subject, html: digest.html, text: digest.text)
             Log.info("Sent the weekly coaching email for \(reviews.count) calls")
             return now
         } catch {

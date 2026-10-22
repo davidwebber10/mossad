@@ -337,4 +337,22 @@ final class CoachTests: XCTestCase {
                                                  now: date(21), writer: fake, mailer: fake, calendar: cal)
         XCTAssertNil(notDue)
     }
+
+    func testTheEmailOnlyEverGoesToOneOwnAddress() async throws {
+        XCTAssertTrue(WeeklyEmail.isSingleAddress("me@example.com"))
+        XCTAssertTrue(WeeklyEmail.isSingleAddress(" me@example.com "))
+        for bad in ["", "me", "a@b.com, c@d.com", "a@b.com;c@d.com", "a@b.com c@d.com", "Me <a@b.com>, c@d.com", "a@@b.com"] {
+            XCTAssertFalse(WeeklyEmail.isSingleAddress(bad), bad)
+        }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let start = cal.date(from: DateComponents(year: 2026, month: 10, day: 14, hour: 12))!
+        let paths = try tempPaths([record("in", start: start)])
+        try CoachReview(headline: "in", overview: "", strengths: [], improvements: [], focusProgress: nil).save(in: paths.callDirectory("in"))
+        let fake = FakeMail()
+        let sent = await WeeklyEmail.sendIfDue(paths: paths, owner: "David Webber", to: "me@example.com, boss@example.com", lastSent: nil,
+                                               now: cal.date(from: DateComponents(year: 2026, month: 10, day: 21))!, writer: fake, mailer: fake, calendar: cal)
+        XCTAssertNil(sent)
+        XCTAssertTrue(fake.sent.isEmpty)
+    }
 }
