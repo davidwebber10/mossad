@@ -14,9 +14,17 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
     public static let days = 7
     public static let limit = 12
 
-    public static func from(_ events: [CalendarEventInfo], now: Date = Date(), days: Int = days, limit: Int = limit) -> [UpcomingMeeting] {
+    /// `recorded` hides events that are being recorded or were recorded: the call is already happening or done.
+    public static func from(_ events: [CalendarEventInfo], now: Date = Date(), days: Int = days, limit: Int = limit,
+                            recorded: [CallRecord] = []) -> [UpcomingMeeting] {
         let horizon = now.addingTimeInterval(Double(days) * 86_400)
-        return events.filter { !$0.isAllDay && $0.end > now && $0.start < horizon }
+        func isRecorded(_ e: CalendarEventInfo) -> Bool {
+            recorded.contains { r in
+                r.calendarTitle?.caseInsensitiveCompare(e.title) == .orderedSame
+                    && r.start < e.end && (r.status == .recording ? now : r.end) > e.start
+            }
+        }
+        return events.filter { !$0.isAllDay && $0.end > now && $0.start < horizon && !isRecorded($0) }
             .sorted { $0.start < $1.start }
             .compactMap { e in
                 // Only calls: an event without a call link (lunch, a focus block) is not one.

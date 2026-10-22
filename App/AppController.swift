@@ -68,7 +68,10 @@ final class AppController: ObservableObject {
     @Published private(set) var windowVisible = false
     private var occlusionObserver: NSObjectProtocol?
     /// Calendar events still to come, for the Upcoming list and the menu bar.
-    @Published private(set) var upcoming: [UpcomingMeeting] = []
+    /// The chosen calendars' events for the next days; `upcoming` filters them against the meetings.
+    @Published private(set) var calendarEvents: [CalendarEventInfo] = []
+    /// Calls still to come, without the ones being recorded or already recorded.
+    var upcoming: [UpcomingMeeting] { UpcomingMeeting.from(calendarEvents, recorded: meetings) }
     /// The Mac's calendars, for the choice in Settings.
     @Published private(set) var calendars: [CalendarInfo] = []
     /// The calendars Mossad reads; saved once chosen, and defaulted to the owner's own on first use.
@@ -756,7 +759,7 @@ final class AppController: ObservableObject {
                            CalendarEventInfo(title: "Tech Team Monthly Sync", start: now.addingTimeInterval(86_400), end: now.addingTimeInterval(90_000),
                                              attendees: ["Ed Ng", "Adam Stoffel", "Jeff Hill"], text: "", isAllDay: false)]
             }
-            upcoming = UpcomingMeeting.from(events, now: now)
+            calendarEvents = events
         }
     }
 

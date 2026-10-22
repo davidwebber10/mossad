@@ -58,4 +58,14 @@ final class UpcomingTests: XCTestCase {
         let m = UpcomingMeeting.from([event("Weekly Sync", in: 30, text: "https://zoom.us/j/123456789")], now: now)[0]
         XCTAssertEqual(m.earlier(in: records).map(\.id), ["b", "a"])
     }
+
+    func testAnEventBeingRecordedOrAlreadyRecordedIsNotUpcoming() {
+        let link = "https://meet.google.com/abc-defg-hij"
+        var live = CallRecord(id: "live", platform: .meet, bundleID: "", start: now.addingTimeInterval(-300), end: now, status: .recording)
+        live.calendarTitle = "Commercial Website Leadership TB"
+        let events = [event("Commercial Website Leadership TB", in: -10, length: 60, text: link),
+                      event("Crescendo Launch Sync", in: 15, text: link),
+                      event("Not joined yet", in: -5, text: link)]
+        XCTAssertEqual(UpcomingMeeting.from(events, now: now, recorded: [live]).map(\.title), ["Not joined yet", "Crescendo Launch Sync"])
+    }
 }

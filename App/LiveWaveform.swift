@@ -28,8 +28,10 @@ struct LiveWaveform: View {
                 Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).frame(width: 64, alignment: .leading)
             }
             TimelineView(.animation(minimumInterval: 0.08, paused: controller.isPaused || !active)) { _ in
+              // Read the levels here and hand them to the drawing as a value: a Canvas redraws only when its
+              // inputs change, so reading them inside the drawing left the bars frozen between redraws.
+              let levels = Array(meter.history.suffix(bars))
               Canvas { context, size in
-                let levels = Array(meter.history.suffix(bars))
                 let padded = Array(repeating: Float(0), count: max(0, bars - levels.count)) + levels
                 let step = size.width / CGFloat(bars)
                 let width = max(1.5, step * 0.55)
