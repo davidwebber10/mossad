@@ -115,6 +115,7 @@ public struct ChatTools: Sendable {
         var line = "call_id: \(r.id) | \(r.title) | \(day(r.start)) | \(Int((r.end.timeIntervalSince(r.start) / 60).rounded())) min | people: \(people(r).joined(separator: ", "))"
         if !r.tags.isEmpty { line += " | tags: \(r.tags.joined(separator: ", "))" }
         if let h = r.headline { line += " | \(h)" }
+        if let note = r.markdownPath { line += " | note: \(note)" }
         return line
     }
 

@@ -35,6 +35,10 @@ struct SettingsView: View {
                 }
                 group("Providers", footer: "Keys are stored in the Keychain. Each provider bills your own account.") { providers }
                 group("Communication coach", footer: "Reviews use the AI provider above. The coach's notes stay on this Mac in the Coach folder.") { coach }
+                group("Use your meetings in other AI apps",
+                      footer: "Read-only. Claude Code, Claude Desktop, and other MCP apps can search and read your meetings, the same way the Chat tab does. Mossad does not need to be open.") {
+                    MCPSetup()
+                }
                 group("Storage") { StorageSettings() }
             }
             .font(.system(size: 12))
@@ -423,5 +427,42 @@ private struct ModelPicker: View {
         .task(id: "\(provider.rawValue)-\(controller.hasKey(provider.key))") {
             models = (try? await ModelCatalog.fetch(provider, apiKey: controller.keychain.get(provider.key))) ?? []
         }
+    }
+}
+
+/// The commands that connect other AI apps to Mossad's MCP server.
+private struct MCPSetup: View {
+    @State private var copied: String?
+    private var binary: String { Bundle.main.executablePath ?? "/Applications/Mossad.app/Contents/MacOS/Mossad" }
+    private var claudeCode: String { "claude mcp add --scope user mossad -- \"\(binary)\" --mcp" }
+    private var desktop: String {
+        "\"mossad\": { \"command\": \"\(binary)\", \"args\": [\"--mcp\"] }"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            row("Claude Code", "Run this once in Terminal:", claudeCode)
+            row("Claude Desktop", "Add this inside \"mcpServers\" in claude_desktop_config.json:", desktop)
+        }
+    }
+
+    private func row(_ title: String, _ hint: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).fontWeight(.medium)
+            Text(hint).foregroundStyle(.secondary)
+            HStack(alignment: .top) {
+                Text(text).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(copied == title ? "Copied" : "Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    copied = title
+                }
+                .controlSize(.small)
+            }
+            .padding(8)
+            .background(Theme.field, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .padding(.vertical, 2)
     }
 }

@@ -10,6 +10,12 @@ struct MossadEntry {
             print(stored.isEmpty ? "No keys found in the environment." : "Stored: " + stored.map(\.rawValue).joined(separator: ", "))
             exit(stored.isEmpty ? 1 : 0)
         }
+        // `--mcp` serves the meetings to other AI apps over stdio, read-only, with no UI and no recording.
+        if CommandLine.arguments.contains("--mcp") {
+            let owner = UserDefaults.standard.string(forKey: "ownerName") ?? NSFullUserName()
+            MCPServer(paths: .live, owner: owner).run()
+            exit(0)
+        }
         MossadApp.main()
     }
 }
