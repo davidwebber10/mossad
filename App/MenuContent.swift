@@ -7,6 +7,8 @@ struct MenuContent: View {
     @ObservedObject var controller: AppController
     @ObservedObject var permissions: PermissionsMonitor
     @Environment(\.dismiss) private var dismiss
+    /// The panel stays in memory when closed; it animates only while open.
+    @State private var open = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -80,6 +82,9 @@ struct MenuContent: View {
         .font(.system(size: 13))
         .padding(8)
         .frame(width: 320)
+        .environment(\.animationsActive, open)
+        .onAppear { open = true }
+        .onDisappear { open = false }
         .environmentObject(controller)
     }
 

@@ -77,16 +77,22 @@ struct PlatformSquare: View {
 }
 
 /// A status dot; recording dots pulse with a fading ring.
+extension EnvironmentValues {
+    /// False while the window or panel cannot be seen: animations stop instead of drawing for nobody.
+    @Entry var animationsActive = true
+}
+
 struct StatusDot: View {
     let color: Color
     var size: CGFloat = 8
     var pulsing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.animationsActive) private var active
 
     var body: some View {
         Circle().fill(color).frame(width: size, height: size)
             .overlay {
-                if pulsing, !reduceMotion {
+                if pulsing, !reduceMotion, active {
                     // A phase animation changes only scale and opacity, so the ring cannot drift when the
                     // dot moves during layout (a repeating implicit animation also animated its position).
                     Circle().stroke(color.opacity(0.5), lineWidth: 2)

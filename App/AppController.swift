@@ -63,6 +63,10 @@ final class AppController: ObservableObject {
     @Published var selectedMeetingID: String?
     @Published var namingCallID: String?
     var personToOpen: String?
+    /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
+    /// alive, so animations check this and stop while it is hidden.
+    @Published private(set) var windowVisible = false
+    private var occlusionObserver: NSObjectProtocol?
     /// Calendar events still to come, for the Upcoming list and the menu bar.
     @Published private(set) var upcoming: [UpcomingMeeting] = []
     /// The Mac's calendars, for the choice in Settings.
@@ -772,6 +776,10 @@ final class AppController: ObservableObject {
             w.setContentSize(NSSize(width: 1240, height: 820))
             w.contentMinSize = NSSize(width: 980, height: 600)
             w.delegate = windowDelegate
+            occlusionObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: w, queue: .main) { [weak self] note in
+                let visible = (note.object as? NSWindow)?.occlusionState.contains(.visible) == true
+                Task { @MainActor in if self?.windowVisible != visible { self?.windowVisible = visible } }
+            }
             w.center()
             w.setFrameAutosaveName("MossadMain")
             window = w

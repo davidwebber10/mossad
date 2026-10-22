@@ -31,6 +31,7 @@ struct MainWindow: View {
             .ignoresSafeArea(.container, edges: .top)
         }
         .frame(minWidth: 980, minHeight: 600)
+        .environment(\.animationsActive, controller.windowVisible)
 
     }
 }
