@@ -48,6 +48,19 @@ final class LocalASRExperiment: XCTestCase {
                      totalAudio / 60, totalTime, totalAudio / max(totalTime, 0.01), 100 * Double(totalErrors) / Double(max(totalWords, 1)), totalWords))
     }
 
+    func testLocalTranscriberLabelsSpeakers() async throws {
+        guard let id = ProcessInfo.processInfo.environment["MOSSAD_ASR_CALLS"]?.split(separator: ",").first.map(String.init) else {
+            throw XCTSkip("MOSSAD_ASR_CALLS not set")
+        }
+        let dir = Paths.live.callDirectory(id)
+        let started = Date()
+        let utterances = try await LocalTranscriber().transcribe(file: dir.appendingPathComponent(Track.them.fileName), track: .them)
+        let reference = Set((try CallRecord.load(from: dir).themUtterances ?? []).map(\.speakerLabel))
+        print("LOCAL \(id): \(utterances.count) utterances, speakers \(Set(utterances.map(\.speakerLabel)).sorted()) (AssemblyAI found \(reference.count)), \(Int(Date().timeIntervalSince(started))) s")
+        for u in utterances.prefix(6) { print("LOCAL  [\(Int(u.start))s] \(u.speakerLabel): \(u.text.prefix(90))") }
+        XCTAssertFalse(utterances.isEmpty)
+    }
+
     /// Lowercase words without punctuation, and without the fillers that AssemblyAI keeps and Parakeet drops.
     static func words(_ text: String) -> [String] {
         let fillers: Set<String> = ["um", "uh", "uhm", "umm", "er", "erm", "hmm", "mm", "mhm"]

@@ -198,18 +198,19 @@ public actor Pipeline {
     private func stageChanged(_ id: String, _ track: Track, _ stage: TranscriptionStage) {
         guard transcribing.contains(id) else { return }
         stages[id, default: [:]][track] = stage
+        let name = transcriber.serviceName
         func text(_ t: Track, _ s: TranscriptionStage) -> String {
             switch s {
-            case .uploading: t == .me ? "Uploading your mic to AssemblyAI" : "Uploading the call audio to AssemblyAI"
-            case .queued: "Waiting in AssemblyAI's queue"
-            case .transcribing: "AssemblyAI is transcribing"
+            case .uploading: t == .me ? "Uploading your mic to \(name)" : "Uploading the call audio to \(name)"
+            case .queued: "Waiting in \(name)'s queue"
+            case .transcribing: "\(name) is transcribing"
             }
         }
         let current = stages[id] ?? [:]
         let parts = [Track.me, .them].compactMap { t in current[t].map { (t, $0) } }
         let line = Set(parts.map { text($0.0, $0.1) }).count == 1
             ? text(parts[0].0, parts[0].1)
-            : parts.map { "\($0.0 == .me ? "Mic" : "Call audio"): \(text($0.0, $0.1).replacingOccurrences(of: " to AssemblyAI", with: ""))" }.joined(separator: " · ")
+            : parts.map { "\($0.0 == .me ? "Mic" : "Call audio"): \(text($0.0, $0.1).replacingOccurrences(of: " to \(name)", with: ""))" }.joined(separator: " · ")
         onDetail(id, line)
     }
 

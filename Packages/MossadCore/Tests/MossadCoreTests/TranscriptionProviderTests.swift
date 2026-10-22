@@ -123,3 +123,19 @@ final class TranscriptionProviderTests: XCTestCase {
         XCTAssertEqual(cost(.openai, "gpt-4o-transcribe-diarize"), 0.36, accuracy: 0.0001)
     }
 }
+
+final class LocalTranscriberTests: XCTestCase {
+    func testEachWordTakesTheSpeakerOfTheSegmentAtItsMiddleOrTheNearestOne() {
+        let words = [("Hi", 0.1, 0.4), ("there.", 0.5, 0.9), ("Yes.", 2.1, 2.4), ("Late.", 9.0, 9.3)]
+        let segments = [(start: 0.0, end: 1.5, speaker: "S1"), (start: 2.0, end: 3.0, speaker: "S2"), (start: 6.0, end: 8.5, speaker: "S1")]
+        let spoken = LocalTranscriber.assign(words.map { (text: $0.0, start: $0.1, end: $0.2) }, to: segments)
+        XCTAssertEqual(spoken.map(\.speaker), ["S1", "S1", "S2", "S1"])
+        XCTAssertEqual(SpokenWord.utterances(spoken, track: .them).map(\.speakerLabel), ["A", "B", "A"])
+    }
+
+    func testLocalIsFreeAndNeedsNoKey() {
+        XCTAssertNil(TranscriptionProvider.local.key)
+        XCTAssertTrue(TranscriptionProvider.local.rating.free)
+        XCTAssertTrue(TranscriptionProvider.local.rating.basis.contains("your calls"))
+    }
+}

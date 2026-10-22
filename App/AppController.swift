@@ -263,8 +263,11 @@ final class AppController: ObservableObject {
         let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
         let organization = organization.trimmingCharacters(in: .whitespaces)
         let provider = transcriptionProvider
-        let transcriber: Transcribing = keychain.get(provider.key).map { provider.transcriber(model: transcriptionModel, apiKey: $0, usage: usage) }
-            ?? MissingKeyTranscriber(service: provider.displayName)
+        let transcriber: Transcribing = if let key = provider.key {
+            keychain.get(key).map { provider.transcriber(model: transcriptionModel, apiKey: $0, usage: usage) } ?? MissingKeyTranscriber(service: provider.displayName)
+        } else {
+            provider.transcriber(model: transcriptionModel, apiKey: "", usage: usage)
+        }
         let summarizer: Summarizing? = languageModel.map { LLMSummarizer(llm: $0, ownerName: owner, organization: organization) }
         let notifier = notifier
         pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: FluidEmbeddingProvider(),

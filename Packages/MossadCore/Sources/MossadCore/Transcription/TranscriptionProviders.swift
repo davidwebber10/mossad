@@ -102,6 +102,7 @@ private func send(_ request: URLRequest, provider: String, session: URLSession) 
 
 /// Deepgram pre-recorded transcription: one upload, words with speakers.
 public struct DeepgramTranscriber: Transcribing {
+    public var serviceName: String { "Deepgram" }
     private let apiKey: String
     private let model: String
     private let session: URLSession
@@ -145,6 +146,7 @@ public struct DeepgramTranscriber: Transcribing {
 
 /// ElevenLabs Scribe: one upload, words with speakers.
 public struct ElevenLabsTranscriber: Transcribing {
+    public var serviceName: String { "ElevenLabs" }
     private let apiKey: String
     private let model: String
     private let session: URLSession
@@ -189,6 +191,7 @@ public struct ElevenLabsTranscriber: Transcribing {
 /// OpenAI's diarizing transcription model. It returns segments without word times, and OpenAI deprecated it
 /// (shutdown 2027-02-26), so it is offered but not recommended.
 public struct OpenAITranscriber: Transcribing {
+    public var serviceName: String { "OpenAI" }
     /// OpenAI's upload limit.
     static let maxBytes = 25 * 1024 * 1024
 

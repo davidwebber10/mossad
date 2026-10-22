@@ -8,6 +8,15 @@ public struct Rating: Equatable, Sendable {
     public var price: Int
     /// Where the numbers come from, for the tooltip.
     public var basis: String
+    /// Costs nothing to run, shown as "Free" in place of a price level.
+    public var free = false
+
+    public init(stars: [String: Int], price: Int, basis: String, free: Bool = false) {
+        self.stars = stars
+        self.price = price
+        self.basis = basis
+        self.free = free
+    }
 
     public var dollars: String { String(repeating: "$", count: max(1, min(4, price))) }
     public static let transcriptionAspects = ["Accuracy", "Speakers", "Word times"]
@@ -65,6 +74,7 @@ extension TranscriptionProvider {
         case .deepgram: Pricing.deepgramPerHour
         case .elevenlabs: Pricing.elevenLabsPerHour
         case .openai: Pricing.openAITranscriptionPerHour
+        case .local: 0
         }
     }
 
@@ -83,6 +93,10 @@ extension TranscriptionProvider {
         case .openai:
             Rating(stars: ["Accuracy": 4, "Speakers": 3, "Word times": 1], price: price,
                    basis: "Accuracy is an estimate. It returns no word times and labels speakers by segment only.")
+        case .local:
+            Rating(stars: ["Accuracy": 3, "Speakers": 3, "Word times": 4], price: 0,
+                   basis: "Accuracy measured on your calls: 94% the same words as AssemblyAI, but it missed product names such as Triple Whale. Speakers are an estimate.",
+                   free: true)
         }
     }
 }

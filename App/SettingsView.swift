@@ -197,7 +197,9 @@ struct SettingsView: View {
             controller.transcriptionModel = p.models.first?.id ?? ""
             controller.rebuildPipeline()
         }
-        keyRow(controller.transcriptionProvider.displayName, "Transcribes your calls after they end", controller.transcriptionProvider.key)
+        if let key = controller.transcriptionProvider.key {
+            keyRow(controller.transcriptionProvider.displayName, "Transcribes your calls after they end", key)
+        }
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
@@ -423,7 +425,9 @@ private struct RatingView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(aspect): \(rating.stars[aspect]!) of 5")
             }
-            if rating.price > 0 {
+            if rating.free {
+                Text("Free").font(.system(size: 11, weight: .semibold)).foregroundStyle(.green)
+            } else if rating.price > 0 {
                 (Text(rating.dollars).foregroundStyle(.primary) + Text(String(repeating: "$", count: 4 - rating.price)).foregroundStyle(.quaternary))
                     .font(.system(size: 11, weight: .semibold))
                     .accessibilityLabel("Price level \(rating.price) of 4")
