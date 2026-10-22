@@ -2,9 +2,6 @@ import Foundation
 
 /// Reviews each written call once, oldest first, so every review builds on the profile the earlier ones left.
 public actor CoachRunner {
-    /// A call where the owner spoke less than this gives the coach nothing to work with.
-    static let minimumOwnerSeconds: TimeInterval = 60
-
     private let paths: Paths
     private let coach: any Coaching
     private let owner: String
@@ -30,8 +27,8 @@ public actor CoachRunner {
 
     static func pending(_ records: [CallRecord], owner: String, since: Date, reviewed: Set<String>) -> [CallRecord] {
         records.filter { r in
-            r.status == .written && r.start >= since && !reviewed.contains(r.id)
-                && DeliveryStats(record: r, owner: owner).talkSeconds >= minimumOwnerSeconds
+            // A call where only others spoke still gets a review: whether it needed the owner is worth knowing.
+            r.status == .written && r.start >= since && !reviewed.contains(r.id) && !r.utterances.isEmpty
         }.sorted { $0.start < $1.start }
     }
 

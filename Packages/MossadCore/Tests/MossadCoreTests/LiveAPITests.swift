@@ -98,6 +98,24 @@ final class LiveAPITests: XCTestCase {
         XCTAssertFalse(result.update.focus.isEmpty)
     }
 
+    func testClaudeCoachReviewsACallWhereTheOwnerOnlyListened() async throws {
+        guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
+        var r = syntheticCall()
+        r.calendarTitle = "Tech Team Monthly Sync"
+        r.kind = "Monthly update"
+        r.speakerNames = ["me:A": "David Webber", "them:A": "Jeff Hill", "them:B": "Ed Ng"]
+        r.utterances = [
+            Utterance(track: .them, speakerLabel: "A", start: 0, end: 300, text: "Infrastructure update: the firewall swap is done, the new laptops ship next week, and the Databricks migration slipped two weeks because the vendor contract is not signed."),
+            Utterance(track: .them, speakerLabel: "B", start: 310, end: 600, text: "On data, the cost dashboard is live. Nobody owns the Databricks contract follow-up yet; someone from leadership needs to push the vendor."),
+            Utterance(track: .me, speakerLabel: "A", start: 610, end: 612, text: "Thanks."),
+        ]
+        let result = try await LLMCoach(apiKey: key, ownerName: "David Webber").review(record: r, profile: CoachProfile(), tone: nil)
+        print("LIVE listener: \(result.review.headline) | \(result.review.overview)")
+        print("LIVE listener value: \(result.review.value?.rating.rawValue ?? "-") \(result.review.value?.action.rawValue ?? "-"): \(result.review.value?.suggestion ?? "")")
+        print("LIVE listener improve: \(result.review.improvements.map { "\($0.title): \($0.tryInstead ?? "")" })")
+        XCTAssertNotNil(result.review.value)
+    }
+
     func testClaudeWritesTheWeeklyDigest() async throws {
         guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
         let review = CoachReview(headline: "Long openings", overview: "You took 90 s to reach the point.", strengths: [],

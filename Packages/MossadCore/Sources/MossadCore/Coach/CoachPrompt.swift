@@ -45,6 +45,14 @@ enum CoachPrompt {
         to the wrong speaker. Do not coach on something that looks like a recognition error. "Speaker A" and similar \
         labels are people whose names are not known.
 
+        Some meetings put \(owner) in the audience: a status update, a demo, a large all-hands. There, coach \
+        listening and follow-through instead of delivery: did they ask the one question that mattered, flag a risk \
+        they saw, or claim the work that is theirs, and what should they follow up on afterward? When the material \
+        says "Listener mode", \(owner) barely spoke: do not comment on their pace, fillers, or talk share, and do \
+        not invent strengths. Name a strength only when the transcript shows one (such as a good question). For \
+        improvements, give the moments where speaking up would have helped, with the words to say; if there were \
+        none, return no improvements and say so in the overview.
+
         Rate the meeting's value for \(owner): was this a good use of their time? Judge by what the meeting needed \
         from them and what it produced, using the facts given: their talk share, the decisions, the action items they \
         took, the number of people, the length, and how often the same meeting has come up before. A meeting where \
@@ -110,13 +118,19 @@ enum CoachPrompt {
         if !r.attendees.isEmpty { meeting.append("Invited: \(r.attendees.joined(separator: ", "))") }
         if let h = r.headline { meeting.append("Summary: \(h)") }
         meeting.append("People who spoke: \(Set(r.speakerNames.values).count), including \(owner)")
+        let spoke = delivery.talkSeconds < 60 ? "\(Int(delivery.talkSeconds)) s" : "\(Int((delivery.talkSeconds / 60).rounded())) min"
+        meeting.append("\(owner) spoke for \(spoke) (\(Int((delivery.talkShare * 100).rounded()))% of the talk)")
         meeting.append("Decisions: \(r.decisions.count)")
         meeting.append("Action items for \(owner): \(r.actionItems.filter { $0.owner == owner }.count) of \(r.actionItems.count)")
         let earlier = profile.history.filter { $0.callID != r.id && $0.title.caseInsensitiveCompare(r.title) == .orderedSame }
         meeting.append("Earlier coached meetings with this title: \(earlier.count)"
                        + (earlier.compactMap(\.value).isEmpty ? "" : " (rated \(earlier.compactMap(\.value).map(\.rawValue).joined(separator: ", ")))"))
         parts.append("## This meeting\n" + meeting.joined(separator: "\n"))
-        parts.append("## \(owner)'s delivery in this call\n" + numbers(delivery))
+        if CoachReview.isListener(delivery) {
+            parts.append("## Listener mode\n\(owner) spoke for under a minute in this call. Review listening, missed chances to speak up, follow-ups, and the meeting's value, not delivery.")
+        } else {
+            parts.append("## \(owner)'s delivery in this call\n" + numbers(delivery))
+        }
         parts.append("## Transcript\n" + MarkdownWriter.transcript(r))
         return parts.joined(separator: "\n\n")
     }

@@ -22,7 +22,7 @@ struct CoachTab: View {
                              message: "The review shows here when it is done.")
         } else {
             DetailEmptyState(symbol: "text.bubble", title: "No review for this call",
-                             message: "The coach reviews calls where you spoke for at least a minute, from the day it was turned on, two weeks back.")
+                             message: "The coach reviews every call with speech, from two weeks before the day it was turned on.")
         }
     }
 
@@ -39,7 +39,16 @@ struct CoachTab: View {
             if let progress = review.focusProgress {
                 focusCard(progress)
             }
-            if let d = review.delivery { DeliveryCard(stats: d) }
+            if let d = review.delivery {
+                if CoachReview.isListener(d) {
+                    Card("Delivery") {
+                        Text("You mostly listened in this call, so the coach looked at listening, follow-ups, and whether the meeting needed you.")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    DeliveryCard(stats: d)
+                }
+            }
             if !review.strengths.isEmpty {
                 section("What worked", symbol: "checkmark.circle.fill", tint: .green, points: review.strengths)
             }

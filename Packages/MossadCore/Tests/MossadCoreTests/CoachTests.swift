@@ -152,18 +152,31 @@ final class CoachTests: XCTestCase {
 
     // MARK: Which calls
 
-    func testPendingCallsAreWrittenSinceTheStartWithEnoughOwnerSpeechAndNoReviewOldestFirst() {
+    func testPendingCallsAreWrittenSinceTheStartWithSpeechAndNoReviewOldestFirst() {
         let since = Date(timeIntervalSince1970: 100 * day)
+        var silent = record("silent", start: since.addingTimeInterval(day))
+        silent.utterances = []
         let calls = [
             record("new", start: since.addingTimeInterval(2 * day)),
             record("old", start: since.addingTimeInterval(day)),
             record("before", start: since.addingTimeInterval(-day)),
-            record("quiet", start: since.addingTimeInterval(day), ownerSeconds: 20),
+            record("quiet", start: since.addingTimeInterval(day + 60), ownerSeconds: 0),
+            silent,
             record("processing", start: since.addingTimeInterval(day), status: .summarized),
             record("reviewed", start: since.addingTimeInterval(day)),
         ]
         let pending = CoachRunner.pending(calls, owner: "David Webber", since: since, reviewed: ["reviewed"])
-        XCTAssertEqual(pending.map(\.id), ["old", "new"])
+        // A call where only others spoke is still reviewed; one where nobody spoke is not.
+        XCTAssertEqual(pending.map(\.id), ["old", "quiet", "new"])
+    }
+
+    func testAQuietCallIsReviewedInListenerMode() {
+        let quiet = CoachPrompt.user(record: record("q", start: Date(), ownerSeconds: 10), owner: "David Webber", profile: CoachProfile())
+        XCTAssertTrue(quiet.contains("Listener mode"), quiet)
+        let talking = CoachPrompt.user(record: record("t", start: Date(), ownerSeconds: 300), owner: "David Webber", profile: CoachProfile())
+        XCTAssertFalse(talking.contains("Listener mode"))
+        XCTAssertTrue(talking.contains("David Webber spoke for 5 min"), talking)
+        XCTAssertTrue(CoachReview.isListener(DeliveryStats(record: record("q", start: Date(), ownerSeconds: 10), owner: "David Webber")))
     }
 
     // MARK: Weekly email

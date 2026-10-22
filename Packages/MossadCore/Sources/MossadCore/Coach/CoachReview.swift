@@ -67,6 +67,11 @@ public struct CoachReview: Codable, Equatable, Sendable {
         self.delivery = delivery
     }
 
+    /// Below this the owner mostly listened, and the review covers listening and value instead of delivery.
+    public static let listenerSeconds: TimeInterval = 60
+
+    public static func isListener(_ d: DeliveryStats) -> Bool { d.talkSeconds < listenerSeconds }
+
     public static func load(in dir: URL) -> CoachReview? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent(fileName)) else { return nil }
         return try? JSONDecoder.coach.decode(CoachReview.self, from: data)
