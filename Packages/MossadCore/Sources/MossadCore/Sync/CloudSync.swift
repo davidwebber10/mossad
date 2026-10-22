@@ -81,7 +81,8 @@ public actor CloudSync {
         record["platform"] = p.fields.platform
         record["headline"] = p.fields.headline
         record["kind"] = p.fields.kind
-        record["tags"] = p.fields.tags
+        // CloudKit cannot learn a field's type from an empty list; the record asset has the tags anyway.
+        record["tags"] = p.fields.tags.isEmpty ? nil : p.fields.tags
         record["status"] = p.fields.status
         record["record"] = try asset(p.record, "\(p.id)-record.json", scratch)
         record["coach"] = try p.coach.map { try asset($0, "\(p.id)-coach.json", scratch) }
