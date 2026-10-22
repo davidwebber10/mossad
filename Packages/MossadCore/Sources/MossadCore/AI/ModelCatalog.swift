@@ -3,10 +3,15 @@ import Foundation
 public struct ModelInfo: Equatable, Sendable, Identifiable, Hashable {
     public var id: String
     public var name: String
+    /// US dollars per million tokens, when the list gives them (OpenRouter does).
+    public var inputPerMillion: Double?
+    public var outputPerMillion: Double?
 
-    public init(id: String, name: String) {
+    public init(id: String, name: String, inputPerMillion: Double? = nil, outputPerMillion: Double? = nil) {
         self.id = id
         self.name = name
+        self.inputPerMillion = inputPerMillion
+        self.outputPerMillion = outputPerMillion
     }
 }
 
@@ -33,7 +38,13 @@ public enum ModelCatalog {
         data(json).filter { m in
             let params = m["supported_parameters"] as? [String] ?? []
             return params.contains("tools") && params.contains("structured_outputs")
-        }.compactMap { m in (m["id"] as? String).map { ModelInfo(id: $0, name: m["name"] as? String ?? $0) } }
+        }.compactMap { m in
+            guard let id = m["id"] as? String else { return nil }
+            // Prices come as strings in dollars per token.
+            let pricing = m["pricing"] as? [String: Any]
+            func perMillion(_ key: String) -> Double? { (pricing?[key] as? String).flatMap(Double.init).map { $0 * 1_000_000 } }
+            return ModelInfo(id: id, name: m["name"] as? String ?? id, inputPerMillion: perMillion("prompt"), outputPerMillion: perMillion("completion"))
+        }
     }
 
     public static func fetch(_ provider: AIProvider, apiKey: String?, session: URLSession = .shared) async throws -> [ModelInfo] {

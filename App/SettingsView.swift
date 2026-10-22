@@ -191,23 +191,30 @@ struct SettingsView: View {
                 }
             }
             Text(controller.transcriptionProvider.note).font(.system(size: 11)).foregroundStyle(.secondary)
+            RatingView(rating: controller.transcriptionProvider.rating, aspects: Rating.transcriptionAspects)
         }
         .onChange(of: controller.transcriptionProvider) { _, p in
             controller.transcriptionModel = p.models.first?.id ?? ""
             controller.rebuildPipeline()
         }
         keyRow(controller.transcriptionProvider.displayName, "Transcribes your calls after they end", controller.transcriptionProvider.key)
-        HStack {
-            VStack(alignment: .leading, spacing: 1) {
-                Text("AI").fontWeight(.medium)
-                Text("Summaries, the coach, the weekly email, and chat").foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("AI").fontWeight(.medium)
+                    Text("Summaries, the coach, the weekly email, and chat").foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("AI provider", selection: $controller.aiProvider) {
+                    ForEach(AIProvider.allCases) { Text($0.displayName).tag($0) }
+                }
+                .labelsHidden().frame(width: 150)
+                ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)
             }
-            Spacer()
-            Picker("AI provider", selection: $controller.aiProvider) {
-                ForEach(AIProvider.allCases) { Text($0.displayName).tag($0) }
+            if let rating = Rating.model(controller.aiModel.isEmpty ? controller.aiProvider.defaultModel : controller.aiModel, provider: controller.aiProvider)
+                ?? (controller.aiProvider == .openrouter ? controller.openRouterRating : nil) {
+                RatingView(rating: rating, aspects: Rating.modelAspects)
             }
-            .labelsHidden().frame(width: 150)
-            ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)
         }
         .onChange(of: controller.aiProvider) { _, _ in
             controller.aiModel = ""
@@ -396,11 +403,48 @@ extension APIKey {
 
 /// The model menu for the AI provider, filled from the provider's own list. OpenRouter has hundreds of
 /// models, so it gets a field to type in with a filtered menu beside it.
+/// Stars for each aspect and the price level; the tooltip says what they rest on.
+private struct RatingView: View {
+    let rating: Rating
+    let aspects: [String]
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ForEach(aspects.filter { rating.stars[$0] != nil }, id: \.self) { aspect in
+                HStack(spacing: 4) {
+                    Text(aspect).foregroundStyle(.secondary)
+                    HStack(spacing: 1) {
+                        ForEach(1...5, id: \.self) { i in
+                            Image(systemName: i <= rating.stars[aspect]! ? "star.fill" : "star")
+                                .font(.system(size: 9)).foregroundStyle(i <= rating.stars[aspect]! ? Color.yellow : Color.secondary.opacity(0.5))
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(aspect): \(rating.stars[aspect]!) of 5")
+            }
+            if rating.price > 0 {
+                (Text(rating.dollars).foregroundStyle(.primary) + Text(String(repeating: "$", count: 4 - rating.price)).foregroundStyle(.quaternary))
+                    .font(.system(size: 11, weight: .semibold))
+                    .accessibilityLabel("Price level \(rating.price) of 4")
+            }
+        }
+        .font(.system(size: 11))
+        .help(rating.basis)
+    }
+}
+
 private struct ModelPicker: View {
     @EnvironmentObject var controller: AppController
     let provider: AIProvider
     @Binding var model: String
     @State private var models: [ModelInfo] = []
+
+    /// "Claude Opus 5.5 · $$$".
+    private func label(_ m: ModelInfo) -> String {
+        guard let r = Rating.model(m, provider: provider), r.price > 0 else { return m.name }
+        return "\(m.name) · \(r.dollars)"
+    }
 
     var body: some View {
         let current = model.isEmpty ? provider.defaultModel : model
@@ -411,7 +455,9 @@ private struct ModelPicker: View {
                     Menu("Choose") {
                         let q = model.lowercased()
                         let matches = models.filter { q.isEmpty || $0.id.lowercased().contains(q) || $0.name.lowercased().contains(q) }
-                        ForEach(Array((matches.isEmpty ? models : matches).prefix(60))) { m in Button(m.name) { model = m.id } }
+                        ForEach(Array((matches.isEmpty ? models : matches).prefix(60))) { m in
+                            Button(label(m)) { model = m.id; controller.openRouterRating = Rating.model(m, provider: .openrouter) }
+                        }
                     }
                     .fixedSize()
                     .disabled(models.isEmpty)
@@ -419,12 +465,13 @@ private struct ModelPicker: View {
             } else {
                 Picker("Model", selection: Binding(get: { current }, set: { model = $0 })) {
                     let list = models.contains { $0.id == current } || current.isEmpty ? models : [ModelInfo(id: current, name: current)] + models
-                    ForEach(list) { Text($0.name).tag($0.id) }
+                    ForEach(list) { Text(label($0)).tag($0.id) }
                 }
                 .labelsHidden().frame(width: 220)
             }
         }
         .task(id: "\(provider.rawValue)-\(controller.hasKey(provider.key))") {
+            defer { if provider == .openrouter { controller.openRouterRating = models.first { $0.id == model }.flatMap { Rating.model($0, provider: .openrouter) } } }
             models = (try? await ModelCatalog.fetch(provider, apiKey: controller.keychain.get(provider.key))) ?? []
         }
     }

@@ -111,6 +111,8 @@ final class AppController: ObservableObject {
     @AppStorage("transcriptionModel") var transcriptionModel = ""
     @AppStorage("aiProvider") var aiProvider = AIProvider.anthropic
     @AppStorage("aiModel") var aiModel = ""
+    /// The picked OpenRouter model's rating, from its listed prices.
+    @Published var openRouterRating: Rating?
     @AppStorage("mailProvider") var mailProvider = MailProvider.resend
     @AppStorage("mailDomain") var mailDomain = ""
     @AppStorage("mailEurope") var mailEurope = false
