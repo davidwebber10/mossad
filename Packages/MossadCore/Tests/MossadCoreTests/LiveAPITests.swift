@@ -129,6 +129,12 @@ final class LiveAPITests: XCTestCase {
         print("LIVE feedback reply: \(answer.reply)")
         print("LIVE feedback guidance: add \(answer.add) remove \(answer.remove)")
         XCTAssertFalse(answer.add.isEmpty)
+        let facts = try await CoachResponder(llm: AnthropicModel(apiKey: key), ownerName: "David Webber")
+            .respond(to: "For context: I run data and technology, I own our vendor contracts for data tools including Databricks, and Mitch reports to me.",
+                     review: review, record: r, profile: CoachProfile())
+        print("LIVE facts reply: \(facts.reply)")
+        print("LIVE facts: \(facts.addFacts.map { "\($0.kind.rawValue): \($0.text)" })")
+        XCTAssertTrue(facts.addFacts.contains { $0.kind == .responsibility })
     }
 
     func testClaudeWritesTheWeeklyDigest() async throws {

@@ -53,6 +53,11 @@ enum CoachPrompt {
         improvements, give the moments where speaking up would have helped, with the words to say; if there were \
         none, return no improvements and say so in the overview.
 
+        You know who \(owner) is: their role, what they are responsible for, their goals, and their relationships. \
+        Judge each call against that. When something in their area of responsibility is unowned, unclear, or at \
+        risk, that is theirs to act on, so call it out. When a topic is someone else's, do not push them to own it. \
+        Weigh how they speak by who they speak to: a manager, a peer, a direct report, a vendor.
+
         \(owner) can rate your points and tell you where you were wrong. Their guidance is standing instruction: \
         follow it in every review. Do not repeat advice they rejected; if this call shows strong new evidence for \
         it, say so and say why, in one sentence. Learn from the points they agreed with too.
@@ -89,6 +94,14 @@ enum CoachPrompt {
     static func user(record r: CallRecord, owner: String, profile: CoachProfile, delivery: DeliveryStats? = nil) -> String {
         let delivery = delivery ?? DeliveryStats(record: r, owner: owner)
         var parts: [String] = []
+        if !profile.facts.isEmpty {
+            var about: [String] = profile.facts(.role).map { "Role: \($0.text)" }
+            for kind in [CoachFact.Kind.responsibility, .goal, .relationship] where !profile.facts(kind).isEmpty {
+                let label = switch kind { case .responsibility: "Responsible for:"; case .goal: "Goals:"; default: "Relationships:" }
+                about.append(label + "\n" + profile.facts(kind).map { "- \($0.text)" }.joined(separator: "\n"))
+            }
+            parts.append("## Who \(owner) is\n" + about.joined(separator: "\n"))
+        }
 
         var notes: [String] = []
         if let s = profile.summary.nonBlank { notes.append("Summary: \(s)") }

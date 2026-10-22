@@ -78,3 +78,49 @@ final class CoachFeedbackTests: XCTestCase {
         XCTAssertTrue(r.thread.isEmpty)
     }
 }
+
+final class CoachMemoryTests: XCTestCase {
+    func testFactsAreKeptByKindOnceAndCanBeRemoved() {
+        var profile = CoachProfile()
+        profile.updateFacts(add: [CoachFact(kind: .role, text: "Head of data and technology"),
+                                  CoachFact(kind: .responsibility, text: "Vendor contracts for data tools"),
+                                  CoachFact(kind: .responsibility, text: " vendor contracts for data tools "),
+                                  CoachFact(kind: .relationship, text: "Mitch Haus is my direct report")], remove: [])
+        XCTAssertEqual(profile.facts(.responsibility).map(\.text), ["Vendor contracts for data tools"])
+        XCTAssertEqual(profile.facts(.role).map(\.text), ["Head of data and technology"])
+        profile.updateFacts(add: [], remove: ["Vendor contracts for data tools"])
+        XCTAssertTrue(profile.facts(.responsibility).isEmpty)
+    }
+
+    func testThePromptStartsWithWhoTheOwnerIs() {
+        var profile = CoachProfile()
+        profile.updateFacts(add: [CoachFact(kind: .role, text: "Head of data and technology"),
+                                  CoachFact(kind: .responsibility, text: "The Databricks contract"),
+                                  CoachFact(kind: .goal, text: "Metric ownership agreed by December"),
+                                  CoachFact(kind: .relationship, text: "Jeff Hill is my manager")], remove: [])
+        var r = CallRecord(id: "x", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
+        r.speakerNames = ["me:A": "David Webber"]
+        let text = CoachPrompt.user(record: r, owner: "David Webber", profile: profile)
+        for expected in ["Role: Head of data and technology", "Responsible for:", "- The Databricks contract", "Goals:", "Jeff Hill is my manager"] {
+            XCTAssertTrue(text.contains(expected), expected)
+        }
+        XCTAssertLessThan(text.range(of: "Head of data")!.lowerBound, text.range(of: "coaching profile")!.lowerBound)
+        XCTAssertTrue(CoachPrompt.system(owner: "David Webber").contains("responsib"))
+    }
+
+    func testTheCoachCanLearnFactsFromAReply() async throws {
+        let output = #"{"reply":"Got it.","add_guidance":[],"remove_guidance":[],"add_facts":[{"kind":"responsibility","text":"Vendor contracts for data tools"}],"remove_facts":[]}"#
+        StubURLProtocol.handler = { _ in (200, json(["stop_reason": "end_turn", "content": [["type": "text", "text": output]]])) }
+        let responder = CoachResponder(llm: AnthropicModel(apiKey: "k", session: StubURLProtocol.session()), ownerName: "David Webber")
+        let r = CallRecord(id: "x", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
+        let review = CoachReview(headline: "H", overview: "O", strengths: [], improvements: [], focusProgress: nil)
+        let answer = try await responder.respond(to: "I own vendor contracts.", review: review, record: r, profile: CoachProfile())
+        XCTAssertEqual(answer.addFacts, [CoachFact(kind: .responsibility, text: "Vendor contracts for data tools")])
+    }
+
+    func testOldProfilesLoadWithNoFacts() throws {
+        let dir = tempDirectory()
+        try Data(#"{"summary":"S","focus":"F","patterns":[],"people":{},"history":[]}"#.utf8).write(to: dir.appendingPathComponent("profile.json"))
+        XCTAssertTrue(try CoachProfile.load(from: dir).facts.isEmpty)
+    }
+}

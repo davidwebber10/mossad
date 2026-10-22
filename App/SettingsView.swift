@@ -264,19 +264,7 @@ struct SettingsView: View {
                     Text(focus).fontWeight(.medium)
                 }
             }
-            let guidance = controller.coachVersion >= 0 ? controller.coachProfile.guidance : []
-            if !guidance.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("What the coach learned from you").foregroundStyle(.secondary)
-                    ForEach(guidance) { g in
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(g.text)
-                            Spacer()
-                            Button("Remove") { controller.removeCoachGuidance(g.text) }.buttonStyle(.link).font(.system(size: 11))
-                        }
-                    }
-                }
-            }
+            CoachMemoryEditor()
             switchRow("Weekly email on Monday", $controller.coachEmailEnabled)
             if controller.coachEmailEnabled {
                 HStack {
@@ -550,5 +538,67 @@ private struct MCPSetup: View {
             .background(Theme.field, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// What the coach knows about you, by memory: role, responsibilities, goals, relationships, and the coaching
+/// preferences it learned from your corrections. You can add and remove items; the coach also adds from replies.
+private struct CoachMemoryEditor: View {
+    @EnvironmentObject var controller: AppController
+    @State private var drafts: [CoachFact.Kind: String] = [:]
+
+    private func hint(_ kind: CoachFact.Kind) -> String {
+        switch kind {
+        case .role: "Head of data and technology"
+        case .responsibility: "Vendor contracts for data tools"
+        case .goal: "Metric ownership agreed by December"
+        case .relationship: "Mitch Haus is my direct report"
+        }
+    }
+
+    var body: some View {
+        let profile = controller.coachVersion >= 0 ? controller.coachProfile : CoachProfile()
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What the coach knows about you").fontWeight(.medium)
+            Text("The coach judges each call against this. It also adds to it when you tell it something in a reply.")
+                .foregroundStyle(.secondary)
+            ForEach(CoachFact.Kind.allCases, id: \.self) { kind in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(kind.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                    ForEach(profile.facts(kind)) { fact in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(fact.text)
+                            Spacer()
+                            Button("Remove") { controller.removeCoachFact(fact.text) }.buttonStyle(.link).font(.system(size: 11))
+                        }
+                    }
+                    HStack {
+                        TextField(hint(kind), text: Binding(get: { drafts[kind, default: ""] }, set: { drafts[kind] = $0 }))
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { add(kind) }
+                        Button("Add") { add(kind) }.controlSize(.small).disabled(drafts[kind, default: ""].trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+            }
+            if !profile.guidance.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your coaching preferences").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                    ForEach(profile.guidance) { g in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(g.text)
+                            Spacer()
+                            Button("Remove") { controller.removeCoachGuidance(g.text) }.buttonStyle(.link).font(.system(size: 11))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func add(_ kind: CoachFact.Kind) {
+        let text = drafts[kind, default: ""].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        controller.addCoachFact(kind, text)
+        drafts[kind] = ""
     }
 }

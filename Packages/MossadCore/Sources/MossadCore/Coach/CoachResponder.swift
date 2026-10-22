@@ -6,6 +6,8 @@ public struct CoachResponder: Sendable {
         public var reply: String
         public var add: [String]
         public var remove: [String]
+        public var addFacts: [CoachFact] = []
+        public var removeFacts: [String] = []
     }
 
     private let llm: any LanguageModel
@@ -25,7 +27,11 @@ public struct CoachResponder: Sendable {
         Then decide what to remember. add_guidance holds standing instructions for future reviews, each one short, \
         specific, and written as a rule (for example "In 1:1s with Mitch, letting him lead is on purpose; do not flag \
         it."). Add one only when the reply tells you something that should change later reviews. remove_guidance \
-        holds existing guidance, word for word, that this reply makes wrong. Return empty lists when nothing changes.
+        holds existing guidance, word for word, that this reply makes wrong. \
+        add_facts holds facts about who they are that the reply states: their role, a responsibility, a goal, or a \
+        relationship (such as "Mitch Haus is my direct report"). Write each as a short statement in their words. \
+        remove_facts holds existing facts, word for word, that the reply makes wrong. When you add or remove \
+        anything, say so briefly in the reply. Return empty lists when nothing changes.
         """
         func points(_ list: [CoachPoint], _ label: String) -> [String] {
             list.map { p in
@@ -40,18 +46,23 @@ public struct CoachResponder: Sendable {
         user += points(review.strengths, "Strength") + points(review.improvements, "Improve")
         if let v = review.value { user.append("Meeting value: \(v.rating.rawValue), \(v.action.rawValue): \(v.reason)") }
         if !profile.guidance.isEmpty { user.append("\n## Current guidance\n" + profile.guidance.map { "- \($0.text)" }.joined(separator: "\n")) }
+        if !profile.facts.isEmpty { user.append("\n## What you know about them\n" + profile.facts.map { "- \($0.kind.rawValue): \($0.text)" }.joined(separator: "\n")) }
         if !review.thread.isEmpty {
             user.append("\n## Earlier in this conversation\n" + review.thread.map { "\($0.role == .user ? ownerName : "You"): \($0.text)" }.joined(separator: "\n"))
         }
         user.append("\n## \(ownerName) says\n\(message)")
-        let schema = Schema.object(["reply": Schema.string, "add_guidance": Schema.array(Schema.string), "remove_guidance": Schema.array(Schema.string)])
+        let fact = Schema.object(["kind": Schema.oneOf(CoachFact.Kind.allCases.map(\.rawValue)), "text": Schema.string])
+        let schema = Schema.object(["reply": Schema.string, "add_guidance": Schema.array(Schema.string), "remove_guidance": Schema.array(Schema.string),
+                                    "add_facts": Schema.array(fact), "remove_facts": Schema.array(Schema.string)])
         let out = try await llm.json(system: system, user: user.joined(separator: "\n"), schema: schema, effort: .medium, purpose: .coach, as: Output.self)
-        return Answer(reply: out.reply, add: out.add_guidance, remove: out.remove_guidance)
+        return Answer(reply: out.reply, add: out.add_guidance, remove: out.remove_guidance, addFacts: out.add_facts ?? [], removeFacts: out.remove_facts ?? [])
     }
 
     private struct Output: Decodable {
         let reply: String
         let add_guidance: [String]
         let remove_guidance: [String]
+        let add_facts: [CoachFact]?
+        let remove_facts: [String]?
     }
 }

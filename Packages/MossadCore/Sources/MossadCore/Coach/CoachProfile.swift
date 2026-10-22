@@ -98,6 +98,31 @@ public struct RatedPoint: Codable, Equatable, Sendable {
     public var date: Date
 }
 
+/// Something true about the owner that the coach should judge their calls against.
+public struct CoachFact: Codable, Equatable, Sendable, Hashable, Identifiable {
+    public enum Kind: String, Codable, Sendable, CaseIterable {
+        case role, responsibility, goal, relationship
+
+        public var title: String {
+            switch self {
+            case .role: "Your role"
+            case .responsibility: "What you are responsible for"
+            case .goal: "Your goals"
+            case .relationship: "Your relationships"
+            }
+        }
+    }
+
+    public var id: String { "\(kind.rawValue):\(text)" }
+    public var kind: Kind
+    public var text: String
+
+    public init(kind: Kind, text: String) {
+        self.kind = kind
+        self.text = text
+    }
+}
+
 /// A standing instruction the coach learned from the owner, such as "Fillers do not matter to me."
 public struct CoachGuidance: Codable, Equatable, Sendable, Identifiable, Hashable {
     public var id: String { text }
@@ -122,13 +147,15 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     public var guidance: [CoachGuidance] = []
     /// The owner's latest ratings of individual points.
     public var rated: [RatedPoint] = []
+    /// Who the owner is: role, responsibilities, goals, and relationships.
+    public var facts: [CoachFact] = []
 
     public static let ratedLimit = 30
     public static let guidanceLimit = 25
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated }
+    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated, facts }
 
     /// Profiles from before feedback existed have no guidance or ratings.
     public init(from decoder: Decoder) throws {
@@ -140,6 +167,20 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         history = try c.decodeIfPresent([CoachHistoryEntry].self, forKey: .history) ?? []
         guidance = try c.decodeIfPresent([CoachGuidance].self, forKey: .guidance) ?? []
         rated = try c.decodeIfPresent([RatedPoint].self, forKey: .rated) ?? []
+        facts = try c.decodeIfPresent([CoachFact].self, forKey: .facts) ?? []
+    }
+
+    public func facts(_ kind: CoachFact.Kind) -> [CoachFact] { facts.filter { $0.kind == kind } }
+
+    /// Adds facts without duplicates (ignoring case and spaces) and removes those named by their text.
+    public mutating func updateFacts(add: [CoachFact], remove: [String]) {
+        let gone = Set(remove.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+        facts.removeAll { gone.contains($0.text.lowercased()) }
+        for fact in add {
+            guard let text = fact.text.nonBlank,
+                  !facts.contains(where: { $0.kind == fact.kind && $0.text.caseInsensitiveCompare(text) == .orderedSame }) else { continue }
+            facts.append(CoachFact(kind: fact.kind, text: text))
+        }
     }
 
     /// Keeps the owner's rating of a point; a new rating of the same point replaces the old one.

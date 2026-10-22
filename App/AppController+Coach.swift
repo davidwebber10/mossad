@@ -71,7 +71,22 @@ extension AppController {
         try latest.save(in: dir)
         var profile = coachProfile
         profile.updateGuidance(add: answer.add, remove: answer.remove, at: Date())
+        profile.updateFacts(add: answer.addFacts, remove: answer.removeFacts)
         try profile.save(to: paths.coach)
+        coachVersion += 1
+    }
+
+    func addCoachFact(_ kind: CoachFact.Kind, _ text: String) {
+        var profile = coachProfile
+        profile.updateFacts(add: [CoachFact(kind: kind, text: text)], remove: [])
+        try? profile.save(to: paths.coach)
+        coachVersion += 1
+    }
+
+    func removeCoachFact(_ text: String) {
+        var profile = coachProfile
+        profile.updateFacts(add: [], remove: [text])
+        try? profile.save(to: paths.coach)
         coachVersion += 1
     }
 
