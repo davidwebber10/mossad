@@ -71,6 +71,7 @@ struct MenuContent: View {
             navigationRow("People", "person.2") { controller.open(.people) }
             navigationRow("Settings", "gearshape") { controller.open(.settings) }
             navigationRow("Log", "doc.text") { controller.open(.log) }
+            UpdateRow(updater: controller.updater)
             PanelSeparator()
             PanelRow(action: { NSApp.terminate(nil) }) {
                 Text("Quit Mossad")
@@ -229,5 +230,19 @@ private struct PanelRow<Content: View>: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 6)
         .onHover { hovering = $0 }
+    }
+}
+
+/// "Check for Updates…", or a note while an accepted update waits for the call to end.
+private struct UpdateRow: View {
+    @ObservedObject var updater: Updater
+
+    var body: some View {
+        PanelRow(action: { updater.checkForUpdates() }) {
+            Image(systemName: "arrow.down.circle").font(.system(size: 14)).foregroundStyle(.secondary).frame(width: 18)
+            Text(updater.waitingForCall ? "Update installs after this call" : "Check for Updates…")
+            Spacer()
+        }
+        .disabled(!updater.canCheck || updater.waitingForCall)
     }
 }

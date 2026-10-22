@@ -65,6 +65,8 @@ final class AppController: ObservableObject {
     @Published var selectedMeetingID: String?
     @Published var namingCallID: String?
     var personToOpen: String?
+    /// Checks GitHub releases for new versions; never in the UI preview.
+    private(set) lazy var updater = Updater(start: !CommandLine.arguments.contains("--ui-preview")) { [weak self] in self?.isRecording ?? false }
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
     /// alive, so animations check this and stop while it is hidden.
     @Published private(set) var windowVisible = false
@@ -204,6 +206,7 @@ final class AppController: ObservableObject {
                 CaptureQueue.queue.async { recorder.rebuildThem() }
             }
             requestPermissions()
+            _ = updater
             bookmarkKey = GlobalHotKey { [weak self] in self?.bookmarkCurrentCall() }
 
             Task { await runHousekeeping() }
@@ -325,6 +328,7 @@ final class AppController: ObservableObject {
         status = .idle
         isPaused = false
         stopLive()
+        updater.callEnded()
     }
 
     /// Ends the recording now and processes it. The detector still sees this call, so it does not start a
@@ -345,6 +349,7 @@ final class AppController: ObservableObject {
         status = .idle
         isPaused = false
         stopLive()
+        updater.callEnded()
     }
 
     /// Marks this moment of the call as important. Also bound to ⌃⌥B everywhere.
@@ -674,6 +679,7 @@ final class AppController: ObservableObject {
             isMuted = false
             startLive(reset: true)
         case .ended:
+            updater.callEnded()
             status = .idle
             isPaused = false
             isMuted = false

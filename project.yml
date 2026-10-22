@@ -6,6 +6,9 @@ options:
 packages:
   MossadCore:
     path: Packages/MossadCore
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.6.0
 targets:
   Mossad:
     type: application
@@ -13,12 +16,18 @@ targets:
     sources: [App]
     dependencies:
       - package: MossadCore
+      - package: Sparkle
     info:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Mossad
-        CFBundleShortVersionString: "2.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Updates come from the latest GitHub release; each one is signed with the key whose public half is below.
+        SUFeedURL: https://github.com/davidwebber10/mossad/releases/latest/download/appcast.xml
+        SUPublicEDKey: Y131ILTxYqpxKtpjHK7imAzNE1qdTsCVCQQVYv2tVBc=
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 21600
         LSUIElement: true
         NSMicrophoneUsageDescription: Mossad records your microphone during meetings to transcribe what you say.
         NSAudioCaptureUsageDescription: Mossad records the meeting app's audio to transcribe what other people say.
@@ -38,6 +47,9 @@ targets:
         DEVELOPMENT_TEAM: 35VNBDXR6B
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_VERSION: "6.0"
+        # scripts/release.sh sets both; local builds use the commit count too (scripts/build.sh).
+        MARKETING_VERSION: "2.0"
+        CURRENT_PROJECT_VERSION: "1"
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

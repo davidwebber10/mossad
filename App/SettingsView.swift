@@ -43,6 +43,9 @@ struct SettingsView: View {
                     MCPSetup()
                 }
                 group("Storage") { StorageSettings() }
+                group("Updates", footer: "New versions come from the Mossad releases on GitHub. Each one is signed, and an update never installs during a call.") {
+                    UpdateSettings(updater: controller.updater)
+                }
             }
             .font(.system(size: 12))
             .padding(EdgeInsets(top: 8, leading: 24, bottom: 24, trailing: 24))
@@ -600,5 +603,29 @@ private struct CoachMemoryEditor: View {
         guard !text.isEmpty else { return }
         controller.addCoachFact(kind, text)
         drafts[kind] = ""
+    }
+}
+
+private struct UpdateSettings: View {
+    @ObservedObject var updater: Updater
+
+    var body: some View {
+        HStack {
+            Text("Version \(updater.version)")
+            Spacer()
+            Button("Check for Updates…") { updater.checkForUpdates() }.controlSize(.small).disabled(!updater.canCheck)
+        }
+        HStack {
+            Text("Check for updates automatically")
+            Spacer()
+            Toggle("", isOn: Binding(get: { updater.automaticallyChecks }, set: { updater.automaticallyChecks = $0 }))
+                .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+        }
+        HStack {
+            Text("Download and install updates automatically")
+            Spacer()
+            Toggle("", isOn: Binding(get: { updater.automaticallyInstalls }, set: { updater.automaticallyInstalls = $0 }))
+                .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+        }
     }
 }
