@@ -193,3 +193,21 @@ extension CallRecord {
         cloudKey = try c.decodeIfPresent(String.self, forKey: .cloudKey)
     }
 }
+
+extension CallRecord {
+    /// Swaps labels such as "Speaker A" for names in the summary, topics, decisions, and action items. Whole
+    /// words only, so "Speaker A" never matches inside "Speaker AB".
+    mutating func replaceSpeakerLabels(_ labels: [String: String]) {
+        guard !labels.isEmpty else { return }
+        func swap(_ text: String) -> String {
+            labels.reduce(text) { text, pair in
+                text.replacingOccurrences(of: "\\b\(NSRegularExpression.escapedPattern(for: pair.key))\\b", with: NSRegularExpression.escapedTemplate(for: pair.value),
+                                          options: .regularExpression)
+            }
+        }
+        summary = summary.map(swap)
+        topics = topics.map { SummaryTopic(title: swap($0.title), summary: swap($0.summary)) }
+        decisions = decisions.map(swap)
+        actionItems = actionItems.map { ActionItem(owner: $0.owner.map { labels[$0] ?? $0 }, task: swap($0.task)) }
+    }
+}

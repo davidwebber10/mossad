@@ -456,6 +456,31 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(library.bestMatch([0, 1, 0, 0])?.name, "Alex Rivera")
     }
 
+    func testNamingReplacesSpeakerLettersAtOnceBeforeTheNewSummary() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        let letters = MarkdownWriter.displayNames(r)
+        let a = try XCTUnwrap(letters["them:A"]), b = try XCTUnwrap(letters["them:B"])
+        r.summary = "\(a) and \(b) agreed. \(a)'s plan stands."
+        r.topics = [SummaryTopic(title: "Freight", summary: "\(b) books it.")]
+        r.decisions = ["\(a) owns freight"]
+        r.actionItems = [ActionItem(owner: a, task: "book freight"), ActionItem(owner: nil, task: "ask \(b) for dates")]
+        try r.save(to: paths.callDirectory(id))
+        summarizer.delayOnCall[2] = .milliseconds(400)
+        let naming = Task { await p.applyNames(callID: id, names: ["them:A": "Alex Rivera", "them:B": "Amy Lee"]) }
+        try await Task.sleep(for: .milliseconds(150))
+        let early = try load(id)
+        XCTAssertEqual(early.summary, "Alex Rivera and Amy Lee agreed. Alex Rivera's plan stands.")
+        XCTAssertEqual(early.topics.first?.summary, "Amy Lee books it.")
+        XCTAssertEqual(early.decisions, ["Alex Rivera owns freight"])
+        XCTAssertEqual(early.actionItems.map(\.owner), ["Alex Rivera", nil])
+        XCTAssertEqual(early.actionItems.last?.task, "ask Amy Lee for dates")
+        await naming.value
+        XCTAssertEqual(try load(id).summary, "Summary 2")
+    }
+
     func testApplyNamesStoresEmailsOnTheProfiles() async throws {
         let id = try makeRecord()
         let p = pipeline()

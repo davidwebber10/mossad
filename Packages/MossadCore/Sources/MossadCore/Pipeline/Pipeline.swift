@@ -302,9 +302,13 @@ public actor Pipeline {
     public func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) async {
         let dir = paths.callDirectory(callID)
         guard var r = try? CallRecord.load(from: dir) else { return }
+        // The labels the summary used before the names, such as "Speaker A".
+        let before = MarkdownWriter.displayNames(r)
+        var renamed: [String: String] = [:]
         for (key, raw) in names {
             let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
+            if let old = before[key], old != name, r.speakerNames[key] == nil { renamed[old] = name }
             r.speakerNames[key] = name
             r.unknownSpeakers.removeAll { $0 == key }
             if let e = r.speakerEmbeddings[key] {
@@ -315,6 +319,8 @@ public actor Pipeline {
             guard let name = r.speakerNames[key] else { continue }
             do { try library.setEmail(email, for: name) } catch { Log.error("Saving email for \(name) failed: \(error)") }
         }
+        // The new summary takes a while; until it lands, the old one shows the names in place of the letters.
+        r.replaceSpeakerLabels(renamed)
         // Save the names before the summary request, so a second save made meanwhile starts from them.
         save(&r, dir: dir)
         guard let summarizer, r.status == .written, !r.utterances.isEmpty else { return }
