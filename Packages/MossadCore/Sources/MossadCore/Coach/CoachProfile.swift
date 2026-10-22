@@ -87,6 +87,24 @@ public struct CoachProfileUpdate: Codable, Equatable, Sendable {
     }
 }
 
+/// A point the owner rated, kept so later reviews know what landed and what missed.
+public struct RatedPoint: Codable, Equatable, Sendable {
+    public var callID: String
+    public var callTitle: String
+    public var title: String
+    public var principle: String
+    public var agree: Bool
+    public var note: String?
+    public var date: Date
+}
+
+/// A standing instruction the coach learned from the owner, such as "Fillers do not matter to me."
+public struct CoachGuidance: Codable, Equatable, Sendable, Identifiable, Hashable {
+    public var id: String { text }
+    public var text: String
+    public var date: Date
+}
+
 /// The coach's memory across calls, kept in `~/Mossad/Coach/profile.json`. Each review reads it and updates it,
 /// so advice builds on what came before instead of starting over each call.
 public struct CoachProfile: Codable, Equatable, Sendable {
@@ -100,8 +118,46 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     public var patterns: [CoachPattern] = []
     public var people: [String: CoachPerson] = [:]
     public var history: [CoachHistoryEntry] = []
+    /// What the owner told the coach about its coaching.
+    public var guidance: [CoachGuidance] = []
+    /// The owner's latest ratings of individual points.
+    public var rated: [RatedPoint] = []
+
+    public static let ratedLimit = 30
+    public static let guidanceLimit = 25
 
     public init() {}
+
+    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated }
+
+    /// Profiles from before feedback existed have no guidance or ratings.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        focus = try c.decodeIfPresent(String.self, forKey: .focus) ?? ""
+        patterns = try c.decodeIfPresent([CoachPattern].self, forKey: .patterns) ?? []
+        people = try c.decodeIfPresent([String: CoachPerson].self, forKey: .people) ?? [:]
+        history = try c.decodeIfPresent([CoachHistoryEntry].self, forKey: .history) ?? []
+        guidance = try c.decodeIfPresent([CoachGuidance].self, forKey: .guidance) ?? []
+        rated = try c.decodeIfPresent([RatedPoint].self, forKey: .rated) ?? []
+    }
+
+    /// Keeps the owner's rating of a point; a new rating of the same point replaces the old one.
+    public mutating func remember(_ feedback: CoachFeedback, on point: CoachPoint, callID: String, title: String) {
+        rated.removeAll { $0.callID == callID && $0.title == point.title }
+        rated.append(RatedPoint(callID: callID, callTitle: title, title: point.title, principle: point.principle,
+                                agree: feedback.agree, note: feedback.note?.nonBlank, date: feedback.date))
+        rated = Array(rated.suffix(Self.ratedLimit))
+    }
+
+    public mutating func updateGuidance(add: [String], remove: [String], at date: Date) {
+        let gone = Set(remove.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+        guidance.removeAll { gone.contains($0.text.lowercased()) }
+        for text in add.compactMap(\.nonBlank) where !guidance.contains(where: { $0.text.caseInsensitiveCompare(text) == .orderedSame }) {
+            guidance.append(CoachGuidance(text: text, date: date))
+        }
+        guidance = Array(guidance.suffix(Self.guidanceLimit))
+    }
 
     public mutating func apply(_ update: CoachProfileUpdate, review: CoachReview, callID: String, title: String, at: Date) {
         if let s = update.summary.nonBlank { summary = s }

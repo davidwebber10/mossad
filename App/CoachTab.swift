@@ -55,6 +55,7 @@ struct CoachTab: View {
             if !review.improvements.isEmpty {
                 section("Try next time", symbol: "arrow.up.forward.circle.fill", tint: Theme.warning, points: review.improvements)
             }
+            CoachThread(callID: record.id, thread: review.thread)
         }
         .padding(.top, 6)
     }
@@ -75,7 +76,8 @@ struct CoachTab: View {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(Array(points.enumerated()), id: \.offset) { i, point in
                     if i > 0 { Rectangle().fill(Theme.separator).frame(height: 1) }
-                    PointView(point: point, symbol: symbol, tint: tint, player: player)
+                    PointView(point: point, symbol: symbol, tint: tint, player: player, callID: record.id,
+                              feedback: controller.coachReview(record.id)?.feedback[point.title])
                 }
             }
         }
@@ -83,10 +85,17 @@ struct CoachTab: View {
 }
 
 private struct PointView: View {
+    @EnvironmentObject var controller: AppController
     let point: CoachPoint
     let symbol: String
     let tint: Color
     @ObservedObject var player: AudioPlayer
+    let callID: String
+    let feedback: CoachFeedback?
+    @State private var writing = false
+    @State private var note = ""
+    @State private var sending = false
+    @State private var error: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -119,8 +128,116 @@ private struct PointView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
+            rating
         }
         .textSelection(.enabled)
+    }
+
+    /// 👍 / 👎, and after 👎 a line to say what it got wrong. The coach learns from both.
+    @ViewBuilder
+    private var rating: some View {
+        HStack(spacing: 10) {
+            thumb(agree: true)
+            thumb(agree: false)
+            if let note = feedback?.note {
+                Text("You said: \(note)").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
+            } else if feedback != nil {
+                Text(feedback!.agree ? "Marked right" : "Marked wrong").font(.system(size: 11)).foregroundStyle(.tertiary)
+            }
+            if sending { ProgressView().controlSize(.mini) }
+            Spacer()
+        }
+        if writing {
+            HStack(spacing: 6) {
+                TextField("What did it get wrong? The coach will remember.", text: $note, axis: .vertical)
+                    .textFieldStyle(.roundedBorder).lineLimit(1...3)
+                    .onSubmit { send(agree: false) }
+                Button("Send") { send(agree: false) }.disabled(sending)
+            }
+        }
+        if let error { Text(error).font(.system(size: 11)).foregroundStyle(Theme.recording) }
+    }
+
+    private func thumb(agree: Bool) -> some View {
+        let chosen = feedback?.agree == agree
+        return Button {
+            if agree { send(agree: true) } else { writing.toggle() }
+        } label: {
+            Image(systemName: agree ? (chosen ? "hand.thumbsup.fill" : "hand.thumbsup") : (chosen ? "hand.thumbsdown.fill" : "hand.thumbsdown"))
+                .font(.system(size: 12))
+                .foregroundStyle(chosen ? (agree ? Color.green : Theme.warning) : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(agree ? "The coach got this right" : "The coach got this wrong")
+        .accessibilityLabel(agree ? "Mark right" : "Mark wrong")
+    }
+
+    private func send(agree: Bool) {
+        sending = true
+        error = nil
+        let text = agree ? nil : note
+        Task {
+            do {
+                try await controller.rateCoachPoint(callID: callID, point: point, agree: agree, note: text)
+                writing = false
+                note = ""
+            } catch {
+                self.error = "\(error)"
+            }
+            sending = false
+        }
+    }
+}
+
+/// A conversation with the coach about this review: it answers and remembers what should change.
+private struct CoachThread: View {
+    @EnvironmentObject var controller: AppController
+    let callID: String
+    let thread: [ChatMessage]
+    @State private var draft = ""
+    @State private var sending = false
+    @State private var error: String?
+
+    var body: some View {
+        Card("Talk to the coach") {
+            VStack(alignment: .leading, spacing: 10) {
+                if thread.isEmpty {
+                    Text("Tell the coach what it missed or got wrong, or ask about this call. It answers and remembers what should change in later reviews.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(thread) { m in
+                    Text(m.text)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(m.role == .user ? Color.accentColor.opacity(0.14) : Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .frame(maxWidth: .infinity, alignment: m.role == .user ? .trailing : .leading)
+                        .textSelection(.enabled)
+                }
+                HStack(alignment: .bottom, spacing: 8) {
+                    TextField("Reply to the coach", text: $draft, axis: .vertical)
+                        .textFieldStyle(.roundedBorder).lineLimit(1...5)
+                        .onSubmit(send)
+                    if sending { ProgressView().controlSize(.small) }
+                    Button("Send", action: send).disabled(sending || draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                if let error { Text(error).font(.system(size: 11)).foregroundStyle(Theme.recording) }
+            }
+        }
+    }
+
+    private func send() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !sending else { return }
+        sending = true
+        error = nil
+        Task {
+            do {
+                try await controller.replyToCoach(callID: callID, message: text)
+                draft = ""
+            } catch {
+                self.error = "\(error)"
+            }
+            sending = false
+        }
     }
 }
 

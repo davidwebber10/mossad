@@ -53,6 +53,10 @@ enum CoachPrompt {
         improvements, give the moments where speaking up would have helped, with the words to say; if there were \
         none, return no improvements and say so in the overview.
 
+        \(owner) can rate your points and tell you where you were wrong. Their guidance is standing instruction: \
+        follow it in every review. Do not repeat advice they rejected; if this call shows strong new evidence for \
+        it, say so and say why, in one sentence. Learn from the points they agreed with too.
+
         Rate the meeting's value for \(owner): was this a good use of their time? Judge by what the meeting needed \
         from them and what it produced, using the facts given: their talk share, the decisions, the action items they \
         took, the number of people, the length, and how often the same meeting has come up before. A meeting where \
@@ -104,6 +108,14 @@ enum CoachPrompt {
             }.joined(separator: "\n"))
         }
         parts.append("## Your coaching profile of \(owner)\n" + notes.joined(separator: "\n"))
+        if !profile.guidance.isEmpty {
+            parts.append("## What \(owner) told you about your coaching (follow this)\n" + profile.guidance.map { "- \($0.text)" }.joined(separator: "\n"))
+        }
+        if !profile.rated.isEmpty {
+            parts.append("## \(owner)'s ratings of your recent points\n" + profile.rated.suffix(15).map {
+                "- \($0.agree ? "Right" : "Wrong"): \"\($0.title)\" (\($0.principle), \($0.callTitle))" + ($0.note.map { ". They said: \($0)" } ?? "")
+            }.joined(separator: "\n"))
+        }
 
         let here = Set(r.speakerNames.values).subtracting([owner])
         let people = profile.people.filter { here.contains($0.key) }.sorted { $0.key < $1.key }

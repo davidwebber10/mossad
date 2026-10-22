@@ -48,8 +48,11 @@ public actor CoachRunner {
                 let current = profile, tone = measureTone(r)
                 let result = try await UsageContext.$callID.withValue(r.id) { try await coach.review(record: r, profile: current, tone: tone) }
                 try result.review.save(in: paths.callDirectory(r.id))
-                profile.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start)
-                try profile.save(to: paths.coach)
+                // Read again before saving: the owner may have added guidance while the review ran.
+                var fresh = (try? CoachProfile.load(from: paths.coach)) ?? profile
+                fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start)
+                try fresh.save(to: paths.coach)
+                profile = fresh
                 done += 1
                 Log.info("Coached \(r.id)")
                 await onReview(r.id)

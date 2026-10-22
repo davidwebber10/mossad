@@ -43,6 +43,19 @@ public struct MeetingValue: Codable, Equatable, Sendable, Hashable {
     }
 }
 
+/// The owner's verdict on one point: right or wrong, and why.
+public struct CoachFeedback: Codable, Equatable, Sendable {
+    public var agree: Bool
+    public var note: String?
+    public var date: Date
+
+    public init(agree: Bool, note: String?, date: Date = Date()) {
+        self.agree = agree
+        self.note = note
+        self.date = date
+    }
+}
+
 /// The coach's review of one call, saved as `coach.json` next to `call.json`.
 public struct CoachReview: Codable, Equatable, Sendable {
     public static let fileName = "coach.json"
@@ -55,6 +68,10 @@ public struct CoachReview: Codable, Equatable, Sendable {
     public var focusProgress: String?
     public var value: MeetingValue?
     public var delivery: DeliveryStats?
+    /// The owner's rating of each point, by the point's title.
+    public var feedback: [String: CoachFeedback] = [:]
+    /// The owner's conversation with the coach about this review.
+    public var thread: [ChatMessage] = []
 
     public init(headline: String, overview: String, strengths: [CoachPoint], improvements: [CoachPoint],
                 focusProgress: String?, value: MeetingValue? = nil, delivery: DeliveryStats? = nil) {
@@ -65,6 +82,24 @@ public struct CoachReview: Codable, Equatable, Sendable {
         self.improvements = improvements
         self.focusProgress = focusProgress
         self.delivery = delivery
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case headline, overview, strengths, improvements, focusProgress, value, delivery, feedback, thread
+    }
+
+    /// Reviews from before feedback existed have no feedback or thread.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        headline = try c.decode(String.self, forKey: .headline)
+        overview = try c.decode(String.self, forKey: .overview)
+        strengths = try c.decode([CoachPoint].self, forKey: .strengths)
+        improvements = try c.decode([CoachPoint].self, forKey: .improvements)
+        focusProgress = try c.decodeIfPresent(String.self, forKey: .focusProgress)
+        value = try c.decodeIfPresent(MeetingValue.self, forKey: .value)
+        delivery = try c.decodeIfPresent(DeliveryStats.self, forKey: .delivery)
+        feedback = try c.decodeIfPresent([String: CoachFeedback].self, forKey: .feedback) ?? [:]
+        thread = try c.decodeIfPresent([ChatMessage].self, forKey: .thread) ?? []
     }
 
     /// Below this the owner mostly listened, and the review covers listening and value instead of delivery.

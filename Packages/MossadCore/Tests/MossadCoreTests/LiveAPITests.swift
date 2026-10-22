@@ -116,6 +116,21 @@ final class LiveAPITests: XCTestCase {
         XCTAssertNotNil(result.review.value)
     }
 
+    func testClaudeCoachTakesFeedback() async throws {
+        guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
+        let review = CoachReview(headline: "You let Mitch drive", overview: "Mitch talked 70% of the time.", strengths: [],
+                                 improvements: [CoachPoint(title: "Take back the agenda", observation: "Mitch set the order of topics.", quote: "Let me go first on the dashboards.",
+                                                           at: 40, principle: "Framing", tryInstead: "Before we start, here is what I need from today.")],
+                                 focusProgress: nil)
+        var r = syntheticCall()
+        r.calendarTitle = "Mitch / David"
+        let answer = try await CoachResponder(llm: AnthropicModel(apiKey: key), ownerName: "David Webber")
+            .respond(to: "That was on purpose. Mitch is my direct report and I want him to own these 1:1s.", review: review, record: r, profile: CoachProfile())
+        print("LIVE feedback reply: \(answer.reply)")
+        print("LIVE feedback guidance: add \(answer.add) remove \(answer.remove)")
+        XCTAssertFalse(answer.add.isEmpty)
+    }
+
     func testClaudeWritesTheWeeklyDigest() async throws {
         guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
         let review = CoachReview(headline: "Long openings", overview: "You took 90 s to reach the point.", strengths: [],

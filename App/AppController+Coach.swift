@@ -39,6 +39,50 @@ extension AppController {
     }
 }
 
+extension AppController {
+    /// Saves a 👍 or 👎 on one point. A note goes to the coach as a reply, so it can learn from it.
+    func rateCoachPoint(callID: String, point: CoachPoint, agree: Bool, note: String?) async throws {
+        let dir = paths.callDirectory(callID)
+        guard var review = CoachReview.load(in: dir), let record = try? CallRecord.load(from: dir) else { return }
+        let feedback = CoachFeedback(agree: agree, note: note?.nonEmpty)
+        review.feedback[point.title] = feedback
+        try review.save(in: dir)
+        var profile = coachProfile
+        profile.remember(feedback, on: point, callID: callID, title: record.title)
+        try profile.save(to: paths.coach)
+        coachVersion += 1
+        if let note = feedback.note {
+            try await replyToCoach(callID: callID, message: "About your point “\(point.title)”: \(note)")
+        }
+    }
+
+    /// Sends a reply to the coach about one review; the answer joins the review's thread, and any new
+    /// guidance joins the profile.
+    func replyToCoach(callID: String, message: String) async throws {
+        guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
+        let dir = paths.callDirectory(callID)
+        guard let review = CoachReview.load(in: dir), let record = try? CallRecord.load(from: dir) else { return }
+        let answer = try await UsageContext.$callID.withValue(callID) {
+            try await CoachResponder(llm: llm, ownerName: ownerName).respond(to: message, review: review, record: record, profile: coachProfile)
+        }
+        // Read again: a rating may have landed while the coach answered.
+        var latest = CoachReview.load(in: dir) ?? review
+        latest.thread += [ChatMessage(role: .user, text: message), ChatMessage(role: .assistant, text: answer.reply)]
+        try latest.save(in: dir)
+        var profile = coachProfile
+        profile.updateGuidance(add: answer.add, remove: answer.remove, at: Date())
+        try profile.save(to: paths.coach)
+        coachVersion += 1
+    }
+
+    func removeCoachGuidance(_ text: String) {
+        var profile = coachProfile
+        profile.updateGuidance(add: [], remove: [text], at: Date())
+        try? profile.save(to: paths.coach)
+        coachVersion += 1
+    }
+}
+
 private extension String {
     var nonEmpty: String? {
         let t = trimmingCharacters(in: .whitespaces)

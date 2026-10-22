@@ -264,6 +264,19 @@ struct SettingsView: View {
                     Text(focus).fontWeight(.medium)
                 }
             }
+            let guidance = controller.coachVersion >= 0 ? controller.coachProfile.guidance : []
+            if !guidance.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("What the coach learned from you").foregroundStyle(.secondary)
+                    ForEach(guidance) { g in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(g.text)
+                            Spacer()
+                            Button("Remove") { controller.removeCoachGuidance(g.text) }.buttonStyle(.link).font(.system(size: 11))
+                        }
+                    }
+                }
+            }
             switchRow("Weekly email on Monday", $controller.coachEmailEnabled)
             if controller.coachEmailEnabled {
                 HStack {
