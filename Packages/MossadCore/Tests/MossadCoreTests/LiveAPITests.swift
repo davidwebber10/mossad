@@ -125,6 +125,61 @@ final class LiveAPITests: XCTestCase {
         XCTAssertTrue(follow.lowercased().contains("friday"))
     }
 
+    private let liveTranscript = """
+    [00:00:05] David Webber: Where are we on the cushion shipment?
+    [00:00:09] Alex Rivera: Freight is booked. It leaves the north plant on Friday.
+    [00:00:15] David Webber: Good. Can you send me the updated forecast by Thursday?
+    [00:00:19] Alex Rivera: Yes, I will send it Thursday morning.
+    """
+
+    private func checkProvider(_ llm: any LanguageModel, _ label: String) async throws {
+        let summary = try await LLMSummarizer(llm: llm, ownerName: "David Webber").summarize(transcript: liveTranscript, title: "Cushion check-in")
+        print("LIVE \(label) summary: \(summary.headline ?? "") | items: \(summary.actionItems) | tags: \(summary.tags)")
+        XCTAssertTrue(summary.actionItems.contains { $0.task.lowercased().contains("forecast") })
+        let coach = try await LLMCoach(llm: llm, ownerName: "David Webber").review(record: syntheticCall(), profile: CoachProfile(), tone: nil)
+        print("LIVE \(label) coach: \(coach.review.headline) | value: \(coach.review.value?.rating.rawValue ?? "-")")
+        XCTAssertFalse(coach.review.improvements.isEmpty)
+        let answer = try await ChatAgent(llm: llm, ownerName: "David Webber")
+            .answer("What did Alex agree to do last call, and was there a deadline?", history: [], records: [syntheticCall()]) { print("LIVE \(label) step: \($0)") }
+        print("LIVE \(label) chat: \(answer)")
+        XCTAssertTrue(answer.contains("mossad://call/live"))
+    }
+
+    func testOpenAIProvider() async throws {
+        guard let key = APIKey.openai.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
+        try await checkProvider(OpenAIModel(apiKey: key, model: "gpt-6.1-sol"), "openai")
+    }
+
+    func testOpenRouterProvider() async throws {
+        guard let key = APIKey.openrouter.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
+        let models = try await ModelCatalog.fetch(.openrouter, apiKey: nil)
+        print("LIVE openrouter models: \(models.count), e.g. \(models.prefix(5).map(\.id))")
+        let model = try XCTUnwrap(models.first { $0.id.hasPrefix("google/") } ?? models.first)
+        try await checkProvider(OpenRouterModel(apiKey: key, model: model.id), "openrouter \(model.id)")
+    }
+
+    func testOpenAITranscribesSpeech() async throws {
+        guard let key = APIKey.openai.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
+        let dir = tempDirectory()
+        let aiff = dir.appendingPathComponent("speech.aiff")
+        let say = Process()
+        say.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+        say.arguments = ["-o", aiff.path, "We should ship the cushions on Friday. The Adirondack chairs can wait until Monday."]
+        try say.run()
+        say.waitUntilExit()
+        let caf = dir.appendingPathComponent("me.caf")
+        let input = try AVAudioFile(forReading: aiff)
+        let buffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: AVAudioFrameCount(input.length))!
+        try input.read(into: buffer)
+        let writer = try TrackWriter(url: caf, startTime: Date(), clock: { Date() })
+        try writer.append(buffer)
+        writer.close()
+        let utterances = try await OpenAITranscriber(apiKey: key).transcribe(file: caf, track: .me)
+        let text = utterances.map(\.text).joined(separator: " ").lowercased()
+        print("LIVE openai transcription: \(text)")
+        XCTAssertTrue(text.contains("cushions"), text)
+    }
+
     /// Full pipeline on synthetic voices: me = Samantha, them = Daniel then Karen.
     func testEndToEndPipeline() async throws {
         let env = ProcessInfo.processInfo.environment

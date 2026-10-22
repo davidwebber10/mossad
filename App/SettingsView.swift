@@ -31,13 +31,10 @@ struct SettingsView: View {
                     }
                     VStack(alignment: .leading, spacing: 18) {
                         group("Recording") { recording }
-                        group("API keys", footer: "Keys are stored in the Keychain.") {
-                            keyRow("AssemblyAI", "Transcription and speaker turns", .assemblyai)
-                            keyRow("Anthropic", "Summary and action items with Claude", .anthropic)
-                        }
                     }
                 }
-                group("Communication coach", footer: "Reviews use your Anthropic key. The coach's notes stay on this Mac in the Coach folder.") { coach }
+                group("Providers", footer: "Keys are stored in the Keychain. Each provider bills your own account.") { providers }
+                group("Communication coach", footer: "Reviews use the AI provider above. The coach's notes stay on this Mac in the Coach folder.") { coach }
                 group("Storage") { StorageSettings() }
             }
             .font(.system(size: 12))
@@ -173,6 +170,53 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var providers: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Transcription").fontWeight(.medium)
+                Spacer()
+                Picker("Transcription provider", selection: $controller.transcriptionProvider) {
+                    ForEach(TranscriptionProvider.allCases) { Text($0.displayName).tag($0) }
+                }
+                .labelsHidden().frame(width: 150)
+                if controller.transcriptionProvider.models.count > 1 {
+                    Picker("Transcription model", selection: $controller.transcriptionModel) {
+                        ForEach(controller.transcriptionProvider.models) { Text($0.name).tag($0.id) }
+                    }
+                    .labelsHidden().frame(width: 170)
+                }
+            }
+            Text(controller.transcriptionProvider.note).font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+        .onChange(of: controller.transcriptionProvider) { _, p in
+            controller.transcriptionModel = p.models.first?.id ?? ""
+            controller.rebuildPipeline()
+        }
+        keyRow(controller.transcriptionProvider.displayName, "Transcribes your calls after they end", controller.transcriptionProvider.key)
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("AI").fontWeight(.medium)
+                Text("Summaries, the coach, the weekly email, and chat").foregroundStyle(.secondary)
+            }
+            Spacer()
+            Picker("AI provider", selection: $controller.aiProvider) {
+                ForEach(AIProvider.allCases) { Text($0.displayName).tag($0) }
+            }
+            .labelsHidden().frame(width: 150)
+            ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)
+        }
+        .onChange(of: controller.aiProvider) { _, _ in
+            controller.aiModel = ""
+            controller.rebuildPipeline()
+        }
+        .onChange(of: controller.aiModel) { _, _ in controller.rebuildPipeline() }
+        keyRow(controller.aiProvider.displayName, "Answers with your chosen model", controller.aiProvider.key)
+        if controller.liveTranscriptEnabled, controller.transcriptionProvider != .assemblyai {
+            keyRow("AssemblyAI", "The live transcript while recording uses AssemblyAI", .assemblyai)
+        }
+    }
+
+    @ViewBuilder
     private var coach: some View {
         switchRow("Review each call", $controller.coachEnabled)
             .help("After each note, Claude reviews how you communicated and gives advice tied to moments in the call. It keeps notes over time, so it tracks your progress and your history with each person.")
@@ -197,7 +241,41 @@ struct SettingsView: View {
                     Spacer()
                     TextField("Mossad <coach@yourdomain.com>", text: $controller.coachEmailFrom).frame(width: 240)
                 }
-                keyRow("Resend", "Sends the weekly email with your own account", .resend)
+                HStack {
+                    Text("Email provider")
+                    Spacer()
+                    Picker("Email provider", selection: $controller.mailProvider) {
+                        ForEach(MailProvider.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    .labelsHidden().frame(width: 160)
+                }
+                if controller.mailProvider == .mailgun {
+                    HStack {
+                        Text("Sending domain")
+                        Spacer()
+                        TextField("mg.yourdomain.com", text: $controller.mailDomain).frame(width: 240)
+                    }
+                }
+                if controller.mailProvider == .mailgun || controller.mailProvider == .sendgrid {
+                    switchRow("Use the EU region", $controller.mailEurope)
+                }
+                if controller.mailProvider == .ses {
+                    HStack {
+                        Text("Region")
+                        Spacer()
+                        TextField("us-east-1", text: $controller.mailRegion).frame(width: 240)
+                    }
+                    HStack {
+                        Text("Access key ID")
+                        Spacer()
+                        TextField("AKIA…", text: $controller.mailAccessKeyID).frame(width: 240)
+                    }
+                }
+                keyRow(controller.mailProvider.displayName, controller.mailProvider == .ses ? "The secret access key" : "Sends the weekly email with your own account",
+                       controller.mailProvider.key)
+                if !controller.coachEmailTo.isEmpty, !WeeklyEmail.isSingleAddress(controller.coachEmailTo) {
+                    Text("Enter one address, your own. Mossad only ever emails you.").foregroundStyle(Theme.recording)
+                }
                 HStack {
                     Spacer()
                     Button(sending ? "Sending…" : "Send last week's email now") {
@@ -208,7 +286,8 @@ struct SettingsView: View {
                         }
                     }
                     .controlSize(.small)
-                    .disabled(sending || controller.coachEmailTo.isEmpty || controller.coachEmailFrom.isEmpty || !controller.hasKey(.resend))
+                    .disabled(sending || !WeeklyEmail.isSingleAddress(controller.coachEmailTo) || controller.coachEmailFrom.isEmpty
+                              || !controller.hasKey(controller.mailProvider.key))
                 }
             }
         }
@@ -266,18 +345,9 @@ private struct KeySheet: View {
     let key: APIKey
     @State private var value = ""
 
-    private var title: String {
-        switch key {
-        case .assemblyai: "AssemblyAI key"
-        case .anthropic: "Anthropic key"
-        case .resend: "Resend key"
-        case .cloudSecret: "Secret access key"
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.headline)
+            Text(key.displayName).font(.headline)
             SecureField("Paste the key", text: $value).textFieldStyle(.roundedBorder)
             HStack {
                 Spacer()
@@ -297,5 +367,61 @@ private struct KeySheet: View {
         }
         .padding(20)
         .frame(width: 380)
+    }
+}
+
+extension APIKey {
+    var displayName: String {
+        switch self {
+        case .assemblyai: "AssemblyAI key"
+        case .anthropic: "Anthropic key"
+        case .openai: "OpenAI key"
+        case .openrouter: "OpenRouter key"
+        case .deepgram: "Deepgram key"
+        case .elevenlabs: "ElevenLabs key"
+        case .resend: "Resend key"
+        case .postmark: "Postmark server token"
+        case .sendgrid: "SendGrid key"
+        case .mailgun: "Mailgun key"
+        case .brevo: "Brevo key"
+        case .sesSecret: "Amazon SES secret access key"
+        case .cloudSecret: "Secret access key"
+        }
+    }
+}
+
+/// The model menu for the AI provider, filled from the provider's own list. OpenRouter has hundreds of
+/// models, so it gets a field to type in with a filtered menu beside it.
+private struct ModelPicker: View {
+    @EnvironmentObject var controller: AppController
+    let provider: AIProvider
+    @Binding var model: String
+    @State private var models: [ModelInfo] = []
+
+    var body: some View {
+        let current = model.isEmpty ? provider.defaultModel : model
+        Group {
+            if provider == .openrouter {
+                HStack(spacing: 6) {
+                    TextField("provider/model", text: $model).frame(width: 190)
+                    Menu("Choose") {
+                        let q = model.lowercased()
+                        let matches = models.filter { q.isEmpty || $0.id.lowercased().contains(q) || $0.name.lowercased().contains(q) }
+                        ForEach(Array((matches.isEmpty ? models : matches).prefix(60))) { m in Button(m.name) { model = m.id } }
+                    }
+                    .fixedSize()
+                    .disabled(models.isEmpty)
+                }
+            } else {
+                Picker("Model", selection: Binding(get: { current }, set: { model = $0 })) {
+                    let list = models.contains { $0.id == current } || current.isEmpty ? models : [ModelInfo(id: current, name: current)] + models
+                    ForEach(list) { Text($0.name).tag($0.id) }
+                }
+                .labelsHidden().frame(width: 220)
+            }
+        }
+        .task(id: "\(provider.rawValue)-\(controller.hasKey(provider.key))") {
+            models = (try? await ModelCatalog.fetch(provider, apiKey: controller.keychain.get(provider.key))) ?? []
+        }
     }
 }

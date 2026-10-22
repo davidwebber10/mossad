@@ -103,6 +103,16 @@ final class AppController: ObservableObject {
     @AppStorage("ownerName") var ownerName = NSFullUserName()
     @AppStorage("organization") var organization = ""
     @AppStorage("voiceFingerprints") var voiceFingerprints = true
+    /// The provider and model for each job. Keys stay in the Keychain; these names are not secret.
+    @AppStorage("transcriptionProvider") var transcriptionProvider = TranscriptionProvider.assemblyai
+    @AppStorage("transcriptionModel") var transcriptionModel = ""
+    @AppStorage("aiProvider") var aiProvider = AIProvider.anthropic
+    @AppStorage("aiModel") var aiModel = ""
+    @AppStorage("mailProvider") var mailProvider = MailProvider.resend
+    @AppStorage("mailDomain") var mailDomain = ""
+    @AppStorage("mailEurope") var mailEurope = false
+    @AppStorage("mailRegion") var mailRegion = "us-east-1"
+    @AppStorage("mailAccessKeyID") var mailAccessKeyID = ""
     @AppStorage("coachEnabled") var coachEnabled = false
     /// Calls that start before this (seconds since 1970) are not coached, so turning the coach on does not review years of calls.
     @AppStorage("coachSince") var coachSince: Double = 0
@@ -226,12 +236,25 @@ final class AppController: ObservableObject {
 
     func hasKey(_ key: APIKey) -> Bool { keychain.get(key) != nil }
 
+    /// The chosen AI model, or nil without its key (or without a picked OpenRouter model).
+    var languageModel: (any LanguageModel)? {
+        guard let key = keychain.get(aiProvider.key), !(aiModel.isEmpty && aiProvider.defaultModel.isEmpty) else { return nil }
+        return aiProvider.model(aiModel, apiKey: key, usage: usage)
+    }
+
+    var mailSettings: MailSettings {
+        MailSettings(from: coachEmailFrom.trimmingCharacters(in: .whitespaces), domain: mailDomain, europe: mailEurope,
+                     region: mailRegion, accessKeyID: mailAccessKeyID)
+    }
+
     /// Recreates the pipeline with the current keys and settings.
     func rebuildPipeline() {
         let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
         let organization = organization.trimmingCharacters(in: .whitespaces)
-        let transcriber: Transcribing = keychain.get(.assemblyai).map { AssemblyAIClient(apiKey: $0, usage: usage) } ?? MissingKeyTranscriber()
-        let summarizer: Summarizing? = keychain.get(.anthropic).map { LLMSummarizer(apiKey: $0, ownerName: owner, organization: organization, usage: usage) }
+        let provider = transcriptionProvider
+        let transcriber: Transcribing = keychain.get(provider.key).map { provider.transcriber(model: transcriptionModel, apiKey: $0, usage: usage) }
+            ?? MissingKeyTranscriber(service: provider.displayName)
+        let summarizer: Summarizing? = languageModel.map { LLMSummarizer(llm: $0, ownerName: owner, organization: organization) }
         let notifier = notifier
         pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: FluidEmbeddingProvider(),
                             calendar: calendar, summarizer: summarizer, notify: { record in
@@ -427,8 +450,8 @@ final class AppController: ObservableObject {
     }
 
     func chatAnswer(_ question: String, history: [ChatMessage], onStep: @escaping @Sendable (String) -> Void) async throws -> String {
-        guard let key = keychain.get(.anthropic) else { throw SummaryError.http(0, "The Anthropic key is missing. Add it in Settings.") }
-        return try await ChatAgent(apiKey: key, ownerName: ownerName, usage: usage).answer(question, history: history, records: meetings, onStep: onStep)
+        guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
+        return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, onStep: onStep)
     }
 
     /// Opens a `mossad://call/<id>?t=<seconds>` link from a chat answer.
@@ -689,7 +712,9 @@ private final class WindowDelegate: NSObject, NSWindowDelegate {
 
 /// Used when no AssemblyAI key is stored: the call stays queued until a key exists.
 struct MissingKeyTranscriber: Transcribing {
+    let service: String
+
     func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
-        throw MissingAPIKey(service: "AssemblyAI")
+        throw MissingAPIKey(service: service)
     }
 }

@@ -16,9 +16,9 @@ extension AppController {
 
     /// Reviews the calls that are due, one at a time, then sends the weekly email when it is due.
     func runCoach() {
-        guard coachEnabled, !coaching, let key = keychain.get(.anthropic) else { return }
+        guard coachEnabled, !coaching, let llm = languageModel else { return }
         coaching = true
-        let runner = CoachRunner(paths: paths, coach: LLMCoach(apiKey: key, ownerName: ownerName, usage: usage), owner: ownerName,
+        let runner = CoachRunner(paths: paths, coach: LLMCoach(llm: llm, ownerName: ownerName), owner: ownerName,
                                  since: Date(timeIntervalSince1970: coachSince))
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
@@ -29,11 +29,11 @@ extension AppController {
 
     /// `now` sends last week's email even when this week's was sent already.
     func sendCoachEmail(now: Bool = false) async {
-        guard coachEnabled, coachEmailEnabled || now, let to = coachEmailTo.nonEmpty, let from = coachEmailFrom.nonEmpty,
-              let anthropic = keychain.get(.anthropic), let resend = keychain.get(.resend) else { return }
+        guard coachEnabled, coachEmailEnabled || now, let to = coachEmailTo.nonEmpty, coachEmailFrom.nonEmpty != nil,
+              let llm = languageModel, let secret = keychain.get(mailProvider.key) else { return }
         let last = now || coachLastEmail == 0 ? nil : Date(timeIntervalSince1970: coachLastEmail)
         if let sent = await WeeklyEmail.sendIfDue(paths: paths, owner: ownerName, to: to, lastSent: last,
-                                                  writer: LLMDigestWriter(apiKey: anthropic, usage: usage), mailer: ResendMailer(apiKey: resend, from: from)) {
+                                                  writer: LLMDigestWriter(llm: llm), mailer: mailSettings.mailer(mailProvider, secret: secret)) {
             coachLastEmail = sent.timeIntervalSince1970
         }
     }

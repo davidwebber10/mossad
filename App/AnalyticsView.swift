@@ -527,7 +527,15 @@ private struct DeliveryChart: View {
 private struct CostSection: View {
     let report: AnalyticsReport
 
-    private static let services: [(UsageEvent.Service, String, Color)] = [(.assemblyai, "AssemblyAI", Color(hex: 0x2545d3)), (.claude, "Claude", Color(hex: 0xd97757))]
+    private static let allServices: [(UsageEvent.Service, String, Color)] = [
+        (.assemblyai, "AssemblyAI", Color(hex: 0x2545d3)), (.deepgram, "Deepgram", Color(hex: 0x13ef93)), (.elevenlabs, "ElevenLabs", Color(hex: 0x8e8e93)),
+        (.claude, "Claude", Color(hex: 0xd97757)), (.openai, "OpenAI", Color(hex: 0x10a37f)), (.openrouter, "OpenRouter", Color(hex: 0x6467f2)),
+    ]
+
+    /// Only the services that cost something in this period, so the legend stays short.
+    private var services: [(UsageEvent.Service, String, Color)] {
+        Self.allServices.filter { (report.cost.byService[$0.0] ?? 0) > 0 }
+    }
     private static let purposes: [(UsageEvent.Purpose, String)] = [
         (.transcription, "Transcription"), (.live, "Live transcript"), (.summary, "Summaries"), (.coach, "Coach reviews"), (.weeklyEmail, "Weekly email"), (.question, "Questions"),
     ]
@@ -548,7 +556,7 @@ private struct CostSection: View {
                 VStack(alignment: .leading, spacing: 6) {
                     row("Per call", money(c.perCall))
                     row("Per hour of calls", money(c.perCallHour))
-                    ForEach(Self.services, id: \.1) { s in
+                    ForEach(services, id: \.1) { s in
                         row(s.1, money(c.byService[s.0] ?? 0), dot: s.2)
                     }
                 }
@@ -566,14 +574,14 @@ private struct CostSection: View {
             .frame(width: 260)
             Chart {
                 ForEach(report.days) { bar in
-                    ForEach(Self.services, id: \.1) { s in
+                    ForEach(services, id: \.1) { s in
                         BarMark(x: .value("Date", bar.date, unit: unit), y: .value("Cost", bar.cost[s.0] ?? 0))
                             .foregroundStyle(by: .value("Service", s.1))
                             .cornerRadius(2)
                     }
                 }
             }
-            .chartForegroundStyleScale(domain: Self.services.map(\.1), range: Self.services.map(\.2))
+            .chartForegroundStyleScale(domain: services.map(\.1), range: services.map(\.2))
             .chartLegend(position: .top, alignment: .trailing)
             .chartYAxis {
                 AxisMarks(position: .leading) { v in

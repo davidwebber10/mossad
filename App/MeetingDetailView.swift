@@ -524,10 +524,10 @@ private struct SummaryTab: View {
         } else if record.status == .written {
             Card("Summary") {
                 HStack {
-                    Text(controller.hasKey(.anthropic) ? "No summary for this meeting." : "No summary for this meeting. Add the Anthropic key in Settings.")
+                    Text(controller.languageModel != nil ? "No summary for this meeting." : "No summary for this meeting. Add the \(controller.aiProvider.displayName) key in Settings.")
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if !controller.hasKey(.anthropic) { Button("Retry summary") { controller.retry(record.id) } }
+                    if controller.languageModel == nil { Button("Retry summary") { controller.retry(record.id) } }
                 }
             }
         }
