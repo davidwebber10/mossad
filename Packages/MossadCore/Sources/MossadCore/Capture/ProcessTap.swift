@@ -1,3 +1,5 @@
+#if os(macOS)
+// Call detection and capture use macOS-only APIs; the iPhone app reads meetings only.
 import AVFoundation
 import CoreAudio
 import Foundation
@@ -122,3 +124,4 @@ public final class OutputDeviceWatcher: @unchecked Sendable {
         AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
     }
 }
+#endif

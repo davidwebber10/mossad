@@ -1,3 +1,4 @@
+#if os(macOS)
 import AVFoundation
 import Foundation
 
@@ -57,3 +58,4 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
         if voiceProcessing { try? engine.inputNode.setVoiceProcessingEnabled(false) }
     }
 }
+#endif

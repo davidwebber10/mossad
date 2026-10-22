@@ -1,3 +1,5 @@
+#if os(macOS)
+// Call detection and capture use macOS-only APIs; the iPhone app reads meetings only.
 import AppKit
 import Foundation
 
@@ -111,3 +113,4 @@ func onMain<T: Sendable>(timeout: TimeInterval = 5, _ body: @escaping @MainActor
 private final class MainResult<T>: @unchecked Sendable {
     var value: T?
 }
+#endif

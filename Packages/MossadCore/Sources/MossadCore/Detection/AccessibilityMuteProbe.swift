@@ -1,3 +1,5 @@
+#if os(macOS)
+// Call detection and capture use macOS-only APIs; the iPhone app reads meetings only.
 import AppKit
 import ApplicationServices
 
@@ -89,3 +91,4 @@ public final class AccessibilityMuteProbe: MuteProbing, @unchecked Sendable {
         return AXUIElementCopyAttributeValue(e, name as CFString, &value) == .success ? value : nil
     }
 }
+#endif

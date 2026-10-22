@@ -1,3 +1,5 @@
+#if os(macOS)
+// Call detection and capture use macOS-only APIs; the iPhone app reads meetings only.
 import CoreAudio
 import Foundation
 
@@ -50,3 +52,4 @@ public protocol WindowTitleProbing: AnyObject {
     func windowTitles(bundleID: String) -> [String]?
     func isRunning(bundleID: String) -> Bool
 }
+#endif

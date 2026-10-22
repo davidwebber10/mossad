@@ -9,8 +9,14 @@ public struct Paths: Sendable {
     }
 
     /// `~/Mossad`, or `$MOSSAD_ROOT` when set (for trying the app against a demo folder).
-    public static let live = Paths(root: ProcessInfo.processInfo.environment["MOSSAD_ROOT"].map { URL(fileURLWithPath: $0) }
-        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Mossad"))
+    public static let live = Paths(root: ProcessInfo.processInfo.environment["MOSSAD_ROOT"].map { URL(fileURLWithPath: $0) } ?? home)
+
+    #if os(macOS)
+    private static let home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Mossad")
+    #else
+    /// On the iPhone, the meetings synced from the Mac live in the app's own Documents folder.
+    private static let home = URL.documentsDirectory.appendingPathComponent("Mossad")
+    #endif
 
     public var meetings: URL { root.appendingPathComponent("Meetings") }
     public var audio: URL { root.appendingPathComponent("Audio") }

@@ -1,3 +1,5 @@
+#if os(macOS)
+// Call detection and capture use macOS-only APIs; the iPhone app reads meetings only.
 import AVFoundation
 import CoreAudio
 import Foundation
@@ -318,3 +320,4 @@ public final class CallRecorder: @unchecked Sendable {
         isManual = false
     }
 }
+#endif

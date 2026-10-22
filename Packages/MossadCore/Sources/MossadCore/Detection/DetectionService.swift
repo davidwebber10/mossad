@@ -1,3 +1,5 @@
+#if os(macOS)
+// Call detection and capture use macOS-only APIs; the iPhone app reads meetings only.
 import CoreAudio
 import Foundation
 
@@ -192,3 +194,4 @@ public final class DetectionService: @unchecked Sendable {
         }
     }
 }
+#endif

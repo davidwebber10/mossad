@@ -1,3 +1,5 @@
+#if os(macOS)
+// Call detection and capture use macOS-only APIs; the iPhone app reads meetings only.
 import AppKit
 import ApplicationServices
 
@@ -50,3 +52,4 @@ public final class WindowTitleProbe: WindowTitleProbing {
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 }
+#endif
