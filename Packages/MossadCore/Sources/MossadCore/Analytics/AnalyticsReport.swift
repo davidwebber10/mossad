@@ -38,6 +38,8 @@ public struct AnalyticsReport: Sendable {
         public var date: Date
         public var seconds: TimeInterval = 0
         public var calls = 0
+        /// Calls matched to a calendar invite; the rest were ad hoc.
+        public var scheduledCalls = 0
         public var cost: [UsageEvent.Service: Double] = [:]
     }
 
@@ -104,6 +106,13 @@ public struct AnalyticsReport: Sendable {
     /// Meeting titles rated low more than once in the period: the first ones to change.
     public let lowValueRepeats: [Slice]
     public let cost: Cost
+    /// Calls matched to a calendar invite, and the rest (ad hoc calls).
+    public let scheduled: Slice
+    public let unscheduled: Slice
+    /// Calls per calendar day in the period.
+    public var callsPerDay: Double { Double(calls) / max(1, (interval.duration / 86_400).rounded()) }
+    /// The bucket with the most calls.
+    public var busiestDay: Bar? { days.max { $0.calls < $1.calls }.flatMap { $0.calls > 0 ? $0 : nil } }
 
     public init(records all: [CallRecord], usage: [UsageEvent], owner: String, interval: DateInterval,
                 reviews: [String: CoachReview] = [:], calendar: Calendar = .current) {
@@ -113,6 +122,9 @@ public struct AnalyticsReport: Sendable {
         records = all.filter { $0.status != .recording && interval.contains($0.start) }.sorted { $0.start < $1.start }
         func length(_ r: CallRecord) -> TimeInterval { max(0, r.end.timeIntervalSince(r.start)) }
         callSeconds = records.map(length).reduce(0, +)
+        let planned = records.filter { $0.calendarTitle != nil }, adHoc = records.filter { $0.calendarTitle == nil }
+        scheduled = Slice(name: "Scheduled", seconds: planned.map(length).reduce(0, +), calls: planned.count)
+        unscheduled = Slice(name: "Unscheduled", seconds: adHoc.map(length).reduce(0, +), calls: adHoc.count)
         longest = records.max { length($0) < length($1) }
         actionItems = records.map(\.actionItems.count).reduce(0, +)
 
@@ -160,6 +172,7 @@ public struct AnalyticsReport: Sendable {
         for r in records {
             bars[bucketStart(r.start), default: Bar(date: bucketStart(r.start))].seconds += length(r)
             bars[bucketStart(r.start)]!.calls += 1
+            if r.calendarTitle != nil { bars[bucketStart(r.start)]!.scheduledCalls += 1 }
             // Spread the call over the hours it covers.
             var t = r.start
             while t < r.end {

@@ -186,4 +186,24 @@ final class AnalyticsTests: XCTestCase {
         XCTAssertEqual(r.lowValueRepeats.map(\.name), ["Weekly Sync"])
         XCTAssertEqual(r.lowValueRepeats.first?.calls, 2)
     }
+
+    // MARK: Scheduled and unscheduled
+
+    func testReportSplitsScheduledFromUnscheduledCallsAndCountsCallsPerDay() {
+        var a = call("a", date(10, 19, 9), minutes: 30); a.calendarTitle = "Weekly Sync"
+        let b = call("b", date(10, 19, 14), minutes: 10)
+        let c = call("c", date(10, 20, 10), minutes: 20)
+        let r = AnalyticsReport(records: [a, b, c], usage: [], owner: "David Webber",
+                                interval: DateInterval(start: date(10, 15, 0), end: date(10, 22, 0)), calendar: cal)
+        XCTAssertEqual(r.scheduled.calls, 1)
+        XCTAssertEqual(r.scheduled.seconds, 1800)
+        XCTAssertEqual(r.unscheduled.calls, 2)
+        XCTAssertEqual(r.unscheduled.seconds, 1800)
+        let monday = r.days.first { cal.isDate($0.date, inSameDayAs: date(10, 19)) }
+        XCTAssertEqual(monday?.scheduledCalls, 1)
+        XCTAssertEqual(monday?.calls, 2)
+        // 3 calls over the 7 days in the period.
+        XCTAssertEqual(r.callsPerDay, 3.0 / 7.0, accuracy: 0.001)
+        XCTAssertEqual(r.busiestDay?.calls, 2)
+    }
 }

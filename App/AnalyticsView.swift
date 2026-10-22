@@ -137,7 +137,7 @@ struct AnalyticsView: View {
             Metric(title: "Time in calls", value: hours(r.callSeconds), change: change(r.callSeconds, before.callSeconds),
                    detail: "\(hours(r.callSeconds / max(1, r.interval.duration / (7 * 86_400)))) a week")
             Metric(title: "Calls", value: "\(r.calls)", change: change(Double(r.calls), Double(before.calls)),
-                   detail: "\(r.actionItems) action items")
+                   detail: String(format: "%.1f a day · %d action items", r.callsPerDay, r.actionItems))
             Metric(title: "Average length", value: "\(Int(r.averageSeconds / 60)) min", change: change(r.averageSeconds, before.averageSeconds),
                    detail: r.longest.map { "Longest: \(Int($0.end.timeIntervalSince($0.start) / 60)) min" } ?? "")
             Metric(title: "Your talk share", value: r.talkShare.map { "\(Int(($0 * 100).rounded()))%" } ?? "–",
@@ -152,6 +152,7 @@ struct AnalyticsView: View {
             Card("Platforms") { PlatformChart(slices: r.platforms) }
                 .frame(width: 300)
         }
+        Card("Scheduled and unscheduled") { ScheduledSection(report: r) }
         HStack(alignment: .top, spacing: 12) {
             Card("When you meet") { HeatChart(cells: r.heat) }
                 .frame(maxWidth: .infinity)
@@ -447,6 +448,57 @@ private struct ValueSection: View {
             }
             .frame(width: 340)
         }
+    }
+}
+
+/// Calls from a calendar invite against ad hoc ones, as a share and over time.
+private struct ScheduledSection: View {
+    let report: AnalyticsReport
+    private static let planned = Color.accentColor, adHoc = Color(hex: 0x8e8e93)
+
+    private var unit: Calendar.Component {
+        switch report.bucket { case .day: .day; case .week: .weekOfYear; case .month: .month }
+    }
+
+    var body: some View {
+        let share = report.calls > 0 ? Double(report.scheduled.calls) / Double(report.calls) : 0
+        HStack(alignment: .top, spacing: 24) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(Int((share * 100).rounded()))% scheduled").font(.system(size: 22, weight: .semibold)).monospacedDigit()
+                    Text("Scheduled means Mossad matched the call to a calendar invite.").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                row("Scheduled", report.scheduled, Self.planned)
+                row("Unscheduled", report.unscheduled, Self.adHoc)
+                if let busiest = report.busiestDay {
+                    Text("Busiest: \(busiest.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())), \(busiest.calls) calls")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 260, alignment: .leading)
+            Chart {
+                ForEach(report.days) { bar in
+                    BarMark(x: .value("Date", bar.date, unit: unit), y: .value("Calls", bar.scheduledCalls))
+                        .foregroundStyle(by: .value("Kind", "Scheduled"))
+                    BarMark(x: .value("Date", bar.date, unit: unit), y: .value("Calls", bar.calls - bar.scheduledCalls))
+                        .foregroundStyle(by: .value("Kind", "Unscheduled"))
+                }
+            }
+            .chartForegroundStyleScale(domain: ["Scheduled", "Unscheduled"], range: [Self.planned, Self.adHoc])
+            .chartLegend(position: .top, alignment: .trailing)
+            .chartYAxis { AxisMarks(position: .leading) }
+            .frame(height: 180)
+        }
+    }
+
+    private func row(_ title: String, _ s: AnalyticsReport.Slice, _ color: Color) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(title)
+            Spacer()
+            Text("\(s.calls) · \(hours(s.seconds))").foregroundStyle(.secondary).monospacedDigit()
+        }
+        .font(.system(size: 12))
     }
 }
 
