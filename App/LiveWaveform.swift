@@ -13,7 +13,8 @@ struct LiveWaveform: View {
     var body: some View {
         let meters = controller.meters
         VStack(alignment: .leading, spacing: 8) {
-            row("You", meters.me, color: Theme.speakerPalette[0])
+            row(controller.isMuted ? "Muted" : "You", meters.me, color: controller.isMuted ? Theme.unknown : Theme.speakerPalette[0])
+                .opacity(controller.isMuted ? 0.5 : 1)
             row("Call audio", meters.them, color: Theme.speakerPalette[1])
         }
         .opacity(controller.isPaused ? 0.4 : 1)

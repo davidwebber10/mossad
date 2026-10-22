@@ -309,8 +309,12 @@ private struct CurrentCallRow: View {
                 LengthText(record: record).font(.system(size: 12, weight: .medium)).monospacedDigit()
             }
             HStack(spacing: 8) {
-                Text(controller.isPaused ? "Paused" : "\(record.platform.displayName) · recording")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                if controller.isMuted, !controller.isPaused {
+                    Label("Muted", systemImage: "mic.slash.fill").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.warning)
+                } else {
+                    Text(controller.isPaused ? "Paused" : "\(record.platform.displayName) · recording")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
                 LiveWaveform(bars: 28, rowHeight: 8, showLabels: false).frame(maxWidth: 120)
             }
             .padding(.leading, 16)

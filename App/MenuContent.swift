@@ -138,6 +138,7 @@ struct MenuContent: View {
                     Text("\(platform.displayName) · started \(since.formatted(date: .omitted, time: .shortened))")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
+                if controller.isMuted, !controller.isPaused { MutedBanner(platform: platform, compact: true) }
                 CallControls(compact: true)
             }
             .padding(EdgeInsets(top: 14, leading: 14, bottom: 12, trailing: 14))

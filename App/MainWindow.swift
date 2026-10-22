@@ -46,7 +46,7 @@ private struct SidebarStatus: View {
             if case .recording(_, let since) = controller.status {
                 StatusDot(color: Theme.recording, pulsing: true)
                 TimelineView(.periodic(from: since, by: 1)) { context in
-                    Text("Recording \(elapsed(since, context.date))").monospacedDigit()
+                    Text("Recording \(elapsed(since, context.date))\(controller.isMuted ? " · muted" : "")").monospacedDigit()
                 }
             } else if !permissions.allGood {
                 StatusDot(color: Theme.warning)

@@ -160,3 +160,23 @@ extension View {
         glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
     }
 }
+
+/// Shown while the person is muted in the call app: Mossad records silence on their mic meanwhile.
+struct MutedBanner: View {
+    let platform: Platform
+    var compact = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "mic.slash.fill").font(.system(size: compact ? 11 : 13, weight: .semibold)).foregroundStyle(Theme.warning)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Muted in \(platform.displayName)").font(.system(size: compact ? 12 : 13, weight: .semibold))
+                Text("Your mic is not recorded while you are muted.").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, compact ? 10 : 12).padding(.vertical, compact ? 7 : 9)
+        .background(Theme.warning.opacity(0.13), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}

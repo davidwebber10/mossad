@@ -781,6 +781,9 @@ private struct LivePanel: View {
             TimelineView(.periodic(from: record.start, by: 1)) { context in
                 Text(elapsed(record.start, context.date)).font(.system(size: 40, weight: .semibold)).kerning(-1).monospacedDigit()
             }
+            if controller.isMuted, !controller.isPaused {
+                MutedBanner(platform: record.platform).frame(maxWidth: 620)
+            }
             LiveWaveform(bars: 72, rowHeight: 40)
                 .padding(16)
                 .frame(maxWidth: 620)

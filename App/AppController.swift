@@ -219,6 +219,7 @@ final class AppController: ObservableObject {
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
         if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }
+        if CommandLine.arguments.contains("--show-muted") { isMuted = true }
         // Development hook: `--regenerate-summaries` writes new summaries for today's finished meetings.
         if !preview, CommandLine.arguments.contains("--regenerate-summaries") {
             let today = meetings.filter { Calendar.current.isDateInToday($0.start) && $0.status == .written }.map(\.id)
