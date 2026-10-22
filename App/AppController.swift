@@ -36,7 +36,9 @@ final class AppController: ObservableObject {
     /// The sub-step each call is in while processing, such as "AssemblyAI is transcribing".
     @Published private(set) var stepDetails: [String: String] = [:]
     /// What was said so far, from AssemblyAI streaming; shown while the call runs, not used for the note.
-    @Published private(set) var live = LiveTranscript()
+    /// What was said so far, from AssemblyAI streaming. Its own object, so only the transcript view redraws when
+    /// a message arrives, not the whole window.
+    let live = LiveTranscriptModel()
     @AppStorage("liveTranscript") var liveTranscriptEnabled = true
     /// "local", "r2", or "s3". The secret lives in the Keychain; the rest is not secret.
     @AppStorage("storage") var storage = "local"
@@ -398,7 +400,7 @@ final class AppController: ObservableObject {
     /// Opens one streaming session per track. Billed while open, so only while recording and not paused.
     private func startLive(reset: Bool) {
         stopLive()
-        if reset { live = LiveTranscript() }
+        if reset { live.reset() }
         guard liveTranscriptEnabled, case .recording(_, let since) = status, let key = keychain.get(.assemblyai) else { return }
         liveStart = since
         for (track, sink) in [(Track.me, recorder.meSink), (.them, recorder.themSink)] {
@@ -776,6 +778,8 @@ final class AppController: ObservableObject {
             w.isReleasedWhenClosed = false
             let host = NSHostingController(rootView: MainWindow().environmentObject(self).environmentObject(permissions))
             host.sceneBridgingOptions = [.toolbars]
+            // Without this, every view update re-measures the whole window to set its size limits.
+            host.sizingOptions = []
             w.contentViewController = host
             w.setContentSize(NSSize(width: 1240, height: 820))
             w.contentMinSize = NSSize(width: 980, height: 600)
@@ -808,5 +812,28 @@ struct MissingKeyTranscriber: Transcribing {
 
     func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
         throw MissingAPIKey(service: service)
+    }
+}
+
+/// The live transcript, published at most four times a second: AssemblyAI sends several partial results a second.
+@MainActor
+final class LiveTranscriptModel: ObservableObject {
+    @Published private(set) var transcript = LiveTranscript()
+    private var pending = LiveTranscript()
+    private var scheduled = false
+
+    func apply(_ message: Data, source: Track, at time: TimeInterval) {
+        guard pending.apply(message, source: source, at: time), !scheduled else { return }
+        scheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            transcript = pending
+            scheduled = false
+        }
+    }
+
+    func reset() {
+        pending = LiveTranscript()
+        transcript = pending
     }
 }

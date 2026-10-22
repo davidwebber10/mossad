@@ -790,7 +790,7 @@ private struct LivePanel: View {
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             CallControls()
             if controller.liveTranscriptEnabled {
-                LiveTranscriptView().frame(maxWidth: 620)
+                LiveTranscriptView(model: controller.live).frame(maxWidth: 620)
             } else {
                 Text("Recording your microphone and the call audio. The transcript and summary appear after the call ends.")
                     .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
@@ -804,6 +804,7 @@ private struct LivePanel: View {
 /// The streaming transcript while the call runs. The note uses the full transcription after the call.
 private struct LiveTranscriptView: View {
     @EnvironmentObject var controller: AppController
+    @ObservedObject var model: LiveTranscriptModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -811,10 +812,10 @@ private struct LiveTranscriptView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        if controller.live.lines.isEmpty {
+                        if model.transcript.lines.isEmpty {
                             Text(controller.isPaused ? "Paused." : "Listening…").foregroundStyle(.secondary)
                         }
-                        ForEach(controller.live.lines) { line in
+                        ForEach(model.transcript.lines) { line in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 Text(line.source == .me ? "You" : "Call")
                                     .font(.system(size: 11, weight: .semibold))
@@ -831,8 +832,9 @@ private struct LiveTranscriptView: View {
                     .textSelection(.enabled)
                     .padding(12)
                 }
-                .onChange(of: controller.live.lines.last?.text) { _, _ in
-                    if let last = controller.live.lines.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                // No animation: an animated scroll per update kept the scroll view busy at display rate.
+                .onChange(of: model.transcript.lines.count) { _, _ in
+                    if let last = model.transcript.lines.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
             .frame(minHeight: 140, maxHeight: 260)
