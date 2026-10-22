@@ -812,10 +812,10 @@ private struct LiveTranscriptView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        if model.transcript.lines.isEmpty {
+                        if model.transcript.visibleLines.isEmpty {
                             Text(controller.isPaused ? "Paused." : "Listening…").foregroundStyle(.secondary)
                         }
-                        ForEach(model.transcript.lines) { line in
+                        ForEach(model.transcript.visibleLines) { line in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 Text(line.source == .me ? "You" : "Call")
                                     .font(.system(size: 11, weight: .semibold))

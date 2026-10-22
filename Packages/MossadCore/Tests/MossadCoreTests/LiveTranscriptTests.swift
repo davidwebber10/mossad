@@ -42,4 +42,28 @@ final class LiveTranscriptTests: XCTestCase {
         let data = LiveTranscriber.pcm16(buffer)
         XCTAssertEqual(Array(data), [0x00, 0x00, 0xff, 0x7f, 0x01, 0x80])
     }
+
+    private func turn(_ order: Int, _ text: String) -> Data {
+        json(["type": "Turn", "turn_order": order, "end_of_turn": true, "transcript": text])
+    }
+
+    func testAYouLineThatRepeatsTheCallIsEchoAndHidden() {
+        var t = LiveTranscript()
+        t.apply(turn(1, "I wonder if, um, where there's maybe a little bit of a"), source: .them, at: 10)
+        t.apply(turn(1, "Right. Um, where there's maybe a little bit of a"), source: .me, at: 10.5)
+        t.apply(turn(2, "divergence from the PSYOP stamp cycle and the budget."), source: .me, at: 13)
+        t.apply(turn(2, "divergence from the PSYOP stamp cycle."), source: .them, at: 13.2)
+        t.apply(turn(3, "I'm just trying to get into the headspace of this."), source: .me, at: 20)
+        t.apply(turn(3, "Yeah."), source: .them, at: 21)
+        t.apply(turn(4, "Yeah."), source: .me, at: 40)
+        let shown = t.visibleLines.map { "\($0.source.rawValue): \($0.text)" }
+        XCTAssertEqual(shown, [
+            "them: I wonder if, um, where there's maybe a little bit of a",
+            "them: divergence from the PSYOP stamp cycle.",
+            "me: I'm just trying to get into the headspace of this.",
+            "them: Yeah.",
+            "me: Yeah.",
+        ])
+        XCTAssertEqual(t.lines.count, 7, "the echo stays in the data; only the view hides it")
+    }
 }

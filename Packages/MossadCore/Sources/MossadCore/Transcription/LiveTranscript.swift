@@ -41,4 +41,28 @@ public struct LiveTranscript: Equatable, Sendable {
     }
 
     public mutating func reset() { lines = [] }
+
+    /// The lines without the mic's echo of the call. The mic is recorded raw, so it also hears the speakers:
+    /// a "You" line that repeats a call line from the same few seconds is that echo. Short lines such as
+    /// "Yeah." stay, since they are as likely to be the owner's own.
+    public var visibleLines: [Line] {
+        let calls = lines.filter { $0.source == .them }
+        return lines.filter { line in
+            guard line.source == .me else { return true }
+            let mine = Self.words(line.text)
+            guard mine.count >= Self.echoMinimumWords else { return true }
+            return !calls.contains { call in
+                abs(call.time - line.time) <= Self.echoWindow
+                    && Double(mine.filter(Set(Self.words(call.text)).contains).count) / Double(mine.count) >= Self.echoShare
+            }
+        }
+    }
+
+    static let echoWindow: TimeInterval = 8
+    static let echoShare = 0.6
+    static let echoMinimumWords = 3
+
+    static func words(_ text: String) -> [String] {
+        text.lowercased().split { !$0.isLetter && !$0.isNumber && $0 != "'" }.map(String.init)
+    }
 }
