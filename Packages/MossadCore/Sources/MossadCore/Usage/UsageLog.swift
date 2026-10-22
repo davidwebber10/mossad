@@ -2,7 +2,7 @@ import Foundation
 
 /// One billed request to AssemblyAI or Claude, as the service reported it.
 public struct UsageEvent: Codable, Equatable, Sendable {
-    public enum Service: String, Codable, Sendable, CaseIterable { case assemblyai, claude }
+    public enum Service: String, Codable, Sendable, CaseIterable { case assemblyai, claude, openai, openrouter, deepgram, elevenlabs }
     public enum Purpose: String, Codable, Sendable, CaseIterable { case transcription, live, summary, coach, weeklyEmail, question }
 
     public var date: Date
@@ -15,6 +15,8 @@ public struct UsageEvent: Codable, Equatable, Sendable {
     public var outputTokens: Int?
     public var cacheReadTokens: Int?
     public var cacheWriteTokens: Int?
+    /// The charged amount when the provider reports it (OpenRouter does); it wins over the price table.
+    public var costUSD: Double?
     /// Worked out from a call's length and transcript, for calls from before usage was logged.
     public var estimated = false
 

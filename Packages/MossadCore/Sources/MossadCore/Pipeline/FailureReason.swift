@@ -5,7 +5,9 @@ extension Pipeline {
     public static func failureReason(_ error: Error) -> String {
         switch error {
         case let e as MissingAPIKey: return "\(e.service) key missing"
-        case TranscriptionError.http(401, _), SummaryError.http(401, _): return "invalid API key"
+        case TranscriptionError.http(401, _), SummaryError.http(401, _), ProviderError.http(_, 401, _): return "invalid API key"
+        case ProviderError.http(let p, let code, _): return "\(p) error \(code)"
+        case ProviderError.failed(let p, let message): return "\(p): \(message)"
         case TranscriptionError.http(let code, _): return "AssemblyAI error \(code)"
         case TranscriptionError.failed: return "AssemblyAI could not transcribe the audio"
         case SummaryError.http(let code, _): return "Anthropic error \(code)"
