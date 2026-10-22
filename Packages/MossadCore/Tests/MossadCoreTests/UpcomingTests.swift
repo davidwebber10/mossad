@@ -27,6 +27,13 @@ final class UpcomingTests: XCTestCase {
                    CalendarInfo(id: "3", title: "dwebber@polywood.com", account: "dwebber@polywood.com"),
                    CalendarInfo(id: "4", title: "US Holidays", account: "Other")]
         XCTAssertEqual(CalendarInfo.defaults(all, ownerName: "David Webber"), ["1", "3"])
+        // The real layout: the account is named "Google", and the main calendar is titled with the address.
+        let real = [CalendarInfo(id: "a", title: "Ecom Schedules", account: "Google"), CalendarInfo(id: "b", title: "dwebber@polywood.com", account: "Google"),
+                    CalendarInfo(id: "c", title: "Personal", account: "Google"), CalendarInfo(id: "d", title: "Home", account: "webberassistant@gmail.com")]
+        XCTAssertEqual(CalendarInfo.defaults(real, ownerName: "David Webber"), ["b"])
+        XCTAssertTrue(CalendarInfo.isOwnersAddress("david.webber@x.com", ownerName: "David Webber"))
+        XCTAssertTrue(CalendarInfo.isOwnersAddress("davidw@x.com", ownerName: "David Webber"))
+        XCTAssertFalse(CalendarInfo.isOwnersAddress("ecom@x.com", ownerName: "David Webber"))
         // With no calendar of their own, every calendar is read rather than none.
         XCTAssertEqual(CalendarInfo.defaults([all[1], all[3]], ownerName: "David Webber"), ["2", "4"])
     }

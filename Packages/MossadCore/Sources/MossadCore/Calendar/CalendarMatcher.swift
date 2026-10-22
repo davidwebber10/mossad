@@ -38,9 +38,20 @@ public struct CalendarInfo: Identifiable, Equatable, Sendable, Hashable {
     public static func defaults(_ calendars: [CalendarInfo], ownerName: String) -> Set<String> {
         let own = calendars.filter {
             $0.title.caseInsensitiveCompare(ownerName) == .orderedSame
-                || ($0.title.contains("@") && $0.title.caseInsensitiveCompare($0.account) == .orderedSame)
+                || ($0.title.contains("@") && ($0.title.caseInsensitiveCompare($0.account) == .orderedSame || isOwnersAddress($0.title, ownerName: ownerName)))
         }
         return Set((own.isEmpty ? calendars : own).map(\.id))
+    }
+}
+
+extension CalendarInfo {
+    /// An address whose name part fits the owner: dwebber, david.webber, davidwebber, davidw, or david.
+    public static func isOwnersAddress(_ address: String, ownerName: String) -> Bool {
+        let local = address.lowercased().split(separator: "@").first.map { $0.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: "_", with: "") } ?? ""
+        let parts = ownerName.lowercased().split(separator: " ").map(String.init)
+        guard let first = parts.first, let last = parts.dropFirst().last, !local.isEmpty else { return false }
+        let forms = [first.prefix(1) + last, first + last, first + last.prefix(1), first, last + first.prefix(1)]
+        return forms.contains { $0 == local }
     }
 }
 

@@ -737,6 +737,7 @@ final class AppController: ObservableObject {
         if UserDefaults.standard.stringArray(forKey: "calendarIDs") == nil, !calendars.isEmpty {
             // The first time, read only the owner's own calendars, not shared or subscribed ones.
             chosenCalendars = CalendarInfo.defaults(calendars, ownerName: ownerName)
+            Log.info("Calendars: \(calendars.map { "\($0.title) [\($0.account)]\(chosenCalendars.contains($0.id) ? " *" : "")" }.joined(separator: "; "))")
             return
         }
         calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
