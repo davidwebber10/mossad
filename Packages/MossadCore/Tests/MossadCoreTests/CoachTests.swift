@@ -359,7 +359,7 @@ final class CoachTests: XCTestCase {
         var sent: [String] = []
         var reviewed: [String] = []
         func send(to: String, subject: String, html: String, text: String) async throws { sent.append(subject) }
-        func digest(owner: String, reviews: [(title: String, date: Date, review: CoachReview)], profile: CoachProfile) async throws -> WeeklyDigest {
+        func digest(owner: String, reviews: [(title: String, date: Date, review: CoachReview)], profile: CoachProfile, kind: CoachEmailKind) async throws -> WeeklyDigest {
             reviewed = reviews.map(\.review.headline)
             return WeeklyDigest(subject: "Week", intro: "I", improved: [], toWork: [], focus: "F")
         }

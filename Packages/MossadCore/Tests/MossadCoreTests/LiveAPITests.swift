@@ -143,7 +143,7 @@ final class LiveAPITests: XCTestCase {
                                  improvements: [CoachPoint(title: "Lead with the ask", observation: "O", quote: "Q", at: 3, principle: "BLUF", tryInstead: "T")],
                                  focusProgress: nil)
         let digest = try await LLMDigestWriter(apiKey: key).digest(owner: "David Webber", reviews: [(title: "Cushion check-in", date: Date(), review: review)],
-                                                                    profile: CoachProfile())
+                                                                    profile: CoachProfile(), kind: .weekly)
         print("LIVE digest: \(digest.subject) | \(digest.focus)")
         XCTAssertFalse(digest.subject.isEmpty)
         XCTAssertFalse(digest.focus.isEmpty)

@@ -281,7 +281,8 @@ struct SettingsView: View {
             }
             CoachMemoryEditor()
             switchRow("Weekly email on Monday", $controller.coachEmailEnabled)
-            if controller.coachEmailEnabled {
+            switchRow("Month in review on the 1st", $controller.coachMonthlyEmail)
+            if controller.coachEmailEnabled || controller.coachMonthlyEmail {
                 HStack {
                     Text("Send to")
                     Spacer()
@@ -329,18 +330,24 @@ struct SettingsView: View {
                 }
                 HStack {
                     Spacer()
-                    Button(sending ? "Sending…" : "Send last week's email now") {
-                        sending = true
-                        Task {
-                            await controller.sendCoachEmail(now: true)
-                            sending = false
-                        }
+                    Menu(sending ? "Sending…" : "Send now") {
+                        Button("Last week's email") { send(.weekly) }
+                        Button("Last month's review") { send(.monthly) }
                     }
+                    .fixedSize()
                     .controlSize(.small)
                     .disabled(sending || !WeeklyEmail.isSingleAddress(controller.coachEmailTo) || controller.coachEmailFrom.isEmpty
                               || !controller.hasKey(controller.mailProvider.key))
                 }
             }
+        }
+    }
+
+    private func send(_ kind: CoachEmailKind) {
+        sending = true
+        Task {
+            await controller.sendCoachEmail(kind, now: true)
+            sending = false
         }
     }
 

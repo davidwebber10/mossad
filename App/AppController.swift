@@ -154,6 +154,8 @@ final class AppController: ObservableObject {
     @AppStorage("coachSince") var coachSince: Double = 0
     @AppStorage("commitmentsSince") var commitmentsSince: Double = 0
     @AppStorage("coachEmailEnabled") var coachEmailEnabled = false
+    @AppStorage("coachMonthlyEmail") var coachMonthlyEmail = false
+    @AppStorage("coachLastMonthEmail") var coachLastMonthEmail: Double = 0
     @AppStorage("coachEmailTo") var coachEmailTo = ""
     @AppStorage("coachEmailFrom") var coachEmailFrom = ""
     @AppStorage("coachLastEmail") var coachLastEmail: Double = 0

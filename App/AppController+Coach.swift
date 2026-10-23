@@ -28,14 +28,22 @@ extension AppController {
         }
     }
 
-    /// `now` sends last week's email even when this week's was sent already.
-    func sendCoachEmail(now: Bool = false) async {
-        guard coachEnabled, coachEmailEnabled || now, let to = coachEmailTo.nonEmpty, coachEmailFrom.nonEmpty != nil,
+    /// `now` sends the last period's email even when it was sent already.
+    func sendCoachEmail(_ kind: CoachEmailKind? = nil, now: Bool = false) async {
+        guard coachEnabled, let to = coachEmailTo.nonEmpty, coachEmailFrom.nonEmpty != nil,
               let llm = languageModel, let secret = keychain.get(mailProvider.key) else { return }
-        let last = now || coachLastEmail == 0 ? nil : Date(timeIntervalSince1970: coachLastEmail)
-        if let sent = await WeeklyEmail.sendIfDue(paths: paths, owner: ownerName, to: to, lastSent: last,
-                                                  writer: LLMDigestWriter(llm: llm), mailer: mailSettings.mailer(mailProvider, secret: secret)) {
-            coachLastEmail = sent.timeIntervalSince1970
+        let mailer = mailSettings.mailer(mailProvider, secret: secret), writer = LLMDigestWriter(llm: llm)
+        if (kind == nil && coachEmailEnabled) || kind == .weekly {
+            let last = now || coachLastEmail == 0 ? nil : Date(timeIntervalSince1970: coachLastEmail)
+            if let sent = await WeeklyEmail.sendIfDue(kind: .weekly, paths: paths, owner: ownerName, to: to, lastSent: last, writer: writer, mailer: mailer) {
+                coachLastEmail = sent.timeIntervalSince1970
+            }
+        }
+        if (kind == nil && coachMonthlyEmail) || kind == .monthly {
+            let last = now || coachLastMonthEmail == 0 ? nil : Date(timeIntervalSince1970: coachLastMonthEmail)
+            if let sent = await WeeklyEmail.sendIfDue(kind: .monthly, paths: paths, owner: ownerName, to: to, lastSent: last, writer: writer, mailer: mailer) {
+                coachLastMonthEmail = sent.timeIntervalSince1970
+            }
         }
     }
 }

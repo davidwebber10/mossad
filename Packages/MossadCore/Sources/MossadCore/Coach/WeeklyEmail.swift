@@ -34,8 +34,11 @@ public struct WeeklyDigest: Codable, Equatable, Sendable {
     public var improved: [String]
     public var toWork: [String]
     public var focus: String
+    /// One quote from the period worth remembering, with where it was said.
+    public var bestMoment: String?
 
-    public init(subject: String, intro: String, improved: [String], toWork: [String], focus: String) {
+    public init(subject: String, intro: String, improved: [String], toWork: [String], focus: String, bestMoment: String? = nil) {
+        self.bestMoment = bestMoment
         self.subject = subject
         self.intro = intro
         self.improved = improved
@@ -43,34 +46,13 @@ public struct WeeklyDigest: Codable, Equatable, Sendable {
         self.focus = focus
     }
 
-    public var text: String {
-        var lines = [intro, ""]
-        if !improved.isEmpty { lines += ["What improved:"] + improved.map { "- \($0)" } + [""] }
-        if !toWork.isEmpty { lines += ["What to work on:"] + toWork.map { "- \($0)" } + [""] }
-        lines += ["Focus for this week: \(focus)"]
-        return lines.joined(separator: "\n")
-    }
-
-    public var html: String {
-        func list(_ title: String, _ items: [String]) -> String {
-            items.isEmpty ? "" : "<h3 style=\"margin:20px 0 6px;font-size:15px\">\(title)</h3><ul style=\"margin:0;padding-left:20px\">"
-                + items.map { "<li style=\"margin:4px 0\">\(escape($0))</li>" }.joined() + "</ul>"
-        }
-        return """
-        <div style="font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#1d1d1f;max-width:600px">\
-        <p>\(escape(intro))</p>\(list("What improved", improved))\(list("What to work on", toWork))\
-        <div style="margin-top:20px;padding:12px 14px;background:#fff4e5;border-radius:10px"><b>Focus for this week:</b> \(escape(focus))</div>\
-        </div>
-        """
-    }
-
-    private func escape(_ s: String) -> String {
-        s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
-    }
+    public var text: String { CoachEmailDesign.text(kind: .weekly, period: "", digest: self, facts: nil) }
+    public var html: String { CoachEmailDesign.html(kind: .weekly, period: "", digest: self, facts: nil) }
 }
 
 public protocol DigestWriting: Sendable {
-    func digest(owner: String, reviews: [(title: String, date: Date, review: CoachReview)], profile: CoachProfile) async throws -> WeeklyDigest
+    func digest(owner: String, reviews: [(title: String, date: Date, review: CoachReview)], profile: CoachProfile,
+                kind: CoachEmailKind) async throws -> WeeklyDigest
 }
 
 /// Writes the weekly email with Claude from the week's reviews and the profile.
@@ -85,18 +67,26 @@ public struct LLMDigestWriter: DigestWriting {
         self.init(llm: AnthropicModel(apiKey: apiKey, model: model, session: session, usage: usage))
     }
 
-    public func digest(owner: String, reviews: [(title: String, date: Date, review: CoachReview)], profile: CoachProfile) async throws -> WeeklyDigest {
+    public func digest(owner: String, reviews: [(title: String, date: Date, review: CoachReview)], profile: CoachProfile,
+                       kind: CoachEmailKind) async throws -> WeeklyDigest {
+        let period = kind.noun
         let system = """
-        You are \(owner)'s communication coach. Write their weekly email from your reviews of this week's calls and \
-        your profile of them. Be specific: name the calls and the moments. intro is 2 to 3 sentences on the week. \
-        improved lists 1 to 3 things that got better, with the evidence. to_work lists 1 to 3 things to work on, \
-        each with a concrete thing to try; when meetings rated low, one item names the meeting to change and how. focus is one sentence on the owner's agreed focus: how the week went on it (hits and misses) and what to do \
-        next; when there is no agreed focus, invite them to accept the proposed one in Mossad. subject is a \
-        short, specific subject line. Do not pad: if the week had little to say, write less. Address \(owner) as "you".
+        You are \(owner)'s communication coach. Write their \(kind == .weekly ? "weekly email" : "month in review email") \
+        from your reviews of this \(period)'s calls and your notes on them. It should be a pleasure to read: warm, \
+        direct, specific, and short. Name the calls and the moments. \(CoachPrompt.voiceRules(profile.voice, owner: owner))
+        subject: at most 8 words, specific to this \(period), no emoji. intro: 2 to 3 sentences on the \(period)'s story. \
+        improved: 1 to 3 things that got better, each one sentence with the evidence; never claim a change the reviews \
+        do not show. to_work: 1 to 3 things to try next, each one sentence starting with a verb; when meetings rated \
+        low, one names the meeting to change and how. focus: one sentence on the agreed focus, how the \(period) went \
+        on it, and what to do next; when there is no agreed focus, invite them to accept the proposed one in Mossad. \
+        best_moment: the single best quote of the \(period) from \(owner)'s own words in the reviews, in quotation \
+        marks, then the meeting and day in parentheses; null when none stands out. \
+        \(kind == .monthly ? "This covers a whole month: look for the arc across weeks, not a list of calls." : "") \
+        Do not pad: a quiet \(period) gets a short email. Address \(owner) as "you".
         """
         var user = ["## Profile", "Summary: \(profile.summary)", "## The focus\n" + CoachPrompt.focusText(profile)]
         user += profile.patterns.map { "- \($0.name) (\($0.kind.rawValue), \($0.trend.rawValue), seen \($0.seen)): \($0.note)" }
-        user.append("\n## This week's calls")
+        user.append("\n## This \(period)'s calls")
         for item in reviews {
             let r = item.review
             user.append("### \(item.date.formatted(.dateTime.weekday(.wide).month().day())) \(item.title)\n\(r.headline)\n\(r.overview)")
@@ -113,14 +103,17 @@ public struct LLMDigestWriter: DigestWriting {
         let schema = Schema.object([
             "subject": Schema.string, "intro": Schema.string,
             "improved": Schema.array(Schema.string), "to_work": Schema.array(Schema.string), "focus": Schema.string,
+            "best_moment": Schema.nullableString,
         ])
         let out = try await llm.json(system: system, user: user.joined(separator: "\n"), schema: schema, effort: .medium,
                                      purpose: .weeklyEmail, as: Output.self)
-        return WeeklyDigest(subject: out.subject, intro: out.intro, improved: out.improved, toWork: out.to_work, focus: out.focus)
+        return WeeklyDigest(subject: out.subject, intro: out.intro, improved: out.improved, toWork: out.to_work, focus: out.focus,
+                            bestMoment: out.best_moment?.nonBlank)
     }
 
     private struct Output: Decodable {
         let subject, intro, focus: String
+        let best_moment: String?
         let improved, to_work: [String]
     }
 }
@@ -177,27 +170,35 @@ public enum WeeklyEmail {
         s.trimmingCharacters(in: .whitespaces).wholeMatch(of: /[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+/) != nil
     }
 
-    public static func sendIfDue(paths: Paths, owner: String, to: String, lastSent: Date?, now: Date = Date(),
+    public static func sendIfDue(kind: CoachEmailKind = .weekly, paths: Paths, owner: String, to: String, lastSent: Date?, now: Date = Date(),
                                  writer: any DigestWriting, mailer: any Mailing, calendar: Calendar = .current) async -> Date? {
-        guard WeeklySchedule.isDue(lastSent: lastSent, now: now, calendar: calendar) else { return nil }
+        let due = kind == .weekly ? WeeklySchedule.isDue(lastSent: lastSent, now: now, calendar: calendar)
+            : MonthlySchedule.isDue(lastSent: lastSent, now: now, calendar: calendar)
+        guard due else { return nil }
         guard isSingleAddress(to) else {
-            Log.error("The weekly email needs exactly one address, your own; nothing was sent")
+            Log.error("The coaching email needs exactly one address, your own; nothing was sent")
             return nil
         }
-        let start = WeeklySchedule.weekStart(before: now, calendar: calendar), end = WeeklySchedule.weekEnd(before: now, calendar: calendar)
+        let range = kind == .weekly
+            ? DateInterval(start: WeeklySchedule.weekStart(before: now, calendar: calendar), end: WeeklySchedule.weekEnd(before: now, calendar: calendar))
+            : MonthlySchedule.range(before: now, calendar: calendar)
         let reviews = ProcessingQueue(paths: paths).allRecords()
-            .filter { $0.start >= start && $0.start < end }
+            .filter { $0.start >= range.start && $0.start < range.end }
             .compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (title: r.title, date: r.start, review: $0) } }
-        // A week with no coached calls has nothing to say; count it as sent.
+        // A period with no coached calls has nothing to say; count it as sent.
         guard !reviews.isEmpty else { return now }
         do {
             let profile = try CoachProfile.load(from: paths.coach)
-            let digest = try await writer.digest(owner: owner, reviews: reviews, profile: profile)
-            try await mailer.send(to: to.trimmingCharacters(in: .whitespaces), subject: digest.subject, html: digest.html, text: digest.text)
-            Log.info("Sent the weekly coaching email for \(reviews.count) calls")
+            let digest = try await writer.digest(owner: owner, reviews: reviews, profile: profile, kind: kind)
+            let facts = EmailFacts.gather(paths: paths, owner: owner, range: range, now: now, calendar: calendar)
+            let period = CoachEmailDesign.periodLabel(kind, range, calendar: calendar)
+            try await mailer.send(to: to.trimmingCharacters(in: .whitespaces), subject: digest.subject,
+                                  html: CoachEmailDesign.html(kind: kind, period: period, digest: digest, facts: facts),
+                                  text: CoachEmailDesign.text(kind: kind, period: period, digest: digest, facts: facts))
+            Log.info("Sent the \(kind.rawValue) coaching email for \(reviews.count) calls")
             return now
         } catch {
-            Log.error("The weekly coaching email failed: \(error)")
+            Log.error("The \(kind.rawValue) coaching email failed: \(error)")
             return nil
         }
     }
