@@ -105,27 +105,24 @@ struct MeetingRow: View {
     var score: Int?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(spacing: 12) {
             Image(systemName: record.platform.symbol)
-                .font(.subheadline).foregroundStyle(record.platform.tint)
-                .frame(width: 36, height: 36)
-                .background(record.platform.tint.opacity(0.14), in: .rect(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(record.title).font(.headline).lineLimit(1)
-                    Spacer(minLength: 4)
-                    if let score { ScoreBadge(score: score) }
-                }
-                Text("\(record.start.formatted(.dateTime.weekday(.abbreviated).hour().minute())) · \(record.minutes) min")
-                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                if let h = record.headline {
-                    Text(h).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
-                }
-                if !record.tags.isEmpty {
-                    Text(record.tags.map { "#\($0)" }.joined(separator: "  ")).font(.caption).foregroundStyle(.tint).lineLimit(1)
-                }
+                .font(.footnote).foregroundStyle(record.platform.tint)
+                .frame(width: 30, height: 30)
+                .background(record.platform.tint.opacity(0.14), in: .rect(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.title).font(.body.weight(.medium)).lineLimit(1)
+                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).monospacedDigit()
             }
+            Spacer(minLength: 4)
+            if let score { ScoreBadge(score: score) }
         }
-        .padding(.vertical, 2)
+    }
+
+    /// "2:05 PM · 49 min · Jon Hueni, Ben Spiegel"
+    private var detail: String {
+        let others = Set(record.speakerNames.filter { !$0.key.hasPrefix("me:") }.values).sorted()
+        let people = others.isEmpty ? [] : [others.prefix(2).joined(separator: ", ") + (others.count > 2 ? " +\(others.count - 2)" : "")]
+        return ([record.start.formatted(.dateTime.hour().minute()), "\(record.minutes) min"] + people).joined(separator: " · ")
     }
 }
