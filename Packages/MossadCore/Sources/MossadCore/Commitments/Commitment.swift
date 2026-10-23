@@ -56,6 +56,21 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
 
     public init() {}
 
+    enum CodingKeys: String, CodingKey { case items, checked }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        items = try c.decodeIfPresent([Commitment].self, forKey: .items) ?? []
+        checked = Set(try c.decodeIfPresent([String].self, forKey: .checked) ?? [])
+    }
+
+    /// Checked calls in order, so the same book always encodes the same and syncs only when it changed.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(items, forKey: .items)
+        try c.encode(checked.sorted(), forKey: .checked)
+    }
+
     public var visible: [Commitment] { items.filter { !$0.deleted } }
 
     /// Adds what was found in a call, without repeating a commitment already there for that call.

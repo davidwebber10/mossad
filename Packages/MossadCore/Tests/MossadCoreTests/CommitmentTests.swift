@@ -175,3 +175,23 @@ final class CommitmentOwnerTests: XCTestCase {
         XCTAssertEqual(book.visible.map(\.text), ["Give access", "Mine by hand"])
     }
 }
+
+final class CommitmentEncodingTests: XCTestCase {
+    func testTheBookEncodesTheSameWhateverTheOrderCallsWereChecked() throws {
+        var a = CommitmentBook(), b = CommitmentBook()
+        for id in ["c3", "c1", "c2", "c9", "c5"] { a.checked.insert(id) }
+        for id in ["c9", "c2", "c5", "c1", "c3"] { b.checked.insert(id) }
+        XCTAssertEqual(SharedPayload.commitments(a).hash, SharedPayload.commitments(b).hash)
+        let text = String(decoding: try JSONEncoder.callRecord.encode(a), as: UTF8.self)
+        XCTAssertTrue(text.contains(#"["c1","c2","c3","c5","c9"]"#) || text.contains("\"c1\",\n"), text)
+    }
+}
+
+final class SyncPlanSharedKeysTests: XCTestCase {
+    func testMeetingSyncNeverDeletesSharedRecords() {
+        var state = SyncState()
+        for key in ["call-1", "chat:ABC", "notes:call-1", "profile", "commitments"] { state.uploaded[key] = "h" }
+        // No meetings left: only the meeting is deleted, never the chats, notes, memory, or commitments.
+        XCTAssertEqual(state.plan([]).delete, ["call-1"])
+    }
+}

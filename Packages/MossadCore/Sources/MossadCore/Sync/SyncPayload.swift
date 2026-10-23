@@ -78,7 +78,7 @@ public struct SyncState: Codable, Equatable, Sendable {
     public func plan(_ payloads: [SyncPayload]) -> Plan {
         let ids = Set(payloads.map(\.id))
         return Plan(upload: payloads.filter { uploaded[$0.id] != $0.hash },
-                    delete: uploaded.keys.filter { !ids.contains($0) }.sorted())
+                    delete: uploaded.keys.filter { !ids.contains($0) && !SharedPayload.isShared($0) }.sorted())
     }
 
     public static func load(from dir: URL) throws -> SyncState {

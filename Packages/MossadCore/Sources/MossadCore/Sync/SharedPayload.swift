@@ -19,6 +19,9 @@ public struct SharedPayload: Sendable {
         hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Whether a sync-state key belongs to a shared record, not a meeting: "chat:…", "notes:…", "profile", "commitments".
+    static func isShared(_ key: String) -> Bool { key.contains(":") || key == "profile" || key == "commitments" }
+
     public static func chat(_ chat: Chat) -> SharedPayload {
         SharedPayload(kind: .chat, key: "chat:\(chat.id.uuidString)", data: (try? JSONEncoder.callRecord.encode(chat)) ?? Data())
     }
