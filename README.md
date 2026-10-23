@@ -183,6 +183,17 @@ Two hooks help when testing by hand:
 - `MOSSAD_ROOT=/some/folder` makes the app use a different data folder instead of `~/Mossad`.
 - `--open-window Settings` (or `Meetings`, `People`, `Log`) opens the window on launch.
 
+### Releases
+
+`scripts/release.sh <version> "notes"` builds, signs the update with the Sparkle key, and publishes a GitHub release with the appcast. The private Sparkle key lives in the login Keychain. A backup is in Doppler as `SPARKLE_PRIVATE_ED_KEY` (project `dispatch`, config `prd`). To restore it on a new Mac, run this once:
+
+```sh
+doppler secrets get SPARKLE_PRIVATE_ED_KEY --project dispatch --config prd --plain > /tmp/sparkle.key
+build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -f /tmp/sparkle.key && rm -P /tmp/sparkle.key
+```
+
+Without this key, installed copies cannot accept new updates.
+
 The design is written up in [`docs/superpowers/specs/2026-10-20-mossad-rebuild-design.md`](docs/superpowers/specs/2026-10-20-mossad-rebuild-design.md). If you are an AI agent working in this repo, start with [`AGENTS.md`](AGENTS.md).
 
 ## Recording consent
