@@ -14,47 +14,17 @@ struct ChatScreen: View {
     @State private var showMemory = false
     @FocusState private var focused: Bool
 
-    static let suggestions = [
-        "How did I do this week, and what one thing should I work on?",
-        "What do I owe people from my recent meetings?",
-        "Which of my meetings were low value, and what should I change?",
-        "What patterns does the coach see in how I run meetings?",
-    ]
-
     private var chat: Chat { chatID.flatMap { id in store.chats.first { $0.id == id } } ?? draft }
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { scroller in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        if chat.messages.isEmpty { welcome }
-                        ForEach(chat.messages) { MessageBubble(message: $0).id($0.id) }
-                        if running { thinking.id("thinking") }
-                        if let error {
-                            Label(error, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.red)
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .defaultScrollAnchor(.bottom)
-                .onChange(of: chat.messages.count) { scroll(scroller) }
-                .onChange(of: running) { scroll(scroller) }
+            Group {
+                if chat.messages.isEmpty { ChatWelcome { question = $0; send() } } else { conversation }
             }
             .safeAreaBar(edge: .bottom) { composer }
-            .navigationTitle(chat.messages.isEmpty ? "Chat" : chat.title)
+            .toolbar { toolbar }
+            .navigationTitle(chat.messages.isEmpty ? "" : chat.title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Chats", systemImage: "clock.arrow.circlepath") { showChats = true }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Memory", systemImage: "brain") { showMemory = true }
-                    Button("New chat", systemImage: "square.and.pencil") { newChat() }.disabled(running)
-                }
-            }
             .sheet(isPresented: $showChats) { ChatList(selected: $chatID, onPick: { showChats = false }) }
             .sheet(isPresented: $showMemory) { CoachMemoryView() }
         }
@@ -65,31 +35,35 @@ struct ChatScreen: View {
         })
     }
 
-    private var welcome: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Image(systemName: "sparkles").font(.largeTitle).foregroundStyle(.tint)
-            Text("Ask about anything").font(.title2.bold())
-            Text("Chat knows every meeting, the coach's reviews, and what it has learned about you. Ask for advice too: it coaches as well.")
-                .foregroundStyle(.secondary)
-            if store.languageModel == nil {
-                Label(NoSharedKey().errorDescription!, systemImage: "key").font(.subheadline)
-                    .padding(12).background(Color(.secondarySystemFill), in: .rect(cornerRadius: 14))
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Self.suggestions, id: \.self) { s in
-                    Button { question = s; send() } label: {
-                        Text(s).font(.subheadline).multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 14).padding(.vertical, 11)
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color(.secondarySystemFill), in: .rect(cornerRadius: 16))
-                    .disabled(store.languageModel == nil)
-                }
-            }
-            .padding(.top, 6)
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button("Chats", systemImage: "clock.arrow.circlepath") { showChats = true }
         }
-        .padding(.top, 24)
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button("Memory", systemImage: "brain") { showMemory = true }
+            Button("New chat", systemImage: "square.and.pencil") { newChat() }.disabled(running)
+        }
+    }
+
+    private var conversation: some View {
+        ScrollViewReader { scroller in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    ForEach(chat.messages) { MessageBubble(message: $0).id($0.id) }
+                    if running { thinking.id("thinking") }
+                    if let error {
+                        Label(error, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.red)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .defaultScrollAnchor(.bottom)
+            .onChange(of: chat.messages.count) { scroll(scroller) }
+            .onChange(of: running) { scroll(scroller) }
+        }
     }
 
     private var thinking: some View {
