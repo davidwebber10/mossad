@@ -13,6 +13,7 @@ struct MeetingDetailView: View {
     @Binding var deleting: CallRecord?
     @StateObject private var player: AudioPlayer
     @AppStorage("detailTab") private var tab = Tab.summary
+    @State private var highlight: TimeInterval?
 
     init(record: CallRecord, style: Style, deleting: Binding<CallRecord?>) {
         self.record = record
@@ -28,6 +29,7 @@ struct MeetingDetailView: View {
                 guard let seek = controller.seekRequest, seek.callID == record.id else { return }
                 controller.seekRequest = nil
                 tab = .transcript
+                guard seek.play else { highlight = seek.at; return }
                 // The audio loads when the view appears; give it a moment, as the cloud fallback does.
                 for _ in 0..<20 where !player.isAvailable { try? await Task.sleep(for: .milliseconds(100)) }
                 player.play(from: seek.at)
@@ -70,7 +72,7 @@ struct MeetingDetailView: View {
                     }
                 case .transcript:
                     TranscriptTab(record: record, people: people, player: player, horizontalPadding: style == .fullPage ? 32 : 16,
-                                  maxWidth: style == .fullPage ? 900 : .infinity)
+                                  maxWidth: style == .fullPage ? 900 : .infinity, highlight: highlight)
                 case .coach:
                     ScrollView {
                         CoachTab(record: record, player: player)

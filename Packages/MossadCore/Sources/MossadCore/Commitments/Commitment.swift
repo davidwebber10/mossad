@@ -81,6 +81,15 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
         update(id, at: date) { $0.deleted = true }
     }
 
+    /// Marks deleted the commitments found in calls whose quote is not the owner's own line; hand-added ones stay.
+    public mutating func dropOthers(records: [CallRecord], owner: String, at date: Date) {
+        let byID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for c in items where !c.deleted {
+            guard let id = c.callID, let r = byID[id] else { continue }
+            if CommitmentFinder.ownerLine(quote: c.quote ?? "", at: c.at, in: r, owner: owner) == nil { delete(c.id, at: date) }
+        }
+    }
+
     /// Both devices' changes: the newer copy of each commitment, and every checked call.
     public func merged(with other: CommitmentBook) -> CommitmentBook {
         var out = CommitmentBook()
@@ -123,10 +132,27 @@ public struct CommitmentFinder: Sendable {
         ]))])
     }
 
+    /// The owner's line a commitment came from: the one holding the quote, or else the one at the time given.
+    /// Nil when another person said it, so their promises never count as the owner's.
+    static func ownerLine(quote: String, at: TimeInterval?, in r: CallRecord, owner: String) -> Utterance? {
+        func norm(_ s: String) -> String {
+            s.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == " " }.map(String.init).joined()
+                .split(separator: " ").joined(separator: " ")
+        }
+        let keys = Set(r.speakerNames.filter { $0.value == owner }.keys)
+        let q = norm(quote).split(separator: " ").prefix(8).joined(separator: " ")
+        if q.split(separator: " ").count >= 3, let line = r.utterances.first(where: { norm($0.text).contains(q) }) {
+            return keys.contains(line.speakerKey) ? line : nil
+        }
+        guard let at, let line = r.utterances.first(where: { $0.start - 1 <= at && at <= $0.end + 1 }) else { return nil }
+        return keys.contains(line.speakerKey) ? line : nil
+    }
+
     public func find(in r: CallRecord) async throws -> [Commitment] {
         let day = r.start.formatted(.dateTime.weekday(.wide).year().month(.wide).day())
         let system = """
-        You find the commitments \(ownerName) made in a meeting: things they personally promised to do, deliver, \
+        You find the commitments \(ownerName) made in a meeting. Only lines spoken by \(ownerName) count: a \
+        promise someone else made, even to \(ownerName), is not theirs. Find things they personally promised to do, deliver, \
         decide, send, or follow up on, said in their own words ("I'll send that", "let me check and get back to you", \
         "I can have it by Friday"). Leave out tasks others took, tasks assigned to \(ownerName) that they did not \
         accept, decisions, ideas, and things they said they might do. Several promises about one deliverable are one \
@@ -145,9 +171,10 @@ public struct CommitmentFinder: Sendable {
         parser.timeZone = .current
         parser.dateFormat = "yyyy-MM-dd"
         return out.commitments.compactMap { c in
-            guard let text = c.text.nonBlank else { return nil }
+            guard let text = c.text.nonBlank,
+                  let line = Self.ownerLine(quote: c.quote, at: c.at_seconds, in: r, owner: ownerName) else { return nil }
             return Commitment(text: text, to: c.to?.nonBlank, callID: r.id, callTitle: r.title,
-                              madeAt: r.start.addingTimeInterval(c.at_seconds ?? 0), at: c.at_seconds, quote: c.quote.nonBlank,
+                              madeAt: r.start.addingTimeInterval(line.start), at: line.start, quote: c.quote.nonBlank,
                               due: c.due.flatMap { parser.date(from: $0) })
         }
     }

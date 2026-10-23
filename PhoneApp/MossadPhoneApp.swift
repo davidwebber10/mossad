@@ -11,11 +11,10 @@ struct MossadPhoneApp: App {
         WindowGroup {
             TabView(selection: $store.tab) {
                 Tab("Meetings", systemImage: "bubble.left.and.text.bubble.right", value: .meetings) { MeetingsListView() }
-                Tab("Commitments", systemImage: "checkmark.circle", value: .commitments) { CommitmentsScreen() }
-                    .badge(store.commitments.visible.filter { $0.status() == .overdue }.count)
                 Tab("Chat", systemImage: "sparkles", value: .chat) { ChatScreen() }
                 Tab("People", systemImage: "person.2", value: .people) { PeopleScreen() }
                 Tab("Analytics", systemImage: "chart.bar.xaxis", value: .analytics) { AnalyticsScreen() }
+                Tab(value: .search, role: .search) { SearchScreen() }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
             .environmentObject(store)

@@ -1,7 +1,7 @@
 import Foundation
 import MossadCore
 
-enum PhoneTab: Hashable { case meetings, commitments, chat, people, analytics }
+enum PhoneTab: Hashable { case meetings, chat, people, analytics, search }
 
 /// The phone's copy of the meetings: pulled from iCloud into the app's folder, then read with the same code
 /// the Mac uses. Chats, ratings, replies to the coach, and the coach's memory go back up.
@@ -34,7 +34,6 @@ final class PhoneStore: ObservableObject {
         if let id = ProcessInfo.processInfo.environment["MOSSAD_OPEN"], !id.isEmpty { path = [id] }
         switch ProcessInfo.processInfo.environment["MOSSAD_TAB"] {
         case "chat": tab = .chat
-        case "commitments": tab = .commitments
         case "people": tab = .people
         case "analytics": tab = .analytics
         default: break

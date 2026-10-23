@@ -32,7 +32,7 @@ struct CommitmentsView: View {
                             ForEach(group.items) { c in
                                 CommitmentRow(commitment: c) { controller.toggleDone(c.id) }
                                     .padding(.vertical, 4)
-                                    .onTapGesture(count: 2) { editing = c }
+                                    .onTapGesture { if let id = c.callID { open(id, c.at) } else { editing = c } }
                                     .contextMenu {
                                         Button("Edit…") { editing = c }
                                         Button(c.done == nil ? "Mark done" : "Mark not done") { controller.toggleDone(c.id) }
@@ -91,6 +91,6 @@ struct CommitmentsView: View {
     }
 
     private func open(_ callID: String, _ at: TimeInterval?) {
-        if let at { controller.openMeeting(callID, at: at) } else { controller.openMeeting(callID) }
+        if let at { controller.showMoment(callID, at: at) } else { controller.openMeeting(callID) }
     }
 }

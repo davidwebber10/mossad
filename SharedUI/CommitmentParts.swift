@@ -16,6 +16,8 @@ extension Commitment.Status {
 /// One commitment: a circle to mark it done, what it is, who it was for and where, and when it is due.
 struct CommitmentRow: View {
     let commitment: Commitment
+    /// Off inside a meeting, where the meeting is already clear.
+    var showSource = true
     let toggleDone: () -> Void
 
     var body: some View {
@@ -34,7 +36,7 @@ struct CommitmentRow: View {
                 Text(commitment.text)
                     .strikethrough(commitment.done != nil)
                     .foregroundStyle(commitment.done == nil ? Color.primary : Color.secondary)
-                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
             }
             Spacer(minLength: 8)
             if let due = commitment.due, commitment.done == nil {
@@ -51,7 +53,9 @@ struct CommitmentRow: View {
     private var detail: String {
         var parts: [String] = []
         if let to = commitment.to { parts.append("To \(to)") }
-        if let title = commitment.callTitle {
+        if !showSource {
+            return parts.joined(separator: " · ")
+        } else if let title = commitment.callTitle {
             parts.append("\(title), \(commitment.madeAt.formatted(.dateTime.month(.abbreviated).day()))")
         } else {
             parts.append("Added \(commitment.created.formatted(.dateTime.month(.abbreviated).day()))")

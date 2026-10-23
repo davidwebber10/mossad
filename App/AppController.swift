@@ -101,6 +101,8 @@ final class AppController: ObservableObject {
     struct SeekRequest: Equatable {
         let callID: String
         let at: TimeInterval
+        /// False marks the line instead of playing from it.
+        var play = true
     }
     /// When the last bookmark was made, so the controls can confirm it.
     @Published private(set) var lastBookmark: Date?
@@ -524,6 +526,12 @@ final class AppController: ObservableObject {
     /// Opens a meeting and plays it from a time.
     func openMeeting(_ callID: String, at time: TimeInterval) {
         seekRequest = SeekRequest(callID: callID, at: time)
+        openMeeting(callID)
+    }
+
+    /// Opens a meeting's transcript at a moment and marks the line, without playing.
+    func showMoment(_ callID: String, at time: TimeInterval) {
+        seekRequest = SeekRequest(callID: callID, at: time, play: false)
         openMeeting(callID)
     }
 

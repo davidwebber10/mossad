@@ -88,7 +88,8 @@ final class CommitmentTests: XCTestCase {
         var r = CallRecord(id: "c9", platform: .meet, bundleID: "", start: t0, end: t0.addingTimeInterval(1800), status: .written)
         r.calendarTitle = "Budget"
         r.speakerNames = ["me:A": "David Webber"]
-        r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 1962, end: 1965, text: "I'll have that by Tuesday")]
+        r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 1962, end: 1965, text: "I'll have that by Tuesday"),
+                        Utterance(track: .me, speakerLabel: "A", start: 2100, end: 2104, text: "Sure, I'll write that up for you.")]
         let finder = CommitmentFinder(llm: AnthropicModel(apiKey: "k", model: "m", session: StubURLProtocol.session(), usage: nil), ownerName: "David Webber")
         let found = try await finder.find(in: r)
         XCTAssertEqual(found.count, 2)
@@ -139,5 +140,38 @@ final class CommitmentGroupTests: XCTestCase {
                                           now: now, calendar: cal)
         XCTAssertEqual(groups.map(\.kind), [.overdue, .today, .thisWeek, .later, .noDate, .done])
         XCTAssertEqual(groups.map { $0.items.map(\.text) }, [["late"], ["today"], ["soon"], ["later"], ["none"], ["finished"]])
+    }
+}
+
+final class CommitmentOwnerTests: XCTestCase {
+    private func record() -> CallRecord {
+        var r = CallRecord(id: "c", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
+        r.speakerNames = ["me:A": "Dana", "them:A": "Pat"]
+        r.utterances = [
+            Utterance(track: .them, speakerLabel: "A", start: 10, end: 14, text: "But let me confirm that, I'll check the flight."),
+            Utterance(track: .me, speakerLabel: "A", start: 20, end: 26, text: "Okay. I'm gonna give you access to the budget sheet today."),
+        ]
+        return r
+    }
+
+    func testOnlyQuotesFromTheOwnersOwnLinesCount() {
+        let r = record()
+        XCTAssertEqual(CommitmentFinder.ownerLine(quote: "I'm gonna give you access", at: 99, in: r, owner: "Dana")?.start, 20)
+        XCTAssertNil(CommitmentFinder.ownerLine(quote: "But let me confirm that.", at: 20, in: r, owner: "Dana"), "Someone else said it")
+        // Without a matching quote, the line at the given time decides.
+        XCTAssertEqual(CommitmentFinder.ownerLine(quote: "paraphrased", at: 21, in: r, owner: "Dana")?.start, 20)
+        XCTAssertNil(CommitmentFinder.ownerLine(quote: "paraphrased", at: 11, in: r, owner: "Dana"))
+    }
+
+    func testCleaningDropsFoundCommitmentsOthersMadeButKeepsHandAddedOnes() {
+        let r = record()
+        var book = CommitmentBook()
+        book.add(found: [
+            Commitment(text: "Give access", to: "Pat", callID: "c", callTitle: "T", madeAt: Date(), at: 20, quote: "give you access", due: nil),
+            Commitment(text: "Confirm the flight", to: "Dana", callID: "c", callTitle: "T", madeAt: Date(), at: 10, quote: "let me confirm that", due: nil),
+        ], callID: "c", at: Date())
+        book.items.append(Commitment(text: "Mine by hand", to: nil, callID: nil, callTitle: nil, madeAt: Date(), due: nil))
+        book.dropOthers(records: [r], owner: "Dana", at: Date())
+        XCTAssertEqual(book.visible.map(\.text), ["Give access", "Mine by hand"])
     }
 }

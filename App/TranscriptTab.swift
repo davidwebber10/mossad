@@ -8,6 +8,8 @@ struct TranscriptTab: View {
     @ObservedObject var player: AudioPlayer
     var horizontalPadding: CGFloat = 16
     var maxWidth: CGFloat = .infinity
+    /// A moment to mark and scroll to, such as where a commitment was made.
+    var highlight: TimeInterval?
     @State private var find = ""
     @State private var matchIndex = 0
     @State private var follow = true
@@ -18,6 +20,10 @@ struct TranscriptTab: View {
         let blocks = TranscriptBlock.blocks(record)
         let matches = self.matches(blocks)
         let current = player.isPlaying || player.time > 0 ? currentLine(blocks) : nil
+        let marked = highlight.flatMap { h in
+            blocks.flatMap { b in b.lines.enumerated().map { (LineID(block: b.id, line: $0.offset), $0.element.start) } }
+                .last { $0.1 <= h + 0.5 }?.0
+        }
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 Spacer()
@@ -67,7 +73,8 @@ struct TranscriptTab: View {
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                     }
                                     .padding(.horizontal, 10).padding(.vertical, 5)
-                                    .background(id == current ? Theme.field : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .background(id == marked ? Color.accentColor.opacity(0.16) : id == current ? Theme.field : .clear,
+                                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     .padding(.horizontal, -10)
                                     .id(id)
                                 }
@@ -87,6 +94,11 @@ struct TranscriptTab: View {
                     .onChange(of: current) { _, line in
                         guard follow, player.isPlaying, let line else { return }
                         withAnimation { proxy.scrollTo(line, anchor: .center) }
+                    }
+                    .task(id: marked) {
+                        guard let marked else { return }
+                        try? await Task.sleep(for: .milliseconds(150))
+                        withAnimation { proxy.scrollTo(marked, anchor: .center) }
                     }
                     .onChange(of: matchIndex) { _, i in
                         if matches.indices.contains(i) { withAnimation { proxy.scrollTo(matches[i], anchor: .center) } }

@@ -4,7 +4,6 @@ import SwiftUI
 struct MeetingsListView: View {
     @EnvironmentObject var store: PhoneStore
     @State private var showActions = false
-    @State private var query = ""
 
     var body: some View {
         NavigationStack(path: $store.path) {
@@ -12,11 +11,57 @@ struct MeetingsListView: View {
                 if let error = store.error {
                     Label(error, systemImage: "exclamationmark.icloud").font(.footnote).foregroundStyle(.red)
                 }
+                ForEach(MeetingGroups.group(store.meetings), id: \.kind) { group in
+                    Section(group.kind.title) {
+                        ForEach(group.records, id: \.id) { r in
+                            NavigationLink(value: r.id) { MeetingRow(record: r, score: store.scores[r.id]) }
+                        }
+                    }
+                }
+            }
+            .overlay {
+                if store.meetings.isEmpty {
+                    ContentUnavailableView(store.syncing ? "Syncing…" : "No meetings yet", systemImage: "icloud",
+                                           description: Text("Meetings appear here after Mossad on your Mac writes their notes."))
+                }
+            }
+            .navigationTitle("Meetings")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Action items", systemImage: "checklist") { showActions = true }
+                }
+            }
+            .refreshable { await store.sync() }
+            .navigationDestination(isPresented: $showActions) { ActionItemsView() }
+            .navigationDestination(for: String.self) { id in
+                if let r = store.meeting(id) { MeetingView(record: r) }
+            }
+        }
+    }
+}
+
+/// The search tab: titles, people, tags, and transcript text. Tags and people are one tap away before typing.
+struct SearchScreen: View {
+    @EnvironmentObject var store: PhoneStore
+    @State private var query = ""
+    @State private var path: [String] = []
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            List {
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
-                    ForEach(MeetingGroups.group(store.meetings), id: \.kind) { group in
-                        Section(group.kind.title) {
-                            ForEach(group.records, id: \.id) { r in
-                                NavigationLink(value: r.id) { MeetingRow(record: r, score: store.scores[r.id]) }
+                    let tags = SearchSuggestions.tags(store.meetings), people = SearchSuggestions.people(store.meetings, owner: store.owner)
+                    if !tags.isEmpty {
+                        Section("Tags") {
+                            ForEach(tags.prefix(12), id: \.self) { tag in
+                                Button { query = "#\(tag)" } label: { Label(tag, systemImage: "number") }
+                            }
+                        }
+                    }
+                    if !people.isEmpty {
+                        Section("People") {
+                            ForEach(people.prefix(8), id: \.self) { name in
+                                Button { query = name } label: { Label(name, systemImage: "person") }
                             }
                         }
                     }
@@ -27,28 +72,10 @@ struct MeetingsListView: View {
                 }
             }
             .overlay {
-                if store.meetings.isEmpty {
-                    ContentUnavailableView(store.syncing ? "Syncing…" : "No meetings yet", systemImage: "icloud",
-                                           description: Text("Meetings appear here after Mossad on your Mac writes their notes."))
-                } else if !query.isEmpty && results.isEmpty {
-                    ContentUnavailableView.search(text: query)
-                }
+                if !query.isEmpty && results.isEmpty { ContentUnavailableView.search(text: query) }
             }
-            .navigationTitle("Meetings")
+            .navigationTitle("Search")
             .searchable(text: $query, prompt: "Titles, people, tags, transcripts")
-            .searchSuggestions {
-                if query.isEmpty {
-                    ForEach(SearchSuggestions.tags(store.meetings).prefix(6), id: \.self) { Label($0, systemImage: "number").searchCompletion("#" + $0) }
-                    ForEach(SearchSuggestions.people(store.meetings, owner: store.owner).prefix(5), id: \.self) { Label($0, systemImage: "person").searchCompletion($0) }
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Action items", systemImage: "checklist") { showActions = true }
-                }
-            }
-            .refreshable { await store.sync() }
-            .navigationDestination(isPresented: $showActions) { ActionItemsView() }
             .navigationDestination(for: String.self) { id in
                 if let r = store.meeting(id) { MeetingView(record: r, find: query) }
             }

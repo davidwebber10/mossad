@@ -8,6 +8,8 @@ struct MeetingView: View {
     /// Words to find in the transcript, from the Search tab.
     var find = ""
     @State private var query = ""
+    /// The moment a tapped commitment was made, marked in the transcript.
+    @State private var moment: TimeInterval?
     // Development hook for screenshots: `MOSSAD_SECTION=coach`.
     @State private var tab = Section(rawValue: ProcessInfo.processInfo.environment["MOSSAD_SECTION"]?.capitalized ?? "") ?? .summary
     @State private var review: CoachReview?
@@ -15,6 +17,7 @@ struct MeetingView: View {
     enum Section: String, CaseIterable { case summary = "Summary", transcript = "Transcript", coach = "Coach" }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
@@ -23,8 +26,14 @@ struct MeetingView: View {
                 }
                 .pickerStyle(.segmented)
                 switch tab {
-                case .summary: SummarySection(record: record)
-                case .transcript: TranscriptSection(record: record, query: $query)
+                case .summary:
+                    MeetingCommitments(callID: record.id) { at in
+                        moment = at
+                        query = ""
+                        tab = .transcript
+                    }
+                    SummarySection(record: record)
+                case .transcript: TranscriptSection(record: record, query: $query, moment: moment)
                 case .coach:
                     if let review { CoachSection(record: record, review: review) } else {
                         ContentUnavailableView("No review", systemImage: "person.wave.2",
@@ -34,6 +43,13 @@ struct MeetingView: View {
             }
             .padding(.horizontal)
             .padding(.bottom, 24)
+        }
+        .task(id: tab == .transcript ? moment : nil) {
+            guard tab == .transcript, let moment,
+                  let block = TranscriptBlock.blocks(record).last(where: { $0.start <= moment + 0.5 }) else { return }
+            try? await Task.sleep(for: .milliseconds(200))
+            withAnimation { proxy.scrollTo(block.id, anchor: .center) }
+        }
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle(record.title)
@@ -133,12 +149,14 @@ private struct SummarySection: View {
 private struct TranscriptSection: View {
     let record: CallRecord
     @Binding var query: String
+    var moment: TimeInterval?
     @FocusState private var focused: Bool
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
         let all = TranscriptBlock.blocks(record)
         let shown = q.isEmpty ? all : all.filter { text($0).localizedCaseInsensitiveContains(q) }
+        let marked = moment.flatMap { m in all.last { $0.start <= m + 0.5 }?.id }
         LazyVStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -164,6 +182,9 @@ private struct TranscriptSection: View {
                     }
                     Text(highlighted(text(block), q)).font(.subheadline).textSelection(.enabled)
                 }
+                .padding(block.id == marked ? 10 : 0)
+                .background(block.id == marked ? Color.accentColor.opacity(0.14) : .clear, in: .rect(cornerRadius: 12))
+                .id(block.id)
             }
         }
         .padding(.top, 4)
@@ -197,5 +218,36 @@ private extension String {
             start = r.upperBound
         }
         return out
+    }
+}
+
+/// What you promised in this call: tap the circle to finish one, tap the row to edit it.
+private struct MeetingCommitments: View {
+    @EnvironmentObject var store: PhoneStore
+    let callID: String
+    let show: (TimeInterval?) -> Void
+    @State private var editing: Commitment?
+
+    var body: some View {
+        let mine = store.commitments.visible.filter { $0.callID == callID }
+        if !mine.isEmpty {
+            Card {
+                CardTitle(text: "Your commitments", symbol: "checkmark.circle")
+                ForEach(mine) { c in
+                    CommitmentRow(commitment: c, showSource: false) { store.toggleDone(c.id) }
+                        .onTapGesture { show(c.at) }
+                        .contextMenu {
+                            Button("Edit", systemImage: "pencil") { editing = c }
+                            Button(c.done == nil ? "Mark done" : "Mark not done", systemImage: "checkmark.circle") { store.toggleDone(c.id) }
+                            Button("Delete", systemImage: "trash", role: .destructive) { store.deleteCommitment(c.id) }
+                        }
+                }
+            }
+            .sheet(item: $editing) { c in
+                NavigationStack {
+                    CommitmentEditor(commitment: c, save: store.saveCommitment, delete: { store.deleteCommitment(c.id) })
+                }
+            }
+        }
     }
 }
