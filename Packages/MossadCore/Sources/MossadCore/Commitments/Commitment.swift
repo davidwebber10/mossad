@@ -133,7 +133,7 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
 /// Reads one call for what the owner promised.
 public struct CommitmentFinder: Sendable {
     private let llm: any LanguageModel
-    private let ownerName: String
+    let ownerName: String
 
     public init(llm: any LanguageModel, ownerName: String) {
         self.llm = llm
@@ -222,12 +222,20 @@ public actor CommitmentRunner {
             .sorted { $0.start < $1.start }
     }
 
-    /// Returns how many calls were read. Stops at the first failure; the next run retries it.
+    /// Returns how many calls were read, plus one when the cleanup changed something. Stops at the first failure; the next run retries it.
     @discardableResult
     public func run() async -> Int {
         let records = ProcessingQueue(paths: paths).allRecords()
-        guard let book = try? CommitmentBook.load(from: paths.commitments) else { return 0 }
-        var done = 0
+        guard var book = try? CommitmentBook.load(from: paths.commitments) else { return 0 }
+        // Promises other people made never count as the owner's, including ones found before this check existed.
+        let before = book.visible.count
+        book.dropOthers(records: records, owner: finder.ownerName, at: Date())
+        let cleaned = book.visible.count != before
+        if cleaned {
+            try? book.save(to: paths.commitments)
+            Log.info("Commitments: removed \(before - book.visible.count) made by other people")
+        }
+        var done = cleaned ? 1 : 0
         for r in Self.pending(records, since: since, checked: book.checked) {
             do {
                 let found = try await UsageContext.$callID.withValue(r.id) { try await finder.find(in: r) }

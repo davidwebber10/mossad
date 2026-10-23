@@ -12,14 +12,6 @@ extension AppController {
         guard !findingCommitments, let llm = languageModel else { return }
         if commitmentsSince == 0 { commitmentsSince = Date().addingTimeInterval(-Self.commitmentsBackfillDays * 86_400).timeIntervalSince1970 }
         findingCommitments = true
-        // Promises other people made never count as the owner's, including ones found before this check existed.
-        var book = commitmentBook
-        let before = book.visible.count
-        book.dropOthers(records: meetings, owner: ownerName, at: Date())
-        if book.visible.count != before {
-            try? book.save(to: paths.commitments)
-            Log.info("Commitments: removed \(before - book.visible.count) made by other people")
-        }
         let runner = CommitmentRunner(paths: paths, finder: CommitmentFinder(llm: llm, ownerName: ownerName),
                                       since: Date(timeIntervalSince1970: commitmentsSince))
         Task {
