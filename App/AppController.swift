@@ -807,8 +807,15 @@ final class AppController: ObservableObject {
         refresh()
         // A Dock icon only while the window is open, so it can be found with Cmd-Tab.
         NSApp.setActivationPolicy(.regular)
+        // macOS may refuse to switch apps while another one is active, which left the window behind it.
+        // Ordering the window front regardless puts it on top either way; the switch is asked for after the
+        // policy change has taken effect, since asking in the same turn often fails.
+        window?.orderFrontRegardless()
         window?.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        DispatchQueue.main.async { [weak self] in
+            NSApp.activate()
+            self?.window?.makeKeyAndOrderFront(nil)
+        }
     }
 }
 
