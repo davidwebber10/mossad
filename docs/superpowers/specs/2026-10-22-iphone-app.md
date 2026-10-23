@@ -14,7 +14,8 @@ David wants to read his meetings on his phone: summaries, action items, decision
   - `CoachProfile`, one record: the coach's memory as an asset.
 - **Change tracking on the Mac:** a hash of what was last uploaded for each meeting, in `~/Mossad/Sync/state.json`. Only changed meetings upload; deleted meetings are deleted from iCloud.
 - **Audio** stays where it is (on the Mac, or in R2). Playback on the phone is a later step.
-- **Chat on the phone** is a later step (it needs an AI key on the phone).
+- **Chat on the phone** uses the Mac's AI provider and key, shared through iCloud Keychain when the owner turns on "Use my AI key on my iPhone". Chats, ratings, replies to the coach, and the coach's memory sync both ways (`Chat`, `CoachNotes`, and `CoachProfile` records).
+- **Tabs:** Meetings, Chat (also the coach), People, Analytics, and a search tab. Liquid Glass only on the navigation layer: the tab bar, toolbars, sheets, and the chat composer.
 
 ## Setup that needs David
 

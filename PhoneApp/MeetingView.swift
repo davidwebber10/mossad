@@ -5,18 +5,16 @@ import SwiftUI
 struct MeetingView: View {
     @EnvironmentObject var store: PhoneStore
     let record: CallRecord
-    @State private var tab = Section.summary
+    // Development hook for screenshots: `MOSSAD_SECTION=coach`.
+    @State private var tab = Section(rawValue: ProcessInfo.processInfo.environment["MOSSAD_SECTION"]?.capitalized ?? "") ?? .summary
+    @State private var review: CoachReview?
 
     enum Section: String, CaseIterable { case summary = "Summary", transcript = "Transcript", coach = "Coach" }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(record.start.formatted(.dateTime.weekday(.wide).month(.wide).day().hour().minute()) + " · \(record.platform.displayName)")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Text(people).font(.footnote).foregroundStyle(.secondary)
-                }
+                header
                 Picker("View", selection: $tab) {
                     ForEach(Section.allCases, id: \.self) { Text($0.rawValue) }
                 }
@@ -24,61 +22,83 @@ struct MeetingView: View {
                 switch tab {
                 case .summary: SummarySection(record: record)
                 case .transcript: TranscriptSection(record: record)
-                case .coach: CoachSection(review: store.coach(record.id))
+                case .coach:
+                    if let review { CoachSection(record: record, review: review) } else {
+                        ContentUnavailableView("No review", systemImage: "person.wave.2",
+                                               description: Text("The coach has not reviewed this meeting."))
+                    }
                 }
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.bottom, 24)
         }
+        .background(Color(.systemGroupedBackground))
         .navigationTitle(record.title)
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: store.coachVersion) { review = store.coach(record.id) }
     }
 
-    private var people: String {
-        Set(record.speakerNames.values).sorted().joined(separator: ", ")
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(record.title).font(.title2.bold())
+            HStack(spacing: 6) {
+                Image(systemName: record.platform.symbol).foregroundStyle(record.platform.tint)
+                Text("\(record.start.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute())) · \(duration(record.end.timeIntervalSince(record.start)))")
+            }
+            .font(.subheadline).foregroundStyle(.secondary)
+            if !people.isEmpty {
+                Text(people.joined(separator: ", ")).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            }
+            if !record.tags.isEmpty {
+                Text(record.tags.map { "#\($0)" }.joined(separator: "  ")).font(.footnote).foregroundStyle(.tint)
+            }
+        }
+        .padding(.top, 8)
     }
-}
 
-/// `**bold**` and links in summary text.
-func rich(_ text: String) -> AttributedString {
-    (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+    private var people: [String] { Set(record.speakerNames.values).sorted() }
 }
 
 private struct SummarySection: View {
     let record: CallRecord
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            if let summary = record.summary {
-                blocks(summary)
-            } else {
-                Text("No summary for this meeting.").foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            Card {
+                if let summary = record.summary { blocks(summary) } else {
+                    Text("No summary for this meeting.").foregroundStyle(.secondary)
+                }
             }
-            ForEach(record.topics, id: \.self) { topic in
-                DisclosureGroup {
-                    blocks(topic.summary).padding(.top, 6)
-                } label: {
-                    Text(topic.title).font(.headline)
+            if !record.topics.isEmpty {
+                Card {
+                    CardTitle(text: "Topics", symbol: "list.bullet.rectangle")
+                    ForEach(record.topics, id: \.self) { topic in
+                        DisclosureGroup {
+                            blocks(topic.summary).padding(.top, 6)
+                        } label: {
+                            Text(topic.title).font(.headline).foregroundStyle(.primary)
+                        }
+                    }
                 }
             }
             if !record.actionItems.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Action items").font(.headline)
+                Card {
+                    CardTitle(text: "Action items", symbol: "checklist")
                     ForEach(Array(record.actionItems.enumerated()), id: \.offset) { _, item in
                         Label {
-                            Text(rich((item.owner.map { "**\($0)** " } ?? "") + item.task)).font(.subheadline)
-                        } icon: { Image(systemName: "circle").foregroundStyle(.secondary) }
+                            Text(rich((item.owner.map { "**\($0)** " } ?? "") + item.task))
+                        } icon: { Image(systemName: "circle").foregroundStyle(.tertiary) }
                     }
                 }
             }
             if !record.decisions.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Decisions").font(.headline)
-                    ForEach(record.decisions, id: \.self) { d in
-                        Label(d, systemImage: "checkmark.seal").font(.subheadline)
-                    }
+                Card {
+                    CardTitle(text: "Decisions", symbol: "checkmark.seal")
+                    ForEach(record.decisions, id: \.self) { Text(rich("•  " + $0)) }
                 }
             }
         }
+        .textSelection(.enabled)
     }
 
     @ViewBuilder
@@ -102,10 +122,10 @@ private struct TranscriptSection: View {
     let record: CallRecord
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 14) {
+        LazyVStack(alignment: .leading, spacing: 16) {
             ForEach(TranscriptBlock.blocks(record)) { block in
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
+                    HStack(alignment: .firstTextBaseline) {
                         Text(block.speaker).font(.subheadline.weight(.semibold))
                         Spacer()
                         Text(clock(block.start)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
@@ -114,61 +134,6 @@ private struct TranscriptSection: View {
                 }
             }
         }
-    }
-
-    private func clock(_ t: TimeInterval) -> String {
-        let s = Int(t)
-        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
-    }
-}
-
-private struct CoachSection: View {
-    let review: CoachReview?
-
-    var body: some View {
-        if let review {
-            VStack(alignment: .leading, spacing: 16) {
-                if let card = review.scorecard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text("\(card.score)/5").font(.title.bold())
-                            Text(card.reason).font(.subheadline).foregroundStyle(.secondary)
-                        }
-                        ForEach(card.positives, id: \.self) { Label($0, systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.subheadline) }
-                        ForEach(card.negatives, id: \.self) { Label($0, systemImage: "xmark.circle.fill").foregroundStyle(.orange).font(.subheadline) }
-                    }
-                }
-                Text(review.headline).font(.headline)
-                Text(review.overview).foregroundStyle(.secondary)
-                if let v = review.value {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Meeting value: \(v.rating.rawValue.capitalized)").font(.subheadline.weight(.semibold))
-                        Text(v.reason).font(.subheadline).foregroundStyle(.secondary)
-                        if v.action != .keep { Text(v.suggestion).font(.subheadline) }
-                    }
-                }
-                points("What worked", review.strengths, tint: .green)
-                points("Try next time", review.improvements, tint: .orange)
-            }
-        } else {
-            Text("The coach has not reviewed this meeting.").foregroundStyle(.secondary)
-        }
-    }
-
-    @ViewBuilder
-    private func points(_ title: String, _ list: [CoachPoint], tint: Color) -> some View {
-        if !list.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(title).font(.headline).foregroundStyle(tint)
-                ForEach(list, id: \.self) { p in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(p.title).font(.subheadline.weight(.semibold))
-                        Text(p.observation).font(.subheadline)
-                        Text("“\(p.quote)”").font(.subheadline).italic().foregroundStyle(.secondary)
-                        if let t = p.tryInstead { Text("Try: \(t)").font(.subheadline) }
-                    }
-                }
-            }
-        }
+        .padding(.top, 4)
     }
 }
