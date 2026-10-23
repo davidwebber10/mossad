@@ -25,6 +25,10 @@ The product goal is zero interaction. Any change that adds a click, a prompt, or
 | `.../AI/` | `LanguageModel` (one protocol for JSON-schema output and tool loops) with `AnthropicModel`, `OpenAIModel` (Responses API), and `OpenRouterModel`; `ModelCatalog` (model lists); `Providers` (the provider choices and their factories). Transcription clients for Deepgram, ElevenLabs, and OpenAI are in `.../Transcription/TranscriptionProviders.swift`. |
 | `.../Mail/` | Mailers for Postmark, SendGrid, Mailgun, Brevo, and Amazon SES (`SigV4`); Resend is in `WeeklyEmail.swift`. Mail only ever goes to the owner's one address. |
 | `.../Chat/` | The Chat tab: `ChatAgent` (a Claude tool-use loop), `ChatTools` (find_meetings, search_transcripts, read_meeting, action_items over the records), `ChatStore` (one JSON file per chat in `~/Mossad/Chats`), and `ChatLink` (`mossad://call/<id>?t=<seconds>` links in answers), and `MCPServer` (the same tools over stdio for other AI apps: `Mossad --mcp`). |
+| `.../Commitments/` | `Commitment` and `CommitmentBook` (the owner's own promises, in `~/Mossad/Commitments`), `CommitmentFinder` (reads one call; a quote must be the owner's own line), `CommitmentRunner`, and `CommitmentGroup`. |
+| `.../Sync/` | `CloudSync` (iCloud: meetings Mac to phone; chats, review notes, the coach's memory, and commitments both ways; phone room recordings to the Mac) and `PhoneRecording` (imports a phone recording as an in-person call). |
+| `SharedUI/` | SwiftUI parts both apps compile: the coach's focus, three lines, goals, and call strip, and the commitment row and editor. |
+| `PhoneApp/` | The iPhone app: Meetings (with the room recorder), Chat, People, Analytics, and Search. |
 | `.../Summary/Summarizer.swift` | Claude Messages API over raw HTTP with a JSON schema response. |
 | `.../Output/MarkdownWriter.swift` | The note format. The golden test in `MarkdownWriterTests` is the contract. |
 | `docs/superpowers/specs/` | Design documents. The newest spec is the source of truth for behavior. |
