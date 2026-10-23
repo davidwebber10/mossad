@@ -124,3 +124,20 @@ final class CommitmentSyncTests: XCTestCase {
         XCTAssertEqual(SyncState().planShared([p]).upload.map(\.key), ["commitments"])
     }
 }
+
+final class CommitmentGroupTests: XCTestCase {
+    func testGroupsGoFromMostUrgentToDone() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Chicago")!
+        let now = Date(timeIntervalSince1970: 1_800_000_000) // a Friday
+        func c(_ text: String, _ days: Double?, done: Bool = false) -> Commitment {
+            var x = Commitment(text: text, to: nil, callID: nil, callTitle: nil, madeAt: now, due: days.map { now.addingTimeInterval($0 * 86_400) })
+            if done { x.done = now }
+            return x
+        }
+        let groups = CommitmentGroup.make([c("late", -2), c("today", 0), c("soon", 1), c("later", 20), c("none", nil), c("finished", -1, done: true)],
+                                          now: now, calendar: cal)
+        XCTAssertEqual(groups.map(\.kind), [.overdue, .today, .thisWeek, .later, .noDate, .done])
+        XCTAssertEqual(groups.map { $0.items.map(\.text) }, [["late"], ["today"], ["soon"], ["later"], ["none"], ["finished"]])
+    }
+}

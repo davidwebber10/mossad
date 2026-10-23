@@ -15,11 +15,12 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", chat = "Chat", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
+        case meetings = "Meetings", commitments = "Commitments", chat = "Chat", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
         var id: String { rawValue }
         var symbol: String {
             switch self {
             case .meetings: "bubble.left.and.text.bubble.right"
+            case .commitments: "checkmark.circle"
             case .chat: "sparkles"
             case .people: "person.2"
             case .analytics: "chart.bar.xaxis"
@@ -149,6 +150,7 @@ final class AppController: ObservableObject {
     @AppStorage("coachEnabled") var coachEnabled = false
     /// Calls that start before this (seconds since 1970) are not coached, so turning the coach on does not review years of calls.
     @AppStorage("coachSince") var coachSince: Double = 0
+    @AppStorage("commitmentsSince") var commitmentsSince: Double = 0
     @AppStorage("coachEmailEnabled") var coachEmailEnabled = false
     @AppStorage("coachEmailTo") var coachEmailTo = ""
     @AppStorage("coachEmailFrom") var coachEmailFrom = ""
@@ -158,6 +160,8 @@ final class AppController: ObservableObject {
     @Published var coachVersion = 0
     /// Bumped when chats change on another device, so the Chat list reloads.
     @Published var chatsVersion = 0
+    @Published var commitmentsVersion = 0
+    var findingCommitments = false
     private var iCloudTimer: Timer?
 
     /// The mic is recorded raw: when Chrome also uses voice processing, macOS gives a second voice-processing
@@ -722,6 +726,7 @@ final class AppController: ObservableObject {
         await work()
         syncCloud()
         runCoach()
+        runCommitments()
         syncToICloud()
         processing -= 1
         refresh()
@@ -736,6 +741,7 @@ final class AppController: ObservableObject {
             Retention.sweep(audioRoot: audio, recordingsAfterDays: days)
         }.value
         runCoach()
+        runCommitments()
         syncToICloud()
     }
 

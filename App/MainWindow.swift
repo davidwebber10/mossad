@@ -20,6 +20,7 @@ struct MainWindow: View {
             Group {
                 switch controller.section {
                 case .meetings: MeetingsView()
+                case .commitments: CommitmentsView()
                 case .chat: ChatView()
                 case .people: PeopleView()
                 case .analytics: AnalyticsView()

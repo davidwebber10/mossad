@@ -202,3 +202,42 @@ public actor CommitmentRunner {
         return done
     }
 }
+
+/// Commitments in the order to act on them.
+public struct CommitmentGroup: Sendable, Identifiable {
+    public enum Kind: Int, Sendable, CaseIterable {
+        case overdue, today, thisWeek, later, noDate, done
+
+        public var title: String {
+            switch self {
+            case .overdue: "Overdue"
+            case .today: "Today"
+            case .thisWeek: "Next 7 days"
+            case .later: "Later"
+            case .noDate: "No date"
+            case .done: "Done"
+            }
+        }
+    }
+
+    public var id: Kind { kind }
+    public var kind: Kind
+    public var items: [Commitment]
+
+    public static func make(_ list: [Commitment], now: Date = Date(), calendar: Calendar = .current) -> [CommitmentGroup] {
+        let today = calendar.startOfDay(for: now)
+        let week = calendar.date(byAdding: .day, value: 7, to: today)!
+        func kind(_ c: Commitment) -> Kind {
+            if c.done != nil { return .done }
+            guard let due = c.due.map({ calendar.startOfDay(for: $0) }) else { return .noDate }
+            return due < today ? .overdue : due == today ? .today : due <= week ? .thisWeek : .later
+        }
+        return Kind.allCases.compactMap { k in
+            let items = list.filter { !$0.deleted && kind($0) == k }.sorted {
+                k == .done ? ($0.done ?? .distantPast) > ($1.done ?? .distantPast)
+                    : ($0.due ?? $0.madeAt, $0.madeAt) < ($1.due ?? $1.madeAt, $1.madeAt)
+            }
+            return items.isEmpty ? nil : CommitmentGroup(kind: k, items: items)
+        }
+    }
+}

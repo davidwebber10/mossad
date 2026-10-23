@@ -1,7 +1,7 @@
 import Foundation
 import MossadCore
 
-enum PhoneTab: Hashable { case meetings, chat, people, analytics, search }
+enum PhoneTab: Hashable { case meetings, commitments, chat, people, analytics }
 
 /// The phone's copy of the meetings: pulled from iCloud into the app's folder, then read with the same code
 /// the Mac uses. Chats, ratings, replies to the coach, and the coach's memory go back up.
@@ -10,6 +10,7 @@ final class PhoneStore: ObservableObject {
     @Published private(set) var meetings: [CallRecord] = []
     @Published private(set) var profile = CoachProfile()
     @Published private(set) var chats: [Chat] = []
+    @Published private(set) var commitments = CommitmentBook()
     /// The coach's score per meeting, for the lists.
     @Published private(set) var scores: [String: Int] = [:]
     @Published private(set) var syncing = false
@@ -33,6 +34,7 @@ final class PhoneStore: ObservableObject {
         if let id = ProcessInfo.processInfo.environment["MOSSAD_OPEN"], !id.isEmpty { path = [id] }
         switch ProcessInfo.processInfo.environment["MOSSAD_TAB"] {
         case "chat": tab = .chat
+        case "commitments": tab = .commitments
         case "people": tab = .people
         case "analytics": tab = .analytics
         default: break
@@ -73,6 +75,7 @@ final class PhoneStore: ObservableObject {
         meetings = MeetingIndex(paths: paths).all()
         profile = (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile()
         chats = chatStore.all()
+        commitments = (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook()
         scores = Dictionary(uniqueKeysWithValues: meetings.compactMap { r in coach(r.id)?.scorecard.map { (r.id, $0.score) } })
         coachVersion += 1
     }
@@ -87,6 +90,12 @@ final class PhoneStore: ObservableObject {
 
     func coach(_ id: String) -> CoachReview? { CoachReview.load(in: paths.callDirectory(id)) }
     func meeting(_ id: String) -> CallRecord? { meetings.first { $0.id == id } }
+
+    func openMeeting(_ id: String) {
+        guard meeting(id) != nil else { return }
+        tab = .meetings
+        path = [id]
+    }
 
     func open(_ link: ChatLink) {
         guard meeting(link.callID) != nil else { return }
@@ -124,6 +133,24 @@ final class PhoneStore: ObservableObject {
             share()
         }
     }
+
+    // MARK: Commitments
+
+    func changeCommitments(_ change: (inout CommitmentBook) -> Void) {
+        var book = (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook()
+        change(&book)
+        try? book.save(to: paths.commitments)
+        share()
+    }
+
+    func saveCommitment(_ c: Commitment) {
+        changeCommitments { book in
+            if book.items.contains(where: { $0.id == c.id }) { book.update(c.id) { $0 = c } } else { book.items.append(c) }
+        }
+    }
+
+    func toggleDone(_ id: UUID) { changeCommitments { $0.update(id) { $0.done = $0.done == nil ? Date() : nil } } }
+    func deleteCommitment(_ id: UUID) { changeCommitments { $0.delete(id) } }
 
     // MARK: Coach
 

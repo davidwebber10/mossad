@@ -42,7 +42,7 @@ extension AppController {
             }
             await MainActor.run {
                 // Chats, ratings, and memories from the phone show here at once.
-                if received > 0 { self.coachVersion += 1; self.chatsVersion += 1 }
+                if received > 0 { self.coachVersion += 1; self.chatsVersion += 1; self.commitmentsVersion += 1 }
                 self.iCloudSyncing = false
                 if self.iCloudSyncAgain {
                     self.iCloudSyncAgain = false

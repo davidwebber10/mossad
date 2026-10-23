@@ -54,7 +54,11 @@ struct MenuContent: View {
                 }
             }
             PanelSeparator()
-            navigationRow("Open Mossad", "macwindow") { controller.open(controller.section) }
+            PanelRow(action: { go { controller.open(controller.section) } }) {
+                Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 18, height: 18)
+                Text("Open Mossad")
+                Spacer()
+            }
             navigationRow("Meetings", "bubble.left.and.text.bubble.right") { controller.open(.meetings) }
             if let first = controller.callsNeedingNames.first {
                 PanelRow(action: { go { controller.openNaming(first.id) } }) {
