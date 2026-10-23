@@ -37,15 +37,16 @@ public struct LLMCoach: Coaching {
             "at_seconds": Schema.nullableNumber,
             "principle": Schema.string, "try_instead": Schema.nullableString,
         ])
-        let note = Schema.object(["text": Schema.string, "quote": Schema.nullableString, "at_seconds": Schema.nullableNumber])
+        // Claude allows at most 16 union-typed parameters, so quotes and "say" use "" for none instead of null.
+        let note = Schema.object(["text": Schema.string, "quote": Schema.string, "at_seconds": Schema.nullableNumber])
         func nullable(_ s: [String: Any]) -> [String: Any] { ["anyOf": [s, ["type": "null"]]] }
         return Schema.object([
             "quiet": ["type": "boolean"],
             "headline": Schema.string,
             "did_well": nullable(note),
             "improving": nullable(note),
-            "try_next": nullable(Schema.object(["text": Schema.string, "quote": Schema.nullableString, "at_seconds": Schema.nullableNumber,
-                                                "say": Schema.nullableString])),
+            "try_next": nullable(Schema.object(["text": Schema.string, "quote": Schema.string, "at_seconds": Schema.nullableNumber,
+                                                "say": Schema.string])),
             "focus_result": nullable(Schema.object(["outcome": Schema.oneOf(FocusOutcome.allCases.map(\.rawValue)),
                                                     "evidence": Schema.string, "at_seconds": Schema.nullableNumber])),
             "focus_proposal": nullable(Schema.object(["plan": Schema.string, "why": Schema.string,

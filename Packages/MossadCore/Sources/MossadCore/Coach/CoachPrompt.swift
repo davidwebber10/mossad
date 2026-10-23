@@ -18,7 +18,7 @@ enum CoachPrompt {
         - try_next: one forward plan for the next meeting, written as when-then ("When someone asks what's next, \
         say your items first, each with a day"). Point to the moment in this call that shows why, and put the exact \
         words \(owner) could say in "say", in their own voice. Tie it to the focus when the call gave a chance to.
-        headline: at most 12 words, the call in one line.
+        headline: at most 12 words, the call in one line. A quote or "say" with nothing to put in it is "".
 
         Stay quiet when there is little to say. When \(owner) mostly listened, or the call was routine and nothing \
         stood out, set quiet to true, keep the headline, and leave the three lines null unless one is clearly worth \
