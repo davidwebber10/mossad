@@ -117,10 +117,13 @@ public struct CoachFact: Codable, Equatable, Sendable, Hashable, Identifiable {
     public var id: String { "\(kind.rawValue):\(text)" }
     public var kind: Kind
     public var text: String
+    /// When it was added, so a later removal on another device wins and an earlier one does not.
+    public var date: Date?
 
-    public init(kind: Kind, text: String) {
+    public init(kind: Kind, text: String, date: Date? = nil) {
         self.kind = kind
         self.text = text
+        self.date = date
     }
 }
 
@@ -150,13 +153,15 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     public var rated: [RatedPoint] = []
     /// Who the owner is: role, responsibilities, goals, and relationships.
     public var facts: [CoachFact] = []
+    /// Removed facts and guidance by lowercased text, with when, so a sync from another device does not bring them back.
+    public var forgotten: [String: Date] = [:]
 
     public static let ratedLimit = 30
     public static let guidanceLimit = 25
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated, facts }
+    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated, facts, forgotten }
 
     /// Profiles from before feedback existed have no guidance or ratings.
     public init(from decoder: Decoder) throws {
@@ -169,19 +174,52 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         guidance = try c.decodeIfPresent([CoachGuidance].self, forKey: .guidance) ?? []
         rated = try c.decodeIfPresent([RatedPoint].self, forKey: .rated) ?? []
         facts = try c.decodeIfPresent([CoachFact].self, forKey: .facts) ?? []
+        forgotten = try c.decodeIfPresent([String: Date].self, forKey: .forgotten) ?? [:]
     }
 
     public func facts(_ kind: CoachFact.Kind) -> [CoachFact] { facts.filter { $0.kind == kind } }
 
     /// Adds facts without duplicates (ignoring case and spaces) and removes those named by their text.
-    public mutating func updateFacts(add: [CoachFact], remove: [String]) {
+    public mutating func updateFacts(add: [CoachFact], remove: [String], at date: Date = Date()) {
         let gone = Set(remove.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
         facts.removeAll { gone.contains($0.text.lowercased()) }
+        for text in gone { forgotten[text] = date }
         for fact in add {
             guard let text = fact.text.nonBlank,
                   !facts.contains(where: { $0.kind == fact.kind && $0.text.caseInsensitiveCompare(text) == .orderedSame }) else { continue }
-            facts.append(CoachFact(kind: fact.kind, text: text))
+            facts.append(CoachFact(kind: fact.kind, text: text, date: date))
+            forgotten[text.lowercased()] = nil
         }
+    }
+
+    /// This profile combined with another device's copy. Facts, guidance, and ratings from both are kept,
+    /// unless removed later than they were added. The coaching fields (summary, focus, patterns, people,
+    /// history) come from this copy, or from the other one with `takeCoaching`: the Mac writes those.
+    public func merged(with other: CoachProfile, takeCoaching: Bool = false) -> CoachProfile {
+        var out = takeCoaching ? other : self
+        out.forgotten = forgotten.merging(other.forgotten) { max($0, $1) }
+        func kept(_ text: String, _ date: Date?) -> Bool {
+            guard let removed = out.forgotten[text.lowercased()] else { return true }
+            return (date ?? .distantPast) > removed
+        }
+        var facts: [String: CoachFact] = [:]
+        for f in self.facts + other.facts where kept(f.text, f.date) {
+            let key = "\(f.kind.rawValue):\(f.text.lowercased())"
+            if (facts[key]?.date ?? .distantPast) <= (f.date ?? .distantPast) || facts[key] == nil { facts[key] = f }
+        }
+        out.facts = (self.facts + other.facts).compactMap { f in
+            let key = "\(f.kind.rawValue):\(f.text.lowercased())"
+            return facts.removeValue(forKey: key)
+        }
+        var guidance: [String: CoachGuidance] = [:]
+        for g in self.guidance + other.guidance where kept(g.text, g.date) {
+            if (guidance[g.text.lowercased()]?.date ?? .distantPast) <= g.date { guidance[g.text.lowercased()] = g }
+        }
+        out.guidance = (self.guidance + other.guidance).compactMap { guidance.removeValue(forKey: $0.text.lowercased()) }
+        var rated: [String: RatedPoint] = [:]
+        for r in self.rated + other.rated where (rated["\(r.callID)|\(r.title)"]?.date ?? .distantPast) <= r.date { rated["\(r.callID)|\(r.title)"] = r }
+        out.rated = Array(rated.values.sorted { $0.date < $1.date }.suffix(Self.ratedLimit))
+        return out
     }
 
     /// Keeps the owner's rating of a point; a new rating of the same point replaces the old one.
@@ -195,8 +233,10 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     public mutating func updateGuidance(add: [String], remove: [String], at date: Date) {
         let gone = Set(remove.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
         guidance.removeAll { gone.contains($0.text.lowercased()) }
+        for text in gone { forgotten[text] = date }
         for text in add.compactMap(\.nonBlank) where !guidance.contains(where: { $0.text.caseInsensitiveCompare(text) == .orderedSame }) {
             guidance.append(CoachGuidance(text: text, date: date))
+            forgotten[text.lowercased()] = nil
         }
         guidance = Array(guidance.suffix(Self.guidanceLimit))
     }

@@ -18,13 +18,19 @@ extension AppController {
         iCloudSyncing = true
         let cloud = cloudSync
         Task.detached(priority: .utility) {
+            var received = 0
             do {
                 let changed = try await cloud.push()
-                if changed > 0 { Log.info("iCloud: \(changed) changes uploaded") }
+                received = try await cloud.pull(includeMeetings: false)
+                let shared = try await cloud.pushShared()
+                if changed + shared > 0 { Log.info("iCloud: \(changed + shared) changes uploaded") }
+                if received > 0 { Log.info("iCloud: \(received) changes from your other devices") }
             } catch {
                 Log.error("iCloud sync failed: \(error)")
             }
             await MainActor.run {
+                // Chats, ratings, and memories from the phone show here at once.
+                if received > 0 { self.coachVersion += 1; self.chatsVersion += 1 }
                 self.iCloudSyncing = false
                 if self.iCloudSyncAgain {
                     self.iCloudSyncAgain = false

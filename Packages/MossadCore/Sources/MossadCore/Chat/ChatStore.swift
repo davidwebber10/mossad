@@ -29,6 +29,11 @@ public struct Chat: Codable, Equatable, Sendable, Identifiable {
         self.title = title
     }
 
+    /// The copy to keep when two devices changed the same chat.
+    public static func newer(_ a: Chat, _ b: Chat) -> Chat {
+        a.updated == b.updated ? (a.messages.count >= b.messages.count ? a : b) : (a.updated > b.updated ? a : b)
+    }
+
     static let titleLength = 46
 
     /// The first question, cut at a word near 46 characters.

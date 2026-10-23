@@ -10,6 +10,8 @@ public actor CloudSync {
     static let meetingType = "Meeting"
     static let profileType = "CoachProfile"
     static let profileName = "coach-profile"
+    static let chatType = "Chat"
+    static let notesType = "CoachNotes"
     /// CloudKit takes up to 400 changes a request; assets make big requests, so stay well under.
     static let batch = 50
 
@@ -68,8 +70,6 @@ public actor CloudSync {
             }
             try state.save(to: paths.sync)
         }
-        changed += try await pushProfile(state: &state, scratch: scratch)
-        try state.save(to: paths.sync)
         return changed
     }
 
@@ -89,16 +89,59 @@ public actor CloudSync {
         return record
     }
 
-    private func pushProfile(state: inout SyncState, scratch: URL) async throws -> Int {
-        let url = paths.coach.appendingPathComponent(CoachProfile.fileName)
-        guard let data = try? Data(contentsOf: url) else { return 0 }
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        guard state.uploaded[Self.profileName] != hash else { return 0 }
-        let record = CKRecord(recordType: Self.profileType, recordID: CKRecord.ID(recordName: Self.profileName, zoneID: Self.zone))
-        record["profile"] = try asset(data, "profile.json", scratch)
-        _ = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: false)
-        state.uploaded[Self.profileName] = hash
-        return 1
+    // MARK: Both devices
+
+    /// Uploads chats, the owner's notes on reviews, and the coach's memory when they changed here, and deletes
+    /// chats deleted here.
+    @discardableResult
+    public func pushShared() async throws -> Int {
+        try await ensureZone()
+        var state = try SyncState.load(from: paths.sync)
+        var payloads = ChatStore(directory: paths.chats).all().map(SharedPayload.chat)
+        for r in ProcessingQueue(paths: paths).allRecords() {
+            if let review = CoachReview.load(in: paths.callDirectory(r.id)), let notes = SharedPayload.notes(callID: r.id, review: review) {
+                payloads.append(notes)
+            }
+        }
+        if FileManager.default.fileExists(atPath: paths.coach.appendingPathComponent(CoachProfile.fileName).path),
+           let profile = try? CoachProfile.load(from: paths.coach) {
+            payloads.append(.profile(profile))
+        }
+        let plan = state.planShared(payloads)
+        guard !plan.upload.isEmpty || !plan.delete.isEmpty else { return 0 }
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("mossad-sync-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        var changed = 0
+        for chunk in stride(from: 0, to: plan.upload.count, by: Self.batch).map({ Array(plan.upload[$0..<min($0 + Self.batch, plan.upload.count)]) }) {
+            let records = try chunk.map { p -> CKRecord in
+                let type = switch p.kind { case .chat: Self.chatType; case .notes: Self.notesType; case .profile: Self.profileType }
+                let record = CKRecord(recordType: type, recordID: Self.recordID(p.key))
+                record["data"] = try asset(p.data, "\(p.key.replacingOccurrences(of: ":", with: "-")).json", scratch)
+                return record
+            }
+            let (saved, _) = try await database.modifyRecords(saving: records, deleting: [], savePolicy: .allKeys, atomically: false)
+            for (id, result) in saved {
+                guard case .success = result, let p = chunk.first(where: { Self.recordID($0.key) == id }) else { continue }
+                state.uploaded[p.key] = p.hash
+                changed += 1
+            }
+        }
+        if !plan.delete.isEmpty {
+            let (_, deleted) = try await database.modifyRecords(saving: [], deleting: plan.delete.map(Self.recordID), savePolicy: .allKeys, atomically: false)
+            for (id, result) in deleted {
+                if case .failure(let error) = result, (error as? CKError)?.code != .unknownItem { continue }
+                if let key = plan.delete.first(where: { Self.recordID($0) == id }) { state.uploaded[key] = nil }
+                changed += 1
+            }
+        }
+        try state.save(to: paths.sync)
+        return changed
+    }
+
+    /// "chat:<uuid>" becomes "chat-<uuid>"; the profile keeps its own name.
+    static func recordID(_ key: String) -> CKRecord.ID {
+        CKRecord.ID(recordName: key == "profile" ? profileName : key.replacingOccurrences(of: ":", with: "-"), zoneID: zone)
     }
 
     private func asset(_ data: Data, _ name: String, _ scratch: URL) throws -> CKAsset {
@@ -109,9 +152,10 @@ public actor CloudSync {
 
     // MARK: Phone
 
-    /// Fetches what changed since the last pull into the local folders, and returns how many meetings changed.
+    /// Fetches what changed since the last pull into the local folders, and returns how many records changed.
+    /// The Mac leaves out meetings: it wrote them, and the copies in iCloud are trimmed.
     @discardableResult
-    public func pull() async throws -> Int {
+    public func pull(includeMeetings: Bool = true) async throws -> Int {
         var state = try SyncState.load(from: paths.sync)
         var token = state.changeToken.flatMap { try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: $0) }
         var changed = 0
@@ -129,11 +173,20 @@ public actor CloudSync {
             }
             for (id, result) in changes.modificationResultsByID {
                 guard case .success(let modification) = result else { continue }
-                try store(modification.record, id: id.recordName)
+                try store(modification.record, id: id.recordName, includeMeetings: includeMeetings)
                 changed += 1
             }
-            for deletion in changes.deletions where deletion.recordType == Self.meetingType {
-                try? FileManager.default.removeItem(at: paths.callDirectory(deletion.recordID.recordName))
+            for deletion in changes.deletions {
+                switch deletion.recordType {
+                case Self.meetingType where includeMeetings:
+                    try? FileManager.default.removeItem(at: paths.callDirectory(deletion.recordID.recordName))
+                case Self.chatType:
+                    if let id = UUID(uuidString: String(deletion.recordID.recordName.dropFirst("chat-".count))) {
+                        ChatStore(directory: paths.chats).delete(id)
+                        state.uploaded["chat:\(id.uuidString)"] = nil
+                    }
+                default: continue
+                }
                 changed += 1
             }
             token = changes.changeToken
@@ -143,23 +196,37 @@ public actor CloudSync {
         }
     }
 
-    private func store(_ record: CKRecord, id: String) throws {
-        func copy(_ key: String, to url: URL) throws {
-            guard let source = (record[key] as? CKAsset)?.fileURL else {
-                try? FileManager.default.removeItem(at: url)
-                return
-            }
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: url)
-            try FileManager.default.copyItem(at: source, to: url)
-        }
+    private func store(_ record: CKRecord, id: String, includeMeetings: Bool) throws {
+        func data(_ key: String) -> Data? { (record[key] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) } }
         switch record.recordType {
-        case Self.meetingType:
+        case Self.meetingType where includeMeetings:
             let dir = paths.callDirectory(id)
-            try copy("record", to: dir.appendingPathComponent("call.json"))
-            try copy("coach", to: dir.appendingPathComponent(CoachReview.fileName))
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let call = data("record") { try call.write(to: dir.appendingPathComponent("call.json"), options: .atomic) }
+            if let coach = data("coach"), var remote = try? JSONDecoder.callRecord.decode(CoachReview.self, from: coach) {
+                // Ratings or replies made here and not yet merged by the Mac stay.
+                if let local = CoachReview.load(in: dir) { remote = remote.mergingNotes(from: local) }
+                try remote.save(in: dir)
+            }
         case Self.profileType:
-            try copy("profile", to: paths.coach.appendingPathComponent(CoachProfile.fileName))
+            guard let raw = data("data") ?? data("profile"), let remote = try? JSONDecoder.callRecord.decode(CoachProfile.self, from: raw) else { return }
+            let local = (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile()
+            // The Mac's coach writes the coaching fields; the phone takes them, the Mac keeps its own.
+            try local.merged(with: remote, takeCoaching: includeMeetings).save(to: paths.coach)
+        case Self.chatType:
+            guard let raw = data("data"), let remote = try? JSONDecoder.callRecord.decode(Chat.self, from: raw) else { return }
+            let store = ChatStore(directory: paths.chats)
+            let local = store.all().first { $0.id == remote.id }
+            try store.save(local.map { Chat.newer($0, remote) } ?? remote)
+        case Self.notesType:
+            guard let raw = data("data"), let notes = try? JSONDecoder.callRecord.decode(ReviewNotes.self, from: raw) else { return }
+            let dir = paths.callDirectory(String(id.dropFirst("notes-".count)))
+            guard var review = CoachReview.load(in: dir) else { return }
+            var incoming = review
+            incoming.feedback = notes.feedback
+            incoming.thread = notes.thread
+            review = review.mergingNotes(from: incoming)
+            try review.save(in: dir)
         default:
             break
         }

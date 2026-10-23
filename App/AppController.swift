@@ -155,6 +155,9 @@ final class AppController: ObservableObject {
     @Published var coaching = false
     /// Bumped after each review so open Coach tabs reload from disk.
     @Published var coachVersion = 0
+    /// Bumped when chats change on another device, so the Chat list reloads.
+    @Published var chatsVersion = 0
+    private var iCloudTimer: Timer?
 
     /// The mic is recorded raw: when Chrome also uses voice processing, macOS gives a second voice-processing
     /// client silence. Echo from the speakers is dropped later by TranscriptMerger.
@@ -218,6 +221,10 @@ final class AppController: ObservableObject {
 
             Task { await runHousekeeping() }
             refreshUpcoming()
+            // Chats and notes from the phone arrive within five minutes.
+            iCloudTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.syncToICloud() }
+            }
             upcomingTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.refreshUpcoming() }
             }

@@ -52,6 +52,7 @@ extension AppController {
         profile.remember(feedback, on: point, callID: callID, title: record.title)
         try profile.save(to: paths.coach)
         coachVersion += 1
+        syncToICloud()
         if let note = feedback.note {
             try await replyToCoach(callID: callID, message: "About your point “\(point.title)”: \(note)")
         }
@@ -75,6 +76,7 @@ extension AppController {
         profile.updateFacts(add: answer.addFacts, remove: answer.removeFacts)
         try profile.save(to: paths.coach)
         coachVersion += 1
+        syncToICloud()
     }
 
     func addCoachFact(_ kind: CoachFact.Kind, _ text: String) {
@@ -82,6 +84,7 @@ extension AppController {
         profile.updateFacts(add: [CoachFact(kind: kind, text: text)], remove: [])
         try? profile.save(to: paths.coach)
         coachVersion += 1
+        syncToICloud()
     }
 
     func removeCoachFact(_ text: String) {
@@ -89,6 +92,7 @@ extension AppController {
         profile.updateFacts(add: [], remove: [text])
         try? profile.save(to: paths.coach)
         coachVersion += 1
+        syncToICloud()
     }
 
     func removeCoachGuidance(_ text: String) {
@@ -96,6 +100,7 @@ extension AppController {
         profile.updateGuidance(add: [], remove: [text], at: Date())
         try? profile.save(to: paths.coach)
         coachVersion += 1
+        syncToICloud()
     }
 }
 

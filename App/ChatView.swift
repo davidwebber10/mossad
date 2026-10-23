@@ -44,6 +44,7 @@ struct ChatView: View {
         .background(Theme.background)
         .onAppear(perform: reload)
         .onChange(of: controller.newChatRequest) { _, _ in newChat() }
+        .onChange(of: controller.chatsVersion) { _, _ in reload() }
     }
 
     // MARK: List
@@ -229,6 +230,7 @@ struct ChatView: View {
                 chat.updated = Date()
                 store(chat)
                 controller.summarizeChat(chat.id)
+                controller.syncToICloud()
             } catch {
                 self.error = "\(error)"
             }

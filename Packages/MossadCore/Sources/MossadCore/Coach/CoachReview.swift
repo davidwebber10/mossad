@@ -142,6 +142,16 @@ public struct CoachReview: Codable, Equatable, Sendable {
         scorecard = try c.decodeIfPresent(Scorecard.self, forKey: .scorecard)
     }
 
+    /// This review with another device's ratings and conversation added: the newer rating of a point wins,
+    /// and messages the other copy has that this one lacks are appended.
+    public func mergingNotes(from other: CoachReview) -> CoachReview {
+        var out = self
+        for (title, f) in other.feedback where (out.feedback[title]?.date ?? .distantPast) < f.date { out.feedback[title] = f }
+        let ids = Set(thread.map(\.id))
+        out.thread += other.thread.filter { !ids.contains($0.id) }
+        return out
+    }
+
     /// Below this the owner mostly listened, and the review covers listening and value instead of delivery.
     public static let listenerSeconds: TimeInterval = 60
 
