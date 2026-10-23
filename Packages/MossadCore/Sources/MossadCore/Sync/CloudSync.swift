@@ -13,6 +13,7 @@ public actor CloudSync {
     static let chatType = "Chat"
     static let notesType = "CoachNotes"
     static let commitmentsType = "Commitments"
+    static let recordingType = "Recording"
     /// CloudKit takes up to 400 changes a request; assets make big requests, so stay well under.
     static let batch = 50
 
@@ -162,6 +163,17 @@ public actor CloudSync {
 
     // MARK: Phone
 
+    /// Sends a room recording to the Mac. Returns once iCloud has it, so the phone can keep its copy until then.
+    public func upload(_ p: PhoneRecording, audio: URL) async throws {
+        try await ensureZone()
+        let record = CKRecord(recordType: Self.recordingType, recordID: CKRecord.ID(recordName: PhoneRecording.recordName(p.id), zoneID: Self.zone))
+        record["start"] = p.start
+        record["end"] = p.end
+        record["title"] = p.title
+        record["audio"] = CKAsset(fileURL: audio)
+        _ = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: true)
+    }
+
     /// Fetches what changed since the last pull into the local folders, and returns how many records changed.
     /// The Mac leaves out meetings: it wrote them, and the copies in iCloud are trimmed.
     @discardableResult
@@ -169,6 +181,14 @@ public actor CloudSync {
         var state = try SyncState.load(from: paths.sync)
         var token = state.changeToken.flatMap { try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: $0) }
         var changed = 0
+        var imported: [CKRecord.ID] = []
+        defer {
+            // An imported recording lives on the Mac now; remove the copy in iCloud.
+            if !imported.isEmpty {
+                let ids = imported, database = database
+                Task { _ = try? await database.modifyRecords(saving: [], deleting: ids, savePolicy: .allKeys, atomically: false) }
+            }
+        }
         while true {
             let changes: (modificationResultsByID: [CKRecord.ID: Result<CKDatabase.RecordZoneChange.Modification, any Error>],
                           deletions: [CKDatabase.RecordZoneChange.Deletion], changeToken: CKServerChangeToken, moreComing: Bool)
@@ -183,6 +203,11 @@ public actor CloudSync {
             }
             for (id, result) in changes.modificationResultsByID {
                 guard case .success(let modification) = result else { continue }
+                if modification.record.recordType == Self.recordingType {
+                    // Only the Mac processes recordings.
+                    if !includeMeetings, importRecording(modification.record) { imported.append(id); changed += 1 }
+                    continue
+                }
                 if try store(modification.record, id: id.recordName, includeMeetings: includeMeetings) { changed += 1 }
             }
             for deletion in changes.deletions {
@@ -202,6 +227,21 @@ public actor CloudSync {
             state.changeToken = try NSKeyedArchiver.archivedData(withRootObject: changes.changeToken, requiringSecureCoding: true)
             try state.save(to: paths.sync)
             if !changes.moreComing { return changed }
+        }
+    }
+
+    /// Turns a phone recording into a call. True once the call exists here, including from an earlier pull.
+    private func importRecording(_ record: CKRecord) -> Bool {
+        let id = String(record.recordID.recordName.dropFirst("rec-".count))
+        if FileManager.default.fileExists(atPath: paths.callDirectory(id).appendingPathComponent(CallRecord.fileName).path) { return true }
+        guard let start = record["start"] as? Date, let end = record["end"] as? Date, let audio = (record["audio"] as? CKAsset)?.fileURL else { return false }
+        do {
+            try PhoneRecording.importAudio(audio, recording: PhoneRecording(id: id, start: start, end: end, title: record["title"] as? String), into: paths)
+            Log.info("Imported the iPhone recording \(id)")
+            return true
+        } catch {
+            Log.error("Importing the iPhone recording \(id) failed: \(error)")
+            return false
         }
     }
 

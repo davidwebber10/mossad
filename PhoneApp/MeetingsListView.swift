@@ -4,12 +4,31 @@ import SwiftUI
 struct MeetingsListView: View {
     @EnvironmentObject var store: PhoneStore
     @State private var showActions = false
+    @State private var recording = false
 
     var body: some View {
         NavigationStack(path: $store.path) {
             List {
                 if let error = store.error {
                     Label(error, systemImage: "exclamationmark.icloud").font(.footnote).foregroundStyle(.red)
+                }
+                if !store.outbox.isEmpty {
+                    Section("Recorded on this iPhone") {
+                        ForEach(store.outbox) { item in
+                            HStack(spacing: 12) {
+                                Image(systemName: "mic.fill").font(.footnote).foregroundStyle(.orange)
+                                    .frame(width: 30, height: 30).background(Color.orange.opacity(0.14), in: .rect(cornerRadius: 8))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.recording.title ?? "In-person meeting").font(.body.weight(.medium))
+                                    Text("\(item.recording.start.formatted(.dateTime.hour().minute())) · \(Int(item.recording.end.timeIntervalSince(item.recording.start) / 60)) min · "
+                                         + (item.sent ? "Your Mac is writing the notes" : "Waiting to send"))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if !item.sent { ProgressView() }
+                            }
+                        }
+                    }
                 }
                 ForEach(MeetingGroups.group(store.meetings), id: \.kind) { group in
                     Section(group.kind.title) {
@@ -27,10 +46,15 @@ struct MeetingsListView: View {
             }
             .navigationTitle("Meetings")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Record", systemImage: "mic.fill") { recording = true }
+                        .tint(.red)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Action items", systemImage: "checklist") { showActions = true }
                 }
             }
+            .fullScreenCover(isPresented: $recording) { RecordingView() }
             .refreshable { await store.sync() }
             .navigationDestination(isPresented: $showActions) { ActionItemsView() }
             .navigationDestination(for: String.self) { id in

@@ -11,6 +11,14 @@ final class PhoneStore: ObservableObject {
     @Published private(set) var profile = CoachProfile()
     @Published private(set) var chats: [Chat] = []
     @Published private(set) var commitments = CommitmentBook()
+    /// Room recordings made here that the Mac has not turned into meetings yet; `sent` once iCloud has them.
+    @Published private(set) var outbox: [Outgoing] = []
+
+    struct Outgoing: Codable, Identifiable, Equatable {
+        var recording: PhoneRecording
+        var sent = false
+        var id: String { recording.id }
+    }
     /// The coach's score per meeting, for the lists.
     @Published private(set) var scores: [String: Int] = [:]
     @Published private(set) var syncing = false
@@ -61,6 +69,7 @@ final class PhoneStore: ObservableObject {
             do {
                 try await cloud.pull(includeMeetings: true)
                 try await cloud.pushShared()
+                await sendOutbox()
                 error = nil
                 lastSync = Date()
             } catch {
@@ -75,6 +84,7 @@ final class PhoneStore: ObservableObject {
         profile = (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile()
         chats = chatStore.all()
         commitments = (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook()
+        loadOutbox()
         scores = Dictionary(uniqueKeysWithValues: meetings.compactMap { r in coach(r.id)?.scorecard.map { (r.id, $0.score) } })
         coachVersion += 1
     }
@@ -130,6 +140,49 @@ final class PhoneStore: ObservableObject {
             latest.summary = summary
             try? store.save(latest)
             share()
+        }
+    }
+
+    // MARK: Room recordings
+
+    var recordingsFolder: URL { paths.root.appendingPathComponent("Recordings") }
+    private var outboxFile: URL { recordingsFolder.appendingPathComponent("outbox.json") }
+
+    private func loadOutbox() {
+        var list = (try? JSONDecoder().decode([Outgoing].self, from: Data(contentsOf: outboxFile))) ?? []
+        // Done once the Mac's meeting for it has arrived.
+        let arrived = Set(meetings.map(\.id))
+        let done = list.filter { $0.sent && arrived.contains($0.id) }
+        for d in done { try? FileManager.default.removeItem(at: recordingsFolder.appendingPathComponent("\(d.id).m4a")) }
+        list.removeAll { d in done.contains { $0.id == d.id } }
+        if !done.isEmpty { saveOutbox(list) }
+        outbox = list
+    }
+
+    private func saveOutbox(_ list: [Outgoing]) {
+        try? FileManager.default.createDirectory(at: recordingsFolder, withIntermediateDirectories: true)
+        try? JSONEncoder().encode(list).write(to: outboxFile, options: .atomic)
+        outbox = list
+    }
+
+    func send(_ recording: PhoneRecording, audio: URL) {
+        saveOutbox(outbox + [Outgoing(recording: recording)])
+        Task { await sendOutbox() }
+    }
+
+    /// Uploads what iCloud does not have yet. The audio stays here until the meeting comes back from the Mac.
+    func sendOutbox() async {
+        guard !offline else { return }
+        for item in outbox where !item.sent {
+            let audio = recordingsFolder.appendingPathComponent("\(item.id).m4a")
+            do {
+                try await cloud.upload(item.recording, audio: audio)
+                var list = outbox
+                if let i = list.firstIndex(where: { $0.id == item.id }) { list[i].sent = true }
+                saveOutbox(list)
+            } catch {
+                self.error = "The recording is saved on this iPhone and will be sent when iCloud is reachable."
+            }
         }
     }
 

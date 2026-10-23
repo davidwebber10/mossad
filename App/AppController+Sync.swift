@@ -42,7 +42,11 @@ extension AppController {
             }
             await MainActor.run {
                 // Chats, ratings, and memories from the phone show here at once.
-                if received > 0 { self.coachVersion += 1; self.chatsVersion += 1; self.commitmentsVersion += 1 }
+                if received > 0 {
+                    self.coachVersion += 1; self.chatsVersion += 1; self.commitmentsVersion += 1
+                    // A room recording from the iPhone is a new call to process.
+                    if self.processing == 0 { self.processPending() }
+                }
                 self.iCloudSyncing = false
                 if self.iCloudSyncAgain {
                     self.iCloudSyncAgain = false

@@ -742,6 +742,11 @@ final class AppController: ObservableObject {
         refresh()
     }
 
+    /// Processes calls waiting in the queue, such as a recording that arrived from the iPhone.
+    func processPending() {
+        Task { await track { await self.pipeline.runPending() } }
+    }
+
     private func runHousekeeping() async {
         await track { await self.pipeline.runPending() }
         // Encoding an hour of audio takes seconds, so this stays off the main actor.
