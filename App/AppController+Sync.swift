@@ -10,6 +10,18 @@ extension AppController {
         return (value as? [String])?.contains("CloudKit") == true
     }()
 
+    /// Puts the chosen AI provider, model, and key in iCloud Keychain for the iPhone, or removes them.
+    func updateSharedAIKey() {
+        guard Self.hasICloud else { return }
+        guard shareAIKey, let key = keychain.get(aiProvider.key) else {
+            SharedAIKey.delete()
+            return
+        }
+        let shared = SharedAIKey(provider: aiProvider.rawValue, model: aiModel.isEmpty ? aiProvider.defaultModel : aiModel, key: key)
+        guard SharedAIKey.load() != shared else { return }
+        do { try shared.save() } catch { Log.error("Sharing the AI key with the iPhone failed: \(error)") }
+    }
+
     /// Uploads new and changed meetings for the iPhone app. One push at a time; a push asked for during one
     /// runs again after it.
     func syncToICloud() {

@@ -142,6 +142,7 @@ final class AppController: ObservableObject {
     @AppStorage("mailRegion") var mailRegion = "us-east-1"
     @AppStorage("mailAccessKeyID") var mailAccessKeyID = ""
     @AppStorage("iCloudSync") var iCloudSyncEnabled = true
+    @AppStorage("shareAIKey") var shareAIKey = true
     var iCloudSyncing = false
     var iCloudSyncAgain = false
     lazy var cloudSync = CloudSync(paths: paths)
@@ -299,6 +300,7 @@ final class AppController: ObservableObject {
 
     /// Recreates the pipeline with the current keys and settings.
     func rebuildPipeline() {
+        updateSharedAIKey()
         let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
         let organization = organization.trimmingCharacters(in: .whitespaces)
         let provider = transcriptionProvider

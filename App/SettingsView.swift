@@ -46,6 +46,9 @@ struct SettingsView: View {
                 group("iPhone", footer: "Finished meetings, their summaries and transcripts, and the coach's notes go to your private iCloud, where Mossad for iPhone reads them. Audio stays where it is.") {
                     switchRow("Sync meetings to iCloud", $controller.iCloudSyncEnabled)
                         .onChange(of: controller.iCloudSyncEnabled) { _, on in if on { controller.syncToICloud() } }
+                    switchRow("Use my AI key on my iPhone", $controller.shareAIKey)
+                        .help("Chat and the coach on the iPhone use the AI provider and key chosen here. The key travels in iCloud Keychain, which is end-to-end encrypted.")
+                        .onChange(of: controller.shareAIKey) { _, _ in controller.updateSharedAIKey() }
                 }
                 group("Updates", footer: "New versions come from the Mossad releases on GitHub. Each one is signed, and an update never installs during a call.") {
                     UpdateSettings(updater: controller.updater)
