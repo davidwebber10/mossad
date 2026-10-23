@@ -128,6 +128,16 @@ private struct CoachSection: View {
     var body: some View {
         if let review {
             VStack(alignment: .leading, spacing: 16) {
+                if let card = review.scorecard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("\(card.score)/5").font(.title.bold())
+                            Text(card.reason).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        ForEach(card.positives, id: \.self) { Label($0, systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.subheadline) }
+                        ForEach(card.negatives, id: \.self) { Label($0, systemImage: "xmark.circle.fill").foregroundStyle(.orange).font(.subheadline) }
+                    }
+                }
                 Text(review.headline).font(.headline)
                 Text(review.overview).foregroundStyle(.secondary)
                 if let v = review.value {

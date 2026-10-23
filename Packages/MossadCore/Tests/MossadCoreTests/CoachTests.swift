@@ -241,6 +241,10 @@ final class CoachTests: XCTestCase {
             "strengths": [["title": "Goal first", "observation": "O", "quote": "Q", "at_seconds": 3, "principle": "P", "try_instead": NSNull()]],
             "improvements": [["title": "Close", "observation": "O2", "quote": "Q2", "at_seconds": 90, "principle": "P2", "try_instead": "Say X"]],
             "focus_progress": "Better than last week.",
+            "score": 3, "score_reason": "Clear framing, weak close.",
+            "dimensions": [["name": "Clarity", "score": 4], ["name": "Listening", "score": 3], ["name": "Follow-through", "score": 2], ["name": "Use of time", "score": 9]],
+            "positives": ["Opened with the goal, so everyone knew the point"],
+            "negatives": ["Ended the call with no owners or dates for the follow-up work at all"],
             "meeting_value": ["rating": "low", "reason": "Status only; you said nothing.", "action": "async", "suggestion": "Ask for a written update."],
             "profile": ["summary": "S", "focus": "F",
                         "patterns": [["name": "Interrupts", "kind": "growth", "note": "N", "trend": "improving"]],
@@ -261,7 +265,17 @@ final class CoachTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "claude-opus-5-5")
         let schema = ((body["output_config"] as? [String: Any])?["format"] as? [String: Any])?["schema"] as? [String: Any]
         XCTAssertEqual(Set(schema?["required"] as? [String] ?? []),
-                       ["headline", "overview", "strengths", "improvements", "focus_progress", "meeting_value", "profile"])
+                       ["headline", "overview", "strengths", "improvements", "focus_progress", "meeting_value", "profile",
+                        "score", "score_reason", "dimensions", "positives", "negatives"])
+        let card = try XCTUnwrap(result.review.scorecard)
+        XCTAssertEqual(card.score, 3)
+        XCTAssertEqual(card.reason, "Clear framing, weak close.")
+        XCTAssertEqual(card.dimensions.map(\.name), ["Clarity", "Listening", "Follow-through", "Use of time"])
+        // Scores stay in 1...5, and a point keeps at most 10 words.
+        XCTAssertEqual(card.dimensions.last?.score, 5)
+        XCTAssertEqual(card.positives, ["Opened with the goal, so everyone knew the point"])
+        XCTAssertEqual(card.negatives.first?.split(separator: " ").count, 10)
+        XCTAssertTrue(card.negatives.first?.hasSuffix("…") == true)
         XCTAssertEqual(result.review.value, MeetingValue(rating: .low, reason: "Status only; you said nothing.", action: .async, suggestion: "Ask for a written update."))
     }
 

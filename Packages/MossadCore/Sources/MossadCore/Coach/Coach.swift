@@ -35,6 +35,11 @@ public struct LLMCoach: Coaching {
             "strengths": Schema.array(point),
             "improvements": Schema.array(point),
             "focus_progress": Schema.nullableString,
+            "score": ["type": "integer"],
+            "score_reason": Schema.string,
+            "dimensions": Schema.array(Schema.object(["name": Schema.oneOf(Scorecard.dimensionNames), "score": ["type": "integer"]])),
+            "positives": Schema.array(Schema.string),
+            "negatives": Schema.array(Schema.string),
             "meeting_value": Schema.object([
                 "rating": Schema.oneOf(MeetingValue.Rating.allCases.map(\.rawValue)),
                 "reason": Schema.string,
@@ -61,7 +66,9 @@ public struct LLMCoach: Coaching {
                                      schema: Self.schema, effort: .high, purpose: .coach, as: Output.self)
         let review = CoachReview(headline: out.headline, overview: out.overview, strengths: out.strengths.map(\.point),
                                  improvements: out.improvements.map(\.point), focusProgress: out.focus_progress?.nonBlank,
-                                 value: out.meeting_value, delivery: delivery)
+                                 value: out.meeting_value, delivery: delivery,
+                                 scorecard: Scorecard(score: out.score, reason: out.score_reason, dimensions: out.dimensions,
+                                                      positives: out.positives, negatives: out.negatives))
         return CoachResult(review: review, update: out.profile)
     }
 
@@ -72,6 +79,11 @@ public struct LLMCoach: Coaching {
         let improvements: [Point]
         let focus_progress: String?
         let meeting_value: MeetingValue?
+        let score: Int
+        let score_reason: String
+        let dimensions: [Scorecard.Dimension]
+        let positives: [String]
+        let negatives: [String]
         let profile: CoachProfileUpdate
     }
 

@@ -100,6 +100,7 @@ public struct LLMDigestWriter: DigestWriting {
             let r = item.review
             user.append("### \(item.date.formatted(.dateTime.weekday(.wide).month().day())) \(item.title)\n\(r.headline)\n\(r.overview)")
             if let p = r.focusProgress { user.append("Focus: \(p)") }
+            if let card = r.scorecard { user.append("Score: \(card.score)/5. \(card.reason)") }
             if let v = r.value { user.append("Value: \(v.rating.rawValue); \(v.action.rawValue): \(v.suggestion)") }
             if let d = r.delivery { user.append("Delivery: \(CoachPrompt.numbers(d))") }
             user += r.strengths.map { "+ \($0.title): \($0.observation)" }

@@ -43,6 +43,42 @@ public struct MeetingValue: Codable, Equatable, Sendable, Hashable {
     }
 }
 
+/// The review at a glance: a score out of 5, scores by area, and the key points in a few words each.
+public struct Scorecard: Codable, Equatable, Sendable {
+    public struct Dimension: Codable, Equatable, Sendable, Hashable {
+        public var name: String
+        public var score: Int
+
+        public init(name: String, score: Int) {
+            self.name = name
+            self.score = score
+        }
+    }
+
+    public static let dimensionNames = ["Clarity", "Listening", "Follow-through", "Use of time"]
+    public static let pointWords = 10
+
+    public var score: Int
+    public var reason: String
+    public var dimensions: [Dimension]
+    public var positives: [String]
+    public var negatives: [String]
+
+    /// Keeps scores in 1...5 and each point to 10 words, whatever the model sent.
+    public init(score: Int, reason: String, dimensions: [Dimension], positives: [String], negatives: [String]) {
+        func clamp(_ n: Int) -> Int { min(5, max(1, n)) }
+        func short(_ text: String) -> String {
+            let words = text.split(separator: " ")
+            return words.count <= Self.pointWords ? text : words.prefix(Self.pointWords).joined(separator: " ") + "…"
+        }
+        self.score = clamp(score)
+        self.reason = reason
+        self.dimensions = dimensions.map { Dimension(name: $0.name, score: clamp($0.score)) }
+        self.positives = positives.compactMap(\.nonBlank).prefix(3).map(short)
+        self.negatives = negatives.compactMap(\.nonBlank).prefix(3).map(short)
+    }
+}
+
 /// The owner's verdict on one point: right or wrong, and why.
 public struct CoachFeedback: Codable, Equatable, Sendable {
     public var agree: Bool
@@ -68,14 +104,17 @@ public struct CoachReview: Codable, Equatable, Sendable {
     public var focusProgress: String?
     public var value: MeetingValue?
     public var delivery: DeliveryStats?
+    /// Nil for reviews from before the scorecard.
+    public var scorecard: Scorecard?
     /// The owner's rating of each point, by the point's title.
     public var feedback: [String: CoachFeedback] = [:]
     /// The owner's conversation with the coach about this review.
     public var thread: [ChatMessage] = []
 
     public init(headline: String, overview: String, strengths: [CoachPoint], improvements: [CoachPoint],
-                focusProgress: String?, value: MeetingValue? = nil, delivery: DeliveryStats? = nil) {
+                focusProgress: String?, value: MeetingValue? = nil, delivery: DeliveryStats? = nil, scorecard: Scorecard? = nil) {
         self.value = value
+        self.scorecard = scorecard
         self.headline = headline
         self.overview = overview
         self.strengths = strengths
@@ -85,7 +124,7 @@ public struct CoachReview: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case headline, overview, strengths, improvements, focusProgress, value, delivery, feedback, thread
+        case headline, overview, strengths, improvements, focusProgress, value, delivery, feedback, thread, scorecard
     }
 
     /// Reviews from before feedback existed have no feedback or thread.
@@ -100,6 +139,7 @@ public struct CoachReview: Codable, Equatable, Sendable {
         delivery = try c.decodeIfPresent(DeliveryStats.self, forKey: .delivery)
         feedback = try c.decodeIfPresent([String: CoachFeedback].self, forKey: .feedback) ?? [:]
         thread = try c.decodeIfPresent([ChatMessage].self, forKey: .thread) ?? []
+        scorecard = try c.decodeIfPresent(Scorecard.self, forKey: .scorecard)
     }
 
     /// Below this the owner mostly listened, and the review covers listening and value instead of delivery.

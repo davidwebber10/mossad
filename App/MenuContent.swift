@@ -39,7 +39,6 @@ struct MenuContent: View {
                     }
                 }
             }
-            navigationRow("Open Mossad", "macwindow") { controller.open(controller.section) }
             let recent = controller.meetings.filter { $0.status != .recording }.prefix(3)
             if !recent.isEmpty {
                 PanelSeparator()
@@ -55,6 +54,7 @@ struct MenuContent: View {
                 }
             }
             PanelSeparator()
+            navigationRow("Open Mossad", "macwindow") { controller.open(controller.section) }
             navigationRow("Meetings", "bubble.left.and.text.bubble.right") { controller.open(.meetings) }
             if let first = controller.callsNeedingNames.first {
                 PanelRow(action: { go { controller.openNaming(first.id) } }) {

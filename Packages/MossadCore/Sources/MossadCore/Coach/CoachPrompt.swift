@@ -62,6 +62,14 @@ enum CoachPrompt {
         follow it in every review. Do not repeat advice they rejected; if this call shows strong new evidence for \
         it, say so and say why, in one sentence. Learn from the points they agreed with too.
 
+        Start with a scorecard. score is how well \(owner) communicated in this call, 1 to 5: 3 is solid, 5 is \
+        excellent and rare, 1 means it went badly. Judge against what the meeting needed from them, so a quiet \
+        call where listening was right can score well. score_reason is one sentence. dimensions scores Clarity, \
+        Listening, Follow-through (owners, dates, next steps), and Use of time, each 1 to 5; leave out an area \
+        the call gave no chance to show. positives and negatives are the key points, up to 3 each, at most 10 \
+        words each, plain and specific (for example "Opened with the decision you needed"). The strengths and \
+        improvements below hold the detail behind them.
+
         Rate the meeting's value for \(owner): was this a good use of their time? Judge by what the meeting needed \
         from them and what it produced, using the facts given: their talk share, the decisions, the action items they \
         took, the number of people, the length, and how often the same meeting has come up before. A meeting where \
@@ -114,7 +122,7 @@ enum CoachPrompt {
         let recent = profile.history.suffix(recentCalls)
         if !recent.isEmpty {
             notes.append("Recent calls, oldest first:\n" + recent.map { h in
-                var line = "- \(day(h.date)) \(h.title): \(h.headline)"
+                var line = "- \(day(h.date)) \(h.title)\(h.score.map { " (scored \($0)/5)" } ?? ""): \(h.headline)"
                 if let p = h.focusProgress { line += " Focus: \(p)" }
                 if let d = h.delivery { line += " [\(numbers(d))]" }
                 return line

@@ -28,6 +28,7 @@ struct CoachTab: View {
 
     private func content(_ review: CoachReview) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            if let card = review.scorecard { ScorecardView(card: card) }
             Card("Coach") {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(review.headline).font(.system(size: 15, weight: .semibold))
@@ -323,5 +324,65 @@ private struct DeliveryCard: View {
             // A blank line keeps every tile the same height, so the values line up.
             Text(detail ?? " ").font(.system(size: 11)).foregroundStyle(.tertiary)
         }
+    }
+}
+
+/// The review at a glance: the score out of 5, the score by area, and the key points.
+private struct ScorecardView: View {
+    let card: Scorecard
+
+    private func color(_ score: Int) -> Color {
+        score >= 4 ? .green : score == 3 ? .yellow : Theme.warning
+    }
+
+    var body: some View {
+        Card("Scorecard") {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 18) {
+                    VStack(spacing: 4) {
+                        (Text("\(card.score)").font(.system(size: 40, weight: .bold)) + Text("/5").font(.system(size: 17, weight: .semibold)).foregroundColor(.secondary))
+                            .foregroundStyle(color(card.score))
+                        HStack(spacing: 2) {
+                            ForEach(1...5, id: \.self) { i in
+                                Image(systemName: i <= card.score ? "star.fill" : "star").font(.system(size: 10))
+                                    .foregroundStyle(i <= card.score ? Color.yellow : Color.secondary.opacity(0.5))
+                            }
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Score \(card.score) of 5")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(card.reason).fontWeight(.medium)
+                        ForEach(card.dimensions, id: \.self) { d in
+                            HStack(spacing: 8) {
+                                Text(d.name).font(.system(size: 12)).foregroundStyle(.secondary).frame(width: 96, alignment: .leading)
+                                HStack(spacing: 3) {
+                                    ForEach(1...5, id: \.self) { i in
+                                        Capsule().fill(i <= d.score ? color(d.score) : Theme.field).frame(width: 22, height: 6)
+                                    }
+                                }
+                                Text("\(d.score)").font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                            }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(d.name): \(d.score) of 5")
+                        }
+                    }
+                }
+                HStack(alignment: .top, spacing: 18) {
+                    points(card.positives, symbol: "checkmark.circle.fill", tint: .green)
+                    points(card.negatives, symbol: "xmark.circle.fill", tint: Theme.warning)
+                }
+            }
+            .textSelection(.enabled)
+        }
+    }
+
+    private func points(_ list: [String], symbol: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(list, id: \.self) { p in
+                Label { Text(p) } icon: { Image(systemName: symbol).foregroundStyle(tint) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
