@@ -12,7 +12,13 @@ struct CoachMemoryView: View {
         NavigationStack {
             List {
                 let p = store.profile
-                if !p.focus.isEmpty { Section("Your focus") { Text(p.focus) } }
+                if p.activeFocus != nil || p.proposedFocus != nil {
+                    Section {
+                        FocusPanel(profile: p, accept: { store.acceptFocus($0, plan: $1) }, dismiss: { store.dismissFocus($0) })
+                    }
+                }
+                let learned = p.foci.filter { $0.status == .learned }
+                if !learned.isEmpty { Section("Learned") { ForEach(learned) { Label($0.plan, systemImage: "checkmark.seal.fill") } } }
                 if !p.summary.isEmpty { Section("How you communicate") { Text(p.summary) } }
                 if !p.patterns.isEmpty {
                     Section("Patterns") {

@@ -13,7 +13,7 @@ targets:
   Mossad:
     type: application
     platform: macOS
-    sources: [App]
+    sources: [App, SharedUI]
     dependencies:
       - package: MossadCore
       - package: Sparkle
@@ -63,7 +63,7 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "26.0"
-    sources: [PhoneApp]
+    sources: [PhoneApp, SharedUI]
     dependencies:
       - package: MossadCore
     info:

@@ -79,6 +79,37 @@ extension AppController {
         syncToICloud()
     }
 
+    func acceptFocus(_ id: UUID, plan: String?) {
+        var profile = coachProfile
+        profile.acceptFocus(id, plan: plan, at: Date())
+        try? profile.save(to: paths.coach)
+        coachVersion += 1
+        syncToICloud()
+    }
+
+    func dismissFocus(_ id: UUID) {
+        var profile = coachProfile
+        profile.dismissFocus(id, at: Date())
+        try? profile.save(to: paths.coach)
+        coachVersion += 1
+        syncToICloud()
+    }
+
+    func setCoachVoice(_ voice: CoachVoice) {
+        var profile = coachProfile
+        profile.voice = voice
+        try? profile.save(to: paths.coach)
+        coachVersion += 1
+        syncToICloud()
+    }
+
+    /// Deletes this call's review and runs the coach, which reviews it again in the current format.
+    func reviewAgain(_ callID: String) {
+        try? FileManager.default.removeItem(at: paths.callDirectory(callID).appendingPathComponent(CoachReview.fileName))
+        coachVersion += 1
+        runCoach()
+    }
+
     func addCoachFact(_ kind: CoachFact.Kind, _ text: String) {
         var profile = coachProfile
         profile.updateFacts(add: [CoachFact(kind: kind, text: text)], remove: [])

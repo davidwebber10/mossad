@@ -267,12 +267,17 @@ struct SettingsView: View {
             .help("After each note, Claude reviews how you communicated and gives advice tied to moments in the call. It keeps notes over time, so it tracks your progress and your history with each person.")
             .onChange(of: controller.coachEnabled) { _, on in if on { controller.turnOnCoach() } }
         if controller.coachEnabled {
-            let focus = controller.coachProfile.focus
-            if !focus.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Current focus").foregroundStyle(.secondary)
-                    Text(focus).fontWeight(.medium)
+            let profile = controller.coachProfile
+            HStack {
+                Text("Voice")
+                Spacer()
+                Picker("Voice", selection: Binding(get: { profile.voice }, set: { controller.setCoachVoice($0) })) {
+                    ForEach(CoachVoice.allCases) { Text($0.title).tag($0) }
                 }
+                .labelsHidden().fixedSize()
+            }
+            if profile.activeFocus != nil || profile.proposedFocus != nil {
+                FocusPanel(profile: profile, accept: { controller.acceptFocus($0, plan: $1) }, dismiss: { controller.dismissFocus($0) })
             }
             CoachMemoryEditor()
             switchRow("Weekly email on Monday", $controller.coachEmailEnabled)

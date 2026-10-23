@@ -8,6 +8,7 @@ struct CoachTab: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
     @ObservedObject var player: AudioPlayer
+    @State private var more = false
 
     var body: some View {
         // Read on each coach run, so a review that lands while the tab is open shows at once.
@@ -27,49 +28,51 @@ struct CoachTab: View {
     }
 
     private func content(_ review: CoachReview) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let card = review.scorecard { ScorecardView(card: card) }
+        let profile = controller.coachProfile
+        let metrics = CallMetrics(record: record, owner: controller.ownerName,
+                                  history: profile.history.filter { $0.callID != record.id }.compactMap(\.delivery))
+        return VStack(alignment: .leading, spacing: 12) {
+            if profile.activeFocus != nil || profile.proposedFocus != nil {
+                Card("Focus") {
+                    FocusPanel(profile: profile, callID: record.id, result: review.focusResult,
+                               accept: { controller.acceptFocus($0, plan: $1) }, dismiss: { controller.dismissFocus($0) })
+                }
+            }
             Card("Coach") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(review.headline).font(.system(size: 15, weight: .semibold))
-                    Text(review.overview).foregroundStyle(.secondary)
-                }
-                .textSelection(.enabled)
+                CoachLines(review: review, play: player.isAvailable ? { player.play(from: $0) } : nil)
             }
-            if let value = review.value { ValueCard(value: value) }
-            if let progress = review.focusProgress {
-                focusCard(progress)
+            Button {
+                withAnimation(.snappy) { more.toggle() }
+            } label: {
+                Label(more ? "Less" : "More from the coach", systemImage: more ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 12, weight: .medium))
             }
-            if let d = review.delivery {
-                if CoachReview.isListener(d) {
-                    Card("Delivery") {
-                        Text("You mostly listened in this call, so the coach looked at listening, follow-ups, and whether the meeting needed you.")
-                            .foregroundStyle(.secondary)
+            .buttonStyle(.plain).foregroundStyle(Color.accentColor)
+            if more {
+                if !metrics.checks.isEmpty {
+                    Card("Against your goals") {
+                        VStack(alignment: .leading, spacing: 16) {
+                            GoalsGrid(metrics: metrics, focus: profile.activeFocus?.metric)
+                            CallStrip(metrics: metrics)
+                        }
                     }
-                } else {
-                    DeliveryCard(stats: d)
+                }
+                if let value = review.value { ValueCard(value: value) }
+                if !review.strengths.isEmpty {
+                    section("What worked", symbol: "checkmark.circle.fill", tint: .green, points: review.strengths)
+                }
+                if !review.improvements.isEmpty {
+                    section("What to work on", symbol: "arrow.up.forward.circle.fill", tint: Theme.warning, points: review.improvements)
+                }
+                if let card = review.scorecard { ScorecardView(card: card) }
+                CoachThread(callID: record.id, thread: review.thread)
+                if review.didWell == nil && review.tryNext == nil && !review.quiet {
+                    Button("Review this call again with the new coach") { controller.reviewAgain(record.id) }
+                        .controlSize(.small).disabled(controller.coaching)
                 }
             }
-            if !review.strengths.isEmpty {
-                section("What worked", symbol: "checkmark.circle.fill", tint: .green, points: review.strengths)
-            }
-            if !review.improvements.isEmpty {
-                section("Try next time", symbol: "arrow.up.forward.circle.fill", tint: Theme.warning, points: review.improvements)
-            }
-            CoachThread(callID: record.id, thread: review.thread)
         }
         .padding(.top, 6)
-    }
-
-    private func focusCard(_ progress: String) -> some View {
-        let focus = controller.coachProfile.focus
-        return Card("Your focus") {
-            VStack(alignment: .leading, spacing: 6) {
-                if !focus.isEmpty { Text(focus).fontWeight(.medium) }
-                Text(progress).foregroundStyle(.secondary)
-            }
-            .textSelection(.enabled)
-        }
     }
 
     private func section(_ title: String, symbol: String, tint: Color, points: [CoachPoint]) -> some View {

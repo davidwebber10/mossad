@@ -4,26 +4,45 @@ import SwiftUI
 /// The coach's review of one meeting, as on the Mac: the scorecard, the meeting's value, delivery, the points
 /// with 👍 / 👎, and a conversation with the coach.
 struct CoachSection: View {
+    @EnvironmentObject var store: PhoneStore
     let record: CallRecord
     let review: CoachReview
+    @State private var more = false
 
     var body: some View {
+        let profile = store.profile
+        let metrics = CallMetrics(record: record, owner: store.owner,
+                                  history: profile.history.filter { $0.callID != record.id }.compactMap(\.delivery))
         VStack(alignment: .leading, spacing: 14) {
-            if let card = review.scorecard { ScorecardCard(card: card) }
-            Card {
-                Text(review.headline).font(.headline)
-                Text(review.overview).foregroundStyle(.secondary)
-                if let focus = review.focusProgress {
-                    Label(focus, systemImage: "scope").font(.subheadline)
+            if profile.activeFocus != nil || profile.proposedFocus != nil {
+                Card {
+                    FocusPanel(profile: profile, callID: record.id, result: review.focusResult,
+                               accept: { store.acceptFocus($0, plan: $1) }, dismiss: { store.dismissFocus($0) })
                 }
             }
-            if let value = review.value { ValueCard(value: value) }
-            if let d = review.delivery { DeliveryCard(stats: d) }
-            PointsCard(title: "What worked", symbol: "hand.thumbsup.fill", tint: .green, points: review.strengths, review: review, callID: record.id)
-            PointsCard(title: "Try next time", symbol: "arrow.up.forward.circle.fill", tint: .orange, points: review.improvements, review: review, callID: record.id)
-            CoachThread(callID: record.id, thread: review.thread)
+            Card { CoachLines(review: review) }
+            Button {
+                withAnimation(.snappy) { more.toggle() }
+            } label: {
+                Label(more ? "Less" : "More from the coach", systemImage: more ? "chevron.up" : "chevron.down")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .padding(.horizontal, 4)
+            if more {
+                if !metrics.checks.isEmpty {
+                    Card {
+                        CardTitle(text: "Against your goals", symbol: "target")
+                        GoalsGrid(metrics: metrics, focus: profile.activeFocus?.metric)
+                        CallStrip(metrics: metrics)
+                    }
+                }
+                if let value = review.value { ValueCard(value: value) }
+                PointsCard(title: "What worked", symbol: "hand.thumbsup.fill", tint: .green, points: review.strengths, review: review, callID: record.id)
+                PointsCard(title: "What to work on", symbol: "arrow.up.forward.circle.fill", tint: .orange, points: review.improvements, review: review, callID: record.id)
+                if let card = review.scorecard { ScorecardCard(card: card) }
+                CoachThread(callID: record.id, thread: review.thread)
+            }
         }
-        .textSelection(.enabled)
     }
 }
 
@@ -89,31 +108,6 @@ private struct ValueCard: View {
     }
 
     private var tint: Color { value.rating == .high ? .green : value.rating == .medium ? .yellow : .orange }
-}
-
-private struct DeliveryCard: View {
-    let stats: DeliveryStats
-
-    var body: some View {
-        Card {
-            CardTitle(text: "Delivery", symbol: "waveform")
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 14) {
-                metric("\(Int(stats.wordsPerMinute))", "words a minute")
-                metric("\(Int((stats.talkShare * 100).rounded()))%", "of the talking")
-                metric(String(format: "%.1f", stats.fillersPerMinute), "fillers a minute")
-                metric(clock(stats.longestTurnSeconds), "longest turn")
-                metric("\(stats.questions)", "questions asked")
-                metric("\(stats.interruptions)", "times you cut in")
-            }
-        }
-    }
-
-    private func metric(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.title3.weight(.semibold)).monospacedDigit()
-            Text(label).font(.caption).foregroundStyle(.secondary)
-        }
-    }
 }
 
 private struct PointsCard: View {

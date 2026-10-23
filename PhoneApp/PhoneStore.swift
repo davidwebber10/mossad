@@ -158,6 +158,20 @@ final class PhoneStore: ObservableObject {
         share()
     }
 
+    func acceptFocus(_ id: UUID, plan: String?) {
+        var profile = profile
+        profile.acceptFocus(id, plan: plan, at: Date())
+        try? profile.save(to: paths.coach)
+        share()
+    }
+
+    func dismissFocus(_ id: UUID) {
+        var profile = profile
+        profile.dismissFocus(id, at: Date())
+        try? profile.save(to: paths.coach)
+        share()
+    }
+
     func addFact(_ kind: CoachFact.Kind, _ text: String) {
         var profile = profile
         profile.updateFacts(add: [CoachFact(kind: kind, text: text)], remove: [])
