@@ -26,6 +26,11 @@ extension ChatTools {
                  schema: ["type": "object", "properties": [
                     "kind": ["type": "string", "enum": ["role", "responsibility", "goal", "relationship", "preference"]], "text": ["type": "string"],
                  ] as [String: Any], "required": ["kind", "text"]]),
+        ToolSpec(name: "commitments",
+                 description: "What the owner personally promised in meetings (separate from action items), with who it was promised to, the meeting and moment, the due date, and whether it is done or overdue. status is open (default), overdue, done, or all. Filter by a person.",
+                 schema: ["type": "object", "properties": [
+                    "status": ["type": "string", "enum": ["open", "overdue", "done", "all"]], "person": ["type": "string"], "limit": ["type": "integer"],
+                 ] as [String: Any]]),
         ToolSpec(name: "past_chats",
                  description: "Earlier conversations with the owner, newest first, with their summaries. Filter by words.",
                  schema: ["type": "object", "properties": ["query": ["type": "string"], "limit": ["type": "integer"]] as [String: Any]]),
@@ -41,7 +46,7 @@ extension ChatTools {
     private func review(_ id: String) -> CoachReview? { paths.flatMap { CoachReview.load(in: $0.callDirectory(id)) } }
 
     func runCoachTool(_ name: String, input: [String: Any], from: Date?, to: Date?, people: [String], limit: Int) -> String? {
-        guard let paths else { return name.hasPrefix("coach") || ["people", "stats", "remember", "past_chats", "read_chat", "read_coach_review"].contains(name) ? "Not available here." : nil }
+        guard let paths else { return name.hasPrefix("coach") || ["people", "stats", "remember", "past_chats", "read_chat", "read_coach_review", "commitments"].contains(name) ? "Not available here." : nil }
         switch name {
         case "coach_profile": return coachProfileText()
         case "coach_reviews":
@@ -64,6 +69,7 @@ extension ChatTools {
             guard let id = input["call_id"] as? String, let v = review(id) else { return "No coach review for that call_id." }
             return reviewText(v, title: records.first { $0.id == id }?.title ?? id)
         case "people": return peopleText(query: input["query"] as? String, limit: limit)
+        case "commitments": return commitmentsText(status: input["status"] as? String ?? "open", person: input["person"] as? String, limit: limit)
         case "stats":
             let end = to ?? Date(), start = from ?? end.addingTimeInterval(-30 * 86_400)
             return statsText(DateInterval(start: start, end: max(start, end)), usage: UsageLog(directory: paths.usage).all())
@@ -131,6 +137,32 @@ extension ChatTools {
             parts.append("Recent scores: " + scored.suffix(10).map { "\($0.0.title) \($0.1)/5" }.joined(separator: ", "))
         }
         return parts.isEmpty ? "The coach has no notes yet." : parts.joined(separator: "\n\n")
+    }
+
+    func commitmentsText(status: String, person: String?, limit: Int) -> String {
+        guard let paths, let book = try? CommitmentBook.load(from: paths.commitments) else { return "No commitments yet." }
+        let now = Date()
+        let list = book.visible.filter { c in
+            let s = c.status(now: now)
+            let keep = switch status {
+            case "all": true
+            case "done": s == .done
+            case "overdue": s == .overdue
+            default: s != .done
+            }
+            return keep && (person.map { p in (c.to ?? "").localizedCaseInsensitiveContains(p) || (c.callTitle ?? "").localizedCaseInsensitiveContains(p) } ?? true)
+        }
+        .sorted { ($0.due ?? .distantFuture, $0.madeAt) < ($1.due ?? .distantFuture, $1.madeAt) }
+        .prefix(max(limit, 30))
+        guard !list.isEmpty else { return "No commitments match." }
+        let day = Date.FormatStyle().year().month(.abbreviated).day()
+        return list.map { c in
+            var line = "- \(c.text)"
+            if let to = c.to { line += " (to \(to))" }
+            line += c.done.map { " | done \($0.formatted(day))" } ?? (c.due.map { " | due \($0.formatted(day))" + (c.status(now: now) == .overdue ? ", overdue" : "") } ?? " | no date")
+            if let id = c.callID { line += " | made in call_id \(id)" + (c.callTitle.map { " (\($0))" } ?? "") + (c.at.map { " at \(Int($0)) s" } ?? "") }
+            return line
+        }.joined(separator: "\n")
     }
 
     func reviewText(_ v: CoachReview, title: String) -> String {

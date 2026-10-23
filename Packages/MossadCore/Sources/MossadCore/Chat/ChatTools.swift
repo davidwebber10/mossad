@@ -205,6 +205,7 @@ public struct ChatTools: Sendable {
         case "read_coach_review": return "Reading the coach's review of \((input["call_id"] as? String).flatMap(title) ?? "a meeting")"
         case "people": return (input["query"] as? String).map { "Looking up \($0)" } ?? "Looking at the people you meet"
         case "stats": return "Adding up your numbers"
+        case "commitments": return "Checking your commitments"
         case "remember": return "Remembering that"
         case "past_chats", "read_chat": return "Reading earlier chats"
         default: return "Looking it up"

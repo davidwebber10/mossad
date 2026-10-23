@@ -4,7 +4,7 @@ import Foundation
 /// What both devices write and read: chats, the owner's ratings and conversation on a review, and the
 /// coach's memory. Meetings themselves come only from the Mac.
 public struct SharedPayload: Sendable {
-    public enum Kind: String, Sendable { case chat, notes, profile }
+    public enum Kind: String, Sendable { case chat, notes, profile, commitments }
 
     public let kind: Kind
     /// "chat:<uuid>", "notes:<call id>", or "profile": the record name and the key in the sync state.
@@ -28,6 +28,10 @@ public struct SharedPayload: Sendable {
         guard !review.feedback.isEmpty || !review.thread.isEmpty else { return nil }
         let notes = ReviewNotes(feedback: review.feedback, thread: review.thread)
         return SharedPayload(kind: .notes, key: "notes:\(callID)", data: (try? JSONEncoder.callRecord.encode(notes)) ?? Data())
+    }
+
+    public static func commitments(_ book: CommitmentBook) -> SharedPayload {
+        SharedPayload(kind: .commitments, key: "commitments", data: (try? JSONEncoder.callRecord.encode(book)) ?? Data())
     }
 
     public static func profile(_ profile: CoachProfile) -> SharedPayload {

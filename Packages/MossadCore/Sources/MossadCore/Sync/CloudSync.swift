@@ -12,6 +12,7 @@ public actor CloudSync {
     static let profileName = "coach-profile"
     static let chatType = "Chat"
     static let notesType = "CoachNotes"
+    static let commitmentsType = "Commitments"
     /// CloudKit takes up to 400 changes a request; assets make big requests, so stay well under.
     static let batch = 50
 
@@ -107,6 +108,10 @@ public actor CloudSync {
            let profile = try? CoachProfile.load(from: paths.coach) {
             payloads.append(.profile(profile))
         }
+        if FileManager.default.fileExists(atPath: paths.commitments.appendingPathComponent(CommitmentBook.fileName).path),
+           let book = try? CommitmentBook.load(from: paths.commitments) {
+            payloads.append(.commitments(book))
+        }
         let plan = state.planShared(payloads)
         guard !plan.upload.isEmpty || !plan.delete.isEmpty else { return 0 }
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("mossad-sync-\(UUID().uuidString)")
@@ -115,7 +120,12 @@ public actor CloudSync {
         var changed = 0
         for chunk in stride(from: 0, to: plan.upload.count, by: Self.batch).map({ Array(plan.upload[$0..<min($0 + Self.batch, plan.upload.count)]) }) {
             let records = try chunk.map { p -> CKRecord in
-                let type = switch p.kind { case .chat: Self.chatType; case .notes: Self.notesType; case .profile: Self.profileType }
+                let type = switch p.kind {
+                case .chat: Self.chatType
+                case .notes: Self.notesType
+                case .profile: Self.profileType
+                case .commitments: Self.commitmentsType
+                }
                 let record = CKRecord(recordType: type, recordID: Self.recordID(p.key))
                 record["data"] = try asset(p.data, "\(p.key.replacingOccurrences(of: ":", with: "-")).json", scratch)
                 return record
@@ -223,6 +233,12 @@ public actor CloudSync {
             let kept = local.map { Chat.newer($0, remote) } ?? remote
             guard kept != local else { return false }
             try store.save(kept)
+        case Self.commitmentsType:
+            guard let raw = data("data"), let remote = try? JSONDecoder.callRecord.decode(CommitmentBook.self, from: raw) else { return false }
+            let local = (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook()
+            let merged = local.merged(with: remote)
+            guard merged != local else { return false }
+            try merged.save(to: paths.commitments)
         case Self.notesType:
             guard let raw = data("data"), let notes = try? JSONDecoder.callRecord.decode(ReviewNotes.self, from: raw) else { return false }
             let dir = paths.callDirectory(String(id.dropFirst("notes-".count)))

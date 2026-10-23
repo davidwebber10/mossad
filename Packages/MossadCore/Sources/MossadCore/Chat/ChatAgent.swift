@@ -56,7 +56,8 @@ public struct ChatAgent: Sendable {
         someone means the most recent meeting they were in. Resolve relative dates ("last week", "Tuesday") \
         against today's date. Look again with other words or names when a search finds nothing, then say plainly \
         what you could not find. "The coach" and "feedback" mean the coach's reviews: use coach_reviews, \
-        read_coach_review, and coach_profile for them.
+        read_coach_review, and coach_profile for them. "What I promised", "what I owe", and "my commitments" mean \
+        the commitments tool: those are the owner's own promises, tracked with due dates.
 
         As a coach, you are expert in executive communication: framing and bottom line up front, active listening, \
         questions, managing up and across, giving and taking feedback, negotiation, running and closing meetings, \
