@@ -76,7 +76,7 @@ struct SearchScreen: View {
             .navigationTitle("Search")
             .searchable(text: $query, prompt: "Titles, people, tags, transcripts")
             .navigationDestination(for: String.self) { id in
-                if let r = store.meeting(id) { MeetingView(record: r) }
+                if let r = store.meeting(id) { MeetingView(record: r, find: query) }
             }
         }
     }

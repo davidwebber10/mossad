@@ -5,6 +5,9 @@ import SwiftUI
 struct MeetingView: View {
     @EnvironmentObject var store: PhoneStore
     let record: CallRecord
+    /// Words to find in the transcript, from the Search tab.
+    var find = ""
+    @State private var query = ""
     // Development hook for screenshots: `MOSSAD_SECTION=coach`.
     @State private var tab = Section(rawValue: ProcessInfo.processInfo.environment["MOSSAD_SECTION"]?.capitalized ?? "") ?? .summary
     @State private var review: CoachReview?
@@ -21,7 +24,7 @@ struct MeetingView: View {
                 .pickerStyle(.segmented)
                 switch tab {
                 case .summary: SummarySection(record: record)
-                case .transcript: TranscriptSection(record: record)
+                case .transcript: TranscriptSection(record: record, query: $query)
                 case .coach:
                     if let review { CoachSection(record: record, review: review) } else {
                         ContentUnavailableView("No review", systemImage: "person.wave.2",
@@ -36,6 +39,15 @@ struct MeetingView: View {
         .navigationTitle(record.title)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: store.coachVersion) { review = store.coach(record.id) }
+        .onAppear {
+            // A search that matched the transcript, not the title, opens the transcript at it.
+            // Development hook for screenshots: `MOSSAD_FIND=<words>`.
+            let q = (find.isEmpty ? ProcessInfo.processInfo.environment["MOSSAD_FIND"] ?? "" : find).trimmingCharacters(in: .whitespaces)
+            guard query.isEmpty, !q.isEmpty, !q.hasPrefix("#"), !record.title.localizedCaseInsensitiveContains(q),
+                  record.utterances.contains(where: { $0.text.localizedCaseInsensitiveContains(q) }) else { return }
+            query = q
+            tab = .transcript
+        }
     }
 
     private var header: some View {
@@ -120,20 +132,70 @@ private struct SummarySection: View {
 
 private struct TranscriptSection: View {
     let record: CallRecord
+    @Binding var query: String
+    @FocusState private var focused: Bool
 
     var body: some View {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        let all = TranscriptBlock.blocks(record)
+        let shown = q.isEmpty ? all : all.filter { text($0).localizedCaseInsensitiveContains(q) }
         LazyVStack(alignment: .leading, spacing: 16) {
-            ForEach(TranscriptBlock.blocks(record)) { block in
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Find in transcript", text: $query)
+                    .focused($focused).submitLabel(.search).autocorrectionDisabled()
+                if !query.isEmpty {
+                    Text("\(matches(in: shown, q))").font(.footnote).monospacedDigit().foregroundStyle(.secondary)
+                    Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
+                        .accessibilityLabel("Clear")
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(Color(.tertiarySystemFill), in: .capsule)
+            if !q.isEmpty && shown.isEmpty {
+                ContentUnavailableView.search(text: q)
+            }
+            ForEach(shown) { block in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(block.speaker).font(.subheadline.weight(.semibold))
                         Spacer()
                         Text(clock(block.start)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
                     }
-                    Text(block.lines.map(\.text).joined(separator: " ")).font(.subheadline).textSelection(.enabled)
+                    Text(highlighted(text(block), q)).font(.subheadline).textSelection(.enabled)
                 }
             }
         }
         .padding(.top, 4)
+    }
+
+    private func text(_ block: TranscriptBlock) -> String { block.lines.map(\.text).joined(separator: " ") }
+
+    private func matches(in blocks: [TranscriptBlock], _ q: String) -> String {
+        guard !q.isEmpty else { return "" }
+        let n = blocks.reduce(0) { $0 + text($1).ranges(of: q, options: .caseInsensitive).count }
+        return n == 1 ? "1 match" : "\(n) matches"
+    }
+
+    private func highlighted(_ text: String, _ q: String) -> AttributedString {
+        var out = AttributedString(text)
+        guard !q.isEmpty else { return out }
+        for r in text.ranges(of: q, options: .caseInsensitive) {
+            guard let lower = AttributedString.Index(r.lowerBound, within: out), let upper = AttributedString.Index(r.upperBound, within: out) else { continue }
+            out[lower..<upper].backgroundColor = .yellow.opacity(0.45)
+            out[lower..<upper].inlinePresentationIntent = .stronglyEmphasized
+        }
+        return out
+    }
+}
+
+private extension String {
+    func ranges(of needle: String, options: String.CompareOptions) -> [Range<String.Index>] {
+        var out: [Range<String.Index>] = [], start = startIndex
+        while let r = range(of: needle, options: options, range: start..<endIndex) {
+            out.append(r)
+            start = r.upperBound
+        }
+        return out
     }
 }
