@@ -173,8 +173,7 @@ public actor CloudSync {
             }
             for (id, result) in changes.modificationResultsByID {
                 guard case .success(let modification) = result else { continue }
-                try store(modification.record, id: id.recordName, includeMeetings: includeMeetings)
-                changed += 1
+                if try store(modification.record, id: id.recordName, includeMeetings: includeMeetings) { changed += 1 }
             }
             for deletion in changes.deletions {
                 switch deletion.recordType {
@@ -196,7 +195,9 @@ public actor CloudSync {
         }
     }
 
-    private func store(_ record: CKRecord, id: String, includeMeetings: Bool) throws {
+    /// Returns whether the record changed something here.
+    @discardableResult
+    private func store(_ record: CKRecord, id: String, includeMeetings: Bool) throws -> Bool {
         func data(_ key: String) -> Data? { (record[key] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) } }
         switch record.recordType {
         case Self.meetingType where includeMeetings:
@@ -209,26 +210,32 @@ public actor CloudSync {
                 try remote.save(in: dir)
             }
         case Self.profileType:
-            guard let raw = data("data") ?? data("profile"), let remote = try? JSONDecoder.callRecord.decode(CoachProfile.self, from: raw) else { return }
+            guard let raw = data("data") ?? data("profile"), let remote = try? JSONDecoder.callRecord.decode(CoachProfile.self, from: raw) else { return false }
             let local = (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile()
             // The Mac's coach writes the coaching fields; the phone takes them, the Mac keeps its own.
-            try local.merged(with: remote, takeCoaching: includeMeetings).save(to: paths.coach)
+            let merged = local.merged(with: remote, takeCoaching: includeMeetings)
+            guard merged != local else { return false }
+            try merged.save(to: paths.coach)
         case Self.chatType:
-            guard let raw = data("data"), let remote = try? JSONDecoder.callRecord.decode(Chat.self, from: raw) else { return }
+            guard let raw = data("data"), let remote = try? JSONDecoder.callRecord.decode(Chat.self, from: raw) else { return false }
             let store = ChatStore(directory: paths.chats)
             let local = store.all().first { $0.id == remote.id }
-            try store.save(local.map { Chat.newer($0, remote) } ?? remote)
+            let kept = local.map { Chat.newer($0, remote) } ?? remote
+            guard kept != local else { return false }
+            try store.save(kept)
         case Self.notesType:
-            guard let raw = data("data"), let notes = try? JSONDecoder.callRecord.decode(ReviewNotes.self, from: raw) else { return }
+            guard let raw = data("data"), let notes = try? JSONDecoder.callRecord.decode(ReviewNotes.self, from: raw) else { return false }
             let dir = paths.callDirectory(String(id.dropFirst("notes-".count)))
-            guard var review = CoachReview.load(in: dir) else { return }
+            guard let review = CoachReview.load(in: dir) else { return false }
             var incoming = review
             incoming.feedback = notes.feedback
             incoming.thread = notes.thread
-            review = review.mergingNotes(from: incoming)
-            try review.save(in: dir)
+            let merged = review.mergingNotes(from: incoming)
+            guard merged != review else { return false }
+            try merged.save(in: dir)
         default:
-            break
+            return false
         }
+        return true
     }
 }

@@ -10,5 +10,9 @@
 	<array>
 		<string>CloudKit</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.dwebber.mossad.shared</string>
+	</array>
 </dict>
 </plist>
