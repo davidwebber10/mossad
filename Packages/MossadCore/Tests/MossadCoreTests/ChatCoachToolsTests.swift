@@ -109,3 +109,13 @@ extension ChatCoachToolsTests {
         XCTAssertFalse(try CoachProfile.load(from: paths.coach).facts(.responsibility).isEmpty)
     }
 }
+
+final class ChatBrevityTests: XCTestCase {
+    func testTheSystemPromptAsksForShortAnswers() {
+        let tools = ChatTools(records: [], owner: "Dana", paths: nil)
+        let text = ChatAgent.system(owner: "Dana", tools: tools, now: Date())
+        XCTAssertTrue(text.contains("under 100 words"))
+        XCTAssertTrue(text.contains("No headings"))
+        XCTAssertFalse(text.contains("Answer directly, then the details."))
+    }
+}
