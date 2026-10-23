@@ -4,6 +4,8 @@ import Foundation
 /// search and read the meetings with the same tools as the Chat tab. One JSON-RPC message per line.
 public struct MCPServer: Sendable {
     static let fallbackVersion = "2025-06-18"
+    /// Everything Chat can read; not `remember`, so other apps cannot change what the coach knows.
+    static var tools: [ToolSpec] { ChatTools.allDefinitions.filter { $0.name != "remember" } }
 
     let paths: Paths
     let owner: String
@@ -38,15 +40,15 @@ public struct MCPServer: Sendable {
         case "ping":
             result = [:]
         case "tools/list":
-            result = ["tools": ChatTools.definitions.map { ["name": $0.name, "description": $0.description, "inputSchema": $0.schema] as [String: Any] }]
+            result = ["tools": Self.tools.map { ["name": $0.name, "description": $0.description, "inputSchema": $0.schema] as [String: Any] }]
         case "tools/call":
             let name = params["name"] as? String ?? ""
-            guard ChatTools.definitions.contains(where: { $0.name == name }) else {
+            guard Self.tools.contains(where: { $0.name == name }) else {
                 result = ["content": [["type": "text", "text": "Unknown tool \(name)."]], "isError": true]
                 break
             }
             // Fresh records on every call: the app may have written a new meeting since the last one.
-            let tools = ChatTools(records: ProcessingQueue(paths: paths).allRecords(), owner: owner)
+            let tools = ChatTools(records: ProcessingQueue(paths: paths).allRecords(), owner: owner, paths: paths)
             result = ["content": [["type": "text", "text": tools.run(name, input: params["arguments"] as? [String: Any] ?? [:])]]]
         default:
             return encode(["jsonrpc": "2.0", "id": id, "error": ["code": -32601, "message": "Method not found"]])

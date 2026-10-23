@@ -522,7 +522,20 @@ final class AppController: ObservableObject {
 
     func chatAnswer(_ question: String, history: [ChatMessage], onStep: @escaping @Sendable (String) -> Void) async throws -> String {
         guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
-        return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, onStep: onStep)
+        return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths, onStep: onStep)
+    }
+
+    /// Writes the chat's short summary for later chats to recall, and syncs it.
+    func summarizeChat(_ id: UUID) {
+        guard let llm = languageModel, let chat = chats.all().first(where: { $0.id == id }) else { return }
+        let owner = ownerName, store = chats
+        Task {
+            guard let summary = try? await ChatAgent(llm: llm, ownerName: owner).summarize(chat) else { return }
+            guard var latest = store.all().first(where: { $0.id == id }) else { return }
+            latest.summary = summary
+            try? store.save(latest)
+            syncToICloud()
+        }
     }
 
     /// Opens a `mossad://call/<id>?t=<seconds>` link from a chat answer.

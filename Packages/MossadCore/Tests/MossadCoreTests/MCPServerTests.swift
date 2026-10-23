@@ -38,7 +38,9 @@ final class MCPServerTests: XCTestCase {
     func testListsTheMeetingTools() throws {
         let r = try XCTUnwrap(reply(try server(), ["jsonrpc": "2.0", "id": "a", "method": "tools/list"]))
         let tools = (r["result"] as? [String: Any])?["tools"] as? [[String: Any]] ?? []
-        XCTAssertEqual(Set(tools.map { $0["name"] as! String }), ["find_meetings", "search_transcripts", "read_meeting", "action_items"])
+        let names = Set(tools.map { $0["name"] as! String })
+        XCTAssertTrue(names.isSuperset(of: ["find_meetings", "search_transcripts", "read_meeting", "action_items", "coach_reviews", "coach_profile", "people", "stats"]))
+        XCTAssertFalse(names.contains("remember"), "the MCP server is read-only")
         XCTAssertNotNil(tools.first?["inputSchema"])
         XCTAssertEqual(r["id"] as? String, "a")
     }

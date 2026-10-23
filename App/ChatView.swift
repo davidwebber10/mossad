@@ -228,6 +228,7 @@ struct ChatView: View {
                 chat.messages.append(ChatMessage(role: .assistant, text: answer, steps: steps))
                 chat.updated = Date()
                 store(chat)
+                controller.summarizeChat(chat.id)
             } catch {
                 self.error = "\(error)"
             }

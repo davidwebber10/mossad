@@ -22,6 +22,8 @@ public struct Chat: Codable, Equatable, Sendable, Identifiable {
     public var created = Date()
     public var updated = Date()
     public var messages: [ChatMessage] = []
+    /// One or two sentences on what the chat was about and what was decided, for later chats to recall.
+    public var summary: String?
 
     public init(title: String) {
         self.title = title

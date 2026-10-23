@@ -26,10 +26,13 @@ public struct ChatTools: Sendable {
 
     let records: [CallRecord]
     let owner: String
+    /// Where the coach's reviews, its memory, and the chats live; without it only the meeting tools work.
+    let paths: Paths?
 
-    public init(records: [CallRecord], owner: String) {
+    public init(records: [CallRecord], owner: String, paths: Paths? = nil) {
         self.records = records.filter { $0.status == .written }.sorted { $0.start > $1.start }
         self.owner = owner
+        self.paths = paths
     }
 
     // MARK: Names
@@ -125,6 +128,9 @@ public struct ChatTools: Sendable {
 
     // MARK: Claude
 
+    /// The meeting tools, plus the coach, people, stats, memory, and chat tools.
+    public static var allDefinitions: [ToolSpec] { definitions + coachDefinitions }
+
     public static var definitions: [ToolSpec] { [
         ToolSpec(name: "find_meetings",
                  description: "Lists meetings, newest first, with call_id, title, date, length, people, tags, and a one-line summary. Every filter is optional and they combine. people matches first names, short forms (\"Jen\" finds Jennifer), last names, or full names; every person listed must be in the meeting. Dates are YYYY-MM-DD in local time; to is inclusive.",
@@ -171,7 +177,7 @@ public struct ChatTools: Sendable {
                 "call_id: \($0.callID) | \($0.title) | \(day($0.date)) | \($0.owner ?? "no owner"): \($0.task)"
             }.joined(separator: "\n")
         default:
-            return "Unknown tool \(name)."
+            return runCoachTool(name, input: input, from: from, to: to, people: people, limit: limit) ?? "Unknown tool \(name)."
         }
     }
 
@@ -194,6 +200,13 @@ public struct ChatTools: Sendable {
         case "search_transcripts": return "Searching transcripts for “\(input["query"] as? String ?? "")”"
         case "read_meeting": return "Reading \((input["call_id"] as? String).flatMap(title) ?? "a meeting")"
         case "action_items": return (input["owner"] as? String).map { "Listing action items for \($0)" } ?? "Listing action items"
+        case "coach_profile": return "Reading what the coach knows about you"
+        case "coach_reviews": return "Reading the coach's reviews"
+        case "read_coach_review": return "Reading the coach's review of \((input["call_id"] as? String).flatMap(title) ?? "a meeting")"
+        case "people": return (input["query"] as? String).map { "Looking up \($0)" } ?? "Looking at the people you meet"
+        case "stats": return "Adding up your numbers"
+        case "remember": return "Remembering that"
+        case "past_chats", "read_chat": return "Reading earlier chats"
         default: return "Looking it up"
         }
     }
