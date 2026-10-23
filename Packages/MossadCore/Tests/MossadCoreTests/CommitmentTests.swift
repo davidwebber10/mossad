@@ -158,9 +158,11 @@ final class CommitmentOwnerTests: XCTestCase {
         let r = record()
         XCTAssertEqual(CommitmentFinder.ownerLine(quote: "I'm gonna give you access", at: 99, in: r, owner: "Dana")?.start, 20)
         XCTAssertNil(CommitmentFinder.ownerLine(quote: "But let me confirm that.", at: 20, in: r, owner: "Dana"), "Someone else said it")
-        // Without a matching quote, the line at the given time decides.
-        XCTAssertEqual(CommitmentFinder.ownerLine(quote: "paraphrased", at: 21, in: r, owner: "Dana")?.start, 20)
-        XCTAssertNil(CommitmentFinder.ownerLine(quote: "paraphrased", at: 11, in: r, owner: "Dana"))
+        // A quote that is in nobody's line is not proof, wherever it points.
+        XCTAssertNil(CommitmentFinder.ownerLine(quote: "I will share the sheet", at: 21, in: r, owner: "Dana"))
+        // Without a real quote, the line at the given time decides.
+        XCTAssertEqual(CommitmentFinder.ownerLine(quote: "", at: 21, in: r, owner: "Dana")?.start, 20)
+        XCTAssertNil(CommitmentFinder.ownerLine(quote: "", at: 11, in: r, owner: "Dana"))
     }
 
     func testCleaningDropsFoundCommitmentsOthersMadeButKeepsHandAddedOnes() {

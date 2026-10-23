@@ -52,7 +52,7 @@ struct CommitmentRow: View {
 
     private var detail: String {
         var parts: [String] = []
-        if let to = commitment.to { parts.append("To \(to)") }
+        if let to = commitment.to { parts.append("Promised to \(to)") }
         if !showSource {
             return parts.joined(separator: " · ")
         } else if let title = commitment.callTitle {

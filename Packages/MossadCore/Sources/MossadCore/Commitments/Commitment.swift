@@ -156,8 +156,9 @@ public struct CommitmentFinder: Sendable {
         }
         let keys = Set(r.speakerNames.filter { $0.value == owner }.keys)
         let q = norm(quote).split(separator: " ").prefix(8).joined(separator: " ")
-        if q.split(separator: " ").count >= 3, let line = r.utterances.first(where: { norm($0.text).contains(q) }) {
-            return keys.contains(line.speakerKey) ? line : nil
+        if q.split(separator: " ").count >= 3 {
+            // A real quote must be found among the owner's own lines; a paraphrase is not proof.
+            return r.utterances.first { keys.contains($0.speakerKey) && norm($0.text).contains(q) }
         }
         guard let at, let line = r.utterances.first(where: { $0.start - 1 <= at && at <= $0.end + 1 }) else { return nil }
         return keys.contains(line.speakerKey) ? line : nil
