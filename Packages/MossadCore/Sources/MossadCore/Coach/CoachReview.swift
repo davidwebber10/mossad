@@ -93,6 +93,22 @@ public struct CoachFeedback: Codable, Equatable, Sendable {
 }
 
 /// The coach's review of one call, saved as `coach.json` next to `call.json`.
+/// One short line of the review, with the moment it is about.
+public struct CoachNote: Codable, Equatable, Sendable, Hashable {
+    public var text: String
+    public var quote: String?
+    public var at: TimeInterval?
+    /// For "try next time": the words the owner could say.
+    public var say: String?
+
+    public init(text: String, quote: String? = nil, at: TimeInterval? = nil, say: String? = nil) {
+        self.text = text
+        self.quote = quote
+        self.at = at
+        self.say = say
+    }
+}
+
 public struct CoachReview: Codable, Equatable, Sendable {
     public static let fileName = "coach.json"
 
@@ -110,6 +126,22 @@ public struct CoachReview: Codable, Equatable, Sendable {
     public var feedback: [String: CoachFeedback] = [:]
     /// The owner's conversation with the coach about this review.
     public var thread: [ChatMessage] = []
+    public var didWell: CoachNote?
+    /// Only from a measured change against earlier calls.
+    public var improving: CoachNote?
+    public var tryNext: CoachNote?
+    /// The focus that was active for this call, and how the call went on it.
+    public var focusID: UUID?
+    public var focusResult: FocusResult?
+    /// The owner mostly listened, or nothing stood out: the review is a line at most.
+    public var quiet = false
+
+    /// The three lines, with older reviews' first points standing in.
+    public var lines: (didWell: CoachNote?, improving: CoachNote?, tryNext: CoachNote?) {
+        guard didWell == nil && improving == nil && tryNext == nil && !quiet else { return (didWell, improving, tryNext) }
+        return (strengths.first.map { CoachNote(text: $0.title, quote: $0.quote, at: $0.at) }, nil,
+                improvements.first.map { CoachNote(text: $0.title, quote: $0.quote, at: $0.at, say: $0.tryInstead) })
+    }
 
     public init(headline: String, overview: String, strengths: [CoachPoint], improvements: [CoachPoint],
                 focusProgress: String?, value: MeetingValue? = nil, delivery: DeliveryStats? = nil, scorecard: Scorecard? = nil) {
@@ -125,6 +157,7 @@ public struct CoachReview: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case headline, overview, strengths, improvements, focusProgress, value, delivery, feedback, thread, scorecard
+        case didWell, improving, tryNext, focusID, focusResult, quiet
     }
 
     /// Reviews from before feedback existed have no feedback or thread.
@@ -140,6 +173,12 @@ public struct CoachReview: Codable, Equatable, Sendable {
         feedback = try c.decodeIfPresent([String: CoachFeedback].self, forKey: .feedback) ?? [:]
         thread = try c.decodeIfPresent([ChatMessage].self, forKey: .thread) ?? []
         scorecard = try c.decodeIfPresent(Scorecard.self, forKey: .scorecard)
+        didWell = try c.decodeIfPresent(CoachNote.self, forKey: .didWell)
+        improving = try c.decodeIfPresent(CoachNote.self, forKey: .improving)
+        tryNext = try c.decodeIfPresent(CoachNote.self, forKey: .tryNext)
+        focusID = try c.decodeIfPresent(UUID.self, forKey: .focusID)
+        focusResult = try c.decodeIfPresent(FocusResult.self, forKey: .focusResult)
+        quiet = try c.decodeIfPresent(Bool.self, forKey: .quiet) ?? false
     }
 
     /// This review with another device's ratings and conversation added: the newer rating of a point wins,

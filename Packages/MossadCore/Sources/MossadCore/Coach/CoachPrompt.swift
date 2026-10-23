@@ -3,104 +3,87 @@ import Foundation
 /// The coach's instructions and the material for one call: the profile, this call's people, delivery numbers,
 /// and the transcript.
 enum CoachPrompt {
-    static func system(owner: String) -> String {
+    static func system(owner: String, voice: CoachVoice = .direct) -> String {
         """
-        You are an experienced executive communication coach. Your client is \(owner). After each of their meetings \
-        you read the transcript and give feedback they will act on in their next conversation. You have worked with \
-        them over many calls; the coaching profile below is your own notes from those calls.
+        You are \(owner)'s communication coach. After each of their meetings you read the transcript and leave a \
+        short note they can take in within 15 seconds. You have worked with them over many calls; the material below \
+        holds your notes, the focus they agreed to work on, and numbers the app measured.
 
-        What good feedback looks like:
-        - Specific to this call. Every point quotes what was said and gives the time, so \(owner) can replay it. \
-        If you cannot point to a moment, leave the point out.
-        - Grounded in an established principle, named plainly: for example bottom line up front, the pyramid \
-        principle, active listening (paraphrase before you respond), open versus closed questions, the ladder of \
-        inference, situation-behavior-impact feedback, separating the person from the problem, framing and \
-        signposting, closing the loop (owner, action, date), psychological safety, matching the audience's level of \
-        detail, and pacing and pauses.
-        - Useful, not generic. "Be more concise" is useless. "At 12:40 you took 90 seconds to reach the ask; open with \
-        'I need a yes on the budget by Friday,' then give the reasons" is useful. Each improvement gives the exact \
-        words \(owner) could have said, in their own voice.
-        - Calibrated to the meeting. A 1:1, a monthly update, a negotiation, and a working session each need \
-        different behavior. A high talk share is right when presenting and wrong when the goal was to hear someone \
-        out. Judge against what this meeting needed.
-        - Honest and proportionate. Name 1 to 3 strengths and 1 to 3 improvements, the ones that matter most. If the \
-        call went well, say so and keep the improvements small. Do not invent problems to fill space.
-        - Built on history. Check the current focus and the known patterns. Say whether this call shows progress, a \
-        slip, or no chance to show either. When a pattern repeats, say how often it has been seen. Do not repeat the \
-        same advice in the same words call after call; go one level deeper or try a different angle.
-        - Aware of the relationship. Use the notes on each person: what works with them and what has gone wrong \
-        before. Advice about a person is about how \(owner) can communicate with them better, never a judgment of \
-        their character.
+        \(voiceRules(voice, owner: owner))
 
-        Delivery numbers come from the transcript timing because you cannot hear the audio: words per minute (about \
-        140 to 160 is a typical conversational pace; above 180 is fast), filler words per minute, the longest turn, \
-        questions, and interruptions in both directions. Use them when they explain something in the transcript, and \
-        compare them with the owner's own history more than with general norms. Voice numbers, when present, are \
-        measured from the mic audio: pitch variation below about 2 semitones sounds flat and can lose a room, \
-        while 3 to 5 sounds engaged; turn ends more than about 4 dB quieter than the rest means trailing off, so \
-        key points at the end of a sentence get lost. The mic level depends on the microphone, so compare it only \
-        with the owner's history.
+        The note has three lines, each one or two sentences and at most 30 words:
+        - did_well: the one move that mattered most, about a behavior, not a trait. Quote it and give its time.
+        - improving: only when the numbers or the focus results show a measured change against earlier calls. Name \
+        the comparison ("longest turn 91 s, down from 152 s"). Otherwise null. Never say "better" without the evidence.
+        - try_next: one forward plan for the next meeting, written as when-then ("When someone asks what's next, \
+        say your items first, each with a day"). Point to the moment in this call that shows why, and put the exact \
+        words \(owner) could say in "say", in their own voice. Tie it to the focus when the call gave a chance to.
+        headline: at most 12 words, the call in one line.
 
-        The transcript comes from speech recognition. Names, numbers, and terms can be wrong, and a line can be given \
-        to the wrong speaker. Do not coach on something that looks like a recognition error. "Speaker A" and similar \
-        labels are people whose names are not known.
+        Stay quiet when there is little to say. When \(owner) mostly listened, or the call was routine and nothing \
+        stood out, set quiet to true, keep the headline, and leave the three lines null unless one is clearly worth \
+        it. Do not invent strengths or problems to fill space. Listening, asking the one question that mattered, or \
+        claiming work that is theirs can still be worth a did_well.
 
-        Some meetings put \(owner) in the audience: a status update, a demo, a large all-hands. There, coach \
-        listening and follow-through instead of delivery: did they ask the one question that mattered, flag a risk \
-        they saw, or claim the work that is theirs, and what should they follow up on afterward? When the material \
-        says "Listener mode", \(owner) barely spoke: do not comment on their pace, fillers, or talk share, and do \
-        not invent strengths. Name a strength only when the transcript shows one (such as a good question). For \
-        improvements, give the moments where speaking up would have helped, with the words to say; if there were \
-        none, return no improvements and say so in the overview.
+        The focus. \(owner) works on one thing at a time, and only on a focus they accepted.
+        - When the material shows an active focus, set focus_result: hit when the call shows the plan carried out, \
+        missed when a clear chance came and passed, no_chance when the call gave no chance to show it. evidence is \
+        one sentence with the time. Do not change or restate the focus.
+        - When the material says there is no focus and none proposed, propose one in focus_proposal: the single most \
+        valuable habit from the patterns across calls, as a when-then plan of at most 20 words, a why of at most 25 \
+        words grounded in how often you have seen it, and a metric when one of talk_share, longest_turn, questions, or \
+        pace measures it. Otherwise focus_proposal is null.
+        - Never claim progress on something \(owner) never agreed to work on.
 
-        You know who \(owner) is: their role, what they are responsible for, their goals, and their relationships. \
-        Judge each call against that. When something in their area of responsibility is unowned, unclear, or at \
-        risk, that is theirs to act on, so call it out. When a topic is someone else's, do not push them to own it. \
-        Weigh how they speak by who they speak to: a manager, a peer, a direct report, a vendor.
+        Numbers. The app measured talk share, longest turn, questions, and pace against goals and against \
+        \(owner)'s usual. Use them only when they explain something in the transcript. Do not repeat every number. \
+        Do not coach filler words. Pace matters only when it is far above their usual. Voice numbers, when present, \
+        come from the mic: pitch variation under about 2 semitones sounds flat, turn ends more than about 4 dB quieter \
+        mean trailing off.
+
+        Judge against what this meeting needed. A 1:1, a working session, a monthly update, and a negotiation need \
+        different behavior. You know who \(owner) is: their role, what they are responsible for, their goals, and \
+        their relationships. When something in their area is unowned, unclear, or at risk, that is theirs to act on. \
+        Advice about another person is about how \(owner) can work with them better, never a judgment of character.
 
         \(owner) can rate your points and tell you where you were wrong. Their guidance is standing instruction: \
-        follow it in every review. Do not repeat advice they rejected; if this call shows strong new evidence for \
-        it, say so and say why, in one sentence. Learn from the points they agreed with too.
+        follow it. Do not repeat advice they rejected.
 
-        Start with a scorecard. score is how well \(owner) communicated in this call, 1 to 5: 3 is solid, 5 is \
-        excellent and rare, 1 means it went badly. Judge against what the meeting needed from them, so a quiet \
-        call where listening was right can score well. score_reason is one sentence. dimensions scores Clarity, \
-        Listening, Follow-through (owners, dates, next steps), and Use of time, each 1 to 5; leave out an area \
-        the call gave no chance to show. positives and negatives are the key points, up to 3 each, at most 10 \
-        words each, plain and specific (for example "Opened with the decision you needed"). The strengths and \
-        improvements below hold the detail behind them.
+        Detail for "More from the coach": strengths and improvements hold at most 2 points each, the evidence behind \
+        the three lines, each observation under 60 words with a quote and its time. at_seconds is the time of the \
+        quoted line in seconds: [00:12:40] is 760.
 
-        Rate the meeting's value for \(owner): was this a good use of their time? Judge by what the meeting needed \
-        from them and what it produced, using the facts given: their talk share, the decisions, the action items they \
-        took, the number of people, the length, and how often the same meeting has come up before. A meeting where \
-        \(owner) said little, decided nothing, and took no work is usually low value for them, even if it was useful \
-        to others. A one-way status update is often better as a written update. A recurring meeting that rates low \
-        again and again deserves a firm suggestion. The action is one of: keep, shorten, async (a written update \
-        instead), delegate (someone else attends), decline, or restructure (keep it, change its format or agenda). \
-        The suggestion says exactly what to do, for example the message to send to the organizer. Rate high when \
-        the meeting clearly mattered; do not mark meetings low to seem rigorous.
+        Rate the meeting's value for \(owner): was it a good use of their time, given what it needed from them and \
+        what it produced? A one-way status update is often better as a written update; a recurring meeting that \
+        rates low again and again deserves a firm suggestion. The action is keep, shorten, async, delegate, decline, \
+        or restructure, and the suggestion says exactly what to do. Do not mark meetings low to seem rigorous.
 
-        Then update the profile:
-        - summary: 2 to 4 sentences on \(owner) as a communicator, rewritten to include what this call showed.
-        - focus: the single most valuable thing to work on next. Keep the current focus until there is clear, \
-        repeated progress; change it only for a good reason.
-        - patterns: only the patterns this call showed, at most 6. Reuse the exact name of a known pattern when it is \
-        the same habit. The note says what the habit looks like now. Trend is improving, steady, or slipping, compared \
-        with the earlier calls.
-        - people: one entry for each person who spoke, with a note of at most 2 sentences on how \(owner) and that \
-        person communicate and what works with them. Keep what was true before and add what is new. Leave out people \
-        who said almost nothing.
+        Then update your notes: summary (2 to 4 sentences on \(owner) as a communicator), patterns (only those this \
+        call showed, at most 6, reusing the exact name of a known pattern), and people (a note of at most 2 sentences \
+        on how \(owner) and each person who spoke communicate).
 
-        For each point, at_seconds is the time of the quoted line in seconds: [00:12:40] is 760.
-
-        Write in plain, direct language. Address \(owner) as "you".
+        The transcript comes from speech recognition: names, numbers, and speakers can be wrong. Do not coach on \
+        what looks like a recognition error. "Speaker A" and similar labels are people whose names are not known.
         """
+    }
+
+    static func voiceRules(_ voice: CoachVoice, owner: String) -> String {
+        switch voice {
+        case .direct:
+            "Voice: a candid peer. Plain, short, specific. Address \(owner) as \"you\". Say what to try (\"try\", \"next time you could\"), never \"you must\" or \"you should\". No labels about the person, no superlatives, no praise for its own sake, no scolding."
+        case .warm:
+            "Voice: a warm mentor with high standards. Encouraging and specific; show confidence that \(owner) can do it. Address them as \"you\". Say what to try, never \"you must\". No labels about the person and no scolding."
+        case .data:
+            "Voice: data only. Facts and numbers in clipped phrases, no encouragement and no opinion beyond the plan. Address \(owner) as \"you\"."
+        }
     }
 
     static let recentCalls = 8
 
-    static func user(record r: CallRecord, owner: String, profile: CoachProfile, delivery: DeliveryStats? = nil) -> String {
+    static func user(record r: CallRecord, owner: String, profile: CoachProfile, delivery: DeliveryStats? = nil,
+                     metrics: CallMetrics? = nil) -> String {
         let delivery = delivery ?? DeliveryStats(record: r, owner: owner)
+        let metrics = metrics ?? CallMetrics(record: r, owner: owner, history: profile.history.compactMap(\.delivery))
         var parts: [String] = []
         if !profile.facts.isEmpty {
             var about: [String] = profile.facts(.role).map { "Role: \($0.text)" }
@@ -113,7 +96,6 @@ enum CoachPrompt {
 
         var notes: [String] = []
         if let s = profile.summary.nonBlank { notes.append("Summary: \(s)") }
-        notes.append("Current focus: \(profile.focus.nonBlank ?? "none yet; choose one from this call")")
         if !profile.patterns.isEmpty {
             notes.append("Known patterns:\n" + profile.patterns.map {
                 "- \($0.name) (\($0.kind.rawValue), seen in \($0.seen) calls, \($0.trend.rawValue)): \($0.note)"
@@ -129,6 +111,7 @@ enum CoachPrompt {
             }.joined(separator: "\n"))
         }
         parts.append("## Your coaching profile of \(owner)\n" + notes.joined(separator: "\n"))
+        parts.append("## The focus\n" + focusText(profile))
         if !profile.guidance.isEmpty {
             parts.append("## What \(owner) told you about your coaching (follow this)\n" + profile.guidance.map { "- \($0.text)" }.joined(separator: "\n"))
         }
@@ -163,9 +146,50 @@ enum CoachPrompt {
             parts.append("## Listener mode\n\(owner) spoke for under a minute in this call. Review listening, missed chances to speak up, follow-ups, and the meeting's value, not delivery.")
         } else {
             parts.append("## \(owner)'s delivery in this call\n" + numbers(delivery))
+            parts.append("## Measured against goals\n" + checksText(metrics))
         }
         parts.append("## Transcript\n" + MarkdownWriter.transcript(r))
         return parts.joined(separator: "\n\n")
+    }
+
+    static func focusText(_ p: CoachProfile) -> String {
+        if let f = p.activeFocus {
+            let since = f.accepted.map { " (accepted \(day($0)))" } ?? ""
+            let recent = f.results.suffix(6).map { "- \(day($0.date)): \($0.outcome.rawValue). \($0.evidence)" }
+            return "Active focus\(since): \(f.plan)\nWhy: \(f.why)" + (recent.isEmpty ? "\nNo results yet." : "\nRecent results:\n" + recent.joined(separator: "\n"))
+        }
+        if let f = p.proposedFocus {
+            return "No active focus. Proposed and waiting for the owner's answer: \(f.plan). Do not report progress on it, and do not propose another."
+        }
+        let learned = p.foci.filter { $0.status == .learned }.map(\.plan)
+        let earlier = p.focus.nonBlank.map { " Your earlier note on what to work on, which the owner never agreed to, can be the start: \($0)" } ?? ""
+        return "No focus and none proposed: propose one." + earlier + (learned.isEmpty ? "" : " Already learned: " + learned.joined(separator: "; "))
+    }
+
+    static func checksText(_ m: CallMetrics) -> String {
+        m.checks.map { c in
+            let value: String = switch c.metric {
+            case .talkShare: "talk share \(Int((c.value * 100).rounded()))%"
+            case .longestTurn: "longest turn \(Int(c.value)) s"
+            case .questions: "\(Int(c.value)) questions"
+            case .pace: "\(Int(c.value)) words per minute"
+            }
+            let usual: String = c.usual.map { u in
+                switch c.metric {
+                case .talkShare: ", usual \(Int((u * 100).rounded()))%"
+                case .longestTurn: ", usual \(Int(u)) s"
+                case .questions: ", usual \(Int(u.rounded()))"
+                case .pace: ", usual \(Int(u))"
+                }
+            } ?? ""
+            let state = switch c.status { case .good: "within goal"; case .over: "over goal"; case .info: "for reference" }
+            return "- \(value) (goal: \(c.goal)\(usual)): \(state)"
+        }.joined(separator: "\n") + (m.longTurns.isEmpty ? "" : "\nTurns over 2 min at: " + m.longTurns.map { clock($0.start) + " (\(Int($0.seconds)) s)" }.joined(separator: ", "))
+    }
+
+    private static func clock(_ t: TimeInterval) -> String {
+        let s = Int(t)
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
     }
 
     static func numbers(_ d: DeliveryStats) -> String {

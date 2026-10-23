@@ -90,15 +90,19 @@ public struct LLMDigestWriter: DigestWriting {
         You are \(owner)'s communication coach. Write their weekly email from your reviews of this week's calls and \
         your profile of them. Be specific: name the calls and the moments. intro is 2 to 3 sentences on the week. \
         improved lists 1 to 3 things that got better, with the evidence. to_work lists 1 to 3 things to work on, \
-        each with a concrete thing to try; when meetings rated low, one item names the meeting to change and how. focus is the one focus for the coming week, in one sentence. subject is a \
+        each with a concrete thing to try; when meetings rated low, one item names the meeting to change and how. focus is one sentence on the owner's agreed focus: how the week went on it (hits and misses) and what to do \
+        next; when there is no agreed focus, invite them to accept the proposed one in Mossad. subject is a \
         short, specific subject line. Do not pad: if the week had little to say, write less. Address \(owner) as "you".
         """
-        var user = ["## Profile", "Summary: \(profile.summary)", "Focus: \(profile.focus)"]
+        var user = ["## Profile", "Summary: \(profile.summary)", "## The focus\n" + CoachPrompt.focusText(profile)]
         user += profile.patterns.map { "- \($0.name) (\($0.kind.rawValue), \($0.trend.rawValue), seen \($0.seen)): \($0.note)" }
         user.append("\n## This week's calls")
         for item in reviews {
             let r = item.review
             user.append("### \(item.date.formatted(.dateTime.weekday(.wide).month().day())) \(item.title)\n\(r.headline)\n\(r.overview)")
+            if let f = r.focusResult { user.append("Focus result: \(f.outcome.rawValue). \(f.evidence)") }
+            if let n = r.lines.didWell { user.append("Did well: \(n.text)") }
+            if let n = r.lines.tryNext { user.append("Try next: \(n.text)") }
             if let p = r.focusProgress { user.append("Focus: \(p)") }
             if let card = r.scorecard { user.append("Score: \(card.score)/5. \(card.reason)") }
             if let v = r.value { user.append("Value: \(v.rating.rawValue); \(v.action.rawValue): \(v.suggestion)") }

@@ -3,6 +3,14 @@ import Foundation
 public struct CoachResult: Sendable, Equatable {
     public var review: CoachReview
     public var update: CoachProfileUpdate
+    /// A focus for the owner to accept, when they have none.
+    public var proposal: CoachFocus?
+
+    public init(review: CoachReview, update: CoachProfileUpdate, proposal: CoachFocus? = nil) {
+        self.review = review
+        self.update = update
+        self.proposal = proposal
+    }
 }
 
 public protocol Coaching: Sendable {
@@ -26,20 +34,24 @@ public struct LLMCoach: Coaching {
     static var schema: [String: Any] {
         let point = Schema.object([
             "title": Schema.string, "observation": Schema.string, "quote": Schema.string,
-            "at_seconds": ["anyOf": [["type": "number"], ["type": "null"]]],
+            "at_seconds": Schema.nullableNumber,
             "principle": Schema.string, "try_instead": Schema.nullableString,
         ])
+        let note = Schema.object(["text": Schema.string, "quote": Schema.nullableString, "at_seconds": Schema.nullableNumber])
+        func nullable(_ s: [String: Any]) -> [String: Any] { ["anyOf": [s, ["type": "null"]]] }
         return Schema.object([
+            "quiet": ["type": "boolean"],
             "headline": Schema.string,
-            "overview": Schema.string,
+            "did_well": nullable(note),
+            "improving": nullable(note),
+            "try_next": nullable(Schema.object(["text": Schema.string, "quote": Schema.nullableString, "at_seconds": Schema.nullableNumber,
+                                                "say": Schema.nullableString])),
+            "focus_result": nullable(Schema.object(["outcome": Schema.oneOf(FocusOutcome.allCases.map(\.rawValue)),
+                                                    "evidence": Schema.string, "at_seconds": Schema.nullableNumber])),
+            "focus_proposal": nullable(Schema.object(["plan": Schema.string, "why": Schema.string,
+                                                      "metric": nullable(Schema.oneOf(FocusMetric.allCases.map(\.rawValue)))])),
             "strengths": Schema.array(point),
             "improvements": Schema.array(point),
-            "focus_progress": Schema.nullableString,
-            "score": ["type": "integer"],
-            "score_reason": Schema.string,
-            "dimensions": Schema.array(Schema.object(["name": Schema.oneOf(Scorecard.dimensionNames), "score": ["type": "integer"]])),
-            "positives": Schema.array(Schema.string),
-            "negatives": Schema.array(Schema.string),
             "meeting_value": Schema.object([
                 "rating": Schema.oneOf(MeetingValue.Rating.allCases.map(\.rawValue)),
                 "reason": Schema.string,
@@ -48,7 +60,6 @@ public struct LLMCoach: Coaching {
             ]),
             "profile": Schema.object([
                 "summary": Schema.string,
-                "focus": Schema.string,
                 "patterns": Schema.array(Schema.object([
                     "name": Schema.string, "kind": Schema.oneOf(["strength", "growth"]), "note": Schema.string,
                     "trend": Schema.oneOf(["improving", "steady", "slipping"]),
@@ -58,33 +69,74 @@ public struct LLMCoach: Coaching {
         ])
     }
 
+    /// The most detail points kept per side, for "More from the coach".
+    static let detailPoints = 2
+
     public func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?) async throws -> CoachResult {
         var delivery = DeliveryStats(record: record, owner: ownerName)
         delivery.tone = tone
-        let out = try await llm.json(system: CoachPrompt.system(owner: ownerName),
-                                     user: CoachPrompt.user(record: record, owner: ownerName, profile: profile, delivery: delivery),
+        let metrics = CallMetrics(record: record, owner: ownerName, history: profile.history.compactMap(\.delivery))
+        let out = try await llm.json(system: CoachPrompt.system(owner: ownerName, voice: profile.voice),
+                                     user: CoachPrompt.user(record: record, owner: ownerName, profile: profile, delivery: delivery, metrics: metrics),
                                      schema: Self.schema, effort: .high, purpose: .coach, as: Output.self)
-        let review = CoachReview(headline: out.headline, overview: out.overview, strengths: out.strengths.map(\.point),
-                                 improvements: out.improvements.map(\.point), focusProgress: out.focus_progress?.nonBlank,
-                                 value: out.meeting_value, delivery: delivery,
-                                 scorecard: Scorecard(score: out.score, reason: out.score_reason, dimensions: out.dimensions,
-                                                      positives: out.positives, negatives: out.negatives))
-        return CoachResult(review: review, update: out.profile)
+        let focus = profile.activeFocus
+        var review = CoachReview(headline: out.headline, overview: "", strengths: Array(out.strengths.prefix(Self.detailPoints).map(\.point)),
+                                 improvements: Array(out.improvements.prefix(Self.detailPoints).map(\.point)), focusProgress: nil,
+                                 value: out.meeting_value, delivery: delivery)
+        review.quiet = out.quiet
+        review.didWell = out.did_well?.note
+        review.improving = out.improving?.note
+        review.tryNext = out.try_next.map { CoachNote(text: $0.text, quote: $0.quote?.nonBlank, at: $0.at_seconds, say: $0.say?.nonBlank) }
+        if let focus, let r = out.focus_result {
+            review.focusID = focus.id
+            review.focusResult = FocusResult(callID: record.id, date: record.start, outcome: r.outcome, evidence: r.evidence, at: r.at_seconds)
+        }
+        let proposal = out.focus_proposal.map { CoachFocus(plan: $0.plan, why: $0.why, metric: $0.metric, proposed: record.start) }
+        let update = CoachProfileUpdate(summary: out.profile.summary, focus: "", patterns: out.profile.patterns, people: out.profile.people)
+        return CoachResult(review: review, update: update, proposal: proposal)
+    }
+
+    private struct Note: Decodable {
+        let text: String
+        let quote: String?
+        let at_seconds: Double?
+        var note: CoachNote { CoachNote(text: text, quote: quote?.nonBlank, at: at_seconds) }
+    }
+
+    private struct Next: Decodable {
+        let text: String
+        let quote, say: String?
+        let at_seconds: Double?
+    }
+
+    private struct Result: Decodable {
+        let outcome: FocusOutcome
+        let evidence: String
+        let at_seconds: Double?
+    }
+
+    private struct Proposal: Decodable {
+        let plan, why: String
+        let metric: FocusMetric?
+    }
+
+    private struct ProfileOut: Decodable {
+        let summary: String
+        let patterns: [CoachPatternUpdate]
+        let people: [CoachPersonUpdate]
     }
 
     private struct Output: Decodable {
+        let quiet: Bool
         let headline: String
-        let overview: String
+        let did_well, improving: Note?
+        let try_next: Next?
+        let focus_result: Result?
+        let focus_proposal: Proposal?
         let strengths: [Point]
         let improvements: [Point]
-        let focus_progress: String?
         let meeting_value: MeetingValue?
-        let score: Int
-        let score_reason: String
-        let dimensions: [Scorecard.Dimension]
-        let positives: [String]
-        let negatives: [String]
-        let profile: CoachProfileUpdate
+        let profile: ProfileOut
     }
 
     private struct Point: Decodable {

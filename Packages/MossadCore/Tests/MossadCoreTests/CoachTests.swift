@@ -237,46 +237,65 @@ final class CoachTests: XCTestCase {
 
     func testCoachSendsTheSchemaAndParsesTheReviewAndUpdate() async throws {
         let output: [String: Any] = [
-            "headline": "Clear plan", "overview": "Good.",
+            "quiet": false,
+            "headline": "Your idea set the plan; date your own items",
+            "did_well": ["text": "Your delta idea became the plan.", "quote": "Just apply the percentage.", "at_seconds": 535],
+            "improving": ["text": "Longest turn 91 s, down from 152.", "quote": NSNull(), "at_seconds": NSNull()],
+            "try_next": ["text": "When asked what's next, say yours first with a day.", "quote": "Let you know when I have it.", "at_seconds": 2900,
+                         "say": "My piece: the side forecast by Tuesday."],
+            "focus_result": ["outcome": "missed", "evidence": "Four items left without dates.", "at_seconds": 2900],
+            "focus_proposal": NSNull(),
             "strengths": [["title": "Goal first", "observation": "O", "quote": "Q", "at_seconds": 3, "principle": "P", "try_instead": NSNull()]],
             "improvements": [["title": "Close", "observation": "O2", "quote": "Q2", "at_seconds": 90, "principle": "P2", "try_instead": "Say X"]],
-            "focus_progress": "Better than last week.",
-            "score": 3, "score_reason": "Clear framing, weak close.",
-            "dimensions": [["name": "Clarity", "score": 4], ["name": "Listening", "score": 3], ["name": "Follow-through", "score": 2], ["name": "Use of time", "score": 9]],
-            "positives": ["Opened with the goal, so everyone knew the point"],
-            "negatives": ["Ended the call with no owners or dates for the follow-up work at all"],
             "meeting_value": ["rating": "low", "reason": "Status only; you said nothing.", "action": "async", "suggestion": "Ask for a written update."],
-            "profile": ["summary": "S", "focus": "F",
+            "profile": ["summary": "S",
                         "patterns": [["name": "Interrupts", "kind": "growth", "note": "N", "trend": "improving"]],
                         "people": [["name": "Mitch Haus", "note": "Likes data"]]],
         ]
         let text = String(decoding: json(output), as: UTF8.self)
         StubURLProtocol.handler = { _ in (200, self.reply(text)) }
+        var profile = CoachProfile()
+        profile.propose(CoachFocus(plan: "Date every commitment.", why: "W", metric: nil, proposed: Date()), at: Date())
+        profile.acceptFocus(profile.proposedFocus!.id, plan: nil, at: Date())
         let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
-        let result = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
-        XCTAssertEqual(result.review.headline, "Clear plan")
+        let result = try await coach.review(record: record("c", start: Date()), profile: profile, tone: nil)
+        XCTAssertEqual(result.review.headline, "Your idea set the plan; date your own items")
+        XCTAssertEqual(result.review.didWell?.at, 535)
+        XCTAssertEqual(result.review.improving?.text, "Longest turn 91 s, down from 152.")
+        XCTAssertNil(result.review.improving?.quote)
+        XCTAssertEqual(result.review.tryNext?.say, "My piece: the side forecast by Tuesday.")
+        XCTAssertEqual(result.review.focusID, profile.activeFocus?.id)
+        XCTAssertEqual(result.review.focusResult?.outcome, .missed)
+        XCTAssertEqual(result.review.focusResult?.callID, "c")
+        XCTAssertNil(result.review.scorecard, "New reviews have no score")
+        XCTAssertNil(result.proposal)
         XCTAssertEqual(result.review.improvements.first?.tryInstead, "Say X")
-        XCTAssertEqual(result.review.improvements.first?.at, 90)
-        XCTAssertNil(result.review.strengths.first?.tryInstead)
-        XCTAssertEqual(result.review.focusProgress, "Better than last week.")
         XCTAssertEqual(result.update.patterns.first?.trend, .improving)
         XCTAssertEqual(result.update.people.first?.name, "Mitch Haus")
+        XCTAssertEqual(result.review.value, MeetingValue(rating: .low, reason: "Status only; you said nothing.", action: .async, suggestion: "Ask for a written update."))
         let body = try JSONSerialization.jsonObject(with: XCTUnwrap(StubURLProtocol.requests.first).body) as! [String: Any]
         XCTAssertEqual(body["model"] as? String, "claude-opus-5-5")
         let schema = ((body["output_config"] as? [String: Any])?["format"] as? [String: Any])?["schema"] as? [String: Any]
         XCTAssertEqual(Set(schema?["required"] as? [String] ?? []),
-                       ["headline", "overview", "strengths", "improvements", "focus_progress", "meeting_value", "profile",
-                        "score", "score_reason", "dimensions", "positives", "negatives"])
-        let card = try XCTUnwrap(result.review.scorecard)
-        XCTAssertEqual(card.score, 3)
-        XCTAssertEqual(card.reason, "Clear framing, weak close.")
-        XCTAssertEqual(card.dimensions.map(\.name), ["Clarity", "Listening", "Follow-through", "Use of time"])
-        // Scores stay in 1...5, and a point keeps at most 10 words.
-        XCTAssertEqual(card.dimensions.last?.score, 5)
-        XCTAssertEqual(card.positives, ["Opened with the goal, so everyone knew the point"])
-        XCTAssertEqual(card.negatives.first?.split(separator: " ").count, 10)
-        XCTAssertTrue(card.negatives.first?.hasSuffix("…") == true)
-        XCTAssertEqual(result.review.value, MeetingValue(rating: .low, reason: "Status only; you said nothing.", action: .async, suggestion: "Ask for a written update."))
+                       ["quiet", "headline", "did_well", "improving", "try_next", "focus_result", "focus_proposal",
+                        "strengths", "improvements", "meeting_value", "profile"])
+    }
+
+    func testAFocusProposalIsReturnedWhenThereIsNoFocus() async throws {
+        let output: [String: Any] = [
+            "quiet": true, "headline": "You listened; nothing to coach", "did_well": NSNull(), "improving": NSNull(), "try_next": NSNull(),
+            "focus_result": ["outcome": "hit", "evidence": "Ignored without an active focus", "at_seconds": NSNull()],
+            "focus_proposal": ["plan": "When a topic closes, name the owner and the day.", "why": "Eight calls ended without dates.", "metric": NSNull()],
+            "strengths": [], "improvements": [],
+            "meeting_value": ["rating": "medium", "reason": "R", "action": "keep", "suggestion": ""],
+            "profile": ["summary": "", "patterns": [], "people": []],
+        ]
+        StubURLProtocol.handler = { _ in (200, self.reply(String(decoding: json(output), as: UTF8.self))) }
+        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
+        let result = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
+        XCTAssertTrue(result.review.quiet)
+        XCTAssertNil(result.review.focusResult, "No active focus, so no result")
+        XCTAssertEqual(result.proposal?.plan, "When a topic closes, name the owner and the day.")
     }
 
     func testCoachMalformedReplyThrows() async {

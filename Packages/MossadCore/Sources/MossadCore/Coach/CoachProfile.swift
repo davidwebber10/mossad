@@ -155,13 +155,16 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     public var facts: [CoachFact] = []
     /// Removed facts and guidance by lowercased text, with when, so a sync from another device does not bring them back.
     public var forgotten: [String: Date] = [:]
+    /// Every focus the coach proposed, with the owner's answer and the results per call.
+    public var foci: [CoachFocus] = []
+    public var voice = CoachVoice.direct
 
     public static let ratedLimit = 30
     public static let guidanceLimit = 25
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated, facts, forgotten }
+    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice }
 
     /// Profiles from before feedback existed have no guidance or ratings.
     public init(from decoder: Decoder) throws {
@@ -175,6 +178,8 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         rated = try c.decodeIfPresent([RatedPoint].self, forKey: .rated) ?? []
         facts = try c.decodeIfPresent([CoachFact].self, forKey: .facts) ?? []
         forgotten = try c.decodeIfPresent([String: Date].self, forKey: .forgotten) ?? [:]
+        foci = try c.decodeIfPresent([CoachFocus].self, forKey: .foci) ?? []
+        voice = try c.decodeIfPresent(CoachVoice.self, forKey: .voice) ?? .direct
     }
 
     public func facts(_ kind: CoachFact.Kind) -> [CoachFact] { facts.filter { $0.kind == kind } }
@@ -219,6 +224,9 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         var rated: [String: RatedPoint] = [:]
         for r in self.rated + other.rated where (rated["\(r.callID)|\(r.title)"]?.date ?? .distantPast) <= r.date { rated["\(r.callID)|\(r.title)"] = r }
         out.rated = Array(rated.values.sorted { $0.date < $1.date }.suffix(Self.ratedLimit))
+        // The owner answers proposals on either device, so foci merge by their own dates, not by who coaches.
+        out.foci = Self.mergedFoci(foci, other.foci)
+        out.focus = out.activeFocus?.plan ?? (out.foci.isEmpty ? out.focus : "")
         return out
     }
 
@@ -241,9 +249,15 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         guidance = Array(guidance.suffix(Self.guidanceLimit))
     }
 
-    public mutating func apply(_ update: CoachProfileUpdate, review: CoachReview, callID: String, title: String, at: Date) {
+    /// Folds one review in. The focus changes only through the owner: a proposal waits for them, and a result
+    /// counts only for the focus they accepted.
+    public mutating func apply(_ update: CoachProfileUpdate, review: CoachReview, callID: String, title: String, at: Date,
+                               proposal: CoachFocus? = nil) {
         if let s = update.summary.nonBlank { summary = s }
-        if let f = update.focus.nonBlank { focus = f }
+        // Older coaching (before agreed foci) set the focus text directly.
+        if foci.isEmpty, let f = update.focus.nonBlank { focus = f }
+        if let id = review.focusID, let result = review.focusResult { record(result, focus: id) }
+        if let proposal, proposedFocus == nil { propose(proposal, at: at) }
         for p in update.patterns {
             if let i = patterns.firstIndex(where: { $0.name.caseInsensitiveCompare(p.name) == .orderedSame }) {
                 patterns[i].kind = p.kind
@@ -259,8 +273,10 @@ public struct CoachProfile: Codable, Equatable, Sendable {
             guard let note = p.note.nonBlank else { continue }
             people[p.name] = CoachPerson(note: note, calls: (people[p.name]?.calls ?? 0) + 1, lastSeen: at)
         }
+        // A call reviewed again replaces its earlier entry.
+        history.removeAll { $0.callID == callID }
         history.append(CoachHistoryEntry(callID: callID, title: title, date: at, headline: review.headline,
-                                         focusProgress: review.focusProgress, delivery: review.delivery, value: review.value?.rating,
+                                         focusProgress: review.focusResult?.evidence ?? review.focusProgress, delivery: review.delivery, value: review.value?.rating,
                                          score: review.scorecard?.score))
         history = Array(history.suffix(Self.historyLimit))
     }

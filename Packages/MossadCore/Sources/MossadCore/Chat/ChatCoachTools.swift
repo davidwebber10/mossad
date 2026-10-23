@@ -51,6 +51,12 @@ extension ChatTools {
                 if let c = v.scorecard { line += " | \(c.score)/5: \(c.reason)" }
                 if let value = v.value { line += " | value \(value.rating.rawValue)" }
                 if let c = v.scorecard { line += (c.positives.map { "\n  + \($0)" } + c.negatives.map { "\n  - \($0)" }).joined() } else { line += " | \(v.headline)" }
+                if v.scorecard == nil {
+                    let l = v.lines
+                    line += [l.didWell.map { "\n  Did well: \($0.text)" }, l.improving.map { "\n  Improving: \($0.text)" },
+                             l.tryNext.map { "\n  Try next: \($0.text)" }, v.focusResult.map { "\n  Focus: \($0.outcome.rawValue). \($0.evidence)" }]
+                        .compactMap { $0 }.joined()
+                }
                 return line
             }.prefix(min(limit, Self.maxLimit))
             return lines.isEmpty ? "No coach reviews match." : lines.joined(separator: "\n")
@@ -99,7 +105,16 @@ extension ChatTools {
         }
         if !p.guidance.isEmpty { parts.append("Coaching preferences:\n" + p.guidance.map { "- \($0.text)" }.joined(separator: "\n")) }
         if let s = p.summary.nonBlank { parts.append("How they communicate: \(s)") }
-        if let f = p.focus.nonBlank { parts.append("Current focus: \(f)") }
+        if let f = p.activeFocus {
+            let hits = f.chances.filter { $0.outcome == .hit }.count
+            parts.append("Current focus, agreed by the owner: \(f.plan) (why: \(f.why)). \(hits) hits in \(f.chances.count) chances so far.")
+        } else if let f = p.proposedFocus {
+            parts.append("Proposed focus, waiting for the owner to accept: \(f.plan)")
+        } else if let f = p.focus.nonBlank {
+            parts.append("Current focus: \(f)")
+        }
+        let learned = p.foci.filter { $0.status == .learned }.map(\.plan)
+        if !learned.isEmpty { parts.append("Learned habits: " + learned.joined(separator: "; ")) }
         if !p.patterns.isEmpty {
             parts.append("Patterns:\n" + p.patterns.map { "- \($0.name) (\($0.kind.rawValue), \($0.trend.rawValue), seen in \($0.seen) calls): \($0.note)" }.joined(separator: "\n"))
         }
@@ -119,7 +134,12 @@ extension ChatTools {
     }
 
     func reviewText(_ v: CoachReview, title: String) -> String {
-        var parts = ["\(title): \(v.headline)", v.overview]
+        var parts = ["\(title): \(v.headline)"] + [v.overview].compactMap(\.nonBlank)
+        let l = v.lines
+        if let n = l.didWell { parts.append("Did well: \(n.text)" + (n.quote.map { " Quote: \"\($0)\"" } ?? "")) }
+        if let n = l.improving { parts.append("Improving: \(n.text)") }
+        if let n = l.tryNext { parts.append("Try next time: \(n.text)" + (n.say.map { " Say: \"\($0)\"" } ?? "")) }
+        if let r = v.focusResult { parts.append("Focus result: \(r.outcome.rawValue). \(r.evidence)") }
         if let c = v.scorecard {
             parts.append("Score \(c.score)/5: \(c.reason). " + c.dimensions.map { "\($0.name) \($0.score)" }.joined(separator: ", "))
         }
