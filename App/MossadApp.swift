@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import MossadCore
 
@@ -21,6 +22,7 @@ struct MossadEntry {
 }
 
 struct MossadApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var controller = AppController()
 
     var body: some Scene {
@@ -122,5 +124,24 @@ final class SecondsClock: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.now = Date() }
         }
+    }
+}
+
+/// Makes Mossad behave like a normal app from the Dock: a click on its icon opens the window, and starting it
+/// by hand does too. A start at login stays quiet in the menu bar.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        let atLogin = event?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil
+            // Login items started by the system do not always say so; a start in the first minutes after
+            // booting is one of them.
+            || ProcessInfo.processInfo.systemUptime < 180
+        guard !atLogin, !CommandLine.arguments.contains("--ui-preview"), !CommandLine.arguments.contains("--open-window") else { return }
+        DispatchQueue.main.async { AppController.current?.open(AppController.current?.section ?? .meetings) }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        AppController.current?.open(AppController.current?.section ?? .meetings)
+        return false
     }
 }

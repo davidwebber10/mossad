@@ -65,6 +65,8 @@ final class AppController: ObservableObject {
     @Published var selectedMeetingID: String?
     @Published var namingCallID: String?
     var personToOpen: String?
+    /// The one controller, for the app delegate's Dock handling.
+    nonisolated(unsafe) static weak var current: AppController?
     /// Checks GitHub releases for new versions; never in the UI preview.
     private(set) lazy var updater = Updater(start: !CommandLine.arguments.contains("--ui-preview")) { [weak self] in self?.isRecording ?? false }
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
@@ -168,6 +170,7 @@ final class AppController: ObservableObject {
         Log.directory = paths.logs
         library = VoiceLibrary(directory: paths.voices)
         recorder = Self.makeRecorder(paths: paths)
+        Self.current = self
         // The chosen calendars apply before anything matches a call to an invite.
         calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
