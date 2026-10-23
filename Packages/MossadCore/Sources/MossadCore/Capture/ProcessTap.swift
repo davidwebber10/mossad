@@ -42,7 +42,6 @@ public final class ProcessTap: TrackSource, @unchecked Sendable {
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         var formatAddress = AudioObjectPropertyAddress(mSelector: kAudioTapPropertyFormat, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         try check(AudioObjectGetPropertyData(tapID, &formatAddress, 0, nil, &size, &format), "read tap format")
-        guard let avFormat = AVAudioFormat(streamDescription: &format) else { throw CaptureError.message("unsupported tap format") }
 
         let outputUID = try defaultOutputDeviceUID()
         let aggregate: [String: Any] = [
@@ -56,6 +55,13 @@ public final class ProcessTap: TrackSource, @unchecked Sendable {
             kAudioAggregateDeviceTapListKey: [[kAudioSubTapDriftCompensationKey: true, kAudioSubTapUIDKey: description.uuid.uuidString]],
         ]
         try check(AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &aggregateID), "create aggregate device")
+        // The buffers come at the output device's rate, which can differ from the tap's: AirPods in a call run at
+        // 24 kHz while the tap says 48 kHz, and the other side then played at double speed.
+        if let rate = nominalSampleRate(aggregateID), rate != format.mSampleRate {
+            Log.info("Tap says \(Int(format.mSampleRate)) Hz; the output device runs at \(Int(rate)) Hz")
+            format.mSampleRate = rate
+        }
+        guard let avFormat = AVAudioFormat(streamDescription: &format) else { throw CaptureError.message("unsupported tap format") }
 
         try check(AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, queue) { _, input, _, _, _ in
             guard let buffer = AVAudioPCMBuffer(pcmFormat: avFormat, bufferListNoCopy: input, deallocator: nil) else { return }
@@ -77,6 +83,15 @@ public final class ProcessTap: TrackSource, @unchecked Sendable {
         ioProcID = nil
         aggregateID = AudioObjectID(kAudioObjectUnknown)
         tapID = AudioObjectID(kAudioObjectUnknown)
+    }
+
+    private func nominalSampleRate(_ device: AudioObjectID) -> Double? {
+        var rate = Float64(0)
+        var size = UInt32(MemoryLayout<Float64>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate, mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &rate) == noErr, rate > 0 else { return nil }
+        return rate
     }
 
     private func defaultOutputDeviceUID() throws -> String {

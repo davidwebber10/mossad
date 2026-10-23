@@ -35,6 +35,13 @@ public final class TrackWriter: @unchecked Sendable {
     private let sink: AudioSink?
     private var pausedAt: Date?
     private var muted = false
+    /// Some devices deliver fewer samples than their format says: AirPods in a call run at 24 kHz while the
+    /// process tap still says 48 kHz, so speech came out at double speed. The rate is measured against the
+    /// clock and the buffers are relabeled with the nearest standard rate.
+    static let standardRates: [Double] = [8_000, 16_000, 22_050, 24_000, 32_000, 44_100, 48_000]
+    static let rateWindow: Double = 3
+    private var rateCheck: (declared: Double, start: Date, last: Date, frames: Double)?
+    private var actualRate: Double?
 
     /// While muted in the call app, the mic's sound is replaced with silence of the same length: the timeline
     /// stays true, and what was said off the call (a phone call while muted) is not kept or transcribed.
@@ -65,6 +72,10 @@ public final class TrackWriter: @unchecked Sendable {
         }
     }
 
+    /// When the source last sent a buffer, by the writer's clock.
+    public var lastInput: Date? { lock.withLock { lastInputAt } }
+    private var lastInputAt: Date?
+
     public var duration: TimeInterval {
         lock.withLock { Double(written) / Self.sampleRate }
     }
@@ -76,7 +87,10 @@ public final class TrackWriter: @unchecked Sendable {
 
     public func append(_ buffer: AVAudioPCMBuffer) throws {
         try lock.withLock {
-            guard file != nil, !stalled, pausedAt == nil, buffer.frameLength > 0, let mono = Self.downmix(buffer) else { return }
+            guard file != nil, !stalled, pausedAt == nil, buffer.frameLength > 0 else { return }
+            lastInputAt = clock()
+            let rate = measureRate(declared: buffer.format.sampleRate, frames: buffer.frameLength, now: clock())
+            guard let mono = Self.downmix(buffer, rate: rate) else { return }
             let converted = try convert(mono)
             guard converted.frameLength > 0 else { return }
             if muted { memset(converted.floatChannelData![0], 0, Int(converted.frameLength) * MemoryLayout<Float>.size) }
@@ -97,6 +111,31 @@ public final class TrackWriter: @unchecked Sendable {
             if !muted { sink?.send(converted) }
             if level >= Self.soundThreshold { lastSoundFrame = written }
         }
+    }
+
+    /// The rate the buffers really have. A gap (a restart on another device) or a new format starts over.
+    private func measureRate(declared: Double, frames: AVAudioFrameCount, now: Date) -> Double {
+        guard var check = rateCheck, check.declared == declared, now.timeIntervalSince(check.last) < Self.gapTolerance else {
+            rateCheck = (declared, now, now, 0)
+            actualRate = nil
+            return declared
+        }
+        check.frames += Double(frames)
+        check.last = now
+        let elapsed = now.timeIntervalSince(check.start)
+        if elapsed >= Self.rateWindow {
+            let measured = check.frames / elapsed
+            // Only a clear match: a source that stalls now and then keeps its rate, and the gaps stay silence.
+            let nearest = Self.standardRates.min { abs($0 - measured) < abs($1 - measured) }!
+            let rate = abs(measured / declared - 1) < 0.15 || abs(measured / nearest - 1) > 0.05 ? declared : nearest
+            if rate != (actualRate ?? declared) {
+                Log.info("Audio says \(Int(declared)) Hz but delivers \(Int(measured)) Hz; recording it as \(Int(rate)) Hz")
+            }
+            actualRate = rate == declared ? nil : rate
+            check = (declared, now, now, 0)
+        }
+        rateCheck = check
+        return actualRate ?? declared
     }
 
     public func close() {
@@ -162,14 +201,14 @@ public final class TrackWriter: @unchecked Sendable {
         return out
     }
 
-    /// Float32 input → mono at the input rate. Stereo is averaged; more channels use channel 0
+    /// Float32 input → mono at the input rate, or at `rate` when the input's own label is wrong. Stereo is averaged; more channels use channel 0
     /// (voice processing puts the processed voice on channel 0).
-    static func downmix(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+    static func downmix(_ buffer: AVAudioPCMBuffer, rate: Double? = nil) -> AVAudioPCMBuffer? {
         let format = buffer.format
         guard format.commonFormat == .pcmFormatFloat32, let data = buffer.floatChannelData else { return nil }
         let channels = Int(format.channelCount)
         let frames = Int(buffer.frameLength)
-        let monoFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: format.sampleRate, channels: 1, interleaved: false)!
+        let monoFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate ?? format.sampleRate, channels: 1, interleaved: false)!
         let mono = AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: buffer.frameLength)!
         mono.frameLength = buffer.frameLength
         let out = mono.floatChannelData![0]

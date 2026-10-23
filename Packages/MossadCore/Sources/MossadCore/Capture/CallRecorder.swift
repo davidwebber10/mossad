@@ -35,6 +35,9 @@ public final class CallRecorder: @unchecked Sendable {
     private let clock: () -> Date
     private let systemAudioAllowed: () -> Bool
     public static let retryInterval: TimeInterval = 10
+    /// A mic that sends nothing this long is restarted. It can start on a new device and stay silent.
+    public static let stallLimit: TimeInterval = 10
+    private var meStartedAt = Date.distantPast
 
     private var record: CallRecord?
     private var themSource: TrackSource?
@@ -120,7 +123,15 @@ public final class CallRecorder: @unchecked Sendable {
     public func updateThemProcesses(_ ids: [AudioObjectID]) {
         guard isRecording, !isPaused, !isManual else { return }
         let now = clock()
-        if meSource == nil, now >= nextMeRetry { startMe() }
+        if meSource == nil, now >= nextMeRetry {
+            startMe()
+        } else if let source = meSource, let writer = meWriter,
+                  now.timeIntervalSince(max(writer.lastInput ?? .distantPast, meStartedAt)) > Self.stallLimit {
+            Log.info("The mic sent no audio for \(Int(Self.stallLimit)) s; restarting it")
+            source.stop()
+            meSource = nil
+            startMe()
+        }
         let ids = ids.isEmpty ? themProcessIDs : ids
         if themSource == nil {
             if now >= nextThemRetry { startThem(ids) } else { themProcessIDs = ids }
@@ -164,6 +175,7 @@ public final class CallRecorder: @unchecked Sendable {
 
     private func startMe() {
         guard let writer = meWriter else { return }
+        meStartedAt = clock()
         let source = makeMe()
         source.onFailure { [weak self, weak source] in
             // Runs on the capture queue. Only the current source counts; the next tick restarts it.

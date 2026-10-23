@@ -5,7 +5,8 @@ import Foundation
 /// Captures the microphone. With voice processing on, Apple's echo cancellation removes
 /// what the speakers play, so other people's voices do not leak into the "me" track.
 public final class MicCapture: TrackSource, @unchecked Sendable {
-    private let engine = AVAudioEngine()
+    /// Replaced on every restart: after a device change the old engine can report the old format and send nothing.
+    private var engine = AVAudioEngine()
     private let voiceProcessing: Bool
     private var onBuffer: ((AVAudioPCMBuffer) -> Void)?
     private var observer: NSObjectProtocol?
@@ -17,23 +18,28 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
 
     public func start(_ onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws {
         self.onBuffer = onBuffer
-        // The engine stops itself when the input or output hardware changes (AirPods connect, a USB mic is
-        // unplugged). Restart it on the new device; TrackWriter fills the short gap with silence.
-        observer = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: CaptureQueue.operations) { [weak self] _ in
-            guard let self else { return }
-            Log.info("Audio configuration changed; restarting mic")
-            self.engine.inputNode.removeTap(onBus: 0)
-            self.engine.stop()
-            do { try self.configureAndStart() } catch {
-                Log.error("Mic restart failed: \(error)")
-                self.failureHandler?()
-            }
-        }
         try configureAndStart()
+    }
+
+    /// The engine stops itself when the input or output hardware changes (AirPods connect, a USB mic is
+    /// unplugged). Restart on a new engine for the new device; TrackWriter fills the short gap with silence.
+    private func restart() {
+        Log.info("Audio configuration changed; restarting mic")
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        if voiceProcessing { try? engine.inputNode.setVoiceProcessingEnabled(false) }
+        engine = AVAudioEngine()
+        do { try configureAndStart() } catch {
+            Log.error("Mic restart failed: \(error)")
+            failureHandler?()
+        }
     }
 
     private func configureAndStart() throws {
         guard let onBuffer else { return }
+        observer = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine,
+                                                          queue: CaptureQueue.operations) { [weak self] _ in self?.restart() }
         let input = engine.inputNode
         if voiceProcessing {
             try input.setVoiceProcessingEnabled(true)

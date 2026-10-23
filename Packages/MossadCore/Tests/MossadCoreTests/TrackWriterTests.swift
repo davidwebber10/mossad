@@ -58,6 +58,42 @@ final class TrackWriterTests: XCTestCase {
         XCTAssertEqual(try audioDuration(url), 5, accuracy: 0.05)
     }
 
+    /// AirPods in a call run at 24 kHz while the tap still says 48 kHz: half the samples arrive each second.
+    func testAMislabeledRateIsMeasuredSoSpeechKeepsItsSpeed() throws {
+        let url = dir.appendingPathComponent("r.caf")
+        var now = t0
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        for _ in 0..<200 {
+            now = now.addingTimeInterval(0.1)
+            let b = sineBuffer(seconds: 0.1, sampleRate: 48_000, channels: 2)
+            b.frameLength = 2_400
+            try writer.append(b)
+        }
+        // The AirPods disconnect: the tap is rebuilt, and the real 48 kHz returns.
+        now = now.addingTimeInterval(1)
+        for _ in 0..<200 {
+            now = now.addingTimeInterval(0.1)
+            try writer.append(sineBuffer(seconds: 0.1, sampleRate: 48_000, channels: 2))
+        }
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 41, accuracy: 0.5, "neither part is stretched or squeezed")
+        XCTAssertLessThan(try silentShare(url, from: 5, to: 20), 0.05, "no silence padding between fast speech")
+        XCTAssertLessThan(try silentShare(url, from: 22, to: 41), 0.05)
+    }
+
+    /// The share of 10 ms blocks that are exact digital silence.
+    private func silentShare(_ url: URL, from: Double, to: Double) throws -> Double {
+        let f = try AVAudioFile(forReading: url)
+        f.framePosition = AVAudioFramePosition(from * 16_000)
+        let n = AVAudioFrameCount((to - from) * 16_000)
+        let b = AVAudioPCMBuffer(pcmFormat: f.processingFormat, frameCapacity: n)!
+        try f.read(into: b, frameCount: n)
+        let d = b.floatChannelData![0]
+        let blocks = Int(b.frameLength) / 160
+        let silent = (0..<blocks).filter { k in (0..<160).allSatisfy { d[k * 160 + $0] == 0 } }.count
+        return Double(silent) / Double(max(blocks, 1))
+    }
+
     func testTrimShortensFile() throws {
         let url = dir.appendingPathComponent("trim.caf")
         try writeTestAudio(url, seconds: 10, frequency: 440)

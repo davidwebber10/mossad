@@ -274,6 +274,23 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(me.startCalls, 2)
     }
 
+    /// After AirPods connected, the restarted mic sent nothing and the rest of the call lost the owner's voice.
+    func testAMicThatSendsNoAudioIsRestarted() throws {
+        _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [5], at: t0)
+        now = t0.addingTimeInterval(CallRecorder.stallLimit + 1)
+        recorder.updateThemProcesses([5])
+        XCTAssertEqual(me.startCalls, 2)
+    }
+
+    func testAMicThatSendsAudioIsLeftAlone() throws {
+        me.seconds = 1
+        now = t0.addingTimeInterval(1)
+        _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [5], at: t0)
+        now = t0.addingTimeInterval(CallRecorder.stallLimit)
+        recorder.updateThemProcesses([5])
+        XCTAssertEqual(me.startCalls, 1)
+    }
+
     func testBeginThatCannotCreateItsFilesLeavesNoCall() throws {
         let id = CallRecorder.callID(for: t0)
         try FileManager.default.createDirectory(at: paths.callDirectory(id).appendingPathComponent("me.caf"), withIntermediateDirectories: true)
