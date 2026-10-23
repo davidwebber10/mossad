@@ -39,6 +39,7 @@ struct MenuContent: View {
                     }
                 }
             }
+            navigationRow("Open Mossad", "macwindow") { controller.open(controller.section) }
             let recent = controller.meetings.filter { $0.status != .recording }.prefix(3)
             if !recent.isEmpty {
                 PanelSeparator()
