@@ -369,6 +369,9 @@ struct MeetingMenuItems: View {
             }
             .disabled(record.markdownPath == nil)
             Button("Show audio in Finder", systemImage: "folder") { NSWorkspace.shared.open(controller.paths.callDirectory(record.id)) }
+            if record.status == .written, record.unknownSpeakers.isEmpty, !record.skippedSpeakers.isEmpty {
+                Button("Name skipped voices…", systemImage: "person.wave.2") { controller.namingCallID = record.id }
+            }
             Button("Regenerate summary", systemImage: "arrow.clockwise") { controller.regenerateSummary(record.id) }
                 .disabled(record.status != .written || record.utterances.isEmpty)
             Button("Merge with…", systemImage: "arrow.triangle.merge") {

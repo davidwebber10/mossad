@@ -18,6 +18,17 @@ struct VoiceNamingView: View {
     @State private var sampleText: [String: String] = [:]
     /// Voices skipped in this session; saved when the sheet closes with Save or Later.
     @State private var dismissed: Set<String> = []
+    /// Voices skipped before that the owner asked to name after all.
+    @State private var restored: Set<String> = []
+
+    private var asking: [String] {
+        record.unknownSpeakers.filter { !dismissed.contains($0) } + record.skippedSpeakers.filter { restored.contains($0) }
+    }
+
+    /// Skipped earlier or in this session, last in the sheet so a wrong Skip can be undone.
+    private var skipped: [String] {
+        (record.unknownSpeakers.filter { dismissed.contains($0) } + record.skippedSpeakers).filter { !restored.contains($0) }
+    }
 
     var body: some View {
         let people = MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library)
@@ -27,8 +38,16 @@ struct VoiceNamingView: View {
             Text(subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
             ScrollView {
                 VStack(spacing: 10) {
-                    ForEach(record.unknownSpeakers.filter { !dismissed.contains($0) }, id: \.self) { key in
+                    ForEach(asking, id: \.self) { key in
                         card(key, people: people, talk: talk[people.name(forKey: key)] ?? 0)
+                    }
+                    if !skipped.isEmpty {
+                        Text("Skipped").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, asking.isEmpty ? 0 : 6)
+                        ForEach(skipped, id: \.self) { key in
+                            skippedRow(key, people: people, talk: talk[people.name(forKey: key)] ?? 0)
+                        }
                     }
                 }
             }
@@ -36,11 +55,11 @@ struct VoiceNamingView: View {
             HStack(spacing: 8) {
                 Spacer()
                 Button("Later") {
-                    if !dismissed.isEmpty { controller.dismissSpeakers(callID: record.id, keys: Array(dismissed)) }
+                    saveSkips()
                     dismiss()
                 }
                 Button("Save") {
-                    if !dismissed.isEmpty { controller.dismissSpeakers(callID: record.id, keys: Array(dismissed)) }
+                    saveSkips()
                     if names.values.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
                         controller.applyNames(callID: record.id, names: names, emails: emails)
                     }
@@ -48,7 +67,7 @@ struct VoiceNamingView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(names.values.allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty } && dismissed.isEmpty)
+                .disabled(names.values.allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty } && dismissed.isEmpty && restored.isEmpty)
             }
         }
         .padding(EdgeInsets(top: 20, leading: 20, bottom: 16, trailing: 20))
@@ -56,8 +75,15 @@ struct VoiceNamingView: View {
         .task { await measureSamples() }
     }
 
+    /// Skips and restores both save on Later too: they are choices, not names.
+    private func saveSkips() {
+        if !dismissed.isEmpty { controller.dismissSpeakers(callID: record.id, keys: Array(dismissed)) }
+        if !restored.isEmpty { controller.restoreSpeakers(callID: record.id, keys: Array(restored)) }
+    }
+
     private var subtitle: String {
         let n = record.unknownSpeakers.count
+        if n == 0 { return "You skipped the new voices in \(record.title). Name one to have Mossad recognize it in future calls." }
         return n == 1
             ? "1 voice in \(record.title) is new. Name it once and Mossad recognizes it in future calls."
             : "\(n) voices in \(record.title) are new. Name them once and Mossad recognizes them in future calls."
@@ -86,7 +112,7 @@ struct VoiceNamingView: View {
                 Text(meta(key, people: people, talk: talk)).font(.system(size: 12)).foregroundStyle(.secondary)
                 Spacer()
                 Button("Skip") {
-                    dismissed.insert(key)
+                    if restored.contains(key) { restored.remove(key) } else { dismissed.insert(key) }
                     names[key] = nil
                     emails[key] = nil
                     if playing == key { player?.stop(); playing = nil }
@@ -121,6 +147,30 @@ struct VoiceNamingView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
+    }
+
+    private func skippedRow(_ key: String, people: MeetingPeople, talk: TimeInterval) -> some View {
+        HStack(spacing: 10) {
+            Button { toggle(key) } label: {
+                Image(systemName: playing == key ? "stop.fill" : "play.fill").font(.system(size: 10)).foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(people.color(forKey: key), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Play a sample of this voice")
+            .accessibilityLabel(playing == key ? "Stop sample" : "Play sample")
+            Text(meta(key, people: people, talk: talk)).font(.system(size: 12)).foregroundStyle(.secondary)
+            Spacer()
+            Button("Name") {
+                if dismissed.contains(key) { dismissed.remove(key) } else { restored.insert(key) }
+            }
+            .buttonStyle(.link)
+            .font(.system(size: 12))
+            .help("Ask for this voice again")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     /// The invite's people. Picking one sets the email, and the saved name for that email when there is one.
@@ -165,7 +215,7 @@ struct VoiceNamingView: View {
 
     /// Makes the clips when the sheet opens, off the main actor, to show each sample's length.
     private func measureSamples() async {
-        let jobs = record.unknownSpeakers.map { ($0, clipURL($0)) }
+        let jobs = (record.unknownSpeakers + record.skippedSpeakers).map { ($0, clipURL($0)) }
         let utterances = record.utterances
         let lengths = await Task.detached(priority: .userInitiated) { () -> [String: TimeInterval] in
             var result: [String: TimeInterval] = [:]

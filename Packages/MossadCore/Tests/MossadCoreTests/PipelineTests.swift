@@ -270,6 +270,19 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(try load(id).unknownSpeakers, ["them:A", "them:B"])
         await p.dismissSpeakers(callID: id, keys: ["them:B"])
         XCTAssertEqual(try load(id).unknownSpeakers, ["them:A"])
+        XCTAssertEqual(try load(id).skippedSpeakers, ["them:B"])
+    }
+
+    func testASkippedVoiceCanBeAskedForAgainOrNamed() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        await p.dismissSpeakers(callID: id, keys: ["them:A", "them:B"])
+        await p.restoreSpeakers(callID: id, keys: ["them:B"])
+        XCTAssertEqual(try load(id).unknownSpeakers, ["them:B"])
+        XCTAssertEqual(try load(id).skippedSpeakers, ["them:A"])
+        await p.applyNames(callID: id, names: ["them:A": "Jo"])
+        XCTAssertEqual(try load(id).skippedSpeakers, [])
     }
 
     /// A second written recording of the same meeting, `gap` seconds after the first one ended.

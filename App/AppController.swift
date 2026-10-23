@@ -594,6 +594,14 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Asks for skipped voices again.
+    func restoreSpeakers(callID: String, keys: [String]) {
+        Task {
+            await pipeline.restoreSpeakers(callID: callID, keys: keys)
+            refresh()
+        }
+    }
+
     /// The bucket to archive recordings in, when one is set up completely.
     var cloudArchive: CloudArchive? {
         guard storage != "local", let endpoint = URL(string: cloudEndpoint), endpoint.host != nil, !cloudBucket.isEmpty,

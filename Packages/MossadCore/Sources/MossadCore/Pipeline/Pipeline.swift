@@ -435,6 +435,14 @@ public actor Pipeline {
         save(&r, dir: dir)
     }
 
+    /// Asks for skipped voices again.
+    public func restoreSpeakers(callID: String, keys: [String]) {
+        let dir = paths.callDirectory(callID)
+        guard var r = try? CallRecord.load(from: dir) else { return }
+        r.unknownSpeakers += keys.filter { r.skippedSpeakers.contains($0) }
+        save(&r, dir: dir)
+    }
+
     /// Renames a person in every meeting: speaker names, action item owners, and the notes. An email
     /// address is also replaced inside the summary text, where it cannot be part of another word.
     @discardableResult

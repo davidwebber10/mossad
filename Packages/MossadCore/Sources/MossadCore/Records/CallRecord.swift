@@ -195,6 +195,15 @@ extension CallRecord {
 }
 
 extension CallRecord {
+    /// Voices with lines but no name that the call no longer asks about, in order of first line. Skips keep no
+    /// list of their own, so a skip made before this existed shows here too.
+    public var skippedSpeakers: [String] {
+        var keys: [String] = []
+        for u in utterances where speakerNames[u.speakerKey] == nil && !unknownSpeakers.contains(u.speakerKey)
+            && !keys.contains(u.speakerKey) { keys.append(u.speakerKey) }
+        return keys
+    }
+
     /// Swaps labels such as "Speaker A" for names in the summary, topics, decisions, and action items. Whole
     /// words only, so "Speaker A" never matches inside "Speaker AB".
     mutating func replaceSpeakerLabels(_ labels: [String: String]) {
