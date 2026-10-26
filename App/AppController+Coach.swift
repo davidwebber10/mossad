@@ -22,10 +22,33 @@ extension AppController {
                                  since: Date(timeIntervalSince1970: coachSince))
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
+            await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName))
             coaching = false
             syncToICloud()
             await sendCoachEmail()
         }
+    }
+
+    /// The coach's read on each person, written one at a time; the profile is read fresh before each save
+    /// because a review may have changed it meanwhile.
+    func writePersonBriefs(_ names: [String]) async {
+        guard !names.isEmpty, let llm = languageModel else { return }
+        let writer = PersonBriefWriter(llm: llm, ownerName: ownerName), records = meetings
+        for name in names {
+            do {
+                let brief = try await writer.brief(for: name, records: records, profile: coachProfile)
+                var profile = coachProfile
+                var person = profile.people[name] ?? CoachPerson(note: "", calls: 0, lastSeen: brief.updated)
+                person.brief = brief
+                profile.people[name] = person
+                try profile.save(to: paths.coach)
+                coachVersion += 1
+            } catch {
+                Log.error("The coach's read on a person failed: \(error)")
+            }
+        }
+        Log.info("The coach updated its read on \(names.count) \(names.count == 1 ? "person" : "people")")
+        syncToICloud()
     }
 
     /// Once: the coach's first questions, from the last 30 days of calls.

@@ -206,6 +206,7 @@ extension ChatTools {
             var line = "\(name) | \(s.meetings.count) meetings | talked \(Int(s.totalTalk / 60)) min"
             if let last = s.lastHeard { line += " | last \(last.formatted(.dateTime.month(.abbreviated).day()))" }
             if let note = notes[name]?.note { line += " | coach: \(note)" }
+            if let brief = notes[name]?.brief { line += "\n  The coach's read: " + brief.text.replacingOccurrences(of: "\n", with: " / ") }
             return line
         }.joined(separator: "\n")
     }

@@ -73,6 +73,9 @@ private struct PersonView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
+                if stats.meetings.count >= 2 || store.profile.people[name]?.brief != nil {
+                    PersonBriefCard(name: name, brief: store.profile.people[name]?.brief)
+                }
                 if let r = relation {
                     PhoneRelation(relation: r)
                 } else {

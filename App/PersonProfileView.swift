@@ -14,6 +14,7 @@ struct PersonProfileView: View {
     let select: (String) -> Void
 
     @State private var relation: PersonRelation?
+    @State private var refreshing = false
 
     var body: some View {
         ScrollView {
@@ -27,6 +28,15 @@ struct PersonProfileView: View {
                         stat("Action items", "\(stats.actionItems.count)")
                     }
                 } else if let r = relation {
+                    PersonBriefCard(name: profile.name, brief: controller.coachProfile.people[profile.name]?.brief, refreshing: refreshing,
+                                    refresh: stats.meetings.count >= 2 ? {
+                                        refreshing = true
+                                        Task {
+                                            await controller.writePersonBriefs([profile.name])
+                                            refreshing = false
+                                        }
+                                    } : nil,
+                                    openCall: { controller.openMeeting($0) })
                     RelationSections(relation: r, owner: controller.ownerName, color: color)
                 } else {
                     ProgressView().frame(maxWidth: .infinity).padding(.vertical, 40)

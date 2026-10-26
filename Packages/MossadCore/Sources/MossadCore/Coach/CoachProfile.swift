@@ -30,6 +30,8 @@ public struct CoachPerson: Codable, Equatable, Sendable, Hashable {
     public var note: String
     public var calls: Int
     public var lastSeen: Date
+    /// The coach's fuller read on them across calls; written separately from the reviews.
+    public var brief: PersonBrief?
 
     public init(note: String, calls: Int, lastSeen: Date) {
         self.note = note
@@ -278,7 +280,9 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         }
         for p in update.people {
             guard let note = p.note.nonBlank else { continue }
-            people[p.name] = CoachPerson(note: note, calls: (people[p.name]?.calls ?? 0) + 1, lastSeen: at)
+            var person = CoachPerson(note: note, calls: (people[p.name]?.calls ?? 0) + 1, lastSeen: at)
+            person.brief = people[p.name]?.brief
+            people[p.name] = person
         }
         // A call reviewed again replaces its earlier entry.
         history.removeAll { $0.callID == callID }
