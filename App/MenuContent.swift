@@ -25,6 +25,9 @@ struct MenuContent: View {
                 .padding(.horizontal, 6)
             }
             if !permissions.allGood { permissionsRow }
+            if !controller.isRecording {
+                CoachMoment(compact: true).environmentObject(controller).padding(.horizontal, 6).padding(.top, 4)
+            }
             if let next = controller.upcoming.first(where: { $0.start.timeIntervalSinceNow < 12 * 3600 }), !controller.isRecording {
                 PanelSeparator()
                 Text("Next").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)

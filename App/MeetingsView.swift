@@ -75,8 +75,11 @@ struct MeetingsView: View {
 
     private var splitBody: some View {
         HStack(spacing: 0) {
-            MeetingList(groups: MeetingGroups.group(results), selection: $controller.selectedMeetingID, deleting: $deleting)
-                .frame(width: 330)
+            VStack(spacing: 0) {
+                CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, 8)
+                MeetingList(groups: MeetingGroups.group(results), selection: $controller.selectedMeetingID, deleting: $deleting)
+            }
+            .frame(width: 330)
             Divider()
             Group {
                 if let id = controller.selectedMeetingID, let m = controller.upcoming.first(where: { $0.id == id }) {
