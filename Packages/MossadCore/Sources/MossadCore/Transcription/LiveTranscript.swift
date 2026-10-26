@@ -1,15 +1,21 @@
 import Foundation
 
-/// What was said so far in the call, from the streaming transcription. Only for display while the call
-/// runs; the note still uses the full transcription of the recording after the call.
-public struct LiveTranscript: Equatable, Sendable {
-    public struct Line: Equatable, Sendable, Identifiable {
+/// What was said so far in the call, from the streaming transcription. For display and for the current_call
+/// tool while the call runs; the note still uses the full transcription of the recording after the call.
+public struct LiveTranscript: Codable, Equatable, Sendable {
+    /// Saved next to call.json while the call records, for Chat and other AI apps; removed when the full
+    /// transcription starts.
+    public static let fileName = "live.json"
+
+    public struct Line: Codable, Equatable, Sendable, Identifiable {
         public var source: Track
         public var order: Int
         public var text: String
         public var isFinal: Bool
         /// Seconds into the call when the line began.
         public var time: TimeInterval
+        /// The streaming service's label for a call-audio voice ("A", "B"); nil until it knows.
+        public var speaker: String?
         public var id: String { "\(source.rawValue)-\(order)" }
     }
 
@@ -25,22 +31,43 @@ public struct LiveTranscript: Equatable, Sendable {
             let turn_order: Int?
             let end_of_turn: Bool?
             let transcript: String?
+            let speaker_label: String?
         }
         guard let turn = try? JSONDecoder().decode(Turn.self, from: message), turn.type == "Turn",
               let order = turn.turn_order, let text = turn.transcript, !text.isEmpty else { return false }
+        // A turn with under a second of audio comes back PENDING; keep the label it already had.
+        let speaker = turn.speaker_label.flatMap { $0.count <= 2 ? $0 : nil }
         if let i = lines.firstIndex(where: { $0.source == source && $0.order == order }) {
             // A final line does not go back to a draft.
             guard !lines[i].isFinal || turn.end_of_turn == true else { return false }
             lines[i].text = text
             lines[i].isFinal = turn.end_of_turn ?? false
+            if let speaker { lines[i].speaker = speaker }
         } else {
-            lines.append(Line(source: source, order: order, text: text, isFinal: turn.end_of_turn ?? false, time: time))
+            lines.append(Line(source: source, order: order, text: text, isFinal: turn.end_of_turn ?? false, time: time, speaker: speaker))
             lines.sort { $0.time < $1.time }
         }
         return true
     }
 
     public mutating func reset() { lines = [] }
+
+    /// "[01:05] Speaker A: text" lines, from `since` seconds into the call. The owner's lines use their name.
+    public func text(owner: String, since: TimeInterval?) -> String {
+        visibleLines.filter { $0.time >= (since ?? 0) }.map { line in
+            let t = Int(line.time)
+            let who = line.source == .me ? owner : line.speaker.map { "Speaker \($0)" } ?? "Others"
+            return String(format: "[%02d:%02d] ", t / 60, t % 60) + "\(who): \(line.text)" + (line.isFinal ? "" : " (still speaking)")
+        }.joined(separator: "\n")
+    }
+
+    public func save(to url: URL) throws {
+        try JSONEncoder().encode(self).write(to: url, options: .atomic)
+    }
+
+    public static func load(from url: URL) throws -> LiveTranscript {
+        try JSONDecoder().decode(LiveTranscript.self, from: Data(contentsOf: url))
+    }
 
     /// The lines without the mic's echo of the call. The mic is recorded raw, so it also hears the speakers:
     /// a "You" line that repeats a call line from the same few seconds is that echo. Short lines such as

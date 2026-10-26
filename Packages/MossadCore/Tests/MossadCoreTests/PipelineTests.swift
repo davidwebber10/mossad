@@ -273,6 +273,14 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(try load(id).skippedSpeakers, ["them:B"])
     }
 
+    func testTheLiveTranscriptIsRemovedOnceTheFullOneStarts() async throws {
+        let id = try makeRecord()
+        let live = paths.callDirectory(id).appendingPathComponent(LiveTranscript.fileName)
+        try LiveTranscript().save(to: live)
+        await pipeline().process(id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: live.path))
+    }
+
     func testASkippedVoiceCanBeAskedForAgainOrNamed() async throws {
         let id = try makeRecord()
         let p = pipeline()

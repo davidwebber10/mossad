@@ -432,8 +432,10 @@ final class AppController: ObservableObject {
         if reset { live.reset() }
         guard liveTranscriptEnabled, case .recording(_, let since) = status, let key = keychain.get(.assemblyai) else { return }
         liveStart = since
+        // Saved for the current_call tool in Chat and in other AI apps.
+        live.fileURL = paths.callDirectory(CallRecorder.callID(for: since)).appendingPathComponent(LiveTranscript.fileName)
         for (track, sink) in [(Track.me, recorder.meSink), (.them, recorder.themSink)] {
-            let session = LiveTranscriber(apiKey: key) { [weak self] message in
+            let session = LiveTranscriber(apiKey: key, speakers: track == .them) { [weak self] message in
                 Task { @MainActor in
                     guard let self else { return }
                     self.live.apply(message, source: track, at: Date().timeIntervalSince(self.liveStart))
@@ -894,6 +896,9 @@ final class LiveTranscriptModel: ObservableObject {
     @Published private(set) var transcript = LiveTranscript()
     private var pending = LiveTranscript()
     private var scheduled = false
+    var fileURL: URL?
+    /// One write at a time, in order, so an older copy never replaces a newer one.
+    private let saves = DispatchQueue(label: "com.dwebber.mossad.live-save", qos: .utility)
 
     func apply(_ message: Data, source: Track, at time: TimeInterval) {
         guard pending.apply(message, source: source, at: time), !scheduled else { return }
@@ -902,6 +907,11 @@ final class LiveTranscriptModel: ObservableObject {
             try? await Task.sleep(for: .milliseconds(250))
             transcript = pending
             scheduled = false
+            // At most four times a second (the publish above), off the main actor.
+            if let url = fileURL {
+                let snapshot = pending
+                saves.async { try? snapshot.save(to: url) }
+            }
         }
     }
 

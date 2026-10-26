@@ -154,6 +154,8 @@ public actor Pipeline {
 
     private func transcribe(_ r: inout CallRecord, dir: URL) async throws {
         transcribing.insert(r.id)
+        // The full transcript replaces the live one, which was only for use during the call.
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent(LiveTranscript.fileName))
         async let me = transcribeIfNeeded(r.meUtterances, track: .me, dir: dir, callID: r.id)
         async let them = transcribeIfNeeded(r.themUtterances, track: .them, dir: dir, callID: r.id)
         let (meResult, themResult) = await (me, them)

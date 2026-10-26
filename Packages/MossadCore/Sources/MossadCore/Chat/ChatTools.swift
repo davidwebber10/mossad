@@ -28,9 +28,12 @@ public struct ChatTools: Sendable {
     let owner: String
     /// Where the coach's reviews, its memory, and the chats live; without it only the meeting tools work.
     let paths: Paths?
+    /// The call recording now, if any, for current_call.
+    let live: CallRecord?
 
     public init(records: [CallRecord], owner: String, paths: Paths? = nil) {
         self.records = records.filter { $0.status == .written }.sorted { $0.start > $1.start }
+        live = records.filter { $0.status == .recording }.max { $0.start < $1.start }
         self.owner = owner
         self.paths = paths
     }
@@ -154,6 +157,7 @@ public struct ChatTools: Sendable {
                  schema: ["type": "object", "properties": [
                     "owner": ["type": "string"], "from": ["type": "string"], "to": ["type": "string"],
                  ] as [String: Any]]),
+        currentCallDefinition,
     ] }
 
     /// Runs a tool call from Claude and returns its result as text.
@@ -169,6 +173,8 @@ public struct ChatTools: Sendable {
         case "search_transcripts":
             let hits = searchTranscripts(query: input["query"] as? String ?? "", people: people, from: from, to: to, limit: limit)
             return hits.isEmpty ? "No transcript lines match." : hits.map { "call_id: \($0.callID) | \($0.title) | \(day($0.date)) | \($0.line)" }.joined(separator: "\n")
+        case "current_call":
+            return currentCall(minutes: (input["minutes"] as? NSNumber)?.doubleValue)
         case "read_meeting":
             return (input["call_id"] as? String).flatMap(readMeeting) ?? "No meeting with that call_id."
         case "action_items":
@@ -198,6 +204,7 @@ public struct ChatTools: Sendable {
             if let q = input["query"] as? String, !q.isEmpty { return "Finding meetings about \(q)" }
             return "Finding meetings"
         case "search_transcripts": return "Searching transcripts for “\(input["query"] as? String ?? "")”"
+        case "current_call": return "Listening to the call"
         case "read_meeting": return "Reading \((input["call_id"] as? String).flatMap(title) ?? "a meeting")"
         case "action_items": return (input["owner"] as? String).map { "Listing action items for \($0)" } ?? "Listing action items"
         case "coach_profile": return "Reading what the coach knows about you"

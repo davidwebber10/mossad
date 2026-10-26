@@ -4,7 +4,10 @@ import Foundation
 /// One AssemblyAI streaming session for one track. Audio comes from the capture threads; messages go to
 /// `onMessage` on a background queue. Billed while the connection is open, so it is closed on pause and end.
 public final class LiveTranscriber: @unchecked Sendable {
-    static let url = URL(string: "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&format_turns=true")!
+    /// Speaker labels only for the call audio: the mic is the owner.
+    static func url(speakers: Bool) -> URL {
+        URL(string: "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&format_turns=true" + (speakers ? "&speaker_labels=true" : ""))!
+    }
     /// About 100 ms of 16 kHz 16-bit audio per send.
     static let chunkBytes = 3_200
 
@@ -14,8 +17,8 @@ public final class LiveTranscriber: @unchecked Sendable {
     private var open = true
     private let onMessage: @Sendable (Data) -> Void
 
-    public init(apiKey: String, session: URLSession = .shared, onMessage: @escaping @Sendable (Data) -> Void) {
-        var request = URLRequest(url: Self.url)
+    public init(apiKey: String, speakers: Bool = false, session: URLSession = .shared, onMessage: @escaping @Sendable (Data) -> Void) {
+        var request = URLRequest(url: Self.url(speakers: speakers))
         // The key goes in a header, never in the URL, so it is not logged with the address.
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         task = session.webSocketTask(with: request)

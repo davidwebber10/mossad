@@ -80,7 +80,7 @@ public final class CallRecorder: @unchecked Sendable {
     }
     public var currentRecord: CallRecord? { record }
 
-    static func callID(for date: Date) -> String {
+    public static func callID(for date: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyyMMdd-HHmmss"

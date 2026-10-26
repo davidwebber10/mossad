@@ -112,7 +112,7 @@ final class ChatTests: XCTestCase {
         XCTAssertEqual(result["tool_use_id"] as? String, "t1")
         XCTAssertTrue((result["content"] as? String)?.contains("call_id: both") == true)
         let tools = second["tools"] as! [[String: Any]]
-        XCTAssertEqual(Set(tools.map { $0["name"] as! String }), ["find_meetings", "search_transcripts", "read_meeting", "action_items"])
+        XCTAssertEqual(Set(tools.map { $0["name"] as! String }), ["find_meetings", "search_transcripts", "read_meeting", "action_items", "current_call"])
     }
 
     func testEarlierTurnsGoFirst() async throws {
