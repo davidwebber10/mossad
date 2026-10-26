@@ -270,6 +270,10 @@ final class AppController: ObservableObject {
             let section = Section.allCases.first { $0.rawValue == name } ?? .meetings
             DispatchQueue.main.async { self.open(section) }
         }
+        // Development hook: `MOSSAD_PERSON` opens that person's page.
+        if let person = ProcessInfo.processInfo.environment["MOSSAD_PERSON"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.openPerson(person) }
+        }
     }
 
     // MARK: State

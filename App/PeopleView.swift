@@ -174,7 +174,7 @@ private struct PeopleList: View {
             section("You", profiles.filter(\.isOwner))
             section("People", profiles.filter { !$0.isOwner })
         }
-        .listStyle(.sidebar)
+        .listStyle(.inset)
         .scrollContentBackground(.hidden)
     }
 
@@ -204,7 +204,7 @@ private struct PersonRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle().fill(color).frame(width: 8, height: 8)
+            PersonMark(name: profile.name, size: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 if let email = profile.email {

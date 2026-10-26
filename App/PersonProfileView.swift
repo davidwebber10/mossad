@@ -13,67 +13,100 @@ struct PersonProfileView: View {
     let delete: () -> Void
     let select: (String) -> Void
 
+    @State private var relation: PersonRelation?
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 header
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 175), spacing: 12)], spacing: 12) {
-                    stat("Meetings", "\(stats.meetings.count)")
-                    stat("Total talk time", talkText(stats.totalTalk))
-                    stat("Average talk share", stats.averageShare.map { "\(Int(($0 * 100).rounded()))%" } ?? "None")
-                    stat("Last heard", stats.lastHeard.map(dayWord) ?? "Never")
-                    stat("First heard", stats.firstHeard.map(dayWord) ?? "Never")
-                    stat("Voice samples", "\(profile.embeddings.count)")
-                    stat("Action items", "\(stats.actionItems.count)")
+                if profile.isOwner || stats.meetings.isEmpty {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 175), spacing: 12)], spacing: 12) {
+                        stat("Meetings", "\(stats.meetings.count)")
+                        stat("Total talk time", talkText(stats.totalTalk))
+                        stat("Average talk share", stats.averageShare.map { "\(Int(($0 * 100).rounded()))%" } ?? "None")
+                        stat("Action items", "\(stats.actionItems.count)")
+                    }
+                } else if let r = relation {
+                    RelationSections(relation: r, owner: controller.ownerName, color: color)
+                } else {
+                    ProgressView().frame(maxWidth: .infinity).padding(.vertical, 40)
                 }
                 if !stats.meetings.isEmpty {
-                    HStack(alignment: .top, spacing: 12) {
+                    WeightedColumns(weights: stats.oftenWith.isEmpty ? [1] : [2, 1]) {
                         talkByMeeting
-                        if !stats.oftenWith.isEmpty { oftenWith.frame(width: 230) }
+                        if !stats.oftenWith.isEmpty { oftenWith }
                     }
                 }
-                if !stats.actionItems.isEmpty { actionItems }
+                if profile.isOwner, !stats.actionItems.isEmpty { actionItems }
                 meetings
             }
-            .padding(EdgeInsets(top: 18, leading: 24, bottom: 24, trailing: 24))
+            .padding(24)
+            .frame(maxWidth: 1100)
+            .frame(maxWidth: .infinity)
         }
+        .task(id: "\(profile.name)-\(controller.meetings.count)-\(controller.commitmentsVersion)") { await loadRelation() }
+    }
+
+    /// Reads the shared meetings' coach ratings off the main actor.
+    private func loadRelation() async {
+        guard !profile.isOwner else { return }
+        let name = profile.name, owner = controller.ownerName, records = controller.meetings, paths = controller.paths
+        let commitments = controller.commitmentBook.visible
+        let r = await Task.detached(priority: .userInitiated) {
+            let shared = records.filter { $0.speakerNames.values.contains(name) }
+            let reviews = Dictionary(uniqueKeysWithValues: shared.compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (r.id, $0) } })
+            return PersonRelation(name: name, owner: owner, records: records, reviews: reviews, commitments: commitments)
+        }.value
+        withAnimation(.smooth) { relation = r }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Circle().fill(color).frame(width: 12, height: 12).padding(.top, 8)
+        HStack(alignment: .center, spacing: 14) {
+            PersonMark(name: profile.name, size: 44)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Text(profile.name).font(.system(size: 20, weight: .bold)).kerning(-0.3).lineLimit(1)
+                    Text(profile.name).font(.title2.weight(.semibold)).lineLimit(1)
                     if profile.isOwner {
-                        Text("You").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                        Text("You").font(.caption.weight(.medium)).foregroundStyle(.secondary)
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(Theme.field, in: Capsule())
                     }
                 }
-                if let email = profile.email {
-                    Text(email).font(.system(size: 13)).foregroundStyle(.secondary).textSelection(.enabled)
-                }
+                Text(summaryLine).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             }
             Spacer()
-            HStack(spacing: 8) {
-                Button("Rename", action: rename)
-                Menu("Merge into") {
+            Menu {
+                Button("Rename…", systemImage: "pencil", action: rename)
+                Menu("Merge into", systemImage: "arrow.triangle.merge") {
                     ForEach(others, id: \.name) { target in Button(target.name) { merge(target) } }
                 }
-                .fixedSize()
                 .disabled(profile.isOwner || others.isEmpty)
-                Button("Delete", role: .destructive, action: delete)
-                    .foregroundStyle(.red)
-                    .disabled(profile.isOwner)
+                Divider()
+                Button("Delete…", systemImage: "trash", role: .destructive, action: delete).disabled(profile.isOwner)
+            } label: {
+                Image(systemName: "ellipsis").accessibilityLabel("Actions")
             }
-            .controlSize(.small)
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .fixedSize()
         }
+    }
+
+    /// "jo@example.com · Since Mar 2026 · 14 meetings · 6 voice samples"
+    private var summaryLine: String {
+        var parts: [String] = []
+        if let email = profile.email { parts.append(email) }
+        if let first = stats.firstHeard { parts.append("Since " + first.formatted(.dateTime.month(.abbreviated).year())) }
+        parts.append("\(stats.meetings.count) \(stats.meetings.count == 1 ? "meeting" : "meetings")")
+        parts.append("\(profile.embeddings.count) voice \(profile.embeddings.count == 1 ? "sample" : "samples")")
+        return parts.joined(separator: " · ")
     }
 
     private func stat(_ title: String, _ value: String) -> some View {
         Card(title) {
-            Text(value).font(.system(size: 20, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+            Text(value).font(.system(.title2, design: .rounded, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
         }
     }
 

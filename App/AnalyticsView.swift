@@ -591,6 +591,7 @@ private struct PeopleTable: View {
 struct BalanceBar: View {
     let mine: TimeInterval
     let theirs: TimeInterval
+    var showsShare = true
 
     var body: some View {
         let total = mine + theirs
@@ -604,7 +605,9 @@ struct BalanceBar: View {
                 .clipShape(Capsule())
             }
             .frame(height: 6)
-            Text(total > 0 ? percent(share) : "–").font(.caption).foregroundStyle(.secondary).monospacedDigit().frame(width: 32, alignment: .trailing)
+            if showsShare {
+                Text(total > 0 ? percent(share) : "–").font(.caption).foregroundStyle(.secondary).monospacedDigit().frame(width: 32, alignment: .trailing)
+            }
         }
         .help("Your share of the talking when you are both in the call")
         .accessibilityLabel(total > 0 ? "You talk \(percent(share)) of the time together" : "No speech together")
