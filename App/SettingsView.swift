@@ -10,59 +10,42 @@ struct SettingsView: View {
     @State private var confirmDeleteVoices = false
     @State private var editingKey: APIKey?
     @State private var sending = false
+    @AppStorage("settingsPage") private var page: SettingsPage = .general
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                PowerControl()
-                group("Permissions") {
-                    ForEach(permissions.items) { item in permissionRow(item) }
-                }
-                consent
-                HStack(alignment: .top, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 18) {
-                        group("You and voices") { youAndVoices }
-                        group("Folders") {
-                            folderRow("Meetings", controller.paths.meetings)
-                            folderRow("Audio", controller.paths.audio)
-                            folderRow("Voices", controller.paths.voices)
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 18) {
-                        group("Recording") { recording }
-                    }
-                }
-                group("Calendars", footer: "Mossad reads only the checked calendars, to name calls from their invites and to list upcoming calls.") {
-                    calendarChoices
-                }
-                group("Providers", footer: "Keys are stored in the Keychain. Each provider bills your own account.") { providers }
-                group("Communication coach", footer: "Reviews use the AI provider above. The coach's notes stay on this Mac in the Coach folder.") { coach }
-                group("Use your meetings in other AI apps",
-                      footer: "Read-only. Claude Code, Claude Desktop, and other MCP apps can search and read your meetings, the same way the Chat tab does. Mossad does not need to be open.") {
-                    MCPSetup()
-                }
-                group("Storage") { StorageSettings() }
-                group("iPhone", footer: "Finished meetings, their summaries and transcripts, and the coach's notes go to your private iCloud, where Mossad for iPhone reads them. Audio stays where it is.") {
-                    switchRow("Sync meetings to iCloud", $controller.iCloudSyncEnabled)
-                        .onChange(of: controller.iCloudSyncEnabled) { _, on in if on { controller.syncToICloud() } }
-                    switchRow("Use my AI key on my iPhone", $controller.shareAIKey)
-                        .help("Chat and the coach on the iPhone use the AI provider and key chosen here. The key travels in iCloud Keychain, which is end-to-end encrypted.")
-                        .onChange(of: controller.shareAIKey) { _, _ in controller.updateSharedAIKey() }
-                }
-                group("Updates", footer: "New versions come from the Mossad releases on GitHub. Each one is signed, and an update never installs during a call.") {
-                    UpdateSettings(updater: controller.updater)
-                }
+        HStack(spacing: 0) {
+            List(SettingsPage.allCases, selection: Binding(get: { page }, set: { if let p = $0 { page = p } })) { p in
+                Label { Text(p.title) } icon: { SettingsIcon(page: p) }
+                    .badge(badge(p))
+                    .tag(p)
             }
-            .font(.system(size: 12))
-            .padding(EdgeInsets(top: 8, leading: 24, bottom: 24, trailing: 24))
-            .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .frame(width: 210)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(page.title).font(.title2.weight(.semibold))
+                        Text(page.detail).font(.callout).foregroundStyle(.secondary)
+                    }
+                    .padding(.leading, 4)
+                    content(page)
+                }
+                .font(.system(size: 12))
+                .padding(EdgeInsets(top: 18, leading: 24, bottom: 24, trailing: 24))
+                .frame(maxWidth: 680, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+            .id(page)
         }
         .background(Theme.background)
         .navigationTitle("Settings")
         .onAppear {
             permissions.refresh()
             permissions.setInterval(1)
+            // Development hook for screenshots: MOSSAD_SETTINGS_PAGE names a page.
+            if let p = ProcessInfo.processInfo.environment["MOSSAD_SETTINGS_PAGE"].flatMap(SettingsPage.init(rawValue:)) { page = p }
         }
         .onDisappear {
             permissions.setInterval(10)
@@ -74,6 +57,76 @@ struct SettingsView: View {
             Text("Mossad forgets every voice it learned, including yours. Meeting notes keep their names.")
         }
         .sheet(item: $editingKey) { key in KeySheet(key: key) }
+    }
+
+    // MARK: Pages
+
+    @ViewBuilder
+    private func content(_ page: SettingsPage) -> some View {
+        switch page {
+        case .general:
+            PowerControl()
+            group("You", footer: "Mossad uses your name for your lines in each note, and the company to tell your colleagues from other people.") {
+                youRows
+            }
+            group("Startup") { loginRow }
+            consent
+        case .permissions:
+            group("Permissions", footer: "Mossad checks these every second while this page is open.") {
+                ForEach(permissions.items) { item in permissionRow(item) }
+            }
+        case .recording:
+            group("Recording") { recording }
+            group("Storage") { StorageSettings() }
+            group("Folders") {
+                folderRow("Meetings", controller.paths.meetings)
+                folderRow("Audio", controller.paths.audio)
+                folderRow("Voices", controller.paths.voices)
+            }
+        case .voices:
+            group("Voices", footer: "Some laws treat voice fingerprints as biometric data. Turn off recognition to keep no fingerprints; speakers are then labeled Speaker A, Speaker B.") {
+                voices
+            }
+        case .calendars:
+            group("Calendars", footer: "Mossad reads only the checked calendars, to name calls from their invites and to list upcoming calls.") {
+                calendarChoices
+            }
+        case .ai:
+            group("Providers", footer: "Keys are stored in the Keychain. Each provider bills your own account.") { providers }
+        case .coach:
+            group("Communication coach", footer: "Reviews use the AI provider. The coach's notes stay on this Mac in the Coach folder.") { coach }
+        case .email:
+            group("Coach email", footer: "Mossad only ever emails you, at one address.") { email }
+        case .iphone:
+            group("iPhone", footer: "Finished meetings, their summaries and transcripts, and the coach's notes go to your private iCloud, where Mossad for iPhone reads them. Audio stays where it is.") {
+                switchRow("Sync meetings to iCloud", $controller.iCloudSyncEnabled)
+                    .onChange(of: controller.iCloudSyncEnabled) { _, on in if on { controller.syncToICloud() } }
+                switchRow("Use my AI key on my iPhone", $controller.shareAIKey)
+                    .help("Chat and the coach on the iPhone use the AI provider and key chosen here. The key travels in iCloud Keychain, which is end-to-end encrypted.")
+                    .onChange(of: controller.shareAIKey) { _, _ in controller.updateSharedAIKey() }
+            }
+        case .apps:
+            group("Use your meetings in other AI apps",
+                  footer: "Read-only. Claude Code, Claude Desktop, and other MCP apps can search and read your meetings, the same way the Chat tab does. Mossad does not need to be open.") {
+                MCPSetup()
+            }
+        case .updates:
+            group("Updates", footer: "New versions come from the Mossad releases on GitHub. Each one is signed, and an update never installs during a call.") {
+                UpdateSettings(updater: controller.updater)
+            }
+        }
+    }
+
+    /// A count beside a page that needs attention: missing permissions, or missing keys.
+    private func badge(_ page: SettingsPage) -> Int {
+        switch page {
+        case .permissions: permissions.items.filter { !$0.state.isGood }.count
+        case .ai:
+            ([controller.transcriptionProvider.key, controller.aiProvider.key].compactMap { $0 }
+                + (controller.liveTranscriptEnabled && controller.transcriptionProvider != .assemblyai ? [.assemblyai] : []))
+                .filter { !controller.hasKey($0) }.count
+        default: 0
+        }
     }
 
     // MARK: Groups
@@ -137,7 +190,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var youAndVoices: some View {
+    private var youRows: some View {
         HStack {
             Text("Your name")
             Spacer()
@@ -150,15 +203,18 @@ struct SettingsView: View {
             TextField("Example Inc.", text: $controller.organization).frame(width: 140)
                 .onSubmit { controller.rebuildPipeline() }
         }
+    }
+
+    @ViewBuilder
+    private var voices: some View {
         switchRow("Recognize voices", $controller.voiceFingerprints)
-            .help("Mossad saves a voice fingerprint for each person it hears so it can name them in later calls. Some laws treat voice fingerprints as biometric data. Turn it off to keep no fingerprints; speakers are then labeled Speaker A, Speaker B.")
+            .help("Mossad saves a voice fingerprint for each person it hears so it can name them in later calls.")
             .onChange(of: controller.voiceFingerprints) { _, _ in controller.rebuildPipeline() }
         Button("Delete all saved voices…") { confirmDeleteVoices = true }
             .buttonStyle(.plain).foregroundStyle(.red).fontWeight(.medium)
     }
 
-    @ViewBuilder
-    private var recording: some View {
+    private var loginRow: some View {
         switchRow("Open Mossad at login", $launchAtLogin)
             .onChange(of: launchAtLogin) { _, on in
                 do {
@@ -167,6 +223,10 @@ struct SettingsView: View {
                     Log.error("Launch at login change failed: \(error)")
                 }
             }
+    }
+
+    @ViewBuilder
+    private var recording: some View {
         switchRow("Live transcript while recording", $controller.liveTranscriptEnabled)
             .help("Shows what is said as the call runs, with AssemblyAI streaming. AssemblyAI bills the time a call records with this on. The note still uses the full transcription after the call.")
         VStack(alignment: .leading, spacing: 6) {
@@ -288,6 +348,18 @@ struct SettingsView: View {
                 }
             }
             CoachMemoryEditor()
+        }
+    }
+
+    @ViewBuilder
+    private var email: some View {
+        if !controller.coachEnabled {
+            HStack {
+                Text("The coach writes these emails. Turn on the coach to send them.").foregroundStyle(.secondary)
+                Spacer()
+                Button("Turn on the coach") { controller.coachEnabled = true; controller.turnOnCoach() }.controlSize(.small)
+            }
+        } else {
             switchRow("Weekly email on Monday", $controller.coachEmailEnabled)
             switchRow("Month in review on the 1st", $controller.coachMonthlyEmail)
             if controller.coachEmailEnabled || controller.coachMonthlyEmail {
@@ -655,5 +727,89 @@ private struct UpdateSettings: View {
             Toggle("", isOn: Binding(get: { updater.automaticallyInstalls }, set: { updater.automaticallyInstalls = $0 }))
                 .labelsHidden().toggleStyle(.switch).controlSize(.mini)
         }
+    }
+}
+
+/// The pages of Settings, in the order of the list on the left.
+enum SettingsPage: String, CaseIterable, Identifiable {
+    case general, permissions, recording, voices, calendars, ai, coach, email, iphone, apps, updates
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .permissions: "Permissions"
+        case .recording: "Recording"
+        case .voices: "Voices"
+        case .calendars: "Calendars"
+        case .ai: "AI providers"
+        case .coach: "Coach"
+        case .email: "Email"
+        case .iphone: "iPhone"
+        case .apps: "Other AI apps"
+        case .updates: "Updates"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .general: "Turn Mossad on or off, and tell it who you are."
+        case .permissions: "What Mossad needs from macOS to find and record calls."
+        case .recording: "The live transcript, how long audio stays, and where it goes."
+        case .voices: "How Mossad learns and names the people it hears."
+        case .calendars: "The calendars Mossad reads to name calls."
+        case .ai: "The services that transcribe and summarize your calls."
+        case .coach: "Reviews of how you communicate, with the coach's questions and memory."
+        case .email: "The weekly and monthly emails from the coach."
+        case .iphone: "What goes to Mossad on your iPhone."
+        case .apps: "Search your meetings from Claude and other MCP apps."
+        case .updates: "New versions of Mossad."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape.fill"
+        case .permissions: "hand.raised.fill"
+        case .recording: "waveform"
+        case .voices: "person.wave.2.fill"
+        case .calendars: "calendar"
+        case .ai: "sparkles"
+        case .coach: "figure.mind.and.body"
+        case .email: "envelope.fill"
+        case .iphone: "iphone"
+        case .apps: "puzzlepiece.extension.fill"
+        case .updates: "arrow.down.circle.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .general: .gray
+        case .permissions: .blue
+        case .recording: .red
+        case .voices: .orange
+        case .calendars: .red
+        case .ai: .purple
+        case .coach: .green
+        case .email: .blue
+        case .iphone: .gray
+        case .apps: .indigo
+        case .updates: .teal
+        }
+    }
+}
+
+/// A white symbol on a colored rounded square, as in System Settings.
+private struct SettingsIcon: View {
+    let page: SettingsPage
+
+    var body: some View {
+        Image(systemName: page.symbol)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 22, height: 22)
+            .background(page.tint.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
