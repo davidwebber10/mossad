@@ -666,13 +666,16 @@ final class AppController: ObservableObject {
     /// A new summary from Claude for a finished meeting; the transcript and names stay.
     /// Once: new summaries for the last 90 days' calls from before topics, kinds, and outcomes, so Analytics has them.
     func backfillSummaries() {
-        guard !UserDefaults.standard.bool(forKey: "summaryBackfill2026") else { return }
+        guard !UserDefaults.standard.bool(forKey: "summaryBackfill2026") else { return runQuestionPass() }
         UserDefaults.standard.set(true, forKey: "summaryBackfill2026")
         let since = Date().addingTimeInterval(-90 * 86_400)
         let ids = meetings.filter { $0.status == .written && $0.start >= since && ($0.kind == nil || $0.tags.isEmpty || $0.hasOutcomes == nil) }.map(\.id)
-        guard !ids.isEmpty else { return }
         Log.info("Writing new summaries for \(ids.count) recent calls")
-        Task { for id in ids { await track { await self.pipeline.regenerateSummary(id) } } }
+        Task {
+            for id in ids { await track { await self.pipeline.regenerateSummary(id) } }
+            refresh()
+            runQuestionPass()
+        }
     }
 
     func regenerateSummary(_ id: String) {

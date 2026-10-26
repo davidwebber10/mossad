@@ -55,7 +55,7 @@ public struct CoachQuestion: Codable, Equatable, Sendable, Identifiable, Hashabl
 
 extension CoachProfile {
     /// More would turn a few good questions into homework.
-    public static let openQuestionLimit = 5
+    public static let openQuestionLimit = 10
 
     public var openQuestions: [CoachQuestion] { questions.filter { $0.status == .open } }
 

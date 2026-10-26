@@ -28,6 +28,29 @@ extension AppController {
         }
     }
 
+    /// Once: the coach's first questions, from the last 30 days of calls.
+    func runQuestionPass() {
+        guard coachEnabled, !UserDefaults.standard.bool(forKey: "coachQuestionPass2026"), let llm = languageModel else { return }
+        UserDefaults.standard.set(true, forKey: "coachQuestionPass2026")
+        let pass = CoachQuestionPass(llm: llm, ownerName: ownerName), records = meetings, paths = paths
+        Task {
+            do {
+                var profile = try CoachProfile.load(from: paths.coach)
+                let questions = try await pass.questions(records: records, profile: profile)
+                // Another review may have saved the profile meanwhile.
+                profile = try CoachProfile.load(from: paths.coach)
+                profile.ask(questions)
+                try profile.save(to: paths.coach)
+                Log.info("The coach has \(questions.count) questions for you")
+                coachVersion += 1
+                syncToICloud()
+            } catch {
+                Log.error("The coach's first questions failed: \(error)")
+                UserDefaults.standard.set(false, forKey: "coachQuestionPass2026")
+            }
+        }
+    }
+
     /// `now` sends the last period's email even when it was sent already.
     func sendCoachEmail(_ kind: CoachEmailKind? = nil, now: Bool = false) async {
         guard coachEnabled, let to = coachEmailTo.nonEmpty, coachEmailFrom.nonEmpty != nil,

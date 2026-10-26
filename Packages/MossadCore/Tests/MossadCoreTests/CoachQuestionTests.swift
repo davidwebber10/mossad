@@ -21,9 +21,9 @@ final class CoachQuestionTests: XCTestCase {
         XCTAssertEqual(p.openQuestions.map(\.statement), ["The Monday call is a status update."])
     }
 
-    func testAtMostFiveQuestionsWaitAtOnce() {
+    func testAtMostTenQuestionsWaitAtOnce() {
         var p = CoachProfile()
-        p.ask((1...7).map { question("Fact \($0).") })
+        p.ask((1...12).map { question("Fact \($0).") })
         XCTAssertEqual(p.openQuestions.count, CoachProfile.openQuestionLimit)
     }
 
@@ -54,6 +54,26 @@ final class CoachQuestionTests: XCTestCase {
         let text = CoachPrompt.questionsText(p)
         XCTAssertTrue(text.contains("Waiting for an answer:\n- Mitch reports to you."), text)
         XCTAssertTrue(text.contains("Not true:\n- Jo leads Finance."), text)
+    }
+
+    func testTheFirstPassAsksAboutRecentCallsOnly() async throws {
+        let model = FakeModel(output: ["questions": [
+            ["statement": "Mitch reports to you.", "kind": "relationship", "evidence": "“Mitch, own this.”", "call_id": "c1", "at_seconds": 30],
+            ["statement": "A call it never read.", "kind": "role", "evidence": "x", "call_id": "nope", "at_seconds": NSNull()],
+        ] + (1...12).map { ["statement": "Fact \($0).", "kind": "preference", "evidence": "e", "call_id": "c1", "at_seconds": NSNull()] as [String: Any] }])
+        var recent = CallRecord(id: "c1", platform: .meet, bundleID: "", start: t0.addingTimeInterval(-86_400), end: t0, status: .written)
+        recent.speakerNames = ["me:A": "Dana", "them:A": "Mitch Haus"]
+        recent.headline = "Budget plan"
+        let old = CallRecord(id: "c0", platform: .meet, bundleID: "", start: t0.addingTimeInterval(-40 * 86_400),
+                             end: t0.addingTimeInterval(-40 * 86_400 + 600), status: .written)
+        let pass = CoachQuestionPass(llm: model, ownerName: "Dana")
+        let questions = try await pass.questions(records: [old, recent], profile: CoachProfile(), now: t0)
+        XCTAssertEqual(questions.first?.statement, "Mitch reports to you.")
+        XCTAssertFalse(questions.contains { $0.callID == "nope" })
+        XCTAssertEqual(questions.count, CoachQuestionPass.limit)
+        XCTAssertTrue(model.user.contains("c1"))
+        XCTAssertTrue(model.user.contains("Mitch Haus"))
+        XCTAssertFalse(model.user.contains("c0"), "only the last 30 days")
     }
 
     func testTheReviewReturnsTheCoachsQuestionsForTheCall() async throws {
