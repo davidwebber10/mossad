@@ -103,6 +103,8 @@ public struct RatedPoint: Codable, Equatable, Sendable {
 public struct CoachFact: Codable, Equatable, Sendable, Hashable, Identifiable {
     public enum Kind: String, Codable, Sendable, CaseIterable {
         case role, responsibility, goal, relationship
+        /// Things about meetings and preferences the owner confirmed, such as "Legal approves dates first."
+        case context
 
         public var title: String {
             switch self {
@@ -110,6 +112,7 @@ public struct CoachFact: Codable, Equatable, Sendable, Hashable, Identifiable {
             case .responsibility: "What you are responsible for"
             case .goal: "Your goals"
             case .relationship: "Your relationships"
+            case .context: "Context"
             }
         }
     }
@@ -158,13 +161,15 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     /// Every focus the coach proposed, with the owner's answer and the results per call.
     public var foci: [CoachFocus] = []
     public var voice = CoachVoice.direct
+    /// Conclusions the coach asked the owner to confirm, with their answers.
+    public var questions: [CoachQuestion] = []
 
     public static let ratedLimit = 30
     public static let guidanceLimit = 25
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice }
+    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice, questions }
 
     /// Profiles from before feedback existed have no guidance or ratings.
     public init(from decoder: Decoder) throws {
@@ -180,6 +185,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         forgotten = try c.decodeIfPresent([String: Date].self, forKey: .forgotten) ?? [:]
         foci = try c.decodeIfPresent([CoachFocus].self, forKey: .foci) ?? []
         voice = try c.decodeIfPresent(CoachVoice.self, forKey: .voice) ?? .direct
+        questions = try c.decodeIfPresent([CoachQuestion].self, forKey: .questions) ?? []
     }
 
     public func facts(_ kind: CoachFact.Kind) -> [CoachFact] { facts.filter { $0.kind == kind } }
@@ -226,6 +232,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         out.rated = Array(rated.values.sorted { $0.date < $1.date }.suffix(Self.ratedLimit))
         // The owner answers proposals on either device, so foci merge by their own dates, not by who coaches.
         out.foci = Self.mergedFoci(foci, other.foci)
+        out.questions = Self.mergedQuestions(questions, other.questions)
         out.focus = out.activeFocus?.plan ?? (out.foci.isEmpty ? out.focus : "")
         return out
     }

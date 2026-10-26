@@ -136,7 +136,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Login items started by the system do not always say so; a start in the first minutes after
             // booting is one of them.
             || ProcessInfo.processInfo.systemUptime < 180
-        guard !atLogin, !CommandLine.arguments.contains("--ui-preview"), !CommandLine.arguments.contains("--open-window") else { return }
+        // `--background`: a restart after an update, which must not pull the owner away from their work.
+        guard !atLogin, !CommandLine.arguments.contains("--ui-preview"), !CommandLine.arguments.contains("--open-window"),
+              !CommandLine.arguments.contains("--background") else { return }
         DispatchQueue.main.async { AppController.current?.open(AppController.current?.section ?? .meetings) }
     }
 

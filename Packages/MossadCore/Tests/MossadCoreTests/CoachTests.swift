@@ -277,7 +277,7 @@ final class CoachTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "claude-opus-5-5")
         let schema = ((body["output_config"] as? [String: Any])?["format"] as? [String: Any])?["schema"] as? [String: Any]
         XCTAssertEqual(Set(schema?["required"] as? [String] ?? []),
-                       ["quiet", "headline", "did_well", "improving", "try_next", "focus_result", "focus_proposal",
+                       ["quiet", "headline", "did_well", "improving", "try_next", "focus_result", "focus_proposal", "questions",
                         "strengths", "improvements", "meeting_value", "profile"])
     }
 

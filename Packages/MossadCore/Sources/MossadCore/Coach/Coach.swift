@@ -5,11 +5,14 @@ public struct CoachResult: Sendable, Equatable {
     public var update: CoachProfileUpdate
     /// A focus for the owner to accept, when they have none.
     public var proposal: CoachFocus?
+    /// Conclusions for the owner to confirm.
+    public var questions: [CoachQuestion]
 
-    public init(review: CoachReview, update: CoachProfileUpdate, proposal: CoachFocus? = nil) {
+    public init(review: CoachReview, update: CoachProfileUpdate, proposal: CoachFocus? = nil, questions: [CoachQuestion] = []) {
         self.review = review
         self.update = update
         self.proposal = proposal
+        self.questions = questions
     }
 }
 
@@ -51,6 +54,10 @@ public struct LLMCoach: Coaching {
                                                     "evidence": Schema.string, "at_seconds": Schema.nullableNumber])),
             "focus_proposal": nullable(Schema.object(["plan": Schema.string, "why": Schema.string,
                                                       "metric": nullable(Schema.oneOf(FocusMetric.allCases.map(\.rawValue)))])),
+            "questions": Schema.array(Schema.object([
+                "statement": Schema.string, "kind": Schema.oneOf(CoachQuestion.Kind.allCases.map(\.rawValue)),
+                "evidence": Schema.string, "at_seconds": Schema.nullableNumber,
+            ])),
             "strengths": Schema.array(point),
             "improvements": Schema.array(point),
             "meeting_value": Schema.object([
@@ -94,7 +101,10 @@ public struct LLMCoach: Coaching {
         }
         let proposal = out.focus_proposal.map { CoachFocus(plan: $0.plan, why: $0.why, metric: $0.metric, proposed: record.start) }
         let update = CoachProfileUpdate(summary: out.profile.summary, focus: "", patterns: out.profile.patterns, people: out.profile.people)
-        return CoachResult(review: review, update: update, proposal: proposal)
+        let questions = (out.questions ?? []).prefix(2).map {
+            CoachQuestion(statement: $0.statement, kind: $0.kind, evidence: $0.evidence, callID: record.id, at: $0.at_seconds, asked: record.end)
+        }
+        return CoachResult(review: review, update: update, proposal: proposal, questions: Array(questions))
     }
 
     private struct Note: Decodable {
@@ -138,6 +148,13 @@ public struct LLMCoach: Coaching {
         let improvements: [Point]
         let meeting_value: MeetingValue?
         let profile: ProfileOut
+        let questions: [Question]?
+    }
+
+    private struct Question: Decodable {
+        let statement, evidence: String
+        let kind: CoachQuestion.Kind
+        let at_seconds: Double?
     }
 
     private struct Point: Decodable {

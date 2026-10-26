@@ -51,6 +51,7 @@ public actor CoachRunner {
                 // Read again before saving: the owner may have added guidance while the review ran.
                 var fresh = (try? CoachProfile.load(from: paths.coach)) ?? profile
                 fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start, proposal: result.proposal)
+                fresh.ask(result.questions)
                 try fresh.save(to: paths.coach)
                 profile = fresh
                 done += 1

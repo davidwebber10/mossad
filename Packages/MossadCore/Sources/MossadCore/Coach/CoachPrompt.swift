@@ -46,6 +46,14 @@ enum CoachPrompt {
         their relationships. When something in their area is unowned, unclear, or at risk, that is theirs to act on. \
         Advice about another person is about how \(owner) can work with them better, never a judgment of character.
 
+        Questions. When you conclude something about \(owner)'s world that would change how you judge a call or \
+        what you advise, and the material does not already say it, ask: at most 2 in questions, often none. State it \
+        as a plain claim they can answer yes or no, at most 15 words: "Mitch reports to you.", "The Monday call is \
+        for decisions, not status.", "You held back a date in the budget call on purpose." kind is relationship, \
+        role, meeting_purpose, preference, or this_call. evidence is the quote that led you there, with its time. \
+        Never ask what is already a fact, waiting for an answer, or marked not true. Until it is answered, do not \
+        treat a question as true.
+
         \(owner) can rate your points and tell you where you were wrong. Their guidance is standing instruction: \
         follow it. Do not repeat advice they rejected.
 
@@ -112,6 +120,8 @@ enum CoachPrompt {
         }
         parts.append("## Your coaching profile of \(owner)\n" + notes.joined(separator: "\n"))
         parts.append("## The focus\n" + focusText(profile))
+        let asked = questionsText(profile)
+        if !asked.isEmpty { parts.append("## Your questions to \(owner)\n" + asked) }
         if !profile.guidance.isEmpty {
             parts.append("## What \(owner) told you about your coaching (follow this)\n" + profile.guidance.map { "- \($0.text)" }.joined(separator: "\n"))
         }
@@ -150,6 +160,17 @@ enum CoachPrompt {
         }
         parts.append("## Transcript\n" + MarkdownWriter.transcript(r))
         return parts.joined(separator: "\n\n")
+    }
+
+    /// What the coach asked: the ones still open, and the ones the owner said are not true. Answered ones are
+    /// facts by now, so they are not repeated here.
+    static func questionsText(_ p: CoachProfile) -> String {
+        var parts: [String] = []
+        let open = p.openQuestions
+        if !open.isEmpty { parts.append("Waiting for an answer:\n" + open.map { "- \($0.statement)" }.joined(separator: "\n")) }
+        let denied = p.questions.filter { $0.status == .rejected }.suffix(15)
+        if !denied.isEmpty { parts.append("Not true:\n" + denied.map { "- \($0.statement)" }.joined(separator: "\n")) }
+        return parts.joined(separator: "\n")
     }
 
     static func focusText(_ p: CoachProfile) -> String {
