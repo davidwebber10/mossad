@@ -39,26 +39,13 @@ struct PeopleScreen: View {
     }
 }
 
-private struct Initials: View {
-    let name: String
-    var size: CGFloat = 40
-
-    var body: some View {
-        Text(name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined())
-            .font(.system(size: size * 0.38, weight: .semibold, design: .rounded))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(Color(hue: Double(name.unicodeScalars.reduce(0) { $0 + Int($1.value) * 37 } % 360) / 360, saturation: 0.45, brightness: 0.75).gradient, in: .circle)
-    }
-}
-
 private struct PersonRow: View {
     let name: String
     let stats: PersonStats
 
     var body: some View {
         HStack(spacing: 12) {
-            Initials(name: name)
+            PersonMark(name: name, size: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name).font(.headline)
                 Text("\(stats.meetings.count) \(stats.meetings.count == 1 ? "meeting" : "meetings")" + (stats.lastHeard.map { " · \($0.formatted(.relative(presentation: .named)))" } ?? ""))
@@ -72,12 +59,13 @@ private struct PersonView: View {
     @EnvironmentObject var store: PhoneStore
     let name: String
     let stats: PersonStats
+    @State private var relation: PersonRelation?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(spacing: 10) {
-                    Initials(name: name, size: 72)
+                    PersonMark(name: name, size: 72)
                     Text(name).font(.title2.bold())
                     if let last = stats.lastHeard {
                         Text("Last met \(last.formatted(.relative(presentation: .named)))").font(.subheadline).foregroundStyle(.secondary)
@@ -85,11 +73,10 @@ private struct PersonView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    StatTile(value: "\(stats.meetings.count)", label: "Meetings")
-                    StatTile(value: duration(stats.totalTalk), label: "Talking")
-                    StatTile(value: stats.averageShare.map { "\(Int(($0 * 100).rounded()))%" } ?? "–", label: "Share of the talking")
-                    StatTile(value: "\(stats.actionItems.count)", label: "Action items")
+                if let r = relation {
+                    PhoneRelation(relation: r)
+                } else {
+                    ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
                 }
                 if let note = store.profile.people[name]?.note {
                     Card {
@@ -136,5 +123,106 @@ private struct PersonView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: store.meetings.count) {
+            let records = store.meetings, owner = store.owner, name = name, commitments = store.commitments.visible
+            let reviews = Dictionary(uniqueKeysWithValues: records.filter { $0.speakerNames.values.contains(name) }.compactMap { r in store.coach(r.id).map { (r.id, $0) } })
+            let r = await Task.detached(priority: .userInitiated) {
+                PersonRelation(name: name, owner: owner, records: records, reviews: reviews, commitments: commitments)
+            }.value
+            withAnimation(.smooth) { relation = r }
+        }
     }
+}
+
+/// A person's numbers in relation to the owner, for the phone: the same ones the Mac shows.
+private struct PhoneRelation: View {
+    let relation: PersonRelation
+
+    private var first: String { relation.name.split(separator: " ").first.map(String.init) ?? relation.name }
+
+    var body: some View {
+        let r = relation
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            StatTile(value: "\(r.calls)", label: "Meetings together")
+            StatTile(value: duration(r.seconds), label: "Time together")
+            StatTile(value: r.averageGapDays.map { "\(max(1, Int($0.rounded()))) days" } ?? "–", label: "Between meetings")
+            StatTile(value: r.usualSlot.map(slot) ?? "–", label: "Usual time")
+        }
+        Card {
+            CardTitle(text: "Talk balance", symbol: "person.2.wave.2")
+            balance("One to one", r.oneOnOne)
+            balance("In groups", r.group)
+        }
+        Card {
+            CardTitle(text: "How you talk together", symbol: "bubble.left.and.bubble.right")
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
+                GridRow {
+                    Text("")
+                    Text("You").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text(first).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                row("Speaks first", "\(r.ownerFirst)", "\(r.theyFirst)")
+                row("Questions an hour", rate(r.myQuestionsPerHour), rate(r.theirQuestionsPerHour))
+                row("Cuts in an hour", rate(r.iInterruptPerHour), rate(r.theyInterruptPerHour))
+                row("Usual reply", secs(r.myReply), secs(r.theirReply))
+            }
+            .font(.subheadline).monospacedDigit()
+        }
+        if !r.myCommitments.isEmpty {
+            Card {
+                CardTitle(text: "You promised \(first)", symbol: "checkmark.circle")
+                ForEach(r.myCommitments.prefix(6)) { c in
+                    Label {
+                        Text(c.text).strikethrough(c.done != nil).font(.subheadline)
+                    } icon: {
+                        Image(systemName: c.done != nil ? "checkmark.circle.fill" : "circle").foregroundStyle(c.done != nil ? .green : .secondary)
+                    }
+                }
+            }
+        }
+        if !r.topics.isEmpty {
+            Card {
+                CardTitle(text: "Topics together", symbol: "number")
+                Text(r.topics.map { "#\($0)" }.joined(separator: "  ")).font(.subheadline).foregroundStyle(.tint)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func balance(_ label: String, _ b: PersonRelation.Balance?) -> some View {
+        if let b, let share = b.share {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(label).font(.subheadline.weight(.medium))
+                    Spacer()
+                    Text("You \(Int((share * 100).rounded()))% · \(first) \(Int(((1 - share) * 100).rounded()))%").font(.caption).foregroundStyle(.secondary)
+                }
+                GeometryReader { g in
+                    HStack(spacing: 1) {
+                        Rectangle().fill(.tint).frame(width: g.size.width * share)
+                        Rectangle().fill(Color.secondary.opacity(0.35))
+                    }
+                    .clipShape(Capsule())
+                }
+                .frame(height: 6)
+            }
+        }
+    }
+
+    private func row(_ label: String, _ a: String, _ b: String) -> some View {
+        GridRow {
+            Text(label).foregroundStyle(.secondary)
+            Text(a)
+            Text(b)
+        }
+    }
+
+    private func slot(_ s: PersonRelation.Slot) -> String {
+        let day = Calendar.current.shortWeekdaySymbols[s.weekday - 1]
+        let time = Calendar.current.date(bySettingHour: s.hour, minute: 0, second: 0, of: Date()).map { $0.formatted(.dateTime.hour()) } ?? ""
+        return "\(day) \(time)"
+    }
+
+    private func rate(_ v: Double?) -> String { v.map { String(format: "%.1f", $0) } ?? "–" }
+    private func secs(_ v: TimeInterval?) -> String { v.map { String(format: "%.1f s", $0) } ?? "–" }
 }
