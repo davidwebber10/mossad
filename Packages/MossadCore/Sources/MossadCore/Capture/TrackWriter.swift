@@ -125,17 +125,25 @@ public final class TrackWriter: @unchecked Sendable {
         let elapsed = now.timeIntervalSince(check.start)
         if elapsed >= Self.rateWindow {
             let measured = check.frames / elapsed
-            // Only a clear match: a source that stalls now and then keeps its rate, and the gaps stay silence.
-            let nearest = Self.standardRates.min { abs($0 - measured) < abs($1 - measured) }!
-            let rate = abs(measured / declared - 1) < 0.15 || abs(measured / nearest - 1) > 0.05 ? declared : nearest
-            if rate != (actualRate ?? declared) {
-                Log.info("Audio says \(Int(declared)) Hz but delivers \(Int(measured)) Hz; recording it as \(Int(rate)) Hz")
+            if let rate = Self.standardRate(measured: measured, declared: declared) {
+                if rate != (actualRate ?? declared) {
+                    Log.info("Audio says \(Int(declared)) Hz but delivers \(Int(measured)) Hz; recording it as \(Int(rate)) Hz")
+                }
+                actualRate = rate == declared ? nil : rate
             }
-            actualRate = rate == declared ? nil : rate
             check = (declared, now, now, 0)
         }
         rateCheck = check
         return actualRate ?? declared
+    }
+
+    /// The declared rate when the measurement is near it; otherwise a standard rate within 2.5 %, which a
+    /// steady device meets. Nil when unclear (a device still settling, or a source that stalls now and then):
+    /// the writer keeps the rate it has and measures again.
+    static func standardRate(measured: Double, declared: Double) -> Double? {
+        if abs(measured / declared - 1) < 0.15 { return declared }
+        let nearest = standardRates.min { abs($0 - measured) < abs($1 - measured) }!
+        return abs(measured / nearest - 1) <= 0.025 ? nearest : nil
     }
 
     public func close() {

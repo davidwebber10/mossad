@@ -81,6 +81,14 @@ final class TrackWriterTests: XCTestCase {
         XCTAssertLessThan(try silentShare(url, from: 22, to: 41), 0.05)
     }
 
+    /// Just after AirPods switch, a window measured 22,760 Hz: between 22,050 and 24,000, so the writer waits.
+    func testOnlyAClearMeasurementPicksARate() {
+        XCTAssertEqual(TrackWriter.standardRate(measured: 47_500, declared: 48_000), 48_000)
+        XCTAssertEqual(TrackWriter.standardRate(measured: 23_950, declared: 48_000), 24_000)
+        XCTAssertNil(TrackWriter.standardRate(measured: 22_760, declared: 48_000))
+        XCTAssertNil(TrackWriter.standardRate(measured: 35_000, declared: 48_000))
+    }
+
     /// The share of 10 ms blocks that are exact digital silence.
     private func silentShare(_ url: URL, from: Double, to: Double) throws -> Double {
         let f = try AVAudioFile(forReading: url)
