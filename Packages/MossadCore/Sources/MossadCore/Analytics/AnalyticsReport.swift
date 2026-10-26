@@ -1,7 +1,7 @@
 import Foundation
 
 public enum AnalyticsRange: Hashable, Sendable {
-    case last7Days, last30Days, last90Days, thisMonth, yearToDate, all
+    case last7Days, last30Days, last90Days, thisMonth, lastMonth, yearToDate, all
     /// Whole days, both inclusive.
     case custom(Date, Date)
 
@@ -13,14 +13,25 @@ public enum AnalyticsRange: Hashable, Sendable {
         case .last30Days: daysBack(30)
         case .last90Days: daysBack(90)
         case .thisMonth: calendar.dateInterval(of: .month, for: now)!.start
+        case .lastMonth: calendar.date(byAdding: .month, value: -1, to: calendar.dateInterval(of: .month, for: now)!.start)!
         case .yearToDate: calendar.dateInterval(of: .year, for: now)!.start
         case .all: calendar.startOfDay(for: min(earliest ?? today, today))
         case .custom(let a, _): calendar.startOfDay(for: a)
         }
+        if self == .lastMonth { return DateInterval(start: start, end: calendar.dateInterval(of: .month, for: now)!.start) }
         if case .custom(_, let b) = self {
             return DateInterval(start: start, end: max(start, calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: b))!))
         }
         return DateInterval(start: start, end: max(start, now))
+    }
+
+    /// The same number of whole days just before (`by` -1) or after (+1) the period shown, as a custom range.
+    public static func step(_ i: DateInterval, by direction: Int, calendar: Calendar = .current) -> AnalyticsRange {
+        let first = calendar.startOfDay(for: i.start)
+        let last = calendar.startOfDay(for: i.end.addingTimeInterval(-1))
+        let days = (calendar.dateComponents([.day], from: first, to: last).day ?? 0) + 1
+        let start = calendar.date(byAdding: .day, value: direction * days, to: first)!
+        return .custom(start, calendar.date(byAdding: .day, value: days - 1, to: start)!)
     }
 
     /// The period of the same length just before, for the comparison figures.
@@ -62,6 +73,12 @@ public struct AnalyticsReport: Sendable {
         public var name: String
         public var seconds: TimeInterval
         public var calls: Int
+        /// Speech in the calls they shared with the owner: the owner's, and theirs.
+        public var mySpeech: TimeInterval = 0
+        public var theirSpeech: TimeInterval = 0
+        public var lastMet: Date?
+        /// Calls together per bucket, in the order of `days`.
+        public var trend: [Int] = []
     }
 
     public struct DeliveryPoint: Sendable, Identifiable {
@@ -109,13 +126,16 @@ public struct AnalyticsReport: Sendable {
     /// Calls matched to a calendar invite, and the rest (ad hoc calls).
     public let scheduled: Slice
     public let unscheduled: Slice
+    public let workday: Workday
+    public let communication: Communication
+    public let outcomes: Outcomes
     /// Calls per calendar day in the period.
     public var callsPerDay: Double { Double(calls) / max(1, (interval.duration / 86_400).rounded()) }
     /// The bucket with the most calls.
     public var busiestDay: Bar? { days.max { $0.calls < $1.calls }.flatMap { $0.calls > 0 ? $0 : nil } }
 
     public init(records all: [CallRecord], usage: [UsageEvent], owner: String, interval: DateInterval,
-                reviews: [String: CoachReview] = [:], calendar: Calendar = .current) {
+                reviews: [String: CoachReview] = [:], commitments: [Commitment] = [], calendar: Calendar = .current) {
         self.interval = interval
         let span = interval.duration / 86_400
         bucket = span > 400 ? .month : span > 62 ? .week : .day
@@ -137,9 +157,13 @@ public struct AnalyticsReport: Sendable {
                 speech += d
                 if r.speakerNames[u.speakerKey] == owner { mine += d }
             }
+            let exchange = Exchange(record: r)
             for name in Set(r.speakerNames.values) where name != owner {
                 people[name, default: PersonTime(name: name, seconds: 0, calls: 0)].seconds += length(r)
                 people[name]!.calls += 1
+                people[name]!.mySpeech += exchange.speech(owner)
+                people[name]!.theirSpeech += exchange.speech(name)
+                people[name]!.lastMet = max(people[name]!.lastMet ?? r.start, r.start)
             }
             platforms[r.platform.displayName, default: Slice(name: r.platform.displayName, seconds: 0, calls: 0)].seconds += length(r)
             platforms[r.platform.displayName]!.calls += 1
@@ -153,7 +177,7 @@ public struct AnalyticsReport: Sendable {
             }
         }
         talkShare = speech > 0 ? mine / speech : nil
-        self.people = people.values.sorted { ($0.seconds, $1.name) > ($1.seconds, $0.name) }
+        var sortedPeople = people.values.sorted { ($0.seconds, $1.name) > ($1.seconds, $0.name) }
         self.platforms = platforms.values.sorted { $0.seconds > $1.seconds }
         self.kinds = kinds.values.sorted { $0.seconds > $1.seconds }
         self.tags = tags.values.sorted { ($0.seconds, $1.name) > ($1.seconds, $0.name) }
@@ -207,6 +231,18 @@ public struct AnalyticsReport: Sendable {
         cost.perCallHour = callSeconds > 0 ? cost.total / (callSeconds / 3600) : 0
         self.cost = cost
         self.days = bars.values.sorted { $0.date < $1.date }
+        let index = Dictionary(uniqueKeysWithValues: days.enumerated().map { ($1.date, $0) })
+        for i in sortedPeople.indices {
+            var trend = [Int](repeating: 0, count: days.count)
+            for r in records where r.speakerNames.values.contains(sortedPeople[i].name) {
+                if let b = index[bucketStart(r.start)] { trend[b] += 1 }
+            }
+            sortedPeople[i].trend = trend
+        }
+        self.people = sortedPeople
+        workday = Self.workday(records, interval: interval, calendar: calendar)
+        communication = Self.communication(records, owner: owner, callSeconds: callSeconds)
+        outcomes = Self.outcomes(records, owner: owner, callSeconds: callSeconds, commitments: commitments, interval: interval)
 
         var valueSeconds: [MeetingValue.Rating: TimeInterval] = [:]
         var lows: [String: Slice] = [:]
