@@ -68,36 +68,12 @@ struct SettingsView: View {
             PowerControl()
             group("You", footer: "Mossad uses your name for your lines in each note, and the company to tell your colleagues from other people.") {
                 youRows
+                loginRow
             }
-            group("Startup") { loginRow }
-            consent
-        case .permissions:
-            group("Permissions", footer: "Mossad checks these every second while this page is open.") {
+            group("Permissions") {
                 ForEach(permissions.items) { item in permissionRow(item) }
             }
-        case .recording:
-            group("Recording") { recording }
-            group("Storage") { StorageSettings() }
-            group("Folders") {
-                folderRow("Meetings", controller.paths.meetings)
-                folderRow("Audio", controller.paths.audio)
-                folderRow("Voices", controller.paths.voices)
-            }
-        case .voices:
-            group("Voices", footer: "Some laws treat voice fingerprints as biometric data. Turn off recognition to keep no fingerprints; speakers are then labeled Speaker A, Speaker B.") {
-                voices
-            }
-        case .calendars:
-            group("Calendars", footer: "Mossad reads only the checked calendars, to name calls from their invites and to list upcoming calls.") {
-                calendarChoices
-            }
-        case .ai:
-            group("Providers", footer: "Keys are stored in the Keychain. Each provider bills your own account.") { providers }
-        case .coach:
-            group("Communication coach", footer: "Reviews use the AI provider. The coach's notes stay on this Mac in the Coach folder.") { coach }
-        case .email:
-            group("Coach email", footer: "Mossad only ever emails you, at one address.") { email }
-        case .iphone:
+            consent
             group("iPhone", footer: "Finished meetings, their summaries and transcripts, and the coach's notes go to your private iCloud, where Mossad for iPhone reads them. Audio stays where it is.") {
                 switchRow("Sync meetings to iCloud", $controller.iCloudSyncEnabled)
                     .onChange(of: controller.iCloudSyncEnabled) { _, on in if on { controller.syncToICloud() } }
@@ -105,22 +81,39 @@ struct SettingsView: View {
                     .help("Chat and the coach on the iPhone use the AI provider and key chosen here. The key travels in iCloud Keychain, which is end-to-end encrypted.")
                     .onChange(of: controller.shareAIKey) { _, _ in controller.updateSharedAIKey() }
             }
-        case .apps:
+            group("Updates", footer: "New versions come from the Mossad releases on GitHub. Each one is signed, and an update never installs during a call.") {
+                UpdateSettings(updater: controller.updater)
+            }
+        case .recording:
+            group("Recording") { recording }
+            group("Voices", footer: "Some laws treat voice fingerprints as biometric data. Turn off recognition to keep no fingerprints; speakers are then labeled Speaker A, Speaker B.") {
+                voices
+            }
+            group("Calendars", footer: "Mossad reads only the checked calendars, to name calls from their invites and to list upcoming calls.") {
+                calendarChoices
+            }
+            group("Storage") { StorageSettings() }
+            group("Folders") {
+                folderRow("Meetings", controller.paths.meetings)
+                folderRow("Audio", controller.paths.audio)
+                folderRow("Voices", controller.paths.voices)
+            }
+        case .ai:
+            group("Providers", footer: "Keys are stored in the Keychain. Each provider bills your own account.") { providers }
             group("Use your meetings in other AI apps",
                   footer: "Read-only. Claude Code, Claude Desktop, and other MCP apps can search and read your meetings, the same way the Chat tab does. Mossad does not need to be open.") {
                 MCPSetup()
             }
-        case .updates:
-            group("Updates", footer: "New versions come from the Mossad releases on GitHub. Each one is signed, and an update never installs during a call.") {
-                UpdateSettings(updater: controller.updater)
-            }
+        case .coach:
+            group("Communication coach", footer: "Reviews use the AI provider. The coach's notes stay on this Mac in the Coach folder.") { coach }
+            group("Email", footer: "Mossad only ever emails you, at one address.") { email }
         }
     }
 
     /// A count beside a page that needs attention: missing permissions, or missing keys.
     private func badge(_ page: SettingsPage) -> Int {
         switch page {
-        case .permissions: permissions.items.filter { !$0.state.isGood }.count
+        case .general: permissions.items.filter { !$0.state.isGood }.count
         case .ai:
             ([controller.transcriptionProvider.key, controller.aiProvider.key].compactMap { $0 }
                 + (controller.liveTranscriptEnabled && controller.transcriptionProvider != .assemblyai ? [.assemblyai] : []))
@@ -731,72 +724,45 @@ private struct UpdateSettings: View {
 }
 
 /// The pages of Settings, in the order of the list on the left.
+/// The pages of Settings, in the order of the list on the left.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, permissions, recording, voices, calendars, ai, coach, email, iphone, apps, updates
+    case general, recording, ai, coach
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .general: "General"
-        case .permissions: "Permissions"
         case .recording: "Recording"
-        case .voices: "Voices"
-        case .calendars: "Calendars"
-        case .ai: "AI providers"
+        case .ai: "AI"
         case .coach: "Coach"
-        case .email: "Email"
-        case .iphone: "iPhone"
-        case .apps: "Other AI apps"
-        case .updates: "Updates"
         }
     }
 
     var detail: String {
         switch self {
-        case .general: "Turn Mossad on or off, and tell it who you are."
-        case .permissions: "What Mossad needs from macOS to find and record calls."
-        case .recording: "The live transcript, how long audio stays, and where it goes."
-        case .voices: "How Mossad learns and names the people it hears."
-        case .calendars: "The calendars Mossad reads to name calls."
-        case .ai: "The services that transcribe and summarize your calls."
-        case .coach: "Reviews of how you communicate, with the coach's questions and memory."
-        case .email: "The weekly and monthly emails from the coach."
-        case .iphone: "What goes to Mossad on your iPhone."
-        case .apps: "Search your meetings from Claude and other MCP apps."
-        case .updates: "New versions of Mossad."
+        case .general: "Turn Mossad on or off, and what it needs from you and from macOS."
+        case .recording: "How Mossad records, names voices, and keeps audio."
+        case .ai: "The services that transcribe and summarize your calls, and other apps that read them."
+        case .coach: "Reviews of how you communicate, and the coach's emails."
         }
     }
 
     var symbol: String {
         switch self {
         case .general: "gearshape.fill"
-        case .permissions: "hand.raised.fill"
         case .recording: "waveform"
-        case .voices: "person.wave.2.fill"
-        case .calendars: "calendar"
         case .ai: "sparkles"
         case .coach: "figure.mind.and.body"
-        case .email: "envelope.fill"
-        case .iphone: "iphone"
-        case .apps: "puzzlepiece.extension.fill"
-        case .updates: "arrow.down.circle.fill"
         }
     }
 
     var tint: Color {
         switch self {
         case .general: .gray
-        case .permissions: .blue
         case .recording: .red
-        case .voices: .orange
-        case .calendars: .red
         case .ai: .purple
         case .coach: .green
-        case .email: .blue
-        case .iphone: .gray
-        case .apps: .indigo
-        case .updates: .teal
         }
     }
 }
