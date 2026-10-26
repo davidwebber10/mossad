@@ -214,21 +214,10 @@ struct MessageBubble: View {
                         }
                     }
                 }
-                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, p in
-                    Text(p).lineSpacing(3)
-                }
+                ChatMarkdown(text: message.text)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .textSelection(.enabled)
-        }
-    }
-
-    /// Markdown with links and emphasis; list lines get a bullet.
-    private var paragraphs: [AttributedString] {
-        message.text.components(separatedBy: "\n\n").map { block in
-            let text = block.replacingOccurrences(of: "\n- ", with: "\n•  ").replacingOccurrences(of: "^- ", with: "•  ", options: .regularExpression)
-                .replacingOccurrences(of: "^#{1,4} ", with: "", options: .regularExpression)
-            return rich(text)
         }
     }
 }

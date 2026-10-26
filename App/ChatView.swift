@@ -112,9 +112,13 @@ struct ChatView: View {
                 }
                 .onChange(of: steps.count) { _, _ in withAnimation { proxy.scrollTo("running", anchor: .bottom) } }
             }
+        }
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .safeAreaBar(edge: .bottom) {
             composer
                 .padding(.horizontal, 32).padding(.bottom, 18).padding(.top, 8)
                 .frame(maxWidth: 820)
+                .frame(maxWidth: .infinity)
         }
         .environment(\.openURL, OpenURLAction { url in controller.openLink(url) ? .handled : .systemAction })
     }
@@ -159,17 +163,17 @@ struct ChatView: View {
                 .focused($focused)
                 .onSubmit(send)
             Button(action: send) {
-                Image(systemName: "arrow.up").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(canSend ? Color.accentColor : Color.secondary.opacity(0.5), in: Circle())
+                Image(systemName: "arrow.up").font(.system(size: 13, weight: .bold)).frame(width: 18, height: 18)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
             .disabled(!canSend)
+            .keyboardShortcut(.return, modifiers: .command)
             .accessibilityLabel("Send")
         }
-        .padding(.leading, 16).padding(.trailing, 8).padding(.vertical, 8)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.separator))
+        .padding(.leading, 18).padding(.trailing, 8).padding(.vertical, 8)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
+        .shadow(color: .black.opacity(0.1), radius: 10, y: 3)
         .onAppear { focused = true }
     }
 
@@ -269,21 +273,11 @@ private struct MessageView: View {
                         }
                     }
                 }
-                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, p in
-                    Text(p).font(.system(size: 14)).lineSpacing(4).tint(.accentColor)
-                }
+                ChatMarkdown(text: message.text, bodyFont: .system(size: 14))
             }
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    /// Markdown with links and emphasis; lists stay as their "- " lines.
-    private var paragraphs: [AttributedString] {
-        message.text.components(separatedBy: "\n\n").map { block in
-            (try? AttributedString(markdown: block.replacingOccurrences(of: "\n- ", with: "\n•  ")
-                .replacingOccurrences(of: "^- ", with: "•  ", options: .regularExpression),
-                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(block)
-        }
-    }
 }
