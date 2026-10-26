@@ -28,7 +28,6 @@ targets:
         SUPublicEDKey: Y131ILTxYqpxKtpjHK7imAzNE1qdTsCVCQQVYv2tVBc=
         SUEnableAutomaticChecks: true
         SUScheduledCheckInterval: 21600
-        LSUIElement: true
         NSMicrophoneUsageDescription: Mossad records your microphone during meetings to transcribe what you say.
         NSAudioCaptureUsageDescription: Mossad records the meeting app's audio to transcribe what other people say.
         NSCalendarsFullAccessUsageDescription: Mossad reads your calendar to name meetings and list attendees.

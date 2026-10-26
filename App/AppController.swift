@@ -125,7 +125,6 @@ final class AppController: ObservableObject {
     /// Used only on `CaptureQueue.queue`.
     private nonisolated let recorder: CallRecorder
     private var window: NSWindow?
-    private let windowDelegate = WindowDelegate()
     private var housekeeping: Timer?
     private var outputWatcher: OutputDeviceWatcher?
     private var browserLaunchObserver: NSObjectProtocol?
@@ -876,7 +875,6 @@ final class AppController: ObservableObject {
             w.contentViewController = host
             w.setContentSize(NSSize(width: 1240, height: 820))
             w.contentMinSize = NSSize(width: 980, height: 600)
-            w.delegate = windowDelegate
             occlusionObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: w, queue: .main) { [weak self] note in
                 let visible = (note.object as? NSWindow)?.occlusionState.contains(.visible) == true
                 Task { @MainActor in if self?.windowVisible != visible { self?.windowVisible = visible } }
@@ -886,25 +884,12 @@ final class AppController: ObservableObject {
             window = w
         }
         refresh()
-        // A Dock icon only while the window is open, so it can be found with Cmd-Tab.
-        NSApp.setActivationPolicy(.regular)
-        // macOS may refuse to switch apps while another one is active, which left the window behind it.
-        // Ordering the window front regardless puts it on top either way; the switch is asked for after the
-        // policy change has taken effect, since asking in the same turn often fails.
-        window?.orderFrontRegardless()
+        // A normal app: the window opens in its own space and never above another app's full-screen window.
+        NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
-        DispatchQueue.main.async { [weak self] in
-            NSApp.activate()
-            self?.window?.makeKeyAndOrderFront(nil)
-        }
     }
 }
 
-private final class WindowDelegate: NSObject, NSWindowDelegate {
-    func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
-    }
-}
 
 /// Used when no AssemblyAI key is stored: the call stays queued until a key exists.
 struct MissingKeyTranscriber: Transcribing {
