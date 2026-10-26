@@ -51,6 +51,31 @@ final class PersonBriefTests: XCTestCase {
         XCTAssertTrue(model.user.contains("Likes data."))
     }
 
+    func testTheReadIsShortAndAboutHowToEngageNotTasks() async throws {
+        let long: [String: Any] = [
+            "headline": "Be exact and brief.",
+            "sections": (1...6).map { i in ["title": "S\(i)", "points": (1...4).map { ["text": "P\($0)", "call_id": ""] }] as [String: Any] },
+        ]
+        let model = FakeModel(output: long)
+        let records = [call("c1", daysAgo: 3, with: ["Mitch Haus"]), call("c2", daysAgo: 1, with: ["Mitch Haus"])]
+        let brief = try await PersonBriefWriter(llm: model, ownerName: "Dana").brief(for: "Mitch Haus", records: records, profile: CoachProfile(), now: t0)
+        XCTAssertEqual(brief.sections.count, PersonBriefWriter.maxSections)
+        XCTAssertTrue(brief.sections.allSatisfy { $0.points.count <= PersonBriefWriter.maxPoints })
+        XCTAssertEqual(brief.style, PersonBrief.currentStyle)
+        XCTAssertTrue(model.system.contains("How to engage them"))
+        XCTAssertTrue(model.system.contains("not the tasks"))
+    }
+
+    func testAReadInAnOlderStyleIsWrittenAgainAtOnce() {
+        var profile = CoachProfile()
+        let records = [call("c1", daysAgo: 3, with: ["Mitch Haus"]), call("c2", daysAgo: 1, with: ["Mitch Haus"])]
+        var old = PersonBrief(headline: "H", sections: [], calls: 2, updated: t0.addingTimeInterval(-600))
+        old.style = PersonBrief.currentStyle - 1
+        profile.people["Mitch Haus"] = CoachPerson(note: "", calls: 2, lastSeen: t0)
+        profile.people["Mitch Haus"]!.brief = old
+        XCTAssertEqual(PersonBriefWriter.due(profile: profile, records: records, owner: "Dana", now: t0), ["Mitch Haus"])
+    }
+
     func testAReviewKeepsThePersonsBrief() {
         var profile = CoachProfile()
         profile.people["Mitch Haus"] = CoachPerson(note: "Old", calls: 1, lastSeen: t0)

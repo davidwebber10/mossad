@@ -100,6 +100,7 @@ final class FakeModel: LanguageModel, @unchecked Sendable {
     let output: [String: Any]
     private(set) var schema: [String: Any]?
     private(set) var user = ""
+    private(set) var system = ""
 
     init(output: [String: Any]) { self.output = output }
 
@@ -107,6 +108,7 @@ final class FakeModel: LanguageModel, @unchecked Sendable {
                                  purpose: UsageEvent.Purpose, as: Output.Type) async throws -> Output {
         self.schema = schema
         self.user = user
+        self.system = system
         return try JSONDecoder().decode(Output.self, from: JSONSerialization.data(withJSONObject: output))
     }
 

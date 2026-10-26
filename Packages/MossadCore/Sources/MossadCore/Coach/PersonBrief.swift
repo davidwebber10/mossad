@@ -29,12 +29,18 @@ public struct PersonBrief: Codable, Equatable, Sendable, Hashable {
     /// The calls with them it was built from.
     public var calls: Int
     public var updated: Date
+    /// The prompt's version; a read in an older style is written again at once. Nil in reads from style 1.
+    public var style: Int?
+
+    /// 2: general ways to engage the person, not their current tasks, and short.
+    public static let currentStyle = 2
 
     public init(headline: String, sections: [Section], calls: Int, updated: Date) {
         self.headline = headline
         self.sections = sections
         self.calls = calls
         self.updated = updated
+        style = Self.currentStyle
     }
 
     /// Plain text, for Chat and other AI apps.
@@ -55,6 +61,9 @@ public struct PersonBriefWriter: Sendable {
     static let minimumGap: TimeInterval = 20 * 3600
     /// Briefs written per run, so a first run cannot cost much.
     public static let perRun = 5
+    /// Short enough to read before a call.
+    public static let maxSections = 4
+    public static let maxPoints = 2
 
     private let llm: any LanguageModel
     private let ownerName: String
@@ -77,6 +86,7 @@ public struct PersonBriefWriter: Sendable {
         return latest.filter { name, last in
             guard (count[name] ?? 0) >= minimumCalls else { return false }
             guard let brief = profile.people[name]?.brief else { return true }
+            if (brief.style ?? 1) < PersonBrief.currentStyle { return true }
             return last > brief.updated && now.timeIntervalSince(brief.updated) >= minimumGap
         }
         .sorted { $0.value > $1.value }.prefix(perRun).map(\.key)
@@ -88,8 +98,8 @@ public struct PersonBriefWriter: Sendable {
         let ids = Set(used.map(\.id))
         let out = try await llm.json(system: system(name), user: user(name, used, profile: profile), schema: Self.schema,
                                      effort: .medium, purpose: .coach, as: Output.self)
-        let sections = out.sections.prefix(6).map { s in
-            PersonBrief.Section(title: s.title, points: s.points.map {
+        let sections = out.sections.prefix(Self.maxSections).map { s in
+            PersonBrief.Section(title: s.title, points: s.points.prefix(Self.maxPoints).map {
                 PersonBrief.Point(text: $0.text, callID: ids.contains($0.call_id) ? $0.call_id : nil)
             })
         }
@@ -99,17 +109,18 @@ public struct PersonBriefWriter: Sendable {
     private func system(_ name: String) -> String {
         let first = name.split(separator: " ").first.map(String.init) ?? name
         return """
-        You are \(ownerName)'s communication coach. Write your read on \(name), from \(ownerName)'s calls with them, \
-        so \(ownerName) can work with \(first) better. headline: one sentence, at most 15 words, on the best way to \
-        work with \(first) now. Then 3 to 6 sections you choose for this person. Try these first, when the calls \
-        support them: "Goals" (what \(first) is trying to achieve), "How to communicate with them" (what lands: \
-        format, order, timing, level of detail), "How they communicate" (their style: direct, detailed, quiet, \
-        fast to decide). Add others only when they are worth knowing, with a short title of your own, such as \
-        "What they care about", "Watch out for", "Decides on", or "Worth knowing". Each section has 1 to 3 points, \
-        each one sentence of at most 25 words, concrete and specific to \(first), never generic advice. call_id is \
-        the call a point came from, exactly as listed, or "" when it comes from several. Only what the calls show; \
-        never judge character. When an earlier read is given, keep what still holds and change what the new calls \
-        change.
+        You are \(ownerName)'s communication coach. Write your current understanding of how best to interact with \
+        \(name): their working style and general expectations, as they show across \(ownerName)'s calls with them. \
+        This is about the person, not the tasks: never describe what \(first) is working on, a project, a number, \
+        or a deadline, except as a brief example in parentheses. Write what will still be true next month.
+        headline: the best way to work with \(first), at most 12 words.
+        sections: 2 to 4, in this order, only when the calls support them: "How to engage them" (what lands: \
+        format, order, level of detail, timing), "How they engage" (their style: direct, detailed, quiet, quick \
+        to decide, how they push back), "What they expect" (from \(ownerName): follow-through, preparation, \
+        updates), and "Watch out for" only when there is something real. Each section has 1 or 2 points, each at \
+        most 18 words. Fewer, sharper points beat many.
+        call_id is the call that shows a point best, exactly as listed, or "" when it shows across several. Never \
+        judge character. When an earlier read is given, keep what still holds and change what the new calls change.
         """
     }
 
