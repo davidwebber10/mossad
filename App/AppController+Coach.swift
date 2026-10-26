@@ -95,6 +95,14 @@ extension AppController {
         syncToICloud()
     }
 
+    func answerQuestion(_ id: UUID, _ status: CoachQuestion.Status, note: String?) {
+        var profile = coachProfile
+        profile.answer(id, status, note: note, at: Date())
+        try? profile.save(to: paths.coach)
+        coachVersion += 1
+        syncToICloud()
+    }
+
     func dismissFocus(_ id: UUID) {
         var profile = coachProfile
         profile.dismissFocus(id, at: Date())

@@ -17,6 +17,15 @@ struct CoachMemoryView: View {
                         FocusPanel(profile: p, accept: { store.acceptFocus($0, plan: $1) }, dismiss: { store.dismissFocus($0) })
                     }
                 }
+                if !p.openQuestions.isEmpty {
+                    Section {
+                        QuestionsPanel(questions: p.openQuestions, answer: { store.answerQuestion($0, $1, note: $2) })
+                            .listRowInsets(EdgeInsets())
+                    }
+                }
+                if p.questions.contains(where: { $0.status != .open }) {
+                    Section("Questions you answered") { AnsweredQuestions(questions: p.questions) }
+                }
                 let learned = p.foci.filter { $0.status == .learned }
                 if !learned.isEmpty { Section("Learned") { ForEach(learned) { Label($0.plan, systemImage: "checkmark.seal.fill") } } }
                 if !p.summary.isEmpty { Section("How you communicate") { Text(p.summary) } }

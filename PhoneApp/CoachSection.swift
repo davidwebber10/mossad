@@ -14,6 +14,8 @@ struct CoachSection: View {
         let metrics = CallMetrics(record: record, owner: store.owner,
                                   history: profile.history.filter { $0.callID != record.id }.compactMap(\.delivery))
         VStack(alignment: .leading, spacing: 14) {
+            QuestionsPanel(questions: profile.openQuestions.filter { $0.callID == record.id },
+                           answer: { store.answerQuestion($0, $1, note: $2) })
             if profile.activeFocus != nil || profile.proposedFocus != nil {
                 Card {
                     FocusPanel(profile: profile, callID: record.id, result: review.focusResult,

@@ -279,6 +279,14 @@ struct SettingsView: View {
             if profile.activeFocus != nil || profile.proposedFocus != nil {
                 FocusPanel(profile: profile, accept: { controller.acceptFocus($0, plan: $1) }, dismiss: { controller.dismissFocus($0) })
             }
+            QuestionsPanel(questions: profile.openQuestions, answer: { controller.answerQuestion($0, $1, note: $2) },
+                           openMoment: { controller.showMoment($0, at: $1) })
+            if profile.questions.contains(where: { $0.status != .open }) {
+                DisclosureGroup("Questions you answered") {
+                    VStack(alignment: .leading, spacing: 8) { AnsweredQuestions(questions: profile.questions) }
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
+                }
+            }
             CoachMemoryEditor()
             switchRow("Weekly email on Monday", $controller.coachEmailEnabled)
             switchRow("Month in review on the 1st", $controller.coachMonthlyEmail)
@@ -575,6 +583,7 @@ private struct CoachMemoryEditor: View {
         case .responsibility: "Vendor contracts for data tools"
         case .goal: "Metric ownership agreed by December"
         case .relationship: "Mitch Haus is my direct report"
+        case .context: "The Monday call is for decisions"
         }
     }
 

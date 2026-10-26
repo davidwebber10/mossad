@@ -244,6 +244,13 @@ final class PhoneStore: ObservableObject {
         share()
     }
 
+    func answerQuestion(_ id: UUID, _ status: CoachQuestion.Status, note: String?) {
+        var profile = profile
+        profile.answer(id, status, note: note, at: Date())
+        try? profile.save(to: paths.coach)
+        share()
+    }
+
     func dismissFocus(_ id: UUID) {
         var profile = profile
         profile.dismissFocus(id, at: Date())
