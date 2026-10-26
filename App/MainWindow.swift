@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MainWindow: View {
     @EnvironmentObject var controller: AppController
+    @State private var welcoming = false
 
     var body: some View {
         NavigationSplitView {
@@ -31,6 +32,18 @@ struct MainWindow: View {
         }
         .frame(minWidth: 980, minHeight: 600)
         .environment(\.animationsActive, controller.windowVisible)
+        .sheet(isPresented: $welcoming) { WelcomeView() }
+        // Development hook for screenshots: `--welcome-inline` draws the welcome in the window, not in a sheet.
+        .overlay {
+            if CommandLine.arguments.contains("--welcome-inline") {
+                WelcomeView().background(.background, in: RoundedRectangle(cornerRadius: 16)).shadow(radius: 30)
+            }
+        }
+        .onAppear {
+            // Only a new install: someone with meetings already set Mossad up.
+            welcoming = !UserDefaults.standard.bool(forKey: "welcomeDone") && controller.meetings.isEmpty
+                || CommandLine.arguments.contains("--welcome")
+        }
 
     }
 }
