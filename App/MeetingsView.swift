@@ -22,11 +22,7 @@ struct MeetingsView: View {
     var body: some View {
         Group {
             if controller.meetings.isEmpty {
-                VStack(spacing: 0) {
-                    paneHeader
-                    Divider()
-                    EmptyMeetings()
-                }
+                EmptyMeetings()
             } else {
                 switch mode {
                 case .split: splitBody
@@ -34,18 +30,23 @@ struct MeetingsView: View {
                     if let id = opened, let r = controller.meetings.first(where: { $0.id == id }) {
                         fullPaneDetail(r)
                     } else {
-                        VStack(spacing: 0) {
-                            paneHeader
-                            Divider()
-                            CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting) { r, period in
-                                open(r, from: period)
-                            }
+                        CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting) { r, period in
+                            open(r, from: period)
                         }
                     }
                 }
             }
         }
         .background(Theme.background)
+        .navigationTitle("Meetings")
+        .searchable(text: $controller.meetingQuery, placement: .toolbar, prompt: "Search titles and transcripts")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if mode == .calendar, opened == nil, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
+                ModePicker(mode: $mode, labeled: false)
+                AskButton()
+            }
+        }
         .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete meeting", role: .destructive) {
                 if let id = deleting?.id {
@@ -74,20 +75,8 @@ struct MeetingsView: View {
 
     private var splitBody: some View {
         HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Meetings").font(.system(size: 18, weight: .bold)).kerning(-0.3)
-                        Spacer()
-                        AskButton()
-                        ModePicker(mode: $mode, labeled: false)
-                    }
-                    SearchField(text: $controller.meetingQuery)
-                }
-                .padding(EdgeInsets(top: 12, leading: 12, bottom: 8, trailing: 12))
-                MeetingList(groups: MeetingGroups.group(results), selection: $controller.selectedMeetingID, deleting: $deleting)
-            }
-            .frame(width: 330)
+            MeetingList(groups: MeetingGroups.group(results), selection: $controller.selectedMeetingID, deleting: $deleting)
+                .frame(width: 330)
             Divider()
             Group {
                 if let id = controller.selectedMeetingID, let m = controller.upcoming.first(where: { $0.id == id }) {
@@ -104,18 +93,6 @@ struct MeetingsView: View {
     }
 
     // MARK: List and Calendar
-
-    private var paneHeader: some View {
-        HStack(spacing: 14) {
-            Text("Meetings").font(.system(size: 18, weight: .bold)).kerning(-0.3)
-            ModePicker(mode: $mode, labeled: false)
-            if mode == .calendar, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
-            Spacer()
-            AskButton()
-            SearchField(text: $controller.meetingQuery).frame(width: 240)
-        }
-        .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
-    }
 
     private func open(_ r: CallRecord, from crumb: String) {
         controller.selectedMeetingID = r.id
@@ -221,32 +198,6 @@ struct ModePicker: View {
         switch m {
         case .split: "sidebar.left"
         case .calendar: "calendar"
-        }
-    }
-}
-
-struct SearchField: View {
-    @Binding var text: String
-    var prompt = "Search titles and transcripts"
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.tertiary)
-            TextField(prompt, text: $text).textFieldStyle(.plain).focused($focused)
-            if !text.isEmpty {
-                Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear search")
-            }
-        }
-        .font(.system(size: 13))
-        .padding(.horizontal, 9)
-        .frame(height: 28)
-        .background(Theme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .background {
-            // ⌘F puts the cursor in the search field.
-            Button("Search") { focused = true }.keyboardShortcut("f").opacity(0).allowsHitTesting(false)
         }
     }
 }

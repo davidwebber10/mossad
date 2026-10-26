@@ -26,18 +26,13 @@ struct PeopleView: View {
     var body: some View {
         VStack(spacing: 0) {
             if loaded, profiles.isEmpty {
-                listHeader
-                Divider()
                 ContentUnavailableView("No people yet", systemImage: "person.2",
                                        description: Text("Your voice is learned in your first call. Name other voices after a call."))
             } else {
                 HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        listHeader
-                        PeopleList(profiles: results, stats: stats, selection: $selection, color: color(for:),
-                                   rename: startEditing, delete: { deleting = $0 })
-                    }
-                    .frame(width: 330)
+                    PeopleList(profiles: results, stats: stats, selection: $selection, color: color(for:),
+                               rename: startEditing, delete: { deleting = $0 })
+                        .frame(width: 330)
                     Divider()
                     Group {
                         if let p = selected {
@@ -57,6 +52,8 @@ struct PeopleView: View {
             footer
         }
         .background(Theme.background)
+        .navigationTitle("People")
+        .searchable(text: $query, placement: .toolbar, prompt: "Search names and emails")
         .onReceive(controller.$meetings) { _ in Task { await reload() } }
         .sheet(item: Binding(get: { editing.map(Wrapped.init) }, set: { editing = $0?.profile })) { item in editSheet(item.profile) }
         .confirmationDialog("Delete \(deleting?.name ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
@@ -75,16 +72,6 @@ struct PeopleView: View {
         } message: {
             Text("Mossad forgets every voice it learned, including yours. Meeting notes keep their names.")
         }
-    }
-
-    private var listHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("People").font(.system(size: 18, weight: .bold)).kerning(-0.3)
-            SearchField(text: $query, prompt: "Search names and emails")
-        }
-        .padding(EdgeInsets(top: 12, leading: 12, bottom: 8, trailing: 12))
-        .frame(maxWidth: 330, alignment: .leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var footer: some View {

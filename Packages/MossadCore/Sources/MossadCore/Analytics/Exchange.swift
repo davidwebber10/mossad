@@ -33,12 +33,18 @@ public struct Exchange: Sendable {
         lines.filter { $0.name == name && $0.text.contains("?") }.count
     }
 
-    /// Times `name` started while `other` (anyone else when nil) still had the floor.
+    /// Times `name` started while `other` (anyone else when nil) still had the floor, and took it: a line of a
+    /// few words that outlasts the other person's. "Yeah" while someone talks is listening, and a line the
+    /// other person talks through did not take the floor.
     public func interruptions(by name: String, of other: String? = nil) -> Int {
-        lines.filter { $0.name == name }.filter { u in
-            lines.contains { o in o.name != name && (other == nil || o.name == other) && o.start < u.start && o.end > u.start + Self.overlapGrace }
+        lines.filter { $0.name == name && $0.text.split(separator: " ").count >= Self.minimumCutInWords }.filter { u in
+            lines.contains { o in
+                o.name != name && (other == nil || o.name == other) && o.start < u.start && o.end > u.start + Self.overlapGrace && o.end < u.end
+            }
         }.count
     }
+
+    static let minimumCutInWords = 3
 
     /// Pauses before `from` answered `to`: `from`'s line comes right after `to`'s, without overlap.
     public func replyGaps(to: String, from: String) -> [TimeInterval] {

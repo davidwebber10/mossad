@@ -51,6 +51,7 @@ public struct AnalyticsReport: Sendable {
         public var calls = 0
         /// Calls matched to a calendar invite; the rest were ad hoc.
         public var scheduledCalls = 0
+        public var scheduledSeconds: TimeInterval = 0
         public var cost: [UsageEvent.Service: Double] = [:]
     }
 
@@ -196,7 +197,10 @@ public struct AnalyticsReport: Sendable {
         for r in records {
             bars[bucketStart(r.start), default: Bar(date: bucketStart(r.start))].seconds += length(r)
             bars[bucketStart(r.start)]!.calls += 1
-            if r.calendarTitle != nil { bars[bucketStart(r.start)]!.scheduledCalls += 1 }
+            if r.calendarTitle != nil {
+                bars[bucketStart(r.start)]!.scheduledCalls += 1
+                bars[bucketStart(r.start)]!.scheduledSeconds += length(r)
+            }
             // Spread the call over the hours it covers.
             var t = r.start
             while t < r.end {

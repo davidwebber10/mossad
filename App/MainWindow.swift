@@ -28,8 +28,6 @@ struct MainWindow: View {
                 case .log: LogView()
                 }
             }
-            // The panes have no toolbar items, so they start at the top edge like the design, not under an empty toolbar.
-            .ignoresSafeArea(.container, edges: .top)
         }
         .frame(minWidth: 980, minHeight: 600)
         .environment(\.animationsActive, controller.windowVisible)

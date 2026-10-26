@@ -691,27 +691,6 @@ private struct TopicRow: View {
     }
 }
 
-struct Card<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: () -> Content
-
-    init(_ title: String, @ViewBuilder content: @escaping () -> Content) {
-        self.title = title
-        self.content = content
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased()).font(.system(size: 11, weight: .semibold)).kerning(0.4).foregroundStyle(.tertiary)
-            content().font(.system(size: 13)).lineSpacing(3)
-        }
-        .padding(.horizontal, 16).padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
-    }
-}
-
 private struct Skeleton: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

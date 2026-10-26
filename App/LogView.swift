@@ -15,28 +15,6 @@ struct LogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("Log").font(.system(size: 18, weight: .bold)).kerning(-0.3)
-                Spacer()
-                pill("Info", .info)
-                pill("Error", .error)
-                pill("Debug", .debug)
-                HStack(spacing: 5) {
-                    Image(systemName: "line.3.horizontal.decrease").font(.system(size: 11)).foregroundStyle(.tertiary)
-                    TextField("Filter", text: $filter).textFieldStyle(.plain)
-                }
-                .font(.system(size: 12))
-                .padding(.horizontal, 8)
-                .frame(width: 150, height: 26)
-                .background(Theme.field, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(visible.map(plain).joined(separator: "\n"), forType: .string)
-                }
-                .controlSize(.small)
-            }
-            .padding(EdgeInsets(top: 16, leading: 20, bottom: 10, trailing: 20))
-
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(visible.enumerated()), id: \.offset) { _, line in
@@ -61,6 +39,20 @@ struct LogView: View {
             .padding(EdgeInsets(top: 0, leading: 20, bottom: 20, trailing: 20))
         }
         .background(Theme.background)
+        .navigationTitle("Log")
+        .searchable(text: $filter, placement: .toolbar, prompt: "Filter")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                pill("Info", .info)
+                pill("Error", .error)
+                pill("Debug", .debug)
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(visible.map(plain).joined(separator: "\n"), forType: .string)
+                } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    .help("Copy the lines shown")
+            }
+        }
         .task {
             while !Task.isCancelled {
                 load()
@@ -77,16 +69,8 @@ struct LogView: View {
     }()
 
     private func pill(_ title: String, _ level: LogLine.Level) -> some View {
-        let on = levels.contains(level)
-        return Button {
-            if on { levels.remove(level) } else { levels.insert(level) }
-        } label: {
-            Text(title).font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(on ? Color(nsColor: .windowBackgroundColor) : .secondary)
-                .padding(.horizontal, 9).padding(.vertical, 3)
-                .background(on ? Color.primary : Theme.field, in: Capsule())
-        }
-        .buttonStyle(.plain)
+        Toggle(title, isOn: Binding(get: { levels.contains(level) }, set: { if $0 { levels.insert(level) } else { levels.remove(level) } }))
+            .help("Show \(title.lowercased()) lines")
     }
 
     private func color(_ level: LogLine.Level) -> Color {

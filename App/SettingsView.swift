@@ -14,7 +14,6 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Settings").font(.system(size: 18, weight: .bold)).kerning(-0.3).padding(.top, 8)
                 PowerControl()
                 group("Permissions") {
                     ForEach(permissions.items) { item in permissionRow(item) }
@@ -60,6 +59,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Theme.background)
+        .navigationTitle("Settings")
         .onAppear {
             permissions.refresh()
             permissions.setInterval(1)

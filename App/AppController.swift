@@ -863,9 +863,7 @@ final class AppController: ObservableObject {
                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                              backing: .buffered, defer: false)
             w.title = "Mossad"
-            // A full-height sidebar with the traffic lights inside it; pane titles live in the content.
-            w.titlebarAppearsTransparent = true
-            w.titleVisibility = .hidden
+            // The system toolbar holds each pane's title, search, and actions; the sidebar runs the full height.
             w.toolbarStyle = .unified
             w.isReleasedWhenClosed = false
             let host = NSHostingController(rootView: MainWindow().environmentObject(self).environmentObject(permissions))
@@ -884,6 +882,11 @@ final class AppController: ObservableObject {
             window = w
         }
         refresh()
+        // A preview for screenshots stays behind the owner's windows and never takes focus.
+        if CommandLine.arguments.contains("--ui-preview") {
+            window?.orderBack(nil)
+            return
+        }
         // A normal app: the window opens in its own space and never above another app's full-screen window.
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)

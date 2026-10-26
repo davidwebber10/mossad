@@ -20,8 +20,6 @@ struct CommitmentsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header.padding(.horizontal, 24).padding(.bottom, 12)
-            Divider()
             if book.visible.isEmpty {
                 DetailEmptyState(symbol: "checkmark.circle", title: "No commitments yet",
                                  message: "After each call, Mossad finds what you promised to do, with due dates when you gave one. You can also add your own.")
@@ -58,6 +56,19 @@ struct CommitmentsView: View {
         }
         .padding(.top, 8)
         .background(Theme.background)
+        .navigationTitle("Commitments")
+        .navigationSubtitle(subtitle)
+        .searchable(text: $query, placement: .toolbar, prompt: "Search")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Toggle(isOn: $showDone) { Label("Show done", systemImage: "checkmark.circle") }
+                    .help("Show done commitments")
+                Button {
+                    adding = Commitment(text: "", to: nil, callID: nil, callTitle: nil, madeAt: Date(), due: nil)
+                } label: { Label("Add", systemImage: "plus") }
+                    .help("Add a commitment")
+            }
+        }
         .task(id: controller.commitmentsVersion) { book = controller.commitmentBook }
         .sheet(item: $editing) { c in
             NavigationStack {
@@ -72,22 +83,10 @@ struct CommitmentsView: View {
         }
     }
 
-    private var header: some View {
+    private var subtitle: String {
         let overdue = book.visible.filter { $0.status() == .overdue }.count
         let open = book.visible.filter { $0.done == nil }.count
-        return HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Commitments").font(.system(size: 18, weight: .bold)).kerning(-0.3)
-                Text(open == 0 ? "Nothing open" : "\(open) open" + (overdue > 0 ? " · \(overdue) overdue" : ""))
-                    .font(.system(size: 12)).foregroundStyle(overdue > 0 ? Color.red : Color.secondary)
-            }
-            Spacer()
-            TextField("Search", text: $query).textFieldStyle(.roundedBorder).frame(width: 180)
-            Toggle("Show done", isOn: $showDone).toggleStyle(.checkbox)
-            Button {
-                adding = Commitment(text: "", to: nil, callID: nil, callTitle: nil, madeAt: Date(), due: nil)
-            } label: { Label("Add", systemImage: "plus") }
-        }
+        return open == 0 ? "Nothing open" : "\(open) open" + (overdue > 0 ? " · \(overdue) overdue" : "")
     }
 
     private func open(_ callID: String, _ at: TimeInterval?) {

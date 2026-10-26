@@ -34,7 +34,7 @@ final class AnalyticsMoreTests: XCTestCase {
         let r = call("x", date(19, 9), minutes: 30, names: trio, [
             ("them:A", 0, 10, "Morning. Ready?"),
             ("me:A", 12, 20, "Yes. Can we start?"),
-            ("them:A", 18, 30, "Sure."),
+            ("them:A", 18, 30, "Sure, I will start now."),
             ("them:B", 31, 35, "Me too?"),
         ])
         let x = Exchange(record: r)
@@ -50,12 +50,25 @@ final class AnalyticsMoreTests: XCTestCase {
         XCTAssertEqual(x.replyGaps(to: "Sam", from: "Jo"), [1])
     }
 
+    func testAShortReplyOrATalkOverIsNotCuttingIn() {
+        let r = call("y", date(19, 9), minutes: 30, names: trio, [
+            ("them:A", 0, 20, "Here is the plan for the quarter."),
+            ("me:A", 5, 6, "Yeah."),
+            ("me:A", 8, 12, "Right, and the budget too"),
+            ("me:A", 25, 30, "So what comes next then?"),
+            ("them:A", 27, 40, "Next we ship the new plan."),
+        ])
+        let x = Exchange(record: r)
+        XCTAssertEqual(x.interruptions(by: "Dana"), 0, "a backchannel, and a line Sam talks through")
+        XCTAssertEqual(x.interruptions(by: "Sam"), 1, "Sam takes the floor and Dana stops")
+    }
+
     // MARK: Report
 
     private func week() -> [CallRecord] {
         [
             call("a", date(19, 9), minutes: 60, names: ["me:A": "Dana", "them:A": "Sam"], [
-                ("me:A", 0, 600, "Where are we?"), ("them:A", 600, 1800, "Fine."), ("me:A", 1790, 1800, "Wait"),
+                ("me:A", 0, 600, "Where are we?"), ("them:A", 600, 1800, "Fine."), ("me:A", 1790, 1830, "Wait, one more thing here"),
             ]),
             call("b", date(19, 10, 3), minutes: 30, names: trio, [
                 ("me:A", 0, 300, "Go."), ("them:A", 300, 900, "Ok."), ("them:B", 900, 1500, "Ok."),
@@ -85,7 +98,7 @@ final class AnalyticsMoreTests: XCTestCase {
         XCTAssertEqual(c.questionsPerHour!, 1 / 2.5, accuracy: 0.001)
         XCTAssertEqual(c.interruptionsMadePerHour!, 1 / 2.5, accuracy: 0.001, "Dana's 'Wait' cuts in on Sam")
         XCTAssertEqual(c.interruptionsReceivedPerHour!, 0, accuracy: 0.001)
-        XCTAssertEqual(c.oneOnOneShare!, (610.0 + 1800) / (610 + 1800 + 1200 + 600), accuracy: 0.001)
+        XCTAssertEqual(c.oneOnOneShare!, (640.0 + 1800) / (640 + 1800 + 1200 + 600), accuracy: 0.001)
         XCTAssertEqual(c.groupShare!, 300.0 / 1500, accuracy: 0.001)
         XCTAssertEqual(c.points.map(\.callID), ["a", "b", "c"])
     }
@@ -111,10 +124,11 @@ final class AnalyticsMoreTests: XCTestCase {
         let r = report(week())
         let sam = r.people.first { $0.name == "Sam" }!
         XCTAssertEqual(sam.calls, 3)
-        XCTAssertEqual(sam.mySpeech, 610 + 300 + 1800)
+        XCTAssertEqual(sam.mySpeech, 640 + 300 + 1800)
         XCTAssertEqual(sam.theirSpeech, 1200 + 600 + 600)
         XCTAssertEqual(sam.lastMet, date(21, 14))
         XCTAssertEqual(sam.trend, [2, 0, 1, 0, 0], "calls per day bucket")
+        XCTAssertEqual(r.days[0].scheduledSeconds, 3600, "the 10:03 call had no invite")
     }
 
     // MARK: Ranges
@@ -148,7 +162,7 @@ final class AnalyticsMoreTests: XCTestCase {
         let p = PersonRelation(name: "Sam", owner: "Dana", records: records, reviews: reviews, commitments: [promise],
                                now: date(26, 12), calendar: cal)
         XCTAssertEqual(p.calls, 4)
-        XCTAssertEqual(p.oneOnOne!.mine, 610 + 1800 + 97)
+        XCTAssertEqual(p.oneOnOne!.mine, 640 + 1800 + 97)
         XCTAssertEqual(p.oneOnOne!.theirs, 1200 + 600 + 100)
         XCTAssertEqual(p.group!.mine, 300)
         XCTAssertEqual(p.lastMet, date(26, 9))

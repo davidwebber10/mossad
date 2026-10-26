@@ -7,13 +7,13 @@ Rules: test first for logic in MossadCore; screenshots of Mossad windows only by
 ## Phase 1. Foundation
 - [ ] 1.1 `SharedUI/Platform.swift`: `Space`, `Radius`, motion helper, 27 wrappers (`toolbarPolish`, `rowSwipe`, `phoneNavPolish`).
 - [ ] 1.2 Theme on system colors; keep `Theme` names so call sites change little.
-- [ ] 1.3 Mac toolbar: remove `ignoresSafeArea` in `MainWindow`, `.navigationTitle` and `.toolbar` per pane, `.searchable` in Meetings.
-- [ ] 1.4 `DateRangeButton` (presets menu, custom two-month calendar, step arrows) in Analytics.
+- [x] 1.3 Mac toolbar: remove `ignoresSafeArea` in `MainWindow`, `.navigationTitle` and `.toolbar` per pane, `.searchable` in Meetings.
+- [x] 1.4 `DateRangeButton` (presets menu, custom two-month calendar, step arrows) in Analytics.
 
 ## Phase 2. Analytics and People
-- [ ] 2.1 MossadCore metrics: scheduled calls and time, work-day load, back-to-back, call-free days, questions and interruptions (made and received), 1:1 vs group talk share, outcomes per hour, commitments made and done, people table (balance, trend, last met).
-- [ ] 2.2 Person relation stats: balance 1:1/group, cadence, who leads, interruptions both ways, response time, topics, open items both ways, value together.
-- [ ] 2.3 Analytics view rebuilt per spec, with scrub highlight and chart accessibility.
+- [x] 2.1 MossadCore metrics: scheduled calls and time, work-day load, back-to-back, call-free days, questions and interruptions (made and received), 1:1 vs group talk share, outcomes per hour, commitments made and done, people table (balance, trend, last met).
+- [x] 2.2 Person relation stats: balance 1:1/group, cadence, who leads, interruptions both ways, response time, topics, open items both ways, value together.
+- [x] 2.3 Analytics view rebuilt per spec, with scrub highlight and chart accessibility.
 - [ ] 2.4 Person page rebuilt; Mac People list and iPhone People use the new stats; shared `PersonMark`.
 - [ ] 2.5 Re-summarize calls from the last 90 days that lack kind, tags, or outcomes.
 
@@ -35,3 +35,6 @@ Rules: test first for logic in MossadCore; screenshots of Mossad windows only by
 - [ ] 4.9 Fonts to text styles across the remaining screens; `ContentUnavailableView`; placeholders.
 
 ## Log
+- 2026-10-26: 1.1 and 1.2 deferred into 4.9 (tokens and system colors change screen by screen as each is rebuilt). Card restyled app-wide (sentence-case title, hairline border).
+- 2026-10-26: Analytics cut-ins count only lines of 3+ words that outlast the other speaker; the coach's DeliveryStats keeps its older rule so its history stays comparable.
+- 2026-10-26: `--ui-preview` windows open behind other windows (orderBack); `MOSSAD_SCROLL_TO` scrolls Analytics to a section heading for screenshots.

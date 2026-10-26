@@ -6,12 +6,7 @@ struct AskButton: View {
     @EnvironmentObject var controller: AppController
 
     var body: some View {
-        Button { controller.startChat() } label: {
-            Image(systemName: "sparkles").font(.system(size: 12, weight: .medium))
-                .frame(width: 26, height: 22)
-                .background(Theme.field, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .buttonStyle(.plain)
+        Button { controller.startChat() } label: { Label("Ask", systemImage: "sparkles") }
         .keyboardShortcut("k", modifiers: .command)
         .help("Ask your meetings (⌘K)")
         .accessibilityLabel("Ask your meetings")
@@ -42,6 +37,14 @@ struct ChatView: View {
             conversation.frame(maxWidth: .infinity)
         }
         .background(Theme.background)
+        .navigationTitle("Chat")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: newChat) { Label("New chat", systemImage: "square.and.pencil") }
+                    .keyboardShortcut("n", modifiers: .command)
+                    .help("New chat (⌘N)")
+            }
+        }
         .onAppear(perform: reload)
         .onChange(of: controller.newChatRequest) { _, _ in newChat() }
         .onChange(of: controller.chatsVersion) { _, _ in reload() }
@@ -51,20 +54,6 @@ struct ChatView: View {
 
     private var chatList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Chat").font(.system(size: 18, weight: .bold)).kerning(-0.3)
-                Spacer()
-                Button(action: newChat) {
-                    Image(systemName: "square.and.pencil").font(.system(size: 13, weight: .medium))
-                        .frame(width: 26, height: 22)
-                        .background(Theme.field, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut("n", modifiers: .command)
-                .help("New chat (⌘N)")
-                .accessibilityLabel("New chat")
-            }
-            .padding(EdgeInsets(top: 12, leading: 14, bottom: 10, trailing: 12))
             List(selection: $selection) {
                 ForEach(chats) { chat in
                     VStack(alignment: .leading, spacing: 2) {
