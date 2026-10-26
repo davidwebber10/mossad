@@ -6,6 +6,7 @@ struct Card<Accessory: View, Content: View>: View {
     let title: String
     @ViewBuilder let accessory: () -> Accessory
     @ViewBuilder let content: () -> Content
+    @Environment(\.colorSchemeContrast) private var contrast
 
     init(_ title: String, @ViewBuilder accessory: @escaping () -> Accessory, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
@@ -25,7 +26,26 @@ struct Card<Accessory: View, Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.separator.opacity(0.6), lineWidth: 0.5))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(Theme.separator.opacity(contrast == .increased ? 1 : 0.6), lineWidth: contrast == .increased ? 1 : 0.5))
+    }
+}
+
+/// VoiceOver's audio graph and data table for a chart of values over dates.
+struct DateSeriesDescriptor: AXChartDescriptorRepresentable {
+    let title: String
+    let unit: String
+    let points: [(Date, Double)]
+
+    func makeChartDescriptor() -> AXChartDescriptor {
+        let dates = points.map(\.0)
+        let x = AXCategoricalDataAxisDescriptor(title: "Date", categoryOrder: dates.map { $0.formatted(date: .abbreviated, time: .omitted) })
+        let values = points.map(\.1)
+        let y = AXNumericDataAxisDescriptor(title: unit, range: 0...max(values.max() ?? 1, 1), gridlinePositions: []) { "\(Int($0)) \(unit)" }
+        let series = AXDataSeriesDescriptor(name: title, isContinuous: false, dataPoints: points.map {
+            AXDataPoint(x: $0.0.formatted(date: .abbreviated, time: .omitted), y: $0.1)
+        })
+        return AXChartDescriptor(title: title, summary: nil, xAxis: x, yAxis: y, additionalAxes: [], series: [series])
     }
 }
 

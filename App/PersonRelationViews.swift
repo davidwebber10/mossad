@@ -187,6 +187,7 @@ private struct WeeklyChart: View {
         .frame(height: 140)
         .animation(.snappy, value: picked?.start)
         .accessibilityLabel("Meetings each week over the last six months")
+        .accessibilityChartDescriptor(DateSeriesDescriptor(title: "Meetings each week", unit: "calls", points: weeks.map { ($0.start, Double($0.calls)) }))
     }
 }
 

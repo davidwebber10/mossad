@@ -52,6 +52,8 @@ struct MainWindow: View {
 private struct SidebarStatus: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
+    /// Dims with the window when another app is in front, as the system's own sidebars do.
+    @Environment(\.appearsActive) private var appearsActive
 
     var body: some View {
         HStack(spacing: 8) {
@@ -77,6 +79,7 @@ private struct SidebarStatus: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 18)
         .padding(.vertical, 10)
+        .opacity(appearsActive ? 1 : 0.55)
     }
 }
 

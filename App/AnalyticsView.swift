@@ -294,6 +294,8 @@ private struct TimeChart: View {
         .animation(.snappy, value: picked?.date)
         .animation(.smooth, value: measure)
         .accessibilityLabel("Time in calls, \(hours(report.callSeconds)) in \(report.calls) calls")
+        .accessibilityChartDescriptor(DateSeriesDescriptor(title: "Time in calls", unit: measure == .hours ? "minutes" : "calls",
+                                                           points: report.days.map { ($0.date, total($0)) }))
     }
 
     private func total(_ bar: AnalyticsReport.Bar) -> Double { measure == .hours ? bar.seconds / 60 : Double(bar.calls) }
