@@ -5,6 +5,8 @@ struct MeetingsListView: View {
     @EnvironmentObject var store: PhoneStore
     @State private var showActions = false
     @State private var recording = false
+    /// A meeting opens out of its row.
+    @Namespace private var zoom
 
     var body: some View {
         NavigationStack(path: $store.path) {
@@ -34,6 +36,7 @@ struct MeetingsListView: View {
                     Section(group.kind.title) {
                         ForEach(group.records, id: \.id) { r in
                             NavigationLink(value: r.id) { MeetingRow(record: r, score: store.scores[r.id]) }
+                                .matchedTransitionSource(id: r.id, in: zoom)
                         }
                     }
                 }
@@ -58,7 +61,7 @@ struct MeetingsListView: View {
             .refreshable { await store.sync() }
             .navigationDestination(isPresented: $showActions) { ActionItemsView() }
             .navigationDestination(for: String.self) { id in
-                if let r = store.meeting(id) { MeetingView(record: r) }
+                if let r = store.meeting(id) { MeetingView(record: r).navigationTransition(.zoom(sourceID: id, in: zoom)) }
             }
         }
     }
