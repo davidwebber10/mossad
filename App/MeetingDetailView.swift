@@ -45,22 +45,16 @@ struct MeetingDetailView: View {
             if record.status == .recording {
                 LivePanel(record: record)
             } else {
-                // The player, the tabs, and the transcript tools stay put; only the tab's content scrolls.
+                // The tabs and the transcript tools stay put; the tab's content scrolls under the floating player.
                 VStack(alignment: .leading, spacing: 0) {
                     if style == .fullPage { header(people).padding(.horizontal, -24) }
                     banner
-                    PlayerBar(player: player, record: record, people: people, retentionDays: controller.deleteRecordings ? controller.recordingDays : nil)
-                        .padding(.top, 12)
-                        .task(id: record.cloudKey) {
-                            // Local audio loads first; give it a moment before falling back to the archive.
-                            try? await Task.sleep(for: .milliseconds(600))
-                            if !player.isAvailable, let url = controller.cloudArchive?.playbackURL(for: record) { await player.loadRemote(url) }
-                        }
                     tabs
                 }
                 .padding(.horizontal, style == .fullPage ? 32 : 16)
                 .frame(maxWidth: style == .fullPage ? 900 : .infinity)
                 .frame(maxWidth: .infinity)
+                Group {
                 switch tab {
                 case .summary:
                     ScrollView {
@@ -81,6 +75,20 @@ struct MeetingDetailView: View {
                             .frame(maxWidth: style == .fullPage ? 900 : .infinity)
                             .frame(maxWidth: .infinity)
                     }
+                }
+                }
+                .scrollEdgeEffectStyle(.soft, for: .bottom)
+                .safeAreaBar(edge: .bottom) {
+                    PlayerBar(player: player, record: record, people: people, retentionDays: controller.deleteRecordings ? controller.recordingDays : nil)
+                        .padding(.horizontal, style == .fullPage ? 32 : 16)
+                        .padding(.bottom, 12)
+                        .frame(maxWidth: style == .fullPage ? 900 : .infinity)
+                        .frame(maxWidth: .infinity)
+                        .task(id: record.cloudKey) {
+                            // Local audio loads first; give it a moment before falling back to the archive.
+                            try? await Task.sleep(for: .milliseconds(600))
+                            if !player.isAvailable, let url = controller.cloudArchive?.playbackURL(for: record) { await player.loadRemote(url) }
+                        }
                 }
             }
         }
@@ -374,7 +382,18 @@ private struct PlayerBar: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .mossadGlass(cornerRadius: 14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        .background {
+            // J, K, and L: back 15 seconds, play or pause, forward 15 seconds, as in most players.
+            Group {
+                Button("Back 15 seconds") { player.skip(-15) }.keyboardShortcut("j", modifiers: [])
+                Button("Play or pause") { player.toggle() }.keyboardShortcut("k", modifiers: [])
+                Button("Forward 15 seconds") { player.skip(15) }.keyboardShortcut("l", modifiers: [])
+            }
+            .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+            .disabled(!player.isAvailable)
+        }
     }
 
     private var segments: [(start: Double, end: Double, color: Color)] {
