@@ -20,6 +20,9 @@ struct PersonProfileView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                if profile.isOwner, stats.meetings.count >= 2 || controller.coachProfile.people[profile.name]?.brief != nil {
+                    briefCard
+                }
                 if profile.isOwner || stats.meetings.isEmpty {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 175), spacing: 12)], spacing: 12) {
                         stat("Meetings", "\(stats.meetings.count)")
@@ -28,15 +31,7 @@ struct PersonProfileView: View {
                         stat("Action items", "\(stats.actionItems.count)")
                     }
                 } else if let r = relation {
-                    PersonBriefCard(name: profile.name, brief: controller.coachProfile.people[profile.name]?.brief, refreshing: refreshing,
-                                    refresh: stats.meetings.count >= 2 ? {
-                                        refreshing = true
-                                        Task {
-                                            await controller.writePersonBriefs([profile.name])
-                                            refreshing = false
-                                        }
-                                    } : nil,
-                                    openCall: { controller.openMeeting($0) })
+                    briefCard
                     RelationSections(relation: r, owner: controller.ownerName, color: color)
                 } else {
                     ProgressView().frame(maxWidth: .infinity).padding(.vertical, 40)
@@ -58,6 +53,18 @@ struct PersonProfileView: View {
     }
 
     /// Reads the shared meetings' coach ratings off the main actor.
+    private var briefCard: some View {
+        PersonBriefCard(name: profile.name, brief: controller.coachProfile.people[profile.name]?.brief, refreshing: refreshing,
+                        refresh: stats.meetings.count >= 2 ? {
+                            refreshing = true
+                            Task {
+                                await controller.writePersonBriefs([profile.name])
+                                refreshing = false
+                            }
+                        } : nil,
+                        openCall: { controller.openMeeting($0) })
+    }
+
     private func loadRelation() async {
         guard !profile.isOwner else { return }
         let name = profile.name, owner = controller.ownerName, records = controller.meetings, paths = controller.paths

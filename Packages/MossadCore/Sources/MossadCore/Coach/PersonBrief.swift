@@ -74,11 +74,11 @@ public struct PersonBriefWriter: Sendable {
     }
 
     /// People with a call since their brief (or no brief yet), and no brief written in the last day, most
-    /// recent first.
+    /// recent first. The owner is one of them: their read is how other people can best work with them.
     public static func due(profile: CoachProfile, records: [CallRecord], owner: String, now: Date = Date()) -> [String] {
         var latest: [String: Date] = [:], count: [String: Int] = [:]
         for r in records where r.status == .written {
-            for name in Set(r.speakerNames.values) where name != owner && !name.hasPrefix("Speaker ") && !name.contains(":") {
+            for name in Set(r.speakerNames.values) where !name.hasPrefix("Speaker ") && !name.contains(":") {
                 latest[name] = max(latest[name] ?? r.end, r.end)
                 count[name, default: 0] += 1
             }
@@ -107,6 +107,7 @@ public struct PersonBriefWriter: Sendable {
     }
 
     private func system(_ name: String) -> String {
+        if name == ownerName { return ownerSystem }
         let first = name.split(separator: " ").first.map(String.init) ?? name
         return """
         You are \(ownerName)'s communication coach. Write your current understanding of how best to interact with \
@@ -124,9 +125,40 @@ public struct PersonBriefWriter: Sendable {
         """
     }
 
+    /// The same read, about the owner, as the coach would give someone who asked how to work with them.
+    private var ownerSystem: String {
+        let first = ownerName.split(separator: " ").first.map(String.init) ?? ownerName
+        return """
+        You are \(ownerName)'s communication coach. Someone who works with \(ownerName) asks you how best to work \
+        with them. Write your current understanding of \(first)'s working style and general expectations, as they \
+        show across their calls. This is about the person, not the tasks: never describe what \(first) is working \
+        on, a project, a number, or a deadline, except as a brief example in parentheses. Write what will still be \
+        true next month, in the third person.
+        headline: the best way to work with \(first), at most 12 words.
+        sections: 2 to 4, in this order, only when the calls support them: "How to engage them" (what lands with \
+        \(first): format, order, level of detail, timing), "How they engage" (their style: direct, detailed, quiet, \
+        quick to decide, how they push back), "What they expect" (from the people they work with: follow-through, \
+        preparation, updates), and "Watch out for" only when there is something real. Each section has 1 or 2 \
+        points, each at most 18 words. Fewer, sharper points beat many.
+        call_id is the call that shows a point best, exactly as listed, or "" when it shows across several. Never \
+        judge character. When an earlier read is given, keep what still holds and change what the new calls change.
+        """
+    }
+
     private func user(_ name: String, _ calls: [CallRecord], profile: CoachProfile) -> String {
         let first = name.split(separator: " ").first.map(String.init) ?? name
         var parts: [String] = []
+        if name == ownerName {
+            if let summary = profile.summary.nonBlank { parts.append("## Your coaching profile of \(first)\n" + summary) }
+            if !profile.patterns.isEmpty {
+                parts.append("## Patterns you track\n" + profile.patterns.map { "- \($0.name): \($0.note)" }.joined(separator: "\n"))
+            }
+            let facts = profile.facts.map { "- \($0.text)" }
+            if !facts.isEmpty { parts.append("## What \(first) told you\n" + facts.joined(separator: "\n")) }
+            if let brief = profile.people[name]?.brief { parts.append("## Your earlier read\n" + brief.text) }
+            parts.append(callsText(name, calls))
+            return parts.joined(separator: "\n\n")
+        }
         let known = profile.facts.filter { $0.text.localizedCaseInsensitiveContains(first) }.map { "- \($0.text)" }
         if !known.isEmpty { parts.append("## What \(ownerName) confirmed\n" + known.joined(separator: "\n")) }
         let denied = profile.questions.filter { $0.status == .rejected && $0.statement.localizedCaseInsensitiveContains(first) }
@@ -135,7 +167,12 @@ public struct PersonBriefWriter: Sendable {
             if let note = person.note.nonBlank { parts.append("## Your note on \(first)\n" + note) }
             if let brief = person.brief { parts.append("## Your earlier read\n" + brief.text) }
         }
-        parts.append("## Calls with \(name), newest first\n" + calls.map { r in
+        parts.append(callsText(name, calls))
+        return parts.joined(separator: "\n\n")
+    }
+
+    private func callsText(_ name: String, _ calls: [CallRecord]) -> String {
+        "## Calls \(name == ownerName ? "of" : "with") \(name), newest first\n" + calls.map { r in
             let others = Set(r.speakerNames.values).subtracting([ownerName, name]).sorted()
             var block = "call_id: \(r.id) | \(r.start.formatted(.dateTime.month(.abbreviated).day())) | \(r.title)"
             if !others.isEmpty { block += " | also: \(others.joined(separator: ", "))" }
@@ -145,8 +182,7 @@ public struct PersonBriefWriter: Sendable {
                 .sorted { $0.start < $1.start }.map { "- " + String($0.text.prefix(Self.lineCharacters)) }
             if !lines.isEmpty { block += "\nTheir words:\n" + lines.joined(separator: "\n") }
             return block
-        }.joined(separator: "\n\n"))
-        return parts.joined(separator: "\n\n")
+        }.joined(separator: "\n\n")
     }
 
     static var schema: [String: Any] {

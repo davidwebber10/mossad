@@ -11,8 +11,17 @@ struct PeopleScreen: View {
 
     var body: some View {
         NavigationStack {
-            List(people, id: \.self) { name in
-                NavigationLink(value: PersonRoute(name: name)) { PersonRow(name: name, stats: stats[name]!) }
+            List {
+                if query.isEmpty, let me = stats[store.owner] {
+                    Section("You") {
+                        NavigationLink(value: PersonRoute(name: store.owner)) { PersonRow(name: store.owner, stats: me) }
+                    }
+                }
+                Section(query.isEmpty && stats[store.owner] != nil ? "People" : "") {
+                    ForEach(people, id: \.self) { name in
+                        NavigationLink(value: PersonRoute(name: name)) { PersonRow(name: name, stats: stats[name]!) }
+                    }
+                }
             }
             .overlay {
                 if stats.isEmpty { ContentUnavailableView("No people yet", systemImage: "person.2", description: Text("People appear once their voices are named on the Mac.")) }
@@ -76,7 +85,9 @@ struct PersonView: View {
                 if stats.meetings.count >= 2 || store.profile.people[name]?.brief != nil {
                     PersonBriefCard(name: name, brief: store.profile.people[name]?.brief)
                 }
-                if let r = relation {
+                if name == store.owner {
+                    EmptyView()
+                } else if let r = relation {
                     PhoneRelation(relation: r)
                 } else {
                     ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
@@ -127,6 +138,7 @@ struct PersonView: View {
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: store.meetings.count) {
+            guard name != store.owner else { return }
             let records = store.meetings, owner = store.owner, name = name, commitments = store.commitments.visible
             let reviews = Dictionary(uniqueKeysWithValues: records.filter { $0.speakerNames.values.contains(name) }.compactMap { r in store.coach(r.id).map { (r.id, $0) } })
             let r = await Task.detached(priority: .userInitiated) {
