@@ -76,7 +76,7 @@ public struct SpeakerIdentifier: Sendable {
     }
 
     /// Averages fingerprints over the speaker's longest clear segments (each ≥ 2 s, up to 60 s in total).
-    private func embedding(for utterances: [Utterance], in url: URL) async throws -> [Float]? {
+    func embedding(for utterances: [Utterance], in url: URL) async throws -> [Float]? {
         let segments = utterances.filter { $0.end - $0.start >= Self.minimumSegment }.sorted { ($0.end - $0.start) > ($1.end - $1.start) }
         var used: TimeInterval = 0
         var vectors: [[Float]] = []

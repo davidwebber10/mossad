@@ -16,47 +16,70 @@ public struct LiveTranscript: Codable, Equatable, Sendable {
         public var time: TimeInterval
         /// The streaming service's label for a call-audio voice ("A", "B"); nil until it knows.
         public var speaker: String?
-        public var id: String { "\(source.rawValue)-\(order)" }
+        /// Each pause starts a new streaming session, whose turn numbers and labels start over.
+        public var session = 0
+        /// Where the line's words are in the track file, in seconds, once the service has final words.
+        public var audioStart: TimeInterval?
+        public var audioEnd: TimeInterval?
+        public var id: String { "\(source.rawValue)-\(session)-\(order)" }
+        /// The speaker label with its session, such as "0A": the key for `names`.
+        public var speakerKey: String? { speaker.map { "\(session)\($0)" } }
     }
 
     public private(set) var lines: [Line] = []
+    public private(set) var session = 0
+    /// Names found from the voice library during the call, by speaker key.
+    public var names: [String: String] = [:]
 
     public init() {}
 
     /// Applies one server message from a source's stream. Returns whether the lines changed.
+    /// `audioOffset` is where this session's audio starts in the track file.
     @discardableResult
-    public mutating func apply(_ message: Data, source: Track, at time: TimeInterval) -> Bool {
+    public mutating func apply(_ message: Data, source: Track, at time: TimeInterval, audioOffset: TimeInterval = 0) -> Bool {
+        struct Word: Decodable {
+            let start, end: Double?
+            let word_is_final: Bool?
+        }
         struct Turn: Decodable {
             let type: String
             let turn_order: Int?
             let end_of_turn: Bool?
             let transcript: String?
             let speaker_label: String?
+            let words: [Word]?
         }
         guard let turn = try? JSONDecoder().decode(Turn.self, from: message), turn.type == "Turn",
               let order = turn.turn_order, let text = turn.transcript, !text.isEmpty else { return false }
         // A turn with under a second of audio comes back PENDING; keep the label it already had.
         let speaker = turn.speaker_label.flatMap { $0.count <= 2 ? $0 : nil }
-        if let i = lines.firstIndex(where: { $0.source == source && $0.order == order }) {
+        let final = (turn.words ?? []).filter { $0.word_is_final == true }
+        let audioStart = final.first?.start.map { audioOffset + $0 / 1000 }
+        let audioEnd = final.last?.end.map { audioOffset + $0 / 1000 }
+        if let i = lines.firstIndex(where: { $0.source == source && $0.session == session && $0.order == order }) {
             // A final line does not go back to a draft.
             guard !lines[i].isFinal || turn.end_of_turn == true else { return false }
             lines[i].text = text
             lines[i].isFinal = turn.end_of_turn ?? false
             if let speaker { lines[i].speaker = speaker }
+            if let audioStart, let audioEnd { (lines[i].audioStart, lines[i].audioEnd) = (audioStart, audioEnd) }
         } else {
-            lines.append(Line(source: source, order: order, text: text, isFinal: turn.end_of_turn ?? false, time: time, speaker: speaker))
+            lines.append(Line(source: source, order: order, text: text, isFinal: turn.end_of_turn ?? false, time: time, speaker: speaker,
+                              session: session, audioStart: audioStart, audioEnd: audioEnd))
             lines.sort { $0.time < $1.time }
         }
         return true
     }
 
-    public mutating func reset() { lines = [] }
+    public mutating func reset() { self = LiveTranscript() }
+
+    public mutating func newSession() { session += 1 }
 
     /// "[01:05] Speaker A: text" lines, from `since` seconds into the call. The owner's lines use their name.
     public func text(owner: String, since: TimeInterval?) -> String {
         visibleLines.filter { $0.time >= (since ?? 0) }.map { line in
             let t = Int(line.time)
-            let who = line.source == .me ? owner : line.speaker.map { "Speaker \($0)" } ?? "Others"
+            let who = line.source == .me ? owner : line.speakerKey.flatMap { names[$0] } ?? line.speaker.map { "Speaker \($0)" } ?? "Others"
             return String(format: "[%02d:%02d] ", t / 60, t % 60) + "\(who): \(line.text)" + (line.isFinal ? "" : " (still speaking)")
         }.joined(separator: "\n")
     }

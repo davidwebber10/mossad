@@ -52,6 +52,9 @@ final class AppController: ObservableObject {
     private var liveStart = Date()
     /// When the open streaming sessions started, to log the time AssemblyAI bills.
     private var liveOpened: Date?
+    private var liveNaming: Task<Void, Never>?
+    /// One voice model for the pipeline and the live names, loaded once.
+    private let embeddings = FluidEmbeddingProvider()
     /// 0 means on. Otherwise Mossad is off until this time (seconds since 1970; `.infinity` for "until I turn it on").
     @AppStorage("offUntil") private var offUntil: Double = 0
     private var resumeTimer: Timer?
@@ -319,7 +322,7 @@ final class AppController: ObservableObject {
         }
         let summarizer: Summarizing? = languageModel.map { LLMSummarizer(llm: $0, ownerName: owner, organization: organization) }
         let notifier = notifier
-        pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: FluidEmbeddingProvider(),
+        pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: embeddings,
                             calendar: calendar, summarizer: summarizer, notify: { record in
                                 Task { @MainActor in notifier.postNewVoices(record) }
                             }, ownerName: owner, voiceFingerprints: voiceFingerprints,
@@ -429,25 +432,47 @@ final class AppController: ObservableObject {
     /// Opens one streaming session per track. Billed while open, so only while recording and not paused.
     private func startLive(reset: Bool) {
         stopLive()
-        if reset { live.reset() }
+        if reset { live.reset() } else { live.newSession() }
         guard liveTranscriptEnabled, case .recording(_, let since) = status, let key = keychain.get(.assemblyai) else { return }
         liveStart = since
+        // A new call's stream starts with the file; after a pause it starts where the file is now.
+        let themOffset = reset ? 0 : recorder.themDuration
+        let themURL = paths.callDirectory(CallRecorder.callID(for: since)).appendingPathComponent(Track.them.fileName)
         // Saved for the current_call tool in Chat and in other AI apps.
         live.fileURL = paths.callDirectory(CallRecorder.callID(for: since)).appendingPathComponent(LiveTranscript.fileName)
         for (track, sink) in [(Track.me, recorder.meSink), (.them, recorder.themSink)] {
             let session = LiveTranscriber(apiKey: key, speakers: track == .them) { [weak self] message in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.live.apply(message, source: track, at: Date().timeIntervalSince(self.liveStart))
+                    self.live.apply(message, source: track, at: Date().timeIntervalSince(self.liveStart),
+                                    audioOffset: track == .them ? themOffset : 0)
                 }
             }
             sink.set { buffer in session.send(buffer) }
             liveSessions.append(session)
         }
         liveOpened = Date()
+        if voiceFingerprints { startLiveNaming(themURL: themURL) }
+    }
+
+    /// Every 20 s, names the call's voices that the voice library knows, for the live transcript and current_call.
+    private func startLiveNaming(themURL: URL) {
+        let namer = LiveSpeakerNamer(library: library, provider: embeddings)
+        liveNaming = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                guard let snapshot = self?.live.snapshot, !Task.isCancelled else { return }
+                let names = await Task.detached(priority: .utility) { await namer.names(for: snapshot, themURL: themURL) }.value
+                guard !Task.isCancelled, names.count > snapshot.names.count else { continue }
+                Log.info("Live transcript: \(names.count) voices named")
+                self?.live.setNames(names)
+            }
+        }
     }
 
     private func stopLive() {
+        liveNaming?.cancel()
+        liveNaming = nil
         recorder.meSink.set(nil)
         recorder.themSink.set(nil)
         liveSessions.forEach { $0.stop() }
@@ -900,8 +925,22 @@ final class LiveTranscriptModel: ObservableObject {
     /// One write at a time, in order, so an older copy never replaces a newer one.
     private let saves = DispatchQueue(label: "com.dwebber.mossad.live-save", qos: .utility)
 
-    func apply(_ message: Data, source: Track, at time: TimeInterval) {
-        guard pending.apply(message, source: source, at: time), !scheduled else { return }
+    var snapshot: LiveTranscript { pending }
+
+    func newSession() { pending.newSession() }
+
+    func setNames(_ names: [String: String]) {
+        pending.names = names
+        publish()
+    }
+
+    func apply(_ message: Data, source: Track, at time: TimeInterval, audioOffset: TimeInterval) {
+        guard pending.apply(message, source: source, at: time, audioOffset: audioOffset) else { return }
+        publish()
+    }
+
+    private func publish() {
+        guard !scheduled else { return }
         scheduled = true
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(250))

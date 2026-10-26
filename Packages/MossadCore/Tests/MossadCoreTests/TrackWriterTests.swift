@@ -102,6 +102,21 @@ final class TrackWriterTests: XCTestCase {
         return Double(silent) / Double(max(blocks, 1))
     }
 
+    /// The live stream's times must match the file's, so the live names can cut the right audio.
+    func testAShortGapIsAlsoSentToTheLiveStream() throws {
+        let url = dir.appendingPathComponent("s.caf")
+        var now = t0.addingTimeInterval(1)
+        let sink = AudioSink()
+        let sent = Counter()
+        sink.set { sent.add(Int($0.frameLength)) }
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now }, sink: sink)
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        now = t0.addingTimeInterval(4)
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        XCTAssertEqual(Double(sent.value) / 16_000, 4, accuracy: 0.05)
+        writer.close()
+    }
+
     func testTrimShortensFile() throws {
         let url = dir.appendingPathComponent("trim.caf")
         try writeTestAudio(url, seconds: 10, frequency: 440)
@@ -152,4 +167,11 @@ final class TrackWriterTests: XCTestCase {
         try writer.append(sineBuffer(seconds: 10, sampleRate: 16_000, channels: 1, amplitude: 0))
         XCTAssertEqual(try XCTUnwrap(writer.lastSound), 10, accuracy: 0.05)
     }
+}
+
+final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var total = 0
+    var value: Int { lock.withLock { total } }
+    func add(_ n: Int) { lock.withLock { total += n } }
 }

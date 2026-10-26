@@ -819,10 +819,11 @@ private struct LiveTranscriptView: View {
                         }
                         ForEach(model.transcript.visibleLines) { line in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                Text(line.source == .me ? "You" : "Call")
+                                Text(who(line))
                                     .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(Theme.speakerPalette[line.source == .me ? 0 : 1])
-                                    .frame(width: 34, alignment: .leading)
+                                    .foregroundStyle(Theme.speakerPalette[color(line) % Theme.speakerPalette.count])
+                                    .lineLimit(1)
+                                    .frame(width: 64, alignment: .leading)
                                 Text(line.text)
                                     .foregroundStyle(line.isFinal ? Color.primary : Color.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -842,6 +843,18 @@ private struct LiveTranscriptView: View {
             .frame(minHeight: 140, maxHeight: 260)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+    }
+
+    /// You, a call voice's first name once the voice library knows it, else its letter.
+    private func who(_ line: LiveTranscript.Line) -> String {
+        guard line.source == .them else { return "You" }
+        if let name = line.speakerKey.flatMap({ model.transcript.names[$0] }) { return String(name.split(separator: " ").first ?? "") }
+        return line.speaker.map { "Voice \($0)" } ?? "Call"
+    }
+
+    private func color(_ line: LiveTranscript.Line) -> Int {
+        guard line.source == .them else { return 0 }
+        return 1 + Int(line.speaker?.unicodeScalars.first.map { $0.value } ?? 65) - 65
     }
 }
 

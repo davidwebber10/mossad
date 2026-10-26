@@ -292,6 +292,9 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     /// Seconds recorded so far: the longer of the two tracks.
+    /// Seconds in the call track so far: where a new live session's audio starts in it.
+    public var themDuration: TimeInterval { themWriter?.duration ?? 0 }
+
     private var recordedLength: TimeInterval { max(meWriter?.duration ?? 0, themWriter?.duration ?? 0) }
 
     static func time(_ date: Date) -> String { date.formatted(date: .omitted, time: .shortened) }

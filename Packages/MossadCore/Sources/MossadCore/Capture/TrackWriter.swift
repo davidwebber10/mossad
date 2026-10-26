@@ -103,7 +103,7 @@ public final class TrackWriter: @unchecked Sendable {
                 return
             }
             if Double(expected - written) > Self.gapTolerance * Self.sampleRate {
-                try writeSilence(frames: expected - written)
+                try writeSilence(frames: expected - written, live: Double(expected - written) <= Self.liveGapLimit * Self.sampleRate)
             }
             try write(converted)
             let level = Self.rms(converted)
@@ -175,7 +175,11 @@ public final class TrackWriter: @unchecked Sendable {
         written += AVAudioFramePosition(buffer.frameLength)
     }
 
-    private func writeSilence(frames: AVAudioFramePosition) throws {
+    /// The live stream gets short gaps too, so its times stay the file's times. A longer gap (the Mac slept)
+    /// would be a burst of silence the stream does not need.
+    static let liveGapLimit: Double = 10
+
+    private func writeSilence(frames: AVAudioFramePosition, live: Bool = false) throws {
         var remaining = frames
         while remaining > 0 {
             let n = AVAudioFrameCount(min(remaining, 16_000))
@@ -183,6 +187,7 @@ public final class TrackWriter: @unchecked Sendable {
             silence.frameLength = n
             memset(silence.floatChannelData![0], 0, Int(n) * MemoryLayout<Float>.size)
             try write(silence)
+            if live, !muted { sink?.send(silence) }
             remaining -= AVAudioFramePosition(n)
         }
     }
