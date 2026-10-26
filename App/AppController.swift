@@ -253,6 +253,7 @@ final class AppController: ObservableObject {
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
         if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }
         if CommandLine.arguments.contains("--show-muted") { isMuted = true }
+        if !preview { backfillSummaries() }
         // Development hook: `--regenerate-summaries` writes new summaries for today's finished meetings.
         if !preview, CommandLine.arguments.contains("--regenerate-summaries") {
             let today = meetings.filter { Calendar.current.isDateInToday($0.start) && $0.status == .written }.map(\.id)
@@ -663,6 +664,17 @@ final class AppController: ObservableObject {
     }
 
     /// A new summary from Claude for a finished meeting; the transcript and names stay.
+    /// Once: new summaries for the last 90 days' calls from before topics, kinds, and outcomes, so Analytics has them.
+    func backfillSummaries() {
+        guard !UserDefaults.standard.bool(forKey: "summaryBackfill2026") else { return }
+        UserDefaults.standard.set(true, forKey: "summaryBackfill2026")
+        let since = Date().addingTimeInterval(-90 * 86_400)
+        let ids = meetings.filter { $0.status == .written && $0.start >= since && ($0.kind == nil || $0.tags.isEmpty || $0.hasOutcomes == nil) }.map(\.id)
+        guard !ids.isEmpty else { return }
+        Log.info("Writing new summaries for \(ids.count) recent calls")
+        Task { for id in ids { await track { await self.pipeline.regenerateSummary(id) } } }
+    }
+
     func regenerateSummary(_ id: String) {
         Task { await track { await self.pipeline.regenerateSummary(id) } }
     }
