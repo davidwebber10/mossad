@@ -55,7 +55,7 @@ private struct PersonRow: View {
     }
 }
 
-private struct PersonView: View {
+struct PersonView: View {
     @EnvironmentObject var store: PhoneStore
     let name: String
     let stats: PersonStats
