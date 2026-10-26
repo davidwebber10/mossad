@@ -121,7 +121,7 @@ public struct PersonBriefWriter: Sendable {
         updates), and "Watch out for" only when there is something real. Each section has 1 or 2 points, each at \
         most 18 words. Fewer, sharper points beat many.
         call_id is the call that shows a point best, exactly as listed, or "" when it shows across several. Never \
-        judge character. When an earlier read is given, keep what still holds and change what the new calls change.
+        judge character. Refer to the person by first name or as "they"; never guess their pronouns. When an earlier read is given, keep what still holds and change what the new calls change.
         """
     }
 
@@ -141,7 +141,7 @@ public struct PersonBriefWriter: Sendable {
         preparation, updates), and "Watch out for" only when there is something real. Each section has 1 or 2 \
         points, each at most 18 words. Fewer, sharper points beat many.
         call_id is the call that shows a point best, exactly as listed, or "" when it shows across several. Never \
-        judge character. When an earlier read is given, keep what still holds and change what the new calls change.
+        judge character. Refer to the person by first name or as "they"; never guess their pronouns. When an earlier read is given, keep what still holds and change what the new calls change.
         """
     }
 

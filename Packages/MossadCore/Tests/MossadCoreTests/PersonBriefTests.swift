@@ -78,6 +78,7 @@ final class PersonBriefTests: XCTestCase {
         XCTAssertFalse(model.user.contains("I need the numbers by Friday."), "not the other people's words")
         XCTAssertTrue(model.user.contains("Dana leads with questions."), "the coach's profile of the owner")
         XCTAssertTrue(model.system.contains("Someone who works with Dana"), model.system)
+        XCTAssertTrue(model.system.contains("never guess their pronouns"))
     }
 
     func testTheOwnersReadIsDueLikeAnyoneElses() {
