@@ -32,6 +32,7 @@ struct MossadApp: App {
             MenuBarIcon(controller: controller)
         }
         .menuBarExtraStyle(.window)
+        .commands { MossadCommands(controller: controller) }
 
     }
 }

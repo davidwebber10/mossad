@@ -41,7 +41,6 @@ struct ChatView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: newChat) { Label("New chat", systemImage: "square.and.pencil") }
-                    .keyboardShortcut("n", modifiers: .command)
                     .help("New chat (⌘N)")
             }
         }
