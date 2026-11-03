@@ -113,5 +113,8 @@ final class FakeModel: LanguageModel, @unchecked Sendable {
     }
 
     func runTools(system: String, history: [ChatMessage], question: String, tools: [ToolSpec], purpose: UsageEvent.Purpose,
-                  execute: @escaping @Sendable (String, [String: Any]) -> String) async throws -> String { "" }
+                  execute: @escaping @Sendable (String, [String: Any]) -> String) async throws -> String {
+        self.system = system
+        return ""
+    }
 }

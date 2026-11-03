@@ -57,7 +57,10 @@ struct ChatView: View {
                 ForEach(chats) { chat in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(chat.title).lineLimit(1)
-                        Text(shortTime(chat.updated)).font(.system(size: 11)).foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            if chat.callID != nil { Image(systemName: "waveform").font(.system(size: 9)).foregroundStyle(.tint) }
+                            Text(shortTime(chat.updated)).font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.vertical, 3)
                     .tag(chat.id)
@@ -83,6 +86,7 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
+                        if let id = current.callID, let r = controller.meetings.first(where: { $0.id == id }) { MeetingPill(record: r) }
                         if current.messages.isEmpty && running == nil { welcome }
                         ForEach(current.messages) { message in
                             MessageView(message: message).id(message.id)
@@ -217,7 +221,7 @@ struct ChatView: View {
         let collector = StepSink { step in Task { @MainActor in steps.append(step) } }
         Task {
             do {
-                let answer = try await controller.chatAnswer(q, history: history, onStep: collector.add)
+                let answer = try await controller.chatAnswer(q, history: history, about: chat.callID, onStep: collector.add)
                 chat.messages.append(ChatMessage(role: .assistant, text: answer, steps: steps))
                 chat.updated = Date()
                 store(chat)
@@ -239,12 +243,12 @@ struct ChatView: View {
     }
 }
 
-private final class StepSink: Sendable {
+final class StepSink: Sendable {
     let add: @Sendable (String) -> Void
     init(_ add: @escaping @Sendable (String) -> Void) { self.add = add }
 }
 
-private struct MessageView: View {
+struct MessageView: View {
     let message: ChatMessage
     @State private var showSteps = false
 
@@ -280,4 +284,26 @@ private struct MessageView: View {
         }
     }
 
+}
+
+/// The meeting a chat is about, as a small capsule that opens it.
+struct MeetingPill: View {
+    @EnvironmentObject var controller: AppController
+    let record: CallRecord
+
+    var body: some View {
+        Button { controller.openMeeting(record.id) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "waveform").foregroundStyle(.tint)
+                Text(record.title).lineLimit(1)
+                Text(record.start.formatted(.dateTime.month(.abbreviated).day())).foregroundStyle(.secondary)
+            }
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Theme.surface, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.separator))
+        }
+        .buttonStyle(.plain)
+        .help("Open this meeting")
+    }
 }

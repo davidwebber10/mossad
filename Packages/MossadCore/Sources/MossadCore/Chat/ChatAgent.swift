@@ -29,7 +29,23 @@ public struct ChatAgent: Sendable {
         self.init(llm: AnthropicModel(apiKey: apiKey, model: model, session: session, usage: usage), ownerName: ownerName)
     }
 
-    static func system(owner: String, tools: ChatTools, now: Date) -> String {
+    static func system(owner: String, tools: ChatTools, now: Date, about callID: String? = nil) -> String {
+        var focus = ""
+        if let callID, let text = tools.readMeeting(callID) {
+            focus = """
+
+
+            ## This chat is about one meeting
+            \(owner) opened this chat from the meeting below. "This meeting", "the call", "they", and "we" refer to it \
+            unless they say otherwise. Answer from it first; use the tools for other meetings only when asked or when \
+            it helps.
+            \(text)
+            """
+        }
+        return base(owner: owner, tools: tools, now: now) + focus
+    }
+
+    private static func base(owner: String, tools: ChatTools, now: Date) -> String {
         let dates = tools.records.isEmpty ? "none yet"
             : "\(tools.records.count) meetings from \(tools.records.last!.start.formatted(date: .abbreviated, time: .omitted)) to \(tools.records.first!.start.formatted(date: .abbreviated, time: .omitted))"
         var memory = ""
@@ -95,9 +111,9 @@ public struct ChatAgent: Sendable {
 
     /// `onStep` reports each lookup as it starts, for the "Reading Launch sync" line.
     public func answer(_ question: String, history: [ChatMessage], records: [CallRecord], paths: Paths? = nil, now: Date = Date(),
-                       onStep: @escaping @Sendable (String) -> Void) async throws -> String {
+                       about callID: String? = nil, onStep: @escaping @Sendable (String) -> Void) async throws -> String {
         let tools = ChatTools(records: records, owner: ownerName, paths: paths)
-        return try await llm.runTools(system: Self.system(owner: ownerName, tools: tools, now: now), history: history, question: question,
+        return try await llm.runTools(system: Self.system(owner: ownerName, tools: tools, now: now, about: callID), history: history, question: question,
                                       tools: paths == nil ? ChatTools.definitions : ChatTools.allDefinitions, purpose: .question) { name, input in
             onStep(ChatTools.step(name, input: input) { id in tools.records.first { $0.id == id }?.title })
             return tools.run(name, input: input)

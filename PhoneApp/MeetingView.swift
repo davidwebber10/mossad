@@ -14,7 +14,7 @@ struct MeetingView: View {
     @State private var tab = Section(rawValue: ProcessInfo.processInfo.environment["MOSSAD_SECTION"]?.capitalized ?? "") ?? .summary
     @State private var review: CoachReview?
 
-    enum Section: String, CaseIterable { case summary = "Summary", transcript = "Transcript", coach = "Coach" }
+    enum Section: String, CaseIterable { case summary = "Summary", transcript = "Transcript", coach = "Coach", chat = "Chat" }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -39,6 +39,7 @@ struct MeetingView: View {
                         ContentUnavailableView("No review", systemImage: "person.wave.2",
                                                description: Text("The coach has not reviewed this meeting."))
                     }
+                case .chat: PhoneMeetingChat(record: record)
                 }
             }
             .padding(.horizontal)

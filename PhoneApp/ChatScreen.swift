@@ -125,7 +125,7 @@ struct ChatScreen: View {
         let sink = StepSink { step in Task { @MainActor in steps.append(step) } }
         Task {
             do {
-                let answer = try await store.answer(q, history: history, onStep: sink.add)
+                let answer = try await store.answer(q, history: history, about: chat.callID, onStep: sink.add)
                 var latest = store.chats.first { $0.id == chat.id } ?? chat
                 latest.messages.append(ChatMessage(role: .assistant, text: answer, steps: steps))
                 latest.updated = Date()
@@ -139,7 +139,7 @@ struct ChatScreen: View {
     }
 }
 
-private final class StepSink: Sendable {
+final class StepSink: Sendable {
     let add: @Sendable (String) -> Void
     init(_ add: @escaping @Sendable (String) -> Void) { self.add = add }
 }

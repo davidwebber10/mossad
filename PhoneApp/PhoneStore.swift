@@ -124,9 +124,11 @@ final class PhoneStore: ObservableObject {
         share()
     }
 
-    func answer(_ question: String, history: [ChatMessage], onStep: @escaping @Sendable (String) -> Void) async throws -> String {
+    func answer(_ question: String, history: [ChatMessage], about callID: String? = nil,
+                onStep: @escaping @Sendable (String) -> Void) async throws -> String {
         guard let llm = languageModel else { throw NoSharedKey() }
-        return try await ChatAgent(llm: llm, ownerName: owner).answer(question, history: history, records: meetings, paths: paths, onStep: onStep)
+        return try await ChatAgent(llm: llm, ownerName: owner).answer(question, history: history, records: meetings, paths: paths,
+                                                                      about: callID, onStep: onStep)
     }
 
     /// Writes the chat's short summary for later chats to recall, then syncs it.
