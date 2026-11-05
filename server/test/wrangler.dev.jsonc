@@ -1,0 +1,10 @@
+{
+  "name": "mossad-server-dev",
+  "main": "../src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "SHARE_HOST": "localhost:8787", "MCP_HOST": "127.0.0.1:8787", "MCP_PATH": "/mossad", "REPO_URL": "https://github.com/davidwebber10/mossad", "OWNER_SECRET": "dev-secret" },
+  "d1_databases": [{ "binding": "DB", "database_name": "mossad-dev", "database_id": "00000000-0000-0000-0000-000000000000" }],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "mossad-dev" }],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }]
+}

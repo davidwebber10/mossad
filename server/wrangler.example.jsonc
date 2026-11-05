@@ -1,0 +1,24 @@
+// Copy to wrangler.jsonc, then fill in your host names and the IDs that `wrangler d1 create` and
+// `wrangler kv namespace create` print. README.md in this folder has the steps.
+{
+  "name": "mossad-server",
+  "workers_dev": false,
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    { "pattern": "notes.example.com", "custom_domain": true },
+    { "pattern": "mcp.example.com/mossad*", "zone_name": "example.com" },
+    { "pattern": "mcp.example.com/.well-known/oauth-authorization-server/mossad*", "zone_name": "example.com" },
+    { "pattern": "mcp.example.com/.well-known/oauth-protected-resource/mossad*", "zone_name": "example.com" }
+  ],
+  "vars": {
+    "SHARE_HOST": "notes.example.com",
+    "MCP_HOST": "mcp.example.com",
+    "MCP_PATH": "/mossad",
+    "REPO_URL": "https://github.com/davidwebber10/mossad"
+  },
+  "d1_databases": [{ "binding": "DB", "database_name": "mossad", "database_id": "<from wrangler d1 create mossad>" }],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "mossad-files" }],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "<from wrangler kv namespace create OAUTH_KV>" }]
+}
