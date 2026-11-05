@@ -38,13 +38,15 @@ public struct SyncPayload: Sendable {
     public let fields: MeetingFields
     public let record: Data
     public let coach: Data?
+    /// The meeting as the server's MCP reads it; only for the server store.
+    public let view: Data?
     /// Changes whenever anything uploaded changes.
     public let hash: String
 
     /// Only finished meetings: a call still recording or processing changes too often to be worth syncing.
     public static func isSyncable(_ r: CallRecord) -> Bool { r.status == .written }
 
-    public init(record r: CallRecord, coach review: CoachReview?) {
+    public init(record r: CallRecord, coach review: CoachReview?, view withView: Bool = false) {
         var slim = r
         // Voice fingerprints, word timings, and the per-track copies are large and only matter on the Mac.
         slim.speakerEmbeddings = [:]
@@ -57,11 +59,13 @@ public struct SyncPayload: Sendable {
         record = (try? JSONEncoder.callRecord.encode(slim)) ?? Data()
         let coachData = review.flatMap { try? JSONEncoder.callRecord.encode($0) }
         coach = coachData
-        hash = SHA256.hash(data: record + (coachData ?? Data())).map { String(format: "%02x", $0) }.joined()
+        let viewData = withView ? try? MeetingView.encoder.encode(MeetingView(r)) : nil
+        view = viewData
+        hash = SHA256.hash(data: record + (coachData ?? Data()) + (viewData ?? Data())).map { String(format: "%02x", $0) }.joined()
     }
 }
 
-/// What the Mac last uploaded (by meeting, its hash), and on the phone the CloudKit change token.
+/// What this device last uploaded (by record, its hash), and the store's change token.
 public struct SyncState: Codable, Equatable, Sendable {
     public static let fileName = "state.json"
     public var uploaded: [String: String] = [:]
@@ -81,14 +85,14 @@ public struct SyncState: Codable, Equatable, Sendable {
                     delete: uploaded.keys.filter { !ids.contains($0) && !SharedPayload.isShared($0) }.sorted())
     }
 
-    public static func load(from dir: URL) throws -> SyncState {
+    public static func load(from dir: URL, fileName: String = fileName) throws -> SyncState {
         let url = dir.appendingPathComponent(fileName)
         guard FileManager.default.fileExists(atPath: url.path) else { return SyncState() }
         return try JSONDecoder().decode(SyncState.self, from: Data(contentsOf: url))
     }
 
-    public func save(to dir: URL) throws {
+    public func save(to dir: URL, fileName: String = fileName) throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try JSONEncoder().encode(self).write(to: dir.appendingPathComponent(Self.fileName), options: .atomic)
+        try JSONEncoder().encode(self).write(to: dir.appendingPathComponent(fileName), options: .atomic)
     }
 }

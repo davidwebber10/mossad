@@ -1,12 +1,10 @@
-import CloudKit
-import CryptoKit
 import Foundation
 
-/// Meetings in the private iCloud database. The Mac pushes finished meetings and the coach's memory; the
-/// phone pulls them into its own copy of the folder layout, so the same readers work on both.
+/// Sync between the Mac and the iPhone through a record store: iCloud's private database, or the owner's own
+/// server. The Mac pushes finished meetings and the coach's memory; the phone pulls them into its own copy of
+/// the folder layout, so the same readers work on both. Chats, review notes, the memory, and commitments go
+/// both ways; room recordings go from the phone to the Mac.
 public actor CloudSync {
-    public static let containerID = "iCloud.com.dwebber.mossad"
-    static let zone = CKRecordZone.ID(zoneName: "Mossad", ownerName: CKCurrentUserDefaultName)
     static let meetingType = "Meeting"
     static let profileType = "CoachProfile"
     static let profileName = "coach-profile"
@@ -14,22 +12,42 @@ public actor CloudSync {
     static let notesType = "CoachNotes"
     static let commitmentsType = "Commitments"
     static let recordingType = "Recording"
-    /// CloudKit takes up to 400 changes a request; assets make big requests, so stay well under.
+    /// Assets make big requests, so stay well under CloudKit's 400 changes a request.
     static let batch = 50
 
-    private let database: CKDatabase
+    private let store: any RecordStore
     private let paths: Paths
-    private var zoneReady = false
+    private var prepared = false
 
-    public init(paths: Paths) {
+    public init(paths: Paths, store: any RecordStore) {
         self.paths = paths
-        database = CKContainer(identifier: Self.containerID).privateCloudDatabase
+        self.store = store
     }
 
-    private func ensureZone() async throws {
-        guard !zoneReady else { return }
-        _ = try await database.modifyRecordZones(saving: [CKRecordZone(zoneID: Self.zone)], deleting: [])
-        zoneReady = true
+    /// iCloud, as before.
+    public init(paths: Paths) {
+        self.init(paths: paths, store: CloudKitStore())
+    }
+
+    private func prepare() async throws {
+        guard !prepared else { return }
+        try await store.prepare()
+        prepared = true
+    }
+
+    private func loadState() throws -> SyncState { try SyncState.load(from: paths.sync, fileName: store.stateFileName) }
+    private func saveState(_ s: SyncState) throws { try s.save(to: paths.sync, fileName: store.stateFileName) }
+
+    private func scratch() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mossad-sync-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func file(_ data: Data, _ name: String, in dir: URL) throws -> URL {
+        let url = dir.appendingPathComponent(name)
+        try data.write(to: url)
+        return url
     }
 
     // MARK: Mac
@@ -37,58 +55,45 @@ public actor CloudSync {
     /// Uploads new and changed meetings, deletes removed ones, and returns how many changed.
     @discardableResult
     public func push() async throws -> Int {
-        try await ensureZone()
-        var state = try SyncState.load(from: paths.sync)
+        try await prepare()
+        var state = try loadState()
+        let withView = store.wantsMeetingView
         let payloads = ProcessingQueue(paths: paths).allRecords().filter(SyncPayload.isSyncable).map {
-            SyncPayload(record: $0, coach: CoachReview.load(in: paths.callDirectory($0.id)))
+            SyncPayload(record: $0, coach: CoachReview.load(in: paths.callDirectory($0.id)), view: withView)
         }
         let plan = state.plan(payloads)
-        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("mossad-sync-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: scratch) }
+        let dir = try scratch()
+        defer { try? FileManager.default.removeItem(at: dir) }
 
         var changed = 0
         for chunk in stride(from: 0, to: plan.upload.count, by: Self.batch).map({ Array(plan.upload[$0..<min($0 + Self.batch, plan.upload.count)]) }) {
-            let records = try chunk.map { try meetingRecord($0, scratch: scratch) }
-            let (saved, _) = try await database.modifyRecords(saving: records, deleting: [], savePolicy: .allKeys, atomically: false)
-            for (id, result) in saved {
-                guard case .success = result, let payload = chunk.first(where: { $0.id == id.recordName }) else {
-                    if case .failure(let error) = result { Log.error("iCloud upload of \(id.recordName) failed: \(error)") }
-                    continue
-                }
-                state.uploaded[payload.id] = payload.hash
+            let records = try chunk.map { try meetingRecord($0, in: dir) }
+            let saved = try await store.save(records)
+            for p in chunk where saved.contains(p.id) {
+                state.uploaded[p.id] = p.hash
                 changed += 1
             }
-            try state.save(to: paths.sync)
+            try saveState(state)
         }
         if !plan.delete.isEmpty {
-            let ids = plan.delete.map { CKRecord.ID(recordName: $0, zoneID: Self.zone) }
-            let (_, deleted) = try await database.modifyRecords(saving: [], deleting: ids, savePolicy: .allKeys, atomically: false)
-            for (id, result) in deleted {
-                // Already gone counts as deleted.
-                if case .failure(let error) = result, (error as? CKError)?.code != .unknownItem { continue }
-                state.uploaded[id.recordName] = nil
-                changed += 1
-            }
-            try state.save(to: paths.sync)
+            let gone = try await store.delete(plan.delete)
+            for id in gone { state.uploaded[id] = nil; changed += 1 }
+            try saveState(state)
         }
         return changed
     }
 
-    private func meetingRecord(_ p: SyncPayload, scratch: URL) throws -> CKRecord {
-        let record = CKRecord(recordType: Self.meetingType, recordID: CKRecord.ID(recordName: p.id, zoneID: Self.zone))
-        record["title"] = p.fields.title
-        record["start"] = p.fields.start
-        record["end"] = p.fields.end
-        record["platform"] = p.fields.platform
-        record["headline"] = p.fields.headline
-        record["kind"] = p.fields.kind
-        // CloudKit cannot learn a field's type from an empty list; the record asset has the tags anyway.
-        record["tags"] = p.fields.tags.isEmpty ? nil : p.fields.tags
-        record["status"] = p.fields.status
-        record["record"] = try asset(p.record, "\(p.id)-record.json", scratch)
-        record["coach"] = try p.coach.map { try asset($0, "\(p.id)-coach.json", scratch) }
-        return record
+    private func meetingRecord(_ p: SyncPayload, in dir: URL) throws -> StoredRecord {
+        var fields: [String: StoredValue] = [
+            "title": .string(p.fields.title), "start": .date(p.fields.start), "end": .date(p.fields.end),
+            "platform": .string(p.fields.platform), "tags": .strings(p.fields.tags), "status": .string(p.fields.status),
+        ]
+        if let h = p.fields.headline { fields["headline"] = .string(h) }
+        if let k = p.fields.kind { fields["kind"] = .string(k) }
+        var files = ["record": try file(p.record, "\(p.id)-record.json", in: dir)]
+        if let coach = p.coach { files["coach"] = try file(coach, "\(p.id)-coach.json", in: dir) }
+        if let view = p.view { files["view"] = try file(view, "\(p.id)-view.json", in: dir) }
+        return StoredRecord(name: p.id, type: Self.meetingType, fields: fields, files: files)
     }
 
     // MARK: Both devices
@@ -97,8 +102,8 @@ public actor CloudSync {
     /// chats deleted here.
     @discardableResult
     public func pushShared() async throws -> Int {
-        try await ensureZone()
-        var state = try SyncState.load(from: paths.sync)
+        try await prepare()
+        var state = try loadState()
         var payloads = ChatStore(directory: paths.chats).all().map(SharedPayload.chat)
         for r in ProcessingQueue(paths: paths).allRecords() {
             if let review = CoachReview.load(in: paths.callDirectory(r.id)), let notes = SharedPayload.notes(callID: r.id, review: review) {
@@ -115,107 +120,81 @@ public actor CloudSync {
         }
         let plan = state.planShared(payloads)
         guard !plan.upload.isEmpty || !plan.delete.isEmpty else { return 0 }
-        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("mossad-sync-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: scratch) }
+        let dir = try scratch()
+        defer { try? FileManager.default.removeItem(at: dir) }
         var changed = 0
         for chunk in stride(from: 0, to: plan.upload.count, by: Self.batch).map({ Array(plan.upload[$0..<min($0 + Self.batch, plan.upload.count)]) }) {
-            let records = try chunk.map { p -> CKRecord in
+            let records = try chunk.map { p -> StoredRecord in
                 let type = switch p.kind {
                 case .chat: Self.chatType
                 case .notes: Self.notesType
                 case .profile: Self.profileType
                 case .commitments: Self.commitmentsType
                 }
-                let record = CKRecord(recordType: type, recordID: Self.recordID(p.key))
-                record["data"] = try asset(p.data, "\(p.key.replacingOccurrences(of: ":", with: "-")).json", scratch)
-                return record
+                let name = Self.recordName(p.key)
+                return StoredRecord(name: name, type: type, files: ["data": try file(p.data, "\(name).json", in: dir)])
             }
-            let (saved, _) = try await database.modifyRecords(saving: records, deleting: [], savePolicy: .allKeys, atomically: false)
-            for (id, result) in saved {
-                guard case .success = result, let p = chunk.first(where: { Self.recordID($0.key) == id }) else { continue }
+            let saved = try await store.save(records)
+            for p in chunk where saved.contains(Self.recordName(p.key)) {
                 state.uploaded[p.key] = p.hash
                 changed += 1
             }
         }
         if !plan.delete.isEmpty {
-            let (_, deleted) = try await database.modifyRecords(saving: [], deleting: plan.delete.map(Self.recordID), savePolicy: .allKeys, atomically: false)
-            for (id, result) in deleted {
-                if case .failure(let error) = result, (error as? CKError)?.code != .unknownItem { continue }
-                if let key = plan.delete.first(where: { Self.recordID($0) == id }) { state.uploaded[key] = nil }
-                changed += 1
-            }
+            let gone = try await store.delete(plan.delete.map(Self.recordName))
+            for key in plan.delete where gone.contains(Self.recordName(key)) { state.uploaded[key] = nil; changed += 1 }
         }
-        try state.save(to: paths.sync)
+        try saveState(state)
         return changed
     }
 
     /// "chat:<uuid>" becomes "chat-<uuid>"; the profile keeps its own name.
-    static func recordID(_ key: String) -> CKRecord.ID {
-        CKRecord.ID(recordName: key == "profile" ? profileName : key.replacingOccurrences(of: ":", with: "-"), zoneID: zone)
-    }
-
-    private func asset(_ data: Data, _ name: String, _ scratch: URL) throws -> CKAsset {
-        let url = scratch.appendingPathComponent(name)
-        try data.write(to: url)
-        return CKAsset(fileURL: url)
+    static func recordName(_ key: String) -> String {
+        key == "profile" ? profileName : key.replacingOccurrences(of: ":", with: "-")
     }
 
     // MARK: Phone
 
-    /// Sends a room recording to the Mac. Returns once iCloud has it, so the phone can keep its copy until then.
+    /// Sends a room recording to the Mac. Returns once the store has it, so the phone can keep its copy until then.
     public func upload(_ p: PhoneRecording, audio: URL) async throws {
-        try await ensureZone()
-        let record = CKRecord(recordType: Self.recordingType, recordID: CKRecord.ID(recordName: PhoneRecording.recordName(p.id), zoneID: Self.zone))
-        record["start"] = p.start
-        record["end"] = p.end
-        record["title"] = p.title
-        record["audio"] = CKAsset(fileURL: audio)
-        _ = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: true)
+        try await prepare()
+        var fields: [String: StoredValue] = ["start": .date(p.start), "end": .date(p.end)]
+        if let t = p.title { fields["title"] = .string(t) }
+        let name = PhoneRecording.recordName(p.id)
+        let saved = try await store.save([StoredRecord(name: name, type: Self.recordingType, fields: fields, files: ["audio": audio])])
+        guard saved.contains(name) else { throw ServerError.http(0, "The recording did not upload.") }
     }
 
     /// Fetches what changed since the last pull into the local folders, and returns how many records changed.
-    /// The Mac leaves out meetings: it wrote them, and the copies in iCloud are trimmed.
+    /// The Mac leaves out meetings: it wrote them, and the copies in the store are trimmed.
     @discardableResult
     public func pull(includeMeetings: Bool = true) async throws -> Int {
-        var state = try SyncState.load(from: paths.sync)
-        var token = state.changeToken.flatMap { try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: $0) }
+        var state = try loadState()
         var changed = 0
-        var imported: [CKRecord.ID] = []
+        var imported: [String] = []
         defer {
-            // An imported recording lives on the Mac now; remove the copy in iCloud.
+            // An imported recording lives on the Mac now; remove the copy in the store.
             if !imported.isEmpty {
-                let ids = imported, database = database
-                Task { _ = try? await database.modifyRecords(saving: [], deleting: ids, savePolicy: .allKeys, atomically: false) }
+                let names = imported, store = store
+                Task { await store.discard(names) }
             }
         }
         while true {
-            let changes: (modificationResultsByID: [CKRecord.ID: Result<CKDatabase.RecordZoneChange.Modification, any Error>],
-                          deletions: [CKDatabase.RecordZoneChange.Deletion], changeToken: CKServerChangeToken, moreComing: Bool)
-            do {
-                changes = try await database.recordZoneChanges(inZoneWith: Self.zone, since: token)
-            } catch let error as CKError where error.code == .zoneNotFound {
-                // The Mac has not uploaded anything yet.
-                return 0
-            } catch let error as CKError where error.code == .changeTokenExpired {
-                token = nil
-                continue
-            }
-            for (id, result) in changes.modificationResultsByID {
-                guard case .success(let modification) = result else { continue }
-                if modification.record.recordType == Self.recordingType {
+            let changes = try await store.changes(since: state.changeToken)
+            for record in changes.modified {
+                if record.type == Self.recordingType {
                     // Only the Mac processes recordings.
-                    if !includeMeetings, importRecording(modification.record) { imported.append(id); changed += 1 }
+                    if !includeMeetings, await importRecording(record) { imported.append(record.name); changed += 1 }
                     continue
                 }
-                if try store(modification.record, id: id.recordName, includeMeetings: includeMeetings) { changed += 1 }
+                if try await store(record, includeMeetings: includeMeetings) { changed += 1 }
             }
-            for deletion in changes.deletions {
-                switch deletion.recordType {
+            for deletion in changes.deleted {
+                switch deletion.type {
                 case Self.meetingType where includeMeetings:
-                    try? FileManager.default.removeItem(at: paths.callDirectory(deletion.recordID.recordName))
+                    try? FileManager.default.removeItem(at: paths.callDirectory(deletion.name))
                 case Self.chatType:
-                    if let id = UUID(uuidString: String(deletion.recordID.recordName.dropFirst("chat-".count))) {
+                    if let id = UUID(uuidString: String(deletion.name.dropFirst("chat-".count))) {
                         ChatStore(directory: paths.chats).delete(id)
                         state.uploaded["chat:\(id.uuidString)"] = nil
                     }
@@ -223,20 +202,23 @@ public actor CloudSync {
                 }
                 changed += 1
             }
-            token = changes.changeToken
-            state.changeToken = try NSKeyedArchiver.archivedData(withRootObject: changes.changeToken, requiringSecureCoding: true)
-            try state.save(to: paths.sync)
-            if !changes.moreComing { return changed }
+            state.changeToken = changes.token
+            try saveState(state)
+            if !changes.more { return changed }
         }
     }
 
     /// Turns a phone recording into a call. True once the call exists here, including from an earlier pull.
-    private func importRecording(_ record: CKRecord) -> Bool {
-        let id = String(record.recordID.recordName.dropFirst("rec-".count))
+    private func importRecording(_ record: ChangedRecord) async -> Bool {
+        let id = String(record.name.dropFirst("rec-".count))
         if FileManager.default.fileExists(atPath: paths.callDirectory(id).appendingPathComponent(CallRecord.fileName).path) { return true }
-        guard let start = record["start"] as? Date, let end = record["end"] as? Date, let audio = (record["audio"] as? CKAsset)?.fileURL else { return false }
+        guard let start = record.fields["start"]?.date, let end = record.fields["end"]?.date,
+              let data = try? await store.data(record, "audio") else { return false }
         do {
-            try PhoneRecording.importAudio(audio, recording: PhoneRecording(id: id, start: start, end: end, title: record["title"] as? String), into: paths)
+            let dir = try scratch()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let audio = try file(data, "\(id).m4a", in: dir)
+            try PhoneRecording.importAudio(audio, recording: PhoneRecording(id: id, start: start, end: end, title: record.fields["title"]?.string), into: paths)
             Log.info("Imported the iPhone recording \(id)")
             return true
         } catch {
@@ -246,42 +228,41 @@ public actor CloudSync {
     }
 
     /// Returns whether the record changed something here.
-    @discardableResult
-    private func store(_ record: CKRecord, id: String, includeMeetings: Bool) throws -> Bool {
-        func data(_ key: String) -> Data? { (record[key] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) } }
-        switch record.recordType {
+    private func store(_ record: ChangedRecord, includeMeetings: Bool) async throws -> Bool {
+        func data(_ key: String) async -> Data? { try? await store.data(record, key) }
+        switch record.type {
         case Self.meetingType where includeMeetings:
-            let dir = paths.callDirectory(id)
+            let dir = paths.callDirectory(record.name)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            if let call = data("record") { try call.write(to: dir.appendingPathComponent("call.json"), options: .atomic) }
-            if let coach = data("coach"), var remote = try? JSONDecoder.callRecord.decode(CoachReview.self, from: coach) {
+            if let call = await data("record") { try call.write(to: dir.appendingPathComponent("call.json"), options: .atomic) }
+            if let coach = await data("coach"), var remote = try? JSONDecoder.callRecord.decode(CoachReview.self, from: coach) {
                 // Ratings or replies made here and not yet merged by the Mac stay.
                 if let local = CoachReview.load(in: dir) { remote = remote.mergingNotes(from: local) }
                 try remote.save(in: dir)
             }
         case Self.profileType:
-            guard let raw = data("data") ?? data("profile"), let remote = try? JSONDecoder.callRecord.decode(CoachProfile.self, from: raw) else { return false }
+            guard let raw = await data("data"), let remote = try? JSONDecoder.callRecord.decode(CoachProfile.self, from: raw) else { return false }
             let local = (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile()
             // The Mac's coach writes the coaching fields; the phone takes them, the Mac keeps its own.
             let merged = local.merged(with: remote, takeCoaching: includeMeetings)
             guard merged != local else { return false }
             try merged.save(to: paths.coach)
         case Self.chatType:
-            guard let raw = data("data"), let remote = try? JSONDecoder.callRecord.decode(Chat.self, from: raw) else { return false }
-            let store = ChatStore(directory: paths.chats)
-            let local = store.all().first { $0.id == remote.id }
+            guard let raw = await data("data"), let remote = try? JSONDecoder.callRecord.decode(Chat.self, from: raw) else { return false }
+            let chats = ChatStore(directory: paths.chats)
+            let local = chats.all().first { $0.id == remote.id }
             let kept = local.map { Chat.newer($0, remote) } ?? remote
             guard kept != local else { return false }
-            try store.save(kept)
+            try chats.save(kept)
         case Self.commitmentsType:
-            guard let raw = data("data"), let remote = try? JSONDecoder.callRecord.decode(CommitmentBook.self, from: raw) else { return false }
+            guard let raw = await data("data"), let remote = try? JSONDecoder.callRecord.decode(CommitmentBook.self, from: raw) else { return false }
             let local = (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook()
             let merged = local.merged(with: remote)
             guard merged != local else { return false }
             try merged.save(to: paths.commitments)
         case Self.notesType:
-            guard let raw = data("data"), let notes = try? JSONDecoder.callRecord.decode(ReviewNotes.self, from: raw) else { return false }
-            let dir = paths.callDirectory(String(id.dropFirst("notes-".count)))
+            guard let raw = await data("data"), let notes = try? JSONDecoder.callRecord.decode(ReviewNotes.self, from: raw) else { return false }
+            let dir = paths.callDirectory(String(record.name.dropFirst("notes-".count)))
             guard let review = CoachReview.load(in: dir) else { return false }
             var incoming = review
             incoming.feedback = notes.feedback

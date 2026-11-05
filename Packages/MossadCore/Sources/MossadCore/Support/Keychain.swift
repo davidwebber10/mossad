@@ -12,6 +12,8 @@ public enum APIKey: String, CaseIterable, Sendable {
     case postmark, sendgrid, mailgun, brevo
     /// The secret access key for Amazon SES.
     case sesSecret
+    /// The owner secret of the owner's own Mossad server.
+    case serverSecret
 
     /// Finds the key in an environment: the standard name first, then a common variant
     /// (`ASSEMBLYAI`, or a named Anthropic key such as `ANTHROPIC_API_KEY_TEAM`).
@@ -30,6 +32,7 @@ public enum APIKey: String, CaseIterable, Sendable {
         case .mailgun: env["MAILGUN_API_KEY"]
         case .brevo: env["BREVO_API_KEY"]
         case .sesSecret: env["AWS_SECRET_ACCESS_KEY"]
+        case .serverSecret: env["MOSSAD_SERVER_SECRET"]
         }
         return found?.isEmpty == false ? found : nil
     }

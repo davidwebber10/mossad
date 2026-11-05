@@ -121,7 +121,7 @@ final class CommitmentSyncTests: XCTestCase {
         book.add(found: [Commitment(text: "Send it", to: nil, callID: "c", callTitle: "T", madeAt: Date(), due: nil)], callID: "c", at: Date())
         let p = SharedPayload.commitments(book)
         XCTAssertEqual(p.key, "commitments")
-        XCTAssertEqual(CloudSync.recordID(p.key).recordName, "commitments")
+        XCTAssertEqual(CloudSync.recordName(p.key), "commitments")
         XCTAssertEqual(SyncState().planShared([p]).upload.map(\.key), ["commitments"])
     }
 }
