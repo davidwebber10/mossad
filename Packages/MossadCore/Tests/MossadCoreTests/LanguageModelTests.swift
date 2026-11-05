@@ -142,3 +142,27 @@ final class LanguageModelTests: XCTestCase {
 }
 
 private final class Box: @unchecked Sendable { var value = "" }
+
+/// Claude refused the coach's strict schema as too large to compile; the request then goes again with the
+/// schema in the instructions, so the coach does not stop for good.
+final class SchemaFallbackTests: XCTestCase {
+    struct Out: Decodable, Equatable { let headline: String }
+
+    func testATooLargeGrammarFallsBackToTheSchemaInTheInstructions() async throws {
+        var calls = 0
+        StubURLProtocol.handler = { _ in
+            calls += 1
+            if calls == 1 {
+                return (400, Data(#"{"type":"error","error":{"type":"invalid_request_error","message":"The compiled grammar is too large, which would cause performance issues."}}"#.utf8))
+            }
+            return (200, Data(#"{"content":[{"type":"text","text":"```json\n{\"headline\":\"Good call\"}\n```"}],"stop_reason":"end_turn"}"#.utf8))
+        }
+        let model = AnthropicModel(apiKey: "k", model: "m", session: StubURLProtocol.session())
+        let out = try await model.json(system: "Coach.", user: "Review.", schema: Schema.object(["headline": Schema.string]),
+                                       effort: .high, purpose: .coach, as: Out.self)
+        XCTAssertEqual(out, Out(headline: "Good call"))
+        let second = try JSONSerialization.jsonObject(with: StubURLProtocol.requests[1].body) as! [String: Any]
+        XCTAssertNil((second["output_config"] as? [String: Any])?["format"])
+        XCTAssertTrue((second["system"] as? String)?.contains(#""headline""#) == true)
+    }
+}

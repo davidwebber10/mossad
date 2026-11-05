@@ -43,12 +43,31 @@ public struct AnthropicModel: LanguageModel {
 
     public func json<Output: Decodable>(system: String, user: String, schema: [String: Any], effort: Effort,
                                         purpose: UsageEvent.Purpose, as: Output.Type) async throws -> Output {
-        let reply = try await send([
-            "system": system,
-            "output_config": ["effort": effort.rawValue, "format": ["type": "json_schema", "schema": schema]],
-            "messages": [["role": "user", "content": user]],
-        ], purpose: purpose)
-        return try decodeOutput(Self.text(reply), as: Output.self)
+        do {
+            let reply = try await send([
+                "system": system,
+                "output_config": ["effort": effort.rawValue, "format": ["type": "json_schema", "schema": schema]],
+                "messages": [["role": "user", "content": user]],
+            ], purpose: purpose)
+            return try decodeOutput(Self.text(reply), as: Output.self)
+        } catch SummaryError.http(400, let body) where body.contains("grammar is too large") {
+            // Claude can refuse a large strict schema; the same schema in the instructions still gets valid JSON.
+            Log.info("Claude refused the strict schema as too large; asking with the schema in the instructions")
+            let data = try JSONSerialization.data(withJSONObject: schema, options: [.sortedKeys])
+            let reply = try await send([
+                "system": system + "\n\nReply with one JSON object and nothing else. It must match this JSON Schema exactly:\n"
+                    + String(decoding: data, as: UTF8.self),
+                "output_config": ["effort": effort.rawValue],
+                "messages": [["role": "user", "content": user]],
+            ], purpose: purpose)
+            return try decodeOutput(Self.jsonObject(in: Self.text(reply)), as: Output.self)
+        }
+    }
+
+    /// The JSON object in a reply, without a code fence or words around it.
+    static func jsonObject(in text: String) -> String {
+        guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end else { return text }
+        return String(text[start...end])
     }
 
     public func runTools(system: String, history: [ChatMessage], question: String, tools: [ToolSpec], purpose: UsageEvent.Purpose,
