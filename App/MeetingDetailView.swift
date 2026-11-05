@@ -148,18 +148,7 @@ struct MeetingDetailView: View {
     @ViewBuilder
     private var banner: some View {
         if let step = ProcessingStep(status: record.status) {
-            HStack(spacing: 9) {
-                ProgressView().controlSize(.small)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(processingText(step))
-                    if let detail = controller.stepDetails[record.id], detail != step.title {
-                        Text(detail).font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                if record.attempts > 0 { Button("Retry now") { controller.retry(record.id) }.controlSize(.small) }
-            }
-            .bannerStyle(Theme.field)
+            ProcessingCard(record: record, step: step)
         } else if record.status == .failed {
             HStack(spacing: 9) {
                 Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Theme.warning)
@@ -169,14 +158,6 @@ struct MeetingDetailView: View {
             }
             .bannerStyle(Color.orange.opacity(0.16))
         }
-    }
-
-    private func processingText(_ step: ProcessingStep) -> String {
-        var text = "\(step.title), step \(step.rawValue) of \(ProcessingStep.total)"
-        if record.attempts > 0, let next = record.nextAttempt {
-            text += ". Attempt \(record.attempts) failed; Mossad retries at \(next.formatted(date: .omitted, time: .shortened))."
-        }
-        return text
     }
 
     private var failureText: String {

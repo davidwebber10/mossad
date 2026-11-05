@@ -53,6 +53,8 @@ final class AppController: ObservableObject {
     @Published private(set) var isMuted = false
     /// The sub-step each call is in while processing, such as "AssemblyAI is transcribing".
     @Published private(set) var stepDetails: [String: String] = [:]
+    /// Each call's progress while it is processed, for the progress card.
+    @Published private(set) var progress: [String: ProcessingProgress] = [:]
     /// What was said so far, from AssemblyAI streaming; shown while the call runs, not used for the note.
     /// What was said so far, from AssemblyAI streaming. Its own object, so only the transcript view redraws when
     /// a message arrives, not the whole window.
@@ -386,6 +388,9 @@ final class AppController: ObservableObject {
                             },
                             onDetail: { [weak self] id, text in
                                 Task { @MainActor in self?.stepDetails[id] = text }
+                            },
+                            onProgress: { [weak self] id, p in
+                                Task { @MainActor in self?.progress[id] = p }
                             })
     }
 
@@ -720,7 +725,12 @@ final class AppController: ObservableObject {
 
     /// The text for a call in progress: the live sub-step, or the step name.
     func progressText(_ r: CallRecord) -> String? {
-        stepDetails[r.id] ?? ProcessingStep(status: r.status)?.title
+        // While uploading, the list and the menu show the percent of the track that is furthest behind.
+        if let p = progress[r.id], p.step == .transcribing, p.detail == nil, let t = p.slowestUpload,
+           let line = p.trackLine(t, service: transcriptionProvider.displayName, room: r.platform == .inPerson) {
+            return line
+        }
+        return stepDetails[r.id] ?? ProcessingStep(status: r.status)?.title
     }
 
     /// A new summary from Claude for a finished meeting; the transcript and names stay.

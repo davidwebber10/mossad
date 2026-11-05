@@ -17,7 +17,8 @@ final class FakeTranscriber: Transcribing, @unchecked Sendable {
     }
     func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
         lock.withLock { _calls.append(track); _speakers[track] = speakers }
-        progress(.uploading)
+        progress(.uploading(nil))
+        progress(.uploading(0.5))
         progress(.transcribing)
         if delay > .zero { try await Task.sleep(for: delay) }
         if let error { throw error }
@@ -211,6 +212,22 @@ final class PipelineTests: XCTestCase {
         await p.setTags(callID: first, ["Freight"])
         await p.regenerateSummary(first)
         XCTAssertEqual(summarizer.lastKnownTags, ["Freight"])
+    }
+
+    /// The progress card gets every step in order, the upload percent, and nil when processing ends.
+    func testProgressReportsEachStepAndTheUpload() async throws {
+        let id = try makeRecord()
+        let seen = Locked<[ProcessingProgress?]>([])
+        let notifications = notifications
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { notifications.records.append($0) },
+                         ownerName: "David Webber", onProgress: { _, progress in seen.withLock { $0.append(progress) } })
+        await p.process(id)
+        let all = seen.withLock { $0 }
+        XCTAssertEqual(all.compactMap { $0?.step }.reduce(into: [ProcessingStep]()) { if $0.last != $1 { $0.append($1) } },
+                       [.transcribing, .identifying, .summarizing, .writing])
+        XCTAssertTrue(all.contains { $0?.tracks[.me] == .uploading(0.5) })
+        XCTAssertNil(all.last!)
     }
 
     func testDetailsDescribeEachSubStep() async throws {

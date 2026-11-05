@@ -27,6 +27,9 @@ public actor Pipeline {
     /// A short text for the sub-step in progress (call ID, text; nil when processing stops). Shown, not saved.
     private let onDetail: @Sendable (String, String?) -> Void
     private var stages: [String: [Track: TranscriptionStage]] = [:]
+    /// Each call's progress for the progress card (call ID, progress; nil when processing stops).
+    private let onProgress: @Sendable (String, ProcessingProgress?) -> Void
+    private var progress: [String: ProcessingProgress] = [:]
     /// Calls in the transcription step; a late stage update after it must not overwrite the next sub-step.
     private var transcribing: Set<String> = []
 
@@ -35,8 +38,10 @@ public actor Pipeline {
                 calendar: CalendarSource, summarizer: Summarizing?, notify: @escaping @Sendable (CallRecord) -> Void,
                 now: @escaping @Sendable () -> Date = Date.init, ownerName: String = "Me", voiceFingerprints: Bool = true,
                 onStep: @escaping @Sendable (CallRecord) -> Void = { _ in },
-                onDetail: @escaping @Sendable (String, String?) -> Void = { _, _ in }) {
+                onDetail: @escaping @Sendable (String, String?) -> Void = { _, _ in },
+                onProgress: @escaping @Sendable (String, ProcessingProgress?) -> Void = { _, _ in }) {
         self.onStep = onStep
+        self.onProgress = onProgress
         self.onDetail = onDetail
         self.paths = paths
         self.queue = ProcessingQueue(paths: paths)
@@ -66,6 +71,8 @@ public actor Pipeline {
             stages[id] = nil
             transcribing.remove(id)
             onDetail(id, nil)
+            progress[id] = nil
+            onProgress(id, nil)
         }
         // `process` suspends at every await; without this a timer run and a call-end run could overlap.
         guard inFlight.insert(id).inserted else { return }
@@ -74,6 +81,7 @@ public actor Pipeline {
         guard var r = try? CallRecord.load(from: dir) else { return }
         do {
             while r.status != .written {
+                if let step = ProcessingStep(status: r.status) { startStep(r, step) }
                 switch r.status {
                 case .recorded: try await transcribe(&r, dir: dir)
                 case .transcribed: try await identify(&r, dir: dir)
@@ -224,9 +232,12 @@ public actor Pipeline {
         // Keep whichever track succeeded, then fail if either did.
         if case .success(let u) = meResult { r.meUtterances = u }
         if case .success(let u) = themResult { r.themUtterances = u }
+        for (track, result) in [(Track.me, meResult), (.them, themResult)] {
+            if case .success(let u) = result { trackChanged(r.id, track, u.isEmpty ? .skipped : .done) }
+        }
         try store(r, dir: dir)
         transcribing.remove(r.id)
-        onDetail(r.id, "Joining the two tracks")
+        detail(r.id, "Joining the two tracks")
         // Without the them track (deleted or unreadable) only the word rule removes echo.
         let themSound = try? SoundTimeline.measure(url: dir.appendingPathComponent(Track.them.fileName))
         r.utterances = TranscriptMerger.merge(me: try meResult.get(), them: try themResult.get(), themSound: themSound)
@@ -256,18 +267,59 @@ public actor Pipeline {
             Log.info("\(track.rawValue) track is empty; skipping transcription")
             return .success([])
         }
+        // A compressed copy goes up; the raw track stays for speaker identification and the recording.
+        let upload = (try? UploadAudio.compress(url, into: dir)) ?? url
+        defer { if upload != url { try? FileManager.default.removeItem(at: upload) } }
         do {
             return .success(try await UsageContext.$callID.withValue(callID) {
-                try await transcriber.transcribe(file: url, track: track, speakers: speakers) { stage in
+                try await transcriber.transcribe(file: upload, track: track, speakers: speakers) { stage in
                     Task { await self.stageChanged(callID, track, stage) }
                 }
             })
         } catch { return .failure(error) }
     }
 
+    private func startStep(_ r: CallRecord, _ step: ProcessingStep) {
+        var p = progress[r.id] ?? ProcessingProgress(step: step, started: now())
+        p.step = step
+        p.stepStarted = now()
+        p.detail = nil
+        if step == .transcribing {
+            p.tracks = [.me: r.meUtterances == nil ? .uploading(nil) : .done, .them: r.themUtterances == nil ? .uploading(nil) : .done]
+            // A room has no call audio to wait for.
+            if r.platform == .inPerson { p.tracks[.them] = .skipped }
+        }
+        progress[r.id] = p
+        onProgress(r.id, p)
+    }
+
+    /// The sub-step text, for the list and menu, and on the progress card.
+    private func detail(_ id: String, _ text: String) {
+        onDetail(id, text)
+        guard var p = progress[id] else { return }
+        p.detail = text
+        progress[id] = p
+        onProgress(id, p)
+    }
+
+    private func trackChanged(_ id: String, _ track: Track, _ state: ProcessingProgress.TrackState) {
+        guard var p = progress[id], p.step == .transcribing else { return }
+        p.tracks[track] = state
+        progress[id] = p
+        onProgress(id, p)
+    }
+
     /// "Uploading your mic to AssemblyAI", or both tracks when they differ.
     private func stageChanged(_ id: String, _ track: Track, _ stage: TranscriptionStage) {
         guard transcribing.contains(id) else { return }
+        let state: ProcessingProgress.TrackState = switch stage {
+        case .uploading(let f): .uploading(f)
+        case .queued: .queued
+        case .transcribing: .transcribing
+        }
+        trackChanged(id, track, state)
+        // The list and menu line changes only when the stage does, not with every percent.
+        if case .uploading = stage, case .uploading? = stages[id]?[track] { return }
         stages[id, default: [:]][track] = stage
         let name = transcriber.serviceName
         func text(_ t: Track, _ s: TranscriptionStage) -> String {
@@ -286,7 +338,7 @@ public actor Pipeline {
     }
 
     private func identify(_ r: inout CallRecord, dir: URL) async throws {
-        onDetail(r.id, "Identifying speakers")
+        detail(r.id, "Identifying speakers")
         guard voiceFingerprints else {
             // No fingerprints: the speaker who talks most on the mic is the owner; everyone else stays a letter.
             let talk = Dictionary(r.utterances.map { ($0.speakerKey, $0.end - $0.start) }, uniquingKeysWith: +)
@@ -326,13 +378,13 @@ public actor Pipeline {
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
-        onDetail(r.id, "Finding the calendar invite")
+        detail(r.id, "Finding the calendar invite")
         let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
         if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
             r.calendarTitle = event.title
             r.attendees = event.attendees
         }
-        if summarizer != nil, !r.utterances.isEmpty { onDetail(r.id, "Claude is writing the summary") }
+        if summarizer != nil, !r.utterances.isEmpty { detail(r.id, "Claude is writing the summary") }
         if let summarizer, !r.utterances.isEmpty {
             do {
                 let transcript = MarkdownWriter.transcript(r), title = r.title, known = knownTags()
@@ -355,14 +407,14 @@ public actor Pipeline {
     private func knownTags() -> [String] { Tags.known(queue.allRecords()) }
 
     private func write(_ r: inout CallRecord) throws {
-        onDetail(r.id, "Writing the note")
+        detail(r.id, "Writing the note")
         let url = paths.meetings.appendingPathComponent(MarkdownWriter.fileName(for: r))
         if let old = r.markdownPath, old != url.path { try? FileManager.default.removeItem(atPath: old) }
         try MarkdownWriter.render(r).write(to: url, atomically: true, encoding: .utf8)
         r.markdownPath = url.path
         r.status = .written
         Log.info("Wrote \(url.lastPathComponent)")
-        onDetail(r.id, "Making the recording")
+        detail(r.id, "Making the recording")
         Recording.makeIfMissing(in: paths.callDirectory(r.id))
         // Without fingerprints a name is never learned, so asking after every call would only nag.
         if voiceFingerprints, !r.unknownSpeakers.isEmpty { notify(r) }

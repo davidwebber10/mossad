@@ -116,7 +116,7 @@ public struct DeepgramTranscriber: Transcribing {
     }
 
     public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
-        progress(.uploading)
+        progress(.uploading(nil))
         let audio = try TrackEncoder.m4a(file)
         defer { try? FileManager.default.removeItem(at: audio) }
         var url = URLComponents(string: "https://api.deepgram.com/v1/listen")!
@@ -160,7 +160,7 @@ public struct ElevenLabsTranscriber: Transcribing {
     }
 
     public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
-        progress(.uploading)
+        progress(.uploading(nil))
         let audio = try TrackEncoder.m4a(file)
         defer { try? FileManager.default.removeItem(at: audio) }
         var form = Multipart()
@@ -208,7 +208,7 @@ public struct OpenAITranscriber: Transcribing {
     }
 
     public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
-        progress(.uploading)
+        progress(.uploading(nil))
         // 24 kbps keeps about 2 hours and 20 minutes under the 25 MB limit.
         let audio = try TrackEncoder.m4a(file, bitRate: 24_000)
         defer { try? FileManager.default.removeItem(at: audio) }

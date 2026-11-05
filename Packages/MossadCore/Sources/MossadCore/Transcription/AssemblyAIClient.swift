@@ -1,8 +1,10 @@
 import Foundation
 
 /// Where a track is in AssemblyAI's batch process, for the progress line.
-public enum TranscriptionStage: Sendable {
-    case uploading, queued, transcribing
+public enum TranscriptionStage: Equatable, Sendable {
+    /// The share of the file sent so far, when known.
+    case uploading(Double?)
+    case queued, transcribing
 }
 
 public protocol Transcribing: Sendable {
@@ -48,8 +50,9 @@ public struct AssemblyAIClient: Transcribing {
     }
 
     public func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
-        progress(.uploading)
-        let uploadURL: UploadResponse = try await send(request("upload", method: "POST"), file: file)
+        progress(.uploading(0))
+        let uploadURL: UploadResponse = try await send(request("upload", method: "POST"), file: file,
+                                                        sent: { progress(.uploading($0)) })
         var body: [String: Any] = [
             "audio_url": uploadURL.upload_url,
             "speaker_labels": true,
@@ -90,9 +93,10 @@ public struct AssemblyAIClient: Transcribing {
     }
 
     /// Uploads stream from disk, so an hour-long track is never held in memory.
-    private func send<T: Decodable>(_ request: URLRequest, body: Data? = nil, file: URL? = nil) async throws -> T {
+    private func send<T: Decodable>(_ request: URLRequest, body: Data? = nil, file: URL? = nil,
+                                    sent: (@Sendable (Double) -> Void)? = nil) async throws -> T {
         let (data, response) = if let file {
-            try await session.upload(for: request, fromFile: file)
+            try await session.upload(for: request, fromFile: file, delegate: sent.map(UploadProgress.init))
         } else if let body {
             try await session.upload(for: request, from: body)
         } else {
@@ -106,6 +110,23 @@ public struct AssemblyAIClient: Transcribing {
     }
 
     private struct UploadResponse: Decodable { let upload_url: String }
+
+    /// Reports the share of an upload sent, at most once per whole percent.
+    final class UploadProgress: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+        private let report: @Sendable (Double) -> Void
+        private var last = -1
+
+        init(_ report: @escaping @Sendable (Double) -> Void) { self.report = report }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64,
+                        totalBytesExpectedToSend: Int64) {
+            guard totalBytesExpectedToSend > 0 else { return }
+            let percent = Int(totalBytesSent * 100 / totalBytesExpectedToSend)
+            guard percent != last else { return }
+            last = percent
+            report(Double(percent) / 100)
+        }
+    }
 
     private struct TranscriptResponse: Decodable {
         let id: String
