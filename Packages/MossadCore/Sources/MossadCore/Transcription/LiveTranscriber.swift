@@ -68,11 +68,12 @@ public final class LiveTranscriber: @unchecked Sendable {
     /// Float samples to 16-bit little-endian PCM, clipped to the 16-bit range.
     static func pcm16(_ buffer: AVAudioPCMBuffer) -> Data {
         guard let samples = buffer.floatChannelData?[0] else { return Data() }
-        var data = Data(capacity: Int(buffer.frameLength) * 2)
-        for i in 0..<Int(buffer.frameLength) {
-            let value = Int16(max(-1, min(1, samples[i])) * Float(Int16.max))
-            withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) }
+        let count = Int(buffer.frameLength)
+        // One pass into a fixed buffer, not two bytes appended at a time.
+        let values = [Int16](unsafeUninitializedCapacity: count) { out, n in
+            for i in 0..<count { out[i] = Int16(max(-1, min(1, samples[i])) * Float(Int16.max)).littleEndian }
+            n = count
         }
-        return data
+        return values.withUnsafeBytes { Data($0) }
     }
 }

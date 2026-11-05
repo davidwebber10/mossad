@@ -43,6 +43,19 @@ final class DetectionServiceTests: XCTestCase {
         AudioProcess(objectID: id, pid: pid_t(id), bundleID: bundle, isRunningInput: input, isRunningOutput: true)
     }
 
+    /// An in-person recording owns the mic, so the tick skips the Core Audio scan it would throw away.
+    func testASuspendedServiceDoesNotScan() {
+        final class CountingMic: MicUsageProbing { var calls = 0; func processes() -> [AudioProcess] { calls += 1; return [] } }
+        let counting = CountingMic()
+        let s = DetectionService(mic: counting, tabs: tabs, windows: windows)
+        s.isSuspended = true
+        s.tick(at: now)
+        XCTAssertEqual(counting.calls, 0)
+        s.isSuspended = false
+        s.tick(at: now)
+        XCTAssertEqual(counting.calls, 1)
+    }
+
     func testSnapshotGroupsBrowserHelpersUnderBaseBrowser() {
         mic.list = [proc(1, "com.google.Chrome", input: false), proc(2, "com.google.Chrome.helper", input: true)]
         tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]

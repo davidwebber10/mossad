@@ -282,6 +282,15 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(me.startCalls, 2)
     }
 
+    /// A room recording has no detection tick, so its own check restarts a mic that went silent.
+    func testAnInPersonMicThatSendsNoAudioIsRestarted() throws {
+        _ = try recorder.beginManual(at: t0)
+        now = t0.addingTimeInterval(CallRecorder.stallLimit + 1)
+        recorder.checkMic()
+        XCTAssertEqual(me.startCalls, 2)
+        XCTAssertFalse(them.started)
+    }
+
     func testAMicThatSendsAudioIsLeftAlone() throws {
         me.seconds = 1
         now = t0.addingTimeInterval(1)

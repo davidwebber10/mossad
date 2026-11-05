@@ -22,6 +22,8 @@ extension Transcribing {
 /// Batch transcription with speaker labels through the AssemblyAI v2 REST API.
 public struct AssemblyAIClient: Transcribing {
     static let base = URL(string: "https://api.assemblyai.com/v2")!
+    /// The mic hears one room (a 12-person meeting is normal). Without a cap, a long room meeting once split into 137 voices.
+    static let maxRoomSpeakers = 20
 
     private let apiKey: String
     private let session: URLSession
@@ -38,14 +40,16 @@ public struct AssemblyAIClient: Transcribing {
     public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
         progress(.uploading)
         let uploadURL: UploadResponse = try await send(request("upload", method: "POST"), file: file)
-        let create = try JSONSerialization.data(withJSONObject: [
+        var body: [String: Any] = [
             "audio_url": uploadURL.upload_url,
             "speaker_labels": true,
             // Keeps "um" and "uh" so the coach can count them.
             "disfluencies": true,
             "language_detection": false,
             "language_code": "en_us",
-        ])
+        ]
+        if track == .me { body["speaker_options"] = ["max_speakers_expected": Self.maxRoomSpeakers] }
+        let create = try JSONSerialization.data(withJSONObject: body)
         var job: TranscriptResponse = try await send(request("transcript", method: "POST", json: true), body: create)
         while true {
             switch job.status {

@@ -30,7 +30,24 @@ final class AppController: ObservableObject {
         }
     }
 
-    @Published private(set) var status: Status = .idle
+    @Published private(set) var status: Status = .idle {
+        // An in-person recording owns the mic until Stop; the call scan every 2 s would be thrown away.
+        didSet {
+            let room = if case .recording(.inPerson, _) = status { true } else { false }
+            detection.isSuspended = room
+            // With detection suspended, the room's mic gets its own stall check.
+            if room, roomMicTimer == nil {
+                let recorder = recorder
+                roomMicTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+                    CaptureQueue.queue.async { recorder.checkMic() }
+                }
+            } else if !room {
+                roomMicTimer?.invalidate()
+                roomMicTimer = nil
+            }
+        }
+    }
+    private var roomMicTimer: Timer?
     @Published private(set) var isPaused = false
     /// Muted in the call app: the mic track records silence meanwhile.
     @Published private(set) var isMuted = false
@@ -257,7 +274,8 @@ final class AppController: ObservableObject {
             refreshUpcoming()
             // Chats and notes from the phone arrive within five minutes.
             iCloudTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.syncNow() }
+                // Not while recording: the call itself syncs once it is written, and the recording gets the disk and network.
+                Task { @MainActor in if self?.isRecording == false { self?.syncNow() } }
             }
             upcomingTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.refreshUpcoming() }
@@ -470,29 +488,35 @@ final class AppController: ObservableObject {
         if reset { live.reset() } else { live.newSession() }
         guard liveTranscriptEnabled, case .recording(_, let since) = status, let key = keychain.get(.assemblyai) else { return }
         liveStart = since
+        // In a room the mic hears everyone and there is no call audio: one stream, with speaker labels, shown
+        // like call audio so each voice gets its own name.
+        let room: Bool = if case .recording(.inPerson, _) = status { true } else { false }
         // A new call's stream starts with the file; after a pause it starts where the file is now.
-        let themOffset = reset ? 0 : recorder.themDuration
-        let themURL = paths.callDirectory(CallRecorder.callID(for: since)).appendingPathComponent(Track.them.fileName)
+        let themOffset = reset ? 0 : (room ? recorder.meDuration : recorder.themDuration)
+        let dir = paths.callDirectory(CallRecorder.callID(for: since))
+        let themURL = dir.appendingPathComponent(room ? Track.me.fileName : Track.them.fileName)
         // Saved for the current_call tool in Chat and in other AI apps.
-        live.fileURL = paths.callDirectory(CallRecorder.callID(for: since)).appendingPathComponent(LiveTranscript.fileName)
-        for (track, sink) in [(Track.me, recorder.meSink), (.them, recorder.themSink)] {
-            let session = LiveTranscriber(apiKey: key, speakers: track == .them) { [weak self] message in
+        live.fileURL = dir.appendingPathComponent(LiveTranscript.fileName)
+        let streams: [(Track, AudioSink)] = room ? [(.me, recorder.meSink)] : [(.me, recorder.meSink), (.them, recorder.themSink)]
+        for (track, sink) in streams {
+            let source: Track = room ? .them : track
+            let session = LiveTranscriber(apiKey: key, speakers: source == .them) { [weak self] message in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.live.apply(message, source: track, at: Date().timeIntervalSince(self.liveStart),
-                                    audioOffset: track == .them ? themOffset : 0)
+                    self.live.apply(message, source: source, at: Date().timeIntervalSince(self.liveStart),
+                                    audioOffset: source == .them ? themOffset : 0)
                 }
             }
             sink.set { buffer in session.send(buffer) }
             liveSessions.append(session)
         }
         liveOpened = Date()
-        if voiceFingerprints { startLiveNaming(themURL: themURL) }
+        if voiceFingerprints { startLiveNaming(themURL: themURL, room: room) }
     }
 
     /// Every 20 s, names the call's voices that the voice library knows, for the live transcript and current_call.
-    private func startLiveNaming(themURL: URL) {
-        let namer = LiveSpeakerNamer(library: library, provider: embeddings)
+    private func startLiveNaming(themURL: URL, room: Bool) {
+        let namer = LiveSpeakerNamer(library: library, provider: embeddings, room: room)
         liveNaming = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(20))
@@ -506,6 +530,7 @@ final class AppController: ObservableObject {
     }
 
     private func stopLive() {
+        live.save()
         liveNaming?.cancel()
         liveNaming = nil
         recorder.meSink.set(nil)
@@ -959,6 +984,8 @@ struct MissingKeyTranscriber: Transcribing {
 @MainActor
 final class LiveTranscriptModel: ObservableObject {
     @Published private(set) var transcript = LiveTranscript()
+    /// Worked out once per update: the echo filter compares every mic line with every call line.
+    @Published private(set) var visibleLines: [LiveTranscript.Line] = []
     private var pending = LiveTranscript()
     private var scheduled = false
     var fileURL: URL?
@@ -979,23 +1006,39 @@ final class LiveTranscriptModel: ObservableObject {
         publish()
     }
 
+    private var saveScheduled = false
+
     private func publish() {
-        guard !scheduled else { return }
-        scheduled = true
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(250))
-            transcript = pending
-            scheduled = false
-            // At most four times a second (the publish above), off the main actor.
-            if let url = fileURL {
-                let snapshot = pending
-                saves.async { try? snapshot.save(to: url) }
+        if !scheduled {
+            scheduled = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                transcript = pending
+                visibleLines = pending.visibleLines
+                scheduled = false
             }
         }
+        // The file is for Chat and other AI apps, which can wait 2 s. It is written whole each time, so on a long
+        // meeting four writes a second added up to about 1 MB/s.
+        guard !saveScheduled, fileURL != nil else { return }
+        saveScheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            saveScheduled = false
+            save()
+        }
+    }
+
+    /// Writes the file now, off the main actor.
+    func save() {
+        guard let url = fileURL else { return }
+        let snapshot = pending
+        saves.async { try? snapshot.save(to: url) }
     }
 
     func reset() {
         pending = LiveTranscript()
         transcript = pending
+        visibleLines = []
     }
 }

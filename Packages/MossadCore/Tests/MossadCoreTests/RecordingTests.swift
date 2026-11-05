@@ -88,6 +88,19 @@ final class TranscriptBlockTests: XCTestCase {
         XCTAssertEqual(talk.map(\.seconds), [10, 5])
     }
 
+    /// A meeting with dozens of voices shows the top few and one line for the rest, so the card stays short.
+    func testTalkTimeOverTheLimitFoldsTheRestIntoOthers() {
+        let lengths: [(String, Double)] = [("A", 10), ("B", 9), ("C", 8), ("D", 7), ("E", 6)]
+        let r = record(lengths.enumerated().map { i, l in
+            Utterance(track: .them, speakerLabel: l.0, start: Double(i) * 100, end: Double(i) * 100 + l.1, text: "x")
+        })
+        let short = TranscriptBlock.talkTime(r, limit: 3)
+        XCTAssertEqual(short.top.map(\.speaker), ["Speaker A", "Speaker B", "Speaker C"])
+        XCTAssertEqual(short.others?.count, 2)
+        XCTAssertEqual(short.others?.seconds, 13)
+        XCTAssertNil(TranscriptBlock.talkTime(r, limit: 5).others)
+    }
+
     func testAPartOfAMergedMeetingStartsANewBlock() {
         var r = record([
             Utterance(track: .me, speakerLabel: "A", start: 0, end: 2, text: "Before."),

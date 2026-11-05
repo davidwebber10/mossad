@@ -22,6 +22,14 @@ public struct TranscriptBlock: Equatable, Sendable, Identifiable {
         return total.map { ($0.key, $0.value) }.sorted { $0.seconds > $1.seconds || ($0.seconds == $1.seconds && $0.speaker < $1.speaker) }
     }
 
+    /// The `limit` longest talkers, and how many more there are and how long they talked in all.
+    public static func talkTime(_ r: CallRecord, limit: Int) -> (top: [(speaker: String, seconds: TimeInterval)], others: (count: Int, seconds: TimeInterval)?) {
+        let all = talkTime(r)
+        guard all.count > limit else { return (all, nil) }
+        let rest = all.dropFirst(limit)
+        return (Array(all.prefix(limit)), (rest.count, rest.reduce(0) { $0 + $1.seconds }))
+    }
+
     /// A pause longer than `gap` starts a new block even for the same speaker.
     public static func blocks(_ r: CallRecord, gap: TimeInterval = 30) -> [TranscriptBlock] {
         let names = MarkdownWriter.displayNames(r)

@@ -8,9 +8,12 @@ public struct LiveSpeakerNamer: Sendable {
 
     private let library: VoiceLibrary
     private let identifier: SpeakerIdentifier
+    /// In a room, one stream hears everyone, the owner too.
+    private let room: Bool
 
-    public init(library: VoiceLibrary, provider: EmbeddingProvider) {
+    public init(library: VoiceLibrary, provider: EmbeddingProvider, room: Bool = false) {
         self.library = library
+        self.room = room
         identifier = SpeakerIdentifier(library: library, provider: provider)
     }
 
@@ -25,7 +28,7 @@ public struct LiveSpeakerNamer: Sendable {
         for (key, utterances) in lines.sorted(by: { $0.key < $1.key })
         where utterances.reduce(0, { $0 + $1.end - $1.start }) >= Self.minimumSpeech {
             guard let e = try? await identifier.embedding(for: utterances, in: themURL), let match = library.bestMatch(e),
-                  match.name != library.owner?.name, !names.values.contains(match.name) else { continue }
+                  room || match.name != library.owner?.name, !names.values.contains(match.name) else { continue }
             names[key] = match.name
         }
         return names

@@ -117,8 +117,17 @@ struct MeetingDetailView: View {
                 if style == .split { MeetingActions(record: record, deleting: $deleting) }
             }
             if record.status != .recording, !people.speakers.isEmpty {
+                // The header sits above the scroll view, so a meeting with dozens of voices must not make it taller than the window.
+                let shown = people.headerSpeakers(record, limit: 14)
                 FlowLayout(spacing: 6) {
-                    ForEach(people.speakers, id: \.key) { SpeakerChip(speaker: $0, callID: record.id, editable: record.status == .written) }
+                    ForEach(shown, id: \.key) { SpeakerChip(speaker: $0, callID: record.id, editable: record.status == .written) }
+                    if people.speakers.count > shown.count {
+                        Text("+\(people.speakers.count - shown.count) more")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(Theme.field, in: Capsule())
+                            .help("Name the other voices from Name voices, or in the transcript.")
+                    }
                 }
             }
             if record.status == .written { TagRow(record: record) }
@@ -260,6 +269,16 @@ struct MeetingPeople {
             guard a.contains("@") else { return (a, nil) }
             return (library.name(forEmail: a) ?? a, library.name(forEmail: a) == nil ? nil : a)
         }
+    }
+
+    /// Named people first, then the voices that talked most, in their usual order.
+    func headerSpeakers(_ record: CallRecord, limit: Int) -> [Speaker] {
+        guard speakers.count > limit else { return speakers }
+        var talk: [String: TimeInterval] = [:]
+        for u in record.utterances { talk[u.speakerKey, default: 0] += max(0, u.end - u.start) }
+        func seconds(_ s: Speaker) -> TimeInterval { s.keys.reduce(0) { $0 + (talk[$1] ?? 0) } }
+        let keep = Set(speakers.sorted { ($0.isUnknown ? 1 : 0, -seconds($0)) < ($1.isUnknown ? 1 : 0, -seconds($1)) }.prefix(limit).map(\.key))
+        return speakers.filter { keep.contains($0.key) }
     }
 
     func speaker(forKey key: String) -> Speaker? { byKey[key] }
@@ -604,7 +623,7 @@ private struct SummaryTab: View {
 
     @ViewBuilder
     private var talkTimeCard: some View {
-        let talk = TranscriptBlock.talkTime(record)
+        let (talk, others) = TranscriptBlock.talkTime(record, limit: 12)
         if let longest = talk.first?.seconds, longest > 0 {
             Card("Talk time") {
                 VStack(spacing: 8) {
@@ -621,6 +640,14 @@ private struct SummaryTab: View {
                             .frame(height: 8)
                             Text(entry.seconds < 60 ? "<1 min" : "\(Int(entry.seconds / 60)) min")
                                 .foregroundStyle(.secondary).monospacedDigit().frame(width: 46, alignment: .trailing)
+                        }
+                    }
+                    if let others {
+                        HStack {
+                            Text("\(others.count) other voices").foregroundStyle(.secondary)
+                            Spacer()
+                            Text(others.seconds < 60 ? "<1 min" : "\(Int(others.seconds / 60)) min")
+                                .foregroundStyle(.secondary).monospacedDigit()
                         }
                     }
                 }
@@ -770,12 +797,15 @@ struct DetailEmptyState: View {
 private struct LivePanel: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
+    /// A room has one mic that hears everyone, so it shows as voices in a room, not you and the call.
+    private var room: Bool { record.platform == .inPerson }
 
     var body: some View {
         VStack(spacing: 18) {
             HStack(spacing: 8) {
                 StatusDot(color: controller.isPaused ? Theme.unknown : Theme.recording, size: 9, pulsing: !controller.isPaused)
-                Text(controller.isPaused ? "Paused" : controller.isMuted ? "Current call · you are muted" : "Current call")
+                if room, !controller.isPaused { Image(systemName: "person.3.fill").font(.system(size: 11)).foregroundStyle(Theme.recording) }
+                Text(controller.isPaused ? "Paused" : room ? "In-person meeting" : controller.isMuted ? "Current call · you are muted" : "Current call")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(controller.isPaused ? Color.secondary : Theme.recording)
             }
@@ -784,7 +814,7 @@ private struct LivePanel: View {
             TimelineView(.periodic(from: record.start, by: 1)) { context in
                 Text(elapsed(record.start, context.date)).font(.system(size: 40, weight: .semibold)).kerning(-1).monospacedDigit()
             }
-            if controller.isMuted, !controller.isPaused {
+            if controller.isMuted, !controller.isPaused, !room {
                 MutedBanner(platform: record.platform).frame(maxWidth: 620)
             }
             LiveWaveform(bars: 72, rowHeight: 40)
@@ -793,9 +823,10 @@ private struct LivePanel: View {
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             CallControls()
             if controller.liveTranscriptEnabled {
-                LiveTranscriptView(model: controller.live).frame(maxWidth: 620)
+                LiveTranscriptView(model: controller.live, room: room).frame(maxWidth: 620)
             } else {
-                Text("Recording your microphone and the call audio. The transcript and summary appear after the call ends.")
+                Text(room ? "Recording the room through your microphone. The transcript, with each speaker, and the summary appear after the meeting ends."
+                          : "Recording your microphone and the call audio. The transcript and summary appear after the call ends.")
                     .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
             }
         }
@@ -808,17 +839,24 @@ private struct LivePanel: View {
 private struct LiveTranscriptView: View {
     @EnvironmentObject var controller: AppController
     @ObservedObject var model: LiveTranscriptModel
+    var room = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("LIVE TRANSCRIPT").font(.system(size: 11, weight: .semibold)).kerning(0.4).foregroundStyle(.tertiary)
+            HStack {
+                Text(room ? "ROOM TRANSCRIPT" : "LIVE TRANSCRIPT").font(.system(size: 11, weight: .semibold)).kerning(0.4).foregroundStyle(.tertiary)
+                Spacer()
+                if room {
+                    Text("Voices get names as Mossad knows them").font(.system(size: 11)).foregroundStyle(.tertiary)
+                }
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        if model.transcript.visibleLines.isEmpty {
+                        if model.visibleLines.isEmpty {
                             Text(controller.isPaused ? "Paused." : "Listening…").foregroundStyle(.secondary)
                         }
-                        ForEach(model.transcript.visibleLines) { line in
+                        ForEach(model.visibleLines) { line in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 Text(who(line))
                                     .font(.system(size: 11, weight: .semibold))
@@ -841,7 +879,7 @@ private struct LiveTranscriptView: View {
                     if let last = model.transcript.lines.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
-            .frame(minHeight: 140, maxHeight: 260)
+            .frame(minHeight: 140, maxHeight: room ? 360 : 260)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
@@ -849,8 +887,10 @@ private struct LiveTranscriptView: View {
     /// You, a call voice's first name once the voice library knows it, else its letter.
     private func who(_ line: LiveTranscript.Line) -> String {
         guard line.source == .them else { return "You" }
-        if let name = line.speakerKey.flatMap({ model.transcript.names[$0] }) { return String(name.split(separator: " ").first ?? "") }
-        return line.speaker.map { "Voice \($0)" } ?? "Call"
+        if let name = line.speakerKey.flatMap({ model.transcript.names[$0] }) {
+            return name == controller.ownerName ? "You" : String(name.split(separator: " ").first ?? "")
+        }
+        return line.speaker.map { "Voice \($0)" } ?? (room ? "Room" : "Call")
     }
 
     private func color(_ line: LiveTranscript.Line) -> Int {

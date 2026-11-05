@@ -29,6 +29,14 @@ public final class DetectionService: @unchecked Sendable {
     /// The current call's meeting ID from its browser tab, for matching the calendar invite.
     public private(set) var meetingID: String?
 
+    private let suspendLock = NSLock()
+    private var suspended = false
+    /// Set during an in-person recording: it owns the mic until Stop, so a tick's scan would be thrown away.
+    public var isSuspended: Bool {
+        get { suspendLock.withLock { suspended } }
+        set { suspendLock.withLock { suspended = newValue } }
+    }
+
     public var onEvent: (DetectorEvent) -> Void = { _ in }
     /// Called after every tick during a call with the call app's audio process IDs.
     public var onCallProcesses: ([AudioObjectID]) -> Void = { _ in }
@@ -66,6 +74,7 @@ public final class DetectionService: @unchecked Sendable {
     }
 
     public func tick(at time: Date) {
+        guard !isSuspended else { return }
         let snapshot = snapshot(at: time)
         if let event = detector.process(snapshot) {
             switch event {

@@ -47,6 +47,23 @@ final class AssemblyAIClientTests: XCTestCase {
         XCTAssertEqual(create["disfluencies"] as? Bool, true)
     }
 
+    /// A room of people on one mic split into 137 voices once; the mic never holds more than a room.
+    func testMicTrackCapsTheSpeakerCount() async throws {
+        StubURLProtocol.handler = { r in
+            switch r.url.path {
+            case "/v2/upload": return (200, json(["upload_url": "u"]))
+            case "/v2/transcript": return (200, json(["id": "t9", "status": "queued"]))
+            default: return (200, json(["id": "t9", "status": "completed", "utterances": []]))
+            }
+        }
+        _ = try await client().transcribe(file: file, track: .me)
+        let me = try JSONSerialization.jsonObject(with: StubURLProtocol.requests[1].body) as! [String: Any]
+        XCTAssertEqual((me["speaker_options"] as? [String: Int])?["max_speakers_expected"], AssemblyAIClient.maxRoomSpeakers)
+        _ = try await client().transcribe(file: file, track: .them)
+        let them = try JSONSerialization.jsonObject(with: StubURLProtocol.requests.last { $0.url.path == "/v2/transcript" }!.body) as! [String: Any]
+        XCTAssertNil(them["speaker_options"])
+    }
+
     func testErrorStatusThrows() async {
         StubURLProtocol.handler = { r in
             switch r.url.path {

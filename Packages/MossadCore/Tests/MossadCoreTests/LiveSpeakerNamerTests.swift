@@ -70,4 +70,20 @@ final class LiveSpeakerNamerTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(try AudioSamples.read(url, from: 1, to: 4).count, 3 * 16_000 - 1_600)
         writer.close()
     }
+
+    /// In a room the owner is one of the voices on the one stream, so the owner's name is allowed.
+    func testInARoomTheOwnerGetsTheirName() async throws {
+        let room = dir.appendingPathComponent("me.caf")
+        try writeSegments(room, total: 20, [(0, 8, 200), (10, 18, 400)])
+        let library = VoiceLibrary(directory: dir)
+        try library.add([1, 0, 0, 0], to: "Dana", isOwner: true)
+        try library.add([0, 1, 0, 0], to: "Sam Lee")
+        var live = LiveTranscript()
+        live.apply(turn(0, "A", from: 0, to: 8), source: .them, at: 8)
+        live.apply(turn(1, "B", from: 10, to: 18), source: .them, at: 18)
+        let call = await LiveSpeakerNamer(library: library, provider: ToneEmbeddingProvider()).names(for: live, themURL: room)
+        XCTAssertEqual(call, ["0B": "Sam Lee"])
+        let inRoom = await LiveSpeakerNamer(library: library, provider: ToneEmbeddingProvider(), room: true).names(for: live, themURL: room)
+        XCTAssertEqual(inRoom, ["0A": "Dana", "0B": "Sam Lee"])
+    }
 }

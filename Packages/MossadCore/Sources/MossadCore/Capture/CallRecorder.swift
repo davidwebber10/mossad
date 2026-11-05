@@ -122,6 +122,22 @@ public final class CallRecorder: @unchecked Sendable {
     /// Runs on every detection tick during a call, so a source that failed to start is tried again.
     public func updateThemProcesses(_ ids: [AudioObjectID]) {
         guard isRecording, !isPaused, !isManual else { return }
+        checkMic()
+        let now = clock()
+        let ids = ids.isEmpty ? themProcessIDs : ids
+        if themSource == nil {
+            if now >= nextThemRetry { startThem(ids) } else { themProcessIDs = ids }
+        } else if !ids.isEmpty, Set(ids) != Set(themProcessIDs) {
+            Log.info("Meeting audio processes changed; rebuilding tap")
+            themSource?.stop()
+            startThem(ids)
+        }
+    }
+
+    /// Starts a mic that failed to start, and restarts one that sent nothing for `stallLimit`. Runs on each
+    /// detection tick during a call, and on its own timer during an in-person recording.
+    public func checkMic() {
+        guard isRecording, !isPaused else { return }
         let now = clock()
         if meSource == nil, now >= nextMeRetry {
             startMe()
@@ -131,14 +147,6 @@ public final class CallRecorder: @unchecked Sendable {
             source.stop()
             meSource = nil
             startMe()
-        }
-        let ids = ids.isEmpty ? themProcessIDs : ids
-        if themSource == nil {
-            if now >= nextThemRetry { startThem(ids) } else { themProcessIDs = ids }
-        } else if !ids.isEmpty, Set(ids) != Set(themProcessIDs) {
-            Log.info("Meeting audio processes changed; rebuilding tap")
-            themSource?.stop()
-            startThem(ids)
         }
     }
 
@@ -294,6 +302,8 @@ public final class CallRecorder: @unchecked Sendable {
     /// Seconds recorded so far: the longer of the two tracks.
     /// Seconds in the call track so far: where a new live session's audio starts in it.
     public var themDuration: TimeInterval { themWriter?.duration ?? 0 }
+    /// Seconds in the mic track so far: where a room recording's new live session starts in it.
+    public var meDuration: TimeInterval { meWriter?.duration ?? 0 }
 
     private var recordedLength: TimeInterval { max(meWriter?.duration ?? 0, themWriter?.duration ?? 0) }
 
