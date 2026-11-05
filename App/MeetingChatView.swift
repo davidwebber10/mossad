@@ -140,7 +140,7 @@ struct MeetingChatView: View {
                 current.updated = Date()
                 save(current)
                 controller.summarizeChat(current.id)
-                controller.syncToICloud()
+                controller.syncNow()
             } catch {
                 self.error = "\(error)"
             }

@@ -5,6 +5,7 @@ struct MeetingsListView: View {
     @EnvironmentObject var store: PhoneStore
     @State private var showActions = false
     @State private var recording = false
+    @State private var settings = false
     /// A meeting opens out of its row.
     @Namespace private var zoom
 
@@ -12,7 +13,7 @@ struct MeetingsListView: View {
         NavigationStack(path: $store.path) {
             List {
                 if let error = store.error {
-                    Label(error, systemImage: "exclamationmark.icloud").font(.footnote).foregroundStyle(.red)
+                    Label(error, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red)
                 }
                 if !store.outbox.isEmpty {
                     Section("Recorded on this iPhone") {
@@ -43,7 +44,7 @@ struct MeetingsListView: View {
             }
             .overlay {
                 if store.meetings.isEmpty {
-                    ContentUnavailableView(store.syncing ? "Syncing…" : "No meetings yet", systemImage: "icloud",
+                    ContentUnavailableView(store.syncing ? "Syncing…" : "No meetings yet", systemImage: store.syncWith == .server ? "server.rack" : "icloud",
                                            description: Text("Meetings appear here after Mossad on your Mac writes their notes."))
                 }
             }
@@ -56,8 +57,12 @@ struct MeetingsListView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Action items", systemImage: "checklist") { showActions = true }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Settings", systemImage: "gearshape") { settings = true }
+                }
             }
             .fullScreenCover(isPresented: $recording) { RecordingView() }
+            .sheet(isPresented: $settings) { PhoneSettingsView() }
             .refreshable { await store.sync() }
             .navigationDestination(isPresented: $showActions) { ActionItemsView() }
             .navigationDestination(for: String.self) { id in

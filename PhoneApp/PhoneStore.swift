@@ -3,7 +3,7 @@ import MossadCore
 
 enum PhoneTab: Hashable { case meetings, chat, people, analytics, search }
 
-/// The phone's copy of the meetings: pulled from iCloud into the app's folder, then read with the same code
+/// The phone's copy of the meetings: pulled from iCloud or the owner's server into the app's folder, then read with the same code
 /// the Mac uses. Chats, ratings, replies to the coach, and the coach's memory go back up.
 @MainActor
 final class PhoneStore: ObservableObject {
@@ -31,7 +31,10 @@ final class PhoneStore: ObservableObject {
     @Published var path: [String] = []
 
     let paths = Paths.live
-    private lazy var cloud = CloudSync(paths: paths)
+    /// Where this iPhone syncs: iCloud (the default), the owner's own server, or nowhere.
+    @Published private(set) var syncWith = SyncChoice(rawValue: UserDefaults.standard.string(forKey: "syncWith") ?? "") ?? .icloud
+    private var engine: (key: String, sync: CloudSync)?
+    private let keychain = Keychain()
     private var chatStore: ChatStore { ChatStore(directory: paths.chats) }
     /// `MOSSAD_ROOT` points the simulator at a sample folder; nothing syncs then.
     private let offline = ProcessInfo.processInfo.environment["MOSSAD_ROOT"] != nil
@@ -61,11 +64,68 @@ final class PhoneStore: ObservableObject {
         return provider.model(shared.model, apiKey: shared.key, usage: nil)
     }
 
+    // MARK: Sync
+
+    /// The server this iPhone uses: the one set up here, or the one the Mac shared through iCloud Keychain.
+    var server: ServerConnection? {
+        if let text = UserDefaults.standard.string(forKey: "serverAddress"), let address = ServerConnection.address(from: text),
+           let secret = keychain.get(.serverSecret) {
+            return ServerConnection(address: address, secret: secret)
+        }
+        return ServerPairing.shared()
+    }
+
+    /// "iCloud" or "your server", for messages.
+    var place: String { syncWith == .server ? "your server" : "iCloud" }
+
+    private var cloud: CloudSync? {
+        guard !offline else { return nil }
+        let key: String
+        let store: any RecordStore
+        switch syncWith {
+        case .icloud: key = "icloud"; store = CloudKitStore()
+        case .server:
+            guard let c = server else { return nil }
+            key = "server:\(c.address.absoluteString)"
+            store = ServerStore(c)
+        case .off: return nil
+        }
+        if let engine, engine.key == key { return engine.sync }
+        let sync = CloudSync(paths: paths, store: store)
+        engine = (key, sync)
+        return sync
+    }
+
+    func choose(_ choice: SyncChoice) {
+        guard choice != syncWith else { return }
+        syncWith = choice
+        UserDefaults.standard.set(choice.rawValue, forKey: "syncWith")
+        engine = nil
+        error = nil
+        lastSync = nil
+        Task { await sync() }
+    }
+
+    /// Keeps a checked server on this iPhone and syncs with it.
+    func connect(_ c: ServerConnection) {
+        try? keychain.set(c.secret, for: .serverSecret)
+        UserDefaults.standard.set(c.address.absoluteString, forKey: "serverAddress")
+        engine = nil
+        syncWith = .icloud
+        choose(.server)
+    }
+
+    func disconnectServer() {
+        keychain.delete(.serverSecret)
+        UserDefaults.standard.removeObject(forKey: "serverAddress")
+        choose(.icloud)
+    }
+
     func sync() async {
         guard !syncing else { return }
         syncing = true
         defer { syncing = false }
-        if !offline {
+        if let cloud {
             do {
                 try await cloud.pull(includeMeetings: true)
                 try await cloud.pushShared()
@@ -73,8 +133,10 @@ final class PhoneStore: ObservableObject {
                 error = nil
                 lastSync = Date()
             } catch {
-                self.error = "Could not reach iCloud: \(error.localizedDescription)"
+                self.error = "Could not reach \(place): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
             }
+        } else if syncWith == .server, !offline {
+            error = "Connect your server in Settings."
         }
         reload()
     }
@@ -89,11 +151,10 @@ final class PhoneStore: ObservableObject {
         coachVersion += 1
     }
 
-    /// Sends what changed here to iCloud, in the background.
+    /// Sends what changed here to the sync store, in the background.
     private func share() {
         reload()
-        guard !offline else { return }
-        let cloud = cloud
+        guard let cloud else { return }
         Task { try? await cloud.pushShared() }
     }
 
@@ -174,7 +235,7 @@ final class PhoneStore: ObservableObject {
 
     /// Uploads what iCloud does not have yet. The audio stays here until the meeting comes back from the Mac.
     func sendOutbox() async {
-        guard !offline else { return }
+        guard let cloud else { return }
         for item in outbox where !item.sent {
             let audio = recordingsFolder.appendingPathComponent("\(item.id).m4a")
             do {
@@ -183,7 +244,7 @@ final class PhoneStore: ObservableObject {
                 if let i = list.firstIndex(where: { $0.id == item.id }) { list[i].sent = true }
                 saveOutbox(list)
             } catch {
-                self.error = "The recording is saved on this iPhone and will be sent when iCloud is reachable."
+                self.error = "The recording is saved on this iPhone and will be sent when \(place) is reachable."
             }
         }
     }

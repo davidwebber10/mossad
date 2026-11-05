@@ -26,7 +26,10 @@ export async function handleAPI(request: Request, env: Env): Promise<Response> {
   const parts = url.pathname.split('/').slice(2).map(decodeURIComponent);
   const owner = await isOwner(request, env);
   if (await tooManyFailures(env, request, !owner && !!bearer(request))) return json({ error: 'Too many wrong secrets. Try again in an hour.' }, 429);
-  if (parts[0] === 'hello' && request.method === 'GET') return json({ mossad: true, version, authorized: owner });
+  if (parts[0] === 'hello' && request.method === 'GET') {
+    const scheme = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(env.MCP_HOST) ? 'http' : 'https';
+    return json({ mossad: true, version, authorized: owner, mcp: `${scheme}://${env.MCP_HOST}${(env.MCP_PATH || '/mossad').replace(/\/$/, '')}`, chat: !!env.ANTHROPIC_API_KEY });
+  }
   if (!owner) return json({ error: 'The secret is wrong or missing.' }, 401);
 
   const [kind, a, b] = parts;

@@ -17,7 +17,7 @@ extension AppController {
         Task {
             if await runner.run() > 0 {
                 commitmentsVersion += 1
-                syncToICloud()
+                syncNow()
             }
             findingCommitments = false
         }
@@ -28,7 +28,7 @@ extension AppController {
         change(&book)
         do { try book.save(to: paths.commitments) } catch { Log.error("Saving commitments failed: \(error)") }
         commitmentsVersion += 1
-        syncToICloud()
+        syncNow()
     }
 
     func saveCommitment(_ c: Commitment) {

@@ -24,7 +24,7 @@ public struct ShareOptions: Codable, Equatable, Sendable {
 }
 
 /// A link the owner made: kept on the Mac so it can be updated or stopped.
-public struct ShareLink: Codable, Equatable, Identifiable, Sendable {
+public struct MeetingLink: Codable, Equatable, Identifiable, Sendable {
     /// The secret part of the URL. Only the Mac and the people it is sent to have it.
     public var token: String
     public var callID: String
@@ -34,6 +34,15 @@ public struct ShareLink: Codable, Equatable, Identifiable, Sendable {
     public var expires: Date?
 
     public var id: String { Self.serverID(token) }
+
+    public init(token: String, callID: String, title: String, options: ShareOptions, created: Date, expires: Date? = nil) {
+        self.token = token
+        self.callID = callID
+        self.title = title
+        self.options = options
+        self.created = created
+        self.expires = expires
+    }
 
     public static func newToken() -> String { SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }.base64URL }
 
@@ -97,13 +106,13 @@ public struct SharedMeeting: Codable, Equatable, Sendable {
 /// The owner's links, in `~/Mossad/Shares/shares.json`.
 public struct ShareBook: Codable, Equatable, Sendable {
     public static let fileName = "shares.json"
-    public var links: [ShareLink] = []
+    public var links: [MeetingLink] = []
 
-    public init(links: [ShareLink] = []) { self.links = links }
+    public init(links: [MeetingLink] = []) { self.links = links }
 
-    public func link(for callID: String) -> ShareLink? { links.first { $0.callID == callID && !$0.isExpired() } }
+    public func link(for callID: String) -> MeetingLink? { links.first { $0.callID == callID && !$0.isExpired() } }
 
-    public mutating func put(_ link: ShareLink) {
+    public mutating func put(_ link: MeetingLink) {
         links.removeAll { $0.token == link.token }
         links.insert(link, at: 0)
     }
@@ -123,7 +132,7 @@ public struct ShareBook: Codable, Equatable, Sendable {
 
 extension ServerClient {
     /// Puts the copy on the server, and the recording when the link shows it.
-    public func putShare(_ link: ShareLink, meeting: SharedMeeting, audio: URL?) async throws {
+    public func putShare(_ link: MeetingLink, meeting: SharedMeeting, audio: URL?) async throws {
         try await send(connection.request("api/shares/\(link.id)", method: "PUT"), body: meeting.encoded())
         if meeting.audio, let audio {
             var request = connection.request("api/shares/\(link.id)/audio", method: "PUT")
@@ -132,7 +141,7 @@ extension ServerClient {
         }
     }
 
-    public func deleteShare(_ link: ShareLink) async throws {
+    public func deleteShare(_ link: MeetingLink) async throws {
         try await send(connection.request("api/shares/\(link.id)", method: "DELETE"))
     }
 

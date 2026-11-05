@@ -24,7 +24,7 @@ extension AppController {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
             await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName))
             coaching = false
-            syncToICloud()
+            syncNow()
             await sendCoachEmail()
         }
     }
@@ -48,7 +48,7 @@ extension AppController {
             }
         }
         Log.info("The coach updated its read on \(names.count) \(names.count == 1 ? "person" : "people")")
-        syncToICloud()
+        syncNow()
     }
 
     /// Once: the coach's first questions, from the last 30 days of calls.
@@ -66,7 +66,7 @@ extension AppController {
                 try profile.save(to: paths.coach)
                 Log.info("The coach has \(questions.count) questions for you")
                 coachVersion += 1
-                syncToICloud()
+                syncNow()
             } catch {
                 Log.error("The coach's first questions failed: \(error)")
                 UserDefaults.standard.set(false, forKey: "coachQuestionPass2026")
@@ -106,7 +106,7 @@ extension AppController {
         profile.remember(feedback, on: point, callID: callID, title: record.title)
         try profile.save(to: paths.coach)
         coachVersion += 1
-        syncToICloud()
+        syncNow()
         if let note = feedback.note {
             try await replyToCoach(callID: callID, message: "About your point “\(point.title)”: \(note)")
         }
@@ -130,7 +130,7 @@ extension AppController {
         profile.updateFacts(add: answer.addFacts, remove: answer.removeFacts)
         try profile.save(to: paths.coach)
         coachVersion += 1
-        syncToICloud()
+        syncNow()
     }
 
     func acceptFocus(_ id: UUID, plan: String?) {
@@ -138,7 +138,7 @@ extension AppController {
         profile.acceptFocus(id, plan: plan, at: Date())
         try? profile.save(to: paths.coach)
         coachVersion += 1
-        syncToICloud()
+        syncNow()
     }
 
     func answerQuestion(_ id: UUID, _ status: CoachQuestion.Status, note: String?) {
@@ -146,7 +146,7 @@ extension AppController {
         profile.answer(id, status, note: note, at: Date())
         try? profile.save(to: paths.coach)
         coachVersion += 1
-        syncToICloud()
+        syncNow()
     }
 
     func dismissFocus(_ id: UUID) {
@@ -154,7 +154,7 @@ extension AppController {
         profile.dismissFocus(id, at: Date())
         try? profile.save(to: paths.coach)
         coachVersion += 1
-        syncToICloud()
+        syncNow()
     }
 
     func setCoachVoice(_ voice: CoachVoice) {
@@ -162,7 +162,7 @@ extension AppController {
         profile.voice = voice
         try? profile.save(to: paths.coach)
         coachVersion += 1
-        syncToICloud()
+        syncNow()
     }
 
     /// Deletes this call's review and runs the coach, which reviews it again in the current format.
@@ -177,7 +177,7 @@ extension AppController {
         profile.updateFacts(add: [CoachFact(kind: kind, text: text)], remove: [])
         try? profile.save(to: paths.coach)
         coachVersion += 1
-        syncToICloud()
+        syncNow()
     }
 
     func removeCoachFact(_ text: String) {
@@ -185,7 +185,7 @@ extension AppController {
         profile.updateFacts(add: [], remove: [text])
         try? profile.save(to: paths.coach)
         coachVersion += 1
-        syncToICloud()
+        syncNow()
     }
 
     func removeCoachGuidance(_ text: String) {
@@ -193,7 +193,7 @@ extension AppController {
         profile.updateGuidance(add: [], remove: [text], at: Date())
         try? profile.save(to: paths.coach)
         coachVersion += 1
-        syncToICloud()
+        syncNow()
     }
 }
 

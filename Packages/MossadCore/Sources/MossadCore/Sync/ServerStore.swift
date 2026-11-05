@@ -70,14 +70,21 @@ public struct ServerClient: Sendable {
         self.session = session
     }
 
-    public enum Hello: Equatable, Sendable { case found(authorized: Bool) }
+    /// What a Mossad server says about itself.
+    public struct Hello: Equatable, Sendable {
+        public var authorized: Bool
+        /// Where AI apps connect, such as https://mcp.example.com/mossad.
+        public var mcp: URL?
+        /// Whether share pages can have an AI chat (the server has an Anthropic key).
+        public var chat: Bool
+    }
 
     /// Whether the address is a Mossad server, and whether it takes the secret.
     public func hello() async throws -> Hello {
         let (data, response) = try await session.data(for: connection.request("api/hello"))
         guard (response as? HTTPURLResponse)?.statusCode == 200,
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any], body["mossad"] as? Bool == true else { throw ServerError.notMossad }
-        return .found(authorized: body["authorized"] as? Bool == true)
+        return Hello(authorized: body["authorized"] as? Bool == true, mcp: (body["mcp"] as? String).flatMap(URL.init(string:)), chat: body["chat"] as? Bool == true)
     }
 
     @discardableResult
@@ -116,7 +123,7 @@ public struct ServerStore: RecordStore {
     public var wantsMeetingView: Bool { true }
 
     public func prepare() async throws {
-        guard case .found(authorized: true) = try await client.hello() else { throw ServerError.wrongSecret }
+        guard try await client.hello().authorized else { throw ServerError.wrongSecret }
     }
 
     public func save(_ records: [StoredRecord]) async throws -> Set<String> {

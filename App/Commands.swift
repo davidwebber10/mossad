@@ -28,6 +28,11 @@ struct MossadCommands: Commands {
                 if let id = controller.selectedMeetingID { controller.namingCallID = id }
             }
             .disabled(selected.map { $0.status != .written || ($0.unknownSpeakers.isEmpty && $0.skippedSpeakers.isEmpty) } ?? true)
+            Button("Share…") {
+                if let id = controller.selectedMeetingID { controller.sharingCallID = id }
+            }
+            .keyboardShortcut("s", modifiers: [.command, .shift])
+            .disabled(selected?.status != .written)
             Divider()
             Button("Bookmark This Moment") { controller.bookmarkCurrentCall() }
                 .keyboardShortcut("b", modifiers: [.command, .option])

@@ -65,6 +65,10 @@ struct MeetingsView: View {
                              set: { controller.namingCallID = $0?.id })) { r in
             VoiceNamingView(record: r)
         }
+        .sheet(item: Binding(get: { controller.sharingCallID.flatMap { id in controller.meetings.first { $0.id == id } } },
+                             set: { controller.sharingCallID = $0?.id })) { r in
+            ShareSheet(record: r)
+        }
         .onAppear {
             if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first?.id }
         }
@@ -326,6 +330,8 @@ struct MeetingMenuItems: View {
             if record.status == .written, record.unknownSpeakers.isEmpty, !record.skippedSpeakers.isEmpty {
                 Button("Name skipped voices…", systemImage: "person.wave.2") { controller.namingCallID = record.id }
             }
+            Button("Share…", systemImage: "square.and.arrow.up") { controller.sharingCallID = record.id }
+                .disabled(record.status != .written)
             Button("Regenerate summary", systemImage: "arrow.clockwise") { controller.regenerateSummary(record.id) }
                 .disabled(record.status != .written || record.utterances.isEmpty)
             Button("Merge with…", systemImage: "arrow.triangle.merge") {
@@ -351,6 +357,12 @@ struct MeetingActions: View {
                     Label("Name voices", systemImage: "person.wave.2")
                 }
                 .buttonStyle(.borderedProminent)
+            }
+            if record.status == .written {
+                Button { controller.sharingCallID = record.id } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                .help("Share this meeting by a private link")
             }
             Menu {
                 MeetingMenuItems(record: record, deleting: $deleting)

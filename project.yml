@@ -69,6 +69,7 @@ targets:
       path: PhoneApp/Info.plist
       properties:
         NSMicrophoneUsageDescription: Mossad records meetings in the room so your Mac can write the notes.
+        NSCameraUsageDescription: Mossad scans the code your Mac shows to connect to your server.
         UIBackgroundModes: [audio]
         CFBundleDisplayName: Mossad
         CFBundleShortVersionString: $(MARKETING_VERSION)

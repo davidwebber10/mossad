@@ -74,13 +74,6 @@ struct SettingsView: View {
                 ForEach(permissions.items) { item in permissionRow(item) }
             }
             consent
-            group("iPhone", footer: "Finished meetings, their summaries and transcripts, and the coach's notes go to your private iCloud, where Mossad for iPhone reads them. Audio stays where it is.") {
-                switchRow("Sync meetings to iCloud", $controller.iCloudSyncEnabled)
-                    .onChange(of: controller.iCloudSyncEnabled) { _, on in if on { controller.syncToICloud() } }
-                switchRow("Use my AI key on my iPhone", $controller.shareAIKey)
-                    .help("Chat and the coach on the iPhone use the AI provider and key chosen here. The key travels in iCloud Keychain, which is end-to-end encrypted.")
-                    .onChange(of: controller.shareAIKey) { _, _ in controller.updateSharedAIKey() }
-            }
             group("Updates", footer: "New versions come from the Mossad releases on GitHub. Each one is signed, and an update never installs during a call.") {
                 UpdateSettings(updater: controller.updater)
             }
@@ -104,6 +97,8 @@ struct SettingsView: View {
                   footer: "Read-only. Claude Code, Claude Desktop, and other MCP apps can search and read your meetings, the same way the Chat tab does. Mossad does not need to be open.") {
                 MCPSetup()
             }
+        case .sync:
+            SyncSettings()
         case .coach:
             group("Communication coach", footer: "Reviews use the AI provider. The coach's notes stay on this Mac in the Coach folder.") { coach }
             group("Email", footer: "Mossad only ever emails you, at one address.") { email }
@@ -118,6 +113,7 @@ struct SettingsView: View {
             ([controller.transcriptionProvider.key, controller.aiProvider.key].compactMap { $0 }
                 + (controller.liveTranscriptEnabled && controller.transcriptionProvider != .assemblyai ? [.assemblyai] : []))
                 .filter { !controller.hasKey($0) }.count
+        case .sync: controller.syncActivity.error == nil ? 0 : 1
         default: 0
         }
     }
@@ -517,6 +513,7 @@ extension APIKey {
         case .brevo: "Brevo key"
         case .sesSecret: "Amazon SES secret access key"
         case .cloudSecret: "Secret access key"
+        case .serverSecret: "Server secret"
         }
     }
 }
@@ -726,7 +723,7 @@ private struct UpdateSettings: View {
 /// The pages of Settings, in the order of the list on the left.
 /// The pages of Settings, in the order of the list on the left.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, recording, ai, coach
+    case general, recording, ai, sync, coach
 
     var id: String { rawValue }
 
@@ -735,6 +732,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: "General"
         case .recording: "Recording"
         case .ai: "AI"
+        case .sync: "Sync & Server"
         case .coach: "Coach"
         }
     }
@@ -744,6 +742,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: "Turn Mossad on or off, and what it needs from you and from macOS."
         case .recording: "How Mossad records, names voices, and keeps audio."
         case .ai: "The services that transcribe and summarize your calls, and other apps that read them."
+        case .sync: "Where your meetings sync, and your own server for share links and ChatGPT."
         case .coach: "Reviews of how you communicate, and the coach's emails."
         }
     }
@@ -753,6 +752,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: "gearshape.fill"
         case .recording: "waveform"
         case .ai: "sparkles"
+        case .sync: "arrow.triangle.2.circlepath"
         case .coach: "figure.mind.and.body"
         }
     }
@@ -762,6 +762,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: .gray
         case .recording: .red
         case .ai: .purple
+        case .sync: .blue
         case .coach: .green
         }
     }

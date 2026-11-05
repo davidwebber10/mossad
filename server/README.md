@@ -74,4 +74,5 @@ npm test                 # the tool rules and the page parts
 npx tsc --noEmit
 npx wrangler d1 execute mossad-dev --local --config test/wrangler.dev.jsonc --file schema.sql
 npx wrangler dev --config test/wrangler.dev.jsonc
+node test/e2e.mjs        # in another terminal: sync, shares, OAuth, and the MCP
 ```

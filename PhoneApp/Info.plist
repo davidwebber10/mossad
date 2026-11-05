@@ -31,6 +31,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Mossad scans the code your Mac shows to connect to your server.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Mossad records meetings in the room so your Mac can write the notes.</string>
 	<key>UIBackgroundModes</key>

@@ -29,6 +29,8 @@ public struct Paths: Sendable {
     public var commitments: URL { root.appendingPathComponent("Commitments") }
     /// What the iCloud sync last uploaded or fetched.
     public var sync: URL { root.appendingPathComponent("Sync") }
+    /// The owner's share links, so they can be updated or stopped.
+    public var shares: URL { root.appendingPathComponent("Shares") }
     /// `usage.jsonl`: each billed request, for the costs in Analytics.
     public var usage: URL { root.appendingPathComponent("Usage") }
 

@@ -226,7 +226,7 @@ struct ChatView: View {
                 chat.updated = Date()
                 store(chat)
                 controller.summarizeChat(chat.id)
-                controller.syncToICloud()
+                controller.syncNow()
             } catch {
                 self.error = "\(error)"
             }

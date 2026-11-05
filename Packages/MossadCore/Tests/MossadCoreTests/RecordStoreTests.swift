@@ -128,10 +128,10 @@ final class RecordStoreTests: XCTestCase {
     }
 
     func testShareTokensAreLongRandomAndStoredByHash() {
-        let a = ShareLink.newToken(), b = ShareLink.newToken()
+        let a = MeetingLink.newToken(), b = MeetingLink.newToken()
         XCTAssertEqual(a.count, 43)
         XCTAssertNotEqual(a, b)
-        XCTAssertEqual(ShareLink.serverID("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        XCTAssertEqual(MeetingLink.serverID("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 
     func testAddressesAndPairingCodes() throws {
@@ -161,7 +161,8 @@ final class RecordStoreTests: XCTestCase {
         let id = "t\(Int(Date().timeIntervalSince1970))"
         _ = try written(id, in: mac)
         let hello = try await ServerClient(connection).hello()
-        XCTAssertEqual(hello, .found(authorized: true))
+        XCTAssertTrue(hello.authorized)
+        XCTAssertEqual(hello.mcp?.absoluteString, "http://127.0.0.1:8787/mossad")
         try await CloudSync(paths: mac, store: ServerStore(connection)).push()
         try await CloudSync(paths: phone, store: ServerStore(connection)).pull(includeMeetings: true)
         XCTAssertEqual(try CallRecord.load(from: phone.callDirectory(id)).summary, "We held spend.")

@@ -146,11 +146,25 @@ final class AppController: ObservableObject {
     @AppStorage("mailEurope") var mailEurope = false
     @AppStorage("mailRegion") var mailRegion = "us-east-1"
     @AppStorage("mailAccessKeyID") var mailAccessKeyID = ""
-    @AppStorage("iCloudSync") var iCloudSyncEnabled = true
+    /// Where meetings sync: iCloud (the default), the owner's own server, or nowhere.
+    @AppStorage("syncWith") var syncWith: SyncChoice = .icloud
+    /// The owner's server, such as https://notes.example.com; the secret is in the Keychain.
+    @AppStorage("serverAddress") var serverAddress = ""
+    /// Puts the server's address and secret in iCloud Keychain, so the iPhone finds it on its own.
+    @AppStorage("serverOnPhone") var serverOnPhone = true
+    /// Where AI apps connect, as the server reported it.
+    @AppStorage("serverMCP") var serverMCP = ""
+    /// Whether the server has an AI key for the chat on share pages.
+    @AppStorage("serverHasChat") var serverHasChat = false
     @AppStorage("shareAIKey") var shareAIKey = true
-    var iCloudSyncing = false
-    var iCloudSyncAgain = false
-    lazy var cloudSync = CloudSync(paths: paths)
+    var syncRunning = false
+    var syncAgain = false
+    /// The sync engine for the chosen store, rebuilt when the choice or the server changes.
+    var syncEngine: (key: String, sync: CloudSync)?
+    @Published var syncActivity = SyncActivity()
+    @Published var shareBook = ShareBook()
+    /// The meeting the Share sheet is open for.
+    @Published var sharingCallID: String?
     @AppStorage("coachEnabled") var coachEnabled = false
     /// Calls that start before this (seconds since 1970) are not coached, so turning the coach on does not review years of calls.
     @AppStorage("coachSince") var coachSince: Double = 0
@@ -185,6 +199,11 @@ final class AppController: ObservableObject {
         library = VoiceLibrary(directory: paths.voices)
         recorder = Self.makeRecorder(paths: paths)
         Self.current = self
+        // Before the sync choice existed, turning iCloud sync off was its own switch.
+        if UserDefaults.standard.object(forKey: "syncWith") == nil, UserDefaults.standard.object(forKey: "iCloudSync") as? Bool == false {
+            syncWith = .off
+        }
+        shareBook = ShareBook.load(from: paths.shares)
         // The chosen calendars apply before anything matches a call to an invite.
         calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
@@ -234,7 +253,7 @@ final class AppController: ObservableObject {
             refreshUpcoming()
             // Chats and notes from the phone arrive within five minutes.
             iCloudTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.syncToICloud() }
+                Task { @MainActor in self?.syncNow() }
             }
             upcomingTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.refreshUpcoming() }
@@ -597,7 +616,7 @@ final class AppController: ObservableObject {
             guard var latest = store.all().first(where: { $0.id == id }) else { return }
             latest.summary = summary
             try? store.save(latest)
-            syncToICloud()
+            syncNow()
         }
     }
 
@@ -799,7 +818,7 @@ final class AppController: ObservableObject {
         syncCloud()
         runCoach()
         runCommitments()
-        syncToICloud()
+        syncNow()
         processing -= 1
         refresh()
     }
@@ -819,7 +838,7 @@ final class AppController: ObservableObject {
         }.value
         runCoach()
         runCommitments()
-        syncToICloud()
+        syncNow()
     }
 
     private func requestPermissions() {
