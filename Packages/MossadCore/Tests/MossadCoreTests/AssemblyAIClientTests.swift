@@ -10,7 +10,7 @@ final class AssemblyAIClientTests: XCTestCase {
     }
 
     func client() -> AssemblyAIClient {
-        AssemblyAIClient(apiKey: "key-123", session: StubURLProtocol.session(), pollInterval: .zero)
+        AssemblyAIClient(apiKey: "key-123", session: StubURLProtocol.session(), pollInterval: .zero, retryPause: .zero)
     }
 
     func testUploadThenCreateThenPoll() async throws {
@@ -76,6 +76,32 @@ final class AssemblyAIClientTests: XCTestCase {
         let body = try JSONSerialization.jsonObject(with: StubURLProtocol.requests[1].body) as! [String: Any]
         XCTAssertEqual(body["speakers_expected"] as? Int, 12)
         XCTAssertNil(body["speaker_options"], "the exact count replaces the room cap")
+    }
+
+    /// On a plane the upload failed with a 502 once; one dropped upload must not cost a whole attempt.
+    func testAFailedUploadIsTriedAgain() async throws {
+        var uploads = 0
+        StubURLProtocol.handler = { r in
+            switch r.url.path {
+            case "/v2/upload":
+                uploads += 1
+                return uploads == 1 ? (502, Data("bad gateway".utf8)) : (200, json(["upload_url": "u"]))
+            case "/v2/transcript": return (200, json(["id": "t7", "status": "queued"]))
+            default: return (200, json(["id": "t7", "status": "completed", "utterances": []]))
+            }
+        }
+        _ = try await client().transcribe(file: file, track: .me)
+        XCTAssertEqual(uploads, 2)
+    }
+
+    func testAnUploadThatKeepsFailingThrows() async {
+        StubURLProtocol.handler = { _ in (503, Data()) }
+        do {
+            _ = try await client().transcribe(file: file, track: .me)
+            XCTFail("expected error")
+        } catch {
+            XCTAssertEqual(StubURLProtocol.requests.filter { $0.url.path == "/v2/upload" }.count, AssemblyAIClient.uploadTries)
+        }
     }
 
     func testErrorStatusThrows() async {

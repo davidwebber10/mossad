@@ -36,9 +36,14 @@ public struct AssemblyAIClient: Transcribing {
     private let apiKey: String
     private let session: URLSession
     private let pollInterval: Duration
+    private let retryPause: Duration
+    /// Uploads per attempt. A slow or dropping network (a plane) fails an upload now and then.
+    static let uploadTries = 3
     private let usage: UsageLog?
 
-    public init(apiKey: String, session: URLSession = .shared, pollInterval: Duration = .seconds(5), usage: UsageLog? = nil) {
+    public init(apiKey: String, session: URLSession = .shared, pollInterval: Duration = .seconds(5), usage: UsageLog? = nil,
+                retryPause: Duration = .seconds(10)) {
+        self.retryPause = retryPause
         self.usage = usage
         self.apiKey = apiKey
         self.session = session
@@ -51,8 +56,7 @@ public struct AssemblyAIClient: Transcribing {
 
     public func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
         progress(.uploading(0))
-        let uploadURL: UploadResponse = try await send(request("upload", method: "POST"), file: file,
-                                                        sent: { progress(.uploading($0)) })
+        let uploadURL = try await upload(file, progress: progress)
         var body: [String: Any] = [
             "audio_url": uploadURL.upload_url,
             "speaker_labels": true,
@@ -81,6 +85,26 @@ public struct AssemblyAIClient: Transcribing {
                 job = try await send(request("transcript/\(job.id)", method: "GET"), body: nil)
             }
         }
+    }
+
+    private func upload(_ file: URL, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> UploadResponse {
+        for attempt in 1... {
+            do {
+                return try await send(request("upload", method: "POST"), file: file, sent: { progress(.uploading($0)) })
+            } catch {
+                guard attempt < Self.uploadTries, Self.isPassing(error) else { throw error }
+                Log.info("Upload to AssemblyAI failed (\(error.localizedDescription)); trying again")
+                progress(.uploading(0))
+                try await Task.sleep(for: retryPause)
+            }
+        }
+        fatalError("unreachable")
+    }
+
+    /// A dropped connection or a server error, which can pass; not a bad key or a bad request.
+    static func isPassing(_ error: Error) -> Bool {
+        if case TranscriptionError.http(let status, _) = error { return status >= 500 }
+        return error is URLError
     }
 
     private func request(_ path: String, method: String, json: Bool = false) -> URLRequest {
