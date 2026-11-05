@@ -45,13 +45,14 @@ extension AppController {
     }
 
     /// Saves a checked server and makes it the sync store.
-    func connectServer(_ c: ServerConnection, hello: ServerClient.Hello) {
+    func connectServer(_ c: ServerConnection, hello: ServerClient.Hello, syncThere: Bool) {
         serverMCP = hello.mcp?.absoluteString ?? ""
         serverHasChat = hello.chat
         do { try keychain.set(c.secret, for: .serverSecret) } catch { Log.error("Saving the server secret failed") }
         serverAddress = c.address.absoluteString
-        syncWith = .server
+        if syncThere || syncWith == .off || !Self.hasICloud { syncWith = .server }
         syncEngine = nil
+        mirrorEngine = nil
         updateSharedServer()
         let owner = ownerName
         Task { try? await ServerClient(c).putConfig(owner: owner) }
@@ -65,6 +66,7 @@ extension AppController {
         serverMCP = ""
         if syncWith == .server { syncWith = Self.hasICloud ? .icloud : .off }
         syncEngine = nil
+        mirrorEngine = nil
         ServerPairing.unshare()
         syncActivity = SyncActivity()
     }
@@ -111,26 +113,52 @@ extension AppController {
         return sync
     }
 
+    /// The server's copy of the meetings while iCloud syncs: only pushes, so the MCP has the meetings.
+    private var mirrorSync: CloudSync? {
+        guard syncWith == .icloud, let c = serverConnection else { return nil }
+        let key = c.address.absoluteString
+        if let m = mirrorEngine, m.key == key { return m.sync }
+        let sync = CloudSync(paths: paths, store: ServerStore(c))
+        mirrorEngine = (key, sync)
+        return sync
+    }
+
     /// Uploads new and changed meetings and pulls what the iPhone changed. One sync at a time; a sync asked for
     /// during one runs again after it.
     func syncNow() {
-        guard let cloud = currentSync else { return }
+        let mirror = mirrorSync
+        guard let cloud = currentSync ?? mirror else { return }
         if syncRunning { syncAgain = true; return }
+        if !serverConfigSent, let c = serverConnection {
+            serverConfigSent = true
+            let owner = ownerName
+            Task { try? await ServerClient(c).putConfig(owner: owner) }
+        }
         syncRunning = true
         syncActivity.running = true
         let place = syncWith == .server ? "your server" : "iCloud"
         Task.detached(priority: .utility) {
             var received = 0
             var failure: String?
-            do {
-                let changed = try await cloud.push()
-                received = try await cloud.pull(includeMeetings: false)
-                let shared = try await cloud.pushShared()
-                if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
-                if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
-            } catch {
-                failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                Log.error("Sync with \(place) failed: \(error)")
+            if cloud !== mirror {
+                do {
+                    let changed = try await cloud.push()
+                    received = try await cloud.pull(includeMeetings: false)
+                    let shared = try await cloud.pushShared()
+                    if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
+                    if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
+                } catch {
+                    failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    Log.error("Sync with \(place) failed: \(error)")
+                }
+            }
+            if let mirror {
+                do {
+                    let copied = try await mirror.push()
+                    if copied > 0 { Log.info("Server: \(copied) meetings copied for ChatGPT and share links") }
+                } catch {
+                    Log.error("Copying meetings to your server failed: \(error)")
+                }
             }
             await MainActor.run {
                 // Chats, ratings, and memories from the phone show here at once.

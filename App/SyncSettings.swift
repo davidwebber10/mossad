@@ -36,14 +36,11 @@ struct SyncSettings: View {
             .font(.system(size: 11))
             .padding(.leading, 4)
 
-            switch controller.syncWith {
-            case .icloud: ICloudDetails()
-            case .server:
-                if controller.serverConnection != nil { ServerDetails(settingUp: $settingUp) } else { finishSetup }
-            case .off: EmptyView()
-            }
-            if controller.syncWith != .server, controller.serverConnection != nil {
-                ServerExtras()
+            if controller.syncWith == .icloud { ICloudDetails() }
+            if controller.serverConnection != nil {
+                ServerDetails(settingUp: $settingUp)
+            } else if controller.syncWith == .server {
+                finishSetup
             }
         }
         .sheet(isPresented: $settingUp) { ServerSetupSheet() }
@@ -77,7 +74,9 @@ struct SyncSettings: View {
 
     private var serverStatus: StatusLine.Model {
         guard controller.serverConnection != nil else { return .init(text: "Not set up", color: .secondary) }
-        guard controller.syncWith == .server else { return .init(text: "Set up · not used for sync", color: .secondary) }
+        guard controller.syncWith == .server else {
+            return controller.syncWith == .icloud ? .init(text: "Has a copy for ChatGPT and links", color: Theme.listening) : .init(text: "Set up · not syncing", color: .secondary)
+        }
         return activityStatus
     }
 
@@ -238,7 +237,10 @@ private struct ServerDetails: View {
                     .frame(width: 34, height: 34).background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(controller.serverConnection?.address.host ?? "").font(.system(size: 13, weight: .semibold))
-                    Text("Your meetings sync here. Only your devices have the secret.").foregroundStyle(.secondary)
+                    Text(controller.syncWith == .server ? "Your meetings sync here. Only your devices have the secret."
+                         : controller.syncWith == .icloud ? "Keeps a copy of your meetings for ChatGPT and share links. iCloud still syncs your iPhone."
+                         : "Share links work. Sync is off, so no meetings go to it.")
+                        .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 Menu {
@@ -249,8 +251,10 @@ private struct ServerDetails: View {
                 } label: { Image(systemName: "ellipsis.circle") }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }
-            Divider()
-            SyncNowRow()
+            if controller.syncWith == .server {
+                Divider()
+                SyncNowRow()
+            }
         }
         .confirmationDialog("Disconnect your server?", isPresented: $confirmDisconnect) {
             Button("Disconnect", role: .destructive) { controller.disconnectServer() }
@@ -460,6 +464,8 @@ struct ServerSetupSheet: View {
     @State private var hello: ServerClient.Hello?
     @State private var started = false
     @State private var copiedSecret = false
+    /// Sync the iPhone through the server too. Off while iCloud works, so the iPhone keeps getting meetings.
+    @State private var syncThere = !AppController.hasICloud
 
     private static let guide = URL(string: "https://github.com/davidwebber10/mossad/tree/main/server#readme")!
     private static let commands = """
@@ -470,7 +476,7 @@ struct ServerSetupSheet: View {
     """
 
     private var secret: String { makeNew ? newSecret : pasted.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var syncDone: Bool { started && !controller.syncActivity.running && controller.syncActivity.last != nil }
+    private var syncDone: Bool { started && !controller.syncRunning && (controller.syncActivity.last != nil || controller.syncWith != .server) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -537,8 +543,17 @@ struct ServerSetupSheet: View {
                     }
                     .disabled(foundAddress == nil)
                     SetupStep(number: 4, title: "Move your data", state: syncDone ? .done : (hello == nil ? .todo : .active), last: true) {
-                        Text("Mossad sends your meetings' notes and transcripts to your server, and then syncs there from now on. Audio stays on this Mac.")
+                        Text("Mossad sends your meetings' notes and transcripts to your server, so ChatGPT can read them. Audio stays on this Mac.")
                             .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        if AppController.hasICloud {
+                            Toggle(isOn: $syncThere) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Sync my iPhone through the server, not iCloud")
+                                    Text("Then connect the iPhone with the code in Settings. Leave this off to keep iCloud.").font(.system(size: 11)).foregroundStyle(.secondary)
+                                }
+                            }
+                            .toggleStyle(.switch).disabled(started)
+                        }
                         if !started {
                             Button("Start syncing", action: start).buttonStyle(.borderedProminent)
                         } else if let error = controller.syncActivity.error {
@@ -610,7 +625,7 @@ struct ServerSetupSheet: View {
     private func start() {
         guard let url = foundAddress, let hello else { return }
         started = true
-        controller.connectServer(ServerConnection(address: url, secret: secret), hello: hello)
+        controller.connectServer(ServerConnection(address: url, secret: secret), hello: hello, syncThere: syncThere)
     }
 }
 

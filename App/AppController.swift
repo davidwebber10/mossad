@@ -158,9 +158,13 @@ final class AppController: ObservableObject {
     @AppStorage("serverHasChat") var serverHasChat = false
     @AppStorage("shareAIKey") var shareAIKey = true
     var syncRunning = false
+    /// The server learns the owner's name and time zone once a launch, for the MCP's answers and dates.
+    var serverConfigSent = false
     var syncAgain = false
     /// The sync engine for the chosen store, rebuilt when the choice or the server changes.
     var syncEngine: (key: String, sync: CloudSync)?
+    /// With iCloud sync and a server set up, the server keeps a copy of the meetings for ChatGPT.
+    var mirrorEngine: (key: String, sync: CloudSync)?
     @Published var syncActivity = SyncActivity()
     @Published var shareBook = ShareBook()
     /// The meeting the Share sheet is open for.
@@ -342,6 +346,7 @@ final class AppController: ObservableObject {
     /// Recreates the pipeline with the current keys and settings.
     func rebuildPipeline() {
         updateSharedAIKey()
+        updateSharedServer()
         let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
         let organization = organization.trimmingCharacters(in: .whitespaces)
         let provider = transcriptionProvider
