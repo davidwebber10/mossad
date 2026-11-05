@@ -194,6 +194,24 @@ final class PipelineTests: XCTestCase {
         XCTAssertFalse(Pipeline.hasPreviousTranscript(dir))
     }
 
+    /// Naming a voice someone who is saved already, by name or by email, adds to that person.
+    func testNamingAVoiceForASavedPersonUsesThatPerson() async throws {
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        try library.setEmail("arivera@example.com", for: "Alex Rivera")
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        let keys = try load(id).unknownSpeakers
+        XCTAssertGreaterThanOrEqual(keys.count, 1)
+        await p.applyNames(callID: id, names: [keys[0]: "alex rivera"])
+        XCTAssertEqual(try load(id).speakerNames[keys[0]], "Alex Rivera")
+        if keys.count > 1 {
+            await p.applyNames(callID: id, names: [keys[1]: "Al R"], emails: [keys[1]: "ARivera@example.com"])
+            XCTAssertEqual(try load(id).speakerNames[keys[1]], "Alex Rivera")
+        }
+        XCTAssertEqual(library.profiles.filter { $0.name.lowercased().hasPrefix("al") }.map(\.name), ["Alex Rivera"])
+    }
+
     func testSetTagsCleansThemAndRewritesTheNote() async throws {
         let id = try makeRecord()
         let p = pipeline()

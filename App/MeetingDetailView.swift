@@ -301,6 +301,7 @@ private struct SpeakerChip: View {
                 Text(speaker.isUnknown ? "Who is \(speaker.name)?" : "Who is this voice?").font(.headline)
                 TextField("Name", text: $name).textFieldStyle(.roundedBorder)
                 TextField("Email (optional)", text: $email).textFieldStyle(.roundedBorder)
+                ExistingPersonHint(name: name, email: email)
                 Text("Mossad saves this voice under the name and recognizes it in later calls.")
                     .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 HStack {

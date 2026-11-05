@@ -142,6 +142,7 @@ struct VoiceNamingView: View {
                     .fixedSize()
                 }
             }
+            ExistingPersonHint(name: names[key, default: ""], email: emails[key])
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)

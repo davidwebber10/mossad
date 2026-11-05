@@ -14,13 +14,24 @@ struct PeopleView: View {
     @State private var newEmail = ""
     @State private var deleting: VoiceProfile?
     @State private var confirmDeleteAll = false
+    @State private var reviewingDuplicates = false
+    /// "recent" (last meeting first) or "name" (A to Z).
+    @AppStorage("peopleSort") private var sort = "recent"
+    /// Pairs the owner said are two people, by pair ID, separated by newlines.
+    @AppStorage("peopleNotDuplicates") private var notDuplicates = ""
+
+    private var duplicates: [PeopleDuplicates.Pair] {
+        let dismissed = Set(notDuplicates.split(separator: "\n").map(String.init))
+        return PeopleDuplicates.find(profiles).filter { !dismissed.contains($0.id) }
+    }
 
     private var selected: VoiceProfile? { profiles.first { $0.name == selection } }
 
     private var results: [VoiceProfile] {
         let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return profiles }
-        return profiles.filter { $0.name.localizedCaseInsensitiveContains(q) || ($0.email?.localizedCaseInsensitiveContains(q) ?? false) }
+        let sorted = sort == "name" ? profiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } : profiles
+        guard !q.isEmpty else { return sorted }
+        return sorted.filter { $0.name.localizedCaseInsensitiveContains(q) || ($0.email?.localizedCaseInsensitiveContains(q) ?? false) }
     }
 
     var body: some View {
@@ -30,9 +41,12 @@ struct PeopleView: View {
                                        description: Text("Your voice is learned in your first call. Name other voices after a call."))
             } else {
                 HStack(spacing: 0) {
-                    PeopleList(profiles: results, stats: stats, selection: $selection, color: color(for:),
-                               rename: startEditing, delete: { deleting = $0 })
-                        .frame(width: 330)
+                    VStack(spacing: 0) {
+                        listHeader
+                        PeopleList(profiles: results, stats: stats, selection: $selection, color: color(for:),
+                                   rename: startEditing, delete: { deleting = $0 })
+                    }
+                    .frame(width: 330)
                     Divider()
                     Group {
                         if let p = selected {
@@ -64,6 +78,16 @@ struct PeopleView: View {
         } message: {
             Text("Mossad will ask for this voice's name again the next time it hears it.")
         }
+        .sheet(isPresented: $reviewingDuplicates) {
+            PeopleDuplicatesSheet(pairs: duplicates, stats: stats,
+                                  merge: { from, into in
+                                      guard let p = profiles.first(where: { $0.name == from }),
+                                            let target = profiles.first(where: { $0.name == into }) else { return }
+                                      merge(p, into: target)
+                                  },
+                                  notSame: { notDuplicates += (notDuplicates.isEmpty ? "" : "\n") + $0.id })
+        }
+        .onChange(of: duplicates.isEmpty) { _, empty in if empty { reviewingDuplicates = false } }
         .confirmationDialog("Delete every saved voice?", isPresented: $confirmDeleteAll) {
             Button("Delete all voices", role: .destructive) {
                 controller.deleteAllVoices()
@@ -72,6 +96,34 @@ struct PeopleView: View {
         } message: {
             Text("Mossad forgets every voice it learned, including yours. Meeting notes keep their names.")
         }
+    }
+
+    /// The sort, and a note when some people look like duplicates.
+    private var listHeader: some View {
+        VStack(spacing: 8) {
+            if !duplicates.isEmpty {
+                Button { reviewingDuplicates = true } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.2.badge.gearshape").foregroundStyle(Theme.warning)
+                        Text("\(duplicates.count) possible \(duplicates.count == 1 ? "duplicate" : "duplicates")")
+                            .font(.system(size: 12, weight: .medium))
+                        Spacer()
+                        Text("Review").font(.system(size: 12)).foregroundStyle(Color.accentColor)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            Picker("Sort", selection: $sort) {
+                Text("Recent").tag("recent")
+                Text("A to Z").tag("name")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
+        .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
     }
 
     private var footer: some View {
@@ -160,7 +212,7 @@ struct PeopleView: View {
     }
 }
 
-/// The left column: "You", then everyone else by most recent meeting.
+/// The left column: "You", then everyone else, in the order the sort picks.
 private struct PeopleList: View {
     let profiles: [VoiceProfile]
     let stats: [String: PersonStats]

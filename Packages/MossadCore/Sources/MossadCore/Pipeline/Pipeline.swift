@@ -429,8 +429,10 @@ public actor Pipeline {
         let before = MarkdownWriter.displayNames(r)
         var renamed: [String: String] = [:]
         for (key, raw) in names {
-            let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { continue }
+            let typed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !typed.isEmpty else { continue }
+            // Someone saved already, by email or by name in other case or spacing, stays one person.
+            let name = library.existingName(name: typed, email: emails[key]) ?? typed
             if let old = before[key], old != name, r.speakerNames[key] == nil { renamed[old] = name }
             r.speakerNames[key] = name
             r.unknownSpeakers.removeAll { $0 == key }
