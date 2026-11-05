@@ -420,7 +420,8 @@ private struct PlayerBar: View {
 
 private extension Text {
     func timeLabel() -> some View {
-        font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit().frame(width: 44)
+        // One line, wider for meetings over an hour ("1:45:43").
+        font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1).fixedSize().frame(minWidth: 44)
     }
 }
 
