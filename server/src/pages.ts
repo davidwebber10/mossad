@@ -20,6 +20,21 @@ ul{padding-left:20px;margin:6px 0}li{margin:4px 0}
 button,input,textarea{font:inherit;color:inherit}
 `;
 
+/** The summary's small Markdown: **bold** and "- " lists, after escaping, so nothing else becomes HTML. */
+export function md(text: string): string {
+  const out: string[] = [];
+  let list: string[] = [];
+  const flush = () => { if (list.length) { out.push(`<ul>${list.map((l) => `<li>${l}</li>`).join('')}</ul>`); list = []; } };
+  for (const raw of text.split('\n')) {
+    const line = e(raw.trim()).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    if (/^[-*] /.test(raw.trim())) { list.push(line.slice(2)); continue; }
+    flush();
+    if (line) out.push(`<p>${line}</p>`);
+  }
+  flush();
+  return out.join('');
+}
+
 function page(title: string, nonce: string, body: string, script = ''): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -63,8 +78,8 @@ export function sharePage(s: Share, token: string, nonce: string, repo: string):
 <div class="meta">${e(formatDay(s.start, tz))} · ${minutes} min · Shared by ${e(s.owner)}</div>
 ${s.people.length ? `<div class="people">${s.people.map((p) => `<span class="chip">${e(p)}</span>`).join('')}</div>` : ''}`);
   if (s.summary || s.topics?.length) {
-    parts.push(`<h2>Summary</h2><div class="card">${s.summary ? `<p>${e(s.summary)}</p>` : ''}${(s.topics ?? [])
-      .map((t) => `<h3>${e(t.title)}</h3><p>${e(t.summary)}</p>`).join('')}</div>`);
+    parts.push(`<h2>Summary</h2><div class="card">${s.summary ? md(s.summary) : ''}${(s.topics ?? [])
+      .map((t) => `<h3>${e(t.title)}</h3>${md(t.summary)}`).join('')}</div>`);
   }
   if (s.actionItems?.length) parts.push(`<h2>Action items</h2><div class="card"><ul>${s.actionItems.map((a) => `<li>${e(a.text)}</li>`).join('')}</ul></div>`);
   if (s.decisions?.length) parts.push(`<h2>Decisions</h2><div class="card"><ul>${s.decisions.map((d) => `<li>${e(d)}</li>`).join('')}</ul></div>`);
