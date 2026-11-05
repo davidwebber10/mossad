@@ -40,6 +40,7 @@ function page(title: string, nonce: string, body: string, script = ''): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
 <meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23d2452f'/%3E%3C/svg%3E">
 <title>${e(title)}</title><style nonce="${nonce}">${baseCSS}${PAGE_CSS}</style></head>
 <body>${body}${script ? `<script nonce="${nonce}">${script}</script>` : ''}</body></html>`;
 }
