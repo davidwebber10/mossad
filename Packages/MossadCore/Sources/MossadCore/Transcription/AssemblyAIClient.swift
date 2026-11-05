@@ -8,11 +8,17 @@ public enum TranscriptionStage: Sendable {
 public protocol Transcribing: Sendable {
     var serviceName: String { get }
     func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance]
+    /// `speakers`: how many voices the track holds, when the person said so. Services that cannot use it ignore it.
+    func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance]
 }
 
 extension Transcribing {
     /// The name in the progress line, such as "Deepgram is transcribing".
     public var serviceName: String { "AssemblyAI" }
+
+    public func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        try await transcribe(file: file, track: track, progress: progress)
+    }
 
     public func transcribe(file: URL, track: Track) async throws -> [Utterance] {
         try await transcribe(file: file, track: track, progress: { _ in })
@@ -38,6 +44,10 @@ public struct AssemblyAIClient: Transcribing {
     }
 
     public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        try await transcribe(file: file, track: track, speakers: nil, progress: progress)
+    }
+
+    public func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
         progress(.uploading)
         let uploadURL: UploadResponse = try await send(request("upload", method: "POST"), file: file)
         var body: [String: Any] = [
@@ -48,7 +58,11 @@ public struct AssemblyAIClient: Transcribing {
             "language_detection": false,
             "language_code": "en_us",
         ]
-        if track == .me { body["speaker_options"] = ["max_speakers_expected": Self.maxRoomSpeakers] }
+        if let speakers {
+            body["speakers_expected"] = speakers
+        } else if track == .me {
+            body["speaker_options"] = ["max_speakers_expected": Self.maxRoomSpeakers]
+        }
         let create = try JSONSerialization.data(withJSONObject: body)
         var job: TranscriptResponse = try await send(request("transcript", method: "POST", json: true), body: create)
         while true {

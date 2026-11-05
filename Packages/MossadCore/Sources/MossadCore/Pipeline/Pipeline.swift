@@ -118,6 +118,67 @@ public actor Pipeline {
         await process(id)
     }
 
+    /// Where the transcript from before the last "Transcribe again" is kept, for one undo.
+    public static let previousFileName = "call.previous.json"
+
+    /// The raw tracks are what gets transcribed; they are deleted some weeks after the meeting.
+    public static func canTranscribeAgain(_ dir: URL) -> Bool {
+        [Track.me, .them].contains { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0.fileName).path) }
+    }
+
+    public static func hasPreviousTranscript(_ dir: URL) -> Bool {
+        FileManager.default.fileExists(atPath: dir.appendingPathComponent(previousFileName).path)
+    }
+
+    /// Transcribes a finished meeting again from its audio, optionally with how many people spoke, then names the
+    /// voices and writes a new summary and note. The current record is kept first, so the person can go back.
+    @discardableResult
+    public func transcribeAgain(_ id: String, speakers: Int?) async -> Bool {
+        let dir = paths.callDirectory(id)
+        guard var r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed,
+              Self.canTranscribeAgain(dir), !inFlight.contains(id) else { return false }
+        do {
+            let previous = dir.appendingPathComponent(Self.previousFileName)
+            try? FileManager.default.removeItem(at: previous)
+            try FileManager.default.copyItem(at: dir.appendingPathComponent(CallRecord.fileName), to: previous)
+        } catch {
+            Log.error("Could not keep the transcript of \(id) before transcribing again: \(error)")
+            return false
+        }
+        r.speakersExpected = speakers
+        r.meUtterances = nil
+        r.themUtterances = nil
+        r.utterances = []
+        r.speakerNames = [:]
+        r.unknownSpeakers = []
+        r.speakerEmbeddings = [:]
+        r.status = .recorded
+        r.failedStep = nil
+        r.failureReason = nil
+        r.attempts = 0
+        r.nextAttempt = nil
+        do { try store(r, dir: dir) } catch { return false }
+        Log.info("Transcribing \(id) again" + (speakers.map { " for \($0) speakers" } ?? ""))
+        await process(id)
+        return true
+    }
+
+    /// Puts back the transcript from before the last "Transcribe again", and its note.
+    @discardableResult
+    public func restorePreviousTranscript(_ id: String) async -> Bool {
+        let dir = paths.callDirectory(id)
+        guard let current = try? CallRecord.load(from: dir), current.status == .written || current.status == .failed,
+              var r = try? CallRecord.load(from: dir, fileName: Self.previousFileName), !inFlight.contains(id) else { return false }
+        // The note is written again from the old record; any path change follows the current one.
+        r.markdownPath = current.markdownPath
+        r.status = .summarized
+        do { try store(r, dir: dir) } catch { return false }
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.previousFileName))
+        Log.info("Restored the previous transcript of \(id)")
+        await process(id)
+        return true
+    }
+
     /// Starts a failed or waiting call again now.
     public func retry(_ id: String) async {
         let dir = paths.callDirectory(id)
@@ -156,8 +217,9 @@ public actor Pipeline {
         transcribing.insert(r.id)
         // The full transcript replaces the live one, which was only for use during the call.
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(LiveTranscript.fileName))
-        async let me = transcribeIfNeeded(r.meUtterances, track: .me, dir: dir, callID: r.id)
-        async let them = transcribeIfNeeded(r.themUtterances, track: .them, dir: dir, callID: r.id)
+        let hints = Self.speakerHints(r)
+        async let me = transcribeIfNeeded(r.meUtterances, track: .me, speakers: hints[.me], dir: dir, callID: r.id)
+        async let them = transcribeIfNeeded(r.themUtterances, track: .them, speakers: hints[.them], dir: dir, callID: r.id)
         let (meResult, themResult) = await (me, them)
         // Keep whichever track succeeded, then fail if either did.
         if case .success(let u) = meResult { r.meUtterances = u }
@@ -172,7 +234,14 @@ public actor Pipeline {
         Log.info("Transcribed \(r.id): \(r.utterances.count) utterances")
     }
 
-    private func transcribeIfNeeded(_ done: [Utterance]?, track: Track, dir: URL, callID: String) async -> Result<[Utterance], Error> {
+    /// The person's speaker count goes with the track that holds those voices: in a room the mic hears everyone;
+    /// on a call the owner is on the mic and the rest are in the call audio.
+    static func speakerHints(_ r: CallRecord) -> [Track: Int] {
+        guard let n = r.speakersExpected, n > 0 else { return [:] }
+        return r.platform == .inPerson ? [.me: n] : [.them: max(1, n - 1)]
+    }
+
+    private func transcribeIfNeeded(_ done: [Utterance]?, track: Track, speakers: Int?, dir: URL, callID: String) async -> Result<[Utterance], Error> {
         if let done { return .success(done) }
         let url = dir.appendingPathComponent(track.fileName)
         let duration: Double
@@ -189,7 +258,7 @@ public actor Pipeline {
         }
         do {
             return .success(try await UsageContext.$callID.withValue(callID) {
-                try await transcriber.transcribe(file: url, track: track) { stage in
+                try await transcriber.transcribe(file: url, track: track, speakers: speakers) { stage in
                     Task { await self.stageChanged(callID, track, stage) }
                 }
             })

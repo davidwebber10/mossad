@@ -186,6 +186,8 @@ final class AppController: ObservableObject {
     @Published var shareBook = ShareBook()
     /// The meeting the Share sheet is open for.
     @Published var sharingCallID: String?
+    /// The meeting whose "Transcribe again" sheet is open.
+    @Published var transcribingAgainCallID: String?
     @AppStorage("coachEnabled") var coachEnabled = false
     /// Calls that start before this (seconds since 1970) are not coached, so turning the coach on does not review years of calls.
     @AppStorage("coachSince") var coachSince: Double = 0
@@ -734,6 +736,14 @@ final class AppController: ObservableObject {
             refresh()
             runQuestionPass()
         }
+    }
+
+    func transcribeAgain(_ id: String, speakers: Int?) {
+        Task { await track { await self.pipeline.transcribeAgain(id, speakers: speakers) } }
+    }
+
+    func restorePreviousTranscript(_ id: String) {
+        Task { await track { await self.pipeline.restorePreviousTranscript(id) } }
     }
 
     func regenerateSummary(_ id: String) {

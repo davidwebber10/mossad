@@ -69,8 +69,16 @@ struct MeetingsView: View {
                              set: { controller.sharingCallID = $0?.id })) { r in
             ShareSheet(record: r)
         }
+        .sheet(item: Binding(get: { controller.transcribingAgainCallID.flatMap { id in controller.meetings.first { $0.id == id } } },
+                             set: { controller.transcribingAgainCallID = $0?.id })) { r in
+            TranscribeAgainSheet(record: r)
+        }
         .onAppear {
             if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first?.id }
+            // Development hook for screenshots: MOSSAD_TRANSCRIBE_AGAIN opens the sheet for the first meeting.
+            if ProcessInfo.processInfo.environment["MOSSAD_TRANSCRIBE_AGAIN"] != nil, CommandLine.arguments.contains("--ui-preview") {
+                controller.transcribingAgainCallID = controller.meetings.first?.id
+            }
         }
         .onChange(of: mode) { _, _ in opened = nil }
     }
@@ -334,6 +342,13 @@ struct MeetingMenuItems: View {
                 .disabled(record.status != .written)
             Button("Regenerate summary", systemImage: "arrow.clockwise") { controller.regenerateSummary(record.id) }
                 .disabled(record.status != .written || record.utterances.isEmpty)
+            let dir = controller.paths.callDirectory(record.id)
+            let finished = record.status == .written || record.status == .failed
+            Button("Transcribe again…", systemImage: "waveform.badge.magnifyingglass") { controller.transcribingAgainCallID = record.id }
+                .disabled(!finished || !Pipeline.canTranscribeAgain(dir))
+            if finished, Pipeline.hasPreviousTranscript(dir) {
+                Button("Restore previous transcript", systemImage: "arrow.uturn.backward") { controller.restorePreviousTranscript(record.id) }
+            }
             Button("Merge with…", systemImage: "arrow.triangle.merge") {
                 NotificationCenter.default.post(name: .mergeMeeting, object: record.id)
             }

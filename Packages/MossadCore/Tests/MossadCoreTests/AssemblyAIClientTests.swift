@@ -64,6 +64,20 @@ final class AssemblyAIClientTests: XCTestCase {
         XCTAssertNil(them["speaker_options"])
     }
 
+    func testAKnownSpeakerCountIsSentExactly() async throws {
+        StubURLProtocol.handler = { r in
+            switch r.url.path {
+            case "/v2/upload": return (200, json(["upload_url": "u"]))
+            case "/v2/transcript": return (200, json(["id": "t8", "status": "queued"]))
+            default: return (200, json(["id": "t8", "status": "completed", "utterances": []]))
+            }
+        }
+        _ = try await client().transcribe(file: file, track: .me, speakers: 12) { _ in }
+        let body = try JSONSerialization.jsonObject(with: StubURLProtocol.requests[1].body) as! [String: Any]
+        XCTAssertEqual(body["speakers_expected"] as? Int, 12)
+        XCTAssertNil(body["speaker_options"], "the exact count replaces the room cap")
+    }
+
     func testErrorStatusThrows() async {
         StubURLProtocol.handler = { r in
             switch r.url.path {

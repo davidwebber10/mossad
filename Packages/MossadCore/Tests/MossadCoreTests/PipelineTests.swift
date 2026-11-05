@@ -9,8 +9,14 @@ final class FakeTranscriber: Transcribing, @unchecked Sendable {
     private let lock = NSLock()
     private var _calls: [Track] = []
     var calls: [Track] { lock.withLock { _calls } }
+    private var _speakers: [Track: Int] = [:]
+    /// The speaker count each track was last sent with.
+    var speakers: [Track: Int] { lock.withLock { _speakers } }
     func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
-        lock.withLock { _calls.append(track) }
+        try await transcribe(file: file, track: track, speakers: nil, progress: progress)
+    }
+    func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        lock.withLock { _calls.append(track); _speakers[track] = speakers }
         progress(.uploading)
         progress(.transcribing)
         if delay > .zero { try await Task.sleep(for: delay) }
@@ -127,6 +133,64 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(r.summary, "Summary 2")
         XCTAssertEqual(r.status, .written)
         XCTAssertEqual(transcriber.calls.count, 2, "no new transcription")
+    }
+
+    /// A transcript that came back wrong is made again from the audio, and the old one is kept for one undo.
+    func testTranscribeAgainKeepsThePreviousOneAndUsesTheSpeakerCount() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        XCTAssertTrue(Pipeline.canTranscribeAgain(paths.callDirectory(id)))
+        let started = await p.transcribeAgain(id, speakers: 4)
+        XCTAssertTrue(started)
+        let r = try load(id)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.summary, "Summary 2")
+        XCTAssertEqual(transcriber.calls.count, 4, "both tracks again")
+        // On a call the owner is on the mic, so the call audio holds the other three.
+        XCTAssertEqual(transcriber.speakers[.them], 3)
+        XCTAssertNil(transcriber.speakers[.me])
+        XCTAssertTrue(Pipeline.hasPreviousTranscript(paths.callDirectory(id)))
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id), fileName: Pipeline.previousFileName).summary, "Summary 1")
+    }
+
+    func testTranscribeAgainInARoomSendsTheCountWithTheMic() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .inPerson
+        try r.save(to: paths.callDirectory(id))
+        let p = pipeline()
+        await p.process(id)
+        _ = await p.transcribeAgain(id, speakers: 12)
+        XCTAssertEqual(transcriber.speakers[.me], 12)
+    }
+
+    func testRestorePreviousTranscriptBringsBackTheOldOne() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        _ = await p.transcribeAgain(id, speakers: nil)
+        let restored = await p.restorePreviousTranscript(id)
+        XCTAssertTrue(restored)
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.status, .written)
+        XCTAssertFalse(Pipeline.hasPreviousTranscript(paths.callDirectory(id)))
+        let note = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertTrue(note.contains("Summary 1"))
+    }
+
+    func testTranscribeAgainNeedsTheAudioTracks() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        let dir = paths.callDirectory(id)
+        for t in [Track.me, .them] { try FileManager.default.removeItem(at: dir.appendingPathComponent(t.fileName)) }
+        XCTAssertFalse(Pipeline.canTranscribeAgain(dir))
+        let started = await p.transcribeAgain(id, speakers: 3)
+        XCTAssertFalse(started)
+        XCTAssertEqual(try load(id).summary, "Summary 1")
+        XCTAssertFalse(Pipeline.hasPreviousTranscript(dir))
     }
 
     func testSetTagsCleansThemAndRewritesTheNote() async throws {

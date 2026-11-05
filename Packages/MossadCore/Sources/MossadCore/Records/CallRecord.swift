@@ -126,6 +126,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var markers: [TranscriptMarker] = []
     /// Where the recording is archived in the bucket, once uploaded.
     public var cloudKey: String?
+    /// How many people spoke, when the person said so for a new transcription.
+    public var speakersExpected: Int?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -143,7 +145,7 @@ public struct CallRecord: Codable, Equatable, Sendable {
         (markers + MeetingMerge.partBreaks(self).map { TranscriptMarker(offset: $0.offset, text: $0.text) }).sorted { $0.offset < $1.offset }
     }
 
-    static let fileName = "call.json"
+    public static let fileName = "call.json"
 
     public func save(to dir: URL) throws {
         let encoder = JSONEncoder()
@@ -152,7 +154,7 @@ public struct CallRecord: Codable, Equatable, Sendable {
         try encoder.encode(self).write(to: dir.appendingPathComponent(Self.fileName), options: .atomic)
     }
 
-    public static func load(from dir: URL) throws -> CallRecord {
+    public static func load(from dir: URL, fileName: String = fileName) throws -> CallRecord {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(CallRecord.self, from: Data(contentsOf: dir.appendingPathComponent(fileName)))
@@ -191,6 +193,7 @@ extension CallRecord {
         parts = try c.decodeIfPresent([CallPart].self, forKey: .parts) ?? []
         markers = try c.decodeIfPresent([TranscriptMarker].self, forKey: .markers) ?? []
         cloudKey = try c.decodeIfPresent(String.self, forKey: .cloudKey)
+        speakersExpected = try c.decodeIfPresent(Int.self, forKey: .speakersExpected)
     }
 }
 

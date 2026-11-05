@@ -77,6 +77,16 @@ public enum Pricing {
     static let summaryOutputTokens = 2_500
     static let promptTokens = 1_500
 
+    /// What "Transcribe again" costs: each track with audio for the meeting's length, and a new summary.
+    public static func transcribeAgainEstimate(_ r: CallRecord, tracks: Int) -> Double {
+        let seconds = r.end.timeIntervalSince(r.start) * Double(tracks)
+        let characters = r.utterances.map(\.text.count).reduce(0, +)
+        return cost(UsageEvent(date: r.end, callID: r.id, service: .assemblyai, purpose: .transcription, model: defaultBatchModel,
+                               audioSeconds: seconds, estimated: true))
+            + cost(UsageEvent(date: r.end, callID: r.id, service: .claude, purpose: .summary, model: claude[0].prefix,
+                              inputTokens: characters / 4 + promptTokens, outputTokens: summaryOutputTokens, estimated: true))
+    }
+
     /// Usage for calls processed before the log existed: both tracks transcribed for the whole call, and one
     /// summary with the transcript as input (about 4 characters per token).
     public static func estimates(for records: [CallRecord], logged: [UsageEvent]) -> [UsageEvent] {

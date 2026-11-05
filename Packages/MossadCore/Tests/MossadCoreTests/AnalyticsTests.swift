@@ -206,4 +206,16 @@ final class AnalyticsTests: XCTestCase {
         XCTAssertEqual(r.callsPerDay, 3.0 / 7.0, accuracy: 0.001)
         XCTAssertEqual(r.busiestDay?.calls, 2)
     }
+
+    /// The estimate in the "Transcribe again" sheet: each track with audio, for the call's length, and a summary.
+    func testTranscribeAgainEstimate() {
+        let start = Date(timeIntervalSince1970: 0)
+        var r = CallRecord(id: "x", platform: .inPerson, bundleID: "", start: start, end: start.addingTimeInterval(3600), status: .written)
+        r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 0, end: 1, text: String(repeating: "a", count: 4000))]
+        let oneTrack = Pricing.transcribeAgainEstimate(r, tracks: 1)
+        let transcription = Pricing.batchModels[Pricing.defaultBatchModel]! + Pricing.speakerLabelsPerHour
+        XCTAssertGreaterThan(oneTrack, transcription)
+        XCTAssertLessThan(oneTrack, transcription + 0.2)
+        XCTAssertEqual(Pricing.transcribeAgainEstimate(r, tracks: 2) - oneTrack, transcription, accuracy: 0.0001)
+    }
 }
