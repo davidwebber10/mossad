@@ -106,6 +106,15 @@ extension CallRecord {
         markers.sort { $0.offset < $1.offset }
         return true
     }
+
+    /// Adds a bookmark at `offset` unless one is already within a second of it.
+    @discardableResult
+    mutating func addBookmark(at offset: TimeInterval, markerText: String) -> Bool {
+        guard !markers.contains(where: { $0.isBookmark && abs($0.offset - offset) <= 1 }) else { return false }
+        markers.append(TranscriptMarker(offset: offset, text: markerText, isBookmark: true))
+        markers.sort { $0.offset < $1.offset }
+        return true
+    }
 }
 
 /// Everything known about one call; saved as `call.json` in the call's audio directory.

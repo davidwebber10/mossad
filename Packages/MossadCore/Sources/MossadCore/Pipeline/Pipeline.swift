@@ -610,6 +610,18 @@ public actor Pipeline {
         save(&r, dir: dir)
     }
 
+    /// Adds a bookmark without a note after the call, from the player. Returns false when one is already within a
+    /// second of `offset`, so a double click does not make two.
+    @discardableResult
+    public func addBookmark(callID: String, offset: TimeInterval) -> Bool {
+        let dir = paths.callDirectory(callID)
+        guard var r = try? CallRecord.load(from: dir) else { return false }
+        let time = r.start.addingTimeInterval(offset).formatted(date: .omitted, time: .shortened)
+        guard r.addBookmark(at: offset, markerText: "★ Bookmarked at \(time)") else { return false }
+        save(&r, dir: dir)
+        return true
+    }
+
     public func dismissSpeakers(callID: String, keys: [String]) {
         let dir = paths.callDirectory(callID)
         guard var r = try? CallRecord.load(from: dir) else { return }

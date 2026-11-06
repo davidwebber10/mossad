@@ -249,6 +249,24 @@ final class PipelineTests: XCTestCase {
         XCTAssertNil(markers[0].note)
     }
 
+    func testAddBookmarkAfterTheCallAddsOneWithoutANoteAndNotTwiceAtOneMoment() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        let added = await p.addBookmark(callID: id, offset: 90)
+        XCTAssertTrue(added)
+        var markers = try load(id).markers.filter(\.isBookmark)
+        XCTAssertEqual(markers.count, 1)
+        XCTAssertEqual(markers[0].offset, 90)
+        XCTAssertNil(markers[0].note)
+        let again = await p.addBookmark(callID: id, offset: 90.6)
+        XCTAssertFalse(again)
+        markers = try load(id).markers.filter(\.isBookmark)
+        XCTAssertEqual(markers.count, 1)
+        await p.setBookmarkNote(callID: id, offset: 90, note: "Send Sam the plan")
+        XCTAssertEqual(try load(id).markers.filter(\.isBookmark).first?.note, "Send Sam the plan")
+    }
+
     func testOwnerEditsMadeWhileTheCallIsProcessingSurviveTheRun() async throws {
         let id = try makeRecord()
         var r = try load(id)
