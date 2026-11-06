@@ -17,8 +17,10 @@ public enum MuteState {
         case .inPerson:
             return nil
         case .teams:
+            // "Unmute mic" / "Mute mic" in the new Teams app, "Unmute (⌘+Shift+M)" / "Mute (…)" in the old one.
+            // Participant tiles ("Myself video, …, Unmuted") do not start with either word.
             if has("unmute") { return true }
-            if has("mute (") || lower.contains("mute") { return false }
+            if has("mute") { return false }
         }
         return nil
     }

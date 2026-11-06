@@ -135,7 +135,14 @@ public final class DetectionService: @unchecked Sendable {
             let titles = windows.windowTitles(bundleID: group)
             if isCurrent, let titles { logChange("teams", "teams windows: \(titles)") }
             // Teams meeting-window titles are not reliable yet: a match means present, anything else is unknown.
-            let present: Bool? = titles?.contains(where: MeetingMatcher.teamsWindowIsMeeting) == true ? true : nil
+            var present: Bool? = titles?.contains(where: MeetingMatcher.teamsWindowIsMeeting) == true ? true : nil
+            // During the call, its mute button ("Mute mic", "Unmute mic") is there for the whole meeting and gone
+            // once you leave. Gone counts only with the mic released too; unreadable stays unknown.
+            if present == nil, isCurrent, let labels = mute?.labels(bundleID: group, platform: .teams) {
+                let controls = labels.contains { let l = $0.lowercased(); return l.hasPrefix("mute") || l.hasPrefix("unmute") }
+                if controls { present = true } else if !micActive { present = false }
+                logChange("teams-controls", "teams controls: \(controls)")
+            }
             return MeetingCandidate(platform: .teams, bundleID: group, micActive: micActive, meetingPresent: present)
         case .browser:
             return browserCandidate(group: group, micActive: micActive, isCurrent: isCurrent)

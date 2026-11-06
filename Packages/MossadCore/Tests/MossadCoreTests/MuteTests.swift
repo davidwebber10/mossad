@@ -13,6 +13,11 @@ final class MuteStateTests: XCTestCase {
         XCTAssertEqual(MuteState.from(labels: ["Mute audio"], platform: .zoom), false)
         XCTAssertEqual(MuteState.from(labels: ["Unmute (⌘+Shift+M)"], platform: .teams), true)
         XCTAssertEqual(MuteState.from(labels: ["Mute (⌘+Shift+M)"], platform: .teams), false)
+        // The new Teams app (com.microsoft.teams2), read during a call: the button and the participant tiles.
+        let tiles = ["Myself video, Dana Lee, Has control of production tools, Unmuted, video is on, Has context menu",
+                     "Sam Park, video is on, muted, Context menu is available"]
+        XCTAssertEqual(MuteState.from(labels: ["Mute mic", "Mute mic"] + tiles, platform: .teams), false)
+        XCTAssertEqual(MuteState.from(labels: ["Unmute mic", "Unmute mic"] + tiles, platform: .teams), true)
     }
 }
 

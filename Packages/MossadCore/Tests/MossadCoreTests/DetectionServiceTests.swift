@@ -56,6 +56,46 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(counting.calls, 1)
     }
 
+    /// The Teams app's window titles do not say whether a meeting is open, but its meeting controls do: the mute
+    /// button is there for the whole call and gone when you leave. A call used to run on for 3 minutes after it ended.
+    func testTheTeamsAppCallEndsWhenItsMeetingControlsGo() {
+        let mute = FakeMute()
+        let s = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        let teams = "com.microsoft.teams2"
+        windows.titles[teams] = ["Polywood | Dana Lee"]
+        windows.running = [teams]
+        mic.list = [proc(4, teams, input: true)]
+        mute.labels = ["Mute mic", "Myself video, Dana Lee, Unmuted"]
+        var events: [DetectorEvent] = []
+        s.onEvent = { events.append($0) }
+        s.tick(at: now)
+        XCTAssertEqual(s.snapshot(at: now).candidates.first?.meetingPresent, true)
+        // You left: the mic is released and the controls are gone.
+        mic.list = [proc(4, teams, input: false)]
+        mute.labels = []
+        windows.titles[teams] = []
+        s.tick(at: now.addingTimeInterval(2))
+        s.tick(at: now.addingTimeInterval(4))
+        XCTAssertEqual(events.count, 2)
+        if case .ended = events.last {} else { XCTFail("the call should have ended") }
+    }
+
+    /// Muted with the mic released, the controls are still there: still in the call.
+    func testATeamsCallWithItsControlsStaysOpenWhileTheMicIsIdle() {
+        let mute = FakeMute()
+        let s = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        let teams = "com.microsoft.teams2"
+        windows.running = [teams]
+        mic.list = [proc(4, teams, input: true)]
+        mute.labels = ["Unmute mic"]
+        var events: [DetectorEvent] = []
+        s.onEvent = { events.append($0) }
+        s.tick(at: now)
+        mic.list = [proc(4, teams, input: false)]
+        for i in 1...10 { s.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 1)
+    }
+
     func testSnapshotGroupsBrowserHelpersUnderBaseBrowser() {
         mic.list = [proc(1, "com.google.Chrome", input: false), proc(2, "com.google.Chrome.helper", input: true)]
         tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
