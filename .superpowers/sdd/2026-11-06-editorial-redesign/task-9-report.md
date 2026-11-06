@@ -80,3 +80,22 @@ Captures (/private/tmp/claude-501/redesign-shots/):
 - task9-fix2-log-600-dark.png: Log at 600 pt. The sidebar is below the title bar.
 
 Remaining (Task 8): at 600 pt the sidebar's own content is taller than the window, so its permissions card falls below the bottom edge. The card is cut off; it does not overlap anything. The sidebar needs to compress or scroll at that height.
+
+## Fix report (review round 3)
+
+Cause: the sidebar's permissions card. `PermissionsCard` set `Text(missing).fixedSize(horizontal: false, vertical: true)`. When NavigationSplitView measures its minimum height, it proposes a very narrow width to the sidebar column. The fixed-size text then wrapped one word per line and reported a very tall height. That held the window's content at about 820 pt on every page. I found it by bisection at 600 pt, with a preview-only switch that I removed after:
+- A plain detail view still overflowed.
+- A plain sidebar fit.
+- The real sidebar without `SidebarStatus` fit.
+- The real sidebar with the card overflowed, in both the `safeAreaInset` layout and a VStack layout.
+
+Fix: the card's text has no vertical `fixedSize` and uses `lineLimit(3)`. It still wraps at the sidebar's real width. The root frame from round 2 stays (flexible height, aligned to the top; `contentMinSize` 980 × 600 sets the limit).
+
+Also: `MOSSAD_WINDOW_HEIGHT` moved into `AppController.showWindow`. A preview window now opens at that height, without the saved frame, so no resize after launch is needed. The MainWindow resize hook is removed.
+
+Builds: Mac Debug build succeeds. `swift test` 611 tests, 0 failures (17 skipped).
+
+Captures at a 600 pt window (/private/tmp/claude-501/redesign-shots/):
+- task9-fix3-meetings-600-dark.png: the sidebar and its permissions card are visible. The detail shows 6 lanes with "+1 more voice", the tabs, and the transcript scrolling inside the page.
+- task9-fix3-settings-600-dark.png: the Settings page scrolls inside the page. The permissions card is visible.
+- task9-fix3-log-600-dark.png: the log panel's bottom edge is in the window. The permissions card is visible.

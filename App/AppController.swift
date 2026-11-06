@@ -1083,8 +1083,12 @@ final class AppController: ObservableObject {
                 let visible = (note.object as? NSWindow)?.occlusionState.contains(.visible) == true
                 Task { @MainActor in if self?.windowVisible != visible { self?.windowVisible = visible } }
             }
+            // Development hook for screenshots: MOSSAD_WINDOW_HEIGHT=<points> opens a preview's window that tall.
+            let previewHeight = CommandLine.arguments.contains("--ui-preview")
+                ? ProcessInfo.processInfo.environment["MOSSAD_WINDOW_HEIGHT"].flatMap(Double.init) : nil
+            if let previewHeight { w.setContentSize(NSSize(width: 1240, height: previewHeight)) }
             w.center()
-            w.setFrameAutosaveName("MossadMain")
+            if previewHeight == nil { w.setFrameAutosaveName("MossadMain") }
             window = w
         }
         refresh()

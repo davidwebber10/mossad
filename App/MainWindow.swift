@@ -36,21 +36,6 @@ struct MainWindow: View {
             }
         }
         .onAppear {
-            // Development hook for screenshots: MOSSAD_WINDOW_HEIGHT=<points> sizes a preview's window.
-            if CommandLine.arguments.contains("--ui-preview"),
-               let h = ProcessInfo.processInfo.environment["MOSSAD_WINDOW_HEIGHT"].flatMap(Double.init) {
-                // Again after the window restores its saved frame.
-                for delay in [0.5, 2.0, 4.0, 6.0] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        for w in NSApp.windows where w.isVisible && w.frame.width > 600 {
-                            var f = w.frame
-                            f.origin.y += f.height - h
-                            f.size.height = h
-                            w.setFrame(f, display: true)
-                        }
-                    }
-                }
-            }
             // Only a new install: someone with meetings already set Mossad up.
             welcoming = !UserDefaults.standard.bool(forKey: "welcomeDone") && controller.meetings.isEmpty
                 || CommandLine.arguments.contains("--welcome")
@@ -197,7 +182,9 @@ private struct PermissionsCard: View {
                     Text(permissions.problemCount == 1 ? "1 permission" : "\(permissions.problemCount) permissions")
                         .fontWeight(.semibold).foregroundStyle(Palette.ink)
                 }
-                Text(missing).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                // No vertical fixedSize: when the split view measures its minimum it asks the sidebar at a tiny width,
+                // and a fixed-size text there grows one word per line and held the window at 820 pt.
+                Text(missing).foregroundStyle(Palette.secondary).lineLimit(3)
                 Text("Review…").fontWeight(.semibold).foregroundStyle(Palette.accent).padding(.top, 6)
             }
             .font(.system(size: 12))
