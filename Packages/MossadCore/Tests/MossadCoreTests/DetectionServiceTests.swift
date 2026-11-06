@@ -62,7 +62,7 @@ final class DetectionServiceTests: XCTestCase {
         let mute = FakeMute()
         let s = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
         let teams = "com.microsoft.teams2"
-        windows.titles[teams] = ["Polywood | Dana Lee"]
+        windows.titles[teams] = ["Weekly sync | Dana Lee"]
         windows.running = [teams]
         mic.list = [proc(4, teams, input: true)]
         mute.labels = ["Mute mic", "Myself video, Dana Lee, Unmuted"]
