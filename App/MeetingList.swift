@@ -13,6 +13,8 @@ struct MeetingList: View {
     /// Letters typed in a row select the first title that starts with them, as in Finder.
     @State private var typed = ""
     @State private var typedAt = Date.distantPast
+    /// Rows on screen, so opening the list scrolls only to a selection that is not.
+    @State private var visible: Set<String> = []
 
     private var upcoming: [UpcomingMeeting] {
         controller.meetingQuery.isEmpty ? Array(controller.upcoming.prefix(UpcomingRow.shown)) : []
@@ -56,7 +58,9 @@ struct MeetingList: View {
                     }
                 }
                 .padding(.leading, 4).padding(.trailing, Space.s).padding(.bottom, Space.m)
+                .scrollTargetLayout()
             }
+            .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.9) { visible = Set($0) }
             .scrollContentBackground(.hidden)
             .focusable()
             .focused($focused)
@@ -73,7 +77,11 @@ struct MeetingList: View {
                 if let id = selection, let r = controller.meetings.first(where: { $0.id == id }), r.canDelete { deleting = r }
             }
             .onAppear {
-                if let selection { proxy.scrollTo(selection, anchor: .center) }
+                // Only a selection off screen: scrolling to one already in view moved the list under the toolbar.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(150))
+                    if let selection, !visible.contains(selection) { proxy.scrollTo(selection, anchor: .center) }
+                }
                 // The arrow keys work as soon as the window opens, without a click in the list first.
                 focused = true
             }
