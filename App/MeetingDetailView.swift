@@ -101,11 +101,10 @@ struct MeetingDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(record.title)
-                        .font(.system(size: style == .fullPage ? 24 : 20, weight: .bold)).kerning(style == .fullPage ? -0.4 : -0.3)
-                        .textSelection(.enabled)
+                    EditableMeetingTitle(record: record, size: style == .fullPage ? 24 : 22)
                     HStack(spacing: 8) {
                         Text(subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
+                        if record.titleSource == .generated { NamedByMossadTag() }
                         if let kind = record.kind {
                             Text(kind).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                                 .padding(.horizontal, 7).padding(.vertical, 2)
