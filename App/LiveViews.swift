@@ -19,7 +19,10 @@ struct LiveBand: View {
             if controller.isMuted, !controller.isPaused, !room {
                 MutedBanner(platform: record.platform).padding(.top, Space.l)
             }
-            LiveBandWaveform(room: room).padding(.top, 18)
+            Group {
+                if room { RoomWaveform(model: controller.live) } else { LiveBandWaveform() }
+            }
+            .padding(.top, 18)
             CallControls(callID: record.id, start: record.start).padding(.top, 18)
         }
     }
@@ -59,15 +62,31 @@ private struct LivePeopleLine: View {
             let n = record.attendees.count
             return (n > 1 ? "\(n) people · " : "") + "Mossad names voices it knows"
         }
-        // A pause starts the labels over, so a named voice counts once by its name.
-        var named = Set<String>(), unnamed = Set<String>()
-        for line in model.visibleLines where line.source == .them {
-            guard let key = line.speakerKey else { continue }
-            if let name = model.transcript.names[key] { named.insert(name) } else { unnamed.insert(key) }
-        }
-        let total = named.count + unnamed.count
+        let (total, unnamed) = model.roomVoices
         guard total > 0 else { return "Voices get names as Mossad knows them" }
-        return "\(total) \(total == 1 ? "speaker" : "speakers") so far" + (unnamed.isEmpty ? "" : " · \(unnamed.count) not named yet")
+        return "\(total) \(total == 1 ? "speaker" : "speakers") so far" + (unnamed == 0 ? "" : " · \(unnamed) not named yet")
+    }
+}
+
+extension LiveTranscriptModel {
+    /// The voices heard so far in a room, and how many have no name. A pause starts the labels over, so a named
+    /// voice counts once by its name.
+    var roomVoices: (total: Int, unnamed: Int) {
+        var named = Set<String>(), unnamed = Set<String>()
+        for line in visibleLines where line.source == .them {
+            guard let key = line.speakerKey else { continue }
+            if let name = transcript.names[key] { named.insert(name) } else { unnamed.insert(key) }
+        }
+        return (named.count + unnamed.count, unnamed.count)
+    }
+}
+
+/// The room's waveform follows the voices heard: one hue until there is a second voice.
+private struct RoomWaveform: View {
+    @ObservedObject var model: LiveTranscriptModel
+
+    var body: some View {
+        LiveBandWaveform(room: true, voices: model.roomVoices.total)
     }
 }
 

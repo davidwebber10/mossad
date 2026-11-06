@@ -37,16 +37,19 @@ struct LiveWaveform: View {
 }
 
 /// The meeting band's one row: each bar is the louder of your mic and the call audio, in your hue or the call's,
-/// and silence is a short neutral bar. A room has one mic that hears everyone, so its bars take the voices' hues.
+/// and silence is a short neutral bar. A room has one mic that hears everyone, so its bars take one hue per voice
+/// heard so far, up to four.
 struct LiveBandWaveform: View {
     @EnvironmentObject var controller: AppController
     @Environment(\.animationsActive) private var active
     var room = false
+    /// Voices heard in a room so far.
+    var voices = 1
     var bars = 64
 
     var body: some View {
         let meters = controller.meters
-        WaveformBars(style: .merged(me: meters.me, them: meters.them, muted: controller.isMuted, room: room),
+        WaveformBars(style: .merged(me: meters.me, them: meters.them, muted: controller.isMuted, room: room ? voices : nil),
                      bars: bars, framesPerSecond: 12, running: active && !controller.isPaused)
             .frame(height: 40)
             .opacity(controller.isPaused ? 0.4 : 1)
@@ -77,7 +80,8 @@ private struct WaveformBars: NSViewRepresentable {
 final class WaveformView: NSView {
     enum Style {
         case row(LevelMeter, NSColor)
-        case merged(me: LevelMeter, them: LevelMeter, muted: Bool, room: Bool)
+        /// `room` is the number of voices heard in a room, nil for a call.
+        case merged(me: LevelMeter, them: LevelMeter, muted: Bool, room: Int?)
     }
 
     var style: Style?
@@ -144,18 +148,19 @@ final class WaveformView: NSView {
         }
     }
 
-    private func drawMerged(_ meMeter: LevelMeter, _ themMeter: LevelMeter, muted: Bool, room: Bool) {
+    private func drawMerged(_ meMeter: LevelMeter, _ themMeter: LevelMeter, muted: Bool, room: Int?) {
         let gap: CGFloat = 2
         let width = max(1.5, (bounds.width - gap * CGFloat(bars - 1)) / CGFloat(bars))
         // Muted, the mic records silence; the bars show only the call.
         let mine = muted ? Array(repeating: Float(0), count: bars) : levels(meMeter)
-        let theirs = room ? Array(repeating: Float(0), count: bars) : levels(themMeter)
+        let theirs = room != nil ? Array(repeating: Float(0), count: bars) : levels(themMeter)
+        let hues = max(1, min(room ?? 1, voices.count))
         for i in 0..<bars {
             let level = max(mine[i], theirs[i])
             let speaking = level > 0.002
             let h = speaking ? height(level, minimum: 3) : 3
             let rect = NSRect(x: CGFloat(i) * (width + gap), y: (bounds.height - h) / 2, width: width, height: h)
-            let color = !speaking ? silent : room ? voices[i % voices.count] : mine[i] >= theirs[i] ? me : them
+            let color = !speaking ? silent : room != nil ? voices[i % hues] : mine[i] >= theirs[i] ? me : them
             color.setFill()
             NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2).fill()
         }

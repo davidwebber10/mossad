@@ -55,12 +55,7 @@ struct FillButtonStyle: ButtonStyle {
             .lineLimit(1)
             .padding(.horizontal, 11)
             .frame(height: height)
-            .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                if configuration.isPressed {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.fill)
-                }
-            }
+            .background(configuration.isPressed ? Palette.selection : Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .opacity(isEnabled ? 1 : 0.5)
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }

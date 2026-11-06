@@ -174,13 +174,13 @@ private struct StepMark: View {
 }
 
 /// A determinate bar whose fill carries a slow light that moves across it, so a long upload never looks stuck.
-/// It keeps moving under Reduce Motion, as the design asks: it is the only sign of progress.
+/// It keeps moving under Reduce Motion, as the design asks: it is the only sign of progress. A timeline, not a
+/// repeating animation, so it stops at once when the window is hidden.
 struct ProgressBar: View {
     let fraction: Double
     var height: CGFloat = 5
     var track: Color = Palette.bar
     @Environment(\.animationsActive) private var active
-    @State private var phase: CGFloat = -1
 
     var body: some View {
         GeometryReader { g in
@@ -190,55 +190,47 @@ struct ProgressBar: View {
                 Capsule().fill(Palette.accentFill)
                     .frame(width: width)
                     .overlay {
-                        LinearGradient(colors: [.white.opacity(0), .white.opacity(0.35), .white.opacity(0)],
-                                       startPoint: .leading, endPoint: .trailing)
-                            .frame(width: max(24, width * 0.4))
-                            .offset(x: phase * width)
-                            .blendMode(.plusLighter)
+                        TimelineView(.animation(paused: !active)) { context in
+                            // -1 to 1 every 1.8 s: the light enters on the left and leaves on the right.
+                            let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 0.9 - 1
+                            LinearGradient(colors: [.white.opacity(0), .white.opacity(0.35), .white.opacity(0)],
+                                           startPoint: .leading, endPoint: .trailing)
+                                .frame(width: max(24, width * 0.4))
+                                .offset(x: phase * width)
+                                .blendMode(.plusLighter)
+                        }
                     }
                     .clipShape(Capsule())
                     .animation(.smooth(duration: 0.4), value: fraction)
             }
         }
         .frame(height: height)
-        .onAppear(perform: start)
-        .onChange(of: active) { _, _ in start() }
         .accessibilityHidden(true)
-    }
-
-    private func start() {
-        guard active else { phase = -1; return }
-        phase = -1
-        withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false)) { phase = 1 }
     }
 }
 
-/// For a stage with no percent: a short accent fill that travels the track, never a spinner.
+/// For a stage with no percent: a short accent fill that travels the track and back, never a spinner.
 struct WaitingBar: View {
     var height: CGFloat = 4
     @Environment(\.animationsActive) private var active
-    @State private var phase: CGFloat = 0
 
     var body: some View {
         GeometryReader { g in
             let segment = g.size.width * 0.32
             Capsule().fill(Palette.fill)
                 .overlay(alignment: .leading) {
-                    Capsule().fill(Palette.accentFill.opacity(0.7))
-                        .frame(width: segment)
-                        .offset(x: phase * (g.size.width - segment))
+                    TimelineView(.animation(paused: !active)) { context in
+                        let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.2) / 2.2
+                        // Eased there and back.
+                        let phase = (1 - cos(t * 2 * .pi)) / 2
+                        Capsule().fill(Palette.accentFill.opacity(0.7))
+                            .frame(width: segment)
+                            .offset(x: phase * (g.size.width - segment))
+                    }
                 }
                 .clipShape(Capsule())
         }
         .frame(height: height)
-        .onAppear(perform: start)
-        .onChange(of: active) { _, _ in start() }
         .accessibilityHidden(true)
-    }
-
-    private func start() {
-        guard active else { phase = 0; return }
-        phase = 0
-        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { phase = 1 }
     }
 }
