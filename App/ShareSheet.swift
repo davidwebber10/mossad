@@ -18,16 +18,36 @@ struct ShareSheet: View {
     private var saved: ShareOptions? { link?.options }
     private var changed: Bool { link != nil && saved != options }
 
+    /// Development hook for screenshots: MOSSAD_SHARE=link shows a made-up link on a made-up server, and
+    /// MOSSAD_SHARE=none the state with no server.
+    private static let preview: String? = CommandLine.arguments.contains("--ui-preview")
+        ? ProcessInfo.processInfo.environment["MOSSAD_SHARE"] : nil
+    private var hasServer: Bool {
+        switch Self.preview {
+        case "none": false
+        case "link": true
+        default: controller.serverConnection != nil
+        }
+    }
+
+    private func url(_ link: MeetingLink) -> URL? {
+        if Self.preview == "link" { return link.url(on: URL(string: "https://notes.example.com")!) }
+        return controller.shareURL(link)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            Divider()
-            if controller.serverConnection == nil { noServer } else { form }
+            SheetHeader(symbol: "link", title: "Share “\(record.title)”",
+                        subtitle: record.start.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
+            if hasServer { form } else { noServer }
         }
-        .frame(width: 460)
-        .background(Theme.background)
+        .mossadSheet(width: hasServer ? 480 : 420)
         .onAppear {
             link = controller.shareBook.link(for: record.id)
+            if Self.preview == "link", link == nil {
+                link = MeetingLink(token: "Hq3v9pR2xW7mN4kT2", callID: record.id, title: record.title, options: ShareOptions(),
+                                   created: Date(), expires: Date().addingTimeInterval(30 * 86400))
+            }
             if let link { options = link.options }
             if !controller.hasRecording(record) { options.recording = false }
         }
@@ -38,103 +58,105 @@ struct ShareSheet: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "link").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
-                .frame(width: 38, height: 38).background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Share “\(record.title)”").font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                Text(record.start.formatted(.dateTime.weekday(.wide).month().day().hour().minute())).foregroundStyle(.secondary)
-            }
-        }
-        .padding(18)
-    }
-
     private var noServer: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Share links need your own server").font(.system(size: 13, weight: .semibold))
-            Text("Mossad puts the parts you choose on a small server in your own Cloudflare account, and gives you a private link to send. Nobody else runs it, and nobody else can use it.")
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Share links need your own server").fontWeight(.semibold)
+                Text("Mossad puts the parts you choose on a small server in your own Cloudflare account and gives you a private link to send. Nobody else runs it, and nobody else can use it.")
+                    .foregroundStyle(Palette.secondary).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 22).padding(.vertical, 16)
+            SheetFooter {
+                Button("Cancel") { dismiss() }.buttonStyle(.sheetSecondary).keyboardShortcut(.cancelAction)
                 Button("Set up your server…") {
                     UserDefaults.standard.set(SettingsPage.sync.rawValue, forKey: "settingsPage")
                     controller.open(.settings)
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                .buttonStyle(.sheetPrimary).keyboardShortcut(.defaultAction)
             }
         }
-        .font(.system(size: 12))
-        .padding(18)
     }
 
     private var form: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(spacing: 0) {
-                part("Summary and action items", "The overview, topics, decisions, and action items.", "text.alignleft", $options.summary)
-                Divider().padding(.leading, 44)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                part("Summary and action items", "The overview, topics, decisions, and action items.", "doc.plaintext", $options.summary)
                 part("Transcript", "Every line, with names and times.", "text.quote", $options.transcript)
-                Divider().padding(.leading, 44)
                 part("Recording", controller.hasRecording(record) ? "The audio, with a player. Tap a line to jump there." : "This meeting has no recording.",
                      "waveform", $options.recording)
                     .disabled(!controller.hasRecording(record))
-                Divider().padding(.leading, 44)
                 part("AI chat", chatDetail, "sparkles", $options.chat)
                     .disabled(!controller.serverHasChat || !(options.summary || options.transcript))
-            }
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.separator))
 
-            HStack {
-                Text("Link works for")
-                Spacer()
-                Picker("Link works for", selection: $options.days) {
-                    ForEach(ShareOptions.expiryChoices, id: \.self) { d in Text(d.map { "\($0) days" } ?? "Until I stop it").tag(d) }
+                HStack {
+                    Text("Link works for")
+                    Spacer()
+                    GlassSegmented(selection: $options.days, choices: ShareOptions.expiryChoices.map { d in
+                        (value: d, title: d.map { "\($0) days" } ?? "Until I stop it")
+                    })
+                    .accessibilityLabel("Link works for")
                 }
-                .labelsHidden().fixedSize()
-            }
-            .padding(.horizontal, 4)
+                .padding(.top, 14)
 
-            Label("The coach's review is never shared. People with the link can copy what they see.", systemImage: "lock")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
-
-            if let link, let url = controller.shareURL(link) {
-                HStack(spacing: 8) {
-                    Text(url.absoluteString).font(.system(size: 11, design: .monospaced)).lineLimit(1).truncationMode(.middle)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 10).padding(.vertical, 7)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Theme.field, in: RoundedRectangle(cornerRadius: 7))
-                    Button(copied ? "Copied" : "Copy link") { copyLink(url) }.buttonStyle(.borderedProminent)
+                Label {
+                    Text("The coach's review is never shared. People with the link can copy what they see.")
+                } icon: {
+                    Image(systemName: "lock").foregroundStyle(Palette.tertiaryMark)
                 }
-                if let expires = link.expires {
-                    Text("Works until \(expires.formatted(date: .long, time: .omitted)).").font(.system(size: 11)).foregroundStyle(.tertiary)
+                .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 12)
+
+                if let link, let url = url(link) {
+                    HStack(spacing: 8) {
+                        Text(url.absoluteString)
+                            .font(.system(size: 12, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 10)
+                            .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                            .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        Button { copyLink(url) } label: {
+                            Label(copied ? "Copied" : "Copy link", systemImage: copied ? "checkmark" : "link")
+                                .labelStyle(.titleAndIcon)
+                        }
+                        .buttonStyle(.sheetPrimary)
+                    }
+                    .padding(.top, 14)
+                    if let expires = link.expires {
+                        Text("Works until \(expires.formatted(date: .long, time: .omitted)).")
+                            .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                            .padding(.top, 6)
+                    }
+                }
+                if let error {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12)).foregroundStyle(Palette.recording)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 12)
                 }
             }
-            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.recording).fixedSize(horizontal: false, vertical: true) }
+            .padding(EdgeInsets(top: 8, leading: 22, bottom: 16, trailing: 22))
 
-            HStack {
+            SheetFooter {
                 if link != nil {
-                    Button("Stop sharing", role: .destructive) { confirmStop = true }.disabled(working)
+                    Button("Stop sharing") { confirmStop = true }
+                        .buttonStyle(.sheetDestructive).disabled(working)
                 }
-                Spacer()
+            } trailing: {
                 if working { ProgressView().controlSize(.small) }
                 if link == nil {
-                    Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                    Button("Create link", action: publish).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    Button("Cancel") { dismiss() }.buttonStyle(.sheetSecondary).keyboardShortcut(.cancelAction)
+                    Button("Create link", action: publish).buttonStyle(.sheetPrimary).keyboardShortcut(.defaultAction)
                         .disabled(working || !options.showsAnything)
                 } else if changed {
-                    Button("Update link", action: publish).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    Button("Update link", action: publish).buttonStyle(.sheetPrimary).keyboardShortcut(.defaultAction)
                         .disabled(working || !options.showsAnything)
                 } else {
-                    Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                    Button("Done") { dismiss() }.buttonStyle(.sheetSecondary).keyboardShortcut(.defaultAction)
                 }
             }
         }
-        .font(.system(size: 12))
-        .padding(18)
     }
 
     private var chatDetail: String {
@@ -144,17 +166,7 @@ struct ShareSheet: View {
     }
 
     private func part(_ title: String, _ detail: String, _ symbol: String, _ on: Binding<Bool>) -> some View {
-        Toggle(isOn: on) {
-            HStack(spacing: 12) {
-                Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(Color.accentColor).frame(width: 20)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.system(size: 12, weight: .medium))
-                    Text(detail).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .toggleStyle(.switch)
-        .padding(.horizontal, 12).padding(.vertical, 9)
+        PartRow(title: title, detail: detail, symbol: symbol, on: on)
     }
 
     private func publish() {
@@ -191,5 +203,32 @@ struct ShareSheet: View {
         copy(url.absoluteString)
         copied = true
         Task { try? await Task.sleep(for: .seconds(2)); copied = false }
+    }
+}
+
+/// One part to share: what it is, a line on what it holds, and a switch. Dimmed when it cannot be shared.
+private struct PartRow: View {
+    let title: String
+    let detail: String
+    let symbol: String
+    let on: Binding<Bool>
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Toggle(isOn: on) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(Palette.accent).frame(width: 20)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).fontWeight(.medium)
+                    Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .opacity(isEnabled ? 1 : 0.5)
+        }
+        .toggleStyle(SheetSwitchStyle())
+        .padding(.vertical, 11)
+        .hairline(.bottom)
     }
 }
