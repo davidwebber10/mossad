@@ -90,6 +90,37 @@ final class OrgChartTests: XCTestCase {
         XCTAssertEqual(Set(c.people.map(\.id)).count, c.people.count)
     }
 
+    func testDuplicateIDsDoNotDependOnRowOrder() throws {
+        let head = "\"Last Name\",\"First Name\",\"Position Title\",\"Supervisor\"\n"
+        let a = "\"Quinn\",\"Pat\",\"Engineer\",\"Park, Sam\"\n", b = "\"Quinn\",\"Pat\",\"Designer\",\"Lee, Dana\"\n"
+        let one = try OrgChart.parse(csv: head + a + b), two = try OrgChart.parse(csv: head + b + a)
+        func id(_ c: OrgChart, _ title: String) -> String? { c.people.first { $0.title == title }?.id }
+        XCTAssertEqual(id(one, "Engineer"), id(two, "Engineer"))
+        XCTAssertEqual(id(one, "Designer"), id(two, "Designer"))
+        XCTAssertNotEqual(id(one, "Engineer"), id(one, "Designer"))
+    }
+
+    func testSameNameAndTitleAreToldApartBySupervisor() throws {
+        let head = "\"Last Name\",\"First Name\",\"Position Title\",\"Supervisor\"\n"
+        let a = "\"Quinn\",\"Pat\",\"Analyst\",\"Park, Sam\"\n", b = "\"Quinn\",\"Pat\",\"Analyst\",\"Lee, Dana\"\n"
+        let one = try OrgChart.parse(csv: head + a + b), two = try OrgChart.parse(csv: head + b + a)
+        XCTAssertEqual(Set(one.people.map(\.id)), Set(two.people.map(\.id)))
+        XCTAssertEqual(Set(one.people.map(\.id)).count, 2)
+    }
+
+    func testAManualMatchToAnIdThatIsGoneIsUnmatched() throws {
+        var o = OrgMatches()
+        o.set("Dana Lee", to: "quinn, pat#2")
+        XCTAssertNil(try chart().person(matching: "Dana Lee", overrides: o))
+    }
+
+    func testMultiWordLastNamesMatchOnEverySplit() throws {
+        let c = try OrgChart.parse(csv: "\"Last Name\",\"First Name\",\"Position Title\",\"Supervisor\"\n\"De La Cruz\",\"Maria\",\"Lead\",\"\"\n\"Van Dyke\",\"Benjamin\",\"Lead\",\"\"\n")
+        XCTAssertEqual(c.person(matching: "Maria De La Cruz", overrides: OrgMatches())?.how, .exact)
+        XCTAssertEqual(c.person(matching: "Ben Van Dyke", overrides: OrgMatches())?.how, .nickname)
+        XCTAssertNil(c.person(matching: "Maria Cruz", overrides: OrgMatches()))
+    }
+
     func testManualMatchWinsAndPicksADuplicate() throws {
         let c = try chart()
         let quinn = c.people.filter { $0.last == "Quinn" }.map(\.id)
@@ -160,6 +191,6 @@ final class OrgChartTests: XCTestCase {
         let c = try OrgChart.parse(csv: big)
         XCTAssertEqual(c.people.count, 2001)
         XCTAssertEqual(c.reports(of: "root, rita").count, 2000)
-        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.2)
     }
 }

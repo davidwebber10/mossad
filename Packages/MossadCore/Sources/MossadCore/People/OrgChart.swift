@@ -5,7 +5,8 @@ import Foundation
 /// The file stays on this Mac in `~/Mossad/People/org.csv`.
 public struct OrgChart: Sendable {
     public struct Person: Equatable, Sendable, Hashable {
-        /// "last, first" lowercased; a second person with the same name gets "#2", "#3", and so on.
+        /// "last, first" lowercased. People who share a name add their title (and supervisor if needed) after a "#",
+        /// so an id does not change when a later export lists them in another order.
         public let id: String
         public let first: String
         public let last: String
@@ -66,21 +67,28 @@ public struct OrgChart: Sendable {
     /// then a short form of the first name with the same last name. A name that fits more than one person is left alone.
     public func person(matching name: String, overrides: OrgMatches) -> Match? {
         if overrides.isOutside(name) { return nil }
-        if let id = overrides.personID(for: name), let p = byID[id] { return Match(person: p, how: .manual) }
+        // A saved match to an id the new file lacks stays unmatched; it must not move to another person.
+        if let id = overrides.personID(for: name) { return byID[id].map { Match(person: $0, how: .manual) } }
         let words = Self.normalize(name).split(separator: " ").map(String.init)
-        guard words.count >= 2, let last = words.last else { return nil }
-        let given = words.dropLast().joined(separator: " ")
-        let firstWord = words[0]
-        let pool = byLast[last] ?? []
+        guard words.count >= 2 else { return nil }
         func firstWords(_ p: Person) -> (full: String, word: String) {
             let f = Self.normalize(p.first)
             return (f, f.split(separator: " ").first.map(String.init) ?? f)
         }
-        let full = pool.filter { firstWords($0).full == given }
+        // "Maria De La Cruz" may be first "Maria" and last "De La Cruz", so every split point is tried.
+        let splits = (1..<words.count).map { (given: words[..<$0].joined(separator: " "), last: words[$0...].joined(separator: " ")) }
+        func find(_ fits: (Person, String, String) -> Bool) -> [Person] {
+            var out: [Person] = []
+            for s in splits {
+                for p in byLast[s.last] ?? [] where fits(p, s.given, words[0]) && !out.contains(p) { out.append(p) }
+            }
+            return out
+        }
+        let full = find { p, g, _ in firstWords(p).full == g }
         if !full.isEmpty { return full.count == 1 ? Match(person: full[0], how: .exact) : nil }
-        let word = pool.filter { firstWords($0).word == firstWord }
+        let word = find { p, _, w in firstWords(p).word == w }
         if !word.isEmpty { return word.count == 1 ? Match(person: word[0], how: .exact) : nil }
-        let nick = pool.filter { Nicknames.related(firstWords($0).word, firstWord) }
+        let nick = find { p, _, w in Nicknames.related(firstWords(p).word, w) }
         return nick.count == 1 ? Match(person: nick[0], how: .nickname) : nil
     }
 
@@ -118,11 +126,20 @@ public struct OrgChart: Sendable {
         }
 
         var count: [String: Int] = [:]
+        for r in parsed { count["\(normalize(r.last)), \(normalize(r.first))", default: 0] += 1 }
         var ids: [String] = []
+        var used: [String: Int] = [:]
+        let withTitle = Dictionary(grouping: parsed) { "\(normalize($0.last)), \(normalize($0.first))#\(normalize($0.title))" }
         for r in parsed {
             let base = "\(normalize(r.last)), \(normalize(r.first))"
-            count[base, default: 0] += 1
-            ids.append(count[base]! == 1 ? base : "\(base)#\(count[base]!)")
+            var id = base
+            if count[base]! > 1 {
+                id = "\(base)#\(normalize(r.title))"
+                if withTitle[id]!.count > 1 { id += "#\(normalize(r.supervisor))" }
+            }
+            // Only identical rows still collide; they get an ordinal, which cannot be told apart anyway.
+            used[id, default: 0] += 1
+            ids.append(used[id]! == 1 ? id : "\(id)#\(used[id]!)")
         }
         // A supervisor name that fits two people cannot say which one, so the manager stays unknown.
         let firstWordIndex = Dictionary(grouping: parsed.indices) { i -> String in
