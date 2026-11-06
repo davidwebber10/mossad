@@ -31,7 +31,7 @@ public enum AIProvider: String, CaseIterable, Sendable, Identifiable {
     /// model, and the chosen model is used instead.
     public var smallModel: String? {
         switch self {
-        case .anthropic: "claude-haiku-4-5"
+        case .anthropic: "claude-haiku-5-5"
         case .openai, .openrouter: nil
         }
     }

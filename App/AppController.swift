@@ -519,7 +519,8 @@ final class AppController: ObservableObject {
             liveSessions.append(session)
         }
         liveOpened = Date()
-        if reset { startLiveTitling(callID: CallRecorder.callID(for: since)) }
+        // A pause cancels the timer, so a resumed call starts it again; the recorder keeps only the first title.
+        startLiveTitling(callID: CallRecorder.callID(for: since))
         if voiceFingerprints { startLiveNaming(themURL: themURL, room: room) }
     }
 
@@ -533,16 +534,21 @@ final class AppController: ObservableObject {
         liveTitling?.cancel()
         liveTitling = Task { [weak self] in
             try? await Task.sleep(for: .seconds(300))
-            guard !Task.isCancelled, let self else { return }
+            guard !Task.isCancelled, let self, self.isRecording(callID) else { return }
             let text = self.live.snapshot.text(owner: owner, since: nil)
             guard let title = await UsageContext.$callID.withValue(callID, operation: { await titler.title(transcript: text) }),
-                  !Task.isCancelled else { return }
+                  !Task.isCancelled, self.isRecording(callID) else { return }
             let recorder = self.recorder
             CaptureQueue.queue.async {
                 recorder.setGeneratedTitle(title, forCall: callID)
                 Task { @MainActor in self.refresh() }
             }
         }
+    }
+
+    private func isRecording(_ callID: String) -> Bool {
+        if case .recording(_, let since) = status { return CallRecorder.callID(for: since) == callID }
+        return false
     }
 
     /// Every 20 s, names the call's voices that the voice library knows, for the live transcript and current_call.
@@ -564,6 +570,8 @@ final class AppController: ObservableObject {
         live.save()
         liveNaming?.cancel()
         liveNaming = nil
+        liveTitling?.cancel()
+        liveTitling = nil
         recorder.meSink.set(nil)
         recorder.themSink.set(nil)
         liveSessions.forEach { $0.stop() }
