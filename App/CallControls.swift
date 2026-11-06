@@ -1,34 +1,47 @@
 import MossadCore
 import SwiftUI
 
-/// Pause or resume, stop and keep, or skip and delete the call being recorded.
+/// Pause or resume, bookmark, stop and keep, or skip and delete the call being recorded. With the call's id (the
+/// meeting band), a bookmark goes in at once and a popover offers an optional note; the menu bar's compact copy
+/// bookmarks the moment as the hot key does.
 struct CallControls: View {
     @EnvironmentObject var controller: AppController
     var compact = false
+    var callID: String?
+    var start: Date?
     @State private var confirmSkip = false
     @State private var justBookmarked = false
+    @State private var adding = false
+    @State private var bookmarked: TimeInterval?
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             if controller.isPaused {
-                control("Resume", "record.circle", tint: Theme.recording) { controller.resumeCurrentCall() }
+                control("Resume", "record.circle", glass: true, tint: Palette.recording) { controller.resumeCurrentCall() }
             } else {
-                control("Pause", "pause.fill", tint: .primary) { controller.pauseCurrentCall() }
+                control("Pause", "pause.fill", glass: true) { controller.pauseCurrentCall() }
             }
-            control(justBookmarked ? "Bookmarked" : "Bookmark", justBookmarked ? "star.fill" : "star", tint: justBookmarked ? .yellow : .primary) {
-                controller.bookmarkCurrentCall()
-            }
-            .disabled(controller.isPaused)
-            .help("Mark this moment as important (⌃⌥B from any app)")
-            control("Stop", "stop.fill", tint: .primary) { controller.stopCurrentCall() }
+            bookmark
+            control("Stop", "stop", glass: false) { controller.stopCurrentCall() }
                 .help("End the recording now and write the note")
-            control(confirmSkip ? "Click again to delete" : "Skip and delete", "trash", tint: Theme.recording) {
+            Spacer(minLength: Space.s)
+            Button {
                 if confirmSkip { controller.skipCurrentCall() } else { confirmSkip = true }
+            } label: {
+                Text(confirmSkip ? "Click again to delete" : "Skip and delete")
+                    .font(.system(size: compact ? 12 : 12.5, weight: .medium))
+                    .foregroundStyle(Palette.recording)
+                    .padding(.horizontal, 6)
+                    .frame(height: compact ? 26 : 30)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .help("Stop recording and delete this call")
         }
         .onChange(of: controller.isRecording) { _, _ in confirmSkip = false }
         .onChange(of: controller.lastBookmark) { _, _ in
+            // The hot key and the menu: a short "Bookmarked" on the button. The popover already says so.
+            guard bookmarked == nil, !adding else { return }
             justBookmarked = true
             Task {
                 try? await Task.sleep(for: .seconds(2))
@@ -37,15 +50,74 @@ struct CallControls: View {
         }
     }
 
-    private func control(_ title: String, _ symbol: String, tint: Color, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(.system(size: compact ? 12 : 13, weight: .medium))
-                .foregroundStyle(tint)
-                .padding(.horizontal, compact ? 9 : 12).padding(.vertical, compact ? 4 : 6)
-                .background(Theme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    private var bookmark: some View {
+        Button(action: addBookmark) {
+            HStack(spacing: 6) {
+                BookmarkFlag().fill(Palette.accentFill).frame(width: 9, height: 11)
+                Text(justBookmarked ? "Bookmarked" : "Bookmark")
+                if !compact {
+                    Text("⌃⌥B").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                }
+            }
+            .font(.system(size: compact ? 12 : 12.5, weight: .medium))
+            .foregroundStyle(Palette.ink)
+            .padding(.horizontal, 12)
+            .frame(height: compact ? 26 : 30)
+            .mossadGlass(in: RoundedRectangle(cornerRadius: 8, style: .continuous), interactive: true)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .disabled(controller.isPaused || adding)
+        .help("Mark this moment, with an optional note (⌃⌥B from any app)")
+        .popover(isPresented: Binding(get: { bookmarked != nil }, set: { if !$0 { bookmarked = nil } }), arrowEdge: .bottom) {
+            if let at = bookmarked, let callID {
+                BookmarkNotePopover(at: at) { note in
+                    controller.setBookmarkNote(callID: callID, offset: at, note: note)
+                } dismiss: { bookmarked = nil }
+            }
+        }
+    }
+
+    /// The bookmark goes in at once, through the recorder; the popover only offers a note.
+    private func addBookmark() {
+        guard let callID else { return controller.bookmarkCurrentCall() }
+        adding = true
+        let at = start.map { Date().timeIntervalSince($0) } ?? 0
+        Task {
+            bookmarked = await controller.addBookmark(callID: callID, at: at)
+            adding = false
+        }
+    }
+
+    private func control(_ title: String, _ symbol: String, glass: Bool, tint: Color = Palette.ink, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .labelStyle(ControlLabel())
+                .font(.system(size: compact ? 12 : 12.5, weight: .medium))
+                .foregroundStyle(tint)
+                .padding(.horizontal, compact ? 11 : 14)
+                .frame(height: compact ? 26 : 30)
+                .background { if !glass { RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.fill) } }
+                .modifier(GlassIf(on: glass))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ControlLabel: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon.font(.system(size: 11, weight: .semibold))
+            configuration.title
+        }
+    }
+}
+
+private struct GlassIf: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        if on { content.mossadGlass(in: RoundedRectangle(cornerRadius: 8, style: .continuous), interactive: true) } else { content }
     }
 }
 

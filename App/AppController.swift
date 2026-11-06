@@ -313,6 +313,7 @@ final class AppController: ObservableObject {
             let today = meetings.filter { Calendar.current.isDateInToday($0.start) && $0.status == .written }.map(\.id)
             Task { for id in today { await track { await self.pipeline.regenerateSummary(id) } } }
         }
+        if preview { applyLivePreview() }
         // Development hook: `--light` shows the UI in light mode, to check both looks.
         if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
         // Development hook: `MOSSAD_APPEARANCE=dark|light` picks the look of a preview, to capture both.
@@ -444,6 +445,39 @@ final class AppController: ObservableObject {
         isPaused = false
         stopLive()
         updater.callEnded()
+    }
+
+    /// Development hooks for screenshots, in a preview only, with nothing recorded or sent:
+    /// `MOSSAD_LIVE=<live.json>` shows those lines and some audio levels for a meeting saved as recording,
+    /// `MOSSAD_MUTED=1` shows the muted note, and `MOSSAD_PROGRESS=upload|queued|summarizing` shows that progress
+    /// for each meeting being processed.
+    private func applyLivePreview() {
+        let env = ProcessInfo.processInfo.environment
+        if let path = env["MOSSAD_LIVE"], let transcript = try? LiveTranscript.load(from: URL(fileURLWithPath: path)) {
+            live.show(transcript)
+            for i in 0..<160 {
+                let speech = { (phase: Double) -> Float in
+                    let v = abs(sin(Double(i) * 0.37 + phase)) * abs(sin(Double(i) * 0.11 + phase * 2))
+                    return v > 0.25 ? Float(0.02 + v * 0.12) : 0
+                }
+                recorder.meMeter.record(speech(0))
+                recorder.themMeter.record(speech(1.7))
+            }
+        }
+        if env["MOSSAD_MUTED"] == "1" { isMuted = true }
+        if let state = env["MOSSAD_PROGRESS"] {
+            for r in meetings {
+                guard let step = ProcessingStep(status: r.status) else { continue }
+                var p = ProcessingProgress(step: state == "summarizing" ? .summarizing : step, started: Date().addingTimeInterval(-134))
+                let room = r.platform == .inPerson
+                switch state {
+                case "upload": p.tracks = room ? [.me: .uploading(0.42)] : [.me: .done, .them: .uploading(0.42)]
+                case "queued": p.tracks = room ? [.me: .queued] : [.me: .transcribing, .them: .queued]
+                default: p.detail = "Claude is writing the summary"
+                }
+                progress[r.id] = p
+            }
+        }
     }
 
     /// Marks this moment of the call as important. Also bound to ⌃⌥B everywhere.
@@ -1128,6 +1162,12 @@ final class LiveTranscriptModel: ObservableObject {
     var snapshot: LiveTranscript { pending }
 
     func newSession() { pending.newSession() }
+
+    /// A saved transcript, shown as is: for a preview's screenshots.
+    func show(_ transcript: LiveTranscript) {
+        pending = transcript
+        publish()
+    }
 
     func setNames(_ names: [String: String]) {
         pending.names = names

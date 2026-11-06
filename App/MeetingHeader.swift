@@ -19,15 +19,17 @@ struct MeetingHeader: View {
                 EditableMeetingTitle(record: record, size: 26)
                     .frame(maxWidth: 740, alignment: .leading)
                 Spacer(minLength: 0)
-                if record.status != .recording {
-                    Text(longClock(length))
-                        .font(.system(size: 26, weight: .semibold)).tracking(26 * -0.02).monospacedDigit()
-                        .foregroundStyle(Palette.secondary)
-                        .fixedSize()
-                        .accessibilityLabel("Length \(record.lengthText)")
+                if record.status == .recording {
+                    TimelineView(.periodic(from: record.start, by: 1)) { context in
+                        clockText(context.date.timeIntervalSince(record.start))
+                    }
+                    .accessibilityLabel("Recording time")
+                } else {
+                    clockText(length).accessibilityLabel("Length \(record.lengthText)")
                 }
             }
             .padding(.top, 6)
+            if record.status == .recording { LiveBand(record: record) }
             banner
             // Also while the call processes or when nobody spoke: the audio plays before there are lanes.
             if record.status != .recording {
@@ -38,10 +40,17 @@ struct MeetingHeader: View {
         .frame(maxWidth: 980, alignment: .leading)
         .padding(.horizontal, 36)
         .padding(.top, 30)
-        .padding(.bottom, record.status == .recording ? Space.xl : 30)
+        .padding(.bottom, 30)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.band)
         .hairline(.bottom)
+    }
+
+    private func clockText(_ seconds: TimeInterval) -> some View {
+        Text(longClock(seconds))
+            .font(.system(size: 26, weight: .semibold)).tracking(26 * -0.02).monospacedDigit()
+            .foregroundStyle(Palette.secondary)
+            .fixedSize()
     }
 
     /// The audio's length once it loads, else the call's.
@@ -93,24 +102,49 @@ struct MeetingHeader: View {
 
     @ViewBuilder
     private var banner: some View {
-        if let step = ProcessingStep(status: record.status) {
+        if let step = ProcessingStep(status: record.status), record.summary != nil {
             ProcessingCard(record: record, step: step).padding(.top, Space.l)
         } else if record.status == .failed {
-            HStack(spacing: 9) {
-                Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Palette.accentFill)
-                Text(failureText).foregroundStyle(Palette.ink)
-                Spacer()
-                Button("Retry now") { controller.retry(record.id) }.controlSize(.small)
-            }
-            .font(.system(size: 13, weight: .medium))
-            .padding(.horizontal, Space.m).padding(.vertical, 9)
-            .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
-            .padding(.top, Space.l)
+            FailedBanner(text: failureText, hint: failureHint) { controller.retry(record.id) }
+                .padding(.top, Space.l)
         }
+    }
+
+    /// What to do about it, under the banner.
+    private var failureHint: String {
+        if record.failureReason?.localizedCaseInsensitiveContains("key missing") == true {
+            return "Add the key in Settings › AI, then retry."
+        }
+        if record.attempts == 0 { return "The recording was interrupted, and a track could not be read. Check the log, then retry." }
+        return "Mossad stopped after \(record.attempts) attempts. Check the log, then retry."
     }
 
     private var failureText: String {
         let step = record.failedStep.flatMap { ProcessingStep(status: $0) }?.title ?? "Processing"
-        return "\(step) failed" + (record.failureReason.map { ": \($0)" } ?? "")
+        return "\(step) failed" + (record.failureReason.map { ": " + $0.trimmingCharacters(in: CharacterSet(charactersIn: ". ")) } ?? "") + ". The audio is saved."
+    }
+}
+
+/// A failed step: one line with Retry now, and what to do under it.
+struct FailedBanner: View {
+    let text: String
+    let hint: String
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.accent)
+                Text(text).font(.system(size: 12.5)).foregroundStyle(Palette.ink)
+                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: Space.s)
+                Button("Retry now", action: retry).buttonStyle(.mossadFill)
+            }
+            .padding(.vertical, Space.m)
+            .padding(.horizontal, 14)
+            .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            Text(hint).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+        }
+        .accessibilityElement(children: .contain)
     }
 }

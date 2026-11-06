@@ -84,16 +84,24 @@ struct MeetingDetailView: View {
                           retentionDays: controller.deleteRecordings ? controller.recordingDays : nil,
                           maxLanes: maxLanes)
                 .overlay(alignment: .bottom) {
-                    if record.status != .recording { DetailTabs(tab: tabBinding).offset(y: Self.underTabs) }
+                    if record.status != .recording, !processingFirstTime { DetailTabs(tab: tabBinding).offset(y: Self.underTabs) }
                 }
                 .zIndex(1)
             if record.status == .recording {
-                LivePanel(record: record)
+                LiveTranscriptPanel(record: record)
+            } else if processingFirstTime, let step = ProcessingStep(status: record.status) {
+                // Until the first note is written the tabs have nothing to show, so the progress takes their place.
+                ScrollView {
+                    ProcessingCard(record: record, step: step).detailColumn(top: 28)
+                }
             } else {
                 tabContent(people)
             }
         }
     }
+
+    /// Processing with no summary yet. A meeting transcribed again keeps its tabs, with the progress in the band.
+    private var processingFirstTime: Bool { ProcessingStep(status: record.status) != nil && record.summary == nil }
 
     /// Room under the tabs that sit on the band's edge.
     private static let underTabs: CGFloat = 17
@@ -103,7 +111,7 @@ struct MeetingDetailView: View {
         switch tab {
         case .summary:
             ScrollView {
-                SummaryTab(record: record, people: people, player: player)
+                SummaryTab(record: record, people: people, player: player, delete: record.canDelete ? { deleting = record } : nil)
                     .detailColumn(top: Self.underTabs + 32)
             }
         case .transcript:
@@ -316,130 +324,6 @@ struct SpeakerNamingPopover: View {
             name = speaker.isUnknown ? "" : speaker.name
             email = speaker.email ?? ""
         }
-    }
-}
-
-struct DetailEmptyState: View {
-    let symbol: String
-    let title: String
-    let message: String
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: symbol).font(.system(size: 30)).foregroundStyle(Palette.tertiaryMark)
-            Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ink)
-            Text(message).font(.system(size: 13)).foregroundStyle(Palette.secondary).multilineTextAlignment(.center)
-                .lineSpacing(3).frame(maxWidth: 380)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 60)
-    }
-}
-
-// MARK: Live
-
-private struct LivePanel: View {
-    @EnvironmentObject var controller: AppController
-    let record: CallRecord
-    /// A room has one mic that hears everyone, so it shows as voices in a room, not you and the call.
-    private var room: Bool { record.platform == .inPerson }
-
-    var body: some View {
-        VStack(spacing: 18) {
-            HStack(spacing: 8) {
-                StatusDot(color: controller.isPaused ? Theme.unknown : Theme.recording, size: 9, pulsing: !controller.isPaused)
-                if room, !controller.isPaused { Image(systemName: "person.3.fill").font(.system(size: 11)).foregroundStyle(Theme.recording) }
-                Text(controller.isPaused ? "Paused" : room ? "In-person meeting" : controller.isMuted ? "Current call · you are muted" : "Current call")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(controller.isPaused ? Color.secondary : Theme.recording)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 5)
-            .background((controller.isPaused ? Color.secondary : Theme.recording).opacity(0.12), in: Capsule())
-            TimelineView(.periodic(from: record.start, by: 1)) { context in
-                Text(elapsed(record.start, context.date)).font(.system(size: 40, weight: .semibold)).kerning(-1).monospacedDigit()
-            }
-            if controller.isMuted, !controller.isPaused, !room {
-                MutedBanner(platform: record.platform).frame(maxWidth: 620)
-            }
-            LiveWaveform(bars: 72, rowHeight: 40)
-                .padding(16)
-                .frame(maxWidth: 620)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            CallControls()
-            if controller.liveTranscriptEnabled {
-                LiveTranscriptView(model: controller.live, room: room).frame(maxWidth: 620)
-            } else {
-                Text(room ? "Recording the room through your microphone. The transcript, with each speaker, and the summary appear after the meeting ends."
-                          : "Recording your microphone and the call audio. The transcript and summary appear after the call ends.")
-                    .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// The streaming transcript while the call runs. The note uses the full transcription after the call.
-private struct LiveTranscriptView: View {
-    @EnvironmentObject var controller: AppController
-    @ObservedObject var model: LiveTranscriptModel
-    var room = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(room ? "ROOM TRANSCRIPT" : "LIVE TRANSCRIPT").font(.system(size: 11, weight: .semibold)).kerning(0.4).foregroundStyle(.tertiary)
-                Spacer()
-                if room {
-                    Text("Voices get names as Mossad knows them").font(.system(size: 11)).foregroundStyle(.tertiary)
-                }
-            }
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
-                        if model.visibleLines.isEmpty {
-                            Text(controller.isPaused ? "Paused." : "Listening…").foregroundStyle(.secondary)
-                        }
-                        ForEach(model.visibleLines) { line in
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                Text(who(line))
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(Theme.speakerPalette[color(line) % Theme.speakerPalette.count])
-                                    .lineLimit(1)
-                                    .frame(width: 64, alignment: .leading)
-                                Text(line.text)
-                                    .foregroundStyle(line.isFinal ? Color.primary : Color.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .font(.system(size: 13))
-                            .id(line.id)
-                        }
-                    }
-                    .textSelection(.enabled)
-                    .padding(12)
-                }
-                // No animation: an animated scroll per update kept the scroll view busy at display rate.
-                .onChange(of: model.transcript.lines.count) { _, _ in
-                    if let last = model.transcript.lines.last { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
-            }
-            .frame(minHeight: 140, maxHeight: room ? 360 : 260)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-    }
-
-    /// You, a call voice's first name once the voice library knows it, else its letter.
-    private func who(_ line: LiveTranscript.Line) -> String {
-        guard line.source == .them else { return "You" }
-        if let name = line.speakerKey.flatMap({ model.transcript.names[$0] }) {
-            return name == controller.ownerName ? "You" : String(name.split(separator: " ").first ?? "")
-        }
-        return line.speaker.map { "Voice \($0)" } ?? (room ? "Room" : "Call")
-    }
-
-    private func color(_ line: LiveTranscript.Line) -> Int {
-        guard line.source == .them else { return 0 }
-        return 1 + Int(line.speaker?.unicodeScalars.first.map { $0.value } ?? 65) - 65
     }
 }
 
