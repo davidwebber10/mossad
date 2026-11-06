@@ -18,6 +18,14 @@ public struct CoachResult: Sendable, Equatable {
 
 public protocol Coaching: Sendable {
     func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?) async throws -> CoachResult
+    /// `people` are "Name, Title" lines for speakers found in the org chart.
+    func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?, people: [String]) async throws -> CoachResult
+}
+
+extension Coaching {
+    public func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?, people: [String]) async throws -> CoachResult {
+        try await review(record: record, profile: profile, tone: tone)
+    }
 }
 
 /// Reviews one call with Claude, given the coach's profile of the owner.
@@ -81,11 +89,15 @@ public struct LLMCoach: Coaching {
     static let detailPoints = 2
 
     public func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?) async throws -> CoachResult {
+        try await review(record: record, profile: profile, tone: tone, people: [])
+    }
+
+    public func review(record: CallRecord, profile: CoachProfile, tone: VoiceTone?, people: [String]) async throws -> CoachResult {
         var delivery = DeliveryStats(record: record, owner: ownerName)
         delivery.tone = tone
         let metrics = CallMetrics(record: record, owner: ownerName, history: profile.history.compactMap(\.delivery))
         let out = try await llm.json(system: CoachPrompt.system(owner: ownerName, voice: profile.voice),
-                                     user: CoachPrompt.user(record: record, owner: ownerName, profile: profile, delivery: delivery, metrics: metrics),
+                                     user: CoachPrompt.user(record: record, owner: ownerName, profile: profile, delivery: delivery, metrics: metrics, people: people),
                                      schema: Self.schema, effort: .high, purpose: .coach, as: Output.self)
         let focus = profile.activeFocus
         var review = CoachReview(headline: out.headline, overview: "", strengths: Array(out.strengths.prefix(Self.detailPoints).map(\.point)),

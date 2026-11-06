@@ -25,6 +25,8 @@ public actor Pipeline {
     private let now: @Sendable () -> Date
     private let ownerName: String
     private let voiceFingerprints: Bool
+    /// "Name, Title" lines for the names in a call; empty without an org chart.
+    private let titles: @Sendable ([String]) -> [String]
     private let onStep: @Sendable (CallRecord) -> Void
     /// A short text for the sub-step in progress (call ID, text; nil when processing stops). Shown, not saved.
     private let onDetail: @Sendable (String, String?) -> Void
@@ -41,7 +43,9 @@ public actor Pipeline {
                 now: @escaping @Sendable () -> Date = Date.init, ownerName: String = "Me", voiceFingerprints: Bool = true,
                 onStep: @escaping @Sendable (CallRecord) -> Void = { _ in },
                 onDetail: @escaping @Sendable (String, String?) -> Void = { _, _ in },
-                onProgress: @escaping @Sendable (String, ProcessingProgress?) -> Void = { _, _ in }) {
+                onProgress: @escaping @Sendable (String, ProcessingProgress?) -> Void = { _, _ in },
+                titles: @escaping @Sendable ([String]) -> [String] = { _ in [] }) {
+        self.titles = titles
         self.onStep = onStep
         self.onProgress = onProgress
         self.onDetail = onDetail
@@ -406,8 +410,9 @@ public actor Pipeline {
         if let summarizer, !r.utterances.isEmpty {
             do {
                 let transcript = MarkdownWriter.transcript(r), title = r.title, known = knownTags()
+                let people = titles(Array(Set(r.speakerNames.values)).sorted())
                 let s = try await UsageContext.$callID.withValue(r.id) {
-                    try await summarizer.summarize(transcript: transcript, title: title, knownTags: known)
+                    try await summarizer.summarize(transcript: transcript, title: title, knownTags: known, people: people)
                 }
                 r.apply(s)
             } catch {

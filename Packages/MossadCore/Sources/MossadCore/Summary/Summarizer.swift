@@ -61,9 +61,15 @@ extension CallRecord {
 public protocol Summarizing: Sendable {
     /// `knownTags` are the tags of earlier meetings, so the same topic keeps one spelling.
     func summarize(transcript: String, title: String, knownTags: [String]) async throws -> MeetingSummary
+    /// `people` are "Name, Title" lines for speakers found in the org chart.
+    func summarize(transcript: String, title: String, knownTags: [String], people: [String]) async throws -> MeetingSummary
 }
 
 extension Summarizing {
+    public func summarize(transcript: String, title: String, knownTags: [String], people: [String]) async throws -> MeetingSummary {
+        try await summarize(transcript: transcript, title: title, knownTags: knownTags)
+    }
+
     public func summarize(transcript: String, title: String) async throws -> MeetingSummary {
         try await summarize(transcript: transcript, title: title, knownTags: [])
     }
@@ -119,6 +125,16 @@ public struct LLMSummarizer: Summarizing {
     """
 
     public func summarize(transcript: String, title: String, knownTags: [String]) async throws -> MeetingSummary {
+        try await summarize(transcript: transcript, title: title, knownTags: knownTags, people: [])
+    }
+
+    static func userPrompt(knownTags: [String], title: String, transcript: String, people: [String]) -> String {
+        let known = knownTags.isEmpty ? "" : "Known tags: \(knownTags.joined(separator: ", "))\n\n"
+        let titles = people.isEmpty ? "" : "Job titles of people in the meeting:\n" + people.map { "- \($0)" }.joined(separator: "\n") + "\n\n"
+        return "\(known)\(titles)Meeting: \(title)\n\nTranscript:\n\(transcript)"
+    }
+
+    public func summarize(transcript: String, title: String, knownTags: [String], people: [String]) async throws -> MeetingSummary {
         let schema = Schema.object([
             "summary": Schema.string,
             "topics": Schema.array(Schema.object(["title": Schema.string, "summary": Schema.string])),
@@ -130,9 +146,8 @@ public struct LLMSummarizer: Summarizing {
             "tags": Schema.array(Schema.string),
             "title": Schema.string,
         ])
-        let known = knownTags.isEmpty ? "" : "Known tags: \(knownTags.joined(separator: ", "))\n\n"
         let result = try await llm.json(system: Self.systemPrompt(owner: ownerName, organization: organization),
-                                        user: "\(known)Meeting: \(title)\n\nTranscript:\n\(transcript)", schema: schema,
+                                        user: Self.userPrompt(knownTags: knownTags, title: title, transcript: transcript, people: people), schema: schema,
                                         effort: .medium, purpose: .summary, as: Output.self)
         let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)
         return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items, decisions: result.decisions.map { Decision(text: $0.text, at: $0.at_seconds.flatMap { $0 >= 0 ? $0 : nil }) },

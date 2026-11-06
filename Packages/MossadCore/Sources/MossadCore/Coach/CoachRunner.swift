@@ -6,8 +6,11 @@ public actor CoachRunner {
     private let coach: any Coaching
     private let owner: String
     private let since: Date
+    /// "Name, Title" lines for the names in a call; empty without an org chart.
+    private let titles: @Sendable ([String]) -> [String]
 
-    public init(paths: Paths, coach: any Coaching, owner: String, since: Date) {
+    public init(paths: Paths, coach: any Coaching, owner: String, since: Date, titles: @escaping @Sendable ([String]) -> [String] = { _ in [] }) {
+        self.titles = titles
         self.paths = paths
         self.coach = coach
         self.owner = owner
@@ -46,7 +49,7 @@ public actor CoachRunner {
         for r in Self.pending(records, owner: owner, since: since, reviewed: reviewed) {
             do {
                 let current = profile, tone = measureTone(r)
-                let result = try await UsageContext.$callID.withValue(r.id) { try await coach.review(record: r, profile: current, tone: tone) }
+                let result = try await UsageContext.$callID.withValue(r.id) { try await coach.review(record: r, profile: current, tone: tone, people: titles(Array(Set(r.speakerNames.values)).sorted())) }
                 try result.review.save(in: paths.callDirectory(r.id))
                 // Read again before saving: the owner may have added guidance while the review ran.
                 var fresh = (try? CoachProfile.load(from: paths.coach)) ?? profile

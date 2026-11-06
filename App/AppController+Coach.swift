@@ -19,7 +19,8 @@ extension AppController {
         guard coachEnabled, !coaching, let llm = languageModel else { return }
         coaching = true
         let runner = CoachRunner(paths: paths, coach: LLMCoach(llm: llm, ownerName: ownerName), owner: ownerName,
-                                 since: Date(timeIntervalSince1970: coachSince))
+                                 since: Date(timeIntervalSince1970: coachSince),
+                                 titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) })
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
             await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName))

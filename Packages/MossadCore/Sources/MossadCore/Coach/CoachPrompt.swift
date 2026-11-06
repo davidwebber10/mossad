@@ -89,7 +89,7 @@ enum CoachPrompt {
     static let recentCalls = 8
 
     static func user(record r: CallRecord, owner: String, profile: CoachProfile, delivery: DeliveryStats? = nil,
-                     metrics: CallMetrics? = nil) -> String {
+                     metrics: CallMetrics? = nil, people titles: [String] = []) -> String {
         let delivery = delivery ?? DeliveryStats(record: r, owner: owner)
         let metrics = metrics ?? CallMetrics(record: r, owner: owner, history: profile.history.compactMap(\.delivery))
         var parts: [String] = []
@@ -138,6 +138,8 @@ enum CoachPrompt {
                 "- \($0.key) (\($0.value.calls) earlier calls): \($0.value.note)"
             }.joined(separator: "\n"))
         }
+
+        if !titles.isEmpty { parts.append("## Job titles\n" + titles.map { "- \($0)" }.joined(separator: "\n")) }
 
         var meeting = ["Title: \(r.title)", "Date: \(day(r.start))", "Length: \(Int(r.end.timeIntervalSince(r.start) / 60)) min"]
         if let k = r.kind { meeting.append("Kind: \(k)") }

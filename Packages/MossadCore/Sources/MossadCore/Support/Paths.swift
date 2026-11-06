@@ -34,12 +34,15 @@ public struct Paths: Sendable {
     /// `usage.jsonl`: each billed request, for the costs in Analytics.
     public var usage: URL { root.appendingPathComponent("Usage") }
 
+    /// The HR export and the owner's matches to it. Never synced.
+    public var people: URL { root.appendingPathComponent("People") }
+
     public func callDirectory(_ id: String) -> URL {
         audio.appendingPathComponent(id)
     }
 
     public func ensureDirectories() throws {
-        for dir in [meetings, audio, voices, logs, coach] {
+        for dir in [meetings, audio, voices, logs, coach, people] {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }

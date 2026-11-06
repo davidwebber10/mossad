@@ -392,7 +392,8 @@ final class AppController: ObservableObject {
                             },
                             onProgress: { [weak self] id, p in
                                 Task { @MainActor in self?.progress[id] = p }
-                            })
+                            },
+                            titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) })
     }
 
     /// Puts a record saved by the pipeline into the list, so the step shows while the call is processed.
