@@ -19,13 +19,13 @@ final class AppController: ObservableObject {
         var id: String { rawValue }
         var symbol: String {
             switch self {
-            case .meetings: "bubble.left.and.text.bubble.right"
+            case .meetings: "text.rectangle"
             case .commitments: "checkmark.circle"
-            case .chat: "sparkles"
+            case .chat: "sparkle"
             case .people: "person.2"
-            case .analytics: "chart.bar.xaxis"
+            case .analytics: "chart.bar"
             case .settings: "gearshape"
-            case .log: "doc.text"
+            case .log: "list.bullet.rectangle"
             }
         }
     }
@@ -315,6 +315,10 @@ final class AppController: ObservableObject {
         }
         // Development hook: `--light` shows the UI in light mode, to check both looks.
         if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
+        // Development hook: `MOSSAD_APPEARANCE=dark|light` picks the look of a preview, to capture both.
+        if preview, let look = ProcessInfo.processInfo.environment["MOSSAD_APPEARANCE"] {
+            NSApp.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
+        }
         // Development hook: `--open-naming` opens "Who is speaking?" for the first call that needs names.
         if CommandLine.arguments.contains("--open-naming"), let first = callsNeedingNames.first {
             DispatchQueue.main.async { self.openNaming(first.id) }
@@ -642,6 +646,14 @@ final class AppController: ObservableObject {
     func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) {
         Task {
             await pipeline.applyNames(callID: callID, names: names, emails: emails)
+            refresh()
+        }
+    }
+
+    /// The owner's own title; nil or blank goes back to the automatic one.
+    func setTitle(callID: String, _ title: String?) {
+        Task {
+            await pipeline.setTitle(callID: callID, title)
             refresh()
         }
     }

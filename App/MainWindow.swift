@@ -7,16 +7,8 @@ struct MainWindow: View {
 
     var body: some View {
         NavigationSplitView {
-            List(AppController.Section.allCases, selection: Binding(get: { controller.section }, set: { if let s = $0 { controller.section = s } })) { section in
-                Label {
-                    Text(section.rawValue)
-                } icon: {
-                    Image(systemName: section.symbol).foregroundStyle(Color.accentColor)
-                }
-                .tag(section)
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
-            .safeAreaInset(edge: .bottom) { SidebarStatus() }
+            Sidebar()
+                .navigationSplitViewColumnWidth(min: 180, ideal: 196, max: 240)
         } detail: {
             Group {
                 switch controller.section {
@@ -30,6 +22,7 @@ struct MainWindow: View {
                 }
             }
         }
+        .background { WindowBackdrop() }
         .frame(minWidth: 980, minHeight: 600)
         .environment(\.animationsActive, controller.windowVisible)
         .sheet(isPresented: $welcoming) { WelcomeView() }
@@ -44,11 +37,89 @@ struct MainWindow: View {
             welcoming = !UserDefaults.standard.bool(forKey: "welcomeDone") && controller.meetings.isEmpty
                 || CommandLine.arguments.contains("--welcome")
         }
-
     }
 }
 
-/// What Mossad is doing, pinned under the sidebar. Recording, then permissions, then processing, then idle.
+/// Warm paper with two soft washes, warm at the top left and cool at the bottom left, so the sidebar's glass has
+/// something to carry, as in the canvas.
+private struct WindowBackdrop: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        let dark = scheme == .dark
+        Palette.window
+            .overlay {
+                if !reduceTransparency {
+                    GeometryReader { g in
+                        ZStack {
+                            RadialGradient(colors: [Color(light: OKLCH(lightness: 0.9, chroma: 0.06, hue: 55), dark: OKLCH(lightness: 0.42, chroma: 0.07, hue: 55))
+                                .opacity(dark ? 0.55 : 0.8), .clear],
+                                           center: UnitPoint(x: -0.04 * 1400 / max(g.size.width, 1), y: 0.18), startRadius: 0, endRadius: 520)
+                            RadialGradient(colors: [Color(light: OKLCH(lightness: 0.9, chroma: 0.05, hue: 240), dark: OKLCH(lightness: 0.36, chroma: 0.06, hue: 240))
+                                .opacity(dark ? 0.5 : 0.55), .clear],
+                                           center: UnitPoint(x: 0.08 * 1400 / max(g.size.width, 1), y: 1.02), startRadius: 0, endRadius: 440)
+                        }
+                    }
+                }
+            }
+            .ignoresSafeArea()
+    }
+}
+
+/// The sections, with the open commitments and what needs the owner in Settings, then what Mossad is doing.
+private struct Sidebar: View {
+    @EnvironmentObject var controller: AppController
+    @EnvironmentObject var permissions: PermissionsMonitor
+    @State private var openCommitments = 0
+
+    var body: some View {
+        List(AppController.Section.allCases, selection: Binding(get: { controller.section }, set: { if let s = $0 { controller.section = s } })) { section in
+            HStack(spacing: 9) {
+                Image(systemName: section.symbol)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(Palette.accent)
+                    .frame(width: 18)
+                Text(section.rawValue).foregroundStyle(Palette.ink)
+                Spacer(minLength: 4)
+                trailing(section)
+            }
+            .font(.system(size: 13, weight: controller.section == section ? .medium : .regular))
+            .accessibilityElement(children: .combine)
+            .tag(section)
+        }
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .safeAreaInset(edge: .bottom, spacing: 0) { SidebarStatus() }
+        .task(id: controller.commitmentsVersion) {
+            openCommitments = controller.commitmentBook.visible.filter { $0.done == nil }.count
+        }
+    }
+
+    @ViewBuilder
+    private func trailing(_ section: AppController.Section) -> some View {
+        switch section {
+        case .commitments where openCommitments > 0:
+            Text("\(openCommitments)")
+                .font(.system(size: 11)).monospacedDigit()
+                .foregroundStyle(Palette.tertiary)
+                .accessibilityLabel("\(openCommitments) open")
+        case .settings where !permissions.allGood:
+            Text("\(permissions.problemCount)")
+                .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                .foregroundStyle(Palette.onAccent)
+                .padding(.horizontal, 6)
+                .frame(minWidth: 18, minHeight: 18)
+                .background(Palette.accentFill, in: Capsule())
+                .accessibilityLabel(permissionsText(permissions.problemCount))
+        default:
+            EmptyView()
+        }
+    }
+}
+
+/// What Mossad is doing, pinned under the sidebar: a call being recorded, then permissions that need the owner as
+/// a card, then calls being processed. Nothing when all is well, so the sidebar stays quiet.
 private struct SidebarStatus: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
@@ -56,30 +127,71 @@ private struct SidebarStatus: View {
     @Environment(\.appearsActive) private var appearsActive
 
     var body: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.s) {
             if case .recording(_, let since) = controller.status {
-                StatusDot(color: Theme.recording, pulsing: true)
-                TimelineView(.periodic(from: since, by: 1)) { context in
-                    Text("Recording \(elapsed(since, context.date))\(controller.isMuted ? " · muted" : "")").monospacedDigit()
+                HStack(spacing: Space.s) {
+                    StatusDot(color: Palette.recording, size: 7, pulsing: !controller.isPaused)
+                    TimelineView(.periodic(from: since, by: 1)) { context in
+                        Text("Recording \(elapsed(since, context.date))\(controller.isMuted ? " · muted" : "")").monospacedDigit()
+                    }
                 }
-            } else if !permissions.allGood {
-                StatusDot(color: Theme.warning)
-                Button(permissionsText(permissions.problemCount)) { controller.section = .settings }
-                    .buttonStyle(.plain)
-            } else if controller.processing > 0 {
-                ProgressView().controlSize(.mini)
-                Text("Processing \(controller.processing) \(controller.processing == 1 ? "call" : "calls")")
-            } else {
-                StatusDot(color: Theme.listening)
-                Text("Waiting for a call")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Palette.ink)
+                .padding(.horizontal, 10)
             }
-            Spacer(minLength: 0)
+            if !permissions.allGood {
+                PermissionsCard()
+            } else if controller.processing > 0, controller.status == .idle {
+                HStack(spacing: Space.s) {
+                    Circle().fill(Palette.accentFill).frame(width: 7, height: 7)
+                    Text("Processing \(controller.processing) \(controller.processing == 1 ? "call" : "calls")")
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.secondary)
+                .padding(.horizontal, 10)
+            }
         }
-        .font(.system(size: 12))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 10)
         .opacity(appearsActive ? 1 : 0.55)
+    }
+}
+
+/// "3 permissions / Microphone, system audio, calendars / Review…": the accent means the owner needs to act.
+private struct PermissionsCard: View {
+    @EnvironmentObject var controller: AppController
+    @EnvironmentObject var permissions: PermissionsMonitor
+
+    private var missing: String {
+        let names = permissions.items.filter { !$0.state.isGood }.map(\.title)
+        guard let first = names.first else { return "" }
+        return ([first] + names.dropFirst().map { $0.prefix(1).lowercased() + $0.dropFirst() }).joined(separator: ", ")
+    }
+
+    var body: some View {
+        Button {
+            UserDefaults.standard.set(SettingsPage.general.rawValue, forKey: "settingsPage")
+            controller.section = .settings
+        } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    Circle().fill(Palette.accentFill).frame(width: 7, height: 7)
+                    Text(permissions.problemCount == 1 ? "1 permission" : "\(permissions.problemCount) permissions")
+                        .fontWeight(.semibold).foregroundStyle(Palette.ink)
+                }
+                Text(missing).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                Text("Review…").fontWeight(.semibold).foregroundStyle(Palette.accent).padding(.top, 6)
+            }
+            .font(.system(size: 12))
+            .lineSpacing(1.5)
+            .padding(EdgeInsets(top: 10, leading: 10, bottom: 8, trailing: 10))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(permissionsText(permissions.problemCount)): \(missing)")
+        .accessibilityHint("Opens Settings")
     }
 }
 
