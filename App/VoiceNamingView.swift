@@ -33,45 +33,52 @@ struct VoiceNamingView: View {
     var body: some View {
         let people = MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library)
         let talk = Dictionary(TranscriptBlock.talkTime(record).map { ($0.speaker, $0.seconds) }, uniquingKeysWith: +)
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Who is speaking?").font(.system(size: 16, weight: .bold))
-            Text(subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            SheetHeader(symbol: "waveform", title: title, subtitle: subtitle)
             ScrollView {
-                VStack(spacing: 10) {
+                VStack(spacing: 12) {
                     ForEach(asking, id: \.self) { key in
                         card(key, people: people, talk: talk[people.name(forKey: key)] ?? 0)
                     }
                     if !skipped.isEmpty {
-                        Text("Skipped").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, asking.isEmpty ? 0 : 6)
-                        ForEach(skipped, id: \.self) { key in
-                            skippedRow(key, people: people, talk: talk[people.name(forKey: key)] ?? 0)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Skipped").textRole(.label).foregroundStyle(Palette.secondary)
+                                .padding(.bottom, 4)
+                            ForEach(skipped, id: \.self) { key in
+                                skippedRow(key, people: people, talk: talk[people.name(forKey: key)] ?? 0)
+                            }
                         }
+                        .padding(.top, asking.isEmpty ? 0 : 4)
                     }
                 }
+                .padding(.horizontal, 22).padding(.vertical, 16)
             }
-            .frame(maxHeight: 460)
-            HStack(spacing: 8) {
-                Spacer()
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: 400)
+            .fixedSize(horizontal: false, vertical: true)
+            SheetFooter {
+                Text("Skipped voices stay as letters in the transcript.")
+                    .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+            } trailing: {
                 Button("Later") {
                     saveSkips()
                     dismiss()
                 }
-                Button("Save") {
+                .buttonStyle(.sheetSecondary)
+                .keyboardShortcut(.cancelAction)
+                Button("Save names") {
                     saveSkips()
                     if names.values.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
                         controller.applyNames(callID: record.id, names: names, emails: emails)
                     }
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.sheetPrimary)
                 .keyboardShortcut(.defaultAction)
                 .disabled(names.values.allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty } && dismissed.isEmpty && restored.isEmpty)
             }
         }
-        .padding(EdgeInsets(top: 20, leading: 20, bottom: 16, trailing: 20))
-        .frame(width: 560)
+        .mossadSheet(width: 640)
         .task { await measureSamples() }
     }
 
@@ -81,35 +88,48 @@ struct VoiceNamingView: View {
         if !restored.isEmpty { controller.restoreSpeakers(callID: record.id, keys: Array(restored)) }
     }
 
-    private var subtitle: String {
+    private var title: String {
         let n = record.unknownSpeakers.count
-        if n == 0 { return "You skipped the new voices in \(record.title). Name one to have Mossad recognize it in future calls." }
-        return n == 1
-            ? "1 voice in \(record.title) is new. Name it once and Mossad recognizes it in future calls."
-            : "\(n) voices in \(record.title) are new. Name them once and Mossad recognizes them in future calls."
+        return n == 0 ? "Name voices" : n == 1 ? "Name 1 voice" : "Name \(n) voices"
+    }
+
+    private var subtitle: String {
+        if record.unknownSpeakers.isEmpty {
+            return "\(record.title) · You skipped these voices. Name one and Mossad knows it in later meetings."
+        }
+        return "\(record.title) · Mossad saves each voice and knows it in later meetings."
+    }
+
+    private func playButton(_ key: String, size: CGFloat) -> some View {
+        Button { toggle(key) } label: {
+            Image(systemName: playing == key ? "stop.fill" : "play.fill")
+                .font(.system(size: size * 0.37))
+                .foregroundStyle(Palette.window)
+                .frame(width: size, height: size)
+                .background(Palette.ink, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Play a sample of this voice")
+        .accessibilityLabel(playing == key ? "Stop sample" : "Play sample")
     }
 
     private func card(_ key: String, people: MeetingPeople, talk: TimeInterval) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Button { toggle(key) } label: {
-                    Image(systemName: playing == key ? "stop.fill" : "play.fill").font(.system(size: 11)).foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(people.color(forKey: key), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .help("Play a sample of this voice")
-                .accessibilityLabel(playing == key ? "Stop sample" : "Play sample")
+                playButton(key, size: 30)
                 Button { nextSample(key) } label: {
-                    Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
-                        .frame(width: 28, height: 28)
-                        .background(Theme.field, in: Circle())
+                    Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
+                        .frame(width: 26, height: 26)
+                        .background(Palette.fill, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .help("Play a different sample")
                 .accessibilityLabel("Next sample")
                 .disabled(ClipExtractor.candidates(for: key, utterances: record.utterances).count < 2)
-                Text(meta(key, people: people, talk: talk)).font(.system(size: 12)).foregroundStyle(.secondary)
+                Text(people.name(forKey: key)).fontWeight(.semibold).foregroundStyle(Palette.accent)
+                Circle().fill(people.color(forKey: key)).frame(width: 8, height: 8).accessibilityHidden(true)
+                Text(meta(key, talk: talk)).font(.system(size: 12)).foregroundStyle(Palette.secondary).monospacedDigit()
                 Spacer()
                 Button("Skip") {
                     if restored.contains(key) { restored.remove(key) } else { dismissed.insert(key) }
@@ -117,21 +137,21 @@ struct VoiceNamingView: View {
                     emails[key] = nil
                     if playing == key { player?.stop(); playing = nil }
                 }
-                .buttonStyle(.link)
-                .font(.system(size: 12))
+                .buttonStyle(.sheetText)
                 .help("Stop asking for this voice. Its lines stay in the transcript.")
             }
             if let quote = sampleText[key] ?? longestLine(of: key) {
-                Text("“\(quote)”").italic().font(.system(size: 13)).lineSpacing(3).lineLimit(3)
+                Text("“\(quote)”").italic().foregroundStyle(Palette.secondary).lineSpacing(4).lineLimit(3)
+                    .padding(.top, 8)
             }
             HStack(spacing: 8) {
                 TextField("Name", text: Binding(get: { names[key, default: ""] }, set: { names[key] = $0 }))
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(SheetFieldStyle())
                 // Typed by hand when the invite only lists a group address, or has no invite at all.
                 TextField("Email (optional)", text: Binding(get: { emails[key, default: ""] },
                                                             set: { emails[key] = $0.isEmpty ? nil : $0 }))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 190)
+                    .textFieldStyle(SheetFieldStyle())
+                    .frame(width: 220)
                 // Pick only when the call's own meeting link matched an invite; a time match can be another meeting.
                 if record.hasInviteLink, !record.attendees.isEmpty {
                     Menu {
@@ -139,39 +159,34 @@ struct VoiceNamingView: View {
                     } label: {
                         Text("Pick")
                     }
+                    .menuStyle(.button)
+                    .menuIndicator(.hidden)
+                    .buttonStyle(.sheetSecondary)
                     .fixedSize()
                 }
             }
+            .padding(.top, 10)
             ExistingPersonHint(name: names[key, default: ""], email: emails[key])
+                .padding(.top, 8)
         }
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
+        .sheetCard()
     }
 
     private func skippedRow(_ key: String, people: MeetingPeople, talk: TimeInterval) -> some View {
         HStack(spacing: 10) {
-            Button { toggle(key) } label: {
-                Image(systemName: playing == key ? "stop.fill" : "play.fill").font(.system(size: 10)).foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-                    .background(people.color(forKey: key), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .help("Play a sample of this voice")
-            .accessibilityLabel(playing == key ? "Stop sample" : "Play sample")
-            Text(meta(key, people: people, talk: talk)).font(.system(size: 12)).foregroundStyle(.secondary)
+            playButton(key, size: 24)
+            Text(people.name(forKey: key)).fontWeight(.medium)
+            Circle().fill(people.color(forKey: key)).frame(width: 8, height: 8).accessibilityHidden(true)
+            Text(meta(key, talk: talk)).font(.system(size: 12)).foregroundStyle(Palette.secondary).monospacedDigit()
             Spacer()
             Button("Name") {
                 if dismissed.contains(key) { dismissed.remove(key) } else { restored.insert(key) }
             }
-            .buttonStyle(.link)
-            .font(.system(size: 12))
+            .buttonStyle(.sheetText)
             .help("Ask for this voice again")
         }
-        .padding(.horizontal, 14).padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.vertical, 8)
+        .hairline(.bottom)
     }
 
     /// The invite's people. Picking one sets the email, and the saved name for that email when there is one.
@@ -196,8 +211,8 @@ struct VoiceNamingView: View {
         }
     }
 
-    private func meta(_ key: String, people: MeetingPeople, talk: TimeInterval) -> String {
-        var parts = [people.name(forKey: key), talk < 60 ? "<1 min" : "\(Int(talk / 60)) min"]
+    private func meta(_ key: String, talk: TimeInterval) -> String {
+        var parts = [talk < 60 ? "<1 min" : "\(Int(talk / 60)) min"]
         if let sample = sampleLengths[key] { parts.append("sample \(clock(sample))") }
         let count = ClipExtractor.candidates(for: key, utterances: record.utterances).count
         if count > 1 { parts.append("\((choices[key] ?? 0) % count + 1) of \(count)") }
