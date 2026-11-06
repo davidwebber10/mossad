@@ -308,6 +308,21 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(summarizer.lastKnownTags, ["Freight"])
     }
 
+    func testBackfillKeepsOwnerTagsAndTitleAndAddsAGeneratedTitle() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        await p.setTags(callID: id, ["Mine"])
+        await p.setTitle(callID: id, "My title")
+        summarizer.title = "Generated"
+        await p.backfill(id)
+        let r = try load(id)
+        XCTAssertEqual(r.tags, ["Mine"])
+        XCTAssertEqual(r.customTitle, "My title")
+        XCTAssertEqual(r.generatedTitle, "Generated")
+        XCTAssertEqual(r.status, .written)
+    }
+
     /// The progress card gets every step in order, the upload percent, and nil when processing ends.
     func testProgressReportsEachStepAndTheUpload() async throws {
         let id = try makeRecord()

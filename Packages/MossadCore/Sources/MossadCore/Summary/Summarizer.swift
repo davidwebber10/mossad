@@ -52,7 +52,7 @@ extension CallRecord {
         headline = s.headline
         kind = s.kind
         hasOutcomes = s.hasOutcomes
-        tags = s.tags
+        if tagsSetByOwner != true { tags = s.tags }
         // A summary without a title must not erase the live guess.
         if let title = s.title { generatedTitle = title }
     }

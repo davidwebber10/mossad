@@ -137,6 +137,10 @@ public actor Pipeline {
         await process(id)
     }
 
+    /// The one-time catch-up for meetings written before titles and decision times: the summary step again.
+    /// Names, owner-set tags, the custom and calendar titles, and bookmarks stay; `apply` keeps owner tags.
+    public func backfill(_ id: String) async { await regenerateSummary(id) }
+
     /// Where the transcript from before the last "Transcribe again" is kept, for one undo.
     public static let previousFileName = "call.previous.json"
 
@@ -573,6 +577,7 @@ public actor Pipeline {
         guard var r = try? CallRecord.load(from: dir) else { return }
         var seen = Set<String>()
         r.tags = tags.compactMap(\.nonBlank).filter { seen.insert($0.lowercased()).inserted }
+        r.tagsSetByOwner = true
         if inFlight.contains(callID) { tagsEditedByOwner.insert(callID) }
         save(&r, dir: dir)
     }

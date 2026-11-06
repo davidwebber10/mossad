@@ -301,6 +301,7 @@ final class AppController: ObservableObject {
         if CommandLine.arguments.contains("--show-muted") { isMuted = true }
         if !preview {
             backfillSummaries()
+            backfillTitlesAndDecisionTimes()
             // The coach's reads on people: a minute after launch, so a call being processed goes first.
             Task {
                 try? await Task.sleep(for: .seconds(60))
@@ -778,6 +779,33 @@ final class AppController: ObservableObject {
             for id in ids { await track { await self.pipeline.regenerateSummary(id) } }
             refresh()
             runQuestionPass()
+        }
+    }
+
+    /// Once, after the editorial update: old meetings get a generated title and the times of their decisions.
+    /// One meeting at a time, newest first, at utility priority, and never while a call records. The flag is set
+    /// when the run ends, so a quit part way continues next launch with the meetings still due.
+    func backfillTitlesAndDecisionTimes() {
+        let key = "summaryBackfill2026-11"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let ids = SummaryBackfill.due(meetings).map(\.id)
+        guard !ids.isEmpty else { return UserDefaults.standard.set(true, forKey: key) }
+        Log.info("Updating \(ids.count) older meetings with titles and decision times")
+        Task(priority: .utility) { [weak self] in
+            let began = Date()
+            var updated = 0
+            for id in ids {
+                // Wait out a call; the phone and the owner come first.
+                while let self, self.isRecording { try? await Task.sleep(for: .seconds(30)) }
+                guard let self else { return }
+                await self.track { await self.pipeline.backfill(id) }
+                updated += 1
+            }
+            UserDefaults.standard.set(true, forKey: key)
+            guard let self else { return }
+            let cost = self.usage.all().filter { $0.date >= began }.compactMap(\.costUSD).reduce(0, +)
+            Log.info("Updated \(updated) meetings" + (cost > 0 ? String(format: " (about $%.2f)", cost) : ""))
+            self.refresh()
         }
     }
 
