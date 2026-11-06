@@ -10,10 +10,13 @@ struct ExistingPersonHint: View {
     var body: some View {
         let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if !typed.isEmpty || !(email ?? "").isEmpty, let match = controller.library.existingName(name: typed, email: email) {
-            Label(match == typed ? "\(match) is saved already. This voice joins them."
-                                 : "Matches \(match), who is saved already. This voice joins them.",
-                  systemImage: "person.crop.circle.badge.checkmark")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Palette.ok)
+                    .accessibilityHidden(true)
+                Text(match == typed ? "\(match) is saved already. This voice joins them."
+                                    : "Matches \(match), who is saved already. This voice joins them.")
+            }
+            .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
         }
     }
 }
@@ -24,63 +27,79 @@ struct PeopleDuplicatesSheet: View {
     @Environment(\.dismiss) private var dismiss
     let pairs: [PeopleDuplicates.Pair]
     let stats: [String: PersonStats]
+    /// Saved emails by name, shown under each name so a pair with the same email reads as one.
+    var emails: [String: String] = [:]
     let merge: (_ from: String, _ into: String) -> Void
     let notSame: (PeopleDuplicates.Pair) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Possible duplicates").font(.system(size: 15, weight: .semibold))
-                Text("Merge keeps the name you pick and moves the other one's voice samples and meetings to it.")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-            .padding(18)
-            Divider()
+            SheetHeader(symbol: "person.2", title: "Possible duplicates",
+                        subtitle: "Merge keeps the name you pick and moves voice samples, the email, and meetings to it.")
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(pairs) { pair in row(pair) }
                 }
-                .padding(18)
+                .padding(.horizontal, 22).padding(.vertical, 16)
             }
-            .frame(maxHeight: 420)
-            Divider()
-            HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }.padding(14)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: 440)
+            .fixedSize(horizontal: false, vertical: true)
+            SheetFooter {
+                Button("Done") { dismiss() }.buttonStyle(.sheetPrimary).keyboardShortcut(.defaultAction)
+            }
         }
-        .frame(width: 520)
-        .background(Theme.background)
+        .mossadSheet(width: 600)
     }
 
     private func row(_ pair: PeopleDuplicates.Pair) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                person(pair.first)
-                Image(systemName: "arrow.left.arrow.right").foregroundStyle(.tertiary)
-                person(pair.second)
-                Spacer()
+                person(pair.first).frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "arrow.left.arrow.right").font(.system(size: 12)).foregroundStyle(Palette.tertiaryMark)
+                    .accessibilityHidden(true)
+                person(pair.second).frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack(spacing: 8) {
-                Label(reasonText(pair.reason), systemImage: reasonSymbol(pair.reason)).font(.system(size: 11)).foregroundStyle(.secondary)
+                Label {
+                    Text(reasonText(pair.reason))
+                } icon: {
+                    Image(systemName: reasonSymbol(pair.reason)).foregroundStyle(Palette.tertiaryMark)
+                }
+                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
                 Spacer()
-                Button("Not the same") { notSame(pair) }.buttonStyle(.link).font(.system(size: 12))
-                Menu("Merge") {
+                Button("Not the same") { notSame(pair) }.buttonStyle(.sheetText)
+                Menu {
                     Button("Keep “\(pair.first)”") { merge(pair.second, pair.first) }
                     Button("Keep “\(pair.second)”") { merge(pair.first, pair.second) }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.merge").font(.system(size: 11))
+                        Text("Merge")
+                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Palette.secondary)
+                    }
                 }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .buttonStyle(SheetButtonStyle(kind: .secondary, compact: true))
                 .fixedSize()
             }
         }
-        .padding(12)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .sheetCard(horizontal: 14, vertical: 12)
     }
 
     private func person(_ name: String) -> some View {
-        HStack(spacing: 7) {
-            PersonMark(name: name, size: 24)
+        let count = stats[name]?.meetings.count ?? 0
+        let meetings = "\(count) \(count == 1 ? "meeting" : "meetings")"
+        return HStack(spacing: 8) {
+            PersonMark(name: name, size: 26)
             VStack(alignment: .leading, spacing: 0) {
-                Text(name).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                Text("\(stats[name]?.meetings.count ?? 0) meetings").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(name).fontWeight(.medium).lineLimit(1).truncationMode(.tail)
+                Text(emails[name].map { "\($0) · \(meetings)" } ?? meetings)
+                    .font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(1).truncationMode(.middle)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 
     private func reasonText(_ r: PeopleDuplicates.Reason) -> String {
@@ -95,7 +114,7 @@ struct PeopleDuplicatesSheet: View {
     private func reasonSymbol(_ r: PeopleDuplicates.Reason) -> String {
         switch r {
         case .sameEmail: "envelope"
-        case .sameName, .similarName: "textformat"
+        case .sameName, .similarName: "pencil"
         case .sameVoice: "waveform"
         }
     }

@@ -80,6 +80,7 @@ struct PeopleView: View {
         }
         .sheet(isPresented: $reviewingDuplicates) {
             PeopleDuplicatesSheet(pairs: duplicates, stats: stats,
+                                  emails: Dictionary(profiles.compactMap { p in p.email.map { (p.name, $0) } }, uniquingKeysWith: { a, _ in a }),
                                   merge: { from, into in
                                       guard let p = profiles.first(where: { $0.name == from }),
                                             let target = profiles.first(where: { $0.name == into }) else { return }
@@ -87,7 +88,13 @@ struct PeopleView: View {
                                   },
                                   notSame: { notDuplicates += (notDuplicates.isEmpty ? "" : "\n") + $0.id })
         }
-        .onChange(of: duplicates.isEmpty) { _, empty in if empty { reviewingDuplicates = false } }
+        .onChange(of: duplicates.isEmpty) { _, empty in
+            if empty { reviewingDuplicates = false }
+            // Development hook for screenshots: MOSSAD_DUPLICATES opens the review once the pairs load.
+            else if CommandLine.arguments.contains("--ui-preview"), ProcessInfo.processInfo.environment["MOSSAD_DUPLICATES"] != nil {
+                reviewingDuplicates = true
+            }
+        }
         .confirmationDialog("Delete every saved voice?", isPresented: $confirmDeleteAll) {
             Button("Delete all voices", role: .destructive) {
                 controller.deleteAllVoices()
