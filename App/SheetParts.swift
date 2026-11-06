@@ -140,59 +140,72 @@ struct SheetFieldStyle: TextFieldStyle {
     }
 }
 
-/// The canvas's switch: 34 by 20, the accent fill when on, the bar color when off.
+/// The canvas's switch: 34 by 20, the accent fill when on, the bar color when off. A button underneath, so Tab
+/// reaches it and Space flips it.
 struct SheetSwitchStyle: ToggleStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 12) {
-            configuration.label
-            Spacer(minLength: 0)
-            Capsule()
-                .fill(configuration.isOn ? Palette.accentFill : Palette.bar)
-                .frame(width: 34, height: 20)
-                .overlay(alignment: configuration.isOn ? .trailing : .leading) {
-                    Circle().fill(.white)
-                        .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
-                        .padding(2)
-                }
-                .opacity(isEnabled ? 1 : 0.45)
-                .animation(.snappy(duration: 0.18), value: configuration.isOn)
+        Button { configuration.isOn.toggle() } label: {
+            HStack(spacing: 12) {
+                configuration.label
+                Spacer(minLength: 0)
+                Capsule()
+                    .fill(configuration.isOn ? Palette.accentFill : Palette.bar)
+                    .frame(width: 34, height: 20)
+                    .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+                        Circle().fill(.white)
+                            .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
+                            .padding(2)
+                    }
+                    .opacity(isEnabled ? 1 : 0.45)
+                    .animation(.snappy(duration: 0.18), value: configuration.isOn)
+            }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
-        .onTapGesture { if isEnabled { configuration.isOn.toggle() } }
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isToggle)
         .accessibilityValue(configuration.isOn ? "On" : "Off")
-        .accessibilityAction { if isEnabled { configuration.isOn.toggle() } }
     }
 }
 
-/// The canvas's checkbox: 16 pt, the accent fill with a check when on, a ring when off.
+/// The canvas's checkbox box: 16 pt, the accent fill with a check when on, a ring when off.
+struct SheetCheckbox: View {
+    let isOn: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4, style: .continuous)
+            .fill(isOn ? Palette.accentFill : .clear)
+            .overlay {
+                if isOn {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.onAccent)
+                } else {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Palette.ring, lineWidth: 1.5)
+                }
+            }
+            .frame(width: 16, height: 16)
+            .accessibilityHidden(true)
+    }
+}
+
+/// A checkbox row: the box, then the label. A button underneath, so Tab reaches it and Space flips it.
 struct SheetCheckboxStyle: ToggleStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(configuration.isOn ? Palette.accentFill : .clear)
-                .overlay {
-                    if configuration.isOn {
-                        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.onAccent)
-                    } else {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Palette.ring, lineWidth: 1.5)
-                    }
-                }
-                .frame(width: 16, height: 16)
-            configuration.label
+        Button { configuration.isOn.toggle() } label: {
+            HStack(spacing: 12) {
+                SheetCheckbox(isOn: configuration.isOn)
+                configuration.label
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .opacity(isEnabled ? 1 : 0.6)
-        .contentShape(Rectangle())
-        .onTapGesture { if isEnabled { configuration.isOn.toggle() } }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isToggle)
         .accessibilityValue(configuration.isOn ? "On" : "Off")
-        .accessibilityAction { if isEnabled { configuration.isOn.toggle() } }
     }
 }
 

@@ -65,7 +65,6 @@ struct VoiceNamingView: View {
                     dismiss()
                 }
                 .buttonStyle(.sheetSecondary)
-                .keyboardShortcut(.cancelAction)
                 Button("Save names") {
                     saveSkips()
                     if names.values.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
@@ -79,6 +78,11 @@ struct VoiceNamingView: View {
             }
         }
         .mossadSheet(width: 640)
+        // Esc closes and saves nothing; Later is the button that keeps the skips. A see-through button, because a
+        // hidden one takes no shortcut.
+        .background {
+            Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).opacity(0).accessibilityHidden(true)
+        }
         .task { await measureSamples() }
     }
 

@@ -140,7 +140,7 @@ struct ShareSheet: View {
 
             SheetFooter {
                 if link != nil {
-                    Button("Stop sharing") { confirmStop = true }
+                    Button("Stop sharing", role: .destructive) { confirmStop = true }
                         .buttonStyle(.sheetDestructive).disabled(working)
                 }
             } trailing: {
@@ -206,13 +206,13 @@ struct ShareSheet: View {
     }
 }
 
-/// One part to share: what it is, a line on what it holds, and a switch. Dimmed when it cannot be shared.
+/// One part to share: what it is, a line on what it holds, and a switch. The plain button underneath dims it when
+/// it cannot be shared.
 private struct PartRow: View {
     let title: String
     let detail: String
     let symbol: String
     let on: Binding<Bool>
-    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Toggle(isOn: on) {
@@ -225,7 +225,6 @@ private struct PartRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .opacity(isEnabled ? 1 : 0.5)
         }
         .toggleStyle(SheetSwitchStyle())
         .padding(.vertical, 11)
