@@ -114,6 +114,14 @@ struct MeetingsView: View {
             if ProcessInfo.processInfo.environment["MOSSAD_TRANSCRIBE_AGAIN"] != nil, preview {
                 controller.transcribingAgainCallID = controller.meetings.first?.id
             }
+            // Development hooks for screenshots: MOSSAD_MERGE and MOSSAD_SHARE open those sheets for the selected
+            // meeting (MOSSAD_MEETING picks it).
+            if preview, ProcessInfo.processInfo.environment["MOSSAD_MERGE"] != nil {
+                merging = controller.meetings.first { $0.id == controller.selectedMeetingID }
+            }
+            if preview, ProcessInfo.processInfo.environment["MOSSAD_SHARE"] != nil {
+                controller.sharingCallID = controller.selectedMeetingID
+            }
             // Development hook for screenshots: MOSSAD_MEETINGS_MODE=split|calendar picks the mode.
             if preview, let m = ProcessInfo.processInfo.environment["MOSSAD_MEETINGS_MODE"].flatMap({ Mode(rawValue: $0.capitalized) }) {
                 previewMode = m
@@ -390,37 +398,67 @@ private struct MergeSheet: View {
             .prefix(12).map { $0 }
     }
 
+    /// The meeting everything joins into: the earliest of the ones picked.
+    private var earliest: String {
+        ([record] + controller.meetings.filter { chosen.contains($0.id) }).min { $0.start < $1.start }?.id ?? record.id
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Merge with “\(record.title)”").font(.system(size: 16, weight: .bold))
-            Text("Mossad joins the audio and the transcripts into one meeting, keeps the speaker names, and writes a new summary and note. The other meetings are removed.")
-                .font(.system(size: 13)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            List(candidates, id: \.id) { r in
-                Toggle(isOn: Binding(get: { chosen.contains(r.id) }, set: { if $0 { chosen.insert(r.id) } else { chosen.remove(r.id) } })) {
-                    HStack(spacing: 8) {
-                        PlatformDot(platform: r.platform)
-                        Text(r.title).fontWeight(.medium).lineLimit(1)
-                        Spacer()
-                        Text("\(dayWord(r.start)) \(r.start.formatted(date: .omitted, time: .shortened)) · \(r.lengthText)")
-                            .foregroundStyle(.secondary).monospacedDigit()
+        VStack(alignment: .leading, spacing: 0) {
+            SheetHeader(symbol: "arrow.triangle.merge", title: "Merge with “\(record.title)”",
+                        subtitle: "Pick the parts of one meeting. Mossad joins them into the earliest one.")
+            VStack(alignment: .leading, spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        row(record, locked: true)
+                        ForEach(candidates, id: \.id) { r in row(r, locked: false) }
                     }
                 }
-                .toggleStyle(.checkbox)
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: 330)
+                Text("Audio, transcripts, and speaker names are joined, and Mossad writes one new summary and note. \(chosen.count > 1 ? "The other meetings are" : "The other meeting is") removed from the list.")
+                    .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 12)
             }
-            .frame(height: 260)
-            HStack {
-                Spacer()
+            .padding(EdgeInsets(top: 8, leading: 22, bottom: 14, trailing: 22))
+            SheetFooter {
                 Button("Cancel") { dismiss() }
-                Button(chosen.count > 1 ? "Merge \(chosen.count + 1) meetings" : "Merge") {
+                    .buttonStyle(.sheetSecondary)
+                    .keyboardShortcut(.cancelAction)
+                Button(chosen.isEmpty ? "Merge" : "Merge \(chosen.count + 1) meetings") {
                     controller.mergeMeetings([record.id] + Array(chosen))
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.sheetPrimary)
                 .keyboardShortcut(.defaultAction)
                 .disabled(chosen.isEmpty)
             }
         }
-        .padding(20)
-        .frame(width: 520)
+        .mossadSheet(width: 560)
+    }
+
+    /// The meeting the sheet opened from is always part of the merge, so its box stays checked.
+    private func row(_ r: CallRecord, locked: Bool) -> some View {
+        Toggle(isOn: Binding(get: { locked || chosen.contains(r.id) },
+                             set: { if locked { return }; if $0 { chosen.insert(r.id) } else { chosen.remove(r.id) } })) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 8) {
+                    Text(r.title).fontWeight(.medium).lineLimit(1)
+                    if r.id == earliest, !chosen.isEmpty {
+                        Text("Joins into this one")
+                            .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.secondary)
+                            .padding(.horizontal, 8).frame(height: 18)
+                            .background(Palette.fill, in: Capsule())
+                    }
+                }
+                Text("\(dayWord(r.start)), \((r.start..<max(r.end, r.start)).formatted(.interval.hour().minute())) · \(r.lengthText)")
+                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).monospacedDigit()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(SheetCheckboxStyle())
+        .padding(.vertical, 10)
+        .hairline(.bottom)
     }
 }
