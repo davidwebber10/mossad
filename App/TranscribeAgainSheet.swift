@@ -19,65 +19,113 @@ struct TranscribeAgainSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "waveform.badge.magnifyingglass").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
-                    .frame(width: 38, height: 38).background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Transcribe “\(record.title)” again").font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                    Text("\(record.start.formatted(date: .abbreviated, time: .shortened)) · \(record.lengthText)").foregroundStyle(.secondary)
-                }
-            }
-            .padding(18)
-            Divider()
+            SheetHeader(symbol: "waveform", title: "Transcribe “\(record.title)” again",
+                        subtitle: "\(dayWord(record.start)), \(record.start.formatted(date: .omitted, time: .shortened)) · \(record.lengthText) · \(record.platform.displayName)")
             VStack(alignment: .leading, spacing: 14) {
                 Text("Mossad sends the audio to \(controller.transcriptionProvider.displayName) again, names the voices it knows, and writes a new summary and note.")
+                    .foregroundStyle(Palette.secondary)
+                    .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 0) {
                     Toggle(isOn: $knowsCount.animation(.snappy)) {
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("I know how many people spoke").font(.system(size: 12, weight: .medium))
-                            Text("The exact number gives the best split between voices.").font(.system(size: 11)).foregroundStyle(.secondary)
+                            Text("I know how many people spoke").fontWeight(.medium)
+                            Text("The exact number gives the best split between voices.")
+                                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
                         }
                     }
-                    .toggleStyle(.switch)
+                    .toggleStyle(SheetSwitchStyle())
                     if knowsCount {
-                        Stepper(value: $count, in: 1...30) {
-                            Text("\(count) \(count == 1 ? "person" : "people")\(room ? " in the room" : " on the call, you included")")
-                                .monospacedDigit()
+                        HStack(spacing: 10) {
+                            Text("\(count) \(count == 1 ? "person" : "people")").fontWeight(.semibold).monospacedDigit()
+                            Text(room ? "in the room" : "on the call, you included").foregroundStyle(Palette.secondary)
+                            Spacer()
+                            CountStepper(count: $count, range: 1...30)
                         }
-                        .padding(.leading, 2)
+                        .padding(.top, 12)
+                        .hairline(.top)
+                        .padding(.top, 12)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityValue("\(count)")
+                        .accessibilityAdjustableAction { direction in
+                            switch direction {
+                            case .increment: count = min(30, count + 1)
+                            case .decrement: count = max(1, count - 1)
+                            @unknown default: break
+                            }
+                        }
                     }
                 }
-                .padding(12)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.separator))
+                .sheetCard(horizontal: 14, vertical: 12)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("About \(Pricing.transcribeAgainEstimate(record, tracks: tracks).formatted(.currency(code: "USD")))", systemImage: "dollarsign.circle")
-                    Label("Voice names you gave stay, through the voice library.", systemImage: "person.wave.2")
-                    Label("You can go back to the current transcript from the More menu.", systemImage: "arrow.uturn.backward")
-                }
-                .font(.system(size: 11)).foregroundStyle(.secondary)
-
-                HStack {
-                    Spacer()
-                    Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                    Button("Transcribe again") {
-                        controller.transcribeAgain(record.id, speakers: knowsCount ? count : nil)
-                        dismiss()
+                    note("dollarsign.circle") {
+                        Text("About \(Pricing.transcribeAgainEstimate(record, tracks: tracks).formatted(.currency(code: "USD")))")
+                            .fontWeight(.semibold).foregroundStyle(Palette.ink)
                     }
-                    .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    note("person.2") { Text("Voice names you gave stay, through the voice library.") }
+                    note("arrow.uturn.backward") { Text("Restore previous transcript stays in the More menu.") }
                 }
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.secondary)
             }
-            .font(.system(size: 12))
-            .padding(18)
+            .padding(.horizontal, 22).padding(.vertical, 16)
+            SheetFooter {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.sheetSecondary)
+                    .keyboardShortcut(.cancelAction)
+                Button("Transcribe again") {
+                    controller.transcribeAgain(record.id, speakers: knowsCount ? count : nil)
+                    dismiss()
+                }
+                .buttonStyle(.sheetPrimary)
+                .keyboardShortcut(.defaultAction)
+            }
         }
-        .frame(width: 440)
-        .background(Theme.background)
+        .mossadSheet(width: 520)
         .onAppear {
             // Start from the number of voices this transcript found, within reason.
             count = max(2, min(30, Set(record.utterances.map(\.speakerKey)).count))
+            // Development hook for screenshots: MOSSAD_TRANSCRIBE_AGAIN=count shows the count turned on.
+            if CommandLine.arguments.contains("--ui-preview"), ProcessInfo.processInfo.environment["MOSSAD_TRANSCRIBE_AGAIN"] == "count" {
+                knowsCount = true
+            }
         }
+    }
+
+    private func note<Content: View>(_ symbol: String, @ViewBuilder _ text: () -> Content) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(Palette.tertiaryMark).frame(width: 16)
+                .accessibilityHidden(true)
+            text()
+        }
+    }
+}
+
+/// Fewer and More on one fill, with a hairline between them.
+private struct CountStepper: View {
+    @Binding var count: Int
+    let range: ClosedRange<Int>
+
+    var body: some View {
+        HStack(spacing: 0) {
+            step("minus", "Fewer", enabled: count > range.lowerBound) { count -= 1 }
+            Hairline(axis: .vertical).frame(height: 26)
+            step("plus", "More", enabled: count < range.upperBound) { count += 1 }
+        }
+        .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func step(_ symbol: String, _ label: String, enabled: Bool, run: @escaping () -> Void) -> some View {
+        Button(action: run) {
+            Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
+                .frame(width: 30, height: 26).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Palette.ink)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityLabel(label)
     }
 }
