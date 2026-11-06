@@ -1,76 +1,156 @@
 import MossadCore
 import SwiftUI
 
-extension Commitment.Status {
-    var tint: Color {
-        switch self {
-        case .overdue: .red
-        case .dueToday: .orange
-        case .upcoming: .secondary
-        case .noDate: .secondary
-        case .done: .green
-        }
-    }
-}
-
-/// One commitment: a circle to mark it done, what it is, who it was for and where, and when it is due.
-struct CommitmentRow: View {
-    let commitment: Commitment
-    /// Off inside a meeting, where the meeting is already clear.
-    var showSource = true
-    let toggleDone: () -> Void
-
-    var body: some View {
-        let status = commitment.status()
-        HStack(alignment: .top, spacing: 10) {
-            Button(action: toggleDone) {
-                Image(systemName: commitment.done == nil ? "circle" : "checkmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(commitment.done == nil ? Color.secondary : Color.green)
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(commitment.done == nil ? "Mark done" : "Mark not done")
-            .sensoryFeedback(.success, trigger: commitment.done != nil)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(commitment.text)
-                    .strikethrough(commitment.done != nil)
-                    .foregroundStyle(commitment.done == nil ? Color.primary : Color.secondary)
-                if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-            }
-            Spacer(minLength: 8)
-            if let due = commitment.due, commitment.done == nil {
-                Text(dueText(due, status))
-                    .font(.caption.weight(.semibold)).monospacedDigit()
-                    .foregroundStyle(status.tint)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(status.tint.opacity(status == .upcoming ? 0.1 : 0.14), in: Capsule())
-            }
-        }
-        .contentShape(Rectangle())
+extension Commitment {
+    /// Whole days past the due date: "15 days late".
+    func daysLate(now: Date = Date(), calendar: Calendar = .current) -> Int {
+        guard let due else { return 0 }
+        return calendar.dateComponents([.day], from: calendar.startOfDay(for: due), to: calendar.startOfDay(for: now)).day ?? 0
     }
 
-    private var detail: String {
-        var parts: [String] = []
-        if let to = commitment.to { parts.append("Promised to \(to)") }
-        if !showSource {
-            return parts.joined(separator: " · ")
-        } else if let title = commitment.callTitle {
-            parts.append("\(title), \(commitment.madeAt.formatted(.dateTime.month(.abbreviated).day()))")
-        } else {
-            parts.append("Added \(commitment.created.formatted(.dateTime.month(.abbreviated).day()))")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func dueText(_ due: Date, _ status: Commitment.Status) -> String {
-        switch status {
+    /// "15 days late", "Today", "Tomorrow", "Fri, Nov 8"; nil without a date or once done.
+    var dueText: String? {
+        guard let due, done == nil else { return nil }
+        switch status() {
         case .overdue:
-            let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: due), to: Calendar.current.startOfDay(for: Date())).day ?? 0
+            let days = daysLate()
             return days == 1 ? "1 day late" : "\(days) days late"
         case .dueToday: return "Today"
         default:
             return Calendar.current.isDateInTomorrow(due) ? "Tomorrow" : due.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        }
+    }
+
+    /// "Weekly 1:1, Oct 21", or "Added Oct 21" for one added by hand.
+    var sourceText: String {
+        let day = (callTitle == nil ? created : madeAt).formatted(.dateTime.month(.abbreviated).day())
+        return callTitle.map { "\($0), \(day)" } ?? "Added \(day)"
+    }
+}
+
+/// One commitment as the canvas draws it: a ring to mark it done (accent when late), what it is, who it was for
+/// and where, and something on the right (when it is due, or the page's own date button).
+struct CommitmentRow<Trailing: View>: View {
+    let commitment: Commitment
+    /// Off inside a meeting, where the meeting is already clear.
+    var showSource = true
+    /// Off under a person's group heading, where the person is already clear.
+    var showPerson = true
+    /// What a click on the text does: the Mac opens the meeting at the moment. Nil leaves the text inert.
+    var open: (() -> Void)?
+    let toggleDone: () -> Void
+    @ViewBuilder var trailing: Trailing
+
+    @ScaledMetric(relativeTo: .body) private var textSize: CGFloat = CommitmentRowMetrics.text
+    @ScaledMetric(relativeTo: .callout) private var detailSize: CGFloat = CommitmentRowMetrics.detail
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            CommitmentRing(commitment: commitment, toggle: toggleDone)
+            if let open {
+                Button(action: open) { content.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+            } else {
+                content
+            }
+            trailing
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(commitment.text)
+                .font(.system(size: textSize, weight: .medium))
+                .lineSpacing(textSize * 0.1)
+                .strikethrough(commitment.done != nil, color: Palette.secondary)
+                .foregroundStyle(commitment.done == nil ? Palette.ink : Palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if hasDetail {
+                HStack(spacing: 6) {
+                    if showPerson, let to = commitment.to {
+                        Circle().fill(PersonMark.color(for: to)).frame(width: 7, height: 7).accessibilityHidden(true)
+                    }
+                    Text(detail).lineLimit(1).truncationMode(.middle)
+                }
+                .font(.system(size: detailSize))
+                .foregroundStyle(Palette.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var hasDetail: Bool { !detail.isEmpty }
+
+    private var detail: String {
+        var parts: [String] = []
+        if showPerson, let to = commitment.to { parts.append(to) }
+        if showSource { parts.append(commitment.sourceText) }
+        return parts.joined(separator: " · ")
+    }
+}
+
+extension CommitmentRow where Trailing == CommitmentDue {
+    /// With the due date on the right, as a meeting shows its own commitments.
+    init(commitment: Commitment, showSource: Bool = true, toggleDone: @escaping () -> Void) {
+        self.init(commitment: commitment, showSource: showSource, toggleDone: toggleDone) { CommitmentDue(commitment: commitment) }
+    }
+}
+
+enum CommitmentRowMetrics {
+    #if os(iOS)
+    static let text: CGFloat = 15
+    static let detail: CGFloat = 13
+    #else
+    static let text: CGFloat = 14
+    static let detail: CGFloat = 12
+    #endif
+}
+
+/// The ring that marks a commitment done: accent when it is late, a quiet ring otherwise, a green check once done.
+struct CommitmentRing: View {
+    let commitment: Commitment
+    let toggle: () -> Void
+    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 16
+
+    var body: some View {
+        let done = commitment.done != nil
+        Button(action: toggle) {
+            ZStack {
+                if done {
+                    Image(systemName: "checkmark.circle.fill")
+                        .resizable()
+                        .foregroundStyle(Palette.ok)
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    Circle().strokeBorder(commitment.status() == .overdue ? Palette.accentFill : Palette.ring, lineWidth: 1.5)
+                }
+            }
+            .frame(width: size, height: size)
+            .padding(3)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(-3)
+        .padding(.top, 1)
+        .animation(.snappy(duration: 0.2), value: done)
+        .accessibilityLabel(done ? "Mark not done" : "Mark done")
+        .sensoryFeedback(.success, trigger: done)
+    }
+}
+
+/// When a commitment is due, on the right of its row: late in the accent, the rest in secondary.
+struct CommitmentDue: View {
+    let commitment: Commitment
+    @ScaledMetric(relativeTo: .callout) private var size: CGFloat = CommitmentRowMetrics.detail
+
+    var body: some View {
+        if let text = commitment.dueText {
+            let late = commitment.status() == .overdue
+            Text(text)
+                .font(.system(size: size + (late ? 0.5 : 0), weight: late ? .semibold : .regular)).monospacedDigit()
+                .foregroundStyle(late ? Palette.accent : Palette.secondary)
+                .fixedSize()
+                .padding(.top, 1)
         }
     }
 }

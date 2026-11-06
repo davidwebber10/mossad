@@ -37,7 +37,9 @@ struct MainWindow: View {
         }
         .onAppear {
             // Only a new install: someone with meetings already set Mossad up.
+            // A preview opened on another page reads its meetings after this runs, so it never welcomes unasked.
             welcoming = !UserDefaults.standard.bool(forKey: "welcomeDone") && controller.meetings.isEmpty
+                && !CommandLine.arguments.contains("--ui-preview")
                 || CommandLine.arguments.contains("--welcome")
         }
     }

@@ -53,7 +53,7 @@ struct MeetingsView: View {
             }
             // Its own field, not `.searchable`: macOS always puts the system search last, and the canvas puts it
             // between the view toggle and the meeting's own controls.
-            ToolbarItem { MeetingSearchField(query: $controller.meetingQuery) }
+            ToolbarItem { ToolbarSearchField(prompt: "Search titles and transcripts", query: $controller.meetingQuery) }
             if mode == .split || opened != nil {
                 ToolbarItemGroup {
                     let record = opened.flatMap { id in controller.meetings.first { $0.id == id } } ?? selected
@@ -195,15 +195,16 @@ struct MeetingsView: View {
     }
 }
 
-/// "Search titles and transcripts" in the toolbar's glass; ⌘F focuses it and Esc clears it.
-private struct MeetingSearchField: View {
+/// A page's search ("Search titles and transcripts") in the toolbar's glass; ⌘F focuses it and Esc clears it.
+struct ToolbarSearchField: View {
+    let prompt: String
     @Binding var query: String
     @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Palette.secondary).accessibilityHidden(true)
-            TextField("Search titles and transcripts", text: $query)
+            TextField(prompt, text: $query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .focused($focused)
