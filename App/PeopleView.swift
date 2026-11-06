@@ -29,7 +29,7 @@ struct PeopleView: View {
 
     private var results: [VoiceProfile] {
         let q = query.trimmingCharacters(in: .whitespaces)
-        let sorted = sort == "name" ? profiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } : profiles
+        let sorted = (PeopleSort(rawValue: sort) ?? .recent).order(profiles, stats: stats)
         guard !q.isEmpty else { return sorted }
         return sorted.filter { $0.name.localizedCaseInsensitiveContains(q) || ($0.email?.localizedCaseInsensitiveContains(q) ?? false) }
     }
@@ -193,11 +193,7 @@ struct PeopleView: View {
         let records = controller.meetings
         let computed = await Task.detached(priority: .utility) { PersonStatistics.compute(records) }.value
         stats = computed
-        profiles = controller.library.profiles.sorted { a, b in
-            if a.isOwner != b.isOwner { return a.isOwner }
-            let la = computed[a.name]?.lastHeard ?? .distantPast, lb = computed[b.name]?.lastHeard ?? .distantPast
-            return la != lb ? la > lb : a.name < b.name
-        }
+        profiles = PeopleSort.recent.order(controller.library.profiles, stats: computed)
         loaded = true
         if let wanted = controller.personToOpen {
             controller.personToOpen = nil
