@@ -90,6 +90,7 @@ public actor Pipeline {
                 case .transcribed: try await identify(&r, dir: dir)
                 case .identified:
                     guard await summarize(&r) else {
+                        carryOwnerEdits(into: &r, dir: dir)
                         try store(r, dir: dir)
                         return
                     }
@@ -106,6 +107,7 @@ public actor Pipeline {
             // Not the call's fault: wait for the key without using up attempts or a backoff delay.
             Log.error("Processing \(id) waits for an API key")
             r.failureReason = Self.failureReason(error)
+            carryOwnerEdits(into: &r, dir: dir)
             try? store(r, dir: dir)
         } catch {
             Log.error("Processing \(id) failed at \(r.status.rawValue): \(error)")
@@ -116,6 +118,7 @@ public actor Pipeline {
                 r.status = .failed
                 Log.error("Gave up on \(id) after \(r.attempts) attempts")
             }
+            carryOwnerEdits(into: &r, dir: dir)
             try? store(r, dir: dir)
         }
     }
@@ -249,6 +252,7 @@ public actor Pipeline {
         for (track, result) in [(Track.me, meResult), (.them, themResult)] {
             if case .success(let u) = result { trackChanged(r.id, track, u.isEmpty ? .skipped : .done) }
         }
+        carryOwnerEdits(into: &r, dir: dir)
         try store(r, dir: dir)
         transcribing.remove(r.id)
         detail(r.id, "Joining the two tracks")

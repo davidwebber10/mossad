@@ -272,6 +272,25 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(note.contains("Dana and Sam sync"), note)
     }
 
+    func testOwnerEditsSurviveAStepThatFails() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.markers = [TranscriptMarker(offset: 52, text: "★ Bookmarked at 2:31 PM", isBookmark: true)]
+        try r.save(to: paths.callDirectory(id))
+        transcriber.error = Boom()
+        transcriber.delay = .milliseconds(400)
+        let p = pipeline()
+        let run = Task { await p.process(id) }
+        try await Task.sleep(for: .milliseconds(150))
+        await p.setBookmarkNote(callID: id, offset: 52, note: "Send Sam the plan")
+        await p.setTitle(callID: id, "Dana and Sam sync")
+        await run.value
+        let failed = try load(id)
+        XCTAssertEqual(failed.attempts, 1)
+        XCTAssertEqual(failed.markers.first?.note, "Send Sam the plan")
+        XCTAssertEqual(failed.customTitle, "Dana and Sam sync")
+    }
+
     func testTheSummaryGetsTheBookmarkNotes() async throws {
         let id = try makeRecord()
         var r = try load(id)
