@@ -23,7 +23,10 @@ struct MainWindow: View {
             }
         }
         .background { WindowBackdrop() }
-        .frame(minWidth: 980, minHeight: 600)
+        // The window's contentMinSize sets the limit. A minimum height here would apply below the toolbar, so it
+        // asked for 600 pt plus the toolbar and the root grew past the window, centered, under the title bar.
+        // Without any frame the content's own minimum held the window at 820 pt. So: any height, from the top.
+        .frame(minWidth: 980, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
         .environment(\.animationsActive, controller.windowVisible)
         .sheet(isPresented: $welcoming) { WelcomeView() }
         // Development hook for screenshots: `--welcome-inline` draws the welcome in the window, not in a sheet.
@@ -36,10 +39,15 @@ struct MainWindow: View {
             // Development hook for screenshots: MOSSAD_WINDOW_HEIGHT=<points> sizes a preview's window.
             if CommandLine.arguments.contains("--ui-preview"),
                let h = ProcessInfo.processInfo.environment["MOSSAD_WINDOW_HEIGHT"].flatMap(Double.init) {
-                DispatchQueue.main.async {
-                    for w in NSApp.windows where w.isVisible && w.frame.width > 600 {
-                        w.setContentSize(NSSize(width: w.frame.width, height: h))
-                        w.center()
+                // Again after the window restores its saved frame.
+                for delay in [0.5, 2.0, 4.0, 6.0] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        for w in NSApp.windows where w.isVisible && w.frame.width > 600 {
+                            var f = w.frame
+                            f.origin.y += f.height - h
+                            f.size.height = h
+                            w.setFrame(f, display: true)
+                        }
                     }
                 }
             }

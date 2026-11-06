@@ -29,9 +29,16 @@ struct MeetingDetailView: View {
         _player = StateObject(wrappedValue: AudioPlayer(callDirectory: Paths.live.callDirectory(record.id)))
     }
 
+    /// Names and emails of the library, so a rename or a new email in People reaches the open meeting.
+    private var profilesKey: Int {
+        var h = Hasher()
+        for p in controller.library.profiles { h.combine(p.name); h.combine(p.email) }
+        return h.finalize()
+    }
+
     /// Changes only when the words, the names, or the people library do, not on each tick of the player.
     private var cacheKey: String {
-        "\(record.utterances.count)|\(controller.ownerName)|\(controller.library.profiles.count)|"
+        "\(record.utterances.count)|\(controller.ownerName)|\(profilesKey)|"
             + record.speakerNames.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
             + "|" + record.attendees.joined(separator: ",")
     }

@@ -65,3 +65,18 @@ Captures (/private/tmp/claude-501/redesign-shots/):
 - task9-fix-manytags-light.png: 13 tags wrap to a second meta line. The title, length, and player stay in place.
 
 Found while capturing (not from this task): at a 652 pt window the whole window's content is laid out about 64 pt taller than the window and centered. This happens on every page, the Log page too, so the sidebar items move up under the title bar. Some view in the shell (Task 8) seems to need more than the declared 600 pt minimum. The detail no longer adds to this, because it takes its proposed height.
+
+## Fix report (review round 2)
+
+Changes:
+1. Window height overflow (`App/MainWindow.swift`): the root's `.frame(minWidth: 980, minHeight: 600)` is replaced by `.frame(minWidth: 980, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)`. The window's `contentMinSize` (980 × 600) still sets the limit. I first removed the frame completely, as suggested. Then the content's own minimum height held the window at 820 pt: a 600 pt resize ended at 820. A flexible frame aligned to the top lets the window reach 600 pt, and the sidebar stays below the title bar on every page.
+2. Detail cache key: it now uses a hash of every voice profile's name and email, not the profile count. A rename or an email change in People now updates the open meeting's speakers and Invited list.
+- The `MOSSAD_WINDOW_HEIGHT` hook now resizes the window at 0.5, 2, 4, and 6 s, so it also works after the window restores its saved frame.
+
+Builds: Mac Debug build succeeds. `swift test` 611 tests, 0 failures (17 skipped). SharedUI did not change in this round.
+
+Captures (/private/tmp/claude-501/redesign-shots/):
+- task9-fix2-meetings-600-dark.png: Meetings at 600 pt. The sidebar is below the title bar. The detail shows 6 lanes and "+1 more voice · scroll", then the transcript.
+- task9-fix2-log-600-dark.png: Log at 600 pt. The sidebar is below the title bar.
+
+Remaining (Task 8): at 600 pt the sidebar's own content is taller than the window, so its permissions card falls below the bottom edge. The card is cut off; it does not overlap anything. The sidebar needs to compress or scroll at that height.
