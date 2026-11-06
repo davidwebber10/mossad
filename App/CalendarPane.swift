@@ -41,9 +41,9 @@ struct CalendarControls: View {
         HStack(spacing: 6) {
             navButton("chevron.left") { state.move(-1) }.accessibilityLabel("Previous")
             Button("Today") { state.anchor = Date() }
-                .font(.system(size: 12, weight: .medium)).buttonStyle(.bordered).controlSize(.small)
+                .font(.system(size: 12, weight: .medium))
             navButton("chevron.right") { state.move(1) }.accessibilityLabel("Next")
-            Text(state.title).font(.system(size: 13, weight: .semibold)).padding(.leading, 6).fixedSize()
+            Text(state.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink).padding(.horizontal, 6).fixedSize()
             Picker("Scope", selection: $state.scope) {
                 ForEach(CalendarState.Scope.allCases, id: \.self) { Text($0.rawValue) }
             }
@@ -53,10 +53,8 @@ struct CalendarControls: View {
 
     private func navButton(_ symbol: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).frame(width: 26, height: 26)
-                .background(Theme.field, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -92,13 +90,12 @@ private struct HourGrid: View {
     @State private var position = ScrollPosition()
 
     private let hour: CGFloat = 60
-    private let gutter: CGFloat = 52
+    private let gutter: CGFloat = 44
     private var isDay: Bool { days.count == 1 }
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
             ScrollView {
                     GeometryReader { g in
                         let columnWidth = (g.size.width - gutter - 12) / CGFloat(days.count)
@@ -137,7 +134,7 @@ private struct HourGrid: View {
             HStack(spacing: 8) {
                 dayLabel(day)
                 Text("\(dayRecords.count) \(dayRecords.count == 1 ? "call" : "calls") · \(durationText(total)) recorded")
-                    .font(.system(size: 12)).foregroundStyle(.secondary).padding(.leading, 6)
+                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.leading, 6)
                 Spacer()
             }
             .padding(.leading, gutter + 10).padding(.vertical, 8)
@@ -145,25 +142,26 @@ private struct HourGrid: View {
             HStack(spacing: 0) {
                 Color.clear.frame(width: gutter, height: 1)
                 ForEach(days, id: \.self) { day in
-                    dayLabel(day).frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 8).padding(.vertical, 8)
-                        .overlay(alignment: .leading) { Rectangle().fill(Theme.separator).frame(width: 1) }
+                    dayLabel(day).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.bottom, Space.s)
+                        .hairline()
                 }
                 Color.clear.frame(width: 12, height: 1)
             }
+            .padding(.top, Space.s)
             .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func dayLabel(_ day: Date) -> some View {
         let today = state.calendar.isDateInToday(day)
-        return HStack(spacing: 6) {
-            Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                .font(.system(size: 11, weight: .semibold)).foregroundStyle(today ? Theme.recording : Color.secondary.opacity(0.7))
+        // Today is the one day the owner acts on, so it takes the accent; the rest stay quiet.
+        return HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(day.formatted(.dateTime.weekday(.abbreviated)))
+                .textRole(.label)
+                .foregroundStyle(today ? Palette.accent : Palette.tertiary)
             Text("\(state.calendar.component(.day, from: day))")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(today ? .white : .primary)
-                .frame(minWidth: 22, minHeight: 22)
-                .background(today ? Theme.recording : .clear, in: Circle())
+                .font(.system(size: 13, weight: today ? .semibold : .regular)).monospacedDigit()
+                .foregroundStyle(today ? Palette.accent : Palette.ink)
         }
     }
 
@@ -171,14 +169,15 @@ private struct HourGrid: View {
         Canvas { context, size in
             for h in 0...24 {
                 let y = CGFloat(h) * hour
-                context.fill(Path(CGRect(x: gutter, y: y, width: size.width - gutter, height: 1)), with: .color(Theme.separator))
+                context.fill(Path(CGRect(x: gutter, y: y, width: size.width - gutter - 12, height: 1)), with: .color(Palette.hairline))
                 if h > 0, h < 24 {
                     let label = Calendar.current.date(bySettingHour: h, minute: 0, second: 0, of: Date())!.formatted(.dateTime.hour())
-                    context.draw(Text(label).font(.system(size: 10)).foregroundStyle(.tertiary), at: CGPoint(x: gutter - 8, y: y - 6), anchor: .trailing)
+                    context.draw(Text(label).font(.system(size: 10.5)).monospacedDigit().foregroundStyle(Palette.tertiary),
+                                 at: CGPoint(x: gutter - 10, y: y), anchor: .trailing)
                 }
             }
             for i in 0..<days.count {
-                context.fill(Path(CGRect(x: gutter + CGFloat(i) * columnWidth, y: 0, width: 1, height: size.height)), with: .color(Theme.separator))
+                context.fill(Path(CGRect(x: gutter + CGFloat(i) * columnWidth, y: 0, width: 1, height: size.height)), with: .color(Palette.hairline))
             }
         }
     }
@@ -187,17 +186,17 @@ private struct HourGrid: View {
         let dayStart = state.calendar.startOfDay(for: day)
         let end = r.status == .recording ? Date() : item.end
         let top = CGFloat(item.start.timeIntervalSince(dayStart) / 60)
-        let height = max(18, CGFloat(end.timeIntervalSince(item.start) / 60))
-        let inset: CGFloat = isDay ? 6 : 3
+        let height = max(20, CGFloat(end.timeIntervalSince(item.start) / 60))
+        let inset: CGFloat = 4
         let slot = (width - inset * 2) / CGFloat(max(item.columns, 1))
         let active = hovered == r.id
         return Button { open(r, state.title) } label: {
-            eventLabel(r, active: active, height: height)
-                .padding(.horizontal, isDay ? 12 : 7).padding(.vertical, isDay ? 7 : 4)
-                .frame(width: slot - 2, height: height, alignment: .topLeading)
+            eventLabel(r, height: height)
+                .padding(.leading, isDay ? 12 : 8).padding(.trailing, isDay ? 12 : 7).padding(.vertical, isDay ? 6 : 3)
+                .frame(width: slot - 2, height: height - 1, alignment: .topLeading)
                 .clipped()
-                .background(active ? Color.accentColor : Theme.surface, in: RoundedRectangle(cornerRadius: isDay ? 9 : 7, style: .continuous))
-                .shadow(color: .black.opacity(active ? 0.2 : 0.12), radius: active ? 8 : 1.5, y: active ? 3 : 1)
+                .background(active ? Palette.selection : Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         }
         .buttonStyle(.plain)
         .opacity(matches.contains(r.id) ? 1 : 0.3)
@@ -206,48 +205,72 @@ private struct HourGrid: View {
         .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
     }
 
+    /// "55 min", "32 min · Needs names": the needs-names word is accent text, never a badge.
     @ViewBuilder
-    private func eventLabel(_ r: CallRecord, active: Bool, height: CGFloat) -> some View {
-        let meta = r.status == .recording ? "Recording" : [r.lengthText, r.badge.map(badgeWord)].compactMap { $0 }.joined(separator: " · ")
+    private func meta(_ r: CallRecord) -> some View {
+        HStack(spacing: 0) {
+            if r.status == .recording {
+                StatusDot(color: Palette.recording, size: 6, pulsing: true).padding(.trailing, 4)
+                Text("Recording").foregroundStyle(Palette.recording)
+            } else {
+                Text(r.lengthText).foregroundStyle(Palette.secondary)
+                switch r.badge {
+                case .needsNames:
+                    Text(" · ").foregroundStyle(Palette.secondary)
+                    Text("Needs names").fontWeight(.medium).foregroundStyle(Palette.accent)
+                case .processing:
+                    Text(" · Processing").foregroundStyle(Palette.secondary)
+                case .failed:
+                    Text(" · ").foregroundStyle(Palette.secondary)
+                    Text("Failed").foregroundStyle(Palette.recording)
+                default:
+                    EmptyView()
+                }
+            }
+        }
+        .lineLimit(1)
+    }
+
+    @ViewBuilder
+    private func eventLabel(_ r: CallRecord, height: CGFloat) -> some View {
         if isDay {
             HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        PlatformSquare(platform: r.platform, size: 10)
-                        Text(r.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    }
-                    .accessibilityAddTraits(.isHeader)
-                    if height >= 40 {
-                        Text("\((r.start..<max(r.end, r.start)).formatted(.interval.hour().minute())) · \(r.platform.displayName)\(r.badge.map { " · " + badgeWord($0) } ?? "")")
-                            .font(.system(size: 12)).foregroundStyle(active ? .white.opacity(0.8) : .secondary)
+                HStack(alignment: .top, spacing: 6) {
+                    PlatformDot(platform: r.platform, size: 7, hollow: r.status != .written).padding(.top, 5)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(r.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                            .accessibilityAddTraits(.isHeader)
+                        if height >= 40 {
+                            HStack(spacing: 0) {
+                                Text("\((r.start..<max(r.end, r.start)).formatted(.interval.hour().minute())) · \(r.platform.shortName) · ")
+                                    .foregroundStyle(Palette.secondary)
+                                meta(r)
+                            }
+                            .font(.system(size: 12))
+                        }
                     }
                 }
                 Spacer()
                 if height >= 44 {
                     HStack(spacing: 4) {
                         ForEach(speakerNames(r), id: \.self) { name in
-                            Text(name).font(.system(size: 11)).lineLimit(1)
+                            Text(name).font(.system(size: 11)).foregroundStyle(Palette.ink).lineLimit(1)
                                 .padding(.horizontal, 7).padding(.vertical, 2)
-                                .background(active ? Color.white.opacity(0.22) : Theme.field, in: Capsule())
+                                .background(Palette.fill, in: Capsule())
                         }
                     }
                 }
             }
-            .foregroundStyle(active ? .white : .primary)
         } else {
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    PlatformSquare(platform: r.platform, size: 8)
-                    Text(r.title).font(.system(size: 11, weight: .semibold)).lineLimit(height > 30 ? 2 : 1)
+            HStack(alignment: .top, spacing: 6) {
+                PlatformDot(platform: r.platform, size: 7, hollow: r.status != .written && r.status != .recording).padding(.top, 4)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(r.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.ink)
+                        .lineLimit(height > 44 ? 2 : 1)
+                    if height > 28 { meta(r).font(.system(size: 10.5)) }
                 }
-                if height > 28 {
-                    HStack(spacing: 4) {
-                        if r.status == .recording { StatusDot(color: Theme.recording, size: 6, pulsing: true) }
-                        Text(meta).font(.system(size: 10)).foregroundStyle(active ? .white.opacity(0.8) : .secondary)
-                    }
-                }
+                .lineSpacing(1)
             }
-            .foregroundStyle(active ? .white : .primary)
         }
     }
 
@@ -260,15 +283,6 @@ private struct HourGrid: View {
             if !order.contains(name) { order.append(name) }
         }
         return order
-    }
-
-    private func badgeWord(_ kind: StatusBadge.Kind) -> String {
-        switch kind {
-        case .needsNames: "Needs names"
-        case .processing: "Processing"
-        case .failed: "Failed"
-        case .recording: "Recording"
-        }
     }
 
     /// The card shows after the pointer rests 0.5 s, and stays while the pointer is on the event or the card.
@@ -298,17 +312,17 @@ private struct HourGrid: View {
         return VStack(alignment: .leading, spacing: 8) {
             Text(r.title).font(.system(size: 13, weight: .semibold))
             Text("\((r.start..<max(r.end, r.start)).formatted(.interval.hour().minute())) · \(r.lengthText) · \(r.platform.displayName)")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.secondary)
             if !names.isEmpty {
                 FlowLayout(spacing: 4) {
-                    ForEach(names, id: \.self) { Text($0).font(.system(size: 11)).padding(.horizontal, 7).padding(.vertical, 2).background(Theme.field, in: Capsule()) }
+                    ForEach(names, id: \.self) { Text($0).font(.system(size: 11)).padding(.horizontal, 7).padding(.vertical, 2).background(Palette.fill, in: Capsule()) }
                 }
             }
             if let line = r.headline ?? r.summary.map(firstSentence) {
                 Text(line).font(.system(size: 13)).lineSpacing(3)
             }
             HStack {
-                if let badge = r.badge { StatusBadge(kind: badge) }
+                meta(r)
                 Spacer()
                 Button("Open meeting") { open(r, state.title) }.buttonStyle(.link).fontWeight(.medium)
             }
@@ -341,8 +355,8 @@ private struct NowLine: View {
         TimelineView(.everyMinute) { context in
             let minutes = CGFloat(context.date.timeIntervalSince(Calendar.current.startOfDay(for: context.date)) / 60)
             HStack(spacing: 0) {
-                Circle().fill(Theme.recording).frame(width: 8, height: 8).offset(x: -4)
-                Rectangle().fill(Theme.recording).frame(height: 1.5)
+                Circle().fill(Palette.accentFill).frame(width: 7, height: 7).offset(x: -3.5)
+                Rectangle().fill(Palette.accentFill).frame(height: 1.5)
             }
             .offset(y: minutes - 4)
         }
@@ -366,7 +380,7 @@ private struct MonthGrid: View {
             HStack(spacing: 0) {
                 ForEach(cells.prefix(7), id: \.self) { d in
                     Text(d.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
+                        .textRole(.label).foregroundStyle(Palette.tertiary)
                         .frame(maxWidth: .infinity).padding(.top, 8).padding(.bottom, 6)
                 }
             }
@@ -390,10 +404,10 @@ private struct MonthGrid: View {
         return VStack(alignment: .leading, spacing: 3) {
             Text(number)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(today ? AnyShapeStyle(.white) : inMonth ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                .foregroundStyle(today ? Palette.onAccent : inMonth ? Palette.ink : Palette.tertiary)
                 .padding(.horizontal, 6)
                 .frame(minWidth: 22, minHeight: 22)
-                .background(today ? Theme.recording : .clear, in: Capsule())
+                .background(today ? Palette.accentFill : .clear, in: Capsule())
                 .frame(maxWidth: .infinity)
             ForEach(items.prefix(3), id: \.id) { r in
                 MonthItem(record: r) { open(r, state.title) }
@@ -405,15 +419,15 @@ private struct MonthGrid: View {
                     state.anchor = day
                     state.scope = .day
                 }
-                .buttonStyle(.plain).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary).padding(.leading, 5)
+                .buttonStyle(.plain).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary).padding(.leading, 5)
             }
             Spacer(minLength: 0)
         }
         .padding(6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(inMonth ? Color.clear : Theme.field)
-        .overlay(alignment: .trailing) { Rectangle().fill(Theme.separator).frame(width: 1) }
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.separator).frame(height: 1) }
+        .background(inMonth ? Color.clear : Palette.fill.opacity(0.5))
+        .overlay(alignment: .trailing) { Hairline(axis: .vertical) }
+        .hairline()
     }
 }
 
@@ -433,14 +447,14 @@ private struct MonthItem: View {
                     }
                 }
                 .frame(width: 7, height: 7)
-                Text(time).foregroundStyle(.secondary).monospacedDigit()
+                Text(time).foregroundStyle(Palette.secondary).monospacedDigit()
                 Text(record.title).fontWeight(.medium).lineLimit(1)
                 Spacer(minLength: 0)
-                if record.status == .recording { StatusDot(color: Theme.recording, size: 6, pulsing: true) }
+                if record.status == .recording { StatusDot(color: Palette.recording, size: 6, pulsing: true) }
             }
             .font(.system(size: 11))
             .padding(.horizontal, 5).padding(.vertical, 2)
-            .background(hovering ? Theme.hover : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .background(hovering ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
