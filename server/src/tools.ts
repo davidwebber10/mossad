@@ -1,5 +1,5 @@
 import type { MeetingView } from './types';
-import { formatDay, localDayStart, timestamp } from './util';
+import { decisionLine, formatDay, localDayStart, timestamp } from './util';
 
 /** The same rules as ChatTools on the Mac: the AI app sees the same tools and the same text. */
 
@@ -91,7 +91,7 @@ export class MeetingTools {
     if (m.attendees.length) parts.push(`Invited: ${m.attendees.join(', ')}`);
     if (m.summary) parts.push(`Summary:\n${m.summary}`);
     for (const t of m.topics) parts.push(`### ${t.title}\n${t.summary}`);
-    if (m.decisions.length) parts.push('Decisions:\n' + m.decisions.map((d) => `- ${d}`).join('\n'));
+    if (m.decisions.length) parts.push('Decisions:\n' + m.decisions.map((d) => `- ${decisionLine(d)}`).join('\n'));
     if (m.actionItems.length) parts.push('Action items:\n' + m.actionItems.map((a) => `- ${a.text}`).join('\n'));
     const t = this.transcript(m);
     parts.push('Transcript:\n' + t.slice(0, maxMeetingCharacters) +

@@ -45,6 +45,12 @@ export function timestamp(seconds: number): string {
   return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
 }
 
+/** A decision as one line: its time in front when the Mac sent one. */
+export function decisionLine(d: string | { text: string; at?: number }): string {
+  if (typeof d === 'string') return d;
+  return d.at == null ? d.text : `[${timestamp(d.at)}] ${d.text}`;
+}
+
 /** The time-zone offset in ms at an instant: local wall time minus UTC. */
 function offset(instant: number, timeZone: string): number {
   const parts = new Intl.DateTimeFormat('en-US', {

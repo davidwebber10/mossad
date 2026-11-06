@@ -58,7 +58,7 @@ public enum MarkdownWriter {
                 lines.append("")
             }
             if !r.decisions.isEmpty {
-                lines += ["## Decisions", ""] + r.decisions.map { "- \($0)" } + [""]
+                lines += ["## Decisions", ""] + r.decisions.map { d in d.at.map { "- [\(timestamp($0))] \(d.text)" } ?? "- \(d.text)" } + [""]
             }
         }
         lines += ["## Transcript", "", transcript(r), ""]

@@ -41,10 +41,21 @@ final class ActionItemTests: XCTestCase {
         XCTAssertNil(loaded.headline)
     }
 
+    func testOldStringDecisionsDecodeWithoutATime() throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try record().save(to: dir)
+        let url = dir.appendingPathComponent("call.json")
+        var json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        json["decisions"] = ["Ship Friday", ["text": "Hire two", "at": 61.5]]
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertEqual(try CallRecord.load(from: dir).decisions, [Decision(text: "Ship Friday", at: nil), Decision(text: "Hire two", at: 61.5)])
+    }
+
     func testNewRecordRoundTrips() throws {
         var r = record()
         r.actionItems = [ActionItem(owner: "Alex", task: "a"), ActionItem(owner: nil, task: "b")]
-        r.decisions = ["Ship Friday"]
+        r.decisions = [Decision(text: "Ship Friday", at: 3128), Decision(text: "Hire two", at: nil)]
         r.headline = "Cushions ship Friday."
         let dir = tempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }

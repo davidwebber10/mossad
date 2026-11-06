@@ -106,7 +106,7 @@ final class AnalyticsMoreTests: XCTestCase {
     func testOutcomesArePerCallHourAndCommitmentsCountWhenMadeInThePeriod() {
         var records = week()
         records[0].actionItems = [ActionItem(owner: "Dana", task: "Send"), ActionItem(owner: "Sam", task: "Check")]
-        records[0].decisions = ["Ship Friday"]
+        records[0].decisions = [Decision(text: "Ship Friday", at: nil)]
         var done = Commitment(text: "Send", to: "Sam", callID: "a", callTitle: "A", madeAt: date(19, 9), due: nil)
         done.done = date(20, 9)
         let early = Commitment(text: "Old", to: nil, callID: nil, callTitle: nil, madeAt: date(1, 9), due: nil)

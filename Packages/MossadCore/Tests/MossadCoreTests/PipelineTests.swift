@@ -42,7 +42,7 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
         if let delay = delayOnCall[call] { try await Task.sleep(for: delay) }
         if fail { throw SummaryError.malformed }
         return MeetingSummary(summary: "Summary \(call)", actionItems: [ActionItem(owner: "Alex Rivera", task: "send forecast")],
-                              decisions: ["Decision \(call)"], headline: "Headline \(call)", title: self.title)
+                              decisions: [Decision(text: "Decision \(call)", at: nil)], headline: "Headline \(call)", title: self.title)
     }
 }
 
@@ -542,7 +542,7 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(r.calendarTitle, "Weekly Ops Sync")
         XCTAssertEqual(r.summary, "Summary 1")
         XCTAssertEqual(r.actionItems, [ActionItem(owner: "Alex Rivera", task: "send forecast")])
-        XCTAssertEqual(r.decisions, ["Decision 1"])
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
         XCTAssertEqual(r.headline, "Headline 1")
         let md = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
         XCTAssertTrue(md.contains("[00:00:11] Alex Rivera: It leaves Friday."))
@@ -607,7 +607,7 @@ final class PipelineTests: XCTestCase {
         let r = try load(id)
         XCTAssertEqual(r.unknownSpeakers, [])
         XCTAssertEqual(r.summary, "Summary 2")
-        XCTAssertEqual(r.decisions, ["Decision 2"])
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 2"])
         XCTAssertEqual(r.headline, "Headline 2")
         let md = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
         XCTAssertTrue(md.contains("Amy Lee: I can book freight."))
@@ -624,7 +624,7 @@ final class PipelineTests: XCTestCase {
         let a = try XCTUnwrap(letters["them:A"]), b = try XCTUnwrap(letters["them:B"])
         r.summary = "\(a) and \(b) agreed. \(a)'s plan stands."
         r.topics = [SummaryTopic(title: "Freight", summary: "\(b) books it.")]
-        r.decisions = ["\(a) owns freight"]
+        r.decisions = [Decision(text: "\(a) owns freight", at: 12)]
         r.actionItems = [ActionItem(owner: a, task: "book freight"), ActionItem(owner: nil, task: "ask \(b) for dates")]
         try r.save(to: paths.callDirectory(id))
         summarizer.delayOnCall[2] = .milliseconds(400)
@@ -633,7 +633,7 @@ final class PipelineTests: XCTestCase {
         let early = try load(id)
         XCTAssertEqual(early.summary, "Alex Rivera and Amy Lee agreed. Alex Rivera's plan stands.")
         XCTAssertEqual(early.topics.first?.summary, "Amy Lee books it.")
-        XCTAssertEqual(early.decisions, ["Alex Rivera owns freight"])
+        XCTAssertEqual(early.decisions, [Decision(text: "Alex Rivera owns freight", at: 12)])
         XCTAssertEqual(early.actionItems.map(\.owner), ["Alex Rivera", nil])
         XCTAssertEqual(early.actionItems.last?.task, "ask Amy Lee for dates")
         await naming.value

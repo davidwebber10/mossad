@@ -100,7 +100,7 @@ public struct ChatTools: Sendable {
         if !r.attendees.isEmpty { parts.append("Invited: \(r.attendees.joined(separator: ", "))") }
         if let s = r.summary { parts.append("Summary:\n\(s)") }
         for t in r.topics { parts.append("### \(t.title)\n\(t.summary)") }
-        if !r.decisions.isEmpty { parts.append("Decisions:\n" + r.decisions.map { "- \($0)" }.joined(separator: "\n")) }
+        if !r.decisions.isEmpty { parts.append("Decisions:\n" + r.decisions.map { "- \($0.text)" }.joined(separator: "\n")) }
         if !r.actionItems.isEmpty { parts.append("Action items:\n" + r.actionItems.map { "- \($0.text)" }.joined(separator: "\n")) }
         let transcript = MarkdownWriter.transcript(r)
         parts.append("Transcript:\n" + String(transcript.prefix(Self.maxMeetingCharacters))

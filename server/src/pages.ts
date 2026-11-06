@@ -1,5 +1,5 @@
 import type { Share } from './types';
-import { escapeHtml as e, formatDay, timestamp } from './util';
+import { decisionLine, escapeHtml as e, formatDay, timestamp } from './util';
 
 /** Shared look for every page: system fonts, one accent, light and dark. */
 const baseCSS = `
@@ -83,7 +83,7 @@ ${s.people.length ? `<div class="people">${s.people.map((p) => `<span class="chi
       .map((t) => `<h3>${e(t.title)}</h3>${md(t.summary)}`).join('')}</div>`);
   }
   if (s.actionItems?.length) parts.push(`<h2>Action items</h2><div class="card"><ul>${s.actionItems.map((a) => `<li>${e(a.text)}</li>`).join('')}</ul></div>`);
-  if (s.decisions?.length) parts.push(`<h2>Decisions</h2><div class="card"><ul>${s.decisions.map((d) => `<li>${e(d)}</li>`).join('')}</ul></div>`);
+  if (s.decisions?.length) parts.push(`<h2>Decisions</h2><div class="card"><ul>${s.decisions.map((d) => `<li>${e(decisionLine(d))}</li>`).join('')}</ul></div>`);
   if (s.chat) {
     parts.push(`<h2>Ask about this meeting</h2><div class="card"><div class="chat" id="chat"></div>
 <form class="ask" id="ask"><textarea id="q" rows="1" maxlength="2000" placeholder="What was decided?" aria-label="Your question"></textarea><button id="send">Ask</button></form></div>`);
@@ -161,7 +161,7 @@ export function shareContext(s: Share): string {
   const out = [`Meeting: ${s.title}`, `When: ${formatDay(s.start, s.timeZone ?? 'UTC')}`, `People: ${s.people.join(', ')}`];
   if (s.summary) out.push(`Summary:\n${s.summary}`);
   for (const t of s.topics ?? []) out.push(`### ${t.title}\n${t.summary}`);
-  if (s.decisions?.length) out.push('Decisions:\n' + s.decisions.map((d) => `- ${d}`).join('\n'));
+  if (s.decisions?.length) out.push('Decisions:\n' + s.decisions.map((d) => `- ${decisionLine(d)}`).join('\n'));
   if (s.actionItems?.length) out.push('Action items:\n' + s.actionItems.map((a) => `- ${a.text}`).join('\n'));
   if (s.lines?.length) out.push('Transcript:\n' + s.lines.map((l) => `[${timestamp(l.at)}] ${l.speaker}: ${l.text}`).join('\n').slice(0, 400_000));
   return out.join('\n\n');

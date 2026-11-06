@@ -84,6 +84,27 @@ public struct TranscriptMarker: Codable, Equatable, Sendable {
 /// Where a meeting's shown title comes from, strongest first.
 public enum TitleSource: Sendable { case custom, calendar, generated, platform }
 
+/// Something the meeting decided, with the second of the call when it was made, if known.
+public struct Decision: Codable, Equatable, Sendable, Hashable {
+    public var text: String
+    public var at: TimeInterval?
+
+    public init(text: String, at: TimeInterval? = nil) {
+        self.text = text
+        self.at = at
+    }
+
+    /// Records saved before decisions had times hold plain strings.
+    public init(from decoder: Decoder) throws {
+        if let text = try? decoder.singleValueContainer().decode(String.self) {
+            self.init(text: text)
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(text: try c.decode(String.self, forKey: .text), at: try c.decodeIfPresent(TimeInterval.self, forKey: .at))
+    }
+}
+
 public struct CallRecord: Codable, Equatable, Sendable {
     public var id: String
     public var platform: Platform
@@ -124,7 +145,7 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// False for a meeting that only shares information; nil for records from before this field.
     public var hasOutcomes: Bool?
     public var actionItems: [ActionItem] = []
-    public var decisions: [String] = []
+    public var decisions: [Decision] = []
     /// One sentence, at most about 140 characters.
     public var headline: String?
     public var markdownPath: String?
@@ -197,7 +218,7 @@ extension CallRecord {
         speakerEmbeddings = try c.decodeIfPresent([String: [Float]].self, forKey: .speakerEmbeddings) ?? [:]
         summary = try c.decodeIfPresent(String.self, forKey: .summary)
         actionItems = try c.decodeIfPresent([ActionItem].self, forKey: .actionItems) ?? []
-        decisions = try c.decodeIfPresent([String].self, forKey: .decisions) ?? []
+        decisions = try c.decodeIfPresent([Decision].self, forKey: .decisions) ?? []
         topics = try c.decodeIfPresent([SummaryTopic].self, forKey: .topics) ?? []
         kind = try c.decodeIfPresent(String.self, forKey: .kind)
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
@@ -233,7 +254,7 @@ extension CallRecord {
         }
         summary = summary.map(swap)
         topics = topics.map { SummaryTopic(title: swap($0.title), summary: swap($0.summary)) }
-        decisions = decisions.map(swap)
+        decisions = decisions.map { Decision(text: swap($0.text), at: $0.at) }
         actionItems = actionItems.map { ActionItem(owner: $0.owner.map { labels[$0] ?? $0 }, task: swap($0.task)) }
     }
 }

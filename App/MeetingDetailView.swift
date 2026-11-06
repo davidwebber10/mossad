@@ -670,7 +670,7 @@ private struct SummaryTab: View {
                     ForEach(Array(record.decisions.enumerated()), id: \.offset) { _, d in
                         HStack(alignment: .top, spacing: 8) {
                             Circle().fill(.secondary).frame(width: 4, height: 4).padding(.top, 7)
-                            Text(d).textSelection(.enabled)
+                            Text(d.text).textSelection(.enabled)
                         }
                     }
                 }

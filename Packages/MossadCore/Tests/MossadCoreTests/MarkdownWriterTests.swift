@@ -22,7 +22,7 @@ final class MarkdownWriterTests: XCTestCase {
         r.unknownSpeakers = ["them:C"]
         r.summary = "The team confirmed the Friday cushion shipment."
         r.actionItems = [ActionItem(owner: "Alex Rivera", task: "confirm freight"), ActionItem(owner: nil, task: "book a room")]
-        r.decisions = ["Cushions ship Friday."]
+        r.decisions = [Decision(text: "Cushions ship Friday.", at: 3128), Decision(text: "Book a room.", at: nil)]
         return r
     }
 
@@ -52,7 +52,8 @@ final class MarkdownWriterTests: XCTestCase {
 
         ## Decisions
 
-        - Cushions ship Friday.
+        - [00:52:08] Cushions ship Friday.
+        - Book a room.
 
         ## Transcript
 

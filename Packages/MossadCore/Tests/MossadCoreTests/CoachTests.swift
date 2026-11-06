@@ -142,7 +142,7 @@ final class CoachTests: XCTestCase {
         var r = record("c", start: Date())
         r.calendarTitle = "Weekly Sync"
         r.actionItems = [ActionItem(owner: "David Webber", task: "a"), ActionItem(owner: "Mitch Haus", task: "b")]
-        r.decisions = ["d"]
+        r.decisions = [Decision(text: "d", at: nil)]
         let text = CoachPrompt.user(record: r, owner: "David Webber", profile: profile)
         XCTAssertTrue(text.contains("Action items for David Webber: 1 of 2"), text)
         XCTAssertTrue(text.contains("Decisions: 1"))

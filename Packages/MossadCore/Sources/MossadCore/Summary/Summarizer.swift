@@ -17,7 +17,7 @@ public struct MeetingSummary: Sendable, Equatable {
     public var summary: String
     public var topics: [SummaryTopic]
     public var actionItems: [ActionItem]
-    public var decisions: [String]
+    public var decisions: [Decision]
     public var headline: String?
     /// What sort of meeting this was, in 1 to 3 words ("Monthly update", "Working session").
     public var kind: String?
@@ -27,7 +27,7 @@ public struct MeetingSummary: Sendable, Equatable {
     /// At most 60 characters; names the topic and, for a small meeting, who it was with.
     public var title: String?
 
-    public init(summary: String, topics: [SummaryTopic] = [], actionItems: [ActionItem], decisions: [String] = [], headline: String? = nil,
+    public init(summary: String, topics: [SummaryTopic] = [], actionItems: [ActionItem], decisions: [Decision] = [], headline: String? = nil,
                 kind: String? = nil, hasOutcomes: Bool? = nil, tags: [String] = [], title: String? = nil) {
         self.title = title
         self.tags = tags
@@ -99,7 +99,9 @@ public struct LLMSummarizer: Summarizing {
     List every request, commitment, or follow-up as an action item with its owner and the task. Use the speaker \
     names exactly as they appear in the transcript; when the owner is unclear, set the owner to null. Return no \
     action items when there are none. List each decision the meeting made as one short sentence; return no \
-    decisions when none were made. Write a headline: one plain sentence of at most 140 characters that says \
+    decisions when none were made. Give each decision at_seconds: the second of the call when it was made, read from the \
+    [HH:MM:SS] stamp of the line where it was agreed (null when you cannot tell). Write a headline: one plain \
+    sentence of at most 140 characters that says \
     what the meeting was about and its main outcome. Name the kind of meeting in 1 to 3 words, such as \
     "Monthly update", "Working session", "Planning", "1:1", or "Interview". Set has_outcomes to false for a \
     meeting that only shares information (an update, a demo, a briefing) and made no decisions and assigned no \
@@ -117,7 +119,7 @@ public struct LLMSummarizer: Summarizing {
             "summary": Schema.string,
             "topics": Schema.array(Schema.object(["title": Schema.string, "summary": Schema.string])),
             "action_items": Schema.array(Schema.object(["owner": Schema.nullableString, "task": Schema.string])),
-            "decisions": Schema.array(Schema.string),
+            "decisions": Schema.array(Schema.object(["text": Schema.string, "at_seconds": Schema.nullableNumber])),
             "headline": Schema.string,
             "kind": Schema.string,
             "has_outcomes": ["type": "boolean"],
@@ -129,17 +131,22 @@ public struct LLMSummarizer: Summarizing {
                                         user: "\(known)Meeting: \(title)\n\nTranscript:\n\(transcript)", schema: schema,
                                         effort: .medium, purpose: .summary, as: Output.self)
         let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)
-        return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items, decisions: result.decisions,
+        return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items, decisions: result.decisions.map { Decision(text: $0.text, at: $0.at_seconds.flatMap { $0 >= 0 ? $0 : nil }) },
                               headline: headline.isEmpty ? nil : headline,
                               kind: result.kind.isEmpty ? nil : result.kind, hasOutcomes: result.has_outcomes,
                               tags: (result.tags ?? []).compactMap(\.nonBlank), title: result.title?.nonBlank.map(Titles.clean))
+    }
+
+    private struct DecisionOutput: Decodable {
+        let text: String
+        let at_seconds: Double?
     }
 
     private struct Output: Decodable {
         let summary: String
         let topics: [SummaryTopic]
         let action_items: [ActionItem]
-        let decisions: [String]
+        let decisions: [DecisionOutput]
         let headline: String
         let kind: String
         let has_outcomes: Bool

@@ -65,7 +65,7 @@ public struct SharedMeeting: Codable, Equatable, Sendable {
     public var owner: String
     public var summary: String?
     public var topics: [MeetingView.Topic]?
-    public var decisions: [String]?
+    public var decisions: [Decision]?
     public var actionItems: [MeetingView.Item]?
     public var lines: [MeetingView.Line]?
     public var audio: Bool

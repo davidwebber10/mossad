@@ -55,6 +55,11 @@ describe('tools', () => {
     expect(tools.run('read_meeting', { call_id: 'x' })).toBe('No meeting with that call_id.');
   });
 
+  it('reads decisions from both the old string form and the timed form', () => {
+    const t = new MeetingTools([meeting('d', '2026-11-03T15:00:00Z', { decisions: ['Ship Friday', { text: 'Hire two', at: 3128 }, { text: 'Skip it' }] })], 'Dana');
+    expect(t.run('read_meeting', { call_id: 'd' })).toContain('Decisions:\n- Ship Friday\n- [00:52:08] Hire two\n- Skip it');
+  });
+
   it('searches lines and lists action items by owner', () => {
     expect(tools.run('search_transcripts', { query: 'numbers' })).toContain('[00:01:05] Jennifer Lee:');
     expect(tools.run('action_items', { owner: 'Jen' })).toContain('Jennifer Lee: Send the numbers');

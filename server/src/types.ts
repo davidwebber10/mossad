@@ -1,3 +1,6 @@
+/** Records synced before decisions had times hold plain strings; newer ones hold an object. */
+export type Decision = string | { text: string; at?: number };
+
 export interface Env {
   DB: D1Database;
   FILES: R2Bucket;
@@ -42,7 +45,7 @@ export interface MeetingView {
   attendees: string[];
   summary?: string;
   topics: { title: string; summary: string }[];
-  decisions: string[];
+  decisions: Decision[];
   actionItems: ActionItem[];
   lines: Line[];
   /** The owner's time zone, such as "America/Chicago": dates in tool inputs are local days. */
@@ -58,7 +61,7 @@ export interface Share {
   owner: string;
   summary?: string;
   topics?: { title: string; summary: string }[];
-  decisions?: string[];
+  decisions?: Decision[];
   actionItems?: ActionItem[];
   lines?: Line[];
   audio: boolean;

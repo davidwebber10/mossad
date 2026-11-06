@@ -37,6 +37,8 @@ final class SummarizerTests: XCTestCase {
         let topic = ((schema?["properties"] as? [String: Any])?["topics"] as? [String: Any])?["items"] as? [String: Any]
         XCTAssertEqual(Set(topic?["required"] as? [String] ?? []), ["title", "summary"])
         let props = schema?["properties"] as? [String: Any]
+        let decision = (props?["decisions"] as? [String: Any])?["items"] as? [String: Any]
+        XCTAssertEqual(Set(decision?["required"] as? [String] ?? []), ["text", "at_seconds"])
         let item = (props?["action_items"] as? [String: Any])?["items"] as? [String: Any]
         XCTAssertEqual(Set(item?["required"] as? [String] ?? []), ["owner", "task"])
         let content = ((body["messages"] as? [[String: Any]])?.first?["content"] as? String) ?? ""
@@ -45,14 +47,14 @@ final class SummarizerTests: XCTestCase {
 
     func testParsesSummaryAndActionItems() async throws {
         StubURLProtocol.handler = { _ in
-            (200, self.reply(#"{"summary":"Agreed to ship cushions **Friday**.","topics":[{"title":"Freight","summary":"Rates went up **8%**."}],"action_items":[{"owner":"Alex Rivera","task":"confirm freight"},{"owner":null,"task":"update forecast"}],"decisions":["Ship Friday"],"headline":"Cushions ship Friday.","kind":"Planning","has_outcomes":true,"title":" Freight rates with Alex "}"#))
+            (200, self.reply(#"{"summary":"Agreed to ship cushions **Friday**.","topics":[{"title":"Freight","summary":"Rates went up **8%**."}],"action_items":[{"owner":"Alex Rivera","task":"confirm freight"},{"owner":null,"task":"update forecast"}],"decisions":[{"text":"Ship Friday","at_seconds":3128},{"text":"Hire two","at_seconds":null}],"headline":"Cushions ship Friday.","kind":"Planning","has_outcomes":true,"title":" Freight rates with Alex "}"#))
         }
         let result = try await summarizer().summarize(transcript: "t", title: "x")
         XCTAssertEqual(result.title, "Freight rates with Alex")
         XCTAssertEqual(result.summary, "Agreed to ship cushions **Friday**.")
         XCTAssertEqual(result.topics, [SummaryTopic(title: "Freight", summary: "Rates went up **8%**.")])
         XCTAssertEqual(result.actionItems, [ActionItem(owner: "Alex Rivera", task: "confirm freight"), ActionItem(owner: nil, task: "update forecast")])
-        XCTAssertEqual(result.decisions, ["Ship Friday"])
+        XCTAssertEqual(result.decisions, [Decision(text: "Ship Friday", at: 3128), Decision(text: "Hire two", at: nil)])
         XCTAssertEqual(result.headline, "Cushions ship Friday.")
         XCTAssertEqual(result.kind, "Planning")
         XCTAssertEqual(result.hasOutcomes, true)

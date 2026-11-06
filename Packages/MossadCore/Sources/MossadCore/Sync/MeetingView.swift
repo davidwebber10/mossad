@@ -32,7 +32,7 @@ public struct MeetingView: Codable, Equatable, Sendable {
     public var attendees: [String]
     public var summary: String?
     public var topics: [Topic]
-    public var decisions: [String]
+    public var decisions: [Decision]
     public var actionItems: [Item]
     public var lines: [Line]
     public var timeZone: String?

@@ -591,7 +591,7 @@ public actor Pipeline {
                 func swap(_ text: String) -> String { text.replacingOccurrences(of: old, with: new) }
                 r.summary = r.summary.map(swap)
                 r.headline = r.headline.map(swap)
-                r.decisions = r.decisions.map(swap)
+                r.decisions = r.decisions.map { Decision(text: swap($0.text), at: $0.at) }
                 r.actionItems = r.actionItems.map { ActionItem(owner: $0.owner, task: swap($0.task)) }
             }
             save(&r, dir: paths.callDirectory(r.id))

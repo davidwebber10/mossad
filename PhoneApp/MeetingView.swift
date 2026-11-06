@@ -123,7 +123,7 @@ private struct SummarySection: View {
             if !record.decisions.isEmpty {
                 Card {
                     CardTitle(text: "Decisions", symbol: "checkmark.seal")
-                    ForEach(record.decisions, id: \.self) { Text(rich("•  " + $0)) }
+                    ForEach(record.decisions, id: \.self) { Text(rich("•  " + $0.text)) }
                 }
             }
         }
