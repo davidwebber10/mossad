@@ -17,8 +17,10 @@ enum Palette {
     static let material = Color(light: 0xE1DDD6, dark: 0x2B2A2E)
     /// Rows, chips, and secondary buttons. Translucent so it reads the same on the window and on a surface.
     static let fill = Color(light: 0x1C1A17, lightAlpha: 0.06, dark: 0xFFFFFF, darkAlpha: 0.08)
-    /// The selected row and the transcript's current turn.
-    static let selection = Color(light: 0x1C1A17, lightAlpha: 0.08, dark: 0xFFFFFF, darkAlpha: 0.10)
+    /// The selected row and the transcript's current turn. A little lighter than the canvas (.08 light, .10 dark)
+    /// so secondary text on it meets 4.5:1: 4.52 on the window and 4.75 on the surface in light mode, 5.07 and
+    /// 4.55 in dark mode.
+    static let selection = Color(light: 0x1C1A17, lightAlpha: 0.07, dark: 0xFFFFFF, darkAlpha: 0.085)
     /// Increase Contrast raises it to 20% ink.
     static let hairline = Color(
         light: 0x1C1A17, lightAlpha: 0.09, dark: 0xFFFFFF, darkAlpha: 0.09,
@@ -31,7 +33,8 @@ enum Palette {
     static let ink = Color(light: 0x1C1A17, dark: 0xF1EEE8)
     static let secondary = Color(light: 0x6B665E, dark: 0xA6A097)
     /// Tertiary text. The canvas's tertiary measures under 3.3:1, so text uses this darker (light) and lighter
-    /// (dark) value of the same hue, which meets 4.5:1 on the window and on the surface.
+    /// (dark) value of the same hue, which meets 4.5:1 on the window and on the surface. On fill or selection,
+    /// use secondary.
     static let tertiary = Color(light: 0x746F66, dark: 0x908B82)
     /// The canvas's tertiary, for marks only: dots, icons, rules. Not for text.
     static let tertiaryMark = Color(light: 0x9B968D, dark: 0x726D65)
@@ -50,7 +53,8 @@ enum Palette {
     static let recordingTint = Color(light: 0xC43D31, lightAlpha: 0.1, dark: 0xFF6B5E, darkAlpha: 0.14)
     /// Done, connected, granted: for marks only (dots, icons). Not for text.
     static let ok = Color(light: 0x1E8E5A, dark: 0x3FCB84)
-    /// "Connected", "Granted" as text: a darker green in light mode so it meets 4.5:1.
+    /// "Connected", "Granted" as text: a darker green in light mode so it meets 4.5:1 on the window and the
+    /// surface. On fill or selection, use secondary.
     static let okText = Color(light: 0x1B7F51, dark: 0x3FCB84)
 
     /// The canvas's stand-in for Liquid Glass and the sidebar; the apps use the system glass, so these only
