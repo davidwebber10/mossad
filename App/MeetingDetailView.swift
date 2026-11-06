@@ -120,7 +120,7 @@ struct MeetingDetailView: View {
                 // The header sits above the scroll view, so a meeting with dozens of voices must not make it taller than the window.
                 let shown = people.headerSpeakers(record, limit: 14)
                 FlowLayout(spacing: 6) {
-                    ForEach(shown, id: \.key) { SpeakerChip(speaker: $0, callID: record.id, editable: record.status == .written) }
+                    ForEach(shown, id: \.key) { HeaderSpeakerChip(speaker: $0, callID: record.id, editable: record.status == .written) }
                     if people.speakers.count > shown.count {
                         Text("+\(people.speakers.count - shown.count) more")
                             .font(.system(size: 12)).foregroundStyle(.secondary)
@@ -278,7 +278,7 @@ struct MeetingPeople {
 }
 
 /// A speaker in the header. Click to name the voice or correct its name, with an email.
-private struct SpeakerChip: View {
+private struct HeaderSpeakerChip: View {
     @EnvironmentObject var controller: AppController
     let speaker: MeetingPeople.Speaker
     let callID: String

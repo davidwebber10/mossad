@@ -2,34 +2,21 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// The redesign's tokens (docs/superpowers/specs/2026-10-21-ui-redesign.md, section 1).
+/// Old names for the editorial tokens in SharedUI/Tokens.swift, so screens not yet rebuilt keep compiling.
+/// They go away once every screen uses `Palette` directly.
 enum Theme {
-    /// The content background: light gray in light mode so white cards stand out.
-    static let background = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? .windowBackgroundColor
-            : NSColor(red: 0xf6 / 255, green: 0xf6 / 255, blue: 0xf8 / 255, alpha: 1)
-    })
-    static let field = Color.primary.opacity(0.06)
-    static let hover = Color.primary.opacity(0.07)
-    /// Cards and tables: white in light mode, a step above the window in dark mode.
-    static let surface = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(red: 0x2b / 255, green: 0x2b / 255, blue: 0x30 / 255, alpha: 1)
-            : .white
-    })
-    static let separator = Color(nsColor: .separatorColor)
+    static let background = Palette.window
+    static let field = Palette.fill
+    static let hover = Palette.selection
+    static let surface = Palette.surface
+    static let separator = Palette.hairline
 
-    static let listening = Color(red: 0.19, green: 0.82, blue: 0.35)
-    static let recording = Color(red: 1, green: 0.23, blue: 0.19)
-    static let warning = Color.orange
-    static let unknown = Color(red: 0.56, green: 0.56, blue: 0.58)
+    static let listening = Palette.ok
+    static let recording = Palette.recording
+    static let warning = Palette.accent
+    static let unknown = Palette.tertiary
 
-    /// The owner first, then by first appearance.
-    static let speakerPalette: [Color] = [
-        Color(hex: 0x0a7aff), Color(hex: 0xff9500), Color(hex: 0xaf52de), Color(hex: 0x34c759),
-        Color(hex: 0xff2d55), Color(hex: 0x30b0c7), Color(hex: 0x5e5ce6), Color(hex: 0xa2845e),
-    ]
+    static let speakerPalette = Palette.speakers
 }
 
 /// "Jordan L." for "Jordan Lee", so two people with one first name stay apart; unnamed voices keep their
@@ -54,14 +41,7 @@ extension Color {
 }
 
 extension Platform {
-    var color: Color {
-        switch self {
-        case .meet: Color(hex: 0x00ac47)
-        case .zoom: Color(hex: 0x2d8cff)
-        case .teams: Color(hex: 0x5b5fc7)
-        case .inPerson: Color(hex: 0xff9f0a)
-        }
-    }
+    var color: Color { Palette.platform(self) }
 }
 
 /// The small rounded square before a meeting title.
@@ -149,13 +129,6 @@ struct StatusBadge: View {
         case .recording: Theme.recording.opacity(0.14)
         default: Theme.field
         }
-    }
-}
-
-extension View {
-    /// The design's glass surfaces (player, hover card).
-    func mossadGlass(cornerRadius: CGFloat) -> some View {
-        glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
     }
 }
 
