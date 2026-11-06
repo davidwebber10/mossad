@@ -27,6 +27,15 @@ public enum AIProvider: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// A cheap model for short jobs such as a provisional title; nil when the provider has no known small
+    /// model, and the chosen model is used instead.
+    public var smallModel: String? {
+        switch self {
+        case .anthropic: "claude-haiku-4-5"
+        case .openai, .openrouter: nil
+        }
+    }
+
     public func model(_ name: String, apiKey: String, usage: UsageLog?) -> any LanguageModel {
         let name = name.isEmpty ? defaultModel : name
         return switch self {

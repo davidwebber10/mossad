@@ -33,7 +33,7 @@ final class SummarizerTests: XCTestCase {
         XCTAssertEqual(format?["type"] as? String, "json_schema")
         let schema = format?["schema"] as? [String: Any]
         XCTAssertEqual(Set(schema?["required"] as? [String] ?? []),
-                       ["summary", "topics", "action_items", "decisions", "headline", "kind", "has_outcomes", "tags"])
+                       ["summary", "topics", "action_items", "decisions", "headline", "kind", "has_outcomes", "tags", "title"])
         let topic = ((schema?["properties"] as? [String: Any])?["topics"] as? [String: Any])?["items"] as? [String: Any]
         XCTAssertEqual(Set(topic?["required"] as? [String] ?? []), ["title", "summary"])
         let props = schema?["properties"] as? [String: Any]
@@ -45,9 +45,10 @@ final class SummarizerTests: XCTestCase {
 
     func testParsesSummaryAndActionItems() async throws {
         StubURLProtocol.handler = { _ in
-            (200, self.reply(#"{"summary":"Agreed to ship cushions **Friday**.","topics":[{"title":"Freight","summary":"Rates went up **8%**."}],"action_items":[{"owner":"Alex Rivera","task":"confirm freight"},{"owner":null,"task":"update forecast"}],"decisions":["Ship Friday"],"headline":"Cushions ship Friday.","kind":"Planning","has_outcomes":true}"#))
+            (200, self.reply(#"{"summary":"Agreed to ship cushions **Friday**.","topics":[{"title":"Freight","summary":"Rates went up **8%**."}],"action_items":[{"owner":"Alex Rivera","task":"confirm freight"},{"owner":null,"task":"update forecast"}],"decisions":["Ship Friday"],"headline":"Cushions ship Friday.","kind":"Planning","has_outcomes":true,"title":" Freight rates with Alex "}"#))
         }
         let result = try await summarizer().summarize(transcript: "t", title: "x")
+        XCTAssertEqual(result.title, "Freight rates with Alex")
         XCTAssertEqual(result.summary, "Agreed to ship cushions **Friday**.")
         XCTAssertEqual(result.topics, [SummaryTopic(title: "Freight", summary: "Rates went up **8%**.")])
         XCTAssertEqual(result.actionItems, [ActionItem(owner: "Alex Rivera", task: "confirm freight"), ActionItem(owner: nil, task: "update forecast")])

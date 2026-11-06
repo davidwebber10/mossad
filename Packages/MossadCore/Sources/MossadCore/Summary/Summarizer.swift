@@ -24,9 +24,12 @@ public struct MeetingSummary: Sendable, Equatable {
     /// Whether the meeting is the kind that makes decisions or assigns work; an update call is not.
     public var hasOutcomes: Bool?
     public var tags: [String]
+    /// At most 60 characters; names the topic and, for a small meeting, who it was with.
+    public var title: String?
 
     public init(summary: String, topics: [SummaryTopic] = [], actionItems: [ActionItem], decisions: [String] = [], headline: String? = nil,
-                kind: String? = nil, hasOutcomes: Bool? = nil, tags: [String] = []) {
+                kind: String? = nil, hasOutcomes: Bool? = nil, tags: [String] = [], title: String? = nil) {
+        self.title = title
         self.tags = tags
         self.summary = summary
         self.topics = topics
@@ -48,6 +51,8 @@ extension CallRecord {
         kind = s.kind
         hasOutcomes = s.hasOutcomes
         tags = s.tags
+        // A summary without a title must not erase the live guess.
+        if let title = s.title { generatedTitle = title }
     }
 }
 
@@ -102,7 +107,9 @@ public struct LLMSummarizer: Summarizing {
     Title Case for the projects, systems, vendors, and themes the meeting was about, such as "Databricks", \
     "Budget", or "Hiring". Use a known tag, with its exact spelling, whenever it fits; make a new one only for a new \
     topic. Do not use people's names or the meeting kind as tags. A line such as "(★ Bookmarked at 2:31 PM)" marks a \
-    moment the owner flagged as important during the call: make sure the summary covers what was said around it.
+    moment the owner flagged as important during the call: make sure the summary covers what was said around it. \
+    Write a title of at most 60 characters that names the topic; for a meeting of two or three people, add who it \
+    was with, by first name.
     """
 
     public func summarize(transcript: String, title: String, knownTags: [String]) async throws -> MeetingSummary {
@@ -115,6 +122,7 @@ public struct LLMSummarizer: Summarizing {
             "kind": Schema.string,
             "has_outcomes": ["type": "boolean"],
             "tags": Schema.array(Schema.string),
+            "title": Schema.string,
         ])
         let known = knownTags.isEmpty ? "" : "Known tags: \(knownTags.joined(separator: ", "))\n\n"
         let result = try await llm.json(system: Self.systemPrompt(owner: ownerName, organization: organization),
@@ -124,7 +132,7 @@ public struct LLMSummarizer: Summarizing {
         return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items, decisions: result.decisions,
                               headline: headline.isEmpty ? nil : headline,
                               kind: result.kind.isEmpty ? nil : result.kind, hasOutcomes: result.has_outcomes,
-                              tags: (result.tags ?? []).compactMap(\.nonBlank))
+                              tags: (result.tags ?? []).compactMap(\.nonBlank), title: result.title?.nonBlank.map(Titles.clean))
     }
 
     private struct Output: Decodable {
@@ -136,6 +144,7 @@ public struct LLMSummarizer: Summarizing {
         let kind: String
         let has_outcomes: Bool
         let tags: [String]?
+        let title: String?
     }
 }
 

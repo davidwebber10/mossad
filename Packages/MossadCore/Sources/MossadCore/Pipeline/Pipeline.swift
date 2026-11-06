@@ -553,6 +553,14 @@ public actor Pipeline {
         save(&r, dir: dir)
     }
 
+    /// Sets the title the owner chose, or clears it when `title` is nil or blank, and renames the note.
+    public func setTitle(callID: String, _ title: String?) {
+        let dir = paths.callDirectory(callID)
+        guard var r = try? CallRecord.load(from: dir) else { return }
+        r.customTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank
+        save(&r, dir: dir)
+    }
+
     public func dismissSpeakers(callID: String, keys: [String]) {
         let dir = paths.callDirectory(callID)
         guard var r = try? CallRecord.load(from: dir) else { return }
@@ -598,6 +606,8 @@ public actor Pipeline {
             if r.status == .written {
                 let url = paths.meetings.appendingPathComponent(MarkdownWriter.fileName(for: r))
                 try MarkdownWriter.render(r).write(to: url, atomically: true, encoding: .utf8)
+                // A new title gives the note a new name; the old file must not stay as a second note.
+                if let old = r.markdownPath, old != url.path { try? FileManager.default.removeItem(atPath: old) }
                 r.markdownPath = url.path
             }
             try store(r, dir: dir)

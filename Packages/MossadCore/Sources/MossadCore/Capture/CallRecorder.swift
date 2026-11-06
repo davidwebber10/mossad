@@ -319,6 +319,14 @@ public final class CallRecorder: @unchecked Sendable {
         do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
     }
 
+    /// A provisional title from the live transcript. Ignored when that call has ended or already has a generated one.
+    public func setGeneratedTitle(_ title: String, forCall id: String) {
+        guard var r = record, r.id == id, r.generatedTitle == nil else { return }
+        r.generatedTitle = title
+        record = r
+        do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
+    }
+
     /// Stops recording and deletes everything for the current call.
     public func skip() {
         guard let r = record else { return }

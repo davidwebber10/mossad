@@ -81,6 +81,9 @@ public struct TranscriptMarker: Codable, Equatable, Sendable {
 }
 
 /// Everything known about one call; saved as `call.json` in the call's audio directory.
+/// Where a meeting's shown title comes from, strongest first.
+public enum TitleSource: Sendable { case custom, calendar, generated, platform }
+
 public struct CallRecord: Codable, Equatable, Sendable {
     public var id: String
     public var platform: Platform
@@ -93,6 +96,11 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// The meeting's ID from its link (Meet code, Zoom number, Teams meeting ID), when the call ran in a browser.
     public var meetingID: String?
     public var calendarTitle: String?
+    /// Named by the model: provisional during the call, then replaced by the summary's. Kept apart from
+    /// `calendarTitle` because Analytics counts a meeting with a calendar title as scheduled.
+    public var generatedTitle: String?
+    /// Set by the owner; wins over every other source and no summary replaces it.
+    public var customTitle: String?
     public var attendees: [String] = []
     public var utterances: [Utterance] = []
     /// Per-track results, kept so a failed track does not force the other one to be transcribed again.
@@ -138,7 +146,11 @@ public struct CallRecord: Codable, Equatable, Sendable {
         self.status = status
     }
 
-    public var title: String { calendarTitle ?? "\(platform.displayName) call" }
+    public var titleSource: TitleSource {
+        if customTitle != nil { .custom } else if calendarTitle != nil { .calendar } else if generatedTitle != nil { .generated } else { .platform }
+    }
+
+    public var title: String { customTitle ?? calendarTitle ?? generatedTitle ?? "\(platform.displayName) call" }
 
     /// Every marker line of the transcript in time order: pauses, stops, and where a merged part begins.
     public var transcriptMarkers: [TranscriptMarker] {
@@ -172,6 +184,8 @@ extension CallRecord {
         nextAttempt = try c.decodeIfPresent(Date.self, forKey: .nextAttempt)
         meetingID = try c.decodeIfPresent(String.self, forKey: .meetingID)
         calendarTitle = try c.decodeIfPresent(String.self, forKey: .calendarTitle)
+        generatedTitle = try c.decodeIfPresent(String.self, forKey: .generatedTitle)
+        customTitle = try c.decodeIfPresent(String.self, forKey: .customTitle)
         attendees = try c.decodeIfPresent([String].self, forKey: .attendees) ?? []
         utterances = try c.decodeIfPresent([Utterance].self, forKey: .utterances) ?? []
         meUtterances = try c.decodeIfPresent([Utterance].self, forKey: .meUtterances)

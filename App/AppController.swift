@@ -68,6 +68,7 @@ final class AppController: ObservableObject {
     @AppStorage("cloudAccessKeyID") var cloudAccessKeyID = ""
     @AppStorage("cloudKeepLocalDays") var cloudKeepLocalDays = 30
     private var liveSessions: [LiveTranscriber] = []
+    private var liveTitling: Task<Void, Never>?
     private var liveStart = Date()
     /// When the open streaming sessions started, to log the time AssemblyAI bills.
     private var liveOpened: Date?
@@ -332,7 +333,7 @@ final class AppController: ObservableObject {
     // MARK: State
 
     /// The calendar title of the call being recorded, when it is known already.
-    var recordingTitle: String? { meetings.first { $0.status == .recording }?.calendarTitle }
+    var recordingTitle: String? { meetings.first { $0.status == .recording && $0.titleSource != .platform }?.title }
 
     /// The step of the oldest call in progress, for the panel and the sidebar.
     var currentStep: ProcessingStep? {
@@ -518,7 +519,30 @@ final class AppController: ObservableObject {
             liveSessions.append(session)
         }
         liveOpened = Date()
+        if reset { startLiveTitling(callID: CallRecorder.callID(for: since)) }
         if voiceFingerprints { startLiveNaming(themURL: themURL, room: room) }
+    }
+
+    /// Once per call, after about 5 minutes of live transcript, asks a small model for a provisional title so the
+    /// menu and the list show it while the call runs. The summary's title replaces it.
+    private func startLiveTitling(callID: String) {
+        let chosen = aiModel.isEmpty ? aiProvider.defaultModel : aiModel
+        guard let key = keychain.get(aiProvider.key), let model = aiProvider.smallModel ?? (chosen.isEmpty ? nil : chosen) else { return }
+        let titler = LiveTitler(llm: aiProvider.model(model, apiKey: key, usage: usage))
+        let owner = ownerName
+        liveTitling?.cancel()
+        liveTitling = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(300))
+            guard !Task.isCancelled, let self else { return }
+            let text = self.live.snapshot.text(owner: owner, since: nil)
+            guard let title = await UsageContext.$callID.withValue(callID, operation: { await titler.title(transcript: text) }),
+                  !Task.isCancelled else { return }
+            let recorder = self.recorder
+            CaptureQueue.queue.async {
+                recorder.setGeneratedTitle(title, forCall: callID)
+                Task { @MainActor in self.refresh() }
+            }
+        }
     }
 
     /// Every 20 s, names the call's voices that the voice library knows, for the live transcript and current_call.

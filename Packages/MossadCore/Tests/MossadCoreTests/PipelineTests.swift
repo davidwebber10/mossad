@@ -33,6 +33,7 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
     var lastTranscript = ""
     var delayOnCall: [Int: Duration] = [:]
     var lastKnownTags: [String] = []
+    var title: String?
     func summarize(transcript: String, title: String, knownTags: [String]) async throws -> MeetingSummary {
         lastKnownTags = knownTags
         calls += 1
@@ -41,7 +42,7 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
         if let delay = delayOnCall[call] { try await Task.sleep(for: delay) }
         if fail { throw SummaryError.malformed }
         return MeetingSummary(summary: "Summary \(call)", actionItems: [ActionItem(owner: "Alex Rivera", task: "send forecast")],
-                              decisions: ["Decision \(call)"], headline: "Headline \(call)")
+                              decisions: ["Decision \(call)"], headline: "Headline \(call)", title: self.title)
     }
 }
 
@@ -487,6 +488,44 @@ final class PipelineTests: XCTestCase {
         }
         await pipeline(calendar: FakeCalendar(events: [event("Other meeting", "xyz-wxyz-xyz")])).process(id)
         XCTAssertNil(try load(id).calendarTitle)
+    }
+
+    func testSetTitleRenamesTheNoteAndKeepsOneFile() async throws {
+        let id = try makeRecord()
+        summarizer.title = "Freight model review"
+        let p = pipeline()
+        await p.process(id)
+        let first = try XCTUnwrap(try load(id).markdownPath)
+        XCTAssertTrue(first.hasSuffix("Freight model review.md"))
+        await p.setTitle(callID: id, "Dana and Sam sync")
+        let r = try load(id)
+        XCTAssertEqual(r.customTitle, "Dana and Sam sync")
+        XCTAssertEqual(r.title, "Dana and Sam sync")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(r.markdownPath)))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: first))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: paths.meetings.path).count, 1)
+        await p.setTitle(callID: id, "  ")
+        let cleared = try load(id)
+        XCTAssertNil(cleared.customTitle)
+        XCTAssertEqual(cleared.title, "Freight model review")
+        XCTAssertTrue(try XCTUnwrap(cleared.markdownPath).hasSuffix("Freight model review.md"))
+    }
+
+    func testANewSummaryNeverReplacesACustomTitleOrClearsAGeneratedOne() async throws {
+        let id = try makeRecord()
+        summarizer.title = "First title"
+        let p = pipeline()
+        await p.process(id)
+        await p.setTitle(callID: id, "Mine")
+        summarizer.title = "Second title"
+        await p.regenerateSummary(id)
+        var r = try load(id)
+        XCTAssertEqual(r.customTitle, "Mine")
+        XCTAssertEqual(r.generatedTitle, "Second title")
+        summarizer.title = nil
+        await p.regenerateSummary(id)
+        r = try load(id)
+        XCTAssertEqual(r.generatedTitle, "Second title")
     }
 
     func testHappyPathWritesMarkdownAndNotifiesUnknowns() async throws {
