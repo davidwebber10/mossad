@@ -38,3 +38,37 @@ final class MeetingGroupsTests: XCTestCase {
         XCTAssertEqual(groups.map(\.kind), [.yesterday, .earlier])
     }
 }
+
+final class MeetingDaysTests: XCTestCase {
+    let calendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "America/New_York")!
+        c.locale = Locale(identifier: "en_US")
+        return c
+    }()
+
+    func at(_ month: Int, _ day: Int, _ hour: Int, year: Int = 2026) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+    }
+
+    func record(_ id: String, _ start: Date) -> CallRecord {
+        CallRecord(id: id, platform: .meet, bundleID: "com.google.Chrome", start: start, end: start.addingTimeInterval(600), status: .written)
+    }
+
+    func testTodayYesterdayWeekdaysThenDates() {
+        // Friday, November 6, 2026, 3 PM.
+        let now = at(11, 6, 15)
+        let records = [
+            record("today", at(11, 6, 9)), record("yesterday", at(11, 5, 16)), record("wed", at(11, 4, 10)),
+            record("sat", at(10, 31, 12)), record("fri", at(10, 30, 9)), record("oct9", at(10, 9, 10)),
+            record("lastYear", at(12, 20, 10, year: 2025)), record("today2", at(11, 6, 11)),
+        ]
+        let days = MeetingGroups.byDay(records, now: now, calendar: calendar)
+        XCTAssertEqual(days.map(\.title), ["Today", "Yesterday", "Wednesday", "Saturday", "Oct 30", "Oct 9", "Dec 20, 2025"])
+        XCTAssertEqual(days[0].records.map(\.id), ["today2", "today"])
+    }
+
+    func testEmptyGivesNoDays() {
+        XCTAssertTrue(MeetingGroups.byDay([], now: at(11, 6, 15), calendar: calendar).isEmpty)
+    }
+}

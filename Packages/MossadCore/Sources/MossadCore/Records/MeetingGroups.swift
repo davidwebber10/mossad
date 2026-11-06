@@ -36,4 +36,34 @@ public enum MeetingGroups {
         if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear), date < now { return .thisWeek }
         return .earlier
     }
+
+    /// One calendar day of meetings, titled as the Mac list shows it.
+    public struct Day: Sendable {
+        /// The start of the day.
+        public var date: Date
+        public var title: String
+        public var records: [CallRecord]
+    }
+
+    /// The Mac list's sections: Today, Yesterday, the weekday for the rest of the last week, then the date
+    /// ("Oct 9", with the year when it is not this year). Newest first; each row then needs only its time.
+    public static func byDay(_ records: [CallRecord], now: Date = Date(), calendar: Calendar = .current) -> [Day] {
+        let buckets = Dictionary(grouping: records) { calendar.startOfDay(for: $0.start) }
+        let today = calendar.startOfDay(for: now)
+        return buckets.keys.sorted(by: >).map { day in
+            Day(date: day, title: dayTitle(day, today: today, calendar: calendar),
+                records: buckets[day, default: []].sorted { $0.start > $1.start })
+        }
+    }
+
+    private static func dayTitle(_ day: Date, today: Date, calendar: Calendar) -> String {
+        let back = calendar.dateComponents([.day], from: day, to: today).day ?? 0
+        if back == 0 { return "Today" }
+        if back == 1 { return "Yesterday" }
+        var style = Date.FormatStyle(locale: calendar.locale ?? .current, calendar: calendar, timeZone: calendar.timeZone)
+        if back > 1, back < 7 { return day.formatted(style.weekday(.wide)) }
+        style = style.month(.abbreviated).day()
+        if !calendar.isDate(day, equalTo: today, toGranularity: .year) { style = style.year() }
+        return day.formatted(style)
+    }
 }
