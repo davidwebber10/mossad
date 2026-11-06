@@ -8,14 +8,17 @@ struct SummaryTab: View {
     let record: CallRecord
     let people: MeetingPeople
     @ObservedObject var player: AudioPlayer
+    /// Asks to delete the meeting, for a call where nobody spoke.
+    var delete: (() -> Void)?
 
     var body: some View {
         if ProcessingStep(status: record.status) != nil {
             Skeleton()
         } else if record.status == .failed, record.summary == nil {
-            DetailEmptyState(symbol: "doc.text.magnifyingglass", title: "No transcript yet", message: failedMessage)
+            EmptyState(symbol: "doc.text.magnifyingglass", title: "No transcript yet", message: failedMessage)
         } else if record.status == .written, record.utterances.isEmpty {
-            DetailEmptyState(symbol: "waveform.slash", title: "No speech detected", message: "The call was recorded, but nobody spoke.")
+            EmptyState(symbol: "mic.slash", title: "No speech detected", message: "The call was recorded, but nobody spoke.",
+                       action: delete.map { ("Delete…", $0) })
         } else {
             LabelColumnStack(spacing: Space.l) {
                 if let line = oneLine {
@@ -62,13 +65,8 @@ struct SummaryTab: View {
         }.map(firstSentence)
     }
 
-    private var failedMessage: String {
-        if record.failureReason?.contains("key missing") == true {
-            return "The audio is saved. Add the AssemblyAI key in Settings, then retry."
-        }
-        if record.attempts == 0 { return "The recording was interrupted, and a track could not be read. Check the log, then retry." }
-        return "Mossad gave up after \(record.attempts) attempts. Check the log, then retry."
-    }
+    /// The banner above says what failed and what to do; this only says what comes.
+    private var failedMessage: String { "The transcript and the summary appear here after a retry works." }
 
     // MARK: Decisions and bookmarks
 

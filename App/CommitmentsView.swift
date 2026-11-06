@@ -21,8 +21,8 @@ struct CommitmentsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if book.visible.isEmpty {
-                DetailEmptyState(symbol: "checkmark.circle", title: "No commitments yet",
-                                 message: "After each call, Mossad finds what you promised to do, with due dates when you gave one. You can also add your own.")
+                EmptyState(symbol: "checkmark.circle", title: "No commitments yet",
+                           message: "After each call, Mossad finds what you promised to do, with due dates when you gave one. You can also add your own.")
             } else {
                 List {
                     ForEach(shown) { group in

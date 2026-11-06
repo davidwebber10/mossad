@@ -36,8 +36,8 @@ struct TranscriptTab: View {
                 tools(matches: matches, proxy: proxy)
                     .detailColumn(top: top, bottom: Space.s)
                 if record.utterances.isEmpty {
-                    DetailEmptyState(symbol: "text.bubble", title: record.status == .written ? "No speech detected" : "No transcript yet",
-                                     message: record.status == .written ? "The call was recorded, but nobody spoke." : "The transcript appears when processing is done.")
+                    EmptyState(symbol: "text.bubble", title: record.status == .written ? "No speech detected" : "No transcript yet",
+                               message: record.status == .written ? "The call was recorded, but nobody spoke." : "The transcript appears when processing is done.")
                 } else {
                     ScrollView {
                         turns(matches: matches, current: current, marked: marked)

@@ -17,14 +17,14 @@ struct CoachTab: View {
         if let review {
             content(review)
         } else if !controller.coachEnabled {
-            DetailEmptyState(symbol: "person.wave.2", title: "The coach is off",
-                             message: "Turn on the communication coach in Settings. It reviews each call and tracks your progress over time.")
+            EmptyState(symbol: "person.wave.2", title: "The coach is off",
+                       message: "Turn on the communication coach in Settings. It reviews each call and tracks your progress over time.")
         } else if controller.coaching || record.status != .written {
-            DetailEmptyState(symbol: "hourglass", title: "The coach is reviewing calls",
-                             message: "The review shows here when it is done.")
+            EmptyState(symbol: "hourglass", title: "The coach is reviewing calls",
+                       message: "The review shows here when it is done.")
         } else {
-            DetailEmptyState(symbol: "text.bubble", title: "No review for this call",
-                             message: "The coach reviews every call with speech, from two weeks before the day it was turned on.")
+            EmptyState(symbol: "text.bubble", title: "No review for this call",
+                       message: "The coach reviews every call with speech, from two weeks before the day it was turned on.")
         }
     }
 
