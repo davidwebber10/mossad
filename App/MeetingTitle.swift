@@ -1,3 +1,4 @@
+import AppKit
 import MossadCore
 import SwiftUI
 
@@ -47,6 +48,14 @@ struct EditableMeetingTitle: View {
                 .contentShape(Rectangle())
                 .onHover { hovering = $0 }
                 .onTapGesture { if editable { begin() } }
+                // A click renames, so copying is in the right-click menu (and ⌘C after Rename selects the text).
+                .contextMenu {
+                    Button("Copy Title", systemImage: "doc.on.doc") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(record.title, forType: .string)
+                    }
+                    if editable { Button("Rename…", systemImage: "pencil") { begin() } }
+                }
                 .help(editable ? "Click to rename" : "")
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityAction(named: "Rename") { if editable { begin() } }
@@ -62,7 +71,8 @@ struct EditableMeetingTitle: View {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         editing = false
         // An unchanged automatic title stays automatic, so a later invite match or summary can still improve it.
-        guard text != record.title || record.titleSource == .custom else { return }
+        // Nothing changed, or an empty field when there is no title of the owner's to clear: leave call.json alone.
+        guard text != record.title, !(text.isEmpty && record.titleSource != .custom) else { return }
         controller.setTitle(callID: record.id, text.isEmpty ? nil : text)
     }
 

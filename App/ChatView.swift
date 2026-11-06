@@ -1,18 +1,6 @@
 import MossadCore
 import SwiftUI
 
-/// Starts a new chat from the Meetings pane. ⌘K.
-struct AskButton: View {
-    @EnvironmentObject var controller: AppController
-
-    var body: some View {
-        Button { controller.startChat() } label: { Label("Ask", systemImage: "sparkles") }
-        .keyboardShortcut("k", modifiers: .command)
-        .help("Ask your meetings (⌘K)")
-        .accessibilityLabel("Ask your meetings")
-    }
-}
-
 /// Chats with Claude over every meeting: the saved chats on the left, the open chat on the right. Links in the
 /// answers open the meeting at that moment.
 struct ChatView: View {

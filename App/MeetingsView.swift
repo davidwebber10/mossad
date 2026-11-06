@@ -46,14 +46,16 @@ struct MeetingsView: View {
         }
         .background(Palette.window)
         .navigationTitle("Meetings")
-        .searchable(text: $controller.meetingQuery, placement: .toolbar, prompt: "Search titles and transcripts")
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItemGroup {
                 if mode == .calendar, opened == nil, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
                 ModePicker(mode: Binding(get: { mode }, set: { previewMode = nil; savedMode = $0 }))
             }
+            // Its own field, not `.searchable`: macOS always puts the system search last, and the canvas puts it
+            // between the view toggle and the meeting's own controls.
+            ToolbarItem { MeetingSearchField(query: $controller.meetingQuery) }
             if mode == .split || opened != nil {
-                ToolbarItemGroup(placement: .primaryAction) {
+                ToolbarItemGroup {
                     let record = opened.flatMap { id in controller.meetings.first { $0.id == id } } ?? selected
                     ExportMenu(record: record)
                     Menu {
@@ -170,6 +172,35 @@ struct MeetingsView: View {
             .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
             Hairline()
             MeetingDetailView(record: r, style: .fullPage, deleting: $deleting).id(r.id)
+        }
+    }
+}
+
+/// "Search titles and transcripts" in the toolbar's glass; ⌘F focuses it and Esc clears it.
+private struct MeetingSearchField: View {
+    @Binding var query: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Palette.secondary)
+            TextField("Search titles and transcripts", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .focused($focused)
+                .onExitCommand { query = ""; focused = false }
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.tertiaryMark)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 240)
+        .background {
+            Button("Search") { focused = true }.keyboardShortcut("f").opacity(0).accessibilityHidden(true)
         }
     }
 }

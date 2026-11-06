@@ -11,6 +11,7 @@ struct MossadCommands: Commands {
         }
         CommandGroup(replacing: .newItem) {
             Button("New Chat") { controller.startChat() }.keyboardShortcut("n")
+            Button("Ask…") { controller.startChat() }.keyboardShortcut("k")
         }
         CommandMenu("Go") {
             ForEach(Array(AppController.Section.allCases.enumerated()), id: \.element) { i, section in

@@ -121,9 +121,10 @@ private struct HourGrid: View {
         }
     }
 
+    /// 8 AM, as the canvas draws the working day, unless a meeting in view starts earlier.
     private var firstHour: Int {
         let starts = records.filter { r in days.contains { state.calendar.isDate(r.start, inSameDayAs: $0) } }.map { state.calendar.component(.hour, from: $0.start) }
-        return max(0, (starts.min() ?? 9) - 1)
+        return min(8, starts.min() ?? 8)
     }
 
     @ViewBuilder

@@ -10,6 +10,9 @@ struct MeetingList: View {
     @Binding var selection: String?
     @Binding var deleting: CallRecord?
     @FocusState private var focused: Bool
+    /// Letters typed in a row select the first title that starts with them, as in Finder.
+    @State private var typed = ""
+    @State private var typedAt = Date.distantPast
 
     private var upcoming: [UpcomingMeeting] {
         controller.meetingQuery.isEmpty ? Array(controller.upcoming.prefix(UpcomingRow.shown)) : []
@@ -60,16 +63,42 @@ struct MeetingList: View {
             .focusEffectDisabled()
             .onKeyPress(.downArrow) { move(1, proxy) }
             .onKeyPress(.upArrow) { move(-1, proxy) }
+            .onKeyPress(.home) { jump(to: order.first, proxy) }
+            .onKeyPress(.end) { jump(to: order.last, proxy) }
+            .onKeyPress(characters: .alphanumerics.union(.whitespaces), phases: .down) { press in
+                guard press.modifiers.subtracting(.shift).isEmpty else { return .ignored }
+                return typeSelect(press.characters, proxy)
+            }
             .onDeleteCommand {
                 if let id = selection, let r = controller.meetings.first(where: { $0.id == id }), r.canDelete { deleting = r }
             }
-            .onAppear { if let selection { proxy.scrollTo(selection, anchor: .center) } }
+            .onAppear {
+                if let selection { proxy.scrollTo(selection, anchor: .center) }
+                // The arrow keys work as soon as the window opens, without a click in the list first.
+                focused = true
+            }
         }
     }
 
     private func select(_ id: String) {
         selection = id
         focused = true
+    }
+
+    private func jump(to id: String?, _ proxy: ScrollViewProxy) -> KeyPress.Result {
+        guard let id else { return .ignored }
+        selection = id
+        proxy.scrollTo(id)
+        return .handled
+    }
+
+    private func typeSelect(_ characters: String, _ proxy: ScrollViewProxy) -> KeyPress.Result {
+        typed = Date().timeIntervalSince(typedAt) < 1 ? typed + characters : characters
+        typedAt = Date()
+        let titles = live.map { ($0.id, $0.title) } + upcoming.map { ($0.id, $0.title) }
+            + days.flatMap { $0.records.map { ($0.id, $0.title) } }
+        guard let match = titles.first(where: { $0.1.lowercased().hasPrefix(typed.lowercased()) }) else { return .handled }
+        return jump(to: match.0, proxy)
     }
 
     private func move(_ by: Int, _ proxy: ScrollViewProxy) -> KeyPress.Result {
@@ -99,9 +128,14 @@ private struct ListRow: ViewModifier {
         content
             .padding(.vertical, 9).padding(.horizontal, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                tint ?? (selected ? Palette.selection : hovering ? Palette.fill.opacity(0.5) : .clear),
-                in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            .background {
+                // The selection lies over a tint (the call being recorded) so a selected live row still reads as selected.
+                let shape = RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
+                ZStack {
+                    if let tint { shape.fill(tint) }
+                    shape.fill(selected ? Palette.selection : hovering ? Palette.fill.opacity(0.5) : .clear)
+                }
+            }
             .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
             .onTapGesture(perform: select)
             .onHover { hovering = $0 }
