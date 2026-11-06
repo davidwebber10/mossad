@@ -13,6 +13,8 @@ public actor Pipeline {
     private var inFlight: Set<String> = []
     /// Calls whose tags the owner changed while they were processing; the summary must not overwrite those.
     private var tagsEditedByOwner: Set<String> = []
+    /// Calls in a backfill, whose existing tags stay.
+    private var keepTags: Set<String> = []
 
     private let paths: Paths
     private let queue: ProcessingQueue
@@ -139,7 +141,14 @@ public actor Pipeline {
 
     /// The one-time catch-up for meetings written before titles and decision times: the summary step again.
     /// Names, owner-set tags, the custom and calendar titles, and bookmarks stay; `apply` keeps owner tags.
-    public func backfill(_ id: String) async { await regenerateSummary(id) }
+    /// Returns whether the new summary landed. Tags never change: owner tags on old meetings carry no flag.
+    public func backfill(_ id: String) async -> Bool {
+        keepTags.insert(id)
+        defer { keepTags.remove(id) }
+        await regenerateSummary(id)
+        guard let r = try? CallRecord.load(from: paths.callDirectory(id)) else { return false }
+        return r.status == .written && (r.summaryVersion ?? 0) >= SummaryBackfill.currentVersion
+    }
 
     /// Where the transcript from before the last "Transcribe again" is kept, for one undo.
     public static let previousFileName = "call.previous.json"
@@ -418,7 +427,9 @@ public actor Pipeline {
                 let s = try await UsageContext.$callID.withValue(r.id) {
                     try await summarizer.summarize(transcript: transcript, title: title, knownTags: known, people: people)
                 }
+                let kept = r.tags
                 r.apply(s)
+                if keepTags.contains(r.id), !kept.isEmpty { r.tags = kept }
             } catch {
                 Log.error("Summary for \(r.id) failed: \(error)")
                 r.failureReason = Self.failureReason(error)

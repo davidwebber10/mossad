@@ -194,6 +194,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var tags: [String] = []
     /// True once the owner changed the tags, so a new summary keeps them. Builds that predate this ignore the key.
     public var tagsSetByOwner: Bool?
+    /// Which build's summary format this record holds; nil before the field. See `SummaryBackfill.currentVersion`.
+    public var summaryVersion: Int?
     /// False for a meeting that only shares information; nil for records from before this field.
     public var hasOutcomes: Bool?
     public var actionItems: [ActionItem] = []
@@ -283,6 +285,7 @@ extension CallRecord {
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         hasOutcomes = try c.decodeIfPresent(Bool.self, forKey: .hasOutcomes)
         tagsSetByOwner = try c.decodeIfPresent(Bool.self, forKey: .tagsSetByOwner)
+        summaryVersion = try c.decodeIfPresent(Int.self, forKey: .summaryVersion)
         headline = try c.decodeIfPresent(String.self, forKey: .headline)
         markdownPath = try c.decodeIfPresent(String.self, forKey: .markdownPath)
         parts = try c.decodeIfPresent([CallPart].self, forKey: .parts) ?? []

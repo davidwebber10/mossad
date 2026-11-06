@@ -315,12 +315,35 @@ final class PipelineTests: XCTestCase {
         await p.setTags(callID: id, ["Mine"])
         await p.setTitle(callID: id, "My title")
         summarizer.title = "Generated"
-        await p.backfill(id)
+        let ok = await p.backfill(id)
+        XCTAssertTrue(ok)
         let r = try load(id)
         XCTAssertEqual(r.tags, ["Mine"])
         XCTAssertEqual(r.customTitle, "My title")
         XCTAssertEqual(r.generatedTitle, "Generated")
         XCTAssertEqual(r.status, .written)
+    }
+
+    /// Meetings from before the tagsSetByOwner flag keep their tags too.
+    func testBackfillKeepsTagsOfAnOldMeetingAndReportsAFailure() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.tags = ["Freight"]
+        r.tagsSetByOwner = nil
+        r.summaryVersion = nil
+        try r.save(to: paths.callDirectory(id))
+        var ok = await p.backfill(id)
+        XCTAssertTrue(ok)
+        XCTAssertEqual(try load(id).tags, ["Freight"])
+        XCTAssertEqual(try load(id).summaryVersion, SummaryBackfill.currentVersion)
+        r = try load(id)
+        r.summaryVersion = nil
+        try r.save(to: paths.callDirectory(id))
+        summarizer.fail = true
+        ok = await p.backfill(id)
+        XCTAssertFalse(ok)
     }
 
     /// The progress card gets every step in order, the upload percent, and nil when processing ends.

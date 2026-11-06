@@ -794,16 +794,18 @@ final class AppController: ObservableObject {
         Task(priority: .utility) { [weak self] in
             let began = Date()
             var updated = 0
+            let done = Set(ids)
             for id in ids {
                 // Wait out a call; the phone and the owner come first.
                 while let self, self.isRecording { try? await Task.sleep(for: .seconds(30)) }
                 guard let self else { return }
-                await self.track { await self.pipeline.backfill(id) }
-                updated += 1
+                var ok = false
+                await self.track { ok = await self.pipeline.backfill(id) }
+                if ok { updated += 1 }
             }
             UserDefaults.standard.set(true, forKey: key)
             guard let self else { return }
-            let cost = self.usage.all().filter { $0.date >= began }.compactMap(\.costUSD).reduce(0, +)
+            let cost = self.usage.all().filter { $0.date >= began && $0.purpose == .summary && $0.callID.map(done.contains) == true }.compactMap(\.costUSD).reduce(0, +)
             Log.info("Updated \(updated) meetings" + (cost > 0 ? String(format: " (about $%.2f)", cost) : ""))
             self.refresh()
         }
