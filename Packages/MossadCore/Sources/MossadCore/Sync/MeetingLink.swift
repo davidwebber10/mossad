@@ -65,7 +65,8 @@ public struct SharedMeeting: Codable, Equatable, Sendable {
     public var owner: String
     public var summary: String?
     public var topics: [MeetingView.Topic]?
-    public var decisions: [Decision]?
+    public var decisions: [String]?
+    public var decisionTimes: [Double?]?
     public var actionItems: [MeetingView.Item]?
     public var lines: [MeetingView.Line]?
     public var audio: Bool
@@ -84,6 +85,7 @@ public struct SharedMeeting: Codable, Equatable, Sendable {
             summary = view.summary
             topics = view.topics
             decisions = view.decisions
+            decisionTimes = view.decisionTimes
             actionItems = view.actionItems
         }
         if o.transcript { lines = view.lines }

@@ -32,7 +32,10 @@ public struct MeetingView: Codable, Equatable, Sendable {
     public var attendees: [String]
     public var summary: String?
     public var topics: [Topic]
-    public var decisions: [Decision]
+    public var decisions: [String]
+    /// Seconds into the call for each decision, in order; nil when none is known. Beside the text so the
+    /// deployed Worker keeps reading `decisions` as strings.
+    public var decisionTimes: [Double?]?
     public var actionItems: [Item]
     public var lines: [Line]
     public var timeZone: String?
@@ -50,7 +53,8 @@ public struct MeetingView: Codable, Equatable, Sendable {
         attendees = r.attendees
         summary = r.summary
         topics = r.topics.map { Topic(title: $0.title, summary: $0.summary) }
-        decisions = r.decisions
+        decisions = r.decisions.map(\.text)
+        decisionTimes = Decision.times(of: r.decisions)
         actionItems = r.actionItems.map { Item(task: $0.task, owner: $0.owner, text: $0.text) }
         let names = MarkdownWriter.displayNames(r)
         lines = Transcript.interleaved(r.utterances).map { Line(at: $0.start, speaker: names[$0.speakerKey] ?? $0.speakerKey, text: $0.text) }

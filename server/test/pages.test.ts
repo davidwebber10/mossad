@@ -13,6 +13,13 @@ describe('share page', () => {
     expect(html).toContain('<li>[00:52:08] New</li>');
   });
 
+  it('puts decision times beside plain-string decisions', () => {
+    const html = sharePage({ title: 'T', start: '2026-11-03T15:00:00Z', end: '2026-11-03T15:30:00Z', people: ['Dana'], owner: 'Dana',
+      summary: 'S', decisions: ['A', 'B'], decisionTimes: [null, 61], audio: false, chat: false, expires: null }, 'tok', 'n', 'https://github.com/x/y');
+    expect(html).toContain('<li>A</li>');
+    expect(html).toContain('<li>[00:01:01] B</li>');
+  });
+
   it('shows only the shared parts, escaped, with no outside resources', () => {
     const html = sharePage({ title: '<script>x</script>', start: '2026-11-03T15:00:00Z', end: '2026-11-03T15:30:00Z', people: ['Dana'], owner: 'Dana',
       lines: [{ at: 5, speaker: 'Dana', text: 'Hi' }], audio: false, chat: false, expires: null }, 'tok', 'n', 'https://github.com/x/y');

@@ -46,6 +46,8 @@ export interface MeetingView {
   summary?: string;
   topics: { title: string; summary: string }[];
   decisions: Decision[];
+  /** Seconds into the call for each decision, in order; absent from older Macs. */
+  decisionTimes?: (number | null)[];
   actionItems: ActionItem[];
   lines: Line[];
   /** The owner's time zone, such as "America/Chicago": dates in tool inputs are local days. */
@@ -62,6 +64,7 @@ export interface Share {
   summary?: string;
   topics?: { title: string; summary: string }[];
   decisions?: Decision[];
+  decisionTimes?: (number | null)[];
   actionItems?: ActionItem[];
   lines?: Line[];
   audio: boolean;

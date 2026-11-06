@@ -89,6 +89,8 @@ public struct Decision: Codable, Equatable, Sendable, Hashable {
     public var text: String
     public var at: TimeInterval?
 
+    private enum CodingKeys: String, CodingKey { case text, at }
+
     public init(text: String, at: TimeInterval? = nil) {
         self.text = text
         self.at = at
@@ -102,6 +104,26 @@ public struct Decision: Codable, Equatable, Sendable, Hashable {
         }
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(text: try c.decode(String.self, forKey: .text), at: try c.decodeIfPresent(TimeInterval.self, forKey: .at))
+    }
+
+    /// Text only: an older phone and the deployed Worker read decisions as strings. The times travel beside
+    /// them as `decisionTimes`.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(text)
+    }
+
+    /// The times in order, or nil when none is known, so records without times stay as they were.
+    static func times(of decisions: [Decision]) -> [Double?]? {
+        decisions.contains { $0.at != nil } ? decisions.map(\.at) : nil
+    }
+
+    /// Gives each decision the time stored at its position, unless it already carries one.
+    static func joined(_ decisions: [Decision], _ times: [Double?]?) -> [Decision] {
+        guard let times else { return decisions }
+        return decisions.enumerated().map { i, d in
+            Decision(text: d.text, at: d.at ?? (i < times.count ? times[i] : nil))
+        }
     }
 }
 
@@ -145,7 +167,12 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// False for a meeting that only shares information; nil for records from before this field.
     public var hasOutcomes: Bool?
     public var actionItems: [ActionItem] = []
-    public var decisions: [Decision] = []
+    public var decisions: [Decision] = [] {
+        didSet { decisionTimes = Decision.times(of: decisions) }
+    }
+    /// The seconds each decision was made, in the order of `decisions`; nil when none is known. Stored beside
+    /// the text so `decisions` stays an array of strings in call.json for builds that predate times.
+    public private(set) var decisionTimes: [Double?]?
     /// One sentence, at most about 140 characters.
     public var headline: String?
     public var markdownPath: String?
@@ -218,7 +245,9 @@ extension CallRecord {
         speakerEmbeddings = try c.decodeIfPresent([String: [Float]].self, forKey: .speakerEmbeddings) ?? [:]
         summary = try c.decodeIfPresent(String.self, forKey: .summary)
         actionItems = try c.decodeIfPresent([ActionItem].self, forKey: .actionItems) ?? []
-        decisions = try c.decodeIfPresent([Decision].self, forKey: .decisions) ?? []
+        decisions = Decision.joined(try c.decodeIfPresent([Decision].self, forKey: .decisions) ?? [],
+                                    try c.decodeIfPresent([Double?].self, forKey: .decisionTimes))
+        decisionTimes = Decision.times(of: decisions)
         topics = try c.decodeIfPresent([SummaryTopic].self, forKey: .topics) ?? []
         kind = try c.decodeIfPresent(String.self, forKey: .kind)
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []

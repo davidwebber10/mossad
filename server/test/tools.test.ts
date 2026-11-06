@@ -60,6 +60,11 @@ describe('tools', () => {
     expect(t.run('read_meeting', { call_id: 'd' })).toContain('Decisions:\n- Ship Friday\n- [00:52:08] Hire two\n- Skip it');
   });
 
+  it('reads decision times that arrive beside plain-string decisions', () => {
+    const t = new MeetingTools([meeting('e', '2026-11-03T15:00:00Z', { decisions: ['Ship Friday', 'Hire two'], decisionTimes: [null, 3128] })], 'Dana');
+    expect(t.run('read_meeting', { call_id: 'e' })).toContain('Decisions:\n- Ship Friday\n- [00:52:08] Hire two');
+  });
+
   it('searches lines and lists action items by owner', () => {
     expect(tools.run('search_transcripts', { query: 'numbers' })).toContain('[00:01:05] Jennifer Lee:');
     expect(tools.run('action_items', { owner: 'Jen' })).toContain('Jennifer Lee: Send the numbers');

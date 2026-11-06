@@ -91,7 +91,7 @@ export class MeetingTools {
     if (m.attendees.length) parts.push(`Invited: ${m.attendees.join(', ')}`);
     if (m.summary) parts.push(`Summary:\n${m.summary}`);
     for (const t of m.topics) parts.push(`### ${t.title}\n${t.summary}`);
-    if (m.decisions.length) parts.push('Decisions:\n' + m.decisions.map((d) => `- ${decisionLine(d)}`).join('\n'));
+    if (m.decisions.length) parts.push('Decisions:\n' + m.decisions.map((d, i) => `- ${decisionLine(d, m.decisionTimes?.[i])}`).join('\n'));
     if (m.actionItems.length) parts.push('Action items:\n' + m.actionItems.map((a) => `- ${a.text}`).join('\n'));
     const t = this.transcript(m);
     parts.push('Transcript:\n' + t.slice(0, maxMeetingCharacters) +

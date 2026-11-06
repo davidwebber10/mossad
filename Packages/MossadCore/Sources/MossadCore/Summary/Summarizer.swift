@@ -46,7 +46,9 @@ extension CallRecord {
         summary = s.summary
         topics = s.topics
         actionItems = s.actionItems
-        decisions = s.decisions
+        // A time past the end of the call is a misread stamp.
+        let length = end.timeIntervalSince(start)
+        decisions = s.decisions.map { Decision(text: $0.text, at: $0.at.flatMap { $0 <= length ? $0 : nil }) }
         headline = s.headline
         kind = s.kind
         hasOutcomes = s.hasOutcomes

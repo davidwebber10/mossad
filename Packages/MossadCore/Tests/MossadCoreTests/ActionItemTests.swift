@@ -52,6 +52,46 @@ final class ActionItemTests: XCTestCase {
         XCTAssertEqual(try CallRecord.load(from: dir).decisions, [Decision(text: "Ship Friday", at: nil), Decision(text: "Hire two", at: 61.5)])
     }
 
+    func testEncodedDecisionsStayPlainStringsForOlderBuilds() throws {
+        var r = record()
+        r.decisions = [Decision(text: "Ship Friday", at: 3128), Decision(text: "Hire two", at: nil)]
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(r)) as! [String: Any]
+        XCTAssertEqual(json["decisions"] as? [String], ["Ship Friday", "Hire two"])
+        XCTAssertEqual((json["decisionTimes"] as? [Any])?.count, 2)
+        r.decisions = [Decision(text: "No times", at: nil)]
+        let plain = try JSONSerialization.jsonObject(with: JSONEncoder().encode(r)) as! [String: Any]
+        XCTAssertEqual(plain["decisions"] as? [String], ["No times"])
+        XCTAssertNil(plain["decisionTimes"])
+    }
+
+    func testStringDecisionsWithSeparateTimesDecode() throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try record().save(to: dir)
+        let url = dir.appendingPathComponent("call.json")
+        var json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        json["decisions"] = ["Ship Friday", "Hire two"]
+        json["decisionTimes"] = [NSNull(), 61.5]
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertEqual(try CallRecord.load(from: dir).decisions, [Decision(text: "Ship Friday", at: nil), Decision(text: "Hire two", at: 61.5)])
+    }
+
+    func testSummaryTimePastTheEndOfTheCallIsDropped() {
+        var r = record()
+        r.apply(MeetingSummary(summary: "S", actionItems: [], decisions: [Decision(text: "In", at: 59), Decision(text: "Out", at: 61)]))
+        XCTAssertEqual(r.decisions, [Decision(text: "In", at: 59), Decision(text: "Out", at: nil)])
+    }
+
+    func testSharedMeetingKeepsDecisionsAsStringsWithTimes() throws {
+        var r = record()
+        r.decisions = [Decision(text: "Ship Friday", at: 30)]
+        let view = MeetingView(r)
+        let shared = SharedMeeting(view, owner: "Dana", options: ShareOptions(summary: true, transcript: false, recording: false, chat: false), expires: nil, model: nil)
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(shared)) as! [String: Any]
+        XCTAssertEqual(json["decisions"] as? [String], ["Ship Friday"])
+        XCTAssertEqual(json["decisionTimes"] as? [Double], [30])
+    }
+
     func testNewRecordRoundTrips() throws {
         var r = record()
         r.actionItems = [ActionItem(owner: "Alex", task: "a"), ActionItem(owner: nil, task: "b")]

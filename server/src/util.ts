@@ -46,9 +46,10 @@ export function timestamp(seconds: number): string {
 }
 
 /** A decision as one line: its time in front when the Mac sent one. */
-export function decisionLine(d: string | { text: string; at?: number }): string {
-  if (typeof d === 'string') return d;
-  return d.at == null ? d.text : `[${timestamp(d.at)}] ${d.text}`;
+export function decisionLine(d: string | { text: string; at?: number }, time?: number | null): string {
+  const text = typeof d === 'string' ? d : d.text;
+  const at = typeof d === 'string' ? time : (d.at ?? time);
+  return at == null ? text : `[${timestamp(at)}] ${text}`;
 }
 
 /** The time-zone offset in ms at an instant: local wall time minus UTC. */
