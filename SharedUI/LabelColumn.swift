@@ -13,6 +13,7 @@ struct LabelColumn<Content: View>: View {
     var labelTopPadding: CGFloat = 2
     @ViewBuilder let content: Content
 
+    @ScaledMetric(relativeTo: .caption) private var noteSize: CGFloat = 11
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var stacked: Bool { sizeClass == .compact }
@@ -41,7 +42,7 @@ struct LabelColumn<Content: View>: View {
             Text(label).textRole(.label).foregroundStyle(Palette.secondary)
             if let note {
                 // Sentence case: the canvas sets only the label itself in caps.
-                Text(note).font(.system(size: TextRole.label.size, weight: .semibold)).monospacedDigit()
+                Text(note).font(.system(size: noteSize, weight: .semibold)).monospacedDigit()
                     .foregroundStyle(Palette.accent)
             }
         }

@@ -9,19 +9,23 @@ struct SpeakerChip: View {
     var note: String?
     /// "Speaker A · name this voice": the chip turns to the accent because the owner needs to act.
     var needsYou = false
+    // The canvas's sizes, scaled with Dynamic Type on iPhone (they stay as drawn on the Mac).
+    @ScaledMetric(relativeTo: .body) private var textSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 24
+    @ScaledMetric(relativeTo: .body) private var dot: CGFloat = 8
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 8, height: 8)
+            Circle().fill(color).frame(width: dot, height: dot)
             Text(name).fontWeight(needsYou ? .medium : .regular)
             if let note { Text(note).foregroundStyle(needsYou ? Palette.accent : Palette.secondary) }
         }
-        .font(.system(size: 13))
+        .font(.system(size: textSize))
         .lineLimit(1)
         .foregroundStyle(needsYou ? Palette.accent : Palette.ink)
         .padding(.leading, Space.s)
         .padding(.trailing, 10)
-        .frame(height: 24)
+        .frame(minHeight: height)
         .background(needsYou ? Palette.accentTint : Palette.fill, in: Capsule())
         .accessibilityElement(children: .combine)
     }
@@ -30,14 +34,16 @@ struct SpeakerChip: View {
 /// A meeting's kind or topic: "Leadership offsite". Quiet, never colored.
 struct TagChip: View {
     let text: String
+    @ScaledMetric(relativeTo: .caption) private var textSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption) private var height: CGFloat = 20
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: textSize, weight: .medium))
             .lineLimit(1)
             .foregroundStyle(Palette.secondary)
             .padding(.horizontal, Space.s)
-            .frame(height: 20)
+            .frame(minHeight: height)
             .background(Palette.fill, in: Capsule())
     }
 }
@@ -46,17 +52,19 @@ struct TagChip: View {
 struct NeedsYouChip: View {
     let text: String
     var systemImage: String?
+    @ScaledMetric(relativeTo: .caption) private var textSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption) private var height: CGFloat = 20
 
     var body: some View {
         HStack(spacing: 5) {
-            if let systemImage { Image(systemName: systemImage).font(.system(size: 9, weight: .semibold)) }
+            if let systemImage { Image(systemName: systemImage).font(.system(size: textSize * 0.82, weight: .semibold)) }
             Text(text).lineLimit(1)
         }
-        .font(.system(size: 11, weight: .semibold))
+        .font(.system(size: textSize, weight: .semibold))
         .monospacedDigit()
         .foregroundStyle(Palette.accent)
         .padding(.horizontal, Space.s)
-        .frame(height: 20)
+        .frame(minHeight: height)
         .background(Palette.accentTint, in: Capsule())
     }
 }

@@ -30,7 +30,11 @@ enum Palette {
 
     static let ink = Color(light: 0x1C1A17, dark: 0xF1EEE8)
     static let secondary = Color(light: 0x6B665E, dark: 0xA6A097)
-    static let tertiary = Color(light: 0x9B968D, dark: 0x726D65)
+    /// Tertiary text. The canvas's tertiary measures under 3.3:1, so text uses this darker (light) and lighter
+    /// (dark) value of the same hue, which meets 4.5:1 on the window and on the surface.
+    static let tertiary = Color(light: 0x746F66, dark: 0x908B82)
+    /// The canvas's tertiary, for marks only: dots, icons, rules. Not for text.
+    static let tertiaryMark = Color(light: 0x9B968D, dark: 0x726D65)
 
     /// Accent text and icons: darker than the fill in light mode so it meets 4.5:1.
     static let accent = Color(light: 0xA84D14, dark: 0xF2A05A)
@@ -44,8 +48,10 @@ enum Palette {
     /// Only while audio is captured, and for destructive actions.
     static let recording = Color(light: 0xC43D31, dark: 0xFF6B5E)
     static let recordingTint = Color(light: 0xC43D31, lightAlpha: 0.1, dark: 0xFF6B5E, darkAlpha: 0.14)
-    /// Done, connected, granted.
+    /// Done, connected, granted: for marks only (dots, icons). Not for text.
     static let ok = Color(light: 0x1E8E5A, dark: 0x3FCB84)
+    /// "Connected", "Granted" as text: a darker green in light mode so it meets 4.5:1.
+    static let okText = Color(light: 0x1B7F51, dark: 0x3FCB84)
 
     /// The canvas's stand-in for Liquid Glass and the sidebar; the apps use the system glass, so these only
     /// serve hand-drawn glass such as a popover arrow.
@@ -183,13 +189,15 @@ private struct TextRoleModifier: ViewModifier {
         _scale = ScaledMetric(wrappedValue: 1, relativeTo: role.textStyle)
     }
 
+    @ViewBuilder
     func body(content: Content) -> some View {
         let size = role.size * scale
-        content
+        let styled = content
             .font(.system(size: size, weight: role.weight))
             .tracking(size * role.trackingEm)
-            .textCase(role == .label ? .uppercase : nil)
             .monospacedDigit()
+        // Only the label sets a case: `textCase(nil)` on the others would clear a parent's.
+        if role == .label { styled.textCase(.uppercase) } else { styled }
     }
 }
 
