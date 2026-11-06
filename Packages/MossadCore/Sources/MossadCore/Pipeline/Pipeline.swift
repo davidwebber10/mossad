@@ -13,8 +13,6 @@ public actor Pipeline {
     private var inFlight: Set<String> = []
     /// Calls whose tags the owner changed while they were processing; the summary must not overwrite those.
     private var tagsEditedByOwner: Set<String> = []
-    /// Calls in a backfill, whose existing tags stay.
-    private var keepTags: Set<String> = []
 
     private let paths: Paths
     private let queue: ProcessingQueue
@@ -141,10 +139,14 @@ public actor Pipeline {
 
     /// The one-time catch-up for meetings written before titles and decision times: the summary step again.
     /// Names, owner-set tags, the custom and calendar titles, and bookmarks stay; `apply` keeps owner tags.
-    /// Returns whether the new summary landed. Tags never change: owner tags on old meetings carry no flag.
+    /// Returns whether the new summary landed. Tags never change.
     public func backfill(_ id: String) async -> Bool {
-        keepTags.insert(id)
-        defer { keepTags.remove(id) }
+        // Saved first, so a retry after a failure keeps the tags too. Old owner tags and old model tags look alike.
+        let dir = paths.callDirectory(id)
+        if var r = try? CallRecord.load(from: dir), r.status == .written, !r.tags.isEmpty, r.tagsSetByOwner != true {
+            r.tagsSetByOwner = true
+            try? store(r, dir: dir)
+        }
         await regenerateSummary(id)
         guard let r = try? CallRecord.load(from: paths.callDirectory(id)) else { return false }
         return r.status == .written && (r.summaryVersion ?? 0) >= SummaryBackfill.currentVersion
@@ -427,9 +429,7 @@ public actor Pipeline {
                 let s = try await UsageContext.$callID.withValue(r.id) {
                     try await summarizer.summarize(transcript: transcript, title: title, knownTags: known, people: people)
                 }
-                let kept = r.tags
                 r.apply(s)
-                if keepTags.contains(r.id), !kept.isEmpty { r.tags = kept }
             } catch {
                 Log.error("Summary for \(r.id) failed: \(error)")
                 r.failureReason = Self.failureReason(error)

@@ -346,6 +346,27 @@ final class PipelineTests: XCTestCase {
         XCTAssertFalse(ok)
     }
 
+    /// A backfill that fails and is retried later by plain processing still keeps the old tags.
+    func testBackfillRetryAfterAFailureKeepsTags() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.tags = ["Freight"]
+        r.tagsSetByOwner = nil
+        r.summaryVersion = nil
+        try r.save(to: paths.callDirectory(id))
+        summarizer.fail = true
+        let ok = await p.backfill(id)
+        XCTAssertFalse(ok)
+        XCTAssertNotEqual(try load(id).status, .written)
+        summarizer.fail = false
+        await p.process(id)
+        let after = try load(id)
+        XCTAssertEqual(after.status, .written)
+        XCTAssertEqual(after.tags, ["Freight"])
+    }
+
     /// The progress card gets every step in order, the upload percent, and nil when processing ends.
     func testProgressReportsEachStepAndTheUpload() async throws {
         let id = try makeRecord()
