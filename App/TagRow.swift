@@ -9,13 +9,10 @@ struct TagRow: View {
     @State private var draft = ""
 
     var body: some View {
-        FlowLayout(spacing: 6) {
+        HStack(spacing: 6) {
             ForEach(record.tags, id: \.self) { tag in
-                Button { controller.showTag(tag) } label: {
-                    Text("#\(tag)").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Color.accentColor.opacity(0.12), in: Capsule())
-                }
+                // Quiet, like the kind: a tag describes the meeting and never asks for anything.
+                Button { controller.showTag(tag) } label: { TagChip(text: tag) }
                 .buttonStyle(.plain)
                 .help("Show every meeting tagged \(tag)")
                 .contextMenu {
@@ -23,9 +20,9 @@ struct TagRow: View {
                 }
             }
             Button { adding = true } label: {
-                Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                    .frame(width: 22, height: 20)
-                    .background(Theme.field, in: Capsule())
+                Image(systemName: "plus").font(.system(size: 9, weight: .semibold)).foregroundStyle(Palette.secondary)
+                    .frame(width: 20, height: 20)
+                    .background(Palette.fill, in: Circle())
             }
             .buttonStyle(.plain)
             .help("Add a tag")
@@ -47,7 +44,7 @@ struct TagRow: View {
             TextField("Tag", text: $draft).textFieldStyle(.roundedBorder)
                 .onSubmit { add(draft) }
             ForEach(suggestions, id: \.self) { tag in
-                Button("#\(tag)") { add(tag) }.buttonStyle(.plain).foregroundStyle(Color.accentColor)
+                Button(tag) { add(tag) }.buttonStyle(.plain).foregroundStyle(Palette.ink)
             }
         }
         .font(.system(size: 12))

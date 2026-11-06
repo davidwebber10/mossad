@@ -457,6 +457,40 @@ final class AppController: ObservableObject {
         lastBookmark = Date()
     }
 
+    /// Adds a bookmark from the player and returns its offset, so the note popover can name it. While this call
+    /// records, the recorder marks the live moment; after the call, the saved call gets one at `offset`.
+    func addBookmark(callID: String, at offset: TimeInterval) async -> TimeInterval? {
+        let recorder = recorder
+        let live: TimeInterval?? = await withCheckedContinuation { done in
+            CaptureQueue.queue.async {
+                guard recorder.currentRecord?.id == callID else { return done.resume(returning: .none) }
+                done.resume(returning: .some(recorder.bookmark()))
+            }
+        }
+        if let live {
+            if live != nil { lastBookmark = Date() }
+            refresh()
+            return live
+        }
+        await pipeline.addBookmark(callID: callID, offset: offset)
+        refresh()
+        return offset
+    }
+
+    /// The note of a bookmark: through the recorder while the call records, else on the saved call.
+    func setBookmarkNote(callID: String, offset: TimeInterval, note: String) {
+        let recorder = recorder
+        Task {
+            let live = await withCheckedContinuation { done in
+                CaptureQueue.queue.async {
+                    done.resume(returning: recorder.currentRecord?.id == callID && recorder.setBookmarkNote(at: offset, note))
+                }
+            }
+            if !live { await pipeline.setBookmarkNote(callID: callID, offset: offset, note: note) }
+            refresh()
+        }
+    }
+
     /// Records a meeting in a room through the mic, until Stop. Detection ignores calls meanwhile.
     func recordInPerson() {
         guard case .idle = status, isOn else { return }

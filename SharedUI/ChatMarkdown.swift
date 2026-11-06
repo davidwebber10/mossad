@@ -5,6 +5,8 @@ import SwiftUI
 struct ChatMarkdown: View {
     let text: String
     var bodyFont: Font = .body
+    /// mossad:// time links as quiet chips, as a meeting's own chat shows them.
+    var timeChips = false
 
     enum Block: Equatable {
         case paragraph(String)
@@ -38,7 +40,25 @@ struct ChatMarkdown: View {
     }
 
     private func inline(_ s: String) -> AttributedString {
-        (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
+        let text = (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
+        return timeChips ? Self.chips(text) : text
+    }
+
+    /// Text cannot draw a capsule inside a line, so a chip is the link on the fill with no-break spaces each side, so it never splits.
+    private static func chips(_ s: AttributedString) -> AttributedString {
+        var out = AttributedString()
+        for run in s.runs {
+            var piece = AttributedString(s[run.range])
+            if let url = run.link, url.scheme == "mossad" {
+                piece = AttributedString("\u{00A0}\u{00A0}") + piece + AttributedString("\u{00A0}\u{00A0}")
+                piece.link = url
+                piece.backgroundColor = Palette.fill
+                piece.foregroundColor = Palette.secondary
+                piece.font = .system(size: 11).monospacedDigit()
+            }
+            out += piece
+        }
+        return out
     }
 
     static func blocks(_ text: String) -> [Block] {

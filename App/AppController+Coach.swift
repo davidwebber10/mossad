@@ -198,7 +198,7 @@ extension AppController {
     }
 }
 
-private extension String {
+extension String {
     var nonEmpty: String? {
         let t = trimmingCharacters(in: .whitespaces)
         return t.isEmpty ? nil : t

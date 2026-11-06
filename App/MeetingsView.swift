@@ -98,6 +98,10 @@ struct MeetingsView: View {
         .onAppear {
             if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first?.id }
             let preview = CommandLine.arguments.contains("--ui-preview")
+            // Development hook for screenshots: MOSSAD_MEETING=<call id> opens that meeting.
+            if preview, let id = ProcessInfo.processInfo.environment["MOSSAD_MEETING"], controller.meetings.contains(where: { $0.id == id }) {
+                controller.selectedMeetingID = id
+            }
             // Development hook for screenshots: MOSSAD_TRANSCRIBE_AGAIN opens the sheet for the first meeting.
             if ProcessInfo.processInfo.environment["MOSSAD_TRANSCRIBE_AGAIN"] != nil, preview {
                 controller.transcribingAgainCallID = controller.meetings.first?.id
@@ -166,7 +170,6 @@ struct MeetingsView: View {
                 Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
                 Text(r.title).fontWeight(.medium).lineLimit(1)
                 Spacer()
-                MeetingActions(record: r, deleting: $deleting)
             }
             .font(.system(size: 13))
             .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
@@ -347,39 +350,6 @@ struct MeetingMenuItems: View {
 }
 
 /// "Name voices" and the More button, in a detail header.
-struct MeetingActions: View {
-    @EnvironmentObject var controller: AppController
-    let record: CallRecord
-    @Binding var deleting: CallRecord?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            if record.status == .written, !record.unknownSpeakers.isEmpty {
-                Button { controller.namingCallID = record.id } label: {
-                    Label("Name voices", systemImage: "person.wave.2")
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            if record.status == .written {
-                Button { controller.sharingCallID = record.id } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-                .help("Share this meeting by a private link")
-            }
-            Menu {
-                MeetingMenuItems(record: record, deleting: $deleting)
-            } label: {
-                Image(systemName: "ellipsis").accessibilityLabel("More")
-            }
-            .menuStyle(.button)
-            .menuIndicator(.hidden)
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .fixedSize()
-        }
-    }
-}
-
 private struct EmptyMeetings: View {
     var body: some View {
         VStack(spacing: 10) {
