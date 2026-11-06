@@ -81,7 +81,8 @@ struct VoiceNamingView: View {
         // Esc closes and saves nothing; Later is the button that keeps the skips. A see-through button, because a
         // hidden one takes no shortcut.
         .background {
-            Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).opacity(0).accessibilityHidden(true)
+            Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).opacity(0)
+                .focusable(false).allowsHitTesting(false).accessibilityHidden(true)
         }
         .task { await measureSamples() }
     }

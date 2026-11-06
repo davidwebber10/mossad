@@ -191,8 +191,6 @@ struct SheetCheckbox: View {
 
 /// A checkbox row: the box, then the label. A button underneath, so Tab reaches it and Space flips it.
 struct SheetCheckboxStyle: ToggleStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
             HStack(spacing: 12) {
@@ -202,7 +200,6 @@ struct SheetCheckboxStyle: ToggleStyle {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .opacity(isEnabled ? 1 : 0.6)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isToggle)
         .accessibilityValue(configuration.isOn ? "On" : "Off")
