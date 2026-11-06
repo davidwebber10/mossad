@@ -92,8 +92,15 @@ struct MeetingList: View {
         return .handled
     }
 
+    /// The player's bare keys: Space plays or pauses, J, K, and L skip and toggle.
+    private static let playerKeys: Set<String> = [" ", "j", "k", "l"]
+
     private func typeSelect(_ characters: String, _ proxy: ScrollViewProxy) -> KeyPress.Result {
-        typed = Date().timeIntervalSince(typedAt) < 1 ? typed + characters : characters
+        let inBurst = Date().timeIntervalSince(typedAt) < 1
+        // A player key never starts a type-to-select, so it falls through to the player's shortcut. Within a
+        // burst of typing that another letter started, it is part of the title.
+        guard inBurst || !Self.playerKeys.contains(characters.lowercased()) else { return .ignored }
+        typed = inBurst ? typed + characters : characters
         typedAt = Date()
         let titles = live.map { ($0.id, $0.title) } + upcoming.map { ($0.id, $0.title) }
             + days.flatMap { $0.records.map { ($0.id, $0.title) } }

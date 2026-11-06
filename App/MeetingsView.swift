@@ -183,7 +183,7 @@ private struct MeetingSearchField: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Palette.secondary)
+            Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Palette.secondary).accessibilityHidden(true)
             TextField("Search titles and transcripts", text: $query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
