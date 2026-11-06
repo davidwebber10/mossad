@@ -15,6 +15,10 @@ struct MeetingList: View {
     @State private var typedAt = Date.distantPast
     /// Rows on screen, so opening the list scrolls only to a selection that is not.
     @State private var visible: Set<String> = []
+    /// Until the first visibility report: only then is it known whether the selection is on screen.
+    @State private var waitingForLayout = true
+    /// The arrow keys, Home, End, and typing scroll on their own; their selection change must not scroll again.
+    @State private var scrolledHere: String?
 
     private var upcoming: [UpcomingMeeting] {
         controller.meetingQuery.isEmpty ? Array(controller.upcoming.prefix(UpcomingRow.shown)) : []
@@ -60,7 +64,13 @@ struct MeetingList: View {
                 .padding(.leading, 4).padding(.trailing, Space.s).padding(.bottom, Space.m)
                 .scrollTargetLayout()
             }
-            .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.9) { visible = Set($0) }
+            .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.9) { ids in
+                visible = Set(ids)
+                if waitingForLayout {
+                    waitingForLayout = false
+                    reveal(selection, proxy)
+                }
+            }
             .scrollContentBackground(.hidden)
             .focusable()
             .focused($focused)
@@ -76,16 +86,23 @@ struct MeetingList: View {
             .onDeleteCommand {
                 if let id = selection, let r = controller.meetings.first(where: { $0.id == id }), r.canDelete { deleting = r }
             }
+            // A meeting opened from elsewhere (a notification, a chat link) comes into view.
+            .onChange(of: selection) { _, id in
+                defer { scrolledHere = nil }
+                guard id != scrolledHere, !waitingForLayout else { return }
+                reveal(id, proxy)
+            }
             .onAppear {
-                // Only a selection off screen: scrolling to one already in view moved the list under the toolbar.
-                Task {
-                    try? await Task.sleep(for: .milliseconds(150))
-                    if let selection, !visible.contains(selection) { proxy.scrollTo(selection, anchor: .center) }
-                }
                 // The arrow keys work as soon as the window opens, without a click in the list first.
                 focused = true
             }
         }
+    }
+
+    /// Only a row off screen: scrolling to one already in view moved the list under the toolbar.
+    private func reveal(_ id: String?, _ proxy: ScrollViewProxy) {
+        guard let id, !visible.contains(id), order.contains(id) else { return }
+        proxy.scrollTo(id, anchor: .center)
     }
 
     private func select(_ id: String) {
@@ -95,6 +112,7 @@ struct MeetingList: View {
 
     private func jump(to id: String?, _ proxy: ScrollViewProxy) -> KeyPress.Result {
         guard let id else { return .ignored }
+        scrolledHere = id
         selection = id
         proxy.scrollTo(id)
         return .handled
@@ -120,6 +138,7 @@ struct MeetingList: View {
         let ids = order
         guard !ids.isEmpty else { return .ignored }
         let index = selection.flatMap { ids.firstIndex(of: $0) }.map { min(max($0 + by, 0), ids.count - 1) } ?? 0
+        scrolledHere = ids[index]
         selection = ids[index]
         proxy.scrollTo(ids[index])
         return .handled

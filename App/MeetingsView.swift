@@ -102,6 +102,14 @@ struct MeetingsView: View {
             if preview, let id = ProcessInfo.processInfo.environment["MOSSAD_MEETING"], controller.meetings.contains(where: { $0.id == id }) {
                 controller.selectedMeetingID = id
             }
+            // Development hook for screenshots: MOSSAD_OPEN_LATER=<call id> opens that meeting 3 s after the list
+            // shows, as a notification or a chat link would.
+            if preview, let id = ProcessInfo.processInfo.environment["MOSSAD_OPEN_LATER"] {
+                Task {
+                    try? await Task.sleep(for: .seconds(3))
+                    controller.openMeeting(id)
+                }
+            }
             // Development hook for screenshots: MOSSAD_TRANSCRIBE_AGAIN opens the sheet for the first meeting.
             if ProcessInfo.processInfo.environment["MOSSAD_TRANSCRIBE_AGAIN"] != nil, preview {
                 controller.transcribingAgainCallID = controller.meetings.first?.id
