@@ -10,6 +10,7 @@ struct MeetingHeader: View {
     let lanes: [SpeakerLanes.Lane]
     @ObservedObject var player: AudioPlayer
     var retentionDays: Int?
+    var maxLanes = 12
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -28,8 +29,9 @@ struct MeetingHeader: View {
             }
             .padding(.top, 6)
             banner
-            if record.status != .recording, !lanes.isEmpty {
-                LanesPlayer(player: player, record: record, people: people, lanes: lanes, retentionDays: retentionDays)
+            // Also while the call processes or when nobody spoke: the audio plays before there are lanes.
+            if record.status != .recording {
+                LanesPlayer(player: player, record: record, people: people, lanes: lanes, retentionDays: retentionDays, maxLanes: maxLanes)
                     .padding(.top, 38)
             }
         }
@@ -47,12 +49,16 @@ struct MeetingHeader: View {
         player.duration > 0 ? player.duration : record.end.timeIntervalSince(record.start)
     }
 
+    /// Wraps onto a second line rather than clip when a meeting has many tags.
     private var meta: some View {
-        HStack(spacing: Space.s) {
-            PlatformDot(platform: record.platform)
-            Text(when).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+        FlowLayout(spacing: Space.s) {
+            HStack(spacing: Space.s) {
+                PlatformDot(platform: record.platform)
+                Text(when).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+            }
+            .frame(minHeight: 20)
             if let kind = record.kind { TagChip(text: kind) }
-            if record.titleSource == .generated { NamedByMossadTag() }
+            if record.titleSource == .generated { NamedByMossadTag().frame(minHeight: 20) }
             if record.status == .written { TagRow(record: record) }
             if record.status == .written, !record.unknownSpeakers.isEmpty {
                 let n = record.unknownSpeakers.count

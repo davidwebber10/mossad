@@ -33,6 +33,16 @@ struct MainWindow: View {
             }
         }
         .onAppear {
+            // Development hook for screenshots: MOSSAD_WINDOW_HEIGHT=<points> sizes a preview's window.
+            if CommandLine.arguments.contains("--ui-preview"),
+               let h = ProcessInfo.processInfo.environment["MOSSAD_WINDOW_HEIGHT"].flatMap(Double.init) {
+                DispatchQueue.main.async {
+                    for w in NSApp.windows where w.isVisible && w.frame.width > 600 {
+                        w.setContentSize(NSSize(width: w.frame.width, height: h))
+                        w.center()
+                    }
+                }
+            }
             // Only a new install: someone with meetings already set Mossad up.
             welcoming = !UserDefaults.standard.bool(forKey: "welcomeDone") && controller.meetings.isEmpty
                 || CommandLine.arguments.contains("--welcome")

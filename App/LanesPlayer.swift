@@ -17,10 +17,11 @@ struct LanesPlayer: View {
     let people: MeetingPeople
     let lanes: [SpeakerLanes.Lane]
     var retentionDays: Int?
+    /// Lanes shown before the rest scroll: fewer in a short window.
+    var maxLanes = 12
 
     static let laneHeight: CGFloat = 11
     static let laneGap: CGFloat = 3
-    static let maxLanes = 12
     /// The label column and its gap: where the lanes start.
     static let gutter: CGFloat = 150 + Space.m
 
@@ -38,7 +39,8 @@ struct LanesPlayer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                lanesArea
+                // No lanes yet while the call processes, or none when nobody spoke: the ruler and transport still play.
+                if !lanes.isEmpty { lanesArea }
                 PlayerRuler(record: record, duration: duration, time: time, enabled: player.isAvailable) { player.seek(to: $0) }
                     .padding(.top, 4)
             }
@@ -54,17 +56,19 @@ struct LanesPlayer: View {
     // MARK: Lanes
 
     private var lanesArea: some View {
-        let visible = min(lanes.count, Self.maxLanes)
+        let visible = min(lanes.count, maxLanes)
         let height = CGFloat(visible) * Self.laneHeight + CGFloat(max(visible - 1, 0)) * Self.laneGap
-        let scrolls = lanes.count > Self.maxLanes
+        let scrolls = lanes.count > maxLanes
         let current = started ? currentKey : nil
         return ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: Self.laneGap) {
                 ForEach(Array(lanes.enumerated()), id: \.element.key) { _, lane in
+                    // Equatable, so a tick of the player redraws only the rows whose state changed.
                     LaneRow(lane: lane, speaker: people.speaker(forKey: lane.key), callID: record.id,
                             editable: record.status == .written, current: lane.key == current,
                             duration: duration, enabled: player.isAvailable,
                             scrub: { dragging = $0 }, seek: { dragging = nil; player.seek(to: $0) })
+                        .equatable()
                 }
             }
         }
@@ -75,7 +79,7 @@ struct LanesPlayer: View {
             g.contentOffset.y + g.containerSize.height >= g.contentSize.height - 4
         } action: { _, end in scrolledToEnd = end }
         .overlay(alignment: .bottom) {
-            if scrolls, !scrolledToEnd { moreVoices(lanes.count - Self.maxLanes) }
+            if scrolls, !scrolledToEnd { moreVoices(lanes.count - maxLanes) }
         }
         .accessibilityRepresentation {
             Slider(value: Binding(get: { player.time }, set: { player.seek(to: $0) }), in: 0...duration) { Text("Position") }
@@ -149,7 +153,7 @@ struct LanesPlayer: View {
 }
 
 /// One speaker: name and minutes on the left, their turns across. Click or drag in the lane to play from there.
-private struct LaneRow: View {
+private struct LaneRow: View, @MainActor Equatable {
     let lane: SpeakerLanes.Lane
     let speaker: MeetingPeople.Speaker?
     let callID: String
@@ -163,6 +167,14 @@ private struct LaneRow: View {
 
     private var unknown: Bool { speaker?.isUnknown ?? true }
     private var color: Color { speaker?.color ?? Palette.bar }
+
+    /// The closures only reach the player, which never changes for a row, so they are left out.
+    static func == (a: LaneRow, b: LaneRow) -> Bool {
+        a.lane == b.lane && a.current == b.current && a.duration == b.duration && a.enabled == b.enabled
+            && a.editable == b.editable && a.callID == b.callID && a.speaker?.name == b.speaker?.name
+            && a.speaker?.isUnknown == b.speaker?.isUnknown && a.speaker?.keys == b.speaker?.keys
+            && a.speaker?.color == b.speaker?.color && a.speaker?.email == b.speaker?.email
+    }
 
     var body: some View {
         HStack(spacing: Space.m) {
@@ -422,6 +434,7 @@ struct BookmarkNotePopover: View {
     let save: (String) -> Void
     let dismiss: () -> Void
     @State private var note = ""
+    @State private var saved = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -463,6 +476,8 @@ struct BookmarkNotePopover: View {
         .padding(14)
         .frame(width: 300)
         .onAppear { focused = true }
+        // A click outside closes the popover; a typed note must not be lost with it.
+        .onDisappear(perform: keep)
         .task {
             try? await Task.sleep(for: .seconds(8))
             if note.isEmpty { dismiss() }
@@ -470,9 +485,15 @@ struct BookmarkNotePopover: View {
     }
 
     private func finish() {
-        let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty { save(text) }
+        keep()
         dismiss()
+    }
+
+    private func keep() {
+        let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !saved, !text.isEmpty else { return }
+        saved = true
+        save(text)
     }
 }
 

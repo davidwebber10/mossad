@@ -8,27 +8,27 @@ struct TagRow: View {
     @State private var adding = false
     @State private var draft = ""
 
+    /// Separate views, not one row, so the layout around them can wrap between tags.
+    @ViewBuilder
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(record.tags, id: \.self) { tag in
-                // Quiet, like the kind: a tag describes the meeting and never asks for anything.
-                Button { controller.showTag(tag) } label: { TagChip(text: tag) }
-                .buttonStyle(.plain)
-                .help("Show every meeting tagged \(tag)")
-                .contextMenu {
-                    Button("Remove tag") { controller.setTags(callID: record.id, record.tags.filter { $0 != tag }) }
-                }
-            }
-            Button { adding = true } label: {
-                Image(systemName: "plus").font(.system(size: 9, weight: .semibold)).foregroundStyle(Palette.secondary)
-                    .frame(width: 20, height: 20)
-                    .background(Palette.fill, in: Circle())
-            }
+        ForEach(record.tags, id: \.self) { tag in
+            // Quiet, like the kind: a tag describes the meeting and never asks for anything.
+            Button { controller.showTag(tag) } label: { TagChip(text: tag) }
             .buttonStyle(.plain)
-            .help("Add a tag")
-            .accessibilityLabel("Add a tag")
-            .popover(isPresented: $adding, arrowEdge: .bottom) { addPopover }
+            .help("Show every meeting tagged \(tag)")
+            .contextMenu {
+                Button("Remove tag") { controller.setTags(callID: record.id, record.tags.filter { $0 != tag }) }
+            }
         }
+        Button { adding = true } label: {
+            Image(systemName: "plus").font(.system(size: 9, weight: .semibold)).foregroundStyle(Palette.secondary)
+                .frame(width: 20, height: 20)
+                .background(Palette.fill, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Add a tag")
+        .accessibilityLabel("Add a tag")
+        .popover(isPresented: $adding, arrowEdge: .bottom) { addPopover }
     }
 
     private var suggestions: [String] {

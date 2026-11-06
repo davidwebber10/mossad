@@ -17,6 +17,7 @@ struct MeetingDetailView: View {
     /// A preview's tab, kept out of the owner's saved choice.
     @State private var previewTab: Tab?
     @State private var highlight: TimeInterval?
+    @State private var cache = DetailCache()
 
     private var tab: Tab { previewTab ?? savedTab }
     private var tabBinding: Binding<Tab> { Binding(get: { tab }, set: { previewTab = nil; savedTab = $0 }) }
@@ -28,9 +29,24 @@ struct MeetingDetailView: View {
         _player = StateObject(wrappedValue: AudioPlayer(callDirectory: Paths.live.callDirectory(record.id)))
     }
 
+    /// Changes only when the words, the names, or the people library do, not on each tick of the player.
+    private var cacheKey: String {
+        "\(record.utterances.count)|\(controller.ownerName)|\(controller.library.profiles.count)|"
+            + record.speakerNames.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+            + "|" + record.attendees.joined(separator: ",")
+    }
+
     var body: some View {
-        let people = MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library)
-        content(people)
+        let (lanes, people) = cache.get(cacheKey) {
+            (SpeakerLanes.make(record, names: MarkdownWriter.displayNames(record), ownerName: controller.ownerName),
+             MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library))
+        }
+        // The window's height, not the content's: the detail takes what it is given and the lanes fit it.
+        GeometryReader { g in
+            content(people, lanes: lanes, maxLanes: g.size.height < 760 ? 6 : 12)
+                .frame(width: g.size.width, height: g.size.height, alignment: .top)
+                .clipped()
+        }
             .background(Palette.window)
             .task(id: controller.seekRequest) {
                 guard let seek = controller.seekRequest, seek.callID == record.id else { return }
@@ -54,11 +70,12 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder
-    private func content(_ people: MeetingPeople) -> some View {
-        let lanes = SpeakerLanes.make(record, names: MarkdownWriter.displayNames(record), ownerName: controller.ownerName)
+    private func content(_ people: MeetingPeople, lanes: [SpeakerLanes.Lane], maxLanes: Int) -> some View {
         VStack(spacing: 0) {
+            // A short window keeps room for the tabs' content: 6 lanes under about 760 pt, else 12. The rest scroll.
             MeetingHeader(record: record, people: people, lanes: lanes, player: player,
-                          retentionDays: controller.deleteRecordings ? controller.recordingDays : nil)
+                          retentionDays: controller.deleteRecordings ? controller.recordingDays : nil,
+                          maxLanes: maxLanes)
                 .overlay(alignment: .bottom) {
                     if record.status != .recording { DetailTabs(tab: tabBinding).offset(y: Self.underTabs) }
                 }
@@ -106,6 +123,21 @@ struct MeetingDetailView: View {
                 player.seek(to: at)
             }
         }
+    }
+}
+
+/// The lanes and people of the open meeting, kept between body passes. A class, so filling it during a body pass
+/// does not count as a state change.
+final class DetailCache {
+    private var key: String?
+    private var value: ([SpeakerLanes.Lane], MeetingPeople)?
+
+    func get(_ key: String, make: () -> ([SpeakerLanes.Lane], MeetingPeople)) -> ([SpeakerLanes.Lane], MeetingPeople) {
+        if key == self.key, let value { return value }
+        let made = make()
+        self.key = key
+        value = made
+        return made
     }
 }
 

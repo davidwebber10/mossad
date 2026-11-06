@@ -12,6 +12,7 @@ struct TranscriptTab: View {
     /// A moment to mark and scroll to, such as where a commitment was made.
     var highlight: TimeInterval?
     @State private var blocks: [TranscriptBlock] = []
+    @State private var stats = ""
     @State private var find = ""
     @State private var matchIndex = 0
     @State private var follow = true
@@ -67,7 +68,11 @@ struct TranscriptTab: View {
                 }
             }
         }
-        .task(id: blocksKey) { blocks = TranscriptBlock.blocks(record) }
+        .task(id: blocksKey) {
+            blocks = TranscriptBlock.blocks(record)
+            let words = record.utterances.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
+            stats = "\(blocks.count.formatted()) \(blocks.count == 1 ? "turn" : "turns") · \(words.formatted()) words"
+        }
     }
 
     // MARK: Tools
@@ -107,12 +112,6 @@ struct TranscriptTab: View {
                 .help("Show where this voice first speaks, to name it")
             }
         }
-    }
-
-    /// "412 turns · 14,860 words".
-    private var stats: String {
-        let words = record.utterances.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
-        return "\(blocks.count.formatted()) \(blocks.count == 1 ? "turn" : "turns") · \(words.formatted()) words"
     }
 
     private func findField(count: Int) -> some View {
