@@ -2,21 +2,28 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// The Meetings pane in one of three modes: Split (list and detail), List (full-pane rows), or Calendar.
+/// The Meetings pane in one of two modes: List (the list and the open meeting) or Calendar.
 struct MeetingsView: View {
     enum Mode: String, CaseIterable { case split = "Split", calendar = "Calendar" }
 
     @EnvironmentObject var controller: AppController
-    @AppStorage("meetingsMode") private var mode = Mode.split
+    @AppStorage("meetingsMode") private var savedMode = Mode.split
+    /// A preview's mode, kept out of the owner's saved choice.
+    @State private var previewMode: Mode?
+    private var mode: Mode { previewMode ?? savedMode }
     @State private var deleting: CallRecord?
     @State private var merging: CallRecord?
-    /// The meeting opened full-pane from List or Calendar mode.
+    /// The meeting opened full-pane from Calendar mode.
     @State private var opened: String?
     @State private var openedFrom = ""
     @StateObject private var calendarState = CalendarState()
 
     private var results: [CallRecord] {
         controller.meetings.filter { MeetingSearch.matches($0, controller.meetingQuery) }
+    }
+
+    private var selected: CallRecord? {
+        controller.selectedMeetingID.flatMap { id in controller.meetings.first { $0.id == id } }
     }
 
     var body: some View {
@@ -37,14 +44,27 @@ struct MeetingsView: View {
                 }
             }
         }
-        .background(Theme.background)
+        .background(Palette.window)
         .navigationTitle("Meetings")
         .searchable(text: $controller.meetingQuery, placement: .toolbar, prompt: "Search titles and transcripts")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if mode == .calendar, opened == nil, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
-                ModePicker(mode: $mode, labeled: false)
-                AskButton()
+                ModePicker(mode: Binding(get: { mode }, set: { previewMode = nil; savedMode = $0 }))
+            }
+            if mode == .split || opened != nil {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    let record = opened.flatMap { id in controller.meetings.first { $0.id == id } } ?? selected
+                    ExportMenu(record: record)
+                    Menu {
+                        if let record { MeetingMenuItems(record: record, deleting: $deleting) }
+                    } label: {
+                        Label("More", systemImage: "ellipsis")
+                    }
+                    .menuIndicator(.hidden)
+                    .disabled(record == nil)
+                    .help("More for this meeting")
+                }
             }
         }
         .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
@@ -75,39 +95,50 @@ struct MeetingsView: View {
         }
         .onAppear {
             if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first?.id }
+            let preview = CommandLine.arguments.contains("--ui-preview")
             // Development hook for screenshots: MOSSAD_TRANSCRIBE_AGAIN opens the sheet for the first meeting.
-            if ProcessInfo.processInfo.environment["MOSSAD_TRANSCRIBE_AGAIN"] != nil, CommandLine.arguments.contains("--ui-preview") {
+            if ProcessInfo.processInfo.environment["MOSSAD_TRANSCRIBE_AGAIN"] != nil, preview {
                 controller.transcribingAgainCallID = controller.meetings.first?.id
+            }
+            // Development hook for screenshots: MOSSAD_MEETINGS_MODE=split|calendar picks the mode.
+            if preview, let m = ProcessInfo.processInfo.environment["MOSSAD_MEETINGS_MODE"].flatMap({ Mode(rawValue: $0.capitalized) }) {
+                previewMode = m
+            }
+            // Development hook for screenshots: MOSSAD_CALENDAR_DATE=2026-10-22 opens the calendar on that week.
+            if preview, let d = ProcessInfo.processInfo.environment["MOSSAD_CALENDAR_DATE"].flatMap({ try? Date($0, strategy: .iso8601.year().month().day()) }) {
+                calendarState.anchor = d.addingTimeInterval(12 * 3600)
             }
         }
         .onChange(of: mode) { _, _ in opened = nil }
     }
 
-    // MARK: Split
+    // MARK: List
 
     private var splitBody: some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, 8)
-                MeetingList(groups: MeetingGroups.group(results), selection: $controller.selectedMeetingID, deleting: $deleting)
+                CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, Space.s)
+                MeetingList(days: MeetingGroups.byDay(results.filter { $0.status != .recording }),
+                            live: results.filter { $0.status == .recording },
+                            selection: $controller.selectedMeetingID, deleting: $deleting)
             }
-            .frame(width: 330)
-            Divider()
+            .frame(width: 300)
+            Hairline(axis: .vertical)
             Group {
                 if let id = controller.selectedMeetingID, let m = controller.upcoming.first(where: { $0.id == id }) {
                     UpcomingDetailView(meeting: m)
-                } else if let id = controller.selectedMeetingID, let r = controller.meetings.first(where: { $0.id == id }) {
+                } else if let r = selected {
                     MeetingDetailView(record: r, style: .split, deleting: $deleting)
                         .id(r.id)
                 } else {
-                    ContentUnavailableView("Select a meeting", systemImage: "bubble.left.and.text.bubble.right")
+                    ContentUnavailableView("Select a meeting", systemImage: "text.rectangle")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    // MARK: List and Calendar
+    // MARK: Calendar
 
     private func open(_ r: CallRecord, from crumb: String) {
         controller.selectedMeetingID = r.id
@@ -121,25 +152,53 @@ struct MeetingsView: View {
                 Button { opened = nil } label: {
                     Image(systemName: "chevron.left").font(.system(size: 12, weight: .semibold))
                         .frame(width: 26, height: 26)
-                        .background(Theme.field, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
                 .keyboardShortcut("[", modifiers: .command)
                 .keyboardShortcut(.escape, modifiers: [])
-                Button("Meetings") { opened = nil }.buttonStyle(.plain).foregroundStyle(.secondary)
-                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(.tertiary)
-                Button(openedFrom) { opened = nil }.buttonStyle(.plain).foregroundStyle(.secondary)
-                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(.tertiary)
+                Button("Meetings") { opened = nil }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
+                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
+                Button(openedFrom) { opened = nil }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
+                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
                 Text(r.title).fontWeight(.medium).lineLimit(1)
                 Spacer()
                 MeetingActions(record: r, deleting: $deleting)
             }
             .font(.system(size: 13))
             .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
-            Divider()
+            Hairline()
             MeetingDetailView(record: r, style: .fullPage, deleting: $deleting).id(r.id)
         }
+    }
+}
+
+/// Export for the open meeting: a private link, or the note itself.
+private struct ExportMenu: View {
+    @EnvironmentObject var controller: AppController
+    let record: CallRecord?
+
+    var body: some View {
+        Menu {
+            if let record {
+                Button("Share…", systemImage: "link") { controller.sharingCallID = record.id }
+                    .disabled(record.status != .written)
+                Button("Open note", systemImage: "doc.richtext") {
+                    if let path = record.markdownPath { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+                }
+                .disabled(record.markdownPath == nil)
+                Button("Show note in Finder", systemImage: "folder") {
+                    if let path = record.markdownPath { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
+                }
+                .disabled(record.markdownPath == nil)
+            }
+        } label: {
+            Label("Export", systemImage: "arrow.down.to.line")
+        }
+        .menuIndicator(.hidden)
+        .disabled(record == nil || record?.status == .recording)
+        .help("Share or open this meeting's note")
     }
 }
 
@@ -159,18 +218,24 @@ extension CallRecord: @retroactive Identifiable {
     /// The call's own meeting link matched a calendar invite, so the invite's people are this call's people.
     var hasInviteLink: Bool { meetingID != nil && calendarTitle != nil }
 
-    /// "59 min", at least "1 min".
-    var lengthText: String { "\(max(1, Int(end.timeIntervalSince(start) / 60))) min" }
+    var lengthText: String { durationLabel(end.timeIntervalSince(start)) }
 }
 
-/// "11:31 AM" for today and yesterday, "Mon 9:00 AM" this week, "Oct 9" (with the year when not this year) earlier.
-func whenText(_ date: Date, kind: MeetingGroups.Kind) -> String {
-    switch kind {
-    case .today, .yesterday: return date.formatted(date: .omitted, time: .shortened)
-    case .thisWeek: return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
-    case .earlier:
-        let sameYear = Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year)
-        return sameYear ? date.formatted(.dateTime.month(.abbreviated).day()) : date.formatted(.dateTime.month(.abbreviated).day().year())
+/// "59 min", "1 h 45 min", at least "1 min".
+func durationLabel(_ seconds: TimeInterval) -> String {
+    let minutes = max(1, Int(seconds / 60))
+    return minutes < 60 ? "\(minutes) min" : minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes / 60) h \(minutes % 60) min"
+}
+
+extension Platform {
+    /// "Meet", "Teams": the list's short name; the dot carries the color.
+    var shortName: String {
+        switch self {
+        case .zoom: "Zoom"
+        case .meet: "Meet"
+        case .teams: "Teams"
+        case .inPerson: "In person"
+        }
     }
 }
 
@@ -181,7 +246,7 @@ struct LengthText: View {
     var body: some View {
         if record.status == .recording {
             TimelineView(.periodic(from: record.start, by: 1)) { context in
-                Text(elapsed(record.start, context.date)).foregroundStyle(Theme.recording)
+                Text(elapsed(record.start, context.date)).foregroundStyle(Palette.recording)
             }
         } else {
             Text(record.lengthText)
@@ -189,130 +254,21 @@ struct LengthText: View {
     }
 }
 
+/// List and Calendar, as one glass toggle in the toolbar.
 struct ModePicker: View {
     @Binding var mode: MeetingsView.Mode
-    let labeled: Bool
 
     var body: some View {
         Picker("View", selection: $mode) {
             ForEach(MeetingsView.Mode.allCases, id: \.self) { m in
-                if labeled {
-                    Label(m.rawValue, systemImage: symbol(m)).tag(m)
-                } else {
-                    Image(systemName: symbol(m)).help(m.rawValue).tag(m)
-                }
+                Label(m == .split ? "List" : "Calendar", systemImage: m == .split ? "list.bullet" : "calendar").tag(m)
             }
         }
         .pickerStyle(.segmented)
+        .labelStyle(.iconOnly)
         .labelsHidden()
-        .controlSize(labeled ? .regular : .small)
         .fixedSize()
-    }
-
-    private func symbol(_ m: MeetingsView.Mode) -> String {
-        switch m {
-        case .split: "sidebar.left"
-        case .calendar: "calendar"
-        }
-    }
-}
-
-/// Split mode's grouped list.
-private struct MeetingList: View {
-    @EnvironmentObject var controller: AppController
-    let groups: [MeetingGroups.Group]
-    @Binding var selection: String?
-    @Binding var deleting: CallRecord?
-
-    var body: some View {
-        let live = groups.flatMap(\.records).filter { $0.status == .recording }
-        List(selection: $selection) {
-            if !live.isEmpty {
-                Section {
-                    ForEach(live, id: \.id) { r in CurrentCallRow(record: r).tag(r.id) }
-                } header: {
-                    Text("Now").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.recording)
-                }
-            }
-            if !controller.upcoming.isEmpty, controller.meetingQuery.isEmpty {
-                Section {
-                    ForEach(controller.upcoming.prefix(UpcomingRow.shown)) { m in UpcomingRow(meeting: m).tag(m.id) }
-                } header: {
-                    Text("Upcoming").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
-                }
-            }
-            ForEach(groups, id: \.kind) { group in
-                Section {
-                    ForEach(group.records.filter { $0.status != .recording }, id: \.id) { r in
-                        MeetingRow(record: r, kind: group.kind)
-                            .tag(r.id)
-                            .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
-                    }
-                } header: {
-                    Text(group.kind.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
-                }
-            }
-        }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .onDeleteCommand {
-            if let id = selection, let r = controller.meetings.first(where: { $0.id == id }), r.canDelete { deleting = r }
-        }
-    }
-}
-
-/// The call being recorded: tinted, with a pulsing dot, the running time, and a small live waveform.
-private struct CurrentCallRow: View {
-    @EnvironmentObject var controller: AppController
-    let record: CallRecord
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                StatusDot(color: controller.isPaused ? Theme.unknown : Theme.recording, size: 8, pulsing: !controller.isPaused)
-                Text(record.calendarTitle ?? "Current call").font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                Spacer(minLength: 6)
-                LengthText(record: record).font(.system(size: 12, weight: .medium)).monospacedDigit()
-            }
-            HStack(spacing: 8) {
-                if controller.isMuted, !controller.isPaused {
-                    Label("Muted", systemImage: "mic.slash.fill").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.warning)
-                } else {
-                    Text(controller.isPaused ? "Paused" : "\(record.platform.displayName) · recording")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                LiveWaveform(bars: 28, rowHeight: 8, showLabels: false, framesPerSecond: 4).frame(maxWidth: 120)
-            }
-            .padding(.leading, 16)
-        }
-        .padding(.vertical, 6).padding(.horizontal, 4)
-        .background(Theme.recording.opacity(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-    }
-}
-
-private struct MeetingRow: View {
-    @EnvironmentObject var controller: AppController
-    let record: CallRecord
-    let kind: MeetingGroups.Kind
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                PlatformSquare(platform: record.platform)
-                Text(record.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                Spacer(minLength: 6)
-                LengthText(record: record).font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
-            }
-            HStack {
-                Text(whenText(record.start, kind: kind)).font(.system(size: 12)).foregroundStyle(.secondary)
-                Spacer()
-                if let badge = record.badge {
-                    StatusBadge(kind: badge, text: badge == .processing ? controller.progressText(record) : nil)
-                }
-            }
-            .padding(.leading, 20)
-        }
-        .padding(.vertical, 4)
+        .help("List or calendar")
     }
 }
 
@@ -433,7 +389,7 @@ private struct MergeSheet: View {
             List(candidates, id: \.id) { r in
                 Toggle(isOn: Binding(get: { chosen.contains(r.id) }, set: { if $0 { chosen.insert(r.id) } else { chosen.remove(r.id) } })) {
                     HStack(spacing: 8) {
-                        PlatformSquare(platform: r.platform)
+                        PlatformDot(platform: r.platform)
                         Text(r.title).fontWeight(.medium).lineLimit(1)
                         Spacer()
                         Text("\(dayWord(r.start)) \(r.start.formatted(date: .omitted, time: .shortened)) · \(r.lengthText)")

@@ -12,31 +12,50 @@ func upcomingWhen(_ m: UpcomingMeeting, now: Date = Date()) -> String {
         : m.start.formatted(.dateTime.weekday(.abbreviated).hour().minute())
 }
 
-/// One upcoming calendar event in the meeting list.
+/// One upcoming calendar event in the meeting list: a hollow dot because it has not happened, the title in
+/// secondary, "2:00 PM · Zoom · Will record", and its planned length.
 struct UpcomingRow: View {
     static let shown = 5
+    @EnvironmentObject var controller: AppController
     let meeting: UpcomingMeeting
+    @State private var hovering = false
 
     var body: some View {
         TimelineView(.everyMinute) { context in
-            HStack(spacing: 8) {
-                if let p = meeting.platform {
-                    PlatformSquare(platform: p, size: 12)
+            let soon = meeting.start.timeIntervalSince(context.date) < 600
+            HStack(alignment: .top, spacing: 10) {
+                Group {
+                    if let p = meeting.platform {
+                        PlatformDot(platform: p, hollow: true)
+                    } else {
+                        Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 8, height: 8)
+                    }
+                }
+                .padding(.top, 5)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(meeting.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    HStack(spacing: 0) {
+                        Text(upcomingWhen(meeting, now: context.date)).foregroundStyle(soon ? Palette.accent : Palette.secondary)
+                        Text(detail).foregroundStyle(Palette.secondary)
+                    }
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let link = meeting.link, soon || hovering {
+                    Button("Join") { NSWorkspace.shared.open(link) }.controlSize(.small)
                 } else {
-                    Image(systemName: "calendar").font(.system(size: 11)).foregroundStyle(.secondary).frame(width: 12)
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(meeting.title).lineLimit(1)
-                    Text(upcomingWhen(meeting, now: context.date)).font(.system(size: 11))
-                        .foregroundStyle(meeting.start.timeIntervalSince(context.date) < 600 ? Color.accentColor : .secondary)
-                }
-                Spacer(minLength: 4)
-                if let link = meeting.link {
-                    Button("Join") { NSWorkspace.shared.open(link) }.controlSize(.mini)
+                    Text(durationLabel(meeting.end.timeIntervalSince(meeting.start))).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary).fixedSize().padding(.top, 1)
                 }
             }
-            .padding(.vertical, 2)
         }
+        .onHover { hovering = $0 }
+    }
+
+    /// " · Zoom · Will record": Mossad records any call it detects; an invite with no call link is only a reminder.
+    private var detail: String {
+        guard let p = meeting.platform else { return " · No call link" }
+        return " · \(p.shortName)" + (controller.isOn ? " · Will record" : "")
     }
 }
 
