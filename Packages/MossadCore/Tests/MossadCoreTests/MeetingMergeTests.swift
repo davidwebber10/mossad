@@ -41,6 +41,14 @@ final class MeetingMergeTests: XCTestCase {
         XCTAssertEqual(merged.status, .identified)
     }
 
+    func testBookmarkNotesMoveWithTheirPart() {
+        let first = record("one", start: 0, end: 200, [])
+        var second = record("two", start: 203, end: 500, [])
+        second.markers = [TranscriptMarker(offset: 10, text: "★ Bookmarked at 3:00 PM", isBookmark: true, note: "Ask Alex")]
+        let merged = MeetingMerge.combine([first, second], durations: ["one": 200, "two": 297])
+        XCTAssertEqual(merged.markers.first?.note, "Ask Alex")
+    }
+
     func testBookmarksMoveWithTheirPartAndStayBookmarks() {
         let first = record("one", start: 0, end: 200, [])
         var second = record("two", start: 203, end: 500, [])

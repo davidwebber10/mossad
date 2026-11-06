@@ -65,11 +65,20 @@ public struct TranscriptMarker: Codable, Equatable, Sendable {
     public var text: String
     /// A moment the owner marked as important during the call.
     public var isBookmark = false
+    /// What the owner typed for a bookmark. A separate key, so builds that predate it still read the marker.
+    public var note: String?
 
-    public init(offset: TimeInterval, text: String, isBookmark: Bool = false) {
+    public init(offset: TimeInterval, text: String, isBookmark: Bool = false, note: String? = nil) {
         self.offset = offset
         self.text = text
         self.isBookmark = isBookmark
+        self.note = note
+    }
+
+    /// The marker's line in the transcript, with a bookmark's note after it.
+    public var lineText: String {
+        guard isBookmark, let note = note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else { return text }
+        return "\(text): \(note)"
     }
 
     public init(from decoder: Decoder) throws {
@@ -77,6 +86,25 @@ public struct TranscriptMarker: Codable, Equatable, Sendable {
         offset = try c.decode(TimeInterval.self, forKey: .offset)
         text = try c.decode(String.self, forKey: .text)
         isBookmark = try c.decodeIfPresent(Bool.self, forKey: .isBookmark) ?? false
+        note = try c.decodeIfPresent(String.self, forKey: .note)
+    }
+}
+
+extension CallRecord {
+    /// Sets the note of the bookmark within a second of `offset`, or adds a bookmark there. A blank note
+    /// clears the note and keeps the bookmark. Returns false when a blank note had no bookmark to clear.
+    @discardableResult
+    mutating func setBookmarkNote(at offset: TimeInterval, _ note: String, markerText: String) -> Bool {
+        let note = note.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank
+        if let i = markers.indices.filter({ markers[$0].isBookmark && abs(markers[$0].offset - offset) <= 1 })
+            .min(by: { abs(markers[$0].offset - offset) < abs(markers[$1].offset - offset) }) {
+            markers[i].note = note
+            return true
+        }
+        guard note != nil else { return false }
+        markers.append(TranscriptMarker(offset: offset, text: markerText, isBookmark: true, note: note))
+        markers.sort { $0.offset < $1.offset }
+        return true
     }
 }
 

@@ -224,6 +224,39 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(note.contains("tags: [\"Budget\", \"Databricks\"]"))
     }
 
+    func testABookmarkNoteIsEditedAddedAndClearedAfterTheCall() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.markers = [TranscriptMarker(offset: 52, text: "★ Bookmarked at 2:31 PM", isBookmark: true)]
+        try r.save(to: paths.callDirectory(id))
+        let p = pipeline()
+        await p.process(id)
+        await p.setBookmarkNote(callID: id, offset: 52.4, note: "Send Sam the plan")
+        var markers = try load(id).markers
+        XCTAssertEqual(markers.count, 1)
+        XCTAssertEqual(markers[0].note, "Send Sam the plan")
+        let note = try String(contentsOfFile: XCTUnwrap(try load(id).markdownPath), encoding: .utf8)
+        XCTAssertTrue(note.contains("(★ Bookmarked at 2:31 PM: Send Sam the plan)"), note)
+        await p.setBookmarkNote(callID: id, offset: 600, note: "Decision on freight")
+        markers = try load(id).markers
+        XCTAssertEqual(markers.count, 2)
+        XCTAssertTrue(markers[1].isBookmark)
+        XCTAssertEqual(markers[1].offset, 600)
+        XCTAssertEqual(markers[1].note, "Decision on freight")
+        await p.setBookmarkNote(callID: id, offset: 52, note: "  ")
+        markers = try load(id).markers
+        XCTAssertEqual(markers.count, 2)
+        XCTAssertNil(markers[0].note)
+    }
+
+    func testTheSummaryGetsTheBookmarkNotes() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.markers = [TranscriptMarker(offset: 52, text: "★ Bookmarked at 2:31 PM", isBookmark: true, note: "Check the Acme quote")]
+        try r.save(to: paths.callDirectory(id))
+        XCTAssertTrue(MarkdownWriter.transcript(r).contains("(★ Bookmarked at 2:31 PM: Check the Acme quote)"))
+    }
+
     func testTheSummaryGetsTheTagsOfEarlierMeetings() async throws {
         let first = try makeRecord()
         let p = pipeline()

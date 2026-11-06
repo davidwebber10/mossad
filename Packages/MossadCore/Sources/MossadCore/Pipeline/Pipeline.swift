@@ -561,6 +561,15 @@ public actor Pipeline {
         save(&r, dir: dir)
     }
 
+    /// Sets a bookmark's note after the call, or adds a bookmark at `offset` when none is there, and rewrites the note.
+    public func setBookmarkNote(callID: String, offset: TimeInterval, note: String) {
+        let dir = paths.callDirectory(callID)
+        guard var r = try? CallRecord.load(from: dir) else { return }
+        let time = r.start.addingTimeInterval(offset).formatted(date: .omitted, time: .shortened)
+        guard r.setBookmarkNote(at: offset, note, markerText: "★ Bookmarked at \(time)") else { return }
+        save(&r, dir: dir)
+    }
+
     public func dismissSpeakers(callID: String, keys: [String]) {
         let dir = paths.callDirectory(callID)
         guard var r = try? CallRecord.load(from: dir) else { return }

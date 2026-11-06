@@ -112,6 +112,8 @@ public struct LLMSummarizer: Summarizing {
     "Budget", or "Hiring". Use a known tag, with its exact spelling, whenever it fits; make a new one only for a new \
     topic. Do not use people's names or the meeting kind as tags. A line such as "(★ Bookmarked at 2:31 PM)" marks a \
     moment the owner flagged as important during the call: make sure the summary covers what was said around it. \
+    A note after the time, such as "(★ Bookmarked at 2:31 PM: Ask Dana about budget)", is the owner's own words \
+    about that moment; use it. \
     Write a title of at most 60 characters that names the topic; for a meeting of two or three people, add who it \
     was with, by first name.
     """

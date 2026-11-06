@@ -254,10 +254,22 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     /// Marks this moment as important. The summary gives it weight, and the player shows it.
-    public func bookmark() {
-        guard isRecording, !isPaused else { return }
-        addMarker(at: recordedLength, "★ Bookmarked at \(Self.time(clock()))", isBookmark: true)
+    /// Returns the bookmark's offset, so a note can be added to it, or nil when nothing was marked.
+    @discardableResult
+    public func bookmark() -> TimeInterval? {
+        guard isRecording, !isPaused else { return nil }
+        let offset = recordedLength
+        addMarker(at: offset, "★ Bookmarked at \(Self.time(clock()))", isBookmark: true)
         Log.info("Bookmarked the call")
+        return offset
+    }
+
+    /// Sets the note of the bookmark at `offset`; a blank note clears it and keeps the bookmark.
+    public func setBookmarkNote(at offset: TimeInterval, _ note: String) {
+        guard var r = record else { return }
+        guard r.setBookmarkNote(at: offset, note, markerText: "★ Bookmarked at \(Self.time(clock()))") else { return }
+        record = r
+        do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
     }
 
     private func addMarker(at offset: TimeInterval, _ text: String, isBookmark: Bool = false) {
