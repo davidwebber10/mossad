@@ -249,6 +249,29 @@ final class PipelineTests: XCTestCase {
         XCTAssertNil(markers[0].note)
     }
 
+    func testOwnerEditsMadeWhileTheCallIsProcessingSurviveTheRun() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.markers = [TranscriptMarker(offset: 52, text: "★ Bookmarked at 2:31 PM", isBookmark: true)]
+        try r.save(to: paths.callDirectory(id))
+        summarizer.delayOnCall[1] = .milliseconds(500)
+        let p = pipeline()
+        let run = Task { await p.process(id) }
+        try await Task.sleep(for: .milliseconds(200))
+        await p.setBookmarkNote(callID: id, offset: 52, note: "Send Sam the plan")
+        await p.setTitle(callID: id, "Dana and Sam sync")
+        await p.setTags(callID: id, ["Freight"])
+        await run.value
+        let done = try load(id)
+        XCTAssertEqual(done.status, .written)
+        XCTAssertEqual(done.markers.first?.note, "Send Sam the plan")
+        XCTAssertEqual(done.customTitle, "Dana and Sam sync")
+        XCTAssertEqual(done.tags, ["Freight"])
+        let note = try String(contentsOfFile: XCTUnwrap(done.markdownPath), encoding: .utf8)
+        XCTAssertTrue(note.contains("Send Sam the plan"), note)
+        XCTAssertTrue(note.contains("Dana and Sam sync"), note)
+    }
+
     func testTheSummaryGetsTheBookmarkNotes() async throws {
         let id = try makeRecord()
         var r = try load(id)

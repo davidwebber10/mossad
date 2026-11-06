@@ -99,12 +99,12 @@ final class CallRecorderTests: XCTestCase {
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         now = t0.addingTimeInterval(90)
         let offset = try XCTUnwrap(recorder.bookmark())
-        recorder.setBookmarkNote(at: offset, "  Ask Dana about the budget ")
+        XCTAssertTrue(recorder.setBookmarkNote(at: offset, "  Ask Dana about the budget "))
         var markers = try CallRecord.load(from: paths.callDirectory(id)).markers
         XCTAssertEqual(markers.count, 1)
         XCTAssertEqual(markers[0].note, "Ask Dana about the budget")
         XCTAssertTrue(markers[0].text.hasPrefix("★ Bookmarked at "), markers[0].text)
-        recorder.setBookmarkNote(at: offset, "")
+        XCTAssertTrue(recorder.setBookmarkNote(at: offset, ""))
         markers = try CallRecord.load(from: paths.callDirectory(id)).markers
         XCTAssertEqual(markers.count, 1)
         XCTAssertNil(markers[0].note)
@@ -112,6 +112,7 @@ final class CallRecorderTests: XCTestCase {
 
     func testABookmarkWhilePausedOrIdleDoesNothing() throws {
         XCTAssertNil(recorder.bookmark())
+        XCTAssertFalse(recorder.setBookmarkNote(at: 5, "x"))
         recorder.bookmark()
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         recorder.pause()

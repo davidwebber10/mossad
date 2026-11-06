@@ -11,6 +11,8 @@ public actor Pipeline {
     static let minimumTrackDuration: TimeInterval = 1
 
     private var inFlight: Set<String> = []
+    /// Calls whose tags the owner changed while they were processing; the summary must not overwrite those.
+    private var tagsEditedByOwner: Set<String> = []
 
     private let paths: Paths
     private let queue: ProcessingQueue
@@ -76,11 +78,12 @@ public actor Pipeline {
         }
         // `process` suspends at every await; without this a timer run and a call-end run could overlap.
         guard inFlight.insert(id).inserted else { return }
-        defer { inFlight.remove(id) }
+        defer { inFlight.remove(id); tagsEditedByOwner.remove(id) }
         let dir = paths.callDirectory(id)
         guard var r = try? CallRecord.load(from: dir) else { return }
         do {
             while r.status != .written {
+                carryOwnerEdits(into: &r, dir: dir)
                 if let step = ProcessingStep(status: r.status) { startStep(r, step) }
                 switch r.status {
                 case .recorded: try await transcribe(&r, dir: dir)
@@ -96,6 +99,7 @@ public actor Pipeline {
                 r.attempts = 0
                 r.nextAttempt = nil
                 r.failureReason = nil
+                carryOwnerEdits(into: &r, dir: dir)
                 try store(r, dir: dir)
             }
         } catch let error as MissingAPIKey {
@@ -200,6 +204,16 @@ public actor Pipeline {
         r.failureReason = nil
         try? store(r, dir: dir)
         await process(id)
+    }
+
+    /// The owner edits bookmark notes, the title, and tags while a call is still processing, and each edit saves
+    /// `call.json` at once. `processSteps` holds its own copy across slow network steps, so without this its next
+    /// save would write the old values back. Called before each step and each save; nothing awaits in between.
+    private func carryOwnerEdits(into r: inout CallRecord, dir: URL) {
+        guard let disk = try? CallRecord.load(from: dir) else { return }
+        r.markers = disk.markers
+        r.customTitle = disk.customTitle
+        if tagsEditedByOwner.contains(r.id) { r.tags = disk.tags }
     }
 
     private func store(_ r: CallRecord, dir: URL) throws {
@@ -550,6 +564,7 @@ public actor Pipeline {
         guard var r = try? CallRecord.load(from: dir) else { return }
         var seen = Set<String>()
         r.tags = tags.compactMap(\.nonBlank).filter { seen.insert($0.lowercased()).inserted }
+        if inFlight.contains(callID) { tagsEditedByOwner.insert(callID) }
         save(&r, dir: dir)
     }
 

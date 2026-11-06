@@ -265,11 +265,14 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     /// Sets the note of the bookmark at `offset`; a blank note clears it and keeps the bookmark.
-    public func setBookmarkNote(at offset: TimeInterval, _ note: String) {
-        guard var r = record else { return }
-        guard r.setBookmarkNote(at: offset, note, markerText: "★ Bookmarked at \(Self.time(clock()))") else { return }
+    /// Returns false when no call is being recorded, so the caller can edit the saved call instead.
+    @discardableResult
+    public func setBookmarkNote(at offset: TimeInterval, _ note: String) -> Bool {
+        guard var r = record else { return false }
+        guard r.setBookmarkNote(at: offset, note, markerText: "★ Bookmarked at \(Self.time(clock()))") else { return true }
         record = r
         do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
+        return true
     }
 
     private func addMarker(at offset: TimeInterval, _ text: String, isBookmark: Bool = false) {
