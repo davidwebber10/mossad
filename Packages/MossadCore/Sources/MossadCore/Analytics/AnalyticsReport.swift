@@ -1,7 +1,7 @@
 import Foundation
 
 public enum AnalyticsRange: Hashable, Sendable {
-    case last7Days, last30Days, last90Days, thisMonth, lastMonth, yearToDate, all
+    case last7Days, last30Days, last90Days, thisMonth, lastMonth, thisQuarter, lastQuarter, yearToDate, all
     /// Whole days, both inclusive.
     case custom(Date, Date)
 
@@ -14,15 +14,25 @@ public enum AnalyticsRange: Hashable, Sendable {
         case .last90Days: daysBack(90)
         case .thisMonth: calendar.dateInterval(of: .month, for: now)!.start
         case .lastMonth: calendar.date(byAdding: .month, value: -1, to: calendar.dateInterval(of: .month, for: now)!.start)!
+        case .thisQuarter: Self.quarterStart(now, calendar)
+        case .lastQuarter: calendar.date(byAdding: .month, value: -3, to: Self.quarterStart(now, calendar))!
         case .yearToDate: calendar.dateInterval(of: .year, for: now)!.start
         case .all: calendar.startOfDay(for: min(earliest ?? today, today))
         case .custom(let a, _): calendar.startOfDay(for: a)
         }
         if self == .lastMonth { return DateInterval(start: start, end: calendar.dateInterval(of: .month, for: now)!.start) }
+        if self == .lastQuarter { return DateInterval(start: start, end: Self.quarterStart(now, calendar)) }
         if case .custom(_, let b) = self {
             return DateInterval(start: start, end: max(start, calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: b))!))
         }
         return DateInterval(start: start, end: max(start, now))
+    }
+
+    /// Quarters start in January, April, July, and October. `Calendar`'s own quarter is not filled in by Foundation.
+    private static func quarterStart(_ now: Date, _ calendar: Calendar) -> Date {
+        let month = calendar.component(.month, from: now)
+        let first = calendar.dateInterval(of: .month, for: now)!.start
+        return calendar.date(byAdding: .month, value: -((month - 1) % 3), to: first)!
     }
 
     /// The same number of whole days just before (`by` -1) or after (+1) the period shown, as a custom range.
