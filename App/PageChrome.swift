@@ -1,5 +1,11 @@
 import AppKit
+import MossadCore
 import SwiftUI
+
+extension EnvironmentValues {
+    /// The main window's width, so a list column can leave the detail its minimum.
+    @Entry var windowWidth: CGFloat = .infinity
+}
 
 /// The canvas's icons: 16 pt grid, 1.5 pt round strokes, as template images in the asset catalog.
 enum Icon: String, CaseIterable {
@@ -32,8 +38,8 @@ struct IconImage: View {
 
 // MARK: Window
 
-/// Empty chrome that moves the window, as the title bar does: drag to move, double-click to zoom or minimize as
-/// the owner set in System Settings.
+/// Empty chrome that moves the window, as the title bar does: drag to move, double-click as the owner set in System
+/// Settings ("Double-click a window's title bar to" zoom, fill, or minimize).
 struct WindowDragArea: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { DragView() }
     func updateNSView(_ nsView: NSView, context: Context) {}
@@ -43,41 +49,94 @@ struct WindowDragArea: NSViewRepresentable {
 
         override func mouseDown(with event: NSEvent) {
             guard let window else { return }
-            if event.clickCount == 2 {
-                let action = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
-                if action == "Minimize" { window.performMiniaturize(nil) } else if action != "None" { window.performZoom(nil) }
-            } else {
-                window.performDrag(with: event)
+            guard event.clickCount == 2 else { window.performDrag(with: event); return }
+            switch DoubleClickAction(defaultsValue: UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick")) {
+            case .zoom: window.performZoom(nil)
+            case .fill: WindowFill.toggle(window)
+            case .minimize: window.performMiniaturize(nil)
+            case .none: break
             }
         }
     }
 }
 
+/// The system's Fill: the window takes the screen's whole visible area, and a second double-click puts it back.
+@MainActor
+enum WindowFill {
+    private static var before: [ObjectIdentifier: NSRect] = [:]
+
+    static func toggle(_ window: NSWindow) {
+        guard let screen = window.screen else { return }
+        let id = ObjectIdentifier(window)
+        if window.frame == screen.visibleFrame, let previous = before[id] {
+            before[id] = nil
+            window.setFrame(previous, display: true, animate: true)
+        } else {
+            before[id] = window.frame
+            window.setFrame(screen.visibleFrame, display: true, animate: true)
+        }
+    }
+}
+
 /// Keeps the native traffic lights inside the sidebar card, where the canvas draws them: the first light's center
-/// 30 pt from the left and 36 pt from the top, 20 pt apart. AppKit lays the title bar out again on resize and
-/// focus changes, so they are placed again after each.
+/// 30 pt from the left and 36 pt from the top, 20 pt apart. AppKit lays the title bar out again on many occasions
+/// (resize, focus, minimize and restore, a display or backing change, an appearance change, full screen), and not
+/// all of them post a window notification, so the lights are also placed again whenever the title bar's views
+/// change frame. Placing compares first, so it never sets a frame that is already right.
 @MainActor
 final class TrafficLights {
     private static let firstCenter = CGPoint(x: 30, y: 36)
     private static let spacing: CGFloat = 20
     private weak var window: NSWindow?
-    nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
+    private let onFullScreen: (Bool) -> Void
+    nonisolated(unsafe) private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+    nonisolated(unsafe) private var frameObservers: [NSObjectProtocol] = []
+    private var appearance: NSKeyValueObservation?
+    private weak var watchedContainer: NSView?
+    private var scheduled = false
 
-    init(window: NSWindow) {
+    init(window: NSWindow, onFullScreen: @escaping (Bool) -> Void) {
         self.window = window
+        self.onFullScreen = onFullScreen
         let names: [Notification.Name] = [NSWindow.didResizeNotification, NSWindow.didEndLiveResizeNotification,
-                                          NSWindow.didExitFullScreenNotification, NSWindow.didBecomeKeyNotification,
-                                          NSWindow.didResignKeyNotification, NSWindow.didChangeScreenNotification,
-                                          NSWindow.didBecomeMainNotification]
-        observers = names.map { name in
-            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.place() }
-            }
+                                          NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
+                                          NSWindow.didBecomeMainNotification, NSWindow.didResignMainNotification,
+                                          NSWindow.didChangeScreenNotification, NSWindow.didDeminiaturizeNotification,
+                                          NSWindow.didChangeBackingPropertiesNotification, NSWindow.didExitFullScreenNotification]
+        for name in names { observe(name, of: window) { $0.placeSoon() } }
+        observe(NSWindow.willEnterFullScreenNotification, of: window) { $0.onFullScreen(true) }
+        observe(NSWindow.didEnterFullScreenNotification, of: window) { $0.onFullScreen(true) }
+        observe(NSWindow.willExitFullScreenNotification, of: window) { $0.onFullScreen(false) }
+        observe(NSApplication.didChangeScreenParametersNotification, of: nil) { $0.placeSoon() }
+        // Reduce Transparency and Increase Contrast.
+        observe(NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, of: nil, in: NSWorkspace.shared.notificationCenter) { $0.placeSoon() }
+        appearance = window.observe(\.effectiveAppearance) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.placeSoon() }
         }
+        onFullScreen(window.styleMask.contains(.fullScreen))
         place()
     }
 
-    deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+    deinit {
+        observers.forEach { $0.0.removeObserver($0.1) }
+        frameObservers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    private func observe(_ name: Notification.Name, of object: AnyObject?, in center: NotificationCenter = .default,
+                         _ run: @escaping @MainActor (TrafficLights) -> Void) {
+        let token = center.addObserver(forName: name, object: object, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { if let self { run(self) } }
+        }
+        observers.append((center, token))
+    }
+
+    /// Now, and once more after AppKit's own layout pass, which can follow the notification.
+    private func placeSoon() {
+        // Also catches a full-screen attempt that failed after willEnter.
+        if let window { onFullScreen(window.styleMask.contains(.fullScreen)) }
+        place()
+        placeLater()
+    }
 
     func place() {
         guard let window, !window.styleMask.contains(.fullScreen),
@@ -88,11 +147,39 @@ final class TrafficLights {
         // Only as wide as the lights, so the taller title bar never covers the list's or toolbar's controls.
         let height = Self.firstCenter.y * 2
         let width = Self.firstCenter.x + Self.spacing * 2 + size.width
-        container.frame = NSRect(x: 0, y: window.frame.height - height, width: width, height: height)
-        titlebar.frame = container.bounds
+        let frame = NSRect(x: 0, y: window.frame.height - height, width: width, height: height)
+        if container.frame != frame { container.frame = frame }
+        if titlebar.frame != container.bounds { titlebar.frame = container.bounds }
         for (i, button) in buttons.enumerated() {
-            button.setFrameOrigin(NSPoint(x: Self.firstCenter.x + Self.spacing * CGFloat(i) - size.width / 2,
-                                          y: height - Self.firstCenter.y - size.height / 2))
+            let origin = NSPoint(x: Self.firstCenter.x + Self.spacing * CGFloat(i) - size.width / 2,
+                                 y: height - Self.firstCenter.y - size.height / 2)
+            if button.frame.origin != origin { button.setFrameOrigin(origin) }
+        }
+        watchFrames(of: [container, titlebar] + buttons, container: container)
+    }
+
+    /// AppKit can swap the title bar's views (after full screen, for example), so the watch follows the container.
+    private func watchFrames(of views: [NSView], container: NSView) {
+        guard container !== watchedContainer else { return }
+        watchedContainer = container
+        frameObservers.forEach(NotificationCenter.default.removeObserver)
+        frameObservers = views.map { view in
+            view.postsFrameChangedNotifications = true
+            return NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: view, queue: .main) { [weak self] _ in
+                // Later, not inside AppKit's layout, and once however many views moved.
+                MainActor.assumeIsolated { self?.placeLater() }
+            }
+        }
+    }
+
+    private func placeLater() {
+        guard !scheduled else { return }
+        scheduled = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                self?.scheduled = false
+                self?.place()
+            }
         }
     }
 }
@@ -113,7 +200,15 @@ struct ListColumn<Content: View>: View {
         self.content = content()
     }
 
-    private var clamped: CGFloat { min(max(CGFloat(width), Chrome.listWidthRange.lowerBound), Chrome.listWidthRange.upperBound) }
+    @Environment(\.windowWidth) private var windowWidth
+
+    /// The saved width, narrowed while the window is too small for it so the detail keeps its minimum.
+    private func fitted(_ value: Double) -> CGFloat {
+        CGFloat(ColumnWidth.list(saved: value, range: Double(Chrome.listWidthRange.lowerBound)...Double(Chrome.listWidthRange.upperBound),
+                                 window: Double(windowWidth), sidebar: Double(Chrome.sidebarWidth), detailMin: Double(Chrome.detailMinWidth)))
+    }
+
+    private var clamped: CGFloat { fitted(width) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -133,20 +228,20 @@ struct ListColumn<Content: View>: View {
         .zIndex(1)
     }
 
-    /// 8 pt over the detail column's hairline.
+    /// 8 pt just right of the edge, over the detail column's hairline, so it never covers the list's scroll bar.
+    /// The system sets and resets the cursor, so it cannot stick.
     private var resizeHandle: some View {
         Color.clear
             .frame(width: 8)
             .contentShape(Rectangle())
-            .offset(x: 4)
-            .onHover { inside in if inside { NSCursor.columnResize.push() } else { NSCursor.pop() } }
+            .offset(x: 8)
+            .pointerStyle(.columnResize)
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
                         let start = dragStart ?? Double(clamped)
                         dragStart = start
-                        width = Double(min(max(CGFloat(start + value.translation.width), Chrome.listWidthRange.lowerBound),
-                                           Chrome.listWidthRange.upperBound))
+                        width = Double(fitted(start + value.translation.width))
                     }
                     .onEnded { _ in dragStart = nil }
             )
@@ -168,11 +263,27 @@ struct DetailColumn<Toolbar: View, Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            OverflowRight { content }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
         }
         .overlay(alignment: .leading) { Hairline(axis: .vertical) }
+    }
+}
+
+/// Centers its content at the top, as a frame does, but content wider than the space starts at the leading edge, so
+/// it overflows to the right rather than under the list.
+struct OverflowRight: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for subview in subviews {
+            let size = subview.sizeThatFits(ProposedViewSize(bounds.size))
+            let x = size.width > bounds.width ? bounds.minX : bounds.midX - size.width / 2
+            subview.place(at: CGPoint(x: x, y: bounds.minY), anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+        }
     }
 }
 
@@ -207,14 +318,54 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
             }
             leading
             Spacer(minLength: 0)
-            HStack(spacing: Chrome.groupGap) { trailing }
-                .fixedSize()
+            // Sized before the title: each control keeps its size and only the search narrows when room is short.
+            ToolbarTrailing { trailing }
+                .layoutPriority(1)
         }
         .frame(maxHeight: .infinity)
         .padding(Chrome.toolbarInsets)
         .frame(height: Chrome.toolbarHeight)
         .frame(maxWidth: .infinity)
         .background { WindowDragArea() }
+    }
+}
+
+/// Marks the toolbar control that narrows when the row is short of room: the search field.
+private struct Compressible: LayoutValueKey {
+    static let defaultValue = false
+}
+
+/// The toolbar's trailing controls, 8 pt apart, at their own sizes. When the row is short of room the
+/// compressible control (the search) gives up width down to its minimum; the others never shrink or clip.
+private struct ToolbarTrailing: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let widths = self.widths(for: proposal.width, subviews)
+        let height = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+        return CGSize(width: widths.reduce(0, +) + gaps(subviews), height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        for (subview, width) in zip(subviews, widths(for: bounds.width, subviews)) {
+            let height = subview.sizeThatFits(.unspecified).height
+            subview.place(at: CGPoint(x: x, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(width: width, height: height))
+            x += width + Chrome.groupGap
+        }
+    }
+
+    private func gaps(_ subviews: Subviews) -> CGFloat { CGFloat(max(subviews.count - 1, 0)) * Chrome.groupGap }
+
+    private func widths(for available: CGFloat?, _ subviews: Subviews) -> [CGFloat] {
+        var widths = subviews.map { $0.sizeThatFits(.unspecified).width }
+        guard let available else { return widths }
+        var short = widths.reduce(0, +) + gaps(subviews) - available
+        for i in subviews.indices where short > 0 && subviews[i][Compressible.self] {
+            let least = subviews[i].sizeThatFits(ProposedViewSize(width: 0, height: nil)).width
+            let give = min(short, max(widths[i] - least, 0))
+            widths[i] -= give
+            short -= give
+        }
+        return widths
     }
 }
 
@@ -377,12 +528,14 @@ struct ToolbarSearchField: View {
             }
         }
         .padding(.horizontal, 12)
-        .frame(width: Chrome.searchWidth, height: Chrome.controlHeight)
+        .frame(minWidth: Chrome.searchMinWidth, idealWidth: Chrome.searchWidth, maxWidth: Chrome.searchWidth)
+        .frame(height: Chrome.controlHeight)
         .contentShape(Capsule())
         .onTapGesture { focused = true }
         .chromeGlass(in: Capsule())
         .background {
             Button("Search") { focused = true }.keyboardShortcut("f").opacity(0).accessibilityHidden(true)
         }
+        .layoutValue(key: Compressible.self, value: true)
     }
 }

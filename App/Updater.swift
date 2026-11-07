@@ -16,8 +16,8 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     @Published private(set) var waitingForCall = false
     /// The newer version Sparkle found, for the sidebar's card. Cleared when the owner skips it.
     @Published private(set) var available: AvailableUpdate?
-    /// The owner chose to install the found update; Sparkle is downloading or installing it.
-    @Published private(set) var installing = false
+    /// "Update now" from click to the end of Sparkle's session.
+    @Published private(set) var progress = UpdateProgress()
     private var observation: AnyCancellable?
 
     init(start: Bool, isRecording: @escaping () -> Bool) {
@@ -54,8 +54,10 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     }
 
     /// "Update now": Sparkle's own install, which shows its progress and waits for a call to end.
+    /// A VoiceOver press on a card that shows "Installs after this call" or "Installing…" does nothing.
     func installAvailable() {
-        installing = true
+        guard progress.canStart, !waitingForCall else { return }
+        progress.clicked()
         controller.checkForUpdates(nil)
     }
 
@@ -69,21 +71,34 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         let found = AvailableUpdate(version: item.displayVersionString, notes: ReleaseNotes(html: item.itemDescription))
-        MainActor.assumeIsolated { available = found }
+        MainActor.assumeIsolated { available = found; progress.found() }
     }
 
     nonisolated func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
-        MainActor.assumeIsolated { available = nil; installing = false }
+        MainActor.assumeIsolated { available = nil; progress.notFound() }
+    }
+
+    nonisolated func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        MainActor.assumeIsolated { progress.aborted() }
+    }
+
+    nonisolated func userDidCancelDownload(_ updater: SPUUpdater) {
+        MainActor.assumeIsolated { progress.downloadEnded() }
+    }
+
+    nonisolated func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: Error) {
+        MainActor.assumeIsolated { progress.downloadEnded() }
+    }
+
+    nonisolated func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
+        MainActor.assumeIsolated { progress.cycleFinished() }
     }
 
     nonisolated func updater(_ updater: SPUUpdater, userDidMake choice: SPUUserUpdateChoice, forUpdate updateItem: SUAppcastItem,
                              state: SPUUserUpdateState) {
         MainActor.assumeIsolated {
-            switch choice {
-            case .skip: available = nil; installing = false
-            case .install: installing = true
-            default: installing = false
-            }
+            if choice == .skip { available = nil }
+            progress.chose(install: choice == .install)
         }
     }
 

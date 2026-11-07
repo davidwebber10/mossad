@@ -137,6 +137,10 @@ enum Chrome {
     static let listTitleHeight: CGFloat = 36
     static let listTop: CGFloat = 10
     static let listTitleLeading: CGFloat = 14
+    /// The least the detail column gets: the Meetings toolbar (view, search, export and more) and its band fit.
+    /// The window's minimum width is the sidebar, the default list, and this.
+    static let detailMinWidth: CGFloat = 538
+    static var windowMinWidth: CGFloat { sidebarWidth + listWidth + detailMinWidth }
 
     /// The detail column's toolbar row and its glass controls.
     static let toolbarHeight: CGFloat = 62
@@ -145,8 +149,9 @@ enum Chrome {
     static let controlPadding: CGFloat = 3
     static let segment = CGSize(width: 32, height: 24)
     static let iconCell = CGSize(width: 30, height: 24)
-    /// 240 and 12 pt padding on each side.
+    /// 240 and 12 pt padding on each side; it narrows to the minimum before any other control would clip.
     static let searchWidth: CGFloat = 264
+    static let searchMinWidth: CGFloat = 150
     static let groupGap: CGFloat = 8
 }
 

@@ -154,12 +154,14 @@ struct TurnOffMenu<Label: View>: View {
             for (index, choice) in choices.enumerated() {
                 guard let (title, until) = choice else { menu.addItem(.separator()); continue }
                 let item = NSMenuItem(title: title, action: #selector(MenuTarget.run(_:)), keyEquivalent: "")
+                // An item's target is weak; the item keeps it alive for as long as the item can fire.
                 item.target = target
+                item.representedObject = target
                 item.tag = index
                 target.actions[index] = { [controller] in controller.turnOff(until: until) }
                 menu.addItem(item)
             }
-            withExtendedLifetime(target) { _ = menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
+            _ = menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         } label: {
             label
         }

@@ -4,6 +4,7 @@ import SwiftUI
 struct MainWindow: View {
     @EnvironmentObject var controller: AppController
     @State private var welcoming = false
+    @State private var width: CGFloat = .infinity
 
     var body: some View {
         // The canvas's chrome, drawn here rather than by a split view: the sidebar is a floating card that never
@@ -24,12 +25,16 @@ struct MainWindow: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .environment(\.windowWidth, width)
         .ignoresSafeArea()
         .background { WindowBackdrop() }
         // The window's contentMinSize sets the limit. A minimum height here would apply below the toolbar, so it
         // asked for 600 pt plus the toolbar and the root grew past the window, centered, under the title bar.
         // Without any frame the content's own minimum held the window at 820 pt. So: any height, from the top.
-        .frame(minWidth: 980, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
+        // No minimum width here either: one wider than the window centered the root and slid the sidebar off the
+        // left edge. Content that cannot fit overflows to the right instead.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
         .environment(\.animationsActive, controller.windowVisible)
         .sheet(isPresented: $welcoming) { WelcomeView() }
         // Development hook for screenshots: `--welcome-inline` draws the welcome in the window, not in a sheet.
@@ -94,8 +99,11 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // The native traffic lights sit here (TrafficLights places them); the row also moves the window.
-            WindowDragArea().frame(height: Chrome.lightsRow + Chrome.lightsToNav)
+            // The native traffic lights sit here (TrafficLights places them); the row also moves the window. In full
+            // screen the lights live in the hidden title bar, so the row goes.
+            if !controller.fullScreen {
+                WindowDragArea().frame(height: Chrome.lightsRow + Chrome.lightsToNav)
+            }
             VStack(alignment: .leading, spacing: Chrome.navRowGap) {
                 ForEach(AppController.Section.allCases) { row($0) }
             }
@@ -111,6 +119,9 @@ private struct Sidebar: View {
         .focusEffectDisabled()
         .onKeyPress(.downArrow) { move(1) }
         .onKeyPress(.upArrow) { move(-1) }
+        .onKeyPress(.home) { jump(to: AppController.Section.allCases.first) }
+        .onKeyPress(.end) { jump(to: AppController.Section.allCases.last) }
+        .onKeyPress(characters: .letters) { press in jump(to: AppController.Section.typeSelect(press.characters, from: controller.section)) }
         .task(id: controller.commitmentsVersion) {
             openCommitments = controller.commitmentBook.visible.filter { $0.done == nil }.count
         }
@@ -136,6 +147,12 @@ private struct Sidebar: View {
         .onHover { hovered = $0 ? section : (hovered == section ? nil : hovered) }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    private func jump(to section: AppController.Section?) -> KeyPress.Result {
+        guard let section else { return .ignored }
+        controller.section = section
+        return .handled
     }
 
     private func move(_ by: Int) -> KeyPress.Result {
@@ -237,7 +254,10 @@ private struct SidebarCard<Lines: View>: View {
         }
         .buttonStyle(.plain)
         // Not disabled: a disabled button fades the whole card, and a waiting update still needs to read clearly.
+        // VoiceOver reads it as text then, with no action to offer.
         .allowsHitTesting(actionEnabled)
+        .accessibilityRemoveTraits(actionEnabled ? [] : .isButton)
+        .accessibilityAddTraits(actionEnabled ? [] : .isStaticText)
     }
 }
 
@@ -276,14 +296,19 @@ private struct UpdateCard: View {
 
     private var action: String {
         if updater.waitingForCall { return "Installs after this call" }
-        return updater.installing ? "Installing…" : "Update now"
+        switch updater.progress.phase {
+        case .idle: return "Update now"
+        case .opening: return "Opening…"
+        case .installing: return "Installing…"
+        }
     }
+
+    private var enabled: Bool { !updater.waitingForCall && updater.progress.canStart }
 
     private func card(_ update: AvailableUpdate) -> some View {
         let preview = update.notes.preview
-        return
-        SidebarCard(title: "Update available", action: action,
-                    actionEnabled: !updater.waitingForCall && !updater.installing) {
+        return SidebarCard(title: "Update available", action: action,
+                    actionEnabled: enabled) {
             updater.installAvailable()
         } lines: {
             VStack(alignment: .leading, spacing: 0) {
@@ -298,8 +323,9 @@ private struct UpdateCard: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Update available: Mossad \(update.version). \(preview.lines.joined(separator: ". "))")
-        .accessibilityHint(updater.waitingForCall ? "Installs after this call" : "Installs the update")
+        .accessibilityLabel("Update available: Mossad \(update.version). \(preview.lines.joined(separator: ". "))\(enabled ? "" : ". \(action)")")
+        .accessibilityHint(enabled ? "Installs the update" : "")
+        .accessibilityRemoveTraits(enabled ? [] : .isButton)
     }
 }
 

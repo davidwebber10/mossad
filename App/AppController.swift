@@ -28,6 +28,10 @@ final class AppController: ObservableObject {
             case .log: .log
             }
         }
+
+        static func typeSelect(_ typed: String, from current: Section) -> Section? {
+            TypeSelect.next(in: allCases.map(\.rawValue), typed: typed, after: allCases.firstIndex(of: current)).map { allCases[$0] }
+        }
     }
 
     @Published private(set) var status: Status = .idle {
@@ -85,7 +89,10 @@ final class AppController: ObservableObject {
     var offUntilDate: Date? { offUntil == 0 || offUntil == .infinity ? nil : Date(timeIntervalSince1970: offUntil) }
     @Published private(set) var meetings: [CallRecord] = []
     @Published private(set) var processing = 0
-    @Published var section: Section = .meetings
+    /// The window's title is hidden, but it names the page for the Window menu, Mission Control, and the Dock.
+    @Published var section: Section = .meetings { didSet { window?.title = section.rawValue } }
+    /// The main window is in full screen, where the traffic lights leave the sidebar.
+    @Published private(set) var fullScreen = false
     @Published var selectedMeetingID: String?
     @Published var namingCallID: String?
     var personToOpen: String?
@@ -1138,7 +1145,7 @@ final class AppController: ObservableObject {
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 820),
                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                              backing: .buffered, defer: false)
-            w.title = "Mossad"
+            w.title = section.rawValue
             // No system toolbar: each page draws its own toolbar row, and the traffic lights sit in the sidebar card.
             w.titlebarAppearsTransparent = true
             w.titleVisibility = .hidden
@@ -1148,7 +1155,7 @@ final class AppController: ObservableObject {
             host.sizingOptions = []
             w.contentViewController = host
             w.setContentSize(NSSize(width: 1240, height: 820))
-            w.contentMinSize = NSSize(width: 980, height: 600)
+            w.contentMinSize = NSSize(width: Chrome.windowMinWidth, height: 600)
             occlusionObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: w, queue: .main) { [weak self] note in
                 let visible = (note.object as? NSWindow)?.occlusionState.contains(.visible) == true
                 Task { @MainActor in if self?.windowVisible != visible { self?.windowVisible = visible } }
@@ -1163,7 +1170,9 @@ final class AppController: ObservableObject {
             w.center()
             if previewWidth == nil, previewHeight == nil { w.setFrameAutosaveName("MossadMain") }
             window = w
-            trafficLights = TrafficLights(window: w)
+            trafficLights = TrafficLights(window: w) { [weak self] in
+                if self?.fullScreen != $0 { self?.fullScreen = $0 }
+            }
         }
         refresh()
         // A preview for screenshots stays behind the owner's windows and never takes focus.
