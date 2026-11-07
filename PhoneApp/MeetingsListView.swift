@@ -5,6 +5,7 @@ import SwiftUI
 /// date. Search and Settings are glass buttons at the top; Record room floats over the list.
 struct MeetingsListView: View {
     @EnvironmentObject var store: PhoneStore
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var recording = PhoneStore.hook("MOSSAD_ROOM") != nil
     @State private var settings = PhoneStore.hook("MOSSAD_SETTINGS") != nil
     @State private var searching = false
@@ -94,13 +95,15 @@ struct MeetingsListView: View {
 
     private var recordButton: some View {
         Button { recording = true } label: {
-            Label("Record room", systemImage: "circle.fill")
+            // Shorter at the largest text sizes, so the button does not cover most of a row.
+            Label(typeSize.isAccessibilitySize ? "Record" : "Record room", systemImage: "circle.fill")
                 .labelStyle(RecordLabelStyle())
         }
         .buttonStyle(.phoneFill(Palette.recording))
         .shadow(color: Palette.recording.opacity(0.3), radius: 12, y: 6)
         .padding(.trailing, Space.l)
         .padding(.bottom, Space.m)
+        .accessibilityLabel("Record room")
         .accessibilityHint("Records a meeting in this room with the iPhone's microphone")
     }
 }

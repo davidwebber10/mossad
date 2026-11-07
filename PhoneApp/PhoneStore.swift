@@ -30,6 +30,14 @@ final class PhoneStore: ObservableObject {
     @Published var tab = PhoneTab.meetings
     /// The meetings open in the Meetings tab, for `mossad://call/<id>` links.
     @Published var path: [String] = []
+    /// A moment to open a meeting at: the meeting page reads it once and opens the transcript there.
+    @Published var moment: Moment?
+
+    struct Moment: Equatable {
+        let callID: String
+        let at: TimeInterval
+        let id = UUID()
+    }
 
     let paths = Paths.live
     /// Where this iPhone syncs: iCloud (the default), the owner's own server, or nowhere.
@@ -59,6 +67,11 @@ final class PhoneStore: ObservableObject {
         reload()
         // Development hooks for screenshots: `MOSSAD_OPEN=<call id>` opens a meeting, `MOSSAD_TAB` picks a tab.
         if let id = ProcessInfo.processInfo.environment["MOSSAD_OPEN"], !id.isEmpty { path = [id] }
+        // `MOSSAD_MOMENT=<call id>@<seconds>` opens a meeting at a moment, as a commitment does.
+        if let m = Self.hook("MOSSAD_MOMENT")?.split(separator: "@"), m.count == 2, let at = TimeInterval(m[1]) {
+            path = [String(m[0])]
+            moment = Moment(callID: String(m[0]), at: at)
+        }
         switch ProcessInfo.processInfo.environment["MOSSAD_TAB"] {
         case "commitments": tab = .commitments
         case "chat": tab = .chat
@@ -185,9 +198,15 @@ final class PhoneStore: ObservableObject {
     }
 
     func open(_ link: ChatLink) {
-        guard meeting(link.callID) != nil else { return }
+        showMoment(link.callID, at: link.at)
+    }
+
+    /// Opens a meeting, at a moment when there is one, as the Mac does for a commitment or a chat link.
+    func showMoment(_ id: String, at: TimeInterval?) {
+        guard meeting(id) != nil else { return }
         tab = .meetings
-        path = [link.callID]
+        path = [id]
+        moment = at.map { Moment(callID: id, at: $0) }
     }
 
     // MARK: Chat

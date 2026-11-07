@@ -14,9 +14,9 @@ struct PhoneSettingsView: View {
         NavigationStack {
             List {
                 Section {
-                    choice(.icloud, symbol: "icloud", tint: Palette.zoom, title: "iCloud",
+                    choice(.icloud, symbol: "icloud", title: "iCloud",
                            detail: "Your Mac sends meetings through your private iCloud. Nothing to set up.")
-                    choice(.server, symbol: "server.rack", tint: Palette.accentFill, title: "Your server",
+                    choice(.server, symbol: "server.rack", title: "Your server",
                            detail: store.server.map { $0.address.host ?? "" } ?? "Your own Cloudflare. Connect with a code from your Mac.")
                 } header: {
                     PhoneLabel("Sync with")
@@ -87,13 +87,14 @@ struct PhoneSettingsView: View {
         }
     }
 
-    private func choice(_ c: SyncChoice, symbol: String, tint: Color, title: String, detail: String) -> some View {
+    private func choice(_ c: SyncChoice, symbol: String, title: String, detail: String) -> some View {
         Button {
             if c == .server, store.server == nil { connecting = true } else { store.choose(c) }
         } label: {
             HStack(spacing: 14) {
-                Image(systemName: symbol).font(.body.weight(.semibold)).foregroundStyle(.white)
-                    .frame(width: 36, height: 36).background(tint, in: .rect(cornerRadius: 9))
+                // The accent tint, not a brand color: platform colors are only for dots.
+                Image(systemName: symbol).font(.body.weight(.semibold)).foregroundStyle(Palette.accent)
+                    .frame(width: 36, height: 36).background(Palette.accentTint, in: .rect(cornerRadius: 9))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).textRole(.headline).foregroundStyle(Palette.ink)

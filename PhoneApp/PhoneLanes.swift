@@ -123,11 +123,18 @@ struct PhoneLanes: View {
                         if let at = d.at {
                             Circle().fill(Palette.ink).frame(width: 6, height: 6)
                                 .offset(x: w * min(at / duration, 1) - 3)
+                                .accessibilityElement()
+                                .accessibilityLabel("Decision at \(stamp(at)): \(d.text)")
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityAction { seek(at) }
                         }
                     }
                     ForEach(Array(bookmarks.enumerated()), id: \.offset) { _, b in
                         Image(systemName: "bookmark.fill").font(.system(size: 9)).foregroundStyle(Palette.accent)
                             .offset(x: w * min(b.offset / duration, 1) - 4)
+                            .accessibilityLabel(bookmarkLabel(b))
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { seek(b.offset) }
                     }
                 }
                 .frame(height: 12)
@@ -136,7 +143,13 @@ struct PhoneLanes: View {
             }
             .frame(height: 12)
         }
-        .accessibilityHidden(true)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// "Bookmark at 52:08: Surcharge decision"
+    private func bookmarkLabel(_ b: TranscriptMarker) -> String {
+        let note = b.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "Bookmark at \(stamp(b.offset))" + (note.isEmpty ? "" : ": \(note)")
     }
 
     private var readout: some View {

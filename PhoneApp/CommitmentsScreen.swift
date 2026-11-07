@@ -50,7 +50,7 @@ struct CommitmentsScreen: View {
             .sheet(item: $editing) { c in
                 NavigationStack {
                     CommitmentEditor(commitment: c, save: store.saveCommitment, delete: { store.deleteCommitment(c.id) },
-                                     openMeeting: { id, _ in store.openMeeting(id) })
+                                     openMeeting: { id, at in store.showMoment(id, at: at) })
                 }
             }
             .sheet(item: $adding) { c in
@@ -124,7 +124,7 @@ struct CommitmentsScreen: View {
         .contextMenu {
             Button("Edit", systemImage: "pencil") { editing = c }
             if c.done == nil { Button(c.due == nil ? "Add a date" : "Change date", systemImage: "calendar") { dating = c } }
-            if let id = c.callID { Button("Open the meeting", systemImage: "arrow.up.right") { store.openMeeting(id) } }
+            if let id = c.callID { Button("Open the meeting", systemImage: "arrow.up.right") { store.showMoment(id, at: c.at) } }
             Button("Delete", systemImage: "trash", role: .destructive) { store.deleteCommitment(c.id) }
         }
     }
@@ -145,9 +145,9 @@ struct CommitmentsScreen: View {
         }
     }
 
-    /// A commitment from a call opens the meeting; one added by hand opens the editor.
+    /// A commitment from a call opens the meeting where it was said; one added by hand opens the editor.
     private func activate(_ c: Commitment) {
-        if let id = c.callID, store.meeting(id) != nil { store.openMeeting(id) } else { editing = c }
+        if let id = c.callID, store.meeting(id) != nil { store.showMoment(id, at: c.at) } else { editing = c }
     }
 }
 

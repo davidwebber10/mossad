@@ -43,11 +43,15 @@ struct ChatWelcome: View {
         return counts.max { $0.value == $1.value ? $0.key > $1.key : $0.value < $1.value }?.key
     }
 
+    /// Built from what is here: the day's meetings, what is overdue, and the person met most.
     private var questions: [String] {
-        [
+        let open = store.commitments.visible.filter { $0.done == nil }
+        let overdue = open.filter { $0.status() == .overdue }.count
+        return [
             today.isEmpty ? "What was decided this week, and what still needs me?" : "What was decided today, and what do I need to do next?",
-            "What do I owe people from this week's meetings?",
-            person.map { "What is open between \($0) and me, and what did we agree?" }
+            overdue > 0 ? "\(overdue) of my commitments are overdue. Which should I do first?"
+                : open.isEmpty ? "What did I agree to in my last meeting?" : "What do I owe people from this week's meetings?",
+            person.map { "Before I meet \($0.split(separator: " ").first.map(String.init) ?? $0): what is open between us, and what should I bring up?" }
                 ?? "Which of my meetings were low value, and what should I change?",
             "How did I do in my recent meetings, and what one thing should I work on?",
         ]

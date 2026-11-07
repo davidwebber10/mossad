@@ -33,7 +33,7 @@ struct MeetingView: View {
                     header
                     if !record.utterances.isEmpty {
                         PhoneLanes(lanes: lanes, duration: length, moment: moment, decisions: record.decisions,
-                                   bookmarks: record.markers.filter(\.isBookmark)) { read(at: $0) }
+                                   bookmarks: record.transcriptMarkers.filter(\.isBookmark)) { read(at: $0) }
                             // A chart: past this size the names would leave no room for the lanes; VoiceOver reads each lane.
                             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     }
@@ -70,6 +70,12 @@ struct MeetingView: View {
             ToolbarItem(placement: .principal) { Text("") }
         }
         .task(id: store.coachVersion) { review = store.coach(record.id) }
+        // A commitment or a chat link asked for a moment in this meeting.
+        .task(id: store.moment) {
+            guard let m = store.moment, m.callID == record.id else { return }
+            store.moment = nil
+            read(at: m.at)
+        }
         .onAppear {
             // A search that matched the transcript, not the title, opens the transcript at it.
             // Development hook for screenshots: `MOSSAD_FIND=<words>`.
@@ -110,6 +116,11 @@ struct MeetingView: View {
                     .padding(.horizontal, Space.s).padding(.vertical, 2)
                     .background(Palette.fill, in: Capsule())
             }
+            // Before the transcript exists, who was invited says who the meeting was with.
+            if record.utterances.isEmpty, !record.attendees.isEmpty {
+                Text("With " + record.attendees.joined(separator: ", "))
+                    .textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
+            }
             if !record.tags.isEmpty {
                 Text(record.tags.map { "#\($0)" }.joined(separator: "  "))
                     .textRole(.secondary).foregroundStyle(Palette.accent)
@@ -143,6 +154,9 @@ private struct SummarySection: View {
             if !record.decisions.isEmpty {
                 LabelColumn(label: "Decisions") { decisions }
             }
+            if !bookmarks.isEmpty {
+                LabelColumn(label: "Bookmarks") { bookmarkList }
+            }
             MeetingCommitments(callID: record.id) { read($0) }
             if record.summary != nil, record.hasOutcomes != false || !record.actionItems.isEmpty {
                 LabelColumn(label: "Action items") { actionItems }
@@ -172,6 +186,40 @@ private struct SummarySection: View {
         guard let s = record.summary else { return nil }
         for block in SummaryBlock.parse(s) { if case .paragraph(let p) = block { return firstSentence(p) } }
         return nil
+    }
+
+    private var bookmarks: [TranscriptMarker] { record.transcriptMarkers.filter(\.isBookmark) }
+
+    /// Each bookmark with its time and note; a tap reads from there.
+    private var bookmarkList: some View {
+        VStack(alignment: .leading, spacing: Space.s) {
+            ForEach(Array(bookmarks.enumerated()), id: \.offset) { _, b in
+                let note = b.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+                Button { read(b.offset) } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bookmark.fill").font(.caption2).foregroundStyle(Palette.accent)
+                                .accessibilityHidden(true)
+                            Text(meetingClock(b.offset, length: length))
+                        }
+                        .textRole(.secondary).foregroundStyle(Palette.secondary).fixedSize()
+                        Group {
+                            if let note, !note.isEmpty {
+                                Text(note).foregroundStyle(Palette.ink)
+                            } else {
+                                Text("Bookmark · no note").foregroundStyle(Palette.secondary)
+                            }
+                        }
+                        .textRole(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the transcript at the bookmark")
+            }
+        }
     }
 
     /// Each decision with the time it was made; a tap reads from there. Older meetings have no times.
