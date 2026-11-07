@@ -6,11 +6,11 @@ extension Pipeline {
         switch error {
         case let e as MissingAPIKey: return "\(e.service) key missing"
         case TranscriptionError.http(401, _), SummaryError.http(401, _), ProviderError.http(_, 401, _): return "invalid API key"
-        case ProviderError.http(let p, let code, _): return "\(p) error \(code)"
+        case ProviderError.http(let p, let code, let body): return "\(p) error \(code)" + said(code, body)
         case ProviderError.failed(let p, let message): return "\(p): \(message)"
-        case TranscriptionError.http(let code, _): return "AssemblyAI error \(code)"
+        case TranscriptionError.http(let code, let body): return "AssemblyAI error \(code)" + said(code, body)
         case TranscriptionError.failed: return "AssemblyAI could not transcribe the audio"
-        case SummaryError.http(let code, _): return "Anthropic error \(code)"
+        case SummaryError.http(let code, let body): return "Anthropic error \(code)" + said(code, body)
         case let e as SummaryError: return e.description
         case let e as URLError:
             switch e.code {
@@ -21,5 +21,11 @@ extension Pipeline {
             }
         default: return "unexpected error"
         }
+    }
+
+    /// A refused request keeps the provider's own words when they read as a sentence, so the card can say why.
+    private static func said(_ code: Int, _ body: String) -> String {
+        guard (400..<500).contains(code), let message = FriendlyError.providerMessage(body) else { return "" }
+        return ": " + message.trimmingCharacters(in: CharacterSet(charactersIn: "."))
     }
 }
