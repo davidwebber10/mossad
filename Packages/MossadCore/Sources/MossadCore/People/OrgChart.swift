@@ -24,16 +24,35 @@ public struct OrgChart: Sendable {
 
     public enum ParseError: Error, Equatable { case missingColumns }
 
+    /// One person's part of the tree as the People page draws it: the manager on top, then a column for the
+    /// person and each peer, with that column's direct reports stacked beneath.
+    public struct Team: Equatable, Sendable {
+        public struct Column: Equatable, Sendable {
+            public let head: Person
+            public let reports: [Person]
+        }
+        public let focus: String
+        public let top: Person?
+        public let columns: [Column]
+    }
+
+    /// An empty export with the four columns, for someone whose HR system is not Paylocity.
+    public static let templateCSV = "Last Name,First Name,Position Title,Supervisor\n"
+
     public let people: [Person]
+    /// The longest chain from the top down, counting both ends; 0 for an empty file.
+    public let levels: Int
     private let byID: [String: Person]
     private let byLast: [String: [Person]]
     private let children: [String: [Person]]
 
     private init(people: [Person]) {
         self.people = people
-        byID = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+        let byID = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+        self.byID = byID
         byLast = Dictionary(grouping: people) { Self.normalize($0.last) }
         children = Dictionary(grouping: people.filter { $0.managerID != nil }) { $0.managerID! }
+        levels = people.map { Self.chain(of: $0.id, in: byID).count + 1 }.max() ?? 0
     }
 
     // MARK: Reading the tree
@@ -50,8 +69,21 @@ public struct OrgChart: Sendable {
         return reports(of: m).filter { $0.id != id }
     }
 
+    /// The person's manager, the person and their peers, and each one's reports. A person at the top (or whose
+    /// manager is not in the file) is drawn on top with their reports as the columns.
+    public func team(around id: String) -> Team {
+        guard let person = byID[id] else { return Team(focus: id, top: nil, columns: []) }
+        func column(_ p: Person) -> Team.Column { Team.Column(head: p, reports: reports(of: p.id)) }
+        if let manager = manager(of: id) {
+            return Team(focus: id, top: manager, columns: [column(person)] + peers(of: id).map(column))
+        }
+        return Team(focus: id, top: person, columns: reports(of: id).map(column))
+    }
+
     /// The ids from the person's manager up to the top. Stops at a loop in the file.
-    public func chain(of id: String) -> [String] {
+    public func chain(of id: String) -> [String] { Self.chain(of: id, in: byID) }
+
+    private static func chain(of id: String, in byID: [String: Person]) -> [String] {
         var out: [String] = [], seen: Set<String> = [id]
         var next = byID[id]?.managerID
         while let n = next, byID[n] != nil, seen.insert(n).inserted {

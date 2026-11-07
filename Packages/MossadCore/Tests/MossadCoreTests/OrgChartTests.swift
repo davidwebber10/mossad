@@ -193,4 +193,36 @@ final class OrgChartTests: XCTestCase {
         XCTAssertEqual(c.reports(of: "root, rita").count, 2000)
         XCTAssertLessThan(Date().timeIntervalSince(start), 0.2)
     }
+
+    func testLevelsCountTheDeepestChain() throws {
+        XCTAssertEqual(try chart().levels, 3)
+        XCTAssertEqual(try OrgChart.parse(csv: OrgChart.templateCSV).levels, 0)
+    }
+
+    func testTheTemplateHasTheFourColumnsAndNoPeople() throws {
+        XCTAssertEqual(OrgChart.templateCSV, "Last Name,First Name,Position Title,Supervisor\n")
+        XCTAssertTrue(try OrgChart.parse(csv: OrgChart.templateCSV).people.isEmpty)
+    }
+
+    func testTeamAroundAPersonIsTheirManagerThenThemAndPeersWithReports() throws {
+        let team = try chart().team(around: "lee, dana")
+        XCTAssertEqual(team.top?.id, "park, sam")
+        XCTAssertEqual(team.columns.map(\.head.fullName), ["Dana Lee", "Pat Quinn", "Mary Ann Stone"])
+        XCTAssertEqual(team.columns[0].reports.map(\.fullName), ["Benjamin Chen", "Jim Fox", "Kim Fox", "Rae Ode", "Chris Orr", "Pat Quinn", "Alex Rivera"])
+        XCTAssertEqual(team.columns[2].reports.map(\.fullName), ["Lou Gray", "Jamie Moss"])
+        XCTAssertEqual(team.focus, "lee, dana")
+    }
+
+    func testTeamAroundTheTopIsTheTopThenItsReports() throws {
+        let team = try chart().team(around: "park, sam")
+        XCTAssertEqual(team.top?.id, "park, sam")
+        XCTAssertEqual(team.columns.map(\.head.fullName), ["Dana Lee", "Pat Quinn", "Mary Ann Stone"])
+    }
+
+    func testTeamAroundAPersonWithNoManagerInTheFileStandsAlone() throws {
+        let team = try chart().team(around: "ng, zachary")
+        XCTAssertEqual(team.top?.id, "ng, zachary")
+        XCTAssertTrue(team.columns.isEmpty)
+        XCTAssertNil(try chart().team(around: "nobody").top)
+    }
 }
