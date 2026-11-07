@@ -59,7 +59,7 @@ struct RelationSections: View {
         }
         LabelColumn(label: "You promised") {
             if r.myCommitments.isEmpty {
-                quiet("No commitments to \(first).")
+                quiet("No tasks for \(first).")
             } else {
                 items(r.myCommitments.prefix(6).map { c in
                     (c.text, c.due.map { "Due " + $0.formatted(.dateTime.month(.abbreviated).day()) } ?? (c.callTitle ?? ""),

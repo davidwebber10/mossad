@@ -429,7 +429,7 @@ private struct MeetingCommitments: View {
     var body: some View {
         let mine = store.commitments.visible.filter { $0.callID == callID }
         if !mine.isEmpty {
-            LabelColumn(label: "Your commitments") {
+            LabelColumn(label: "Your tasks") {
                 VStack(alignment: .leading, spacing: Space.m) {
                     ForEach(mine) { c in
                         CommitmentRow(commitment: c, showSource: false, open: { show(c.at) }, toggleDone: { store.toggleDone(c.id) }) {

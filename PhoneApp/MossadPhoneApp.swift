@@ -12,7 +12,7 @@ struct MossadPhoneApp: App {
         WindowGroup {
             TabView(selection: $store.tab) {
                 Tab(value: .meetings) { MeetingsListView() } label: { Label("Meetings", systemImage: "list.bullet.rectangle").environment(\.symbolVariants, .none) }
-                Tab(value: .commitments) { CommitmentsScreen() } label: { Label("Commitments", systemImage: "checkmark.circle").environment(\.symbolVariants, .none) }
+                Tab(value: .commitments) { CommitmentsScreen() } label: { Label("Tasks", systemImage: "checkmark.circle").environment(\.symbolVariants, .none) }
                 Tab(value: .chat) { ChatScreen() } label: { Label("Chat", systemImage: "sparkle").environment(\.symbolVariants, .none) }
                 Tab(value: .people) { PeopleScreen() } label: { Label("People", systemImage: "person.2").environment(\.symbolVariants, .none) }
                 Tab(value: .analytics) { AnalyticsScreen() } label: { Label("Analytics", systemImage: "chart.bar.xaxis").environment(\.symbolVariants, .none) }

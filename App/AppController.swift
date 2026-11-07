@@ -15,7 +15,7 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", commitments = "Commitments", chat = "Chat", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
+        case meetings = "Meetings", commitments = "Tasks", chat = "Chat", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
         var id: String { rawValue }
         var icon: Icon {
             switch self {

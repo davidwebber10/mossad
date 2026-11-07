@@ -37,10 +37,10 @@ struct CommitmentsScreen: View {
             .listStyle(.plain)
             .overlay { empty }
             .phonePage()
-            .navigationTitle("Commitments")
+            .navigationTitle("Tasks")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Add a commitment", systemImage: "plus") {
+                    Button("Add a task", systemImage: "plus") {
                         adding = Commitment(text: "", to: nil, callID: nil, callTitle: nil, madeAt: Date(), due: nil)
                     }
                     .tint(Palette.ink)
@@ -71,13 +71,13 @@ struct CommitmentsScreen: View {
     @ViewBuilder
     private var empty: some View {
         if store.commitments.visible.isEmpty {
-            EmptyState(symbol: "checkmark.circle", title: "No commitments yet",
+            EmptyState(symbol: "checkmark.circle", title: "No tasks yet",
                        message: "After each call, Mossad finds what you promised to do, with due dates when you gave one.")
         } else if mode == .open, openGroups.isEmpty {
             EmptyState(symbol: "checkmark.circle", title: "Nothing open", message: "New ones appear here after your next call.")
         } else if mode == .done, doneItems.isEmpty {
             EmptyState(symbol: "checkmark.circle", title: "Nothing done yet",
-                       message: "Mark a commitment done with its circle, and it moves here.")
+                       message: "Mark a task done with its circle, and it moves here.")
         }
     }
 

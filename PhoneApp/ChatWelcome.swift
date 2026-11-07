@@ -49,7 +49,7 @@ struct ChatWelcome: View {
         let overdue = open.filter { $0.status() == .overdue }.count
         return [
             today.isEmpty ? "What was decided this week, and what still needs me?" : "What was decided today, and what do I need to do next?",
-            overdue > 0 ? "\(overdue) of my commitments are overdue. Which should I do first?"
+            overdue > 0 ? "\(overdue) of my tasks are overdue. Which should I do first?"
                 : open.isEmpty ? "What did I agree to in my last meeting?" : "What do I owe people from this week's meetings?",
             person.map { "Before I meet \($0.split(separator: " ").first.map(String.init) ?? $0): what is open between us, and what should I bring up?" }
                 ?? "Which of my meetings were low value, and what should I change?",

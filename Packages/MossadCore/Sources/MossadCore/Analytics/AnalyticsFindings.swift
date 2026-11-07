@@ -128,10 +128,10 @@ public enum AnalyticsFindings {
         }
         guard o.commitmentsMade > 0 else { return calls }
         let kept = switch (o.commitmentsMade, o.commitmentsDone) {
-        case (1, 1): "your one commitment is done"
-        case (1, _): "your one commitment is still open"
-        case let (made, done) where made == done: "all \(made) of your commitments are done"
-        case let (made, done): "\(done) of your \(made) commitments are done"
+        case (1, 1): "your one task is done"
+        case (1, _): "your one task is still open"
+        case let (made, done) where made == done: "all \(made) of your tasks are done"
+        case let (made, done): "\(done) of your \(made) tasks are done"
         }
         return "\(calls); \(kept)"
     }

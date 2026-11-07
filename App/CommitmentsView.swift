@@ -49,16 +49,16 @@ struct CommitmentsView: View {
     @ViewBuilder
     private var page: some View {
         if book.visible.isEmpty {
-            EmptyState(symbol: "checkmark.circle", title: "No commitments yet",
+            EmptyState(symbol: "checkmark.circle", title: "No tasks yet",
                        message: "After each call, Mossad finds what you promised to do, with due dates when you gave one. You can also add your own.",
-                       action: ("Add a commitment", add))
+                       action: ("Add a task", add))
                 .pageCentered()
         } else if mode == .open, openGroups.isEmpty, query.isEmpty {
             EmptyState(symbol: "checkmark.circle", title: "Nothing open", message: keptText)
                 .pageCentered()
         } else if mode == .done, doneItems.isEmpty, query.isEmpty {
             EmptyState(symbol: "checkmark.circle", title: "Nothing done yet",
-                       message: "Mark a commitment done with its circle, and it moves here.")
+                       message: "Mark a task done with its circle, and it moves here.")
                 .pageCentered()
         } else {
             ScrollView {
@@ -68,7 +68,7 @@ struct CommitmentsView: View {
                     case .done: doneList
                     }
                     if (mode == .open ? openGroups.isEmpty : doneItems.isEmpty) && !query.isEmpty {
-                        Text("No commitments match “\(query)”.")
+                        Text("No tasks match “\(query)”.")
                             .font(.system(size: 13)).foregroundStyle(Palette.secondary)
                     }
                 }
@@ -80,12 +80,12 @@ struct CommitmentsView: View {
     }
 
     private var toolbar: some View {
-        PageToolbar(title: "Commitments", subtitle: subtitle) {
+        PageToolbar(title: "Tasks", subtitle: subtitle) {
             ToolbarSegmented(selection: $mode, options: Mode.allCases.map { .init(value: $0, label: $0.rawValue) },
                            accessibilityLabel: "Show")
-                .help("Open or done commitments")
-            ToolbarSearchField(prompt: "Search commitments", query: $query)
-            ToolbarCircleButton(icon: .plus, label: "Add", help: "Add a commitment", action: add)
+                .help("Open or done tasks")
+            ToolbarSearchField(prompt: "Search tasks", query: $query)
+            ToolbarCircleButton(icon: .plus, label: "Add", help: "Add a task", action: add)
         }
     }
 
@@ -175,8 +175,8 @@ struct CommitmentsView: View {
         let then = "New ones appear here after your next call."
         switch kept {
         case 0: return then
-        case 1: return "You kept your one commitment from the last 30 days. " + then
-        default: return "You kept all \(kept) commitments from the last 30 days. " + then
+        case 1: return "You kept your one task from the last 30 days. " + then
+        default: return "You kept all \(kept) tasks from the last 30 days. " + then
         }
     }
 

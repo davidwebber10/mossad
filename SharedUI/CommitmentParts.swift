@@ -195,7 +195,7 @@ struct CommitmentEditor: View {
             }
             if let delete, !isNew {
                 Section {
-                    Button("Delete commitment", role: .destructive) {
+                    Button("Delete task", role: .destructive) {
                         delete()
                         dismiss()
                     }
@@ -203,7 +203,7 @@ struct CommitmentEditor: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(isNew ? "New commitment" : "Commitment")
+        .navigationTitle(isNew ? "New task" : "Task")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {

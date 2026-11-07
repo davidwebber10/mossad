@@ -249,7 +249,7 @@ struct OutcomesSection: View {
                 SmallFigure(value: String(format: "%.1f", o.decisionsPerHour), label: "decisions an hour")
                 SmallFigure(value: o.withOutcomesShare.map(percentText) ?? "–", label: "of calls with an item or a decision")
                 SmallFigure(value: "\(o.mine) · \(o.others)", label: "items yours · others’")
-                SmallFigure(value: o.commitmentsMade > 0 ? "\(o.commitmentsDone) of \(o.commitmentsMade)" : "–", label: "of your commitments done")
+                SmallFigure(value: o.commitmentsMade > 0 ? "\(o.commitmentsDone) of \(o.commitmentsMade)" : "–", label: "of your tasks done")
             }
             .padding(.top, 12)
             .hairline(.top)

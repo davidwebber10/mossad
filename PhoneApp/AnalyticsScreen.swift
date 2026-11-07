@@ -166,7 +166,7 @@ struct AnalyticsScreen: View {
             StatTile(value: String(format: "%.1f", r.outcomes.decisionsPerHour), label: "Decisions an hour")
             StatTile(value: "\(r.outcomes.mine) · \(r.outcomes.others)", label: "Items yours · others'")
             StatTile(value: r.outcomes.commitmentsMade > 0 ? "\(r.outcomes.commitmentsDone) of \(r.outcomes.commitmentsMade)" : "–",
-                     label: "Commitments done")
+                     label: "Tasks done")
         }
     }
 

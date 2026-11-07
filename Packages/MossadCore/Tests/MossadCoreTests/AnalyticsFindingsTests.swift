@@ -165,7 +165,7 @@ final class AnalyticsFindingsTests: XCTestCase {
         XCTAssertNil(AnalyticsFindings.outcomes(o))
         o.withOutcomesShare = 0.95
         o.commitmentsMade = 31; o.commitmentsDone = 3
-        XCTAssertEqual(AnalyticsFindings.outcomes(o), "Almost every call produced an item or a decision; 3 of your 31 commitments are done")
+        XCTAssertEqual(AnalyticsFindings.outcomes(o), "Almost every call produced an item or a decision; 3 of your 31 tasks are done")
         o.withOutcomesShare = 0.4
         o.commitmentsMade = 0
         XCTAssertEqual(AnalyticsFindings.outcomes(o), "40% of calls produced an item or a decision")
