@@ -145,6 +145,8 @@ final class AppController: ObservableObject {
     /// Used only on `CaptureQueue.queue`.
     private nonisolated let recorder: CallRecorder
     private var window: NSWindow?
+    /// The menu bar panel shown in a window, for a preview's screenshots.
+    var panelPreviewWindow: NSWindow?
     private var housekeeping: Timer?
     private var outputWatcher: OutputDeviceWatcher?
     private var browserLaunchObserver: NSObjectProtocol?
@@ -297,7 +299,13 @@ final class AppController: ObservableObject {
         }
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
-        if CommandLine.arguments.contains("--show-recording") { status = .recording(.meet, since: Date().addingTimeInterval(-75)) }
+        if CommandLine.arguments.contains("--show-recording") {
+            // MOSSAD_RECORDING_PLATFORM=inPerson|zoom|teams|meet and MOSSAD_RECORDING_SECONDS pick what it shows.
+            let env = ProcessInfo.processInfo.environment
+            let platform = env["MOSSAD_RECORDING_PLATFORM"].flatMap(Platform.init(rawValue:)) ?? .meet
+            let seconds = env["MOSSAD_RECORDING_SECONDS"].flatMap(Double.init) ?? 75
+            status = .recording(platform, since: Date().addingTimeInterval(-seconds))
+        }
         if CommandLine.arguments.contains("--show-muted") { isMuted = true }
         if !preview {
             backfillSummaries()
@@ -324,9 +332,14 @@ final class AppController: ObservableObject {
         if CommandLine.arguments.contains("--open-naming"), let first = callsNeedingNames.first {
             DispatchQueue.main.async { self.openNaming(first.id) }
         }
-        // Development hook: `--open-window [Meetings|People|Settings|Log]`.
+        // Development hook: `--open-window [Meetings|People|Settings|Log]`, or `MenuPanel` in a preview for the
+        // menu bar panel's content in a window of its own.
         if let i = CommandLine.arguments.firstIndex(of: "--open-window") {
             let name = CommandLine.arguments.dropFirst(i + 1).first
+            if preview, name == "MenuPanel" {
+                DispatchQueue.main.async { self.openPanelPreview() }
+                return
+            }
             let section = Section.allCases.first { $0.rawValue == name } ?? .meetings
             DispatchQueue.main.async { self.open(section) }
         }

@@ -2,7 +2,8 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// The last 500 log lines with level pills and a filter. Reloads every 2 s while visible.
+/// The last 500 log lines as they are: monospace time, level, and message, grouped by day. Errors sit on a
+/// faint red ground in full-contrast text; info stays secondary. Reloads every 2 s while visible.
 struct LogView: View {
     @State private var lines: [LogLine] = []
     @State private var levels: Set<LogLine.Level> = [.info, .error, .other]
@@ -13,45 +14,61 @@ struct LogView: View {
         return lines.filter { levels.contains($0.level) && (q.isEmpty || $0.message.localizedCaseInsensitiveContains(q)) }
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(visible.enumerated()), id: \.offset) { _, line in
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text(line.date.map { Self.time.string(from: $0) } ?? "")
-                                .foregroundStyle(.tertiary).frame(width: 64, alignment: .leading)
-                            Text(line.level == .other ? "" : line.level.rawValue)
-                                .fontWeight(.semibold).foregroundStyle(color(line.level)).frame(width: 44, alignment: .leading)
-                            Text(line.message).frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .font(.system(size: 11, design: .monospaced))
-                        .lineSpacing(4)
-                        .padding(.vertical, 2)
-                    }
-                }
-                .textSelection(.enabled)
-                .padding(.horizontal, 12).padding(.vertical, 10)
-            }
-            .defaultScrollAnchor(.bottom)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.separator))
-            .padding(EdgeInsets(top: 0, leading: 20, bottom: 20, trailing: 20))
+    /// Lines without a time belong to the day before them.
+    private var days: [(day: String, lines: [(id: Int, line: LogLine)])] {
+        var result: [(day: String, lines: [(id: Int, line: LogLine)])] = []
+        var current: Date?
+        for (i, line) in visible.enumerated() {
+            let date = line.date ?? current
+            let day = date.map(Self.day) ?? ""
+            if result.last?.day != day { result.append((day, [])) }
+            result[result.count - 1].lines.append((i, line))
+            current = date
         }
-        .background(Theme.background)
+        return result
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(days, id: \.day) { group in
+                    if !group.day.isEmpty {
+                        Text(group.day).textRole(.label).foregroundStyle(Palette.tertiary)
+                            .padding(.top, 14).padding(.bottom, 6)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    ForEach(group.lines, id: \.id) { LogRow(line: $0.line) }
+                }
+                if visible.isEmpty, !lines.isEmpty {
+                    Text("No lines match.").font(.system(size: 12)).foregroundStyle(Palette.tertiary).padding(.top, 14)
+                }
+            }
+            .textSelection(.enabled)
+            .padding(EdgeInsets(top: 0, leading: 36, bottom: 24, trailing: 36))
+            .frame(maxWidth: 1172, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        // Opens at the newest line, follows new lines, and a short log still starts at the top.
+        .defaultScrollAnchor(.top, for: .alignment)
+        .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .defaultScrollAnchor(.bottom, for: .sizeChanges)
+        .background(Palette.window)
         .navigationTitle("Log")
-        .searchable(text: $filter, placement: .toolbar, prompt: "Filter")
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                pill("Info", .info)
-                pill("Error", .error)
-                pill("Debug", .debug)
+            ToolbarItem {
+                HStack(spacing: 6) {
+                    chip("Info", .info)
+                    chip("Error", .error)
+                    chip("Debug", .debug)
+                }
+            }
+            ToolbarItem {
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(visible.map(plain).joined(separator: "\n"), forType: .string)
+                    copy(visible.map(plain).joined(separator: "\n"))
                 } label: { Label("Copy", systemImage: "doc.on.doc") }
                     .help("Copy the lines shown")
             }
+            ToolbarItem { ToolbarSearchField(prompt: "Filter", query: $filter) }
         }
         .task {
             while !Task.isCancelled {
@@ -61,24 +78,38 @@ struct LogView: View {
         }
     }
 
+    private func chip(_ title: String, _ level: LogLine.Level) -> some View {
+        let on = levels.contains(level)
+        return Button {
+            if on { levels.remove(level) } else { levels.insert(level) }
+        } label: {
+            Text(title)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(on ? Palette.accent : Palette.secondary)
+                .padding(.horizontal, 9)
+                .frame(height: 22)
+                .background(on ? Palette.accentTint : Palette.fill, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title) lines")
+        .accessibilityValue(on ? "Shown" : "Hidden")
+        .accessibilityAddTraits(on ? .isSelected : [])
+        .help(on ? "Hide \(title.lowercased()) lines" : "Show \(title.lowercased()) lines")
+    }
+
     /// 24-hour local time, as log readers expect.
-    private static let time: DateFormatter = {
+    fileprivate static let time: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
         return f
     }()
 
-    private func pill(_ title: String, _ level: LogLine.Level) -> some View {
-        Toggle(title, isOn: Binding(get: { levels.contains(level) }, set: { if $0 { levels.insert(level) } else { levels.remove(level) } }))
-            .help("Show \(title.lowercased()) lines")
-    }
-
-    private func color(_ level: LogLine.Level) -> Color {
-        switch level {
-        case .error: Theme.recording
-        case .debug: Theme.unknown
-        default: .secondary
-        }
+    private static func day(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        return date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
     }
 
     private func plain(_ line: LogLine) -> String {
@@ -92,4 +123,33 @@ struct LogView: View {
         let parsed = LogLine.parse(tail)
         if parsed != lines { lines = parsed }
     }
+}
+
+private struct LogRow: View {
+    let line: LogLine
+    private var error: Bool { line.level == .error }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            Text(line.date.map { LogView.time.string(from: $0) } ?? "")
+                // Tertiary loses contrast on the red ground.
+                .foregroundStyle(error ? Palette.secondary : Palette.tertiary)
+                .frame(width: 64, alignment: .leading)
+            Text(line.level == .other ? "" : line.level.rawValue)
+                .fontWeight(.bold)
+                .foregroundStyle(error ? Palette.recording : Palette.tertiary)
+                .frame(width: 48, alignment: .leading)
+            Text(line.message)
+                .foregroundStyle(error ? Palette.ink : Palette.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.system(size: 11.5, design: .monospaced))
+        .lineSpacing(3)
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(error ? LogRow.errorGround : .clear, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .padding(.horizontal, -6)
+    }
+
+    static let errorGround = Color(light: 0xC43D31, lightAlpha: 0.07, dark: 0xFF6B5E, darkAlpha: 0.1)
 }

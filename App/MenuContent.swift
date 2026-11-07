@@ -2,7 +2,8 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// The menu bar panel: what Mossad is doing now, recent meetings, and the app's sections.
+/// The menu bar panel: one glass pane of 30 pt rows with hairlines between groups. The status row is the only
+/// thing with color, and it means state: a neutral dot while waiting, a red pulse while recording.
 struct MenuContent: View {
     @ObservedObject var controller: AppController
     @ObservedObject var permissions: PermissionsMonitor
@@ -11,85 +12,103 @@ struct MenuContent: View {
     @State private var open = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             statusSection
             if controller.processing > 0 { processingRow }
             if controller.cloudSyncing, controller.processing == 0 {
-                HStack(spacing: 10) {
-                    ProgressView().controlSize(.small)
-                    Text("Uploading recordings to the cloud").fontWeight(.medium)
-                    Spacer()
+                PanelRow {
+                    ProgressView().controlSize(.mini).frame(width: 16)
+                    Text("Uploading recordings to the cloud").foregroundStyle(Palette.secondary)
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 8).padding(.vertical, 9)
-                .background(Theme.field, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .padding(.horizontal, 6)
             }
-            if !permissions.allGood { permissionsRow }
             if !controller.isRecording {
-                CoachMoment(compact: true).environmentObject(controller).padding(.horizontal, 6).padding(.top, 4)
+                CoachMoment(compact: true).environmentObject(controller).padding(.horizontal, 6).padding(.vertical, 4)
             }
-            if let next = controller.upcoming.first(where: { $0.start.timeIntervalSinceNow < 12 * 3600 }), !controller.isRecording {
-                PanelSeparator()
-                Text("Next").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
-                    .padding(.horizontal, 14).padding(.top, 2)
+            let next = controller.upcoming.first { $0.start.timeIntervalSinceNow < 12 * 3600 }
+            let recent = Array(controller.meetings.filter { $0.status != .recording }.prefix(3))
+            if next != nil || !recent.isEmpty { PanelDivider() }
+            if let next {
+                PanelHeader(text: "Next")
                 PanelRow(action: { go { controller.selectedMeetingID = next.id; controller.open(.meetings) } }) {
-                    if let p = next.platform { PlatformSquare(platform: p, size: 14) } else { icon("calendar") }
+                    Group {
+                        if let p = next.platform {
+                            PlatformDot(platform: p, hollow: true)
+                        } else {
+                            Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 8, height: 8)
+                        }
+                    }
                     Text(next.title).lineLimit(1).truncationMode(.tail)
-                    Spacer(minLength: 8)
-                    Text(upcomingWhen(next)).font(.system(size: 12)).foregroundStyle(.secondary)
+                    Spacer(minLength: 6)
+                    Text(upcomingWhen(next)).font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize()
                     if let link = next.link {
-                        Button("Join") { NSWorkspace.shared.open(link); dismiss() }.controlSize(.small)
+                        Button("Join") { NSWorkspace.shared.open(link); dismiss() }
+                            .buttonStyle(PanelCapsuleStyle(height: 22))
+                            .accessibilityLabel("Join \(next.title)")
                     }
                 }
             }
-            let recent = controller.meetings.filter { $0.status != .recording }.prefix(3)
             if !recent.isEmpty {
-                PanelSeparator()
-                Text("Recent").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
-                    .padding(.horizontal, 14).padding(.top, 2)
-                ForEach(Array(recent), id: \.id) { r in
+                PanelHeader(text: "Recent").padding(.top, next == nil ? 0 : 2)
+                ForEach(recent, id: \.id) { r in
                     PanelRow(action: { go { controller.openMeeting(r.id) } }) {
-                        PlatformSquare(platform: r.platform, size: 14)
+                        PlatformDot(platform: r.platform)
                         Text(r.title).lineLimit(1).truncationMode(.tail)
-                        Spacer(minLength: 8)
-                        Text(shortTime(r.start)).font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
+                        Spacer(minLength: 6)
+                        if r.badge == .needsNames {
+                            let n = r.unknownSpeakers.count
+                            NeedsYouChip(text: n > 1 ? "\(n) voices" : "Name voices").fixedSize()
+                        }
+                        Text(panelDay(r.start)).font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize()
                     }
                 }
             }
-            PanelSeparator()
+            PanelDivider()
             PanelRow(action: { go { controller.open(controller.section) } }) {
-                Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 18, height: 18)
-                Text("Open Mossad")
+                Text("Open Mossad").fontWeight(.medium)
                 Spacer()
+                Text("⌘O").font(.system(size: 12)).foregroundStyle(Palette.tertiary)
             }
-            navigationRow("Meetings", "bubble.left.and.text.bubble.right") { controller.open(.meetings) }
+            .keyboardShortcut("o")
             if let first = controller.callsNeedingNames.first {
                 PanelRow(action: { go { controller.openNaming(first.id) } }) {
-                    icon("person.wave.2")
                     Text("Name voices")
                     Spacer()
                     Text("\(controller.callsNeedingNames.count)")
                         .font(.system(size: 11, weight: .semibold)).monospacedDigit()
-                        .foregroundStyle(Color(nsColor: .windowBackgroundColor))
+                        .foregroundStyle(Palette.onAccent)
+                        .padding(.horizontal, 6)
                         .frame(minWidth: 18, minHeight: 18)
-                        .padding(.horizontal, 4)
-                        .background(Color.primary, in: Capsule())
+                        .background(Palette.accentFill, in: Capsule())
+                }
+                .accessibilityValue("\(controller.callsNeedingNames.count) \(controller.callsNeedingNames.count == 1 ? "call" : "calls")")
+            }
+            PanelRow(action: {
+                go {
+                    if !permissions.allGood { UserDefaults.standard.set(SettingsPage.general.rawValue, forKey: "settingsPage") }
+                    controller.open(.settings)
+                }
+            }) {
+                Text("Settings")
+                Spacer()
+                if !permissions.allGood {
+                    Circle().fill(Palette.accentFill).frame(width: 7, height: 7)
                 }
             }
-            navigationRow("People", "person.2") { controller.open(.people) }
-            navigationRow("Settings", "gearshape") { controller.open(.settings) }
-            navigationRow("Log", "doc.text") { controller.open(.log) }
+            .accessibilityValue(permissions.allGood ? "" : permissionsText(permissions.problemCount))
+            .help(permissions.allGood ? "" : permissionsText(permissions.problemCount))
             UpdateRow(updater: controller.updater)
-            PanelSeparator()
+            PanelDivider()
             PanelRow(action: { NSApp.terminate(nil) }) {
                 Text("Quit Mossad")
                 Spacer()
-                Text("⌘Q").font(.system(size: 12)).foregroundStyle(.tertiary)
+                Text("⌘Q").font(.system(size: 12)).foregroundStyle(Palette.tertiary)
             }
             .keyboardShortcut("q")
         }
         .font(.system(size: 13))
-        .padding(8)
+        .foregroundStyle(Palette.ink)
+        .padding(6)
         .frame(width: 320)
         .environment(\.animationsActive, open)
         .onAppear { open = true }
@@ -101,97 +120,47 @@ struct MenuContent: View {
     private var statusSection: some View {
         switch controller.status {
         case .idle where !controller.isOn:
-            HStack(alignment: .top, spacing: 10) {
-                StatusDot(color: Theme.unknown, size: 9).padding(.top, 5)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Mossad is off").font(.system(size: 14, weight: .semibold))
-                    Text(controller.offUntilDate.map { "Until \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Until you turn it on")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Turn on") { controller.turnOn() }.buttonStyle(.borderedProminent).controlSize(.small)
+            StatusRow(title: "Mossad is off",
+                      detail: controller.offUntilDate.map { "Until \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Until you turn it on") {
+                Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 8, height: 8)
+            } action: {
+                Button("Turn on") { controller.turnOn() }.buttonStyle(PanelCapsuleStyle(accent: true))
             }
-            .padding(EdgeInsets(top: 12, leading: 14, bottom: 10, trailing: 14))
         case .idle:
-            HStack(alignment: .top, spacing: 10) {
-                StatusDot(color: Theme.listening, size: 9)
-                    .background(Circle().fill(Theme.listening.opacity(0.2)).frame(width: 15, height: 15))
-                    .padding(.top, 5)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Waiting for a call").font(.system(size: 14, weight: .semibold))
-                    Text("Zoom, Google Meet, and Microsoft Teams").font(.system(size: 12)).foregroundStyle(.secondary)
+            StatusRow(title: "Waiting for a call", detail: "Zoom, Google Meet, Teams, in person") {
+                Circle().fill(Palette.inPerson).frame(width: 8, height: 8)
+            } action: {
+                TurnOffMenu {
+                    HStack(spacing: 5) {
+                        Text("Turn off")
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+                    }
+                    .panelCapsule()
                 }
-                Spacer()
-                TurnOffMenu().controlSize(.small)
             }
-            .padding(EdgeInsets(top: 12, leading: 14, bottom: 10, trailing: 14))
             PanelRow(action: { controller.recordInPerson() }) {
-                Image(systemName: "record.circle").font(.system(size: 14)).foregroundStyle(Theme.recording).frame(width: 18)
+                Image(systemName: "mic").font(.system(size: 13)).foregroundStyle(Palette.accent).frame(width: 16)
                 Text("Record a meeting in person")
                 Spacer()
             }
             .help("Records the room through your mic until you click Stop. Use it for meetings without a call app.")
         case .recording(let platform, let since):
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    StatusDot(color: controller.isPaused ? Theme.unknown : Theme.recording, size: 10, pulsing: !controller.isPaused)
-                    Text(controller.isPaused ? "Paused" : "Recording").font(.system(size: 14, weight: .semibold))
-                    Spacer()
-                    TimelineView(.periodic(from: since, by: 1)) { context in
-                        Text(elapsed(since, context.date)).font(.system(size: 14, weight: .medium)).monospacedDigit()
-                            .foregroundStyle(Theme.recording)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(controller.recordingTitle ?? "\(platform.displayName) call").font(.system(size: 13, weight: .medium)).lineLimit(1)
-                    Text("\(platform.displayName) · started \(since.formatted(date: .omitted, time: .shortened))")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                if controller.isMuted, !controller.isPaused { MutedBanner(platform: platform, compact: true) }
-                CallControls(compact: true)
-            }
-            .padding(EdgeInsets(top: 14, leading: 14, bottom: 12, trailing: 14))
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-            .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
+            RecordingStatus(platform: platform, since: since)
         }
     }
 
     private var processingRow: some View {
-        HStack(spacing: 10) {
-            ProgressView().controlSize(.small)
+        PanelRow(action: { go { controller.open(.meetings) } }) {
+            ProgressView().controlSize(.mini).frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Processing \(controller.processing) \(controller.processing == 1 ? "call" : "calls")").fontWeight(.medium)
+                Text("Processing \(controller.processing) \(controller.processing == 1 ? "call" : "calls")")
                 if let r = controller.meetings.filter({ ProcessingStep(status: $0.status) != nil }).min(by: { $0.start < $1.start }),
                    let text = controller.progressText(r) {
-                    Text(text).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                    Text(text).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
                 }
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8).padding(.vertical, 9)
-        .background(Theme.field, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .padding(.horizontal, 6)
-    }
-
-    private var permissionsRow: some View {
-        PanelRow(background: Color.orange.opacity(0.14), cornerRadius: 11, action: { go { controller.open(.settings) } }) {
-            Image(systemName: "exclamationmark.circle.fill").font(.system(size: 16)).foregroundStyle(Theme.warning)
-            Text(permissionsText(permissions.problemCount)).fontWeight(.medium)
-            Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
-        }
-    }
-
-    private func navigationRow(_ title: String, _ symbol: String, _ action: @escaping () -> Void) -> some View {
-        PanelRow(action: { go(action) }) {
-            icon(symbol)
-            Text(title)
-            Spacer()
-        }
-    }
-
-    private func icon(_ symbol: String) -> some View {
-        Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(.secondary).frame(width: 18)
     }
 
     /// Runs a navigation action and closes the panel.
@@ -199,6 +168,126 @@ struct MenuContent: View {
         action()
         dismiss()
     }
+}
+
+/// The top row: a dot, what Mossad is doing, a quiet line under it, and the one action as a capsule.
+private struct StatusRow<Dot: View, Action: View>: View {
+    let title: String
+    let detail: String
+    @ViewBuilder var dot: Dot
+    @ViewBuilder var action: Action
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            dot.frame(width: 8, height: 8).padding(.top, 5).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).fontWeight(.semibold).monospacedDigit()
+                Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 6)
+            action
+        }
+        .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 10))
+    }
+}
+
+/// While a call records: the red pulse, "Recording · In person · 12:41", who has spoken, Stop, the live
+/// talk-share strip, then pause, bookmark, and skip.
+private struct RecordingStatus: View {
+    @EnvironmentObject var controller: AppController
+    let platform: Platform
+    let since: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 10) {
+                StatusDot(color: controller.isPaused ? Palette.inPerson : Palette.recording, size: 8, pulsing: !controller.isPaused)
+                    .background { if !controller.isPaused { Circle().fill(Palette.recordingTint).frame(width: 16, height: 16) } }
+                    .padding(.top, 5)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    TimelineView(.periodic(from: since, by: 1)) { context in
+                        Text("\(controller.isPaused ? "Paused" : "Recording") · \(platform.displayName) · \(elapsed(since, context.date))")
+                            .fontWeight(.semibold).monospacedDigit().lineLimit(1)
+                    }
+                    PanelVoicesLine(model: controller.live, platform: platform, title: controller.recordingTitle)
+                }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 6)
+                Button("Stop") { controller.stopCurrentCall() }
+                    .buttonStyle(PanelCapsuleStyle())
+                    .help("End the recording now and write the note")
+            }
+            .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 10))
+            TalkShareStrip(model: controller.live)
+            if controller.isMuted, !controller.isPaused {
+                MutedBanner(platform: platform, compact: true).padding(.horizontal, 6).padding(.bottom, 6)
+            }
+            CallControls(compact: true, showsStop: false)
+                .padding(.horizontal, 12).padding(.bottom, 8)
+        }
+    }
+}
+
+/// "12 speakers so far, 2 not yet named", or for a call app its title when known.
+private struct PanelVoicesLine: View {
+    @ObservedObject var model: LiveTranscriptModel
+    let platform: Platform
+    let title: String?
+
+    var body: some View {
+        Text(text).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var text: String {
+        let (total, unnamed) = model.roomVoices
+        let voices = total == 0 ? nil
+            : "\(total) \(total == 1 ? "speaker" : "speakers") so far" + (unnamed == 0 ? "" : ", \(unnamed) not yet named")
+        if platform == .inPerson { return voices ?? "Voices get names as Mossad knows them" }
+        return title ?? voices ?? "Mossad names voices it knows"
+    }
+}
+
+/// Each voice's share of the talking so far, in its hue, the owner first. It updates with the live transcript.
+private struct TalkShareStrip: View {
+    @ObservedObject var model: LiveTranscriptModel
+
+    var body: some View {
+        let shares = model.transcript.talkShares.filter { $0.seconds > 0 }
+        if !shares.isEmpty {
+            GeometryReader { g in
+                let total = shares.reduce(0) { $0 + $1.seconds }
+                let gaps = CGFloat(shares.count - 1)
+                HStack(spacing: 1) {
+                    ForEach(Array(shares.enumerated()), id: \.offset) { i, share in
+                        Rectangle().fill(Palette.speaker(i))
+                            .frame(width: max(1, (g.size.width - gaps) * share.seconds / total))
+                    }
+                }
+            }
+            .frame(height: 6)
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            .padding(.horizontal, 12).padding(.bottom, 10)
+            .accessibilityElement()
+            .accessibilityLabel("Talk share")
+            .accessibilityValue(shares.first.map { s in
+                s.voice == .owner ? "You \(Int((s.seconds / shares.reduce(0) { $0 + $1.seconds } * 100).rounded())) percent" : "\(shares.count) voices"
+            } ?? "")
+        }
+    }
+}
+
+/// "Today", "Yesterday", "Thu" this week, "Oct 9" before.
+private func panelDay(_ date: Date) -> String {
+    let calendar = Calendar.current
+    if calendar.isDateInToday(date) { return "Today" }
+    if calendar.isDateInYesterday(date) { return "Yesterday" }
+    if let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: Date())).day, days < 7 {
+        return date.formatted(.dateTime.weekday(.abbreviated))
+    }
+    return date.formatted(.dateTime.month(.abbreviated).day())
 }
 
 func elapsed(_ since: Date, _ now: Date) -> String {
@@ -213,42 +302,77 @@ func shortTime(_ date: Date) -> String {
         : date.formatted(.dateTime.month(.abbreviated).day())
 }
 
-private struct PanelSeparator: View {
+private struct PanelDivider: View {
     var body: some View {
-        Rectangle().fill(Theme.separator).frame(height: 1).padding(.horizontal, 14).padding(.vertical, 4)
+        Hairline().padding(.horizontal, 8).padding(.vertical, 6)
     }
 }
 
-/// A menu-like row with a gray hover fill.
+private struct PanelHeader: View {
+    let text: String
+
+    var body: some View {
+        Text(text).textRole(.label).foregroundStyle(Palette.secondary)
+            .padding(EdgeInsets(top: 6, leading: 12, bottom: 2, trailing: 12))
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// A 30 pt row like a menu item, with the selection fill under the pointer.
 private struct PanelRow<Content: View>: View {
-    var background: Color = .clear
-    var cornerRadius: CGFloat = 8
-    let action: () -> Void
+    var action: (() -> Void)?
     @ViewBuilder let content: () -> Content
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) { content() }
-                .padding(.horizontal, 8)
-                .padding(.vertical, background == .clear ? 5 : 9)
-                .background(hovering ? Theme.hover : background, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                .contentShape(Rectangle())
+        if let action {
+            Button(action: action) { row }
+                .buttonStyle(.plain)
+                .onHover { hovering = $0 }
+        } else {
+            row
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 6)
-        .onHover { hovering = $0 }
+    }
+
+    private var row: some View {
+        HStack(spacing: 10) { content() }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 30)
+            .background(hovering ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
     }
 }
 
-/// "Check for Updates…", or a note while an accepted update waits for the call to end.
+/// The panel's capsule buttons: "Turn off", "Stop", "Join".
+private struct PanelCapsuleStyle: ButtonStyle {
+    var accent = false
+    var height: CGFloat = 24
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.panelCapsule(accent: accent, height: height, pressed: configuration.isPressed)
+    }
+}
+
+private extension View {
+    func panelCapsule(accent: Bool = false, height: CGFloat = 24, pressed: Bool = false) -> some View {
+        font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(accent ? Palette.onAccent : Palette.ink)
+            .lineLimit(1)
+            .padding(.horizontal, height < 24 ? 9 : 10)
+            .frame(height: height)
+            .background(accent ? Palette.accentFill : pressed ? Palette.bar : Palette.selection, in: Capsule())
+            .contentShape(Capsule())
+            .fixedSize()
+    }
+}
+
+/// "Check for updates…", or a note while an accepted update waits for the call to end.
 private struct UpdateRow: View {
     @ObservedObject var updater: Updater
 
     var body: some View {
         PanelRow(action: { updater.checkForUpdates() }) {
-            Image(systemName: "arrow.down.circle").font(.system(size: 14)).foregroundStyle(.secondary).frame(width: 18)
-            Text(updater.waitingForCall ? "Update installs after this call" : "Check for Updates…")
+            Text(updater.waitingForCall ? "Update installs after this call" : "Check for updates…")
             Spacer()
         }
         .disabled(!updater.canCheck || updater.waitingForCall)

@@ -7,6 +7,8 @@ import SwiftUI
 struct CallControls: View {
     @EnvironmentObject var controller: AppController
     var compact = false
+    /// The menu bar panel puts Stop in its status row.
+    var showsStop = true
     var callID: String?
     var start: Date?
     @State private var confirmSkip = false
@@ -22,16 +24,20 @@ struct CallControls: View {
                 control("Pause", "pause.fill", glass: true) { controller.pauseCurrentCall() }
             }
             bookmark
-            control("Stop", "stop", glass: false) { controller.stopCurrentCall() }
-                .help("End the recording now and write the note")
-            Spacer(minLength: Space.s)
+            if showsStop {
+                control("Stop", "stop", glass: false) { controller.stopCurrentCall() }
+                    .help("End the recording now and write the note")
+            }
+            // The panel's copy is 284 pt wide: every control keeps its full label and the gap gives way.
+            Spacer(minLength: compact ? 0 : Space.s)
             Button {
                 if confirmSkip { controller.skipCurrentCall() } else { confirmSkip = true }
             } label: {
                 Text(confirmSkip ? "Click again to delete" : "Skip and delete")
                     .font(.system(size: compact ? 12 : 12.5, weight: .medium))
                     .foregroundStyle(Palette.recording)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, compact ? 4 : 6)
+                    .fixedSize()
                     .frame(height: compact ? 26 : 30)
                     .contentShape(Rectangle())
             }
@@ -61,7 +67,8 @@ struct CallControls: View {
             }
             .font(.system(size: compact ? 12 : 12.5, weight: .medium))
             .foregroundStyle(Palette.ink)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, compact ? 9 : 12)
+            .fixedSize()
             .frame(height: compact ? 26 : 30)
             .mossadGlass(in: RoundedRectangle(cornerRadius: 8, style: .continuous), interactive: true)
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -95,7 +102,8 @@ struct CallControls: View {
                 .labelStyle(ControlLabel())
                 .font(.system(size: compact ? 12 : 12.5, weight: .medium))
                 .foregroundStyle(tint)
-                .padding(.horizontal, compact ? 11 : 14)
+                .padding(.horizontal, compact ? 9 : 14)
+                .fixedSize()
                 .frame(height: compact ? 26 : 30)
                 .background { if !glass { RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.fill) } }
                 .modifier(GlassIf(on: glass))
@@ -121,52 +129,26 @@ private struct GlassIf: ViewModifier {
     }
 }
 
-/// The big switch at the top of Settings, and the "Turn off" menu used in the panel.
-struct PowerControl: View {
+/// "Turn off ⌄": for an hour, until tomorrow, and so on. Settings and the menu bar panel use it.
+struct TurnOffMenu<Label: View>: View {
     @EnvironmentObject var controller: AppController
+    @ViewBuilder var label: Label
 
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            Image(systemName: controller.isOn ? "waveform" : "waveform.slash")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(controller.isOn ? Color.accentColor : .secondary)
-                .frame(width: 44, height: 44)
-                .background((controller.isOn ? Color.accentColor : Color.secondary).opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(controller.isOn ? "Mossad is on" : "Mossad is off").font(.system(size: 16, weight: .semibold))
-                Text(detail).font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if controller.isOn {
-                TurnOffMenu().controlSize(.large)
-            } else {
-                Button("Turn on") { controller.turnOn() }.buttonStyle(.borderedProminent).controlSize(.large)
-            }
-        }
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.separator))
-    }
-
-    private var detail: String {
-        if controller.isOn { return "Records Zoom, Google Meet, and Microsoft Teams calls on its own." }
-        if let date = controller.offUntilDate { return "No calls are detected or recorded until \(date.formatted(date: .abbreviated, time: .shortened))." }
-        return "No calls are detected or recorded until you turn it on."
-    }
-}
-
-struct TurnOffMenu: View {
-    @EnvironmentObject var controller: AppController
-
-    var body: some View {
-        Menu("Turn off") {
+        Menu {
             Button("For 1 hour") { controller.turnOff(until: Date().addingTimeInterval(3600)) }
             Button("Until tomorrow") { controller.turnOff(until: Calendar.current.startOfDay(for: Date()).addingTimeInterval(86_400 + 6 * 3600)) }
             Button("For 3 days") { controller.turnOff(until: Date().addingTimeInterval(3 * 86_400)) }
             Button("For 1 week") { controller.turnOff(until: Date().addingTimeInterval(7 * 86_400)) }
             Divider()
             Button("Until I turn it on") { controller.turnOff(until: nil) }
+        } label: {
+            label
         }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
         .fixedSize()
+        .accessibilityLabel("Turn off")
     }
 }
