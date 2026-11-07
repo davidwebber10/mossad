@@ -138,6 +138,7 @@ final class RoomRecorder: ObservableObject {
 /// bars, and one big stop button between pause and the meeting's name. The Mac transcribes after; the audio
 /// stays here until it has it.
 struct RecordingView: View {
+    @State private var confirmShortStop = false
     @EnvironmentObject var store: PhoneStore
     @StateObject private var recorder = RoomRecorder()
     @Environment(\.dismiss) private var dismiss
@@ -243,8 +244,12 @@ struct RecordingView: View {
             .disabled(recorder.state == .idle)
             .accessibilityLabel(recorder.state == .paused ? "Resume" : "Pause")
             Button {
-                if let (rec, url) = recorder.stop(title: title) { store.send(rec, audio: url) }
-                dismiss()
+                // Under a minute the Mac does not keep a meeting, so say so instead of dropping it in silence.
+                if recorder.elapsed < ProcessingQueue.minimumCallDuration, PhoneStore.hook("MOSSAD_ROOM") == nil {
+                    confirmShortStop = true
+                } else {
+                    finish()
+                }
             } label: {
                 RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.white)
                     .frame(width: 26, height: 26)
@@ -260,5 +265,16 @@ struct RecordingView: View {
             // Balances pause, so the stop button sits in the middle.
             Color.clear.frame(width: 52, height: 52)
         }
+        .confirmationDialog("This recording is under a minute", isPresented: $confirmShortStop, titleVisibility: .visible) {
+            Button("Keep recording", role: .cancel) {}
+            Button("Discard recording", role: .destructive) { finish() }
+        } message: {
+            Text("Mossad writes notes for meetings of a minute or more. Keep recording, or discard this one.")
+        }
+    }
+
+    private func finish() {
+        if let (rec, url) = recorder.stop(title: title) { store.send(rec, audio: url) }
+        dismiss()
     }
 }
