@@ -100,12 +100,12 @@ struct CommitmentsView: View {
     @ViewBuilder
     private var openList: some View {
         ForEach(Array(openGroups.enumerated()), id: \.element.id) { i, group in
-            SectionTitle(title: group.kind.title, count: group.items.count, accent: group.kind == .overdue,
+            CommitmentSectionTitle(title: group.kind.title, count: group.items.count, accent: group.kind == .overdue,
                          note: group.kind == .noDate ? "Grouped by who you promised" : nil)
                 .padding(.top, i == 0 ? 0 : 36)
             if group.kind == .noDate {
-                ForEach(PersonGroup.make(group.items)) { person in
-                    PersonHeading(group: person)
+                ForEach(CommitmentPersonGroup.make(group.items)) { person in
+                    CommitmentPersonHeading(group: person)
                     ForEach(person.items) { c in row(c, showPerson: false) }
                 }
             } else {
@@ -119,7 +119,7 @@ struct CommitmentsView: View {
     @ViewBuilder
     private var doneList: some View {
         if !doneItems.isEmpty {
-            SectionTitle(title: "Done", count: doneItems.count, accent: false, note: nil)
+            CommitmentSectionTitle(title: "Done", count: doneItems.count, accent: false, note: nil)
             ForEach(doneItems) { c in row(c, showPerson: true) }
         }
     }
@@ -197,71 +197,6 @@ struct CommitmentsView: View {
 
     private func open(_ callID: String, _ at: TimeInterval?) {
         if let at { controller.showMoment(callID, at: at) } else { controller.openMeeting(callID) }
-    }
-}
-
-/// "Overdue 3" in the title step, the count in secondary, and a note on the right.
-private struct SectionTitle: View {
-    let title: String
-    let count: Int
-    let accent: Bool
-    let note: String?
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(title).textRole(.title).foregroundStyle(accent ? Palette.accent : Palette.ink)
-            Text("\(count)").font(.system(size: 15)).monospacedDigit().foregroundStyle(Palette.secondary)
-            Spacer(minLength: Space.m)
-            if let note { Text(note).font(.system(size: 12)).foregroundStyle(Palette.secondary) }
-        }
-        .padding(.bottom, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
-    }
-}
-
-/// The commitments with no date for one person, most first; ones with no one named come last.
-private struct PersonGroup: Identifiable {
-    let name: String?
-    let items: [Commitment]
-    var id: String { name ?? "" }
-
-    static func make(_ list: [Commitment]) -> [PersonGroup] {
-        var order: [String] = []
-        var byKey: [String: (name: String?, items: [Commitment])] = [:]
-        for c in list {
-            let name = c.to?.trimmingCharacters(in: .whitespaces).nonEmpty
-            let key = name?.lowercased() ?? ""
-            if byKey[key] == nil { order.append(key); byKey[key] = (name, []) }
-            byKey[key]?.items.append(c)
-        }
-        return order.compactMap { byKey[$0].map { PersonGroup(name: $0.name, items: $0.items) } }
-            .sorted { a, b in
-                if (a.name == nil) != (b.name == nil) { return b.name == nil }
-                if a.items.count != b.items.count { return a.items.count > b.items.count }
-                return (a.name ?? "").localizedCompare(b.name ?? "") == .orderedAscending
-            }
-    }
-}
-
-/// The person's mark, name, and count over their commitments.
-private struct PersonHeading: View {
-    let group: PersonGroup
-
-    var body: some View {
-        HStack(spacing: 8) {
-            if let name = group.name {
-                PersonMark(name: name, size: 18)
-            } else {
-                Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 18, height: 18).accessibilityHidden(true)
-            }
-            Text(group.name ?? "No one named").fontWeight(.semibold).foregroundStyle(Palette.secondary)
-            Text("\(group.items.count)").fontWeight(.medium).monospacedDigit().foregroundStyle(Palette.tertiary)
-        }
-        .font(.system(size: 12))
-        .padding(.top, 14).padding(.bottom, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
     }
 }
 

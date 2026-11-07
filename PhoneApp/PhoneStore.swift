@@ -1,7 +1,8 @@
 import Foundation
 import MossadCore
+import SwiftUI
 
-enum PhoneTab: Hashable { case meetings, chat, people, analytics, search }
+enum PhoneTab: Hashable { case meetings, commitments, chat, people, analytics }
 
 /// The phone's copy of the meetings: pulled from iCloud or the owner's server into the app's folder, then read with the same code
 /// the Mac uses. Chats, ratings, replies to the coach, and the coach's memory go back up.
@@ -39,11 +40,27 @@ final class PhoneStore: ObservableObject {
     /// `MOSSAD_ROOT` points the simulator at a sample folder; nothing syncs then.
     private let offline = ProcessInfo.processInfo.environment["MOSSAD_ROOT"] != nil
 
+    /// A development hook for screenshots, read only with a sample folder so a real install never sees one.
+    static func hook(_ name: String) -> String? {
+        let env = ProcessInfo.processInfo.environment
+        return env["MOSSAD_ROOT"] == nil ? nil : env[name]
+    }
+
+    /// `MOSSAD_APPEARANCE=dark|light`.
+    static var previewScheme: ColorScheme? {
+        switch hook("MOSSAD_APPEARANCE") {
+        case "dark": return .dark
+        case "light": return .light
+        default: return nil
+        }
+    }
+
     init() {
         reload()
         // Development hooks for screenshots: `MOSSAD_OPEN=<call id>` opens a meeting, `MOSSAD_TAB` picks a tab.
         if let id = ProcessInfo.processInfo.environment["MOSSAD_OPEN"], !id.isEmpty { path = [id] }
         switch ProcessInfo.processInfo.environment["MOSSAD_TAB"] {
+        case "commitments": tab = .commitments
         case "chat": tab = .chat
         case "people": tab = .people
         case "analytics": tab = .analytics

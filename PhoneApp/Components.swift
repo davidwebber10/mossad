@@ -11,14 +11,7 @@ extension Platform {
         }
     }
 
-    var tint: Color {
-        switch self {
-        case .zoom: .blue
-        case .meet: .green
-        case .teams: .indigo
-        case .inPerson: .orange
-        }
-    }
+    var tint: Color { Palette.platform(self) }
 }
 
 extension CallRecord {

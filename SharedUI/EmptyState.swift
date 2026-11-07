@@ -11,6 +11,13 @@ struct EmptyState: View {
     @ScaledMetric(relativeTo: .title2) private var symbolSize: CGFloat = 26
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 14
     @ScaledMetric(relativeTo: .body) private var messageSize: CGFloat = 13
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    /// On a phone the message may not hold a set width: at 320 pt and large Dynamic Type it would run off the screen.
+    private var compact: Bool { sizeClass == .compact }
+    #else
+    private let compact = false
+    #endif
 
     var body: some View {
         VStack(spacing: 6) {
@@ -30,7 +37,7 @@ struct EmptyState: View {
                 .lineSpacing(messageSize * 0.3)
                 // A set width: the split view measures pages at a tiny width, and a message wrapped there grew
                 // tall enough to push the page past the window.
-                .frame(minWidth: 300, maxWidth: 300)
+                .frame(minWidth: compact ? nil : 300, maxWidth: compact ? 280 : 300)
                 .fixedSize(horizontal: false, vertical: true)
             if let action {
                 Button(action.title, action: action.run)
@@ -40,6 +47,7 @@ struct EmptyState: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 60)
+        .padding(.horizontal, compact ? Space.xl : 0)
         .accessibilityElement(children: .contain)
     }
 }

@@ -32,6 +32,7 @@ struct ActionItemsView: View {
                 }
             }
         }
+        .phonePage()
         .navigationTitle("Action items")
         .refreshable { await store.sync() }
     }
