@@ -24,15 +24,11 @@ final class RoomRecorder: ObservableObject {
             return
         }
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .spokenAudio, options: [.allowBluetoothHFP])
-            try session.setActive(true)
+            try Self.prepareSession()
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             started = Date()
             id = CallID.make(started)
-            let r = try AVAudioRecorder(url: dir.appendingPathComponent("\(id).m4a"), settings: PhoneRecording.settings)
-            r.isMeteringEnabled = true
-            guard r.record() else { throw RecorderError() }
+            let r = try Self.makeRecorder(url: dir.appendingPathComponent("\(id).m4a"))
             recorder = r
             state = .recording
             NotificationCenter.default.addObserver(self, selector: #selector(interrupted(_:)), name: AVAudioSession.interruptionNotification, object: nil)
@@ -42,7 +38,54 @@ final class RoomRecorder: ObservableObject {
         }
     }
 
-    struct RecorderError: Error {}
+    struct RecorderError: LocalizedError {
+        let step: String
+        let underlying: Error?
+        var errorDescription: String? {
+            "\(step) failed" + (underlying.map { ": \(($0 as NSError).localizedDescription) (\(($0 as NSError).code))" } ?? "")
+        }
+    }
+
+    /// The room recording's audio session. A setup the system refuses (OSStatus -50 on one iPhone) falls back to the
+    /// next, so recording starts whenever the microphone can record at all.
+    private static func prepareSession() throws {
+        let session = AVAudioSession.sharedInstance()
+        let setups: [(AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)] = [
+            (.record, .spokenAudio, [.allowBluetoothHFP]),
+            (.record, .default, [.allowBluetoothHFP]),
+            (.playAndRecord, .default, [.allowBluetoothHFP, .defaultToSpeaker]),
+            (.record, .default, []),
+        ]
+        var last: Error?
+        for (category, mode, options) in setups {
+            do {
+                try session.setCategory(category, mode: mode, options: options)
+                try session.setActive(true)
+                return
+            } catch { last = error }
+        }
+        throw RecorderError(step: "The audio session", underlying: last)
+    }
+
+    /// AAC at 16 kHz first (what the Mac transcribes), then the microphone's own rate; the Mac converts any rate.
+    private static func makeRecorder(url: URL) throws -> AVAudioRecorder {
+        let rate = AVAudioSession.sharedInstance().sampleRate
+        let choices: [[String: Any]] = [
+            PhoneRecording.settings,
+            [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate > 0 ? rate : 44_100, AVNumberOfChannelsKey: 1],
+            [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44_100, AVNumberOfChannelsKey: 1],
+        ]
+        var last: Error?
+        for settings in choices {
+            do {
+                let r = try AVAudioRecorder(url: url, settings: settings)
+                r.isMeteringEnabled = true
+                if r.record() { return r }
+                r.deleteRecording()
+            } catch { last = error }
+        }
+        throw RecorderError(step: "The recorder", underlying: last)
+    }
 
     private func tick() {
         guard let recorder else { return }
