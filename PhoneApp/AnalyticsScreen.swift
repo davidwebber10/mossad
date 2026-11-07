@@ -23,26 +23,23 @@ struct AnalyticsScreen: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    periodMenu.frame(maxWidth: .infinity)
                     if let data {
                         if data.now.calls == 0 {
-                            ContentUnavailableView("No meetings in this period", systemImage: "chart.bar.xaxis",
-                                                   description: Text("Pick a longer period."))
+                            EmptyState(symbol: "chart.bar.xaxis", title: "No calls in this period",
+                                       message: "Pick a longer period, or wait for your next call.")
                         } else {
                             content(data.now, data.before)
                         }
                     } else {
-                        ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
+                        PhoneProcessingMark().frame(maxWidth: .infinity).padding(.top, 60)
                     }
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 24)
             }
-            .background(Color(.systemGroupedBackground))
+            .phonePage()
             .navigationTitle("Analytics")
-            .navigationSubtitle(data.map { periodText($0.now.interval) } ?? "")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { periodMenu }
-            }
             .sheet(isPresented: $customizing) { CustomRangeSheet(start: choice.start, end: choice.end, apply: applyCustom) }
             .navigationDestination(for: PersonLink.self) { link in PersonView(name: link.name, stats: stats[link.name] ?? PersonStats()) }
             .navigationDestination(for: String.self) { id in if let r = store.meeting(id) { MeetingView(record: r) } }
@@ -65,8 +62,18 @@ struct AnalyticsScreen: View {
             Divider()
             Button("Custom range…", systemImage: "calendar") { customizing = true }
         } label: {
-            Label("Period", systemImage: "calendar")
+            HStack(spacing: 6) {
+                Image(systemName: "calendar").accessibilityHidden(true)
+                Text(data.map { shortPeriodText($0.now.interval) } ?? choice.preset.title)
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).accessibilityHidden(true)
+            }
+            .textRole(.secondary)
+            .fontWeight(.medium)
+            .foregroundStyle(Palette.ink)
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .mossadGlass(in: Capsule(), interactive: true)
         }
+        .accessibilityLabel("Period, \(data.map { periodText($0.now.interval) } ?? choice.preset.title)")
     }
 
     private func applyCustom(_ start: Date, _ end: Date) {
@@ -102,9 +109,12 @@ struct AnalyticsScreen: View {
     @ViewBuilder
     private func content(_ r: AnalyticsReport, _ b: AnalyticsReport) -> some View {
         let weeks = max(1, r.interval.duration / (7 * 86_400))
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            StatTile(value: duration(r.callSeconds), label: "In meetings", detail: "\(duration(r.callSeconds / weeks)) a week")
-            StatTile(value: "\(r.calls)", label: "Meetings", detail: change(Double(r.calls), Double(b.calls)) ?? "\(Int((Double(r.calls) / weeks).rounded())) a week")
+        let days = max(1, Int((b.interval.duration / 86_400).rounded()))
+        HStack(alignment: .top, spacing: Space.l) {
+            StatTile(value: duration(r.callSeconds), label: "Time in calls", detail: "\(duration(r.callSeconds / weeks)) a week")
+            StatTile(value: "\(r.calls)", label: "Calls", detail: change(Double(r.calls), Double(b.calls)) ?? "\(Int((Double(r.calls) / weeks).rounded())) a week")
+        }
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 0) {
             StatTile(value: pct(share(r.scheduled.calls, r.calls)), label: "Scheduled",
                      detail: "\(pct(r.scheduled.seconds / max(r.callSeconds, 1))) of the time")
             StatTile(value: r.talkShare.map(pct) ?? "–", label: "You talked",
@@ -112,7 +122,7 @@ struct AnalyticsScreen: View {
                         .compactMap { $0 }.joined(separator: " · "))
         }
 
-        heading("Your time")
+        heading("Your time", AnalyticsFindings.scheduled(r) ?? AnalyticsFindings.time(r))
         PhoneTimeChart(report: r)
         Card {
             CardTitle(text: "Scheduled and unscheduled", symbol: "calendar")
@@ -121,7 +131,7 @@ struct AnalyticsScreen: View {
             Text(averages(r)).font(.caption).foregroundStyle(.secondary)
         }
 
-        heading("Your week")
+        heading("Your week", AnalyticsFindings.workdays(r.workday))
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             StatTile(value: duration(r.workday.hoursPerWorkday * 3600), label: "Per work day")
             StatTile(value: pct(r.workday.coreHoursShare), label: "Of 8 to 6 in meetings")
@@ -129,14 +139,14 @@ struct AnalyticsScreen: View {
             StatTile(value: "\(r.workday.callFreeDays) of \(r.workday.workdays)", label: "Days with no meetings")
         }
 
-        heading("What you meet about")
+        heading("What you meet about", AnalyticsFindings.topics(r))
         if !r.tags.isEmpty { topics(r) }
         if r.valueSeconds.values.reduce(0, +) > 0 { value(r) }
 
-        heading("Who you meet with")
+        heading("Who you meet with", AnalyticsFindings.people(r))
         people(r)
 
-        heading("How you communicate")
+        heading("How you communicate", AnalyticsFindings.communication(r.communication, talkShare: r.talkShare, before: b.communication, beforeDays: days))
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             PhoneMiniTrend(title: "Questions you ask", value: rate(r.communication.questionsPerHour), detail: "an hour",
                            points: r.communication.points.map(\.questionsPerHour))
@@ -150,7 +160,7 @@ struct AnalyticsScreen: View {
         }
         if scores.count > 1 { scoreChart }
 
-        heading("Outcomes")
+        heading("Outcomes", AnalyticsFindings.outcomes(r.outcomes))
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             StatTile(value: String(format: "%.1f", r.outcomes.itemsPerHour), label: "Action items an hour")
             StatTile(value: String(format: "%.1f", r.outcomes.decisionsPerHour), label: "Decisions an hour")
@@ -160,8 +170,17 @@ struct AnalyticsScreen: View {
         }
     }
 
-    private func heading(_ text: String) -> some View {
-        Text(text).font(.title3.weight(.semibold)).padding(.top, 8).accessibilityAddTraits(.isHeader)
+    /// A section's label in caps, then its finding: the sentence first, the chart under it as the evidence.
+    private func heading(_ label: String, _ finding: String?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            PhoneLabel(label)
+            if let finding {
+                Text(finding).textRole(.lede).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.top, Space.xl)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 
     private func topics(_ r: AnalyticsReport) -> some View {
@@ -178,7 +197,7 @@ struct AnalyticsScreen: View {
                     }
                     .font(.subheadline)
                     GeometryReader { g in
-                        Capsule().fill(Color.accentColor.opacity(0.85)).frame(width: max(4, g.size.width * t.seconds / peak))
+                        Capsule().fill(Palette.accentFill).frame(width: max(4, g.size.width * t.seconds / peak))
                     }
                     .frame(height: 6)
                 }
@@ -188,7 +207,7 @@ struct AnalyticsScreen: View {
 
     private func value(_ r: AnalyticsReport) -> some View {
         let total = max(1, r.valueSeconds.values.reduce(0, +))
-        let ratings: [(MeetingValue.Rating, String, Color)] = [(.high, "High", .green), (.medium, "Medium", .gray), (.low, "Low", .orange)]
+        let ratings: [(MeetingValue.Rating, String, Color)] = [(.high, "High", Palette.ok), (.medium, "Medium", Palette.bar), (.low, "Low", Palette.accentFill)]
         return Card {
             CardTitle(text: "Meeting value", symbol: "clock.badge.checkmark")
             Text("\(duration(r.valueSeconds[.low] ?? 0)) in meetings rated low").font(.headline)
@@ -312,7 +331,7 @@ private struct PhoneTimeChart: View {
                         }
                 }
             }
-            .chartForegroundStyleScale(domain: ["Scheduled", "Unscheduled"], range: [Color.accentColor, Color.gray])
+            .chartForegroundStyleScale(domain: ["Scheduled", "Unscheduled"], range: [Palette.accentFill, Palette.bar])
             .chartLegend(position: .bottom, alignment: .leading)
             .chartXSelection(value: $selected)
             .sensoryFeedback(.selection, trigger: picked?.date)
@@ -336,10 +355,10 @@ private struct PhoneShareBar: View {
             }
             GeometryReader { g in
                 HStack(spacing: 2) {
-                    Rectangle().fill(Color.accentColor).frame(width: max(0, g.size.width * share - 1))
-                        .overlay { if g.size.width * share > 40 { Text("\(Int((share * 100).rounded()))%").font(.caption2.weight(.semibold)).foregroundStyle(.white) } }
-                    Rectangle().fill(Color.gray)
-                        .overlay { if g.size.width * (1 - share) > 40 { Text("\(Int(((1 - share) * 100).rounded()))%").font(.caption2.weight(.semibold)).foregroundStyle(.white) } }
+                    Rectangle().fill(Palette.accentFill).frame(width: max(0, g.size.width * share - 1))
+                        .overlay { if g.size.width * share > 40 { Text("\(Int((share * 100).rounded()))%").font(.caption2.weight(.semibold)).foregroundStyle(Palette.onAccent) } }
+                    Rectangle().fill(Palette.bar)
+                        .overlay { if g.size.width * (1 - share) > 40 { Text("\(Int(((1 - share) * 100).rounded()))%").font(.caption2.weight(.semibold)).foregroundStyle(Palette.ink) } }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
@@ -360,8 +379,8 @@ private struct PhoneBalance: View {
         HStack(spacing: 6) {
             GeometryReader { g in
                 HStack(spacing: 1) {
-                    Rectangle().fill(Color.accentColor).frame(width: g.size.width * share)
-                    Rectangle().fill(Color.secondary.opacity(0.35))
+                    Rectangle().fill(Palette.accentFill).frame(width: g.size.width * share)
+                    Rectangle().fill(Palette.bar)
                 }
                 .clipShape(.capsule)
             }
@@ -385,17 +404,16 @@ private struct PhoneMiniTrend: View {
             if points.count >= 2 {
                 Chart(Array(points.enumerated()), id: \.offset) { i, v in
                     AreaMark(x: .value("Meeting", i), y: .value(title, v))
-                        .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.25), .clear], startPoint: .top, endPoint: .bottom))
-                    LineMark(x: .value("Meeting", i), y: .value(title, v)).foregroundStyle(Color.accentColor)
+                        .foregroundStyle(LinearGradient(colors: [Palette.accentFill.opacity(0.25), .clear], startPoint: .top, endPoint: .bottom))
+                    LineMark(x: .value("Meeting", i), y: .value(title, v)).foregroundStyle(Palette.accentFill)
                 }
                 .chartXAxis(.hidden).chartYAxis(.hidden)
                 .frame(height: 40)
                 .accessibilityHidden(true)
             }
         }
-        .padding(14)
+        .padding(.vertical, Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
