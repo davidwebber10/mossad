@@ -1,9 +1,14 @@
+import AppKit
 import MossadCore
 import SwiftUI
 
-/// The People pane: a list of saved people on the left and the selected person's profile on the right.
+/// The People pane: the saved people and the selected person's profile, or the org chart. The toolbar's glass
+/// toggle switches the two.
 struct PeopleView: View {
+    enum Mode: String { case list, org }
+
     @EnvironmentObject var controller: AppController
+    @StateObject private var org = OrgState(paths: Paths.live)
     @State private var profiles: [VoiceProfile] = []
     @State private var stats: [String: PersonStats] = [:]
     @State private var loaded = false
@@ -15,8 +20,17 @@ struct PeopleView: View {
     @State private var deleting: VoiceProfile?
     @State private var confirmDeleteAll = false
     @State private var reviewingDuplicates = false
-    /// "recent" (last meeting first) or "name" (A to Z).
-    @AppStorage("peopleSort") private var sort = "recent"
+    @State private var importing = false
+    @AppStorage("peopleMode") private var savedMode = Mode.list
+    /// A preview's mode, kept out of the owner's saved choice.
+    @State private var previewMode: Mode?
+    private var mode: Mode {
+        get { previewMode ?? savedMode }
+        nonmutating set { previewMode = nil; savedMode = newValue }
+    }
+    @AppStorage("peopleSort") private var sort = PeopleSort.recent.rawValue
+    /// Only people Mossad cannot recognize by voice yet.
+    @AppStorage("peopleNeedsSample") private var needsSample = false
     /// Pairs the owner said are two people, by pair ID, separated by newlines.
     @AppStorage("peopleNotDuplicates") private var notDuplicates = ""
 
@@ -29,47 +43,69 @@ struct PeopleView: View {
 
     private var results: [VoiceProfile] {
         let q = query.trimmingCharacters(in: .whitespaces)
-        let sorted = (PeopleSort(rawValue: sort) ?? .recent).order(profiles, stats: stats)
-        guard !q.isEmpty else { return sorted }
-        return sorted.filter { $0.name.localizedCaseInsensitiveContains(q) || ($0.email?.localizedCaseInsensitiveContains(q) ?? false) }
+        var list = (PeopleSort(rawValue: sort) ?? .recent).order(profiles, stats: stats)
+        if needsSample { list = list.filter { $0.isOwner || $0.embeddings.isEmpty } }
+        guard !q.isEmpty else { return list }
+        return list.filter { $0.name.localizedCaseInsensitiveContains(q) || ($0.email?.localizedCaseInsensitiveContains(q) ?? false) }
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             if loaded, profiles.isEmpty {
-                ContentUnavailableView("No people yet", systemImage: "person.2",
-                                       description: Text("Your voice is learned in your first call. Name other voices after a call."))
+                EmptyState(symbol: "person.2", title: "No people yet",
+                           message: "Mossad learns your voice in your first call. Name the other voices after a call and they show here.")
+                    .frame(maxHeight: .infinity)
+            } else if mode == .org {
+                OrgChartView(org: org, profiles: profiles, stats: stats, query: query,
+                             open: { name in mode = .list; select(name) }, importChart: { importing = true })
             } else {
-                HStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        listHeader
-                        PeopleList(profiles: results, stats: stats, selection: $selection, color: color(for:),
-                                   rename: startEditing, delete: { deleting = $0 })
-                    }
-                    .frame(width: 330)
-                    Divider()
-                    Group {
-                        if let p = selected {
-                            PersonProfileView(profile: p, stats: stats[p.name] ?? PersonStats(), color: color(for: p),
-                                              others: profiles.filter { $0.name != p.name },
-                                              rename: { startEditing(p) }, merge: { merge(p, into: $0) },
-                                              delete: { deleting = p }, select: select)
-                                .id(p.name)
-                        } else {
-                            ContentUnavailableView("Select a person", systemImage: "person.2")
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+                listAndProfile
             }
-            Divider()
-            footer
         }
-        .background(Theme.background)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Palette.window)
         .navigationTitle("People")
-        .searchable(text: $query, placement: .toolbar, prompt: "Search names and emails")
+        .navigationSubtitle(subtitle)
+        .toolbar {
+            ToolbarItem {
+                Picker("View", selection: Binding(get: { mode }, set: { mode = $0 })) {
+                    Label("List", systemImage: "list.bullet").tag(Mode.list)
+                    Label("Org chart", systemImage: "flowchart").tag(Mode.org)
+                }
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
+                .labelsHidden()
+                .fixedSize()
+                .help("List or org chart")
+            }
+            ToolbarItem { ToolbarSearchField(prompt: "Search names and emails", query: $query) }
+            ToolbarItem {
+                Menu {
+                    Button("Import org chart…", systemImage: "square.and.arrow.down") { importing = true }
+                    if !duplicates.isEmpty {
+                        Button("Review possible duplicates…", systemImage: "person.2") { reviewingDuplicates = true }
+                    }
+                    Divider()
+                    Button("Delete all saved voices…", systemImage: "trash", role: .destructive) { confirmDeleteAll = true }
+                } label: {
+                    Label("More", systemImage: "ellipsis")
+                }
+                .menuIndicator(.hidden)
+                .help("More for People")
+            }
+        }
         .onReceive(controller.$meetings) { _ in Task { await reload() } }
+        .onAppear {
+            org.reload()
+            let env = ProcessInfo.processInfo.environment
+            if CommandLine.arguments.contains("--ui-preview") {
+                // Development hooks for screenshots: MOSSAD_PEOPLE_MODE=list|org, MOSSAD_ORG_IMPORT opens the import.
+                if let m = env["MOSSAD_PEOPLE_MODE"].flatMap(Mode.init) { previewMode = m }
+                if env["MOSSAD_ORG_IMPORT"] != nil { importing = true }
+            }
+        }
         .sheet(item: Binding(get: { editing.map(Wrapped.init) }, set: { editing = $0?.profile })) { item in editSheet(item.profile) }
+        .sheet(isPresented: $importing) { OrgImportSheet(org: org, profiles: profiles, stats: stats, owner: controller.ownerName) }
         .confirmationDialog("Delete \(deleting?.name ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete", role: .destructive) {
                 if let p = deleting { edit { try controller.library.delete(p.name) } }
@@ -105,49 +141,62 @@ struct PeopleView: View {
         }
     }
 
-    /// The sort, and a note when some people look like duplicates.
-    private var listHeader: some View {
-        VStack(spacing: 8) {
-            if !duplicates.isEmpty {
-                Button { reviewingDuplicates = true } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "person.2.badge.gearshape").foregroundStyle(Theme.warning)
-                        Text("\(duplicates.count) possible \(duplicates.count == 1 ? "duplicate" : "duplicates")")
-                            .font(.system(size: 12, weight: .medium))
-                        Spacer()
-                        Text("Review").font(.system(size: 12)).foregroundStyle(Color.accentColor)
-                    }
-                    .padding(.horizontal, 10).padding(.vertical, 7)
-                    .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-            Picker("Sort", selection: $sort) {
-                Text("Recent").tag("recent")
-                Text("A to Z").tag("name")
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+    private var subtitle: String {
+        if mode == .org, let chart = org.chart {
+            return "Org chart from \(org.fileName) · \(chart.people.count.formatted()) people"
         }
-        .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
+        let others = profiles.filter { !$0.isOwner }.count
+        return others == 1 ? "1 person" : "\(others) people"
+    }
+
+    private var listAndProfile: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                if !duplicates.isEmpty {
+                    DuplicatesBanner(count: duplicates.count) { reviewingDuplicates = true }
+                }
+                PeopleList(owner: results.filter(\.isOwner), people: results.filter { !$0.isOwner }, stats: stats,
+                           selection: $selection, sort: $sort, needsSample: $needsSample, query: query,
+                           rename: startEditing, delete: { deleting = $0 })
+            }
+            .frame(width: 300)
+            Hairline(axis: .vertical)
+            VStack(spacing: 0) {
+                Group {
+                    if let p = selected {
+                        PersonProfileView(profile: p, stats: stats[p.name] ?? PersonStats(),
+                                          org: org.match(p.name), chart: org.chart,
+                                          others: profiles.filter { $0.name != p.name },
+                                          rename: { startEditing(p) }, merge: { merge(p, into: $0) },
+                                          delete: { deleting = p }, select: select)
+                            .id(p.name)
+                    } else {
+                        EmptyState(symbol: "person.crop.circle", title: "Select a person",
+                                   message: "Their profile shows the coach's read, how much they talk, and who they meet with.")
+                            .frame(maxHeight: .infinity)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                footer
+            }
+        }
     }
 
     private var footer: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: "lock")
+        HStack(spacing: Space.s) {
+            Image(systemName: "lock").font(.system(size: 11)).accessibilityHidden(true)
             Text("Voice fingerprints are biometric data. They stay on this Mac in the Voices folder and are never uploaded.")
-            Spacer()
-            Button("Delete all saved voices") { confirmDeleteAll = true }
-                .buttonStyle(.link).foregroundStyle(.red)
+                .lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: Space.m)
+            Button("Delete all saved voices…") { confirmDeleteAll = true }
+                .buttonStyle(.plain)
+                .fontWeight(.medium)
+                .foregroundStyle(Palette.recording)
         }
-        .font(.system(size: 12)).foregroundStyle(.secondary)
-        .padding(EdgeInsets(top: 10, leading: 20, bottom: 12, trailing: 20))
-    }
-
-    private func color(for p: VoiceProfile) -> Color {
-        let i = profiles.firstIndex { $0.name == p.name } ?? 0
-        return Theme.speakerPalette[i % Theme.speakerPalette.count]
+        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+        .padding(.horizontal, 36)
+        .frame(height: 40)
+        .overlay(alignment: .top) { Hairline() }
     }
 
     private func select(_ name: String) {
@@ -161,32 +210,34 @@ struct PeopleView: View {
     }
 
     private func editSheet(_ p: VoiceProfile) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Edit \(p.name)").font(.headline)
-            TextField("Name", text: $newName).textFieldStyle(.roundedBorder)
-            TextField("Email (optional)", text: $newEmail).textFieldStyle(.roundedBorder)
-            HStack {
-                Spacer()
-                Button("Cancel") { editing = nil }
-                Button("Save") {
-                    let name = newName.trimmingCharacters(in: .whitespaces)
-                    let email = newEmail.trimmingCharacters(in: .whitespaces)
-                    edit {
-                        if !name.isEmpty, name != p.name { try controller.library.rename(p.name, to: name) }
-                        try controller.library.setEmail(email.isEmpty ? nil : email, for: name.isEmpty ? p.name : name)
-                    }
-                    if !name.isEmpty, name != p.name {
-                        controller.renamePerson(p.name, to: name)
-                        selection = name
-                    }
-                    controller.relinkEmails()
-                    editing = nil
-                }
-                .keyboardShortcut(.defaultAction)
+        VStack(alignment: .leading, spacing: 0) {
+            SheetHeader(symbol: "pencil", title: "Edit \(p.name)", subtitle: "Mossad uses the email to match calendar invites.")
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("Name", text: $newName).textFieldStyle(SheetFieldStyle())
+                TextField("Email (optional)", text: $newEmail).textFieldStyle(SheetFieldStyle())
+            }
+            .padding(.horizontal, 22).padding(.vertical, 16)
+            SheetFooter {
+                Button("Cancel") { editing = nil }.buttonStyle(.sheetSecondary).keyboardShortcut(.cancelAction)
+                Button("Save") { save(p) }.buttonStyle(.sheetPrimary).keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
-        .frame(width: 360)
+        .mossadSheet(width: 400)
+    }
+
+    private func save(_ p: VoiceProfile) {
+        let name = newName.trimmingCharacters(in: .whitespaces)
+        let email = newEmail.trimmingCharacters(in: .whitespaces)
+        edit {
+            if !name.isEmpty, name != p.name { try controller.library.rename(p.name, to: name) }
+            try controller.library.setEmail(email.isEmpty ? nil : email, for: name.isEmpty ? p.name : name)
+        }
+        if !name.isEmpty, name != p.name {
+            controller.renamePerson(p.name, to: name)
+            selection = name
+        }
+        controller.relinkEmails()
+        editing = nil
     }
 
     private func startEditing(_ p: VoiceProfile) {
@@ -204,7 +255,10 @@ struct PeopleView: View {
         loaded = true
         if let wanted = controller.personToOpen {
             controller.personToOpen = nil
-            if profiles.contains(where: { $0.name == wanted }) { selection = wanted }
+            if profiles.contains(where: { $0.name == wanted }) {
+                selection = wanted
+                mode = .list
+            }
         }
         if selected == nil { selection = profiles.first?.name }
     }
@@ -215,67 +269,205 @@ struct PeopleView: View {
     }
 }
 
-/// The left column: "You", then everyone else, in the order the sort picks.
-private struct PeopleList: View {
-    let profiles: [VoiceProfile]
-    let stats: [String: PersonStats]
-    @Binding var selection: String?
-    let color: (VoiceProfile) -> Color
-    let rename: (VoiceProfile) -> Void
-    let delete: (VoiceProfile) -> Void
+/// "3 possible duplicates · Review": a quiet line at the top of the list that opens the review.
+private struct DuplicatesBanner: View {
+    let count: Int
+    let review: () -> Void
 
     var body: some View {
-        List(selection: $selection) {
-            section("You", profiles.filter(\.isOwner))
-            section("People", profiles.filter { !$0.isOwner })
-        }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
-    }
-
-    @ViewBuilder
-    private func section(_ title: String, _ items: [VoiceProfile]) -> some View {
-        if !items.isEmpty {
-            Section {
-                ForEach(items, id: \.name) { p in
-                    PersonRow(profile: p, stats: stats[p.name], color: color(p))
-                        .tag(p.name)
-                        .contextMenu {
-                            Button("Rename…") { rename(p) }
-                            if !p.isOwner { Button("Delete…", role: .destructive) { delete(p) } }
-                        }
-                }
-            } header: {
-                Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
+        Button(action: review) {
+            HStack(spacing: Space.s) {
+                Image(systemName: "person.2").foregroundStyle(Palette.accent).accessibilityHidden(true)
+                Text("\(count) possible \(count == 1 ? "duplicate" : "duplicates")").fontWeight(.semibold).foregroundStyle(Palette.ink)
+                Spacer()
+                Text("Review").fontWeight(.semibold).foregroundStyle(Palette.accent)
             }
+            .font(.system(size: 12.5))
+            .padding(.horizontal, 10).padding(.vertical, Space.s)
+            .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(EdgeInsets(top: Space.s, leading: 10, bottom: Space.xs, trailing: 14))
+    }
+}
+
+extension PeopleSort {
+    var title: String {
+        switch self {
+        case .recent: "Most recent"
+        case .mostMet: "Most met with"
+        case .talkTime: "Most talk time"
+        case .newest: "Newest"
+        case .name: "Name"
         }
     }
 }
 
+/// The list column: "You", then everyone else in the sort's order. The arrow keys move the selection.
+private struct PeopleList: View {
+    let owner: [VoiceProfile]
+    let people: [VoiceProfile]
+    let stats: [String: PersonStats]
+    @Binding var selection: String?
+    @Binding var sort: String
+    @Binding var needsSample: Bool
+    let query: String
+    let rename: (VoiceProfile) -> Void
+    let delete: (VoiceProfile) -> Void
+    @FocusState private var focused: Bool
+
+    private var order: [String] { (owner + people).map(\.name) }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 1) {
+                    if !owner.isEmpty {
+                        header(Text("You"))
+                        ForEach(owner, id: \.name) { row($0) }
+                    }
+                    HStack {
+                        header(Text(needsSample ? "Needs a voice sample · \(people.count)" : "People · \(people.count)"))
+                        Spacer()
+                        sortMenu
+                    }
+                    .padding(.top, owner.isEmpty ? 0 : 4)
+                    ForEach(people, id: \.name) { row($0) }
+                    if people.isEmpty {
+                        Text(!query.isEmpty ? "No one matches “\(query)”." : needsSample ? "Everyone has a voice sample." : "Name voices after a call and they show here.")
+                            .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                            .padding(.horizontal, 10).padding(.top, Space.xs)
+                    }
+                }
+                .padding(.leading, 4).padding(.trailing, Space.s).padding(.bottom, Space.m)
+            }
+            .scrollContentBackground(.hidden)
+            .focusable()
+            .focused($focused)
+            .focusEffectDisabled()
+            .onKeyPress(.downArrow) { move(1, proxy) }
+            .onKeyPress(.upArrow) { move(-1, proxy) }
+        }
+    }
+
+    private func header(_ text: Text) -> some View {
+        text.textRole(.label).foregroundStyle(Palette.tertiary)
+            .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 4)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// The canvas's quiet "Most recent ⌄" beside the group label, opening the sort choices and the filter.
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort by", selection: $sort) {
+                ForEach(PeopleSort.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+            Divider()
+            Toggle("Needs a voice sample", isOn: $needsSample)
+        } label: {
+            HStack(spacing: 4) {
+                Text(needsSample ? "Needs a sample" : (PeopleSort(rawValue: sort) ?? .recent).title)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+            }
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(needsSample ? Palette.accent : Palette.secondary)
+            .padding(.leading, Space.s).padding(.trailing, 6)
+            .frame(height: 20)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .padding(.top, 6)
+        .accessibilityLabel("Sort people")
+        .accessibilityValue((PeopleSort(rawValue: sort) ?? .recent).title)
+    }
+
+    private func row(_ p: VoiceProfile) -> some View {
+        PersonRow(profile: p, stats: stats[p.name], selected: selection == p.name) {
+            selection = p.name
+            focused = true
+        }
+        .id(p.name)
+        .contextMenu {
+            Button("Edit…") { rename(p) }
+            if !p.isOwner { Button("Delete…", role: .destructive) { delete(p) } }
+        }
+    }
+
+    private func move(_ by: Int, _ proxy: ScrollViewProxy) -> KeyPress.Result {
+        guard !order.isEmpty else { return .ignored }
+        let index = selection.flatMap { order.firstIndex(of: $0) }.map { min(max($0 + by, 0), order.count - 1) } ?? 0
+        selection = order[index]
+        proxy.scrollTo(order[index])
+        return .handled
+    }
+}
+
+/// The avatar, the name, the email (or the owner's totals), and the meetings and last day on the right.
 private struct PersonRow: View {
     let profile: VoiceProfile
     let stats: PersonStats?
-    let color: Color
+    let selected: Bool
+    let select: () -> Void
+    @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            PersonMark(name: profile.name, size: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(profile.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                if let email = profile.email {
-                    Text(email).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+        Button(action: select) {
+            HStack(spacing: 10) {
+                PersonMark(name: profile.name, size: 28, isOwner: profile.isOwner)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profile.name)
+                        .font(.system(size: 13, weight: profile.isOwner || selected ? .semibold : .medium))
+                        .foregroundStyle(Palette.ink)
+                    if let sub {
+                        Text(sub).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    } else if profile.embeddings.isEmpty {
+                        Text("Needs a voice sample").font(.system(size: 12)).foregroundStyle(Palette.accent)
+                    }
                 }
+                .lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 6)
+                VStack(alignment: .trailing, spacing: 2) {
+                    if !profile.isOwner { Text(meetingsText(stats?.meetings.count ?? 0)) }
+                    if let last = stats?.lastHeard { Text(shortDay(last)) }
+                }
+                .font(.system(size: 12)).monospacedDigit()
+                .foregroundStyle(Palette.secondary)
             }
-            Spacer(minLength: 6)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(meetingsText(stats?.meetings.count ?? 0))
-                if let last = stats?.lastHeard { Text(dayWord(last)) }
-            }
-            .font(.system(size: 12).monospacedDigit())
-            .foregroundStyle(.secondary)
+            .padding(.vertical, Space.s).padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? Palette.selection : hovering ? Palette.fill.opacity(0.5) : .clear,
+                        in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         }
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
+
+    private var sub: String? {
+        if profile.isOwner {
+            let s = stats ?? PersonStats()
+            return "\(meetingsText(s.meetings.count)) · \(talkText(s.totalTalk))"
+        }
+        return profile.email
+    }
+}
+
+/// "Today", or "Oct 26": the list's last-met column, kept short.
+func shortDay(_ date: Date) -> String {
+    let cal = Calendar.current
+    if cal.isDateInToday(date) { return "Today" }
+    if cal.isDateInYesterday(date) { return "Yesterday" }
+    return cal.isDate(date, equalTo: Date(), toGranularity: .year)
+        ? date.formatted(.dateTime.month(.abbreviated).day())
+        : date.formatted(.dateTime.month(.abbreviated).year())
 }
 
 func meetingsText(_ count: Int) -> String { count == 1 ? "1 meeting" : "\(count) meetings" }
