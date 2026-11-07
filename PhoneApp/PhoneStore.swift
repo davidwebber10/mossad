@@ -165,6 +165,9 @@ final class PhoneStore: ObservableObject {
                 await sendOutbox()
                 error = nil
                 lastSync = Date()
+            } catch is CancellationError {
+                // The app stopped its own request (a refresh let go, a view closed): not a failure to show.
+            } catch let e as URLError where e.code == .cancelled {
             } catch {
                 self.error = "Could not reach \(place): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
             }
