@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Combine
 import CoreAudio
 import Foundation
 import MossadCore
@@ -133,6 +134,8 @@ final class AppController: ObservableObject {
         let at: TimeInterval
         /// False marks the line instead of playing from it.
         var play = true
+        /// False only opens the Transcript tab, with no line marked.
+        var mark = true
     }
     /// When the last bookmark was made, so the controls can confirm it.
     @Published private(set) var lastBookmark: Date?
@@ -219,6 +222,14 @@ final class AppController: ObservableObject {
     @Published var commitmentsVersion = 0
     var findingCommitments = false
     private var iCloudTimer: Timer?
+    /// The search palette (Command-K) and its index, kept up to date as meetings, tasks, and chats change.
+    let search = SearchModel()
+    var searchObservers: [AnyCancellable] = []
+    /// Bumped by `openPerson`, so a People page already open selects the person too.
+    @Published var personRequests = 0
+    /// A task or a chat to select when its page shows; the page clears it.
+    @Published var taskToOpen: UUID?
+    @Published var chatToOpen: UUID?
 
     /// The mic is recorded raw: when Chrome also uses voice processing, macOS gives a second voice-processing
     /// client silence. Echo from the speakers is dropped later by TranscriptMerger.
@@ -245,6 +256,7 @@ final class AppController: ObservableObject {
         // The chosen calendars apply before anything matches a call to an invite.
         calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
+        observeForSearch()
 
         // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
         // processing, so the screens can be checked while the installed copy records a call.
@@ -332,6 +344,11 @@ final class AppController: ObservableObject {
             Task { for id in today { await track { await self.pipeline.regenerateSummary(id) } } }
         }
         if preview { applyLivePreview() }
+        if let failure = Self.errorPreview("sync") {
+            var status = SyncStatus()
+            status.show(failure)
+            syncActivity = SyncActivity(last: Date().addingTimeInterval(-7200), status: status)
+        }
         if preview, let update = ProcessInfo.processInfo.environment["MOSSAD_UPDATE_PREVIEW"] { updater.applyPreview(update) }
         // Development hook: `--light` shows the UI in light mode, to check both looks.
         if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
@@ -359,6 +376,10 @@ final class AppController: ObservableObject {
             let section = Section.allCases.first { $0.rawValue == name } ?? .meetings
             DispatchQueue.main.async { self.open(section) }
         }
+        // Development hook: `MOSSAD_SEARCH=<query>` opens the search palette with that query.
+        if preview, let query = ProcessInfo.processInfo.environment["MOSSAD_SEARCH"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.openSearch(query) }
+        }
         // Development hook: `MOSSAD_PERSON` opens that person's page.
         if let person = ProcessInfo.processInfo.environment["MOSSAD_PERSON"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.openPerson(person) }
@@ -385,7 +406,38 @@ final class AppController: ObservableObject {
     }
 
     func refresh() {
-        meetings = MeetingIndex(paths: paths).all()
+        meetings = Self.previewFailures(MeetingIndex(paths: paths).all())
+    }
+
+    /// Development hook, in a preview only: `MOSSAD_ERROR_PREVIEW=sync,chat,meetingChat,coach,org,processing,failed`
+    /// shows those error cards with sample errors, so each one can be captured without breaking anything.
+    static func errorPreview(_ surface: String) -> FriendlyError? {
+        guard CommandLine.arguments.contains("--ui-preview"),
+              let list = ProcessInfo.processInfo.environment["MOSSAD_ERROR_PREVIEW"]?.split(separator: ","),
+              list.contains(Substring(surface)) else { return nil }
+        return ErrorPreview.sample(surface == "meetingChat" ? "chat" : surface)
+    }
+
+    /// `processing` puts the newest meeting back in its summary step after two busy replies; `failed` marks it
+    /// failed with a raw gateway page as its reason. Only in memory.
+    private static func previewFailures(_ records: [CallRecord]) -> [CallRecord] {
+        guard CommandLine.arguments.contains("--ui-preview"),
+              let list = ProcessInfo.processInfo.environment["MOSSAD_ERROR_PREVIEW"]?.split(separator: ","),
+              let i = records.indices.filter({ records[$0].status == .written }).max(by: { records[$0].start < records[$1].start })
+        else { return records }
+        var records = records
+        if list.contains("processing") {
+            records[i].status = .identified
+            records[i].attempts = 2
+            records[i].failureReason = "Anthropic error 529"
+            records[i].nextAttempt = Date().addingTimeInterval(240)
+        } else if list.contains("failed") {
+            records[i].status = .failed
+            records[i].failedStep = .recorded
+            records[i].attempts = 3
+            records[i].failureReason = "AssemblyAI HTTP 502: <html><head><title>502 Bad Gateway</title></head><body><center><h1>502 Bad Gateway</h1></center></body></html>"
+        }
+        return records
     }
 
     func hasKey(_ key: APIKey) -> Bool { keychain.get(key) != nil }
@@ -732,6 +784,7 @@ final class AppController: ObservableObject {
     /// Opens the People page on one person; the page picks the name up when it loads.
     func openPerson(_ name: String) {
         personToOpen = name
+        personRequests += 1
         open(.people)
     }
 
@@ -1131,10 +1184,10 @@ final class AppController: ObservableObject {
             var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))
             // Development hook: `--sample-upcoming` adds two events, since a preview build has no Calendar access.
             if CommandLine.arguments.contains("--sample-upcoming") {
-                events += [CalendarEventInfo(title: "Mitch / David", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),
-                                             attendees: ["Mitch Haus", "David Webber"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false),
+                events += [CalendarEventInfo(title: "Alex / Sam", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),
+                                             attendees: ["Alex Rivera", "Sam Carter"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false),
                            CalendarEventInfo(title: "Tech Team Monthly Sync", start: now.addingTimeInterval(86_400), end: now.addingTimeInterval(90_000),
-                                             attendees: ["Ed Ng", "Adam Stoffel", "Jeff Hill"], text: "", isAllDay: false)]
+                                             attendees: ["Jordan Lee", "Casey Brooks", "Riley Chen"], text: "", isAllDay: false)]
             }
             calendarEvents = events
         }

@@ -11,9 +11,11 @@ struct MossadCommands: Commands {
         }
         CommandGroup(replacing: .newItem) {
             Button("New Chat") { controller.startChat() }.keyboardShortcut("n")
-            Button("Ask…") { controller.startChat() }.keyboardShortcut("k")
+            Button("Ask…") { controller.startChat() }.keyboardShortcut("k", modifiers: [.command, .shift])
         }
         CommandMenu("Go") {
+            Button("Search Everything…") { controller.toggleSearch() }.keyboardShortcut("k")
+            Divider()
             ForEach(Array(AppController.Section.allCases.enumerated()), id: \.element) { i, section in
                 Button(section.rawValue) { controller.open(section) }
                     .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")))

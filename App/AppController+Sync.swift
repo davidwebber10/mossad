@@ -7,13 +7,19 @@ import Security
 struct SyncActivity: Equatable {
     var running = false
     var last: Date?
-    var error: String?
+    /// The problem to show: a single dropped connection is retried quietly, shows only when it repeats, and does
+    /// not clear a problem already shown.
+    var status = SyncStatus()
     /// During the first sync to a new store: meetings sent so far, of how many.
     var progress: (done: Int, total: Int)?
 
     static func == (a: SyncActivity, b: SyncActivity) -> Bool {
-        a.running == b.running && a.last == b.last && a.error == b.error && a.progress?.done == b.progress?.done && a.progress?.total == b.progress?.total
+        a.running == b.running && a.last == b.last && a.status == b.status && a.progress?.done == b.progress?.done && a.progress?.total == b.progress?.total
     }
+}
+
+extension SyncActivity {
+    var error: FriendlyError? { status.shown }
 }
 
 extension AppController {
@@ -139,7 +145,7 @@ extension AppController {
         let place = syncWith == .server ? "your server" : "iCloud"
         Task.detached(priority: .utility) {
             var received = 0
-            var failure: String?
+            var failure: FriendlyError?
             if cloud !== mirror {
                 do {
                     let changed = try await cloud.push()
@@ -148,7 +154,7 @@ extension AppController {
                     if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
                     if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
                 } catch {
-                    failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    failure = FriendlyError(error, context: .syncing, service: place)
                     Log.error("Sync with \(place) failed: \(error)")
                 }
             }
@@ -168,7 +174,10 @@ extension AppController {
                     if self.processing == 0 { self.processPending() }
                 }
                 self.syncRunning = false
-                self.syncActivity = SyncActivity(running: false, last: failure == nil ? Date() : self.syncActivity.last, error: failure)
+                // A sync the app stopped itself is neither a success nor a failure.
+                var status = self.syncActivity.status
+                if let failure { status.failed(failure) } else { status.succeeded() }
+                self.syncActivity = SyncActivity(running: false, last: failure == nil ? Date() : self.syncActivity.last, status: status)
                 if self.syncAgain {
                     self.syncAgain = false
                     self.syncNow()

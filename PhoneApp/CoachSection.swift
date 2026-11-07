@@ -141,7 +141,7 @@ private struct PointView: View {
     @State private var writing = false
     @State private var note = ""
     @State private var sending = false
-    @State private var error: String?
+    @State private var error: FriendlyError?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -187,7 +187,7 @@ private struct PointView: View {
             }
             .font(.subheadline)
         }
-        if let error { Text(error).font(.caption).foregroundStyle(Palette.recording) }
+        if let error { InlineError(error: error) }
     }
 
     private func thumb(agree: Bool) -> some View {
@@ -214,7 +214,9 @@ private struct PointView: View {
             do {
                 try await store.rate(callID: callID, point: point, agree: agree, note: text?.isEmpty == false ? text : nil)
             } catch {
-                self.error = error.localizedDescription
+                Log.error("Rating the coach failed: \(error)")
+                let friendly = FriendlyError(error, context: .coaching)
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
             sending = false
             self.note = ""
@@ -229,7 +231,7 @@ private struct CoachThread: View {
     let thread: [ChatMessage]
     @State private var message = ""
     @State private var sending = false
-    @State private var error: String?
+    @State private var error: FriendlyError?
 
     var body: some View {
         Card {
@@ -242,7 +244,7 @@ private struct CoachThread: View {
             if sending {
                 HStack(spacing: 8) { ProgressView(); Text("The coach is thinking…").font(.subheadline).foregroundStyle(.secondary) }
             }
-            if let error { Text(error).font(.caption).foregroundStyle(Palette.recording) }
+            if let error { ErrorCard(error: error, retry: error.canRetry && !sending ? { send() } : nil) }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Reply to the coach", text: $message, axis: .vertical)
                     .lineLimit(1...5)
@@ -264,7 +266,9 @@ private struct CoachThread: View {
         error = nil
         Task {
             do { try await store.reply(callID: callID, message: text) } catch {
-                self.error = error.localizedDescription
+                Log.error("The coach reply failed: \(error)")
+                let friendly = FriendlyError(error, context: .coaching)
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
                 message = text
             }
             sending = false

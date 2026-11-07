@@ -14,7 +14,7 @@ struct MeetingChatView: View {
     @State private var question = ""
     @State private var running = false
     @State private var steps: [String] = []
-    @State private var error: String?
+    @State private var error: FriendlyError? = AppController.errorPreview("meetingChat")
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -41,7 +41,7 @@ struct MeetingChatView: View {
                         .id("running")
                     }
                     if let error {
-                        LabelColumn(label: "") { Text(error).font(.system(size: 13)).foregroundStyle(Palette.recording) }
+                        LabelColumn(label: "") { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
                     }
                     // Questions not asked yet, under the last answer, as the canvas shows them.
                     if !messages.isEmpty, !running, !followUps.isEmpty {
@@ -156,11 +156,22 @@ struct MeetingChatView: View {
                 controller.summarizeChat(current.id)
                 controller.syncNow()
             } catch {
-                self.error = "\(error)"
+                Log.error("Chat failed: \(error)")
+                let friendly = FriendlyError(error, context: .chatting)
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
             running = false
             focused = true
         }
+    }
+
+    /// Asks the last question again: it leaves the chat and goes back through send.
+    private func retry() {
+        guard var c = chat, let last = c.messages.last, last.role == .user else { return }
+        c.messages.removeLast()
+        chat = c
+        question = last.text
+        send()
     }
 
     private func save(_ c: Chat) {

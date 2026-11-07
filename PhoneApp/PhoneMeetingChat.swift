@@ -10,7 +10,7 @@ struct PhoneMeetingChat: View {
     @State private var question = ""
     @State private var running = false
     @State private var steps: [String] = []
-    @State private var error: String?
+    @State private var error: FriendlyError? = PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample)
     @FocusState private var focused: Bool
 
     private var chat: Chat? {
@@ -34,7 +34,7 @@ struct PhoneMeetingChat: View {
                     Text(steps.last ?? "Thinking…").textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
                 }
             }
-            if let error { Label(error, systemImage: "exclamationmark.triangle").textRole(.secondary).foregroundStyle(Palette.recording) }
+            if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
             HStack(alignment: .bottom, spacing: Space.s) {
                 if chat != nil {
                     Button { chatID = nil; fresh = true } label: {
@@ -84,9 +84,20 @@ struct PhoneMeetingChat: View {
                 store.save(latest)
                 store.finish(latest.id)
             } catch {
-                self.error = error.localizedDescription
+                Log.error("Chat failed: \(error)")
+                let friendly = FriendlyError(error, context: .chatting)
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
             running = false
         }
+    }
+
+    /// Asks the last question again: it leaves the chat and goes back through send.
+    private func retry() {
+        guard var c = chat, let last = c.messages.last, last.role == .user else { return }
+        c.messages.removeLast()
+        store.save(c)
+        question = last.text
+        send()
     }
 }

@@ -153,7 +153,7 @@ private struct PointView: View {
     @State private var writing = false
     @State private var note = ""
     @State private var sending = false
-    @State private var error: String?
+    @State private var error: FriendlyError?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -193,7 +193,7 @@ private struct PointView: View {
                 Button("Send") { send(agree: false) }.disabled(sending)
             }
         }
-        if let error { Text(error).font(.system(size: 11)).foregroundStyle(Palette.recording) }
+        if let error { InlineError(error: error) }
     }
 
     private func thumb(agree: Bool) -> some View {
@@ -220,7 +220,9 @@ private struct PointView: View {
                 writing = false
                 note = ""
             } catch {
-                self.error = "\(error)"
+                Log.error("The coach reply failed: \(error)")
+                let friendly = FriendlyError(error, context: .coaching)
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
             sending = false
         }
@@ -233,7 +235,7 @@ private struct CoachThread: View {
     let thread: [ChatMessage]
     @State private var draft = ""
     @State private var sending = false
-    @State private var error: String?
+    @State private var error: FriendlyError? = AppController.errorPreview("coach")
 
     var body: some View {
         LabelColumn(label: "Talk to the coach") {
@@ -256,7 +258,7 @@ private struct CoachThread: View {
                     if sending { ProgressView().controlSize(.small) }
                     Button("Send", action: send).disabled(sending || draft.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-                if let error { Text(error).font(.system(size: 11)).foregroundStyle(Palette.recording) }
+                if let error { ErrorCard(error: error, retry: error.canRetry && !sending ? { send() } : nil) }
             }
         }
     }
@@ -271,7 +273,9 @@ private struct CoachThread: View {
                 try await controller.replyToCoach(callID: callID, message: text)
                 draft = ""
             } catch {
-                self.error = "\(error)"
+                Log.error("The coach reply failed: \(error)")
+                let friendly = FriendlyError(error, context: .coaching)
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
             sending = false
         }

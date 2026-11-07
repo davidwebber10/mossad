@@ -37,6 +37,7 @@ struct MainWindow: View {
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
         .environment(\.animationsActive, controller.windowVisible)
         .sheet(isPresented: $welcoming) { WelcomeView() }
+        .overlay { SearchOverlay(model: controller.search) }
         // Development hook for screenshots: `--welcome-inline` draws the welcome in the window, not in a sheet.
         .overlay {
             if CommandLine.arguments.contains("--welcome-inline") {
@@ -49,6 +50,18 @@ struct MainWindow: View {
             welcoming = !UserDefaults.standard.bool(forKey: "welcomeDone") && controller.meetings.isEmpty
                 && !CommandLine.arguments.contains("--ui-preview")
                 || CommandLine.arguments.contains("--welcome")
+        }
+    }
+}
+
+/// The Command-K palette over the whole window, when it is open.
+private struct SearchOverlay: View {
+    @ObservedObject var model: SearchModel
+
+    var body: some View {
+        if model.isOpen {
+            SearchPalette(model: model)
+                .transition(.opacity)
         }
     }
 }

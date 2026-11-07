@@ -18,6 +18,8 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     @Published private(set) var available: AvailableUpdate?
     /// "Update now" from click to the end of Sparkle's session.
     @Published private(set) var progress = UpdateProgress()
+    /// Why the last check or download did not finish, for Settings. "No update" is not a problem.
+    @Published private(set) var problem: FriendlyError?
     private var observation: AnyCancellable?
 
     init(start: Bool, isRecording: @escaping () -> Bool) {
@@ -42,7 +44,17 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         set { controller.updater.automaticallyDownloadsUpdates = newValue; objectWillChange.send() }
     }
 
-    func checkForUpdates() { controller.checkForUpdates(nil) }
+    func checkForUpdates() {
+        problem = nil
+        controller.checkForUpdates(nil)
+    }
+
+    nonisolated private static func problem(_ error: Error) -> FriendlyError? {
+        let ns = error as NSError
+        if ns.domain == SUSparkleErrorDomain, ns.code == Int(SUError.noUpdateError.rawValue) { return nil }
+        let friendly = FriendlyError(error, context: .checkingUpdates, service: "the update server")
+        return friendly.shouldShow(failures: 1) ? friendly : nil
+    }
 
     /// Development hook, in a preview only: `MOSSAD_UPDATE_PREVIEW=1` shows a found update in the sidebar, and
     /// `MOSSAD_UPDATE_PREVIEW=waiting` shows it accepted and waiting for the call to end.
@@ -51,6 +63,7 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
             "Pages match the new design, with more room", "Update card in the sidebar", "Faster People search",
             "Log keeps errors in view", "Fixes for sync"]))
         waitingForCall = value == "waiting"
+        if value == "error" { problem = FriendlyError(URLError(.cannotFindHost), context: .checkingUpdates, service: "the update server") }
     }
 
     /// "Update now": Sparkle's own install, which shows its progress and waits for a call to end.
@@ -71,15 +84,17 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         let found = AvailableUpdate(version: item.displayVersionString, notes: ReleaseNotes(html: item.itemDescription))
-        MainActor.assumeIsolated { available = found; progress.found() }
+        MainActor.assumeIsolated { available = found; problem = nil; progress.found() }
     }
 
     nonisolated func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
-        MainActor.assumeIsolated { available = nil; progress.notFound() }
+        MainActor.assumeIsolated { available = nil; problem = nil; progress.notFound() }
     }
 
     nonisolated func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
-        MainActor.assumeIsolated { progress.aborted() }
+        Log.error("Update check stopped: \(error)")
+        let problem = Self.problem(error)
+        MainActor.assumeIsolated { self.problem = problem; progress.aborted() }
     }
 
     nonisolated func userDidCancelDownload(_ updater: SPUUpdater) {
@@ -87,7 +102,9 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     }
 
     nonisolated func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: Error) {
-        MainActor.assumeIsolated { progress.downloadEnded() }
+        Log.error("Update download failed: \(error)")
+        let problem = Self.problem(error)
+        MainActor.assumeIsolated { self.problem = problem; progress.downloadEnded() }
     }
 
     nonisolated func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {

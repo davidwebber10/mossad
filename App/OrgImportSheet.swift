@@ -12,7 +12,7 @@ struct OrgImportSheet: View {
     let owner: String
 
     @State private var choosing = false
-    @State private var error: String?
+    @State private var error: FriendlyError? = AppController.errorPreview("org")
     /// Rows the owner asked to change, which show the search again.
     @State private var changing: Set<String> = []
 
@@ -33,7 +33,7 @@ struct OrgImportSheet: View {
             .frame(minHeight: 200, maxHeight: 440)
             .fixedSize(horizontal: false, vertical: true)
             SheetFooter {
-                if let error { Text(error).font(.system(size: 12)).foregroundStyle(Palette.recording) }
+                if let error { InlineError(error: error) }
             } trailing: {
                 Button("Done") { dismiss() }.buttonStyle(.sheetPrimary).keyboardShortcut(.defaultAction)
             }
@@ -45,11 +45,9 @@ struct OrgImportSheet: View {
                 do {
                     try org.importFile(url)
                     error = nil
-                } catch OrgChart.ParseError.missingColumns {
-                    error = "That file needs the columns Last Name, First Name, Position Title, and Supervisor."
                 } catch {
-                    self.error = "Mossad could not read that file."
                     Log.error("Org chart import failed: \(error)")
+                    self.error = FriendlyError(error, context: .importingOrgChart)
                 }
             case .failure: break
             }

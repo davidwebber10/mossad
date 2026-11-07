@@ -27,6 +27,12 @@ enum Nicknames {
         return out
     }()
 
+    /// The other forms of a lowercase first name: "mike" gives "michael" and "mikey".
+    static func variants(of name: String) -> Set<String> {
+        guard let ids = index[name] else { return [] }
+        return Set(ids.flatMap { groups[$0] }).subtracting([name])
+    }
+
     /// Whether two lowercase first names are short forms of one another. Equal names are not "nicknames".
     static func related(_ a: String, _ b: String) -> Bool {
         guard a != b, let x = index[a], let y = index[b] else { return false }

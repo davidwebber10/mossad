@@ -11,11 +11,12 @@ struct MossadPhoneApp: App {
     var body: some Scene {
         WindowGroup {
             TabView(selection: $store.tab) {
-                Tab(value: .meetings) { MeetingsListView() } label: { Label("Meetings", systemImage: "list.bullet.rectangle").environment(\.symbolVariants, .none) }
-                Tab(value: .commitments) { CommitmentsScreen() } label: { Label("Tasks", systemImage: "checkmark.circle").environment(\.symbolVariants, .none) }
-                Tab(value: .chat) { ChatScreen() } label: { Label("Chat", systemImage: "sparkle").environment(\.symbolVariants, .none) }
-                Tab(value: .people) { PeopleScreen() } label: { Label("People", systemImage: "person.2").environment(\.symbolVariants, .none) }
-                Tab(value: .analytics) { AnalyticsScreen() } label: { Label("Analytics", systemImage: "chart.bar.xaxis").environment(\.symbolVariants, .none) }
+                // The design's thin icons as templates; the selected tab takes the accent.
+                Tab("Meetings", image: "tab-meetings", value: .meetings) { MeetingsListView() }
+                Tab("Tasks", image: "tab-commitments", value: .commitments) { CommitmentsScreen() }
+                Tab("Chat", image: "tab-sparkle", value: .chat) { ChatScreen() }
+                Tab("Analytics", image: "tab-analytics", value: .analytics) { AnalyticsScreen() }
+                Tab("Search", image: "tab-search", value: .search, role: .search) { SearchScreen() }
             }
             // The canvas draws the tabs as outlines, the selected one in the accent.
             .tabBarMinimizeBehavior(.onScrollDown)

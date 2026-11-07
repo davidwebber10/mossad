@@ -29,10 +29,13 @@ struct PhoneSettingsView: View {
                 Section {
                     HStack {
                         Label {
-                            Text(status).foregroundStyle(store.error == nil ? Palette.ink : Palette.recording)
+                            Text(status).foregroundStyle(Palette.ink)
                         } icon: {
-                            Image(systemName: store.error == nil ? "checkmark" : "exclamationmark.triangle")
-                                .foregroundStyle(store.error == nil ? Palette.ok : Palette.recording)
+                            if store.error == nil {
+                                Image(systemName: "checkmark").foregroundStyle(Palette.ok)
+                            } else {
+                                WarningMark(size: 18).foregroundStyle(Palette.accent)
+                            }
                         }
                         Spacer()
                         if store.syncing { PhoneProcessingMark() } else {
@@ -40,7 +43,9 @@ struct PhoneSettingsView: View {
                                 .font(.subheadline.weight(.semibold)).foregroundStyle(Palette.accent)
                         }
                     }
-                    if let error = store.error { Text(error).font(.footnote).foregroundStyle(Palette.secondary) }
+                    if let error = store.error {
+                        Text(error.message).textRole(.secondary).foregroundStyle(Palette.secondary)
+                    }
                 } header: { PhoneLabel("Status") }
                 .listRowBackground(Palette.fill)
 
@@ -82,7 +87,7 @@ struct PhoneSettingsView: View {
         case .off: return "Sync is off"
         case .icloud, .server:
             if store.syncing { return "Syncing…" }
-            if store.error != nil { return "Sync failed" }
+            if let error = store.error { return error.title }
             return store.lastSync.map { "Synced \($0.formatted(.relative(presentation: .named)))" } ?? "Ready"
         }
     }
@@ -120,7 +125,7 @@ struct ConnectServerView: View {
     @State private var address = ""
     @State private var secret = ""
     @State private var checking = false
-    @State private var error: String?
+    @State private var error: FriendlyError? = PhoneStore.hook("MOSSAD_CONNECT_ERROR").flatMap(ErrorPreview.sample)
     @State private var connected: ServerConnection?
 
     var body: some View {
@@ -179,7 +184,7 @@ struct ConnectServerView: View {
                             .textRole(.body)
                             .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                             Button("Connect") {
-                                guard let url = ServerConnection.address(from: address) else { error = "That is not a web address."; return }
+                                guard let url = ServerConnection.address(from: address) else { error = Self.problem("That isn't a web address. Check it, then try again."); return }
                                 check(ServerConnection(address: url, secret: secret.trimmingCharacters(in: .whitespacesAndNewlines)))
                             }
                             .buttonStyle(.mossadFill)
@@ -193,9 +198,7 @@ struct ConnectServerView: View {
                         }
                     }
                     if let error {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .textRole(.secondary).foregroundStyle(Palette.recording)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        ErrorCard(error: error)
                     }
                 }
                 .padding(.horizontal, Space.l)
@@ -212,7 +215,7 @@ struct ConnectServerView: View {
             .fullScreenCover(isPresented: $scanning) {
                 CodeScanner { code in
                     scanning = false
-                    if let c = ServerPairing.connection(fromCode: code) { check(c) } else { error = "That code is not from Mossad." }
+                    if let c = ServerPairing.connection(fromCode: code) { check(c) } else { error = Self.problem("That code isn't from Mossad. Show the code on your Mac again.") }
                 }
                 .ignoresSafeArea()
                 .overlay(alignment: .topTrailing) {
@@ -229,13 +232,18 @@ struct ConnectServerView: View {
             defer { checking = false }
             do {
                 let hello = try await ServerClient(c).hello()
-                guard hello.authorized else { error = "Your server does not accept this secret."; return }
+                guard hello.authorized else { error = FriendlyError(kind: .wrongSecret, context: .connectingServer); return }
                 withAnimation { connected = c }
                 store.connect(c)
             } catch {
-                self.error = (error as? LocalizedError)?.errorDescription ?? "Mossad could not reach that server."
+                Log.error("Checking the server failed: \(error)")
+                self.error = FriendlyError(error, context: .connectingServer, service: "your server")
             }
         }
+    }
+
+    private static func problem(_ sentence: String) -> FriendlyError {
+        FriendlyError(kind: .other, context: .connectingServer, said: sentence, retries: false)
     }
 }
 

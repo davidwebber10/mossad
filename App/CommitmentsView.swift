@@ -12,6 +12,8 @@ struct CommitmentsView: View {
     @State private var adding: Commitment?
     @State private var mode = Mode.open
     @State private var query = ""
+    /// A task opened from search: marked with the selection fill and scrolled to.
+    @State private var opened: UUID?
 
     private var matching: [Commitment] {
         book.visible.filter { c in
@@ -26,7 +28,11 @@ struct CommitmentsView: View {
 
     var body: some View {
         DetailColumn { toolbar } content: { page }
-        .task(id: controller.commitmentsVersion) { book = controller.commitmentBook }
+        .task(id: controller.commitmentsVersion) {
+            book = controller.commitmentBook
+            takeOpenedTask()
+        }
+        .onChange(of: controller.taskToOpen) { _, _ in takeOpenedTask() }
         .onAppear {
             // Development hook for screenshots: MOSSAD_COMMITMENTS=done opens the Done view.
             if CommandLine.arguments.contains("--ui-preview"), ProcessInfo.processInfo.environment["MOSSAD_COMMITMENTS"] == "done" {
@@ -61,6 +67,7 @@ struct CommitmentsView: View {
                        message: "Mark a task done with its circle, and it moves here.")
                 .pageCentered()
         } else {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     switch mode {
@@ -76,7 +83,23 @@ struct CommitmentsView: View {
                 .padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop).padding(.bottom, Space.xxl)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .task(id: opened) {
+                guard let id = opened else { return }
+                // After the list lays out with the mode and query just changed.
+                try? await Task.sleep(for: .milliseconds(80))
+                proxy.scrollTo(id, anchor: .center)
+            }
+            }
         }
+    }
+
+    /// Shows the task search asked for: in Open or Done, with the page's own filter cleared.
+    private func takeOpenedTask() {
+        guard let id = controller.taskToOpen, let c = book.visible.first(where: { $0.id == id }) else { return }
+        controller.taskToOpen = nil
+        query = ""
+        mode = c.done == nil ? .open : .done
+        opened = id
     }
 
     private var toolbar: some View {
@@ -125,7 +148,13 @@ struct CommitmentsView: View {
             trailing(c)
         }
         .padding(.vertical, c.status() == .overdue ? 11 : 10)
+        .background {
+            if opened == c.id {
+                RoundedRectangle(cornerRadius: Radius.row, style: .continuous).fill(Palette.selection).padding(.horizontal, -10)
+            }
+        }
         .hairline()
+        .id(c.id)
         .contextMenu { menu(c) }
         .accessibilityElement(children: .contain)
         .accessibilityActions { menu(c) }

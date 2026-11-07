@@ -2,7 +2,10 @@ import Foundation
 import MossadCore
 import SwiftUI
 
-enum PhoneTab: Hashable { case meetings, commitments, chat, people, analytics }
+enum PhoneTab: Hashable { case meetings, commitments, chat, analytics, search }
+
+/// Pages Analytics pushes besides people and meetings.
+enum AnalyticsRoute: Hashable { case people }
 
 /// The phone's copy of the meetings: pulled from iCloud or the owner's server into the app's folder, then read with the same code
 /// the Mac uses. Chats, ratings, replies to the coach, and the coach's memory go back up.
@@ -24,7 +27,14 @@ final class PhoneStore: ObservableObject {
     @Published private(set) var scores: [String: Int] = [:]
     @Published private(set) var syncing = false
     @Published private(set) var lastSync: Date?
-    @Published private(set) var error: String?
+    /// The sync problem to show, and why each room recording waits. A single dropped connection is retried
+    /// quietly and shows only when it repeats.
+    @Published private(set) var syncStatus: SyncStatus = {
+        var s = SyncStatus()
+        s.show(PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample))
+        return s
+    }()
+    var error: FriendlyError? { syncStatus.shown }
     /// Bumped when a coach review changes here, so open reviews read it again.
     @Published private(set) var coachVersion = 0
     @Published var tab = PhoneTab.meetings
@@ -32,6 +42,22 @@ final class PhoneStore: ObservableObject {
     @Published var path: [String] = []
     /// A moment to open a meeting at: the meeting page reads it once and opens the transcript there.
     @Published var moment: Moment?
+
+    /// The pages open in the Analytics tab; People lives there.
+    @Published var analyticsPath = NavigationPath()
+    /// A task or a chat that Search asked its tab to open; the tab reads it once.
+    @Published var openTask: UUID?
+    @Published var openChat: UUID?
+
+    /// Universal search over everything here, rebuilt off the main thread when the data changes.
+    @Published private(set) var searchIndex = SearchIndex()
+    @Published private(set) var searchSuggestions = SearchSuggestions.empty
+    /// Bumped when the index changes, so an open search runs again.
+    @Published private(set) var searchVersion = 0
+    /// Who the owner meets with, for People and the profiles Search opens.
+    @Published private(set) var personStats: [String: PersonStats] = [:]
+    private var indexed: (meetings: [CallRecord], chats: [Chat])?
+    private var indexing: Task<Void, Never>?
 
     struct Moment: Equatable {
         let callID: String
@@ -75,8 +101,11 @@ final class PhoneStore: ObservableObject {
         switch ProcessInfo.processInfo.environment["MOSSAD_TAB"] {
         case "commitments": tab = .commitments
         case "chat": tab = .chat
-        case "people": tab = .people
+        case "people":
+            tab = .analytics
+            analyticsPath.append(AnalyticsRoute.people)
         case "analytics": tab = .analytics
+        case "search": tab = .search
         default: break
         }
     }
@@ -131,7 +160,7 @@ final class PhoneStore: ObservableObject {
         syncWith = choice
         UserDefaults.standard.set(choice.rawValue, forKey: "syncWith")
         engine = nil
-        error = nil
+        syncStatus.show(nil)
         lastSync = nil
         Task { await sync() }
     }
@@ -162,17 +191,21 @@ final class PhoneStore: ObservableObject {
                     try await cloud.pull(includeMeetings: true)
                     try await cloud.pushShared()
                 }
-                await sendOutbox()
-                error = nil
+                syncStatus.succeeded()
                 lastSync = Date()
             } catch is CancellationError {
                 // The app stopped its own request (a refresh let go, a view closed): not a failure to show.
             } catch let e as URLError where e.code == .cancelled {
             } catch {
-                self.error = "Could not reach \(place): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
+                Log.error("Sync with \(place) failed: \(error)")
+                // A request the app stopped itself (a refresh let go, a view closed) is not a failure.
+                syncStatus.failed(FriendlyError(error, context: .syncing, service: place))
             }
+            // Also after a failed pull, so each waiting recording gets its own reason. Upload problems stay on
+            // their recordings; a good pull does not clear them.
+            await sendOutbox()
         } else if syncWith == .server, !offline {
-            error = "Connect your server in Settings."
+            syncStatus.show(FriendlyError(kind: .notConnected, context: .syncing))
         }
         reload()
     }
@@ -185,6 +218,64 @@ final class PhoneStore: ObservableObject {
         loadOutbox()
         scores = Dictionary(uniqueKeysWithValues: meetings.compactMap { r in coach(r.id)?.scorecard.map { (r.id, $0.score) } })
         coachVersion += 1
+        refreshSearch()
+    }
+
+    /// Builds the search index again when meetings or chats changed, and only swaps the tasks when only they did.
+    private func refreshSearch() {
+        let meetings = meetings, chats = chats, tasks = commitments.items
+        if let indexed, indexed.meetings == meetings, indexed.chats == chats {
+            searchIndex.setTasks(tasks)
+            searchVersion += 1
+            return
+        }
+        indexed = (meetings, chats)
+        let people = VoiceLibrary(directory: paths.voices).profiles
+        indexing?.cancel()
+        indexing = Task {
+            let index = await SearchIndex.build(records: meetings, people: people, tasks: tasks, chats: chats)
+            let stats = await Task.detached(priority: .userInitiated) { PersonStatistics.compute(meetings) }.value
+            guard !Task.isCancelled else { return }
+            var latest = index
+            latest.setTasks(commitments.items)
+            searchIndex = latest
+            searchSuggestions = latest.suggestions()
+            personStats = stats
+            searchVersion += 1
+        }
+    }
+
+    // MARK: Opening from Search
+
+    func openTask(_ id: UUID) {
+        tab = .commitments
+        openTask = id
+    }
+
+    func openChat(_ id: UUID) {
+        tab = .chat
+        openChat = id
+    }
+
+    /// The query Search starts with, for screenshots: `MOSSAD_SEARCH=<words>`.
+    static var searchHook: String { hook("MOSSAD_SEARCH") ?? "" }
+
+    // MARK: Recent searches
+
+    @Published private(set) var recentSearches = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+
+    func remember(search: String) {
+        let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        var list = recentSearches.filter { $0.caseInsensitiveCompare(q) != .orderedSame }
+        list.insert(q, at: 0)
+        recentSearches = Array(list.prefix(8))
+        UserDefaults.standard.set(recentSearches, forKey: "recentSearches")
+    }
+
+    func clearRecentSearches() {
+        recentSearches = []
+        UserDefaults.standard.removeObject(forKey: "recentSearches")
     }
 
     /// Sends what changed here to the sync store, in the background.
@@ -262,6 +353,7 @@ final class PhoneStore: ObservableObject {
         list.removeAll { d in done.contains { $0.id == d.id } }
         if !done.isEmpty { saveOutbox(list) }
         outbox = list
+        syncStatus.keepUploads(for: Set(list.filter { !$0.sent }.map(\.id)))
     }
 
     private func saveOutbox(_ list: [Outgoing]) {
@@ -285,8 +377,10 @@ final class PhoneStore: ObservableObject {
                 var list = outbox
                 if let i = list.firstIndex(where: { $0.id == item.id }) { list[i].sent = true }
                 saveOutbox(list)
+                syncStatus.uploaded(item.id)
             } catch {
-                self.error = "The recording is saved on this iPhone and will be sent when \(place) is reachable."
+                Log.error("Uploading the room recording failed: \(error)")
+                syncStatus.uploadFailed(item.id, FriendlyError(error, context: .uploadingAudio, service: place))
             }
         }
     }
