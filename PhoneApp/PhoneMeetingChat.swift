@@ -11,6 +11,7 @@ struct PhoneMeetingChat: View {
     @State private var running = false
     @State private var steps: [String] = []
     @State private var error: String?
+    @FocusState private var focused: Bool
 
     private var chat: Chat? {
         if let chatID { return store.chats.first { $0.id == chatID } }
@@ -22,40 +23,28 @@ struct PhoneMeetingChat: View {
             if let chat {
                 ForEach(chat.messages) { MessageBubble(message: $0) }
             } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Ask about this meeting").font(.headline)
-                    ForEach(examples, id: \.self) { e in
-                        Button { question = e; send() } label: {
-                            Text(e).font(.subheadline).frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                    }
+                VStack(alignment: .leading, spacing: 0) {
+                    PhoneLabel("Ask about this meeting")
+                    ExampleQuestions(questions: examples) { question = $0; send() }
                 }
             }
             if running {
                 HStack(spacing: 10) {
-                    ProgressView()
-                    Text(steps.last ?? "Thinking…").font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    PhoneProcessingMark()
+                    Text(steps.last ?? "Thinking…").textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
                 }
             }
-            if let error { Label(error, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.red) }
-            HStack(alignment: .bottom, spacing: 8) {
+            if let error { Label(error, systemImage: "exclamationmark.triangle").textRole(.secondary).foregroundStyle(Palette.recording) }
+            HStack(alignment: .bottom, spacing: Space.s) {
                 if chat != nil {
-                    Button { chatID = nil; fresh = true } label: { Image(systemName: "square.and.pencil").frame(width: 30, height: 30) }
-                        .accessibilityLabel("New chat")
+                    Button { chatID = nil; fresh = true } label: {
+                        Image(systemName: "square.and.pencil").foregroundStyle(Palette.ink).frame(width: 44, height: 44)
+                    }
+                    .mossadGlass(in: Circle(), interactive: true)
+                    .accessibilityLabel("New chat")
                 }
-                TextField(chat == nil ? "Ask about this meeting" : "Ask a follow-up", text: $question, axis: .vertical)
-                    .lineLimit(1...6)
-                    .padding(.horizontal, 16).padding(.vertical, 11)
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
-                Button { send() } label: {
-                    Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 30, height: 30)
-                }
-                .buttonStyle(.glassProminent).buttonBorderShape(.circle)
-                .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || running)
-                .accessibilityLabel("Send")
+                ChatComposer(text: $question, prompt: chat == nil ? "Ask about this meeting" : "Ask a follow-up",
+                             focused: $focused, disabled: running) { send() }
             }
         }
     }

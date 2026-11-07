@@ -54,7 +54,12 @@ struct ChatMarkdown: View {
                 piece.link = url
                 piece.backgroundColor = Palette.fill
                 piece.foregroundColor = Palette.secondary
+                #if os(iOS)
+                // Dynamic Type on the phone; the Mac canvas sets the chip at 11 pt.
+                piece.font = .footnote.monospacedDigit()
+                #else
                 piece.font = .system(size: 11).monospacedDigit()
+                #endif
             }
             out += piece
         }

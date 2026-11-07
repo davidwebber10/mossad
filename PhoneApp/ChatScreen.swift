@@ -22,11 +22,14 @@ struct ChatScreen: View {
                 if chat.messages.isEmpty { ChatWelcome { question = $0; send() } } else { conversation }
             }
             .safeAreaBar(edge: .bottom) { composer }
+            .phonePage()
             .toolbar { toolbar }
-            .navigationTitle(chat.messages.isEmpty ? "" : chat.title)
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(chat.messages.isEmpty ? "Chat" : chat.title)
+            .navigationBarTitleDisplayMode(chat.messages.isEmpty ? .large : .inline)
             .sheet(isPresented: $showChats) { ChatList(selected: $chatID, onPick: { showChats = false }) }
             .sheet(isPresented: $showMemory) { CoachMemoryView() }
+            // Development hook for screenshots: `MOSSAD_CHAT=1` opens the newest chat.
+            .onAppear { if PhoneStore.hook("MOSSAD_CHAT") != nil, chatID == nil { chatID = store.chats.first?.id } }
         }
         .environment(\.openURL, OpenURLAction { url in
             guard let link = ChatLink.parse(url) else { return .systemAction }
@@ -38,11 +41,11 @@ struct ChatScreen: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Button("Chats", systemImage: "clock.arrow.circlepath") { showChats = true }
+            Button("Chats", systemImage: "clock.arrow.circlepath") { showChats = true }.tint(Palette.ink)
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Button("Memory", systemImage: "brain") { showMemory = true }
-            Button("New chat", systemImage: "square.and.pencil") { newChat() }.disabled(running)
+            Button("The coach's memory", systemImage: "brain") { showMemory = true }.tint(Palette.ink)
+            Button("New chat", systemImage: "square.and.pencil") { newChat() }.disabled(running).tint(Palette.ink)
         }
     }
 
@@ -53,7 +56,7 @@ struct ChatScreen: View {
                     ForEach(chat.messages) { MessageBubble(message: $0).id($0.id) }
                     if running { thinking.id("thinking") }
                     if let error {
-                        Label(error, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.red)
+                        Label(error, systemImage: "exclamationmark.triangle").textRole(.secondary).foregroundStyle(Palette.recording)
                     }
                 }
                 .padding(.horizontal)
@@ -68,31 +71,17 @@ struct ChatScreen: View {
 
     private var thinking: some View {
         HStack(spacing: 10) {
-            ProgressView()
-            Text(steps.last ?? "Thinking…").font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            PhoneProcessingMark()
+            Text(steps.last ?? "Thinking…").textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
                 .contentTransition(.opacity)
         }
         .animation(.default, value: steps.count)
     }
 
     private var composer: some View {
-        GlassEffectContainer {
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Ask Mossad", text: $question, axis: .vertical)
-                    .lineLimit(1...6)
-                    .focused($focused)
-                    .padding(.horizontal, 16).padding(.vertical, 11)
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
-                Button { send() } label: {
-                    Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 30, height: 30)
-                }
-                .buttonStyle(.glassProminent).buttonBorderShape(.circle)
-                .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || running)
-                .accessibilityLabel("Send")
-            }
-        }
-        .padding(.horizontal)
-        .padding(.bottom, 8)
+        ChatComposer(text: $question, prompt: "Ask about your meetings", focused: $focused, disabled: running) { send() }
+            .padding(.horizontal, Space.l)
+            .padding(.bottom, Space.s)
     }
 
     private func scroll(_ scroller: ScrollViewProxy) {
@@ -178,11 +167,44 @@ private struct ChatList: View {
             .overlay {
                 if store.chats.isEmpty { ContentUnavailableView("No chats yet", systemImage: "bubble.left.and.bubble.right") }
             }
+            .phonePage()
             .navigationTitle("Chats")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+/// The composer, the only glass on the page: the field and the accent send button in one capsule.
+struct ChatComposer: View {
+    @Binding var text: String
+    let prompt: String
+    var focused: FocusState<Bool>.Binding
+    var disabled = false
+    let send: () -> Void
+
+    private var empty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: Space.s) {
+            TextField(prompt, text: $text, axis: .vertical)
+                .lineLimit(1...6)
+                .textRole(.body)
+                .focused(focused)
+                .padding(.leading, 18).padding(.vertical, 12)
+            Button(action: send) {
+                Image(systemName: "arrow.up").font(.body.weight(.semibold))
+                    .foregroundStyle(Palette.onAccent)
+                    .frame(width: 36, height: 36)
+                    .background(Palette.accentFill.opacity(empty || disabled ? 0.45 : 1), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(empty || disabled)
+            .padding(6)
+            .accessibilityLabel("Send")
+        }
+        .mossadGlass(in: RoundedRectangle(cornerRadius: 24, style: .continuous), interactive: true)
     }
 }
 
@@ -194,10 +216,12 @@ struct MessageBubble: View {
         switch message.role {
         case .user:
             Text(message.text)
+                .textRole(.body)
+                .foregroundStyle(Palette.onAccent)
                 .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(Color.accentColor.opacity(0.16), in: .rect(cornerRadius: 18))
+                .background(Palette.accentFill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.leading, 48)
+                .padding(.leading, 44)
                 .textSelection(.enabled)
         case .assistant:
             VStack(alignment: .leading, spacing: 10) {
@@ -205,16 +229,17 @@ struct MessageBubble: View {
                     Button { withAnimation { showSteps.toggle() } } label: {
                         Label("\(message.steps.count) \(message.steps.count == 1 ? "lookup" : "lookups")",
                               systemImage: showSteps ? "chevron.down" : "chevron.right")
-                            .font(.caption).foregroundStyle(.tertiary)
+                            .textRole(.secondary).foregroundStyle(Palette.tertiary)
                     }
                     .buttonStyle(.plain)
                     if showSteps {
                         ForEach(Array(message.steps.enumerated()), id: \.offset) { _, s in
-                            Text(s).font(.caption).foregroundStyle(.tertiary).padding(.leading, 18)
+                            Text(s).textRole(.secondary).foregroundStyle(Palette.tertiary).padding(.leading, 18)
                         }
                     }
                 }
-                ChatMarkdown(text: message.text)
+                ChatMarkdown(text: message.text, timeChips: true)
+                    .foregroundStyle(Palette.ink)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .textSelection(.enabled)
