@@ -3,7 +3,7 @@ import MossadCore
 import SwiftUI
 
 /// The Mac's Analytics story on the phone: how much time, where it went, with whom, how you communicated,
-/// and what came out of it, for a period against the one before.
+/// and what came out of it, for a period against the one before. People, the list and the profiles, opens from here.
 struct AnalyticsScreen: View {
     @EnvironmentObject var store: PhoneStore
     @AppStorage("analyticsPreset") private var presetRaw = PeriodChoice.Preset.last30Days.rawValue
@@ -20,10 +20,11 @@ struct AnalyticsScreen: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $store.analyticsPath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     periodMenu.frame(maxWidth: .infinity)
+                    peopleLink
                     if let data {
                         if data.now.calls == 0 {
                             EmptyState(symbol: "chart.bar.xaxis", title: "No calls in this period",
@@ -41,11 +42,46 @@ struct AnalyticsScreen: View {
             .phonePage()
             .navigationTitle("Analytics")
             .sheet(isPresented: $customizing) { CustomRangeSheet(start: choice.start, end: choice.end, apply: applyCustom) }
+            .navigationDestination(for: AnalyticsRoute.self) { _ in PeopleScreen(path: $store.analyticsPath) }
             .navigationDestination(for: PersonLink.self) { link in PersonView(name: link.name, stats: stats[link.name] ?? PersonStats()) }
             .navigationDestination(for: String.self) { id in if let r = store.meeting(id) { MeetingView(record: r) } }
             .refreshable { await store.sync() }
             .task(id: "\(presetRaw)-\(startStamp)-\(endStamp)-\(store.meetings.count)-\(store.coachVersion)") { await load() }
         }
+    }
+
+    /// Everyone you meet with, all time: the People list and each person's profile.
+    private var peopleLink: some View {
+        NavigationLink(value: AnalyticsRoute.people) {
+            HStack(spacing: Space.m) {
+                Image(systemName: "person.2")
+                    .font(.body)
+                    .foregroundStyle(Palette.accent)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("People").textRole(.headline).foregroundStyle(Palette.ink)
+                    Text(peopleCount).textRole(.secondary).foregroundStyle(Palette.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Palette.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, Space.l).padding(.vertical, Space.m)
+            .mossadGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous), interactive: true)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens everyone you meet with and their profiles")
+    }
+
+    /// "14 people · profiles and time together"
+    private var peopleCount: String {
+        let n = store.personStats.keys.filter { $0 != store.owner && !$0.hasPrefix("Speaker ") }.count
+        return n == 0 ? "Profiles and time together" : "\(n) \(n == 1 ? "person" : "people") · profiles and time together"
     }
 
     private var periodMenu: some View {

@@ -8,6 +8,8 @@ struct MeetingView: View {
     let record: CallRecord
     /// Words to find in the transcript, from Search.
     var find = ""
+    /// A moment to open the transcript at, from a Search result.
+    var at: TimeInterval?
     @State private var query = ""
     /// The moment being read: from a lane, a decision, or a commitment. The lanes draw it as the playhead.
     @State private var moment: TimeInterval?
@@ -78,6 +80,10 @@ struct MeetingView: View {
             read(at: m.at)
         }
         .onAppear {
+            if let at, moment == nil {
+                read(at: at)
+                return
+            }
             // A search that matched the transcript, not the title, opens the transcript at it.
             // Development hook for screenshots: `MOSSAD_FIND=<words>`.
             let q = (find.isEmpty ? ProcessInfo.processInfo.environment["MOSSAD_FIND"] ?? "" : find).trimmingCharacters(in: .whitespaces)

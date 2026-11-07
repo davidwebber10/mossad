@@ -31,6 +31,12 @@ struct ChatScreen: View {
             .sheet(isPresented: $showMemory) { CoachMemoryView() }
             // Development hook for screenshots: `MOSSAD_CHAT=1` opens the newest chat.
             .onAppear { if PhoneStore.hook("MOSSAD_CHAT") != nil, chatID == nil { chatID = store.chats.first?.id } }
+            // Search opened a chat.
+            .onChange(of: store.openChat, initial: true) { _, id in
+                guard let id else { return }
+                store.openChat = nil
+                if store.chats.contains(where: { $0.id == id }) { chatID = id }
+            }
         }
         .environment(\.openURL, OpenURLAction { url in
             guard let link = ChatLink.parse(url) else { return .systemAction }
