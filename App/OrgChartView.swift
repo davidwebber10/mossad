@@ -42,6 +42,10 @@ struct OrgChartView: View {
                         .padding(.bottom, 20)
                 }
                 .frame(maxHeight: .infinity)
+        } else {
+            // Never an empty body: the People page loads the chart in its onAppear, and an empty view never
+            // appears, so the page stayed blank with no toolbar to switch back to the list.
+            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
