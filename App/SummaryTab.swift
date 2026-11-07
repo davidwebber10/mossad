@@ -252,7 +252,7 @@ struct TalkShare: View {
         }
     }
 
-    /// "You 36% · Jon 16% · Adam 13% · nine others share the rest".
+    /// "You 36% · Sam 16% · Dana 13% · nine others share the rest".
     private func caption(_ talkers: [MeetingPeople.Speaker], total: TimeInterval) -> String {
         func percent(_ s: MeetingPeople.Speaker) -> String { "\(Int((s.seconds / total * 100).rounded()))%" }
         let owner = talkers.first(where: \.isOwner)

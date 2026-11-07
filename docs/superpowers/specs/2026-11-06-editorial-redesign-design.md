@@ -64,7 +64,7 @@ Add bookmark (during the call, from the menu bar or the hot key, and afterwards 
 - **Matching** to saved people, by name: exact first and last name, case and spacing ignored; then common nicknames (Ben/Benjamin, Zach/Zachary, Jim/James, …) with the same last name; then the owner's manual matches, kept in `org-matches.json`. Duplicate full names in the file (there are a few) are left for a manual match.
 - **Review**: a list of saved people with no match, each with a picker (a person from the file, or "Outside the company").
 - **Views**: People gets a List or Org chart toggle. The chart shows the owner's part of the tree by default (the owner's manager, the owner, peers, and reports), the rest on demand; people outside the company are a separate group. A matched person's profile shows title and manager.
-- The title is also given to the summary and the coach as context ("Jon Hueni, VP Planning").
+- The title is also given to the summary and the coach as context ("Sam Park, VP Planning").
 
 ### 5. People sort and duplicates
 
