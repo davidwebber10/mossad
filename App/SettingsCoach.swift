@@ -283,7 +283,8 @@ private struct CoachKnowledge: View {
                     }
                     entry(profile.facts(kind).isEmpty ? kind.title : "") {
                         TextField(kind.title, text: Binding(get: { drafts[kind, default: ""] }, set: { drafts[kind] = $0 }), prompt: Text(hint(kind)))
-                            .textFieldStyle(SettingsFieldStyle(width: 320))
+                            // Fills the row instead of a fixed width, which pushed this page wider than the others.
+                            .textFieldStyle(SettingsFieldStyle())
                             .onSubmit { add(kind) }
                     } action: {
                         Button("Add") { add(kind) }

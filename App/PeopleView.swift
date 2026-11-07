@@ -186,16 +186,18 @@ struct PeopleView: View {
         HStack(spacing: Space.s) {
             Image(systemName: "lock").font(.system(size: 11)).accessibilityHidden(true)
             Text("Voice fingerprints are biometric data. They stay on this Mac in the Voices folder and are never uploaded.")
-                .lineLimit(1).truncationMode(.tail)
+                // Two lines in a narrow window rather than cutting the promise that the voices stay here.
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: Space.m)
             Button("Delete all saved voices…") { confirmDeleteAll = true }
                 .buttonStyle(.plain)
                 .fontWeight(.medium)
                 .foregroundStyle(Palette.recording)
+                .fixedSize()
         }
         .font(.system(size: 12)).foregroundStyle(Palette.secondary)
-        .padding(.horizontal, 36)
-        .frame(height: 40)
+        .padding(.horizontal, 36).padding(.vertical, 6)
+        .frame(minHeight: 40)
         .overlay(alignment: .top) { Hairline() }
     }
 

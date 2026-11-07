@@ -317,7 +317,9 @@ struct FigureRow: View {
                         .foregroundStyle(Palette.ink)
                         .lineLimit(1).minimumScaleFactor(0.7)
                         .contentTransition(.numericText())
-                    Text(f.label).font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    // Two lines before a cut: a caption such as "last met · about every 4 days" carries the meaning.
+                    Text(f.label).font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)

@@ -116,10 +116,13 @@ private struct HourGrid: View {
                     .frame(height: hour * 24)
             }
             .scrollPosition($position)
-            .onAppear { position.scrollTo(y: hour * CGFloat(firstHour)) }
-            .onChange(of: days) { _, _ in position.scrollTo(y: hour * CGFloat(firstHour)) }
+            .onAppear { position.scrollTo(y: firstHourTop) }
+            .onChange(of: days) { _, _ in position.scrollTo(y: firstHourTop) }
         }
     }
+
+    /// A little above the first hour's line, so its label, centered on the line, is not cut in half.
+    private var firstHourTop: CGFloat { max(0, hour * CGFloat(firstHour) - 10) }
 
     /// 8 AM, as the canvas draws the working day, unless a meeting in view starts earlier.
     private var firstHour: Int {
@@ -223,7 +226,7 @@ private struct HourGrid: View {
                     Text(" · Processing").foregroundStyle(Palette.secondary)
                 case .failed:
                     Text(" · ").foregroundStyle(Palette.secondary)
-                    Text("Failed").foregroundStyle(Palette.recording)
+                    Text("Failed").fontWeight(.medium).foregroundStyle(Palette.accent)
                 default:
                     EmptyView()
                 }

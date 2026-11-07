@@ -213,8 +213,10 @@ private struct MeetingRow: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                 HStack(spacing: 0) {
+                    // The time and platform keep their width; a long progress line is what gets cut.
                     Text("\(record.start.formatted(date: .omitted, time: .shortened)) · \(record.platform.shortName)")
                         .foregroundStyle(Palette.secondary)
+                        .layoutPriority(1)
                     status
                 }
                 .font(.system(size: 12))
@@ -242,7 +244,7 @@ private struct MeetingRow: View {
             Text(controller.progressText(record) ?? "Processing").foregroundStyle(Palette.secondary).truncationMode(.tail)
         case .failed:
             Text(" · ").foregroundStyle(Palette.secondary)
-            Text("Failed").fontWeight(.medium).foregroundStyle(Palette.recording)
+            Text("Failed").fontWeight(.medium).foregroundStyle(Palette.accent)
         case .recording, nil:
             EmptyView()
         }

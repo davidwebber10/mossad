@@ -32,9 +32,10 @@ struct CoachTab: View {
         let profile = controller.coachProfile
         let metrics = CallMetrics(record: record, owner: controller.ownerName,
                                   history: profile.history.filter { $0.callID != record.id }.compactMap(\.delivery))
-        let lines = review.lines
-        let worked = [lines.didWell].compactMap { $0 }
-        let change = [lines.improving, lines.tryNext].compactMap { $0 }
+        // The stored lines only: `review.lines` stands in the first strength and improvement for an older review,
+        // which the sections below list in full already.
+        let worked = [review.didWell].compactMap { $0 }
+        let change = [review.improving, review.tryNext].compactMap { $0 }
         let questions = profile.openQuestions.filter { $0.callID == record.id }
         return LabelColumnStack(spacing: 18) {
             LabelColumn(label: "The coach\u{2019}s read") {
