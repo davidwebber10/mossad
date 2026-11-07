@@ -16,10 +16,15 @@ struct MossadPhoneApp: App {
                 Tab("Tasks", image: "tab-commitments", value: .commitments) { CommitmentsScreen() }
                 Tab("Chat", image: "tab-sparkle", value: .chat) { ChatScreen() }
                 Tab("Analytics", image: "tab-analytics", value: .analytics) { AnalyticsScreen() }
-                Tab("Search", image: "tab-search", value: .search, role: .search) { SearchScreen() }
+                Tab("Search", image: "tab-search", value: .search, role: .search) { SearchScreen(query: $store.searchQuery) }
             }
             // The canvas draws the tabs as outlines, the selected one in the accent.
             .tabBarMinimizeBehavior(.onScrollDown)
+            // On the TabView, not inside the tab: that is what sets Search apart from the tabs as its own circle and
+            // turns it into the field, focused as soon as the tab is chosen.
+            .searchable(text: $store.searchQuery, prompt: "Meetings, people, transcripts")
+            .tabViewSearchActivation(.searchTabSelection)
+            .onSubmit(of: .search) { store.remember(search: store.searchQuery) }
             .tint(Palette.accent)
             .environmentObject(store)
             .preferredColorScheme(PhoneStore.previewScheme)

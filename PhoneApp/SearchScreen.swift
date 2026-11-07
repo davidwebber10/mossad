@@ -12,7 +12,7 @@ private enum SearchRoute: Hashable {
 /// tasks, and chats, in the engine's groups. Before typing it offers recent searches, people, and tags.
 struct SearchScreen: View {
     @EnvironmentObject var store: PhoneStore
-    @State private var query = PhoneStore.searchHook
+    @Binding var query: String
     @State private var results = SearchResults.empty
     /// Meetings whose "N more in this meeting" was opened, with all their moments.
     @State private var expanded: [String: [MomentHit]] = [:]
@@ -34,10 +34,6 @@ struct SearchScreen: View {
             }
             .phonePage()
             .navigationTitle("Search")
-            .searchable(text: $query, prompt: "Meetings, people, transcripts")
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-            .onSubmit(of: .search) { store.remember(search: query) }
             .task(id: "\(store.searchVersion)|\(query)") { await search() }
             .navigationDestination(for: SearchRoute.self) { route in
                 switch route {

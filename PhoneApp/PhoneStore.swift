@@ -38,6 +38,8 @@ final class PhoneStore: ObservableObject {
     /// Bumped when a coach review changes here, so open reviews read it again.
     @Published private(set) var coachVersion = 0
     @Published var tab = PhoneTab.meetings
+    /// The Search tab's text. The tab bar owns the field, so iOS draws Search apart from the tabs and opens it on selection.
+    @Published var searchQuery = PhoneStore.searchHook
     /// The meetings open in the Meetings tab, for `mossad://call/<id>` links.
     @Published var path: [String] = []
     /// A moment to open a meeting at: the meeting page reads it once and opens the transcript there.
