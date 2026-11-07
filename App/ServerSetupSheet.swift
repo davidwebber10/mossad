@@ -8,7 +8,7 @@ struct ServerSetupSheet: View {
     @EnvironmentObject var controller: AppController
     @Environment(\.dismiss) private var dismiss
 
-    enum Check: Equatable { case idle, checking, ok, failed(String) }
+    enum Check: Equatable { case idle, checking, ok, failed(String), problem(FriendlyError) }
 
     @State private var deployed = false
     @State private var address = ""
@@ -118,8 +118,7 @@ struct ServerSetupSheet: View {
                         if !started {
                             Button("Start syncing", action: start).buttonStyle(.sheetPrimary)
                         } else if let error = controller.syncActivity.error {
-                            CheckLabel(check: .failed(error), ok: "")
-                            Button("Try again") { controller.syncNow() }.buttonStyle(.sheetSecondary)
+                            ErrorCard(error: error, retry: error.canRetry ? { controller.syncNow() } : nil)
                         } else {
                             HStack(spacing: Space.s) {
                                 ProgressView().controlSize(.small)
@@ -175,7 +174,8 @@ struct ServerSetupSheet: View {
                 addressCheck = .ok
             } catch {
                 foundAddress = nil
-                addressCheck = .failed(error is ServerError ? "That address answers, but not like a Mossad server." : "Mossad could not reach that address. Check it, and that the server is deployed.")
+                Log.error("Checking the server address failed: \(error)")
+                addressCheck = .problem(FriendlyError(error is ServerError ? ServerError.notMossad : error, context: .connectingServer, service: "your server"))
             }
         }
     }
@@ -194,7 +194,8 @@ struct ServerSetupSheet: View {
                     secretCheck = .failed(makeNew ? "Not yet. Run the command, paste the secret, and deploy, then check again." : "Your server does not accept this secret.")
                 }
             } catch {
-                secretCheck = .failed("Mossad could not reach your server.")
+                Log.error("Checking the server secret failed: \(error)")
+                secretCheck = .problem(FriendlyError(error, context: .connectingServer, service: "your server"))
             }
         }
     }
@@ -280,8 +281,10 @@ private struct CheckLabel: View {
         case .ok:
             Label { Text(ok).foregroundStyle(Palette.okText) } icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.ok) }
                 .font(.system(size: 12))
+        case .problem(let error):
+            InlineError(error: error)
         case .failed(let message):
-            Label { Text(message).foregroundStyle(Palette.ink) } icon: { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Palette.recording) }
+            Label { Text(message).foregroundStyle(Palette.ink) } icon: { WarningMark(size: 13).foregroundStyle(Palette.accent) }
                 .font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
         }
     }

@@ -16,9 +16,8 @@ struct MeetingsListView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if let error = store.error {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .textRole(.secondary)
-                            .foregroundStyle(Palette.recording)
+                        ErrorCard(error: error, retry: error.canRetry && !store.syncing ? { Task { await store.sync() } } : nil,
+                                  note: error.context == .uploadingAudio ? "The recording is saved on this iPhone." : nil)
                             .padding(.vertical, Space.s)
                     }
                     if !store.outbox.isEmpty { outbox }

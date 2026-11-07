@@ -7,13 +7,21 @@ import Security
 struct SyncActivity: Equatable {
     var running = false
     var last: Date?
-    var error: String?
+    /// The last failure, kept even while it is not shown, so a repeat can count.
+    var failure: FriendlyError?
+    /// Failed syncs in a row: a single dropped connection is retried quietly and only shows when it repeats.
+    var failures = 0
     /// During the first sync to a new store: meetings sent so far, of how many.
     var progress: (done: Int, total: Int)?
 
     static func == (a: SyncActivity, b: SyncActivity) -> Bool {
-        a.running == b.running && a.last == b.last && a.error == b.error && a.progress?.done == b.progress?.done && a.progress?.total == b.progress?.total
+        a.running == b.running && a.last == b.last && a.failure == b.failure && a.failures == b.failures && a.progress?.done == b.progress?.done && a.progress?.total == b.progress?.total
     }
+}
+
+extension SyncActivity {
+    /// The failure to show: none for a cancelled sync, and a quiet retry's only after it repeats.
+    var error: FriendlyError? { failure.flatMap { $0.shouldShow(failures: failures) ? $0 : nil } }
 }
 
 extension AppController {
@@ -139,7 +147,7 @@ extension AppController {
         let place = syncWith == .server ? "your server" : "iCloud"
         Task.detached(priority: .utility) {
             var received = 0
-            var failure: String?
+            var failure: FriendlyError?
             if cloud !== mirror {
                 do {
                     let changed = try await cloud.push()
@@ -148,7 +156,7 @@ extension AppController {
                     if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
                     if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
                 } catch {
-                    failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    failure = FriendlyError(error, context: .syncing, service: place)
                     Log.error("Sync with \(place) failed: \(error)")
                 }
             }
@@ -168,7 +176,12 @@ extension AppController {
                     if self.processing == 0 { self.processPending() }
                 }
                 self.syncRunning = false
-                self.syncActivity = SyncActivity(running: false, last: failure == nil ? Date() : self.syncActivity.last, error: failure)
+                // A sync the app stopped itself is neither a success nor a failure.
+                let stopped = failure?.kind == .cancelled
+                let before = self.syncActivity
+                self.syncActivity = SyncActivity(running: false, last: failure == nil ? Date() : before.last,
+                                                 failure: stopped ? before.failure : failure,
+                                                 failures: failure == nil ? 0 : stopped ? before.failures : before.failures + 1)
                 if self.syncAgain {
                     self.syncAgain = false
                     self.syncNow()

@@ -344,6 +344,7 @@ final class AppController: ObservableObject {
             Task { for id in today { await track { await self.pipeline.regenerateSummary(id) } } }
         }
         if preview { applyLivePreview() }
+        if let failure = Self.errorPreview("sync") { syncActivity = SyncActivity(last: Date().addingTimeInterval(-7200), failure: failure, failures: 3) }
         if preview, let update = ProcessInfo.processInfo.environment["MOSSAD_UPDATE_PREVIEW"] { updater.applyPreview(update) }
         // Development hook: `--light` shows the UI in light mode, to check both looks.
         if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
@@ -401,7 +402,38 @@ final class AppController: ObservableObject {
     }
 
     func refresh() {
-        meetings = MeetingIndex(paths: paths).all()
+        meetings = Self.previewFailures(MeetingIndex(paths: paths).all())
+    }
+
+    /// Development hook, in a preview only: `MOSSAD_ERROR_PREVIEW=sync,chat,meetingChat,coach,org,processing,failed`
+    /// shows those error cards with sample errors, so each one can be captured without breaking anything.
+    static func errorPreview(_ surface: String) -> FriendlyError? {
+        guard CommandLine.arguments.contains("--ui-preview"),
+              let list = ProcessInfo.processInfo.environment["MOSSAD_ERROR_PREVIEW"]?.split(separator: ","),
+              list.contains(Substring(surface)) else { return nil }
+        return ErrorPreview.sample(surface == "meetingChat" ? "chat" : surface)
+    }
+
+    /// `processing` puts the newest meeting back in its summary step after two busy replies; `failed` marks it
+    /// failed with a raw gateway page as its reason. Only in memory.
+    private static func previewFailures(_ records: [CallRecord]) -> [CallRecord] {
+        guard CommandLine.arguments.contains("--ui-preview"),
+              let list = ProcessInfo.processInfo.environment["MOSSAD_ERROR_PREVIEW"]?.split(separator: ","),
+              let i = records.indices.filter({ records[$0].status == .written }).max(by: { records[$0].start < records[$1].start })
+        else { return records }
+        var records = records
+        if list.contains("processing") {
+            records[i].status = .identified
+            records[i].attempts = 2
+            records[i].failureReason = "Anthropic error 529"
+            records[i].nextAttempt = Date().addingTimeInterval(240)
+        } else if list.contains("failed") {
+            records[i].status = .failed
+            records[i].failedStep = .recorded
+            records[i].attempts = 3
+            records[i].failureReason = "AssemblyAI HTTP 502: <html><head><title>502 Bad Gateway</title></head><body><center><h1>502 Bad Gateway</h1></center></body></html>"
+        }
+        return records
     }
 
     func hasKey(_ key: APIKey) -> Bool { keychain.get(key) != nil }

@@ -9,7 +9,7 @@ struct ChatScreen: View {
     @State private var question = ""
     @State private var running = false
     @State private var steps: [String] = []
-    @State private var error: String?
+    @State private var error: FriendlyError? = PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample)
     @State private var showChats = false
     @State private var showMemory = false
     @FocusState private var focused: Bool
@@ -63,7 +63,7 @@ struct ChatScreen: View {
                     ForEach(chat.messages) { MessageBubble(message: $0).id($0.id) }
                     if running { thinking.id("thinking") }
                     if let error {
-                        Label(error, systemImage: "exclamationmark.triangle").textRole(.secondary).foregroundStyle(Palette.recording)
+                        ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil)
                     }
                 }
                 .padding(.horizontal)
@@ -128,10 +128,22 @@ struct ChatScreen: View {
                 store.save(latest)
                 store.finish(latest.id)
             } catch {
-                self.error = error.localizedDescription
+                Log.error("Chat failed: \(error)")
+                let friendly = FriendlyError(error, context: .chatting)
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
             running = false
         }
+    }
+
+    /// Asks the last question again: it leaves the chat and goes back through send.
+    private func retry() {
+        var c = chat
+        guard let last = c.messages.last, last.role == .user else { return }
+        c.messages.removeLast()
+        store.save(c)
+        question = last.text
+        send()
     }
 }
 

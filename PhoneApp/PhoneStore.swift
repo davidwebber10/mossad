@@ -27,7 +27,9 @@ final class PhoneStore: ObservableObject {
     @Published private(set) var scores: [String: Int] = [:]
     @Published private(set) var syncing = false
     @Published private(set) var lastSync: Date?
-    @Published private(set) var error: String?
+    /// The sync problem to show. A single dropped connection is retried quietly and shows only when it repeats.
+    @Published private(set) var error: FriendlyError? = PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample)
+    private var failures = 0
     /// Bumped when a coach review changes here, so open reviews read it again.
     @Published private(set) var coachVersion = 0
     @Published var tab = PhoneTab.meetings
@@ -187,14 +189,18 @@ final class PhoneStore: ObservableObject {
                 await sendOutbox()
                 error = nil
                 lastSync = Date()
-            } catch is CancellationError {
-                // The app stopped its own request (a refresh let go, a view closed): not a failure to show.
-            } catch let e as URLError where e.code == .cancelled {
+                failures = 0
             } catch {
-                self.error = "Could not reach \(place): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
+                Log.error("Sync with \(place) failed: \(error)")
+                // A request the app stopped itself (a refresh let go, a view closed) is not a failure.
+                let failure = FriendlyError(error, context: .syncing, service: place)
+                if failure.kind != .cancelled {
+                    failures += 1
+                    self.error = failure.shouldShow(failures: failures) ? failure : nil
+                }
             }
         } else if syncWith == .server, !offline {
-            error = "Connect your server in Settings."
+            error = FriendlyError(kind: .notConnected, context: .syncing)
         }
         reload()
     }
@@ -366,7 +372,9 @@ final class PhoneStore: ObservableObject {
                 if let i = list.firstIndex(where: { $0.id == item.id }) { list[i].sent = true }
                 saveOutbox(list)
             } catch {
-                self.error = "The recording is saved on this iPhone and will be sent when \(place) is reachable."
+                Log.error("Uploading the room recording failed: \(error)")
+                let failure = FriendlyError(error, context: .uploadingAudio, service: place)
+                if failure.shouldShow(failures: 2) { self.error = failure }
             }
         }
     }

@@ -11,7 +11,7 @@ final class RoomRecorder: ObservableObject {
     @Published private(set) var elapsed: TimeInterval = 0
     /// The last second of levels, 0 to 1, for the meter.
     @Published private(set) var levels: [Float] = Array(repeating: 0, count: 24)
-    @Published var error: String?
+    @Published var error: FriendlyError? = PhoneStore.hook("MOSSAD_ROOM_ERROR").flatMap(ErrorPreview.sample)
 
     private var recorder: AVAudioRecorder?
     private var started = Date()
@@ -20,7 +20,7 @@ final class RoomRecorder: ObservableObject {
 
     func start(into dir: URL) async {
         guard await AVAudioApplication.requestRecordPermission() else {
-            error = "Mossad needs the microphone. Turn it on in Settings, Privacy & Security, Microphone."
+            error = FriendlyError(kind: .microphoneDenied, context: .recording)
             return
         }
         do {
@@ -34,7 +34,10 @@ final class RoomRecorder: ObservableObject {
             NotificationCenter.default.addObserver(self, selector: #selector(interrupted(_:)), name: AVAudioSession.interruptionNotification, object: nil)
             timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
         } catch {
-            self.error = "Recording could not start: \(error.localizedDescription)"
+            Log.error("Room recording could not start: \(error)")
+            // The recorder's own wrapper names the step; the error inside it says what the system refused.
+            let inner = (error as? RecorderError)?.underlying ?? error
+            self.error = FriendlyError(inner, context: .recording, technical: FriendlyError.clean((error as? LocalizedError)?.errorDescription ?? "\(error)"))
         }
     }
 
@@ -173,8 +176,10 @@ struct RecordingView: View {
                             .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
                     }
                     if let error = recorder.error {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .textRole(.secondary).foregroundStyle(Palette.recording)
+                        ErrorCard(error: error, retry: error.canRetry && recorder.state == .idle ? {
+                            recorder.error = nil
+                            Task { await recorder.start(into: store.recordingsFolder) }
+                        } : nil)
                     }
                     Text("Mossad on your Mac writes the notes: the transcript, who said what, and the summary.")
                         .textRole(.secondary).foregroundStyle(Palette.tertiary)

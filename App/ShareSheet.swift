@@ -11,7 +11,7 @@ struct ShareSheet: View {
     @State private var options = ShareOptions()
     @State private var link: MeetingLink?
     @State private var working = false
-    @State private var error: String?
+    @State private var error: FriendlyError?
     @State private var copied = false
     @State private var confirmStop = false
 
@@ -130,10 +130,7 @@ struct ShareSheet: View {
                     }
                 }
                 if let error {
-                    Label { Text(error) } icon: { IconImage(.warning, size: 13) }
-                        .font(.system(size: 12)).foregroundStyle(Palette.recording)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 12)
+                    ErrorCard(error: error).padding(.top, 12)
                 }
             }
             .padding(EdgeInsets(top: 8, leading: 22, bottom: 16, trailing: 22))
@@ -179,7 +176,9 @@ struct ShareSheet: View {
                 link = made
                 if first, let url = controller.shareURL(made) { copyLink(url) }
             } catch {
-                self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                Log.error("Share link failed: \(error)")
+                let friendly = FriendlyError(error, context: .sharing, service: "your server")
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
             working = false
         }
@@ -193,7 +192,9 @@ struct ShareSheet: View {
                 try await controller.stopSharing(link)
                 dismiss()
             } catch {
-                self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                Log.error("Share link failed: \(error)")
+                let friendly = FriendlyError(error, context: .sharing, service: "your server")
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
             working = false
         }

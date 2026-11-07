@@ -104,46 +104,17 @@ struct MeetingHeader: View {
         if let step = ProcessingStep(status: record.status), record.summary != nil {
             ProcessingCard(record: record, step: step).padding(.top, Space.l)
         } else if record.status == .failed {
-            FailedBanner(text: failureText, hint: failureHint) { controller.retry(record.id) }
+            ErrorCard(error: failure, retryTitle: "Retry now", retry: { controller.retry(record.id) }, note: "The audio is saved.")
                 .padding(.top, Space.l)
         }
     }
 
-    /// What to do about it, under the banner.
-    private var failureHint: String {
-        if record.failureReason?.localizedCaseInsensitiveContains("key missing") == true {
-            return "Add the key in Settings › AI, then retry."
-        }
-        if record.attempts == 0 { return "The recording was interrupted, and a track could not be read. Check the log, then retry." }
-        return "Mossad stopped after \(record.attempts) attempts. Check the log, then retry."
-    }
-
-    private var failureText: String {
-        let step = record.failedStep.flatMap { ProcessingStep(status: $0) }?.title ?? "Processing"
-        return "\(step) failed" + (record.failureReason.map { ": " + $0.trimmingCharacters(in: CharacterSet(charactersIn: ". ")) } ?? "") + ". The audio is saved."
+    /// What failed and what to do. A call that never reached a step (a track could not be read) says so.
+    private var failure: FriendlyError {
+        if let f = record.friendlyFailure { return f }
+        let step = record.failedStep.flatMap { ProcessingStep(status: $0) }
+        return FriendlyError(kind: .other, context: step.map(FriendlyError.Context.init(step:)) ?? .transcribing,
+                             said: record.attempts == 0 ? "The recording was interrupted, and a track could not be read." : nil, retries: false)
     }
 }
 
-/// A failed step: one line with Retry now, and what to do under it.
-struct FailedBanner: View {
-    let text: String
-    let hint: String
-    let retry: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.accent)
-                Text(text).font(.system(size: 12.5)).foregroundStyle(Palette.ink)
-                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: Space.s)
-                Button("Retry now", action: retry).buttonStyle(.mossadFill)
-            }
-            .padding(.vertical, Space.m)
-            .padding(.horizontal, 14)
-            .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            Text(hint).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-        }
-        .accessibilityElement(children: .contain)
-    }
-}

@@ -11,7 +11,7 @@ struct ChatView: View {
     @State private var question = ""
     @State private var running: UUID?
     @State private var steps: [String] = []
-    @State private var error: String?
+    @State private var error: FriendlyError?
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -91,7 +91,7 @@ struct ChatView: View {
                         .id("running")
                     }
                     if let error {
-                        LabelColumn(label: "") { Text(error).font(.system(size: 13)).foregroundStyle(Palette.recording) }
+                        LabelColumn(label: "") { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
                     }
                 }
                 .frame(maxWidth: Self.column, alignment: .leading)
@@ -164,6 +164,8 @@ struct ChatView: View {
         if selection == nil, CommandLine.arguments.contains("--ui-preview"),
            let prefix = ProcessInfo.processInfo.environment["MOSSAD_CHAT"]?.uppercased() {
             selection = chats.first { $0.id.uuidString.hasPrefix(prefix) }?.id
+            // The selection change clears errors; a previewed one comes back after it.
+            DispatchQueue.main.async { error = AppController.errorPreview("chat") }
         }
     }
 
@@ -204,11 +206,23 @@ struct ChatView: View {
                 controller.summarizeChat(chat.id)
                 controller.syncNow()
             } catch {
-                self.error = "\(error)"
+                Log.error("Chat failed: \(error)")
+                let friendly = FriendlyError(error, context: .chatting)
+                if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
             running = nil
             focused = true
         }
+    }
+
+    /// Asks the last question again: it leaves the chat and goes back through send.
+    private func retry() {
+        var chat = current
+        guard let last = chat.messages.last, last.role == .user else { return }
+        chat.messages.removeLast()
+        store(chat)
+        question = last.text
+        send()
     }
 
     /// Saves the chat and keeps it selected; a new chat becomes a saved one with its first question.

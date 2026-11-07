@@ -16,7 +16,10 @@ struct ProcessingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             card
-            if let reason = record.failureReason, record.attempts > 0 { failure(reason) }
+            // A single dropped connection is retried quietly; the card speaks up when it repeats.
+            if let failure = record.friendlyFailure, record.attempts > 0, failure.shouldShow(failures: record.attempts) {
+                ErrorCard(error: failure, retryTitle: "Retry now", retry: { controller.retry(record.id) })
+            }
         }
     }
 
@@ -86,23 +89,6 @@ struct ProcessingCard: View {
             case .none: EmptyView()
             }
         }
-    }
-
-    /// "Attempt 1 failed: … Mossad tries again at 2:31 PM." with Retry now.
-    private func failure(_ reason: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle").font(.system(size: 12.5, weight: .medium)).foregroundStyle(Palette.accent)
-            Text("Attempt \(record.attempts) failed: \(reason)"
-                 + (record.nextAttempt.map { ". Mossad tries again at \($0.formatted(date: .omitted, time: .shortened))." } ?? ""))
-                .font(.system(size: 12.5)).foregroundStyle(Palette.ink)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: Space.s)
-            Button("Retry now") { controller.retry(record.id) }.buttonStyle(.mossadFill)
-        }
-        .padding(.vertical, Space.m)
-        .padding(.horizontal, Space.l)
-        .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private struct SubLine {

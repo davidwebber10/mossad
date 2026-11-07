@@ -76,7 +76,7 @@ struct SyncSettings: View {
     private var activityStatus: StatusLine.Model {
         let a = controller.syncActivity
         if a.running { return .init(text: "Syncing…", color: Palette.ring, busy: true) }
-        if a.error != nil { return .init(text: "Sync failed", color: Palette.recording) }
+        if let error = a.error { return .init(text: error.title, color: Palette.accentFill) }
         if let last = a.last { return .init(text: "Synced \(last.formatted(.relative(presentation: .named)))", color: Palette.ok) }
         return .init(text: "On", color: Palette.ok)
     }
@@ -87,37 +87,24 @@ private struct SyncNowRow: View {
     @EnvironmentObject var controller: AppController
 
     var body: some View {
-        HStack(alignment: .center, spacing: Space.m) {
-            VStack(alignment: .leading, spacing: 2) {
-                if let error = controller.syncActivity.error {
-                    HStack(spacing: Space.s) {
-                        Circle().fill(Palette.recording).frame(width: 8, height: 8).accessibilityHidden(true)
-                        Text("\(Text("Sync failed").fontWeight(.semibold).foregroundStyle(Palette.ink)) \(Text("· \(Self.reason(error))").foregroundStyle(Palette.secondary))")
-                            .font(.system(size: 12.5)).lineLimit(2)
-                    }
-                    Text("\(controller.syncActivity.last.map { "Last synced \($0.formatted(.relative(presentation: .named))). " } ?? "")Mossad tries again by itself when the connection is back; meetings stay on this Mac meanwhile.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-                } else {
+        if let error = controller.syncActivity.error {
+            ErrorCard(error: error, retryTitle: "Sync now", retry: controller.syncActivity.running || !error.canRetry ? nil : { controller.syncNow() },
+                      note: controller.syncActivity.last.map { "Last synced \($0.formatted(.relative(presentation: .named)))." })
+                .padding(.vertical, 9)
+        } else {
+            HStack(alignment: .center, spacing: Space.m) {
+                VStack(alignment: .leading, spacing: 2) {
                     if let last = controller.syncActivity.last {
                         Text("Synced \(last.formatted(.relative(presentation: .named)))").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
                     }
                     Text("Mossad syncs after each meeting and every five minutes.").font(.system(size: 12)).foregroundStyle(Palette.secondary)
                 }
+                Spacer(minLength: Space.m)
+                if controller.syncActivity.running { ProgressView().controlSize(.small) }
+                Button("Sync now") { controller.syncNow() }.buttonStyle(.settings).disabled(controller.syncActivity.running)
             }
-            Spacer(minLength: Space.m)
-            if controller.syncActivity.running { ProgressView().controlSize(.small) }
-            Button("Sync now") { controller.syncNow() }.buttonStyle(.settings).disabled(controller.syncActivity.running)
+            .padding(.vertical, 9)
         }
-        .padding(.vertical, 9)
-    }
-
-    /// "the internet connection appears to be offline", from a URL error's text, else the message as it is.
-    static func reason(_ error: String) -> String {
-        if let start = error.range(of: "\""), let end = error[start.upperBound...].range(of: "\"") {
-            let quoted = error[start.upperBound..<end.lowerBound].trimmingCharacters(in: CharacterSet(charactersIn: "."))
-            if !quoted.isEmpty { return quoted.prefix(1).lowercased() + quoted.dropFirst() }
-        }
-        return error
     }
 }
 

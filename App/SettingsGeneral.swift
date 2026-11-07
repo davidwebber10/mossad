@@ -180,6 +180,9 @@ private struct UpdateRows: View {
         SettingsRow(title: "Version \(updater.version)") {
             Button("Check for Updates…") { updater.checkForUpdates() }.buttonStyle(.settings).disabled(!updater.canCheck)
         }
+        if let problem = updater.problem {
+            InlineError(error: problem).padding(.vertical, Space.s)
+        }
         SettingsSwitchRow(title: "Check for updates automatically",
                           isOn: Binding(get: { updater.automaticallyChecks }, set: { updater.automaticallyChecks = $0 }))
         SettingsSwitchRow(title: "Download and install updates automatically",
