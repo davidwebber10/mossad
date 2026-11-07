@@ -27,9 +27,14 @@ final class PhoneStore: ObservableObject {
     @Published private(set) var scores: [String: Int] = [:]
     @Published private(set) var syncing = false
     @Published private(set) var lastSync: Date?
-    /// The sync problem to show. A single dropped connection is retried quietly and shows only when it repeats.
-    @Published private(set) var error: FriendlyError? = PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample)
-    private var failures = 0
+    /// The sync problem to show, and why each room recording waits. A single dropped connection is retried
+    /// quietly and shows only when it repeats.
+    @Published private(set) var syncStatus: SyncStatus = {
+        var s = SyncStatus()
+        s.show(PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample))
+        return s
+    }()
+    var error: FriendlyError? { syncStatus.shown }
     /// Bumped when a coach review changes here, so open reviews read it again.
     @Published private(set) var coachVersion = 0
     @Published var tab = PhoneTab.meetings
@@ -155,7 +160,7 @@ final class PhoneStore: ObservableObject {
         syncWith = choice
         UserDefaults.standard.set(choice.rawValue, forKey: "syncWith")
         engine = nil
-        error = nil
+        syncStatus.show(nil)
         lastSync = nil
         Task { await sync() }
     }
@@ -186,21 +191,18 @@ final class PhoneStore: ObservableObject {
                     try await cloud.pull(includeMeetings: true)
                     try await cloud.pushShared()
                 }
-                await sendOutbox()
-                error = nil
+                syncStatus.succeeded()
                 lastSync = Date()
-                failures = 0
             } catch {
                 Log.error("Sync with \(place) failed: \(error)")
                 // A request the app stopped itself (a refresh let go, a view closed) is not a failure.
-                let failure = FriendlyError(error, context: .syncing, service: place)
-                if failure.kind != .cancelled {
-                    failures += 1
-                    self.error = failure.shouldShow(failures: failures) ? failure : nil
-                }
+                syncStatus.failed(FriendlyError(error, context: .syncing, service: place))
             }
+            // Also after a failed pull, so each waiting recording gets its own reason. Upload problems stay on
+            // their recordings; a good pull does not clear them.
+            await sendOutbox()
         } else if syncWith == .server, !offline {
-            error = FriendlyError(kind: .notConnected, context: .syncing)
+            syncStatus.show(FriendlyError(kind: .notConnected, context: .syncing))
         }
         reload()
     }
@@ -348,6 +350,7 @@ final class PhoneStore: ObservableObject {
         list.removeAll { d in done.contains { $0.id == d.id } }
         if !done.isEmpty { saveOutbox(list) }
         outbox = list
+        syncStatus.keepUploads(for: Set(list.filter { !$0.sent }.map(\.id)))
     }
 
     private func saveOutbox(_ list: [Outgoing]) {
@@ -371,10 +374,10 @@ final class PhoneStore: ObservableObject {
                 var list = outbox
                 if let i = list.firstIndex(where: { $0.id == item.id }) { list[i].sent = true }
                 saveOutbox(list)
+                syncStatus.uploaded(item.id)
             } catch {
                 Log.error("Uploading the room recording failed: \(error)")
-                let failure = FriendlyError(error, context: .uploadingAudio, service: place)
-                if failure.shouldShow(failures: 2) { self.error = failure }
+                syncStatus.uploadFailed(item.id, FriendlyError(error, context: .uploadingAudio, service: place))
             }
         }
     }

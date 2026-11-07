@@ -76,6 +76,10 @@ struct MeetingsListView: View {
                         }
                         .textRole(.secondary)
                         .foregroundStyle(Palette.secondary)
+                        // Why it still waits; it stays until this recording uploads.
+                        if !item.sent, let reason = store.syncStatus.uploads[item.id] {
+                            InlineError(error: reason).padding(.top, 2)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Text(shortLength(item.recording.end.timeIntervalSince(item.recording.start)))
