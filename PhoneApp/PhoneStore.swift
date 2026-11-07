@@ -157,8 +157,11 @@ final class PhoneStore: ObservableObject {
         defer { syncing = false }
         if let cloud {
             do {
-                try await cloud.pull(includeMeetings: true)
-                try await cloud.pushShared()
+                // One quiet second try: a phone that just woke the app often has no route for a moment.
+                try await TransientRetry.run {
+                    try await cloud.pull(includeMeetings: true)
+                    try await cloud.pushShared()
+                }
                 await sendOutbox()
                 error = nil
                 lastSync = Date()
