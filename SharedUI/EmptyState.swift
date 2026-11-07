@@ -28,7 +28,9 @@ struct EmptyState: View {
                 .foregroundStyle(Palette.secondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(messageSize * 0.3)
-                .frame(maxWidth: 300)
+                // A set width: the split view measures pages at a tiny width, and a message wrapped there grew
+                // tall enough to push the page past the window.
+                .frame(minWidth: 300, maxWidth: 300)
                 .fixedSize(horizontal: false, vertical: true)
             if let action {
                 Button(action.title, action: action.run)

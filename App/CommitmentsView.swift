@@ -50,7 +50,6 @@ struct CommitmentsView: View {
                                 .font(.system(size: 13)).foregroundStyle(Palette.secondary)
                         }
                     }
-                    .frame(maxWidth: 960, alignment: .leading)
                     .padding(.horizontal, 36).padding(.top, 18).padding(.bottom, Space.xxl)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -325,10 +324,8 @@ private struct DuePicker: View {
 }
 
 extension View {
-    /// Centered in the page, inside a scroll view: a wrapping message measured at the split view's tiny probe
-    /// width grows tall, and outside a scroll view that height held the window open past the screen.
+    /// Centered in the page.
     func pageCentered() -> some View {
-        ScrollView { containerRelativeFrame(.vertical) }
-            .scrollBounceBehavior(.basedOnSize)
+        frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

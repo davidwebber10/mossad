@@ -13,6 +13,7 @@ struct ChatView: View {
     @State private var steps: [String] = []
     @State private var error: String?
     @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var current: Chat {
         chats.first { $0.id == selection } ?? draft
@@ -91,7 +92,7 @@ struct ChatView: View {
                                     Label(s, systemImage: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Palette.secondary)
                                 }
                                 Text(steps.isEmpty ? "Thinking…" : "Reading…").font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                                    .phaseAnimator([0.45, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
+                                    .phaseAnimator(reduceMotion ? [1] : [0.45, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
                             }
                         }
                         .id("running")
@@ -257,7 +258,11 @@ private struct ChatList: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(chats) { chat in
-                        ChatListRow(chat: chat, selected: selection == chat.id) { selection = chat.id }
+                        ChatListRow(chat: chat, selected: selection == chat.id) {
+                            selection = chat.id
+                            // The arrow keys then move on from here, as they did in the old list.
+                            focused = true
+                        }
                             .id(chat.id)
                             .contextMenu {
                                 Button("Delete chat", role: .destructive) { delete(chat) }

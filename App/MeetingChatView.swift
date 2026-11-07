@@ -16,6 +16,7 @@ struct MeetingChatView: View {
     @State private var steps: [String] = []
     @State private var error: String?
     @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var messages: [ChatMessage] { chat?.messages ?? [] }
 
@@ -34,7 +35,7 @@ struct MeetingChatView: View {
                                     Label(s, systemImage: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Palette.secondary)
                                 }
                                 Text("Thinking…").font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                                    .phaseAnimator([0.45, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
+                                    .phaseAnimator(reduceMotion ? [1] : [0.45, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
                             }
                         }
                         .id("running")
