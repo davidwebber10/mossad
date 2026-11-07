@@ -1,30 +1,39 @@
 import SwiftUI
 
-/// A person's initials in their color. The color comes from the name, so it is the same on every device and
-/// in every list.
+/// A person's initials on their hue, as the canvas draws avatars. The hue comes from the name, so it is the same
+/// on every device and in every list; the owner always has the first hue. Hollow marks someone Mossad has not met
+/// or not placed: a ring and quiet initials.
 struct PersonMark: View {
     let name: String
     var size: CGFloat = 28
+    var isOwner = false
+    var hollow = false
 
     var body: some View {
         Text(Self.initials(name))
-            .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
-            .foregroundStyle(.white)
+            .font(.system(size: Self.textSize(size), weight: .semibold))
+            .foregroundStyle(hollow ? Palette.secondary : .white)
             .frame(width: size, height: size)
-            .background(Self.color(for: name).gradient, in: Circle())
+            .background {
+                if hollow {
+                    Circle().strokeBorder(Palette.ring, lineWidth: 1.5)
+                } else {
+                    Circle().fill(isOwner ? Palette.speaker(0) : Self.color(for: name))
+                }
+            }
             .accessibilityHidden(true)
     }
 
-    static let palette: [Color] = [
-        Color(red: 0.04, green: 0.48, blue: 1), Color(red: 1, green: 0.58, blue: 0), Color(red: 0.69, green: 0.32, blue: 0.87),
-        Color(red: 0.2, green: 0.78, blue: 0.35), Color(red: 1, green: 0.18, blue: 0.33), Color(red: 0.19, green: 0.69, blue: 0.78),
-        Color(red: 0.37, green: 0.36, blue: 0.9), Color(red: 0.64, green: 0.52, blue: 0.37),
-    ]
+    /// The canvas: 11 on a 28 pt mark, 11.5 on 32, 15 on 44.
+    private static func textSize(_ size: CGFloat) -> CGFloat {
+        size < 36 ? min(11.5, size * 0.4) : size * 0.34
+    }
 
-    /// A stable hash: Swift's own `hashValue` changes on every launch.
+    /// A stable hash: Swift's own `hashValue` changes on every launch. The first hue is the owner's, so others
+    /// take one of the other eleven.
     static func color(for name: String) -> Color {
         let hash = name.lowercased().unicodeScalars.reduce(UInt32(5381)) { ($0 &<< 5) &+ $0 &+ $1.value }
-        return palette[Int(hash % UInt32(palette.count))]
+        return Palette.speaker(1 + Int(hash % UInt32(Palette.speakers.count - 1)))
     }
 
     static func initials(_ name: String) -> String {
