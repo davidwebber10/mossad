@@ -1,8 +1,8 @@
 import MossadCore
 import SwiftUI
 
-/// Chats with Claude over every meeting: the saved chats on the left, the open chat on the right. Links in the
-/// answers open the meeting at that moment.
+/// Chats with Claude over every meeting: the saved chats on the left, the open chat on the right. Times in the
+/// answers are chips that open the meeting at that moment. The composer is the page's only glass.
 struct ChatView: View {
     @EnvironmentObject var controller: AppController
     @State private var chats: [Chat] = []
@@ -18,13 +18,16 @@ struct ChatView: View {
         chats.first { $0.id == selection } ?? draft
     }
 
+    private var isEmpty: Bool { current.messages.isEmpty && running != current.id }
+
     var body: some View {
         HStack(spacing: 0) {
-            chatList.frame(width: 260)
-            Divider()
+            ChatList(chats: chats, selection: $selection, delete: delete)
+                .frame(width: 300)
+            Hairline(axis: .vertical)
             conversation.frame(maxWidth: .infinity)
         }
-        .background(Theme.background)
+        .background(Palette.window)
         .navigationTitle("Chat")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -35,105 +38,103 @@ struct ChatView: View {
         .onAppear(perform: reload)
         .onChange(of: controller.newChatRequest) { _, _ in newChat() }
         .onChange(of: controller.chatsVersion) { _, _ in reload() }
-    }
-
-    // MARK: List
-
-    private var chatList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            List(selection: $selection) {
-                ForEach(chats) { chat in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(chat.title).lineLimit(1)
-                        HStack(spacing: 4) {
-                            if chat.callID != nil { Image(systemName: "waveform").font(.system(size: 9)).foregroundStyle(.tint) }
-                            Text(shortTime(chat.updated)).font(.system(size: 11)).foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 3)
-                    .tag(chat.id)
-                    .contextMenu {
-                        Button("Delete chat", role: .destructive) { delete(chat) }
-                    }
-                }
-            }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
-            .overlay {
-                if chats.isEmpty {
-                    Text("Your chats show here.").font(.system(size: 12)).foregroundStyle(.tertiary)
-                }
-            }
-        }
+        .onChange(of: selection) { _, _ in error = nil }
     }
 
     // MARK: Conversation
 
     private var conversation: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
+        Group {
+            if isEmpty {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
-                        if let id = current.callID, let r = controller.meetings.first(where: { $0.id == id }) { MeetingPill(record: r) }
-                        if current.messages.isEmpty && running == nil { welcome }
-                        ForEach(current.messages) { message in
-                            MessageView(message: message).id(message.id)
-                        }
-                        if running == current.id {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(Array(steps.enumerated()), id: \.offset) { _, s in
-                                    Label(s, systemImage: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.secondary)
-                                }
-                                HStack(spacing: 8) {
-                                    ProgressView().controlSize(.small)
-                                    Text(steps.isEmpty ? "Thinking" : "Reading").font(.system(size: 12)).foregroundStyle(.secondary)
-                                }
-                            }
-                            .id("running")
-                        }
-                        if let error {
-                            Text(error).font(.system(size: 13)).foregroundStyle(Theme.recording)
-                        }
-                    }
-                    .padding(.horizontal, 32).padding(.vertical, 24)
-                    .frame(maxWidth: 820, alignment: .leading)
-                    .frame(maxWidth: .infinity)
+                    welcome
+                        .padding(.horizontal, 36)
+                        .padding(.bottom, 80)
+                        // Full width, so the scroll view (and its edge under the toolbar) spans the pane.
+                        .frame(maxWidth: .infinity)
+                        .containerRelativeFrame(.vertical)
                 }
-                .onChange(of: current.messages.count) { _, _ in
-                    withAnimation { proxy.scrollTo(current.messages.last?.id, anchor: .top) }
-                }
-                .onChange(of: steps.count) { _, _ in withAnimation { proxy.scrollTo("running", anchor: .bottom) } }
+                .scrollBounceBehavior(.basedOnSize)
+            } else {
+                exchange
             }
         }
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .safeAreaBar(edge: .bottom) {
             composer
-                .padding(.horizontal, 32).padding(.bottom, 18).padding(.top, 8)
-                .frame(maxWidth: 820)
+                .frame(maxWidth: isEmpty ? 720 : Self.column - LabelColumn<EmptyView>.labelWidth - Space.m)
+                .padding(.leading, isEmpty ? 0 : LabelColumn<EmptyView>.labelWidth + Space.m)
+                .frame(maxWidth: isEmpty ? 720 : Self.column, alignment: .leading)
+                .padding(.horizontal, 36).padding(.bottom, Space.l).padding(.top, 6)
                 .frame(maxWidth: .infinity)
         }
         .environment(\.openURL, OpenURLAction { url in controller.openLink(url) ? .handled : .systemAction })
     }
 
-    private var welcome: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: "sparkles").font(.system(size: 26)).foregroundStyle(Color.accentColor)
-            Text("Ask about your meetings").font(.system(size: 22, weight: .bold)).kerning(-0.3)
-            Text("Claude searches every call: who said what, what people agreed to and by when, what was decided, and which meetings covered a topic. Answers link to the meetings and the moments.")
-                .font(.system(size: 13)).foregroundStyle(.secondary).lineSpacing(3)
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(examples, id: \.self) { e in
-                    Button { question = e; send() } label: {
-                        Text(e).font(.system(size: 13)).frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 12).padding(.vertical, 9)
-                            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    /// The reading column of a chat: the label column and an answer at a comfortable measure.
+    private static let column: CGFloat = 880
+
+    private var exchange: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LabelColumnStack(spacing: Space.m) {
+                    if let id = current.callID, let r = controller.meetings.first(where: { $0.id == id }) {
+                        LabelColumn(label: "About", labelTopPadding: 6) { MeetingPill(record: r) }
                     }
-                    .buttonStyle(.plain)
+                    ForEach(current.messages) { m in
+                        ChatExchangeRow(message: m).id(m.id)
+                    }
+                    if running == current.id {
+                        LabelColumn(label: "Answer") {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(Array(steps.enumerated()), id: \.offset) { _, s in
+                                    Label(s, systemImage: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                                }
+                                Text(steps.isEmpty ? "Thinking…" : "Reading…").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                                    .phaseAnimator([0.45, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
+                            }
+                        }
+                        .id("running")
+                    }
+                    if let error {
+                        LabelColumn(label: "") { Text(error).font(.system(size: 13)).foregroundStyle(Palette.recording) }
+                    }
+                }
+                .frame(maxWidth: Self.column, alignment: .leading)
+                .padding(.horizontal, 36).padding(.top, 28).padding(.bottom, Space.xl)
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: current.messages.count) { _, _ in
+                withAnimation { proxy.scrollTo(current.messages.last?.id, anchor: .top) }
+            }
+            .onChange(of: steps.count) { _, _ in withAnimation { proxy.scrollTo("running", anchor: .bottom) } }
+        }
+    }
+
+    private var welcome: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Image(systemName: "sparkle")
+                .font(.system(size: 24, weight: .light))
+                .foregroundStyle(Palette.accent)
+                .accessibilityHidden(true)
+            Text("Ask about your meetings")
+                .font(.system(size: 26, weight: .semibold)).tracking(-0.52)
+                .foregroundStyle(Palette.ink)
+                .padding(.top, Space.l)
+                .accessibilityAddTraits(.isHeader)
+            Text("Every call is searchable: who said what, what people agreed to and by when, what was decided, which meetings covered a topic. Answers link to the meeting and the moment.")
+                .font(.system(size: 14)).lineSpacing(4)
+                .foregroundStyle(Palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Space.s)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(examples.enumerated()), id: \.offset) { i, e in
+                    ExampleQuestion(text: e, last: i == examples.count - 1) { question = e; send() }
                 }
             }
-            .padding(.top, 6)
+            .padding(.top, 22)
         }
-        .padding(.top, 40)
+        .frame(maxWidth: 620, alignment: .leading)
     }
 
     private var examples: [String] {
@@ -143,7 +144,7 @@ struct ChatView: View {
         return [
             "What did \(person) and I agree to last call, and was there a deadline?",
             "Which meetings this month were about the budget?",
-            "What do I owe people from this week's meetings?",
+            "What do I owe people from this week’s meetings?",
             "Summarize everything decided about Databricks.",
         ]
     }
@@ -151,21 +152,24 @@ struct ChatView: View {
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 10) {
             TextField(current.messages.isEmpty ? "Ask about your meetings" : "Ask a follow-up", text: $question, axis: .vertical)
-                .textFieldStyle(.plain).font(.system(size: 14)).lineLimit(1...6)
+                .textFieldStyle(.plain).font(.system(size: 13.5)).lineLimit(1...6)
+                .padding(.vertical, 4)
                 .focused($focused)
                 .onSubmit(send)
             Button(action: send) {
-                Image(systemName: "arrow.up").font(.system(size: 13, weight: .bold)).frame(width: 18, height: 18)
+                Image(systemName: "arrow.up").font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Palette.onAccent)
+                    .frame(width: 26, height: 26)
+                    .background(Palette.accentFill, in: Circle())
             }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.circle)
+            .buttonStyle(.plain)
             .disabled(!canSend)
+            .opacity(canSend ? 1 : 0.5)
             .keyboardShortcut(.return, modifiers: .command)
             .accessibilityLabel("Send")
         }
-        .padding(.leading, 18).padding(.trailing, 8).padding(.vertical, 8)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
-        .shadow(color: .black.opacity(0.1), radius: 10, y: 3)
+        .padding(.leading, 16).padding(.trailing, 7).padding(.vertical, 7)
+        .mossadGlass(cornerRadius: 20, interactive: true)
         .onAppear { focused = true }
     }
 
@@ -177,6 +181,11 @@ struct ChatView: View {
         chats = controller.chats.all()
         // Development hook: `--open-latest-chat`.
         if selection == nil, CommandLine.arguments.contains("--open-latest-chat") { selection = chats.first?.id }
+        // Development hook for screenshots: MOSSAD_CHAT=<the start of a chat id> opens that chat.
+        if selection == nil, CommandLine.arguments.contains("--ui-preview"),
+           let prefix = ProcessInfo.processInfo.environment["MOSSAD_CHAT"]?.uppercased() {
+            selection = chats.first { $0.id.uuidString.hasPrefix(prefix) }?.id
+        }
     }
 
     private func newChat() {
@@ -236,45 +245,114 @@ final class StepSink: Sendable {
     init(_ add: @escaping @Sendable (String) -> Void) { self.add = add }
 }
 
-struct MessageView: View {
-    let message: ChatMessage
-    @State private var showSteps = false
+/// The saved chats, newest first: the title on one line and the day under it. The arrow keys move the selection.
+private struct ChatList: View {
+    let chats: [Chat]
+    @Binding var selection: UUID?
+    let delete: (Chat) -> Void
+    @FocusState private var focused: Bool
 
     var body: some View {
-        switch message.role {
-        case .user:
-            Text(message.text)
-                .font(.system(size: 14))
-                .textSelection(.enabled)
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.leading, 80)
-        case .assistant:
-            VStack(alignment: .leading, spacing: 8) {
-                if !message.steps.isEmpty {
-                    Button { showSteps.toggle() } label: {
-                        Label("\(message.steps.count) \(message.steps.count == 1 ? "lookup" : "lookups")",
-                              systemImage: showSteps ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 11)).foregroundStyle(.tertiary)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 1) {
+                    ForEach(chats) { chat in
+                        ChatListRow(chat: chat, selected: selection == chat.id) { selection = chat.id }
+                            .id(chat.id)
+                            .contextMenu {
+                                Button("Delete chat", role: .destructive) { delete(chat) }
+                            }
+                            .accessibilityAction(named: "Delete chat") { delete(chat) }
                     }
-                    .buttonStyle(.plain)
-                    if showSteps {
-                        ForEach(Array(message.steps.enumerated()), id: \.offset) { _, s in
-                            Text(s).font(.system(size: 11)).foregroundStyle(.tertiary).padding(.leading, 16)
-                        }
+                    if chats.isEmpty {
+                        Text("Your chats show here.")
+                            .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                            .padding(.horizontal, 10).padding(.top, Space.s)
                     }
                 }
-                ChatMarkdown(text: message.text, bodyFont: .system(size: 14))
+                .padding(.leading, 4).padding(.trailing, Space.s).padding(.vertical, Space.s)
             }
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .scrollContentBackground(.hidden)
+            .focusable()
+            .focused($focused)
+            .focusEffectDisabled()
+            .onKeyPress(.downArrow) { move(1, proxy) }
+            .onKeyPress(.upArrow) { move(-1, proxy) }
         }
     }
 
+    private func move(_ by: Int, _ proxy: ScrollViewProxy) -> KeyPress.Result {
+        guard !chats.isEmpty else { return .ignored }
+        let index = selection.flatMap { id in chats.firstIndex { $0.id == id } }.map { min(max($0 + by, 0), chats.count - 1) } ?? 0
+        selection = chats[index].id
+        proxy.scrollTo(chats[index].id)
+        return .handled
+    }
 }
 
-/// The meeting a chat is about, as a small capsule that opens it.
+private struct ChatListRow: View {
+    let chat: Chat
+    let selected: Bool
+    let select: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: select) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(chat.title)
+                    .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                    .foregroundStyle(Palette.ink)
+                    .lineLimit(1).truncationMode(.tail)
+                HStack(spacing: 5) {
+                    if chat.callID != nil {
+                        Image(systemName: "waveform").font(.system(size: 9, weight: .medium)).foregroundStyle(Palette.tertiaryMark)
+                            .accessibilityLabel("About one meeting")
+                    }
+                    Text(shortTime(chat.updated))
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.secondary)
+            }
+            .padding(.vertical, 9).padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? Palette.selection : hovering ? Palette.fill.opacity(0.5) : .clear,
+                        in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// One example on the empty chat: a plain line with a hairline under it, that asks it.
+private struct ExampleQuestion: View {
+    let text: String
+    let last: Bool
+    let ask: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: ask) {
+            HStack(spacing: Space.s) {
+                Text(text).font(.system(size: 13)).foregroundStyle(Palette.ink)
+                Spacer(minLength: Space.s)
+                Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Palette.tertiaryMark)
+                    .opacity(hovering ? 1 : 0)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .overlay(alignment: .bottom) { if !last { Hairline() } }
+        .accessibilityHint("Asks this question")
+    }
+}
+
+/// The meeting a chat is about: its platform dot, title, and day on the fill. Opens it.
 struct MeetingPill: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
@@ -282,14 +360,14 @@ struct MeetingPill: View {
     var body: some View {
         Button { controller.openMeeting(record.id) } label: {
             HStack(spacing: 6) {
-                Image(systemName: "waveform").foregroundStyle(.tint)
-                Text(record.title).lineLimit(1)
-                Text(record.start.formatted(.dateTime.month(.abbreviated).day())).foregroundStyle(.secondary)
+                PlatformDot(platform: record.platform, size: 7)
+                Text(record.title).foregroundStyle(Palette.ink).lineLimit(1)
+                Text(record.start.formatted(.dateTime.month(.abbreviated).day())).foregroundStyle(Palette.secondary)
             }
-            .font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(Theme.surface, in: Capsule())
-            .overlay(Capsule().strokeBorder(Theme.separator))
+            .font(.system(size: 12.5, weight: .medium))
+            .padding(.horizontal, 10).frame(height: 26)
+            .background(Palette.fill, in: Capsule())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .help("Open this meeting")

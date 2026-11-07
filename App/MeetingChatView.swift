@@ -25,7 +25,7 @@ struct MeetingChatView: View {
                 LabelColumnStack(spacing: Space.m) {
                     if messages.isEmpty && !running { welcome }
                     ForEach(messages) { m in
-                        ExchangeRow(message: m).id(m.id)
+                        ChatExchangeRow(message: m).id(m.id)
                     }
                     if running {
                         LabelColumn(label: "Answer") {
@@ -174,7 +174,7 @@ struct MeetingChatView: View {
 }
 
 /// "You asked" with the question as a lede, or "Answer" with the reply and its lookups.
-private struct ExchangeRow: View {
+struct ChatExchangeRow: View {
     let message: ChatMessage
     @State private var showSteps = false
 

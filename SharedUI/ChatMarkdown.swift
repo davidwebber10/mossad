@@ -5,7 +5,7 @@ import SwiftUI
 struct ChatMarkdown: View {
     let text: String
     var bodyFont: Font = .body
-    /// mossad:// time links as quiet chips, as a meeting's own chat shows them.
+    /// mossad:// time links as quiet chips, as the chats on the Mac show them.
     var timeChips = false
 
     enum Block: Equatable {
@@ -49,7 +49,7 @@ struct ChatMarkdown: View {
         var out = AttributedString()
         for run in s.runs {
             var piece = AttributedString(s[run.range])
-            if let url = run.link, url.scheme == "mossad" {
+            if let url = run.link, url.scheme == "mossad", isMoment(url) {
                 piece = AttributedString("\u{00A0}\u{00A0}") + piece + AttributedString("\u{00A0}\u{00A0}")
                 piece.link = url
                 piece.backgroundColor = Palette.fill
@@ -59,6 +59,11 @@ struct ChatMarkdown: View {
             out += piece
         }
         return out
+    }
+
+    /// A link to a moment (`?t=`) is a chip; a link to a whole meeting stays a link, as its text is the title.
+    private static func isMoment(_ url: URL) -> Bool {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains { $0.name == "t" } == true
     }
 
     static func blocks(_ text: String) -> [Block] {
