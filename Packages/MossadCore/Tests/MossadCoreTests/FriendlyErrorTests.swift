@@ -107,6 +107,19 @@ final class FriendlyErrorTests: XCTestCase {
         assertPlain(credit); assertPlain(quota); assertPlain(slow)
     }
 
+    func testTheRoomRecorderPausedByAnotherApp() {
+        let paused = FriendlyError(kind: .interrupted, context: .recording)
+        XCTAssertEqual(paused.title, "Recording is paused")
+        XCTAssertEqual(paused.message, "Another app used the microphone. Tap Resume to keep recording.")
+        XCTAssertTrue(paused.canRetry)
+        XCTAssertEqual(paused.visibility, .always)
+        XCTAssertTrue(paused.isAboutRecording)
+        let resume = FriendlyError(kind: .resumeFailed, context: .recording)
+        XCTAssertEqual(resume.title, "Recording couldn't resume")
+        XCTAssertTrue(resume.canRetry)
+        assertPlain(paused); assertPlain(resume)
+    }
+
     func testTheRoomRecorderOSStatus() {
         let f = FriendlyError(NSError(domain: NSOSStatusErrorDomain, code: -50), context: .recording)
         XCTAssertEqual(f.title, "Recording couldn't start")

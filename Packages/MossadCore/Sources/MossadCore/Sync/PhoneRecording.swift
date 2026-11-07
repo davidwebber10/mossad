@@ -84,3 +84,16 @@ public enum CallID {
         return f.string(from: date)
     }
 }
+
+/// What the room recorder does when the system interrupts its audio, such as for a phone call.
+public enum RoomInterruption {
+    public enum Action: Equatable, Sendable { case none, pause, resume, tellOwner }
+
+    /// The end of an interruption resumes only a pause the interruption caused, and only when the system allows
+    /// it; otherwise the owner hears about it, because a recording that stays paused loses the meeting.
+    public static func action(began: Bool, shouldResume: Bool, recording: Bool, pausedByInterruption: Bool) -> Action {
+        if began { return recording ? .pause : .none }
+        guard pausedByInterruption, !recording else { return .none }
+        return shouldResume ? .resume : .tellOwner
+    }
+}

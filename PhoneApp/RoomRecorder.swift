@@ -17,6 +17,8 @@ final class RoomRecorder: ObservableObject {
     private var started = Date()
     private var id = ""
     private var timer: Timer?
+    /// The pause came from the system, not the owner, so its end may resume the recording.
+    private var pausedByInterruption = false
 
     func start(into dir: URL) async {
         guard await AVAudioApplication.requestRecordPermission() else {
@@ -98,22 +100,60 @@ final class RoomRecorder: ObservableObject {
         levels = Array(levels.dropFirst()) + [state == .recording ? max(0, min(1, (db + 50) / 50)) : 0]
     }
 
-    /// A phone call pauses the recording; it does not end it.
+    /// A phone call pauses the recording; it does not end it. When the call ends the recording resumes, or the
+    /// owner reads that it is still paused.
     @objc private func interrupted(_ note: Notification) {
-        guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt, AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
-        Task { @MainActor in self.pause() }
+        guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        let options = (note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt).map(AVAudioSession.InterruptionOptions.init) ?? []
+        Task { @MainActor in self.interruption(began: type == .began, shouldResume: options.contains(.shouldResume)) }
+    }
+
+    private func interruption(began: Bool, shouldResume: Bool) {
+        switch RoomInterruption.action(began: began, shouldResume: shouldResume, recording: state == .recording,
+                                       pausedByInterruption: pausedByInterruption) {
+        case .pause:
+            pause()
+            pausedByInterruption = true
+        case .resume: resume()
+        case .tellOwner: error = FriendlyError(kind: .interrupted, context: .recording)
+        case .none: break
+        }
     }
 
     func pause() {
         guard state == .recording else { return }
         recorder?.pause()
+        pausedByInterruption = false
         state = .paused
     }
 
+    /// Stays paused, with the reason on screen, unless the recorder really records again: a screen that says
+    /// "Recording" while nothing is recorded loses the rest of the meeting.
     func resume() {
-        guard state == .paused else { return }
-        try? AVAudioSession.sharedInstance().setActive(true)
-        recorder?.record()
+        guard state == .paused, let recorder else { return }
+        var failure: Error?
+        var recording = false
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            recording = recorder.record()
+        } catch { failure = error }
+        if !recording {
+            // The session may need its setup again after another app had the microphone.
+            do {
+                try Self.prepareSession()
+                recording = recorder.record()
+            } catch { failure = (error as? RecorderError)?.underlying ?? error }
+        }
+        guard recording else {
+            Log.error("Room recording could not resume: \(failure.map { "\($0)" } ?? "the recorder did not start")")
+            let busy = failure.map { FriendlyError($0, context: .recording).kind == .microphoneBusy } ?? false
+            error = FriendlyError(kind: busy ? .microphoneBusy : .resumeFailed, context: .recording,
+                                  technical: failure.map { FriendlyError.clean("\($0)") } ?? "The recorder did not start.")
+            return
+        }
+        pausedByInterruption = false
+        error = nil
         state = .recording
     }
 
@@ -176,10 +216,10 @@ struct RecordingView: View {
                             .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
                     }
                     if let error = recorder.error {
-                        ErrorCard(error: error, retry: error.canRetry && recorder.state == .idle ? {
+                        ErrorCard(error: error, retryTitle: recorder.state == .paused ? "Resume" : "Try again", retry: !error.canRetry ? nil : recorder.state == .idle ? {
                             recorder.error = nil
                             Task { await recorder.start(into: store.recordingsFolder) }
-                        } : nil)
+                        } : recorder.state == .paused ? { recorder.resume() } : nil)
                     }
                     Text("Mossad on your Mac writes the notes: the transcript, who said what, and the summary.")
                         .textRole(.secondary).foregroundStyle(Palette.tertiary)

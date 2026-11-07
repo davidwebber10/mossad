@@ -59,7 +59,7 @@ public struct FriendlyError: Equatable, Sendable {
     public enum Kind: String, Sendable {
         case cancelled, offline, unreachable, timedOut, serverTrouble, busy, rateLimited
         case unauthorized, wrongSecret, missingKey, billing, rejected, tooLarge, refused, unreadable, transcriptionFailed
-        case notMossad, notConnected, microphoneBusy, microphoneDenied, recordingFailed, diskFull, fileMissing, notSignedIn, iCloudFull
+        case notMossad, notConnected, microphoneBusy, microphoneDenied, recordingFailed, interrupted, resumeFailed, diskFull, fileMissing, notSignedIn, iCloudFull
         case badFile, tooManySteps, other
 
         var isTransient: Bool {
@@ -79,7 +79,7 @@ public struct FriendlyError: Equatable, Sendable {
 
     /// Recording problems use the recording color; everything else uses the accent.
     public var isAboutRecording: Bool {
-        context == .recording || [.microphoneBusy, .microphoneDenied, .recordingFailed].contains(kind)
+        context == .recording || [.microphoneBusy, .microphoneDenied, .recordingFailed, .interrupted, .resumeFailed].contains(kind)
     }
 
     public func shouldShow(failures: Int) -> Bool {
@@ -167,6 +167,8 @@ public struct FriendlyError: Equatable, Sendable {
         case .microphoneBusy: return ("Another app is using the microphone", "End the call or recording there, then try again.", true)
         case .microphoneDenied: return ("Mossad can't use the microphone", "Allow it in \(micSettings), then try again.", false)
         case .recordingFailed: return ("Recording couldn't start", "Try again in a moment. The microphone may be busy.", true)
+        case .interrupted: return ("Recording is paused", "Another app used the microphone. Tap Resume to keep recording.", true)
+        case .resumeFailed: return ("Recording couldn't resume", "Tap Resume to try again. The microphone may be busy.", true)
         case .diskFull: return (isPhone ? "This iPhone is full" : "Your disk is full", "Free some space, then try again.", false)
         case .fileMissing: return ("Mossad couldn't find the file", "Choose the file again.", false)
         case .notSignedIn: return ("You're not signed in to iCloud", "Sign in to iCloud in Settings, and Mossad syncs again.", false)
