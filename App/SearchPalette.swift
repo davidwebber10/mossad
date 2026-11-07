@@ -27,6 +27,9 @@ struct SearchPalette: View {
     /// The arrows scroll the list; a row that slides under a resting pointer must not take the selection back.
     @State private var keyedAt = Date.distantPast
     @FocusState private var fieldFocused: Bool
+    /// The window the palette sits in, so its key monitor takes keys only from there.
+    @State private var window: NSWindow?
+    @State private var keyMonitor: Any?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -48,9 +51,20 @@ struct SearchPalette: View {
                 .padding(.top, PaletteMetrics.top)
                 .padding(.horizontal, 40)
         }
+        .background(WindowReader { window = $0 })
+        .defaultFocus($fieldFocused, true)
         .onAppear {
             fieldFocused = true
             selection = list.first
+            startKeys()
+        }
+        .onDisappear(perform: stopKeys)
+        // A focus set as an overlay first appears does not always take on macOS; set it again once it is on screen.
+        .task {
+            for delay in [30, 150] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                if !fieldFocused { fieldFocused = true }
+            }
         }
         .onChange(of: model.list) { old, new in
             // A new answer selects its first row; an expanded meeting keeps the row where the "more" row was.
@@ -100,17 +114,6 @@ struct SearchPalette: View {
                 .focused($fieldFocused)
                 .accessibilityLabel("Search everything")
                 .onChange(of: model.query) { _, _ in model.search() }
-                .onKeyPress(.downArrow) { key(list.moved(selection, by: 1)) }
-                .onKeyPress(.upArrow) { key(list.moved(selection, by: -1)) }
-                .onKeyPress(.tab, phases: .down) { press in
-                    key(list.nextSection(after: selection, backward: press.modifiers.contains(.shift)))
-                }
-                .onKeyPress(.return, phases: .down) { press in
-                    openSelection(transcript: press.modifiers.contains(.command))
-                    return .handled
-                }
-                .onKeyPress(.escape) { close(); return .handled }
-                .onExitCommand(perform: close)
             if !model.query.isEmpty {
                 Button { model.query = "" } label: {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 15)).foregroundStyle(Palette.tertiaryMark)
@@ -123,11 +126,53 @@ struct SearchPalette: View {
         .frame(height: PaletteMetrics.fieldHeight)
     }
 
-    private func key(_ id: String?) -> KeyPress.Result {
-        guard let id else { return .handled }
+    private func key(_ id: String?) {
+        guard let id else { return }
         keyedAt = Date()
         selection = id
-        return .handled
+    }
+
+    // MARK: Keys
+
+    /// The palette's keys come from a local monitor rather than the field's key handlers: AppKit's key view loop
+    /// takes Tab, and Command-Return or a focus that did not take never reach the field. The monitor sees every
+    /// key of the window first, while the palette is open and no sheet is over it.
+    private func startKeys() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            handle(event) ? nil : event
+        }
+    }
+
+    private func stopKeys() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
+    }
+
+    private func handle(_ event: NSEvent) -> Bool {
+        guard let host = window ?? NSApp.mainWindow, event.window === host, host.attachedSheet == nil else { return false }
+        let editor = host.firstResponder as? NSTextView
+        let flags = event.modifierFlags
+        if let action = PaletteKey(keyCode: event.keyCode, shift: flags.contains(.shift), command: flags.contains(.command),
+                                   option: flags.contains(.option), control: flags.contains(.control),
+                                   composing: editor?.hasMarkedText() ?? false) {
+            switch action {
+            case .move(let by): key(list.moved(selection, by: by))
+            case .nextGroup(let backward): key(list.nextSection(after: selection, backward: backward))
+            case .open(let transcript): openSelection(transcript: transcript)
+            case .close: close()
+            }
+            return true
+        }
+        // Typing while the field lost the focus goes to the field, not to the page under the veil.
+        if !fieldFocused, flags.intersection([.command, .control, .option]).isEmpty, editor?.hasMarkedText() != true,
+           let typed = event.characters, !typed.isEmpty, typed.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }),
+           !(0xF700...0xF8FF).contains(typed.unicodeScalars.first!.value) {
+            model.query += typed
+            fieldFocused = true
+            return true
+        }
+        return false
     }
 
     // MARK: Results
@@ -424,5 +469,28 @@ private struct MoreContent: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(count) more in this meeting")
         .accessibilityHint("Shows them here")
+    }
+}
+
+/// Reports the window a view sits in, once it has one.
+private struct WindowReader: NSViewRepresentable {
+    let found: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView { Reader(found: found) }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    private final class Reader: NSView {
+        let found: (NSWindow) -> Void
+        init(found: @escaping (NSWindow) -> Void) {
+            self.found = found
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { nil }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // Later, not during the view update that moved it.
+            guard let window else { return }
+            DispatchQueue.main.async { [found] in found(window) }
+        }
     }
 }
