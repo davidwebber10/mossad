@@ -74,11 +74,15 @@ struct MeetingEntry: Sendable {
     var kind: String?
     var tags: [String]
     var title: IndexedField
+    /// The calendar and generated titles when they differ from the shown one, so a rename hides neither.
+    var otherTitles: [IndexedField]
     var kindField: IndexedField?
     var tagFields: [IndexedField]
     var tagKeys: [String]
-    /// Speaker names and attendees.
+    /// Speaker names and attendees. An email's words are only those before the "@".
     var personFields: [IndexedField]
+    /// Attendee emails, lowercased, for a query that is a whole email.
+    var emails: [String]
     /// Named speakers, for the People counts.
     var speakers: Set<String>
     var outcomes: [OutcomeEntry]
@@ -199,6 +203,32 @@ public struct SearchIndex: Sendable {
         return IndexedField(text: text, terms: terms, spans: tokens.map(\.range))
     }
 
+    /// An email shown whole but searched by the part before the "@": the domain is every colleague's, not a name.
+    mutating func personField(_ text: String, names: Bool) -> IndexedField {
+        guard let at = SearchIndex.emailAt(text) else { return field(text, names: names) }
+        let tokens = SearchTokenizer.tokens(text).filter { $0.range.upperBound <= at }
+        let terms = tokens.map { vocab.intern($0.term) }
+        if names {
+            for (id, t) in zip(terms, tokens) where nameTerms[id] == nil { nameTerms[id] = Array(t.term.unicodeScalars) }
+        }
+        return IndexedField(text: text, terms: terms, spans: tokens.map(\.range))
+    }
+
+    /// The UTF-8 offset of the "@" in a text that is one email address, or nil.
+    static func emailAt(_ text: String) -> Int? {
+        guard normalizedEmail(text) != nil, let at = text.utf8.firstIndex(of: UInt8(ascii: "@")) else { return nil }
+        return text.utf8.distance(from: text.utf8.startIndex, to: at)
+    }
+
+    /// The text lowercased when it is one email address: something before an "@", and a dot after it.
+    static func normalizedEmail(_ text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespaces).lowercased()
+        let parts = t.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty, parts[1].contains("."), !parts[1].hasPrefix("."), !parts[1].hasSuffix("."),
+              !t.contains(where: \.isWhitespace) else { return nil }
+        return t
+    }
+
     private mutating func insert(_ r: CallRecord) {
         if let old = slotOf[r.id] { kill(old) }
         let slot = Int32(slots.count)
@@ -210,12 +240,19 @@ public struct SearchIndex: Sendable {
         let actions = r.actionItems.enumerated().map { i, a in (OutcomeHit.Kind.actionItem, i, TimeInterval?.none, a.text) }
         var entry = MeetingEntry(
             id: r.id, start: r.start, end: r.end, platform: r.platform, kind: r.kind, tags: r.tags,
-            title: field(r.title, names: true), kindField: nil, tagFields: [], tagKeys: r.tags.map(SearchTokenizer.key),
-            personFields: [], speakers: speakers, outcomes: [], utterances: r.utterances, displayNames: names,
+            title: field(r.title, names: true), otherTitles: [], kindField: nil, tagFields: [], tagKeys: r.tags.map(SearchTokenizer.key),
+            personFields: [], emails: [], speakers: speakers, outcomes: [], utterances: r.utterances, displayNames: names,
             turnBase: Int32(turnSlot.count))
+        var titles = [r.title]
+        for t in [r.calendarTitle, r.generatedTitle] {
+            guard let t, !t.trimmingCharacters(in: .whitespaces).isEmpty, !titles.contains(t) else { continue }
+            titles.append(t)
+            entry.otherTitles.append(field(t, names: true))
+        }
         entry.kindField = r.kind.map { field($0) }
         entry.tagFields = r.tags.map { field($0) }
-        entry.personFields = people.map { field($0, names: true) }
+        entry.personFields = people.map { personField($0, names: true) }
+        entry.emails = people.compactMap(SearchIndex.normalizedEmail)
         entry.outcomes = (decisions + actions).map { OutcomeEntry(kind: $0.0, position: $0.1, time: $0.2, field: field($0.3)) }
         for u in r.utterances {
             for t in SearchTokenizer.tokens(u.text) { termStore.append(vocab.intern(t.term)) }
@@ -286,7 +323,7 @@ public struct SearchIndex: Sendable {
         var seen: Set<String> = []
         for p in profiles where !p.name.hasPrefix("Speaker ") && seen.insert(p.name).inserted {
             let c = counts[p.name]
-            out.append(PersonEntry(name: field(p.name, names: true), email: p.email.map { field($0) }, isOwner: p.isOwner,
+            out.append(PersonEntry(name: field(p.name, names: true), email: p.email.map { personField($0, names: false) }, isOwner: p.isOwner,
                                    meetings: c?.meetings ?? 0, lastMet: c?.last))
         }
         for (name, c) in counts.sorted(by: { $0.key < $1.key }) where seen.insert(name).inserted {

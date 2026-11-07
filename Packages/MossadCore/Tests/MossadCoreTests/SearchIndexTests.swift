@@ -92,6 +92,85 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertEqual(meetingIDs(search(index, "stnd")), [], "Words under 5 letters need an exact prefix")
     }
 
+    func testEmailDomainsAreNotPeople() {
+        var r = meeting("1", title: "Budget")
+        r.attendees = ["mike.smith@polywood.com", "dana@polywood.com"]
+        let index = SearchIndex(records: [r, meeting("2", title: "Cost review")],
+                                people: [profile("Michael Ross", email: "mross@acme.com")])
+        XCTAssertEqual(meetingIDs(search(index, "poly")), [], "The domain is not a person")
+        XCTAssertEqual(meetingIDs(search(index, "co")), ["2"], "Nor is com")
+        XCTAssertEqual(personNames(search(index, "acme")), [])
+        XCTAssertEqual(meetingIDs(search(index, "@poly")), [])
+        XCTAssertEqual(meetingIDs(search(index, "smith")), ["1"], "The part before the @ still counts")
+        XCTAssertEqual(meetingIDs(search(index, "@dana")), ["1"])
+        XCTAssertEqual(personNames(search(index, "mross")), ["Michael Ross"])
+    }
+
+    func testAnExactEmailFindsItsMeetingsAndPerson() {
+        var r = meeting("1", title: "Budget")
+        r.attendees = ["mike.smith@polywood.com"]
+        let index = SearchIndex(records: [r, meeting("2", title: "Polywood com review")],
+                                people: [profile("Michael Ross", email: "mross@acme.com")])
+        XCTAssertEqual(meetingIDs(search(index, "Mike.Smith@polywood.com")), ["1"])
+        let person = search(index, "mross@acme.com")
+        XCTAssertEqual(personNames(person), ["Michael Ross"])
+        XCTAssertEqual(meetingIDs(search(index, "mross@acme.com")), [])
+        guard case .meeting(let hit) = search(index, "mike.smith@polywood.com").topHit else { return XCTFail("Expected a meeting") }
+        XCTAssertEqual(hit.context?.text, "mike.smith@polywood.com")
+    }
+
+    func testOtherTitlesStillFindARenamedMeeting() {
+        var r = meeting("1", title: "Weekly sync")
+        r.customTitle = "Budget call"
+        r.generatedTitle = "Freight rates and carriers"
+        let index = SearchIndex(records: [r])
+        XCTAssertEqual(meetingIDs(search(index, "budget")), ["1"])
+        XCTAssertEqual(meetingIDs(search(index, "weekly")), ["1"], "The calendar title")
+        XCTAssertEqual(meetingIDs(search(index, "carriers")), ["1"], "The generated title")
+        guard case .meeting(let hit) = search(index, "weekly").topHit else { return XCTFail("Expected a meeting") }
+        XCTAssertEqual(hit.title.text, "Budget call")
+        XCTAssertEqual(hit.context?.text, "Weekly sync")
+        XCTAssertEqual(hit.context?.matchedStrings, ["Weekly"])
+    }
+
+    func testTheShownTitleOutranksAnOtherTitle() {
+        var renamed = meeting("renamed", title: "Freight review", daysAgo: 1)
+        renamed.customTitle = "Budget call"
+        let index = SearchIndex(records: [renamed, meeting("plain", title: "Freight plan", daysAgo: 30)])
+        XCTAssertEqual(meetingIDs(search(index, "freight")), ["plain", "renamed"])
+    }
+
+    func testOneLetterWordsMatchOnlyTitlesAndNames() {
+        let index = SearchIndex(
+            records: [
+                meeting("1", title: "Budget review", tags: ["Brand"], names: ["them:A": "Bill Ross"],
+                        turns: [("them:A", "bananas are bright")], actions: [ActionItem(owner: nil, task: "Buy bananas")]),
+            ],
+            people: [profile("Bill Ross")])
+        let r = search(index, "b")
+        XCTAssertEqual(meetingIDs(r), ["1"])
+        XCTAssertEqual(personNames(r), ["Bill Ross"])
+        XCTAssertTrue(r.moments.isEmpty, "Not in the transcript")
+        XCTAssertTrue(r.decisionsAndActions.isEmpty)
+        guard case .meeting(let hit) = r.topHit else { return XCTFail("Expected a meeting") }
+        XCTAssertEqual(hit.title.matchedStrings, ["Budget"])
+        XCTAssertEqual(meetingIDs(search(index, "u")), [], "Only at word starts")
+        XCTAssertTrue(search(index, "bananas b").moments.isEmpty)
+        XCTAssertEqual(momentIDs(search(index, "ba")), ["1"], "Two letters reach the transcript")
+    }
+
+    func testACancelledSearchStopsEarly() async {
+        let index = SearchIndex(records: [meeting("1", title: "Freight", turns: [("them:A", "freight")])])
+        let at = now
+        let task = Task.detached { () -> SearchResults in
+            while !Task.isCancelled { await Task.yield() }
+            return index.search("freight", now: at)
+        }
+        task.cancel()
+        let r = await task.value
+        XCTAssertTrue(r.isEmpty)
+    }
+
     func testNicknamesFindPeople() {
         let index = SearchIndex(
             records: [meeting("1", title: "Pricing", names: ["them:A": "Michael Ross"])],
@@ -289,7 +368,7 @@ final class SearchIndexTests: XCTestCase {
         let b = meeting("2", title: "Other", turns: [("them:A", "legacy too")])
         var index = SearchIndex(records: [a, b])
         var changed = a
-        changed.customTitle = "Fresh title"
+        changed.calendarTitle = "Fresh title"
         changed.utterances[0].text = "brand new words"
         index.update(changed)
         XCTAssertEqual(meetingIDs(search(index, "fresh")), ["1"])

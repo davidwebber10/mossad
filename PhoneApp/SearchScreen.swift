@@ -53,6 +53,9 @@ struct SearchScreen: View {
         }
     }
 
+    @concurrent
+    nonisolated private static func run(_ text: String, on index: SearchIndex) async -> SearchResults { index.search(text) }
+
     /// Runs off the main thread on a copy of the index; a newer keystroke cancels it.
     private func search() async {
         let q = query
@@ -61,7 +64,8 @@ struct SearchScreen: View {
             return
         }
         let index = store.searchIndex
-        let found = await Task.detached(priority: .userInitiated) { index.search(q) }.value
+        // Not detached, so a newer keystroke's cancel reaches the search and it stops early.
+        let found = await Self.run(q, on: index)
         guard !Task.isCancelled else { return }
         if found.query != results.query { expanded = [:] }
         results = found

@@ -7,6 +7,8 @@ struct ParsedQuery: Equatable {
     var words: [String] = []
     var tag: String?
     var person: [String] = []
+    /// The query when it is one whole email address, lowercased.
+    var email: String?
 
     init(_ text: String) {
         var chunks = text.split(whereSeparator: \.isWhitespace).map(String.init)
@@ -20,9 +22,10 @@ struct ParsedQuery: Equatable {
             chunks.removeFirst()
         }
         words = Array(SearchTokenizer.terms(chunks.joined(separator: " ")).prefix(Self.maxWords))
+        if chunks.count == 1 { email = SearchIndex.normalizedEmail(chunks[0]) }
     }
 
-    var isEmpty: Bool { words.isEmpty && tag == nil && person.isEmpty }
+    var isEmpty: Bool { words.isEmpty && tag == nil && person.isEmpty && email == nil }
 }
 
 /// How each vocabulary word matches one query word: a code per word id, the best kind of match it allows.
@@ -30,12 +33,16 @@ struct QueryWord {
     static let exact: UInt8 = 4, prefix: UInt8 = 3, nickname: UInt8 = 2, typo: UInt8 = 1
 
     let text: String
+    /// One letter: it matches only word starts in titles and names, where it narrows; in a transcript it matches
+    /// nearly every turn.
+    let isShort: Bool
     /// Words that start with the query word, for reading postings.
     let prefixIDs: [Int32]
     private var codes: [UInt8]
 
     init(_ text: String, in index: SearchIndex) {
         self.text = text
+        isShort = text.unicodeScalars.count < 2
         let vocab = index.vocab
         codes = [UInt8](repeating: 0, count: vocab.count)
         prefixIDs = vocab.withPrefix(text)
@@ -51,10 +58,12 @@ struct QueryWord {
         }
     }
 
-    /// The match quality of a word in a field, or nil. Nicknames count only in names; typos only in names and titles.
+    /// The match quality of a word in a field, or nil. Nicknames count only in names; typos and one-letter words
+    /// only in names and titles, the fields that allow typos.
     @inline(__always)
     func quality(_ id: Int32, names: Bool = false, typos: Bool = false) -> Double? {
-        switch codes[Int(id)] {
+        if isShort, !typos { return nil }
+        return switch codes[Int(id)] {
         case Self.exact: 1
         case Self.prefix: 0.8
         case Self.nickname: names ? 0.9 : nil
@@ -101,6 +110,8 @@ struct QueryWord {
 /// Field weights: how much a match in each field counts.
 enum SearchWeight {
     static let title = 10.0
+    /// The calendar or generated title of a meeting shown under another.
+    static let otherTitle = 6.0
     static let person = 8.0
     static let tag = 6.0
     static let meetingPerson = 4.0
@@ -118,20 +129,27 @@ enum SearchWeight {
 extension SearchIndex {
     public func search(_ query: String, limits: SearchLimits = .standard, now: Date = Date()) -> SearchResults {
         let parsed = ParsedQuery(query)
-        guard !parsed.isEmpty else { return .empty }
+        guard !parsed.isEmpty, !Task.isCancelled else { return .empty }
+        var r = SearchResults(query: query)
+        if let email = parsed.email, parsed.tag == nil, parsed.person.isEmpty { return emailResults(email, r, limits: limits, now: now) }
         let words = parsed.words.map { QueryWord($0, in: self) }
         let personWords = parsed.person.map { QueryWord($0, in: self) }
         let allowed = allowedSlots(tag: parsed.tag, person: personWords)
         let filtered = allowed != nil
-        var r = SearchResults(query: query)
+        // A one-letter word matches only titles and names, so the transcript, outcomes, and chats cannot hold it.
+        let deep = !words.isEmpty && !words.contains(where: \.isShort)
 
         var meetings = filtered && words.isEmpty ? filteredMeetings(allowed!, now: now) : matchMeetings(words, allowed: allowed, now: now)
         var people = matchPeople(words.isEmpty ? personWords : words, now: now)
-        var moments = words.isEmpty ? [] : momentGroups(words, allowed: allowed, limits: limits, now: now)
-        var outcomes = words.isEmpty ? [] : matchOutcomes(words, allowed: allowed, now: now)
+        // A newer keystroke cancels this search; the transcript is the costly part.
+        guard !Task.isCancelled else { return .empty }
+        var moments = deep ? momentGroups(words, allowed: allowed, limits: limits, now: now) : []
+        guard !Task.isCancelled else { return .empty }
+        var outcomes = deep ? matchOutcomes(words, allowed: allowed, now: now) : []
         let callIDs = allowed.map { Set($0.map { slots[Int($0)]!.id }) }
         var tasks = words.isEmpty ? [] : matchTasks(words, callIDs: callIDs, now: now)
-        var chats = words.isEmpty ? [] : matchChats(words, callIDs: callIDs, now: now)
+        var chats = deep ? matchChats(words, callIDs: callIDs, now: now) : []
+        guard !Task.isCancelled else { return .empty }
 
         let candidates: [SearchHit?] = [
             meetings.first.map(SearchHit.meeting), people.first.map(SearchHit.person),
@@ -158,6 +176,29 @@ extension SearchIndex {
         r.decisionsAndActions = Array(outcomes.prefix(limits.decisionsAndActions))
         r.tasks = Array(tasks.prefix(limits.tasks))
         r.chats = Array(chats.prefix(limits.chats))
+        return r
+    }
+
+    /// A whole email address: the meetings it attended and the person with it, matched exactly.
+    private func emailResults(_ email: String, _ base: SearchResults, limits: SearchLimits, now: Date) -> SearchResults {
+        var r = base
+        var meetings = slots.compactMap { $0 }.filter { $0.emails.contains(email) }.sorted { $0.start > $1.start }.map { e in
+            let shown = e.personFields.first { SearchIndex.normalizedEmail($0.text) == email }?.text ?? email
+            let context = SearchText(shown, matches: [shown.startIndex..<shown.endIndex])
+            return meetingHit(e, title: SearchText(e.title.text), context: context, score: SearchWeight.meetingPerson * recency(e.start, now: now))
+        }
+        var people = self.people.filter { $0.email.flatMap { SearchIndex.normalizedEmail($0.text) } == email }.map { p in
+            personHit(p, name: SearchText(p.name.text), score: SearchWeight.person * recency(p.lastMet, now: now))
+        }
+        if let p = people.first {
+            r.topHit = .person(p)
+            people.removeFirst()
+        } else if let m = meetings.first {
+            r.topHit = .meeting(m)
+            meetings.removeFirst()
+        }
+        r.meetings = Array(meetings.prefix(limits.meetings))
+        r.people = Array(people.prefix(limits.people))
         return r
     }
 
@@ -255,6 +296,7 @@ extension SearchIndex {
             var all = true
             for w in words {
                 var b = (best(e.title, w, typos: true) ?? 0) * SearchWeight.title
+                for f in e.otherTitles { b = max(b, (best(f, w, typos: true) ?? 0) * SearchWeight.otherTitle) }
                 for f in e.tagFields + (e.kindField.map { [$0] } ?? []) { b = max(b, (best(f, w) ?? 0) * SearchWeight.tag) }
                 for f in e.personFields { b = max(b, (best(f, w, names: true, typos: true) ?? 0) * SearchWeight.meetingPerson) }
                 if b == 0 { all = false; break }
@@ -263,6 +305,7 @@ extension SearchIndex {
             guard all else { continue }
             var bonus = 0.0
             if hasPhrase(e.title.terms, words) { bonus = SearchWeight.title }
+            for f in e.otherTitles where hasPhrase(f.terms, words) { bonus = max(bonus, SearchWeight.otherTitle) }
             for f in e.tagFields + (e.kindField.map { [$0] } ?? []) where hasPhrase(f.terms, words) { bonus = max(bonus, SearchWeight.tag) }
             for f in e.personFields where hasPhrase(f.terms, words) { bonus = max(bonus, SearchWeight.meetingPerson) }
             total += bonus * SearchWeight.phrase * Double(words.count)
@@ -278,13 +321,15 @@ extension SearchIndex {
 
     /// The field outside the title that matched the most query words, shown under the title.
     private func context(_ e: MeetingEntry, _ words: [QueryWord]) -> SearchText? {
-        let fields = e.tagFields.map { ($0, false) } + (e.kindField.map { [($0, false)] } ?? []) + e.personFields.map { ($0, true) }
-        var pick: (IndexedField, Bool, Int)?
-        for (f, names) in fields {
-            let n = words.filter { best(f, $0, names: names, typos: names) != nil }.count
-            if n > (pick?.2 ?? 0) { pick = (f, names, n) }
+        // (field, names, typos): titles allow typos but not nicknames.
+        let fields = e.otherTitles.map { ($0, false, true) } + e.tagFields.map { ($0, false, false) }
+            + (e.kindField.map { [($0, false, false)] } ?? []) + e.personFields.map { ($0, true, true) }
+        var pick: (IndexedField, Bool, Bool, Int)?
+        for (f, names, typos) in fields {
+            let n = words.filter { best(f, $0, names: names, typos: typos) != nil }.count
+            if n > (pick?.3 ?? 0) { pick = (f, names, typos, n) }
         }
-        return pick.map { SearchText($0.0.text, matches: highlights($0.0, words, names: $0.1, typos: $0.1)) }
+        return pick.map { SearchText($0.0.text, matches: highlights($0.0, words, names: $0.1, typos: $0.2)) }
     }
 
     private func meetingHit(_ e: MeetingEntry, title: SearchText, context: SearchText?, score: Double) -> MeetingHit {
