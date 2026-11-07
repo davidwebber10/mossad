@@ -1,3 +1,4 @@
+import AppKit
 import MossadCore
 import SwiftUI
 
@@ -134,21 +135,43 @@ struct TurnOffMenu<Label: View>: View {
     @EnvironmentObject var controller: AppController
     @ViewBuilder var label: Label
 
+    private var choices: [(String, Date?)?] {
+        let now = Date()
+        return [("For 1 hour", now.addingTimeInterval(3600)),
+                ("Until tomorrow", Calendar.current.startOfDay(for: now).addingTimeInterval(86_400 + 6 * 3600)),
+                ("For 3 days", now.addingTimeInterval(3 * 86_400)),
+                ("For 1 week", now.addingTimeInterval(7 * 86_400)),
+                nil,
+                ("Until I turn it on", nil)]
+    }
+
+    /// A native menu, not a SwiftUI one: the menu bar panel never becomes the key window, and a SwiftUI menu in it
+    /// often did not open at all.
     var body: some View {
-        Menu {
-            Button("For 1 hour") { controller.turnOff(until: Date().addingTimeInterval(3600)) }
-            Button("Until tomorrow") { controller.turnOff(until: Calendar.current.startOfDay(for: Date()).addingTimeInterval(86_400 + 6 * 3600)) }
-            Button("For 3 days") { controller.turnOff(until: Date().addingTimeInterval(3 * 86_400)) }
-            Button("For 1 week") { controller.turnOff(until: Date().addingTimeInterval(7 * 86_400)) }
-            Divider()
-            Button("Until I turn it on") { controller.turnOff(until: nil) }
+        Button {
+            let menu = NSMenu()
+            let target = MenuTarget()
+            for (index, choice) in choices.enumerated() {
+                guard let (title, until) = choice else { menu.addItem(.separator()); continue }
+                let item = NSMenuItem(title: title, action: #selector(MenuTarget.run(_:)), keyEquivalent: "")
+                item.target = target
+                item.tag = index
+                target.actions[index] = { [controller] in controller.turnOff(until: until) }
+                menu.addItem(item)
+            }
+            withExtendedLifetime(target) { _ = menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
         } label: {
             label
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
-        .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Turn off")
     }
+}
+
+/// Runs the closure for the chosen item of a menu built in code.
+@MainActor
+final class MenuTarget: NSObject {
+    var actions: [Int: () -> Void] = [:]
+    @objc func run(_ item: NSMenuItem) { actions[item.tag]?() }
 }

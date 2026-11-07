@@ -9,6 +9,8 @@ struct MainWindow: View {
         NavigationSplitView {
             Sidebar()
                 .navigationSplitViewColumnWidth(min: 180, ideal: 196, max: 240)
+                // The sidebar always shows: hiding it saved nothing and lost the way around.
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             Group {
                 switch controller.section {
