@@ -88,7 +88,8 @@ private struct SyncNowRow: View {
 
     var body: some View {
         if let error = controller.syncActivity.error {
-            ErrorCard(error: error, retryTitle: "Sync now", retry: controller.syncActivity.running || !error.canRetry ? nil : { controller.syncNow() },
+            // Also when trying again as it is cannot work: after the owner fixes the cause, this is the way to sync now.
+            ErrorCard(error: error, retryTitle: "Sync now", retry: controller.syncActivity.running ? nil : { controller.syncNow() },
                       note: controller.syncActivity.last.map { "Last synced \($0.formatted(.relative(presentation: .named)))." })
                 .padding(.vertical, 9)
         } else {
