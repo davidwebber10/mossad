@@ -315,8 +315,10 @@ public struct FriendlyError: Equatable, Sendable {
 
     private static func http(_ code: Int, _ body: String, service: String) -> Classified {
         let said = providerMessage(body)
-        let lower = body.lowercased()
-        if lower.contains("credit balance") || lower.contains("insufficient_quota") || lower.contains("billing") || code == 402 {
+        // Only a provider's billing code or its own message: an outage page can link "Billing" in its footer.
+        let lower = body.lowercased(), message = said?.lowercased() ?? ""
+        let codes = ["insufficient_quota", "billing_error", "billing_not_active", "billing_hard_limit_reached", "payment_required"]
+        if code == 402 || codes.contains(where: lower.contains) || message.contains("credit balance") || message.contains("billing") {
             return .init(kind: .billing, service: service, said: said)
         }
         let kind: Kind = switch code {

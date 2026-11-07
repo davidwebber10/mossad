@@ -107,6 +107,23 @@ final class FriendlyErrorTests: XCTestCase {
         assertPlain(credit); assertPlain(quota); assertPlain(slow)
     }
 
+    func testTheWordBillingInAnOutagePageIsNotABillingProblem() {
+        let page = "<html><body><h1>503 Service Unavailable</h1><footer><a href=\"/billing\">Billing</a> Status</footer></body></html>"
+        let outage = FriendlyError(TranscriptionError.http(503, page), context: .chatting)
+        XCTAssertEqual(outage.kind, .serverTrouble)
+        XCTAssertTrue(outage.canRetry)
+        let reason = FriendlyError(reason: "AssemblyAI HTTP 502: <html>Bad gateway. Billing questions? Contact support.</html>", context: .transcribing)
+        XCTAssertEqual(reason.kind, .serverTrouble)
+        XCTAssertTrue(reason.canRetry)
+        let typed = FriendlyError(SummaryError.http(400, #"{"type":"error","error":{"type":"billing_error","message":"Your account has a problem."}}"#),
+                                  context: .chatting)
+        XCTAssertEqual(typed.kind, .billing, "A provider's billing error code still counts")
+        let said = FriendlyError(ProviderError.http("OpenRouter", 403, #"{"error":{"message":"Billing is not set up for this account."}}"#),
+                                 context: .chatting)
+        XCTAssertEqual(said.kind, .billing, "So does its own message")
+        XCTAssertEqual(FriendlyError(ProviderError.http("OpenAI", 402, "{}"), context: .chatting).kind, .billing)
+    }
+
     func testTheRoomRecorderPausedByAnotherApp() {
         let paused = FriendlyError(kind: .interrupted, context: .recording)
         XCTAssertEqual(paused.title, "Recording is paused")
