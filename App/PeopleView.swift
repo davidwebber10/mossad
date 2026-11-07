@@ -369,7 +369,7 @@ private struct PeopleList: View {
             Toggle("Needs a voice sample", isOn: $needsSample)
         } label: {
             HStack(spacing: 4) {
-                Text(needsSample ? "Needs a sample" : (PeopleSort(rawValue: sort) ?? .recent).title)
+                Text((PeopleSort(rawValue: sort) ?? .recent).title + (needsSample ? " · Needs a sample" : ""))
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
             }
             .font(.system(size: 11.5, weight: .medium))
@@ -458,16 +458,6 @@ private struct PersonRow: View {
         }
         return profile.email
     }
-}
-
-/// "Today", or "Oct 26": the list's last-met column, kept short.
-func shortDay(_ date: Date) -> String {
-    let cal = Calendar.current
-    if cal.isDateInToday(date) { return "Today" }
-    if cal.isDateInYesterday(date) { return "Yesterday" }
-    return cal.isDate(date, equalTo: Date(), toGranularity: .year)
-        ? date.formatted(.dateTime.month(.abbreviated).day())
-        : date.formatted(.dateTime.month(.abbreviated).year())
 }
 
 func meetingsText(_ count: Int) -> String { count == 1 ? "1 meeting" : "\(count) meetings" }

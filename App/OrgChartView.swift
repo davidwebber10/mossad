@@ -24,6 +24,7 @@ struct OrgChartView: View {
     static let cardWidth: CGFloat = 224
     static let columnGap: CGFloat = 24
     static let shownReports = 8
+    static let shownColumns = 6
 
     var body: some View {
         if let chart = org.chart {
@@ -113,16 +114,22 @@ struct OrgChartView: View {
         place.ownerID ?? chart.people.filter { $0.managerID == nil }.max { chart.reports(of: $0.id).count < chart.reports(of: $1.id).count }?.id
     }
 
-    /// A search jumps to the first person in the file whose name has the words typed.
-    private func searched(_ chart: OrgChart) -> String? {
+    /// A search moves the chart once to the first match: a saved person by name or email first, then anyone in
+    /// the file by name or title. The chart stays free to move after that.
+    private func search(_ chart: OrgChart) {
         let q = query.trimmingCharacters(in: .whitespaces)
-        guard q.count >= 2 else { return nil }
-        return chart.people.first { $0.fullName.localizedCaseInsensitiveContains(q) }?.id
+        guard q.count >= 2 else { return }
+        let saved = profiles.lazy.filter { $0.name.localizedCaseInsensitiveContains(q) || ($0.email?.localizedCaseInsensitiveContains(q) ?? false) }
+            .compactMap { org.match($0.name)?.person.id }.first
+        let found = saved
+            ?? chart.people.first { $0.fullName.localizedCaseInsensitiveContains(q) }?.id
+            ?? chart.people.first { $0.title.localizedCaseInsensitiveContains(q) }?.id
+        if let found, found != focus { show(found) }
     }
 
     private func content(_ chart: OrgChart) -> some View {
         let place = placement(chart)
-        let center = searched(chart) ?? focus ?? home(chart, place)
+        let center = focus ?? home(chart, place)
         return ScrollView([.vertical, .horizontal]) {
             HStack(alignment: .top, spacing: 28) {
                 if let center {
@@ -135,34 +142,55 @@ struct OrgChartView: View {
             .padding(.horizontal, 36).padding(.top, Space.xl).padding(.bottom, Space.xxl)
         }
         .scrollBounceBehavior(.basedOnSize)
+        .onChange(of: query) { _, _ in search(chart) }
+        .onAppear { search(chart) }
     }
 
     private func tree(_ team: OrgChart.Team, chart: OrgChart, place: Placement, home: String?) -> some View {
-        let width = CGFloat(max(team.columns.count, 1)) * Self.cardWidth + CGFloat(max(team.columns.count - 1, 0)) * Self.columnGap
+        // A manager with dozens of reports would build dozens of columns; the rest wait behind "N more".
+        let allPeers = expanded.contains("peers:" + team.focus)
+        let columns = allPeers ? team.columns : Array(team.columns.prefix(Self.shownColumns))
+        let hidden = team.columns.count - columns.count
+        let width = CGFloat(max(columns.count, 1)) * Self.cardWidth + CGFloat(max(columns.count - 1, 0)) * Self.columnGap
+        let showsNav = !(team.focus == home && team.top.flatMap({ chart.manager(of: $0.id) }) == nil && hidden == 0 && !allPeers)
         return VStack(spacing: 0) {
-            HStack(spacing: Space.s) {
-                if let top = team.top, chart.manager(of: top.id) != nil {
-                    Button { show(chart.manager(of: top.id)!.id) } label: { Label("Up a level", systemImage: "arrow.up") }
-                        .buttonStyle(.mossadFill)
-                        .help("Show \(chart.manager(of: top.id)!.fullName)'s team")
-                }
-                if let home, team.focus != home {
-                    Button { show(nil) } label: { Label(place.ownerID == nil ? "Back to the top" : "Back to you", systemImage: "arrow.uturn.backward") }
-                        .buttonStyle(.mossadFill)
-                }
+            if showsNav {
+                // Laid over the tree's own width, so a narrow team does not shift its top card.
+                Color.clear.frame(width: width, height: 26)
+                    .overlay(alignment: .leading) {
+                        HStack(spacing: Space.s) {
+                            if let top = team.top, let up = chart.manager(of: top.id) {
+                                Button { show(up.id) } label: { Label("Up a level", systemImage: "arrow.up") }
+                                    .buttonStyle(.mossadFill)
+                                    .help("Show \(up.fullName)'s team")
+                            }
+                            if hidden > 0 || allPeers && team.columns.count > Self.shownColumns {
+                                Button(hidden > 0 ? "\(hidden) more on this level" : "Show fewer") {
+                                    withAnimation(.smooth) {
+                                        if allPeers { expanded.remove("peers:" + team.focus) } else { expanded.insert("peers:" + team.focus) }
+                                    }
+                                }
+                                .buttonStyle(.mossadFill)
+                            }
+                            if let home, team.focus != home {
+                                Button { show(nil) } label: { Label(place.ownerID == nil ? "Back to the top" : "Back to you", systemImage: "arrow.uturn.backward") }
+                                    .buttonStyle(.mossadFill)
+                            }
+                        }
+                        .fixedSize()
+                    }
+                    .padding(.bottom, Space.l)
             }
-            .frame(width: width, alignment: .leading)
-            .padding(.bottom, team.focus == home && team.top.flatMap({ chart.manager(of: $0.id) }) == nil ? 0 : Space.l)
             if let top = team.top {
                 card(top, chart: chart, place: place)
             }
-            if team.columns.count > 0 {
-                Connector(columns: team.columns.count, cardWidth: Self.cardWidth, gap: Self.columnGap)
+            if !columns.isEmpty {
+                Connector(columns: columns.count, cardWidth: Self.cardWidth, gap: Self.columnGap)
                     .stroke(Palette.ring, style: StrokeStyle(lineWidth: 1.25, lineCap: .round))
                     .frame(width: width, height: 26)
                     .accessibilityHidden(true)
                 HStack(alignment: .top, spacing: Self.columnGap) {
-                    ForEach(team.columns, id: \.head.id) { column in
+                    ForEach(columns, id: \.head.id) { column in
                         columnView(column, chart: chart, place: place)
                     }
                 }
@@ -235,7 +263,7 @@ struct OrgChartView: View {
             if !place.outside.isEmpty {
                 group("Outside the company · \(place.outside.count)") {
                     ForEach(place.outside, id: \.name) { p in
-                        OrgCard(name: p.name, title: company(p),
+                        OrgCard(name: p.name, title: CompanyName.from(email: p.email) ?? "Outside",
                                 meta: meetingsText(stats[p.name]?.meetings.count ?? 0), metaColor: Palette.tertiary,
                                 isOwner: false, hollow: false) { open(p.name) }
                     }
@@ -267,12 +295,6 @@ struct OrgChartView: View {
                 .accessibilityAddTraits(.isHeader)
             content()
         }
-    }
-
-    /// "Acme" from "sam@acme.com": a quiet guess at where someone outside works.
-    private func company(_ p: VoiceProfile) -> String {
-        guard let domain = p.email?.split(separator: "@").last?.split(separator: ".").first, !domain.isEmpty else { return "Outside" }
-        return domain.prefix(1).uppercased() + domain.dropFirst()
     }
 }
 

@@ -214,6 +214,16 @@ func dayWord(_ date: Date) -> String {
         : date.formatted(.dateTime.month(.abbreviated).day().year())
 }
 
+/// "Today", or "Oct 26": the list's last-met column, kept short.
+func shortDay(_ date: Date) -> String {
+    let cal = Calendar.current
+    if cal.isDateInToday(date) { return "Today" }
+    if cal.isDateInYesterday(date) { return "Yesterday" }
+    return cal.isDate(date, equalTo: Date(), toGranularity: .year)
+        ? date.formatted(.dateTime.month(.abbreviated).day())
+        : date.formatted(.dateTime.month(.abbreviated).year())
+}
+
 func clock(_ seconds: TimeInterval) -> String {
     let s = Int(max(0, seconds))
     return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
