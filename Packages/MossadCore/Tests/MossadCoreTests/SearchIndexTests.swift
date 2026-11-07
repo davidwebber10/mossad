@@ -94,7 +94,7 @@ final class SearchIndexTests: XCTestCase {
 
     func testEmailDomainsAreNotPeople() {
         var r = meeting("1", title: "Budget")
-        r.attendees = ["mike.smith@polywood.com", "dana@polywood.com"]
+        r.attendees = ["mike.smith@example.com", "dana@example.com"]
         let index = SearchIndex(records: [r, meeting("2", title: "Cost review")],
                                 people: [profile("Michael Ross", email: "mross@acme.com")])
         XCTAssertEqual(meetingIDs(search(index, "poly")), [], "The domain is not a person")
@@ -108,15 +108,15 @@ final class SearchIndexTests: XCTestCase {
 
     func testAnExactEmailFindsItsMeetingsAndPerson() {
         var r = meeting("1", title: "Budget")
-        r.attendees = ["mike.smith@polywood.com"]
-        let index = SearchIndex(records: [r, meeting("2", title: "Polywood com review")],
+        r.attendees = ["mike.smith@example.com"]
+        let index = SearchIndex(records: [r, meeting("2", title: "Example com review")],
                                 people: [profile("Michael Ross", email: "mross@acme.com")])
-        XCTAssertEqual(meetingIDs(search(index, "Mike.Smith@polywood.com")), ["1"])
+        XCTAssertEqual(meetingIDs(search(index, "Mike.Smith@example.com")), ["1"])
         let person = search(index, "mross@acme.com")
         XCTAssertEqual(personNames(person), ["Michael Ross"])
         XCTAssertEqual(meetingIDs(search(index, "mross@acme.com")), [])
-        guard case .meeting(let hit) = search(index, "mike.smith@polywood.com").topHit else { return XCTFail("Expected a meeting") }
-        XCTAssertEqual(hit.context?.text, "mike.smith@polywood.com")
+        guard case .meeting(let hit) = search(index, "mike.smith@example.com").topHit else { return XCTFail("Expected a meeting") }
+        XCTAssertEqual(hit.context?.text, "mike.smith@example.com")
     }
 
     func testOtherTitlesStillFindARenamedMeeting() {
@@ -260,11 +260,11 @@ final class SearchIndexTests: XCTestCase {
 
     func testMomentsUseSpeakerNames() {
         let index = SearchIndex(records: [
-            meeting("1", title: "Sync", names: ["me:A": "David Webber"],
+            meeting("1", title: "Sync", names: ["me:A": "Sam Carter"],
                     turns: [("me:A", "the pallet count"), ("them:B", "pallet numbers are wrong")]),
         ])
         let moments = search(index, "pallet").allMoments.sorted { $0.time < $1.time }
-        XCTAssertEqual(moments.map(\.speaker), ["David Webber", "Speaker A"])
+        XCTAssertEqual(moments.map(\.speaker), ["Sam Carter", "Speaker A"])
         XCTAssertEqual(moments.map(\.time), [0, 10])
     }
 
@@ -408,11 +408,11 @@ final class SearchIndexTests: XCTestCase {
     func testSuggestionsShowRecentMeetingsAndMostMetPeople() {
         let index = SearchIndex(
             records: [
-                meeting("1", title: "One", daysAgo: 3, tags: ["Budget"], names: ["me:A": "David Webber", "them:A": "Alex Rivera"]),
-                meeting("2", title: "Two", daysAgo: 1, tags: ["Budget", "Hiring"], names: ["me:A": "David Webber", "them:A": "Alex Rivera"]),
-                meeting("3", title: "Three", daysAgo: 2, names: ["me:A": "David Webber", "them:A": "Dana Fox"]),
+                meeting("1", title: "One", daysAgo: 3, tags: ["Budget"], names: ["me:A": "Sam Carter", "them:A": "Alex Rivera"]),
+                meeting("2", title: "Two", daysAgo: 1, tags: ["Budget", "Hiring"], names: ["me:A": "Sam Carter", "them:A": "Alex Rivera"]),
+                meeting("3", title: "Three", daysAgo: 2, names: ["me:A": "Sam Carter", "them:A": "Dana Fox"]),
             ],
-            people: [profile("David Webber", owner: true), profile("Alex Rivera"), profile("Dana Fox")])
+            people: [profile("Sam Carter", owner: true), profile("Alex Rivera"), profile("Dana Fox")])
         let s = index.suggestions(meetings: 2, people: 5)
         XCTAssertEqual(s.meetings.map(\.callID), ["2", "3"])
         XCTAssertEqual(s.people.map(\.name.text), ["Alex Rivera", "Dana Fox"], "The owner is left out")
@@ -435,7 +435,7 @@ final class SearchIndexTests: XCTestCase {
             var r = CallRecord(id: "m\(m)", platform: .zoom, bundleID: "b", start: now.addingTimeInterval(-Double(m) * day),
                                end: now, status: .written)
             r.calendarTitle = "\(words[m % 3000]) review \(m)"
-            r.speakerNames = ["me:A": "David Webber", "them:A": "Person \(m % 40)"]
+            r.speakerNames = ["me:A": "Sam Carter", "them:A": "Person \(m % 40)"]
             r.utterances = (0..<800).map { t in
                 var line: [String] = []
                 for k in 0..<14 { line.append(k % 3 == 0 ? common[Int(rng.next() % 8)] : words[Int(rng.next() % 3000)]) }

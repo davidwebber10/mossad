@@ -1184,10 +1184,10 @@ final class AppController: ObservableObject {
             var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))
             // Development hook: `--sample-upcoming` adds two events, since a preview build has no Calendar access.
             if CommandLine.arguments.contains("--sample-upcoming") {
-                events += [CalendarEventInfo(title: "Mitch / David", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),
-                                             attendees: ["Mitch Haus", "David Webber"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false),
+                events += [CalendarEventInfo(title: "Alex / Sam", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),
+                                             attendees: ["Alex Rivera", "Sam Carter"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false),
                            CalendarEventInfo(title: "Tech Team Monthly Sync", start: now.addingTimeInterval(86_400), end: now.addingTimeInterval(90_000),
-                                             attendees: ["Ed Ng", "Adam Stoffel", "Jeff Hill"], text: "", isAllDay: false)]
+                                             attendees: ["Jordan Lee", "Casey Brooks", "Riley Chen"], text: "", isAllDay: false)]
             }
             calendarEvents = events
         }
