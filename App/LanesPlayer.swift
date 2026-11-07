@@ -20,10 +20,10 @@ struct LanesPlayer: View {
     /// Lanes shown before the rest scroll: fewer in a short window.
     var maxLanes = 12
 
-    static let laneHeight: CGFloat = 11
-    static let laneGap: CGFloat = 3
+    static let laneHeight = Detail.laneRow
+    static let laneGap = Detail.laneGap
     /// The label column and its gap: where the lanes start.
-    static let gutter: CGFloat = 150 + Space.m
+    static let gutter = Detail.labelGutter
 
     @State private var dragging: TimeInterval?
     @State private var scrolledToEnd = false
@@ -194,15 +194,21 @@ private struct LaneRow: View, @MainActor Equatable {
                 Text(minutes).foregroundStyle(Palette.tertiary).frame(width: 30, alignment: .trailing)
             }
             .font(.system(size: 12)).monospacedDigit()
-            .frame(width: 150, alignment: .trailing)
+            .frame(width: Detail.labelColumn, alignment: .trailing)
             GeometryReader { g in
                 Canvas { context, size in
-                    context.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 3), with: .color(Palette.fill))
+                    let track = CGRect(x: 0, y: (size.height - Detail.laneTrack) / 2, width: size.width, height: Detail.laneTrack)
+                    context.fill(Path(roundedRect: track, cornerRadius: Detail.laneTrackRadius), with: .color(Palette.fill))
                     let shading = GraphicsContext.Shading.color(color)
-                    for s in lane.segments {
-                        let x = size.width * s.lowerBound / duration
-                        let w = max(1.5, size.width * (s.upperBound - s.lowerBound) / duration)
-                        context.fill(Path(roundedRect: CGRect(x: x, y: 1.5, width: w, height: size.height - 3), cornerRadius: 1.5), with: shading)
+                    let inset = Detail.laneBarInset
+                    // Merged at this width, so a long meeting reads as blocks rather than one-point slivers.
+                    let blocks = SpeakerLanes.blocks(lane.segments, duration: duration, width: size.width,
+                                                     mergeGap: Detail.laneMergeGap, minWidth: Detail.laneMinBlock)
+                    for b in blocks {
+                        let x = size.width * b.lowerBound / duration
+                        let w = size.width * (b.upperBound - b.lowerBound) / duration
+                        let bar = CGRect(x: x, y: track.minY + inset, width: w, height: Detail.laneTrack - inset * 2)
+                        context.fill(Path(roundedRect: bar, cornerRadius: Detail.laneBarRadius), with: shading)
                     }
                 }
                 .contentShape(Rectangle())
@@ -236,8 +242,8 @@ private struct PlayerRuler: View {
     let seek: (TimeInterval) -> Void
 
     var body: some View {
-        HStack(spacing: Space.m) {
-            Color.clear.frame(width: 150, height: 1)
+        HStack(spacing: Detail.labelGap) {
+            Color.clear.frame(width: Detail.labelColumn, height: 1)
             GeometryReader { g in
                 let w = g.size.width
                 let current = currentDecision
@@ -268,7 +274,7 @@ private struct PlayerRuler: View {
                     }
                 }
             }
-            .frame(height: 26)
+            .frame(height: Detail.rulerHeight)
         }
     }
 
@@ -314,14 +320,13 @@ private struct PlayerTransport: View {
 
     var body: some View {
         let enabled = player.isAvailable
-        HStack(spacing: Space.m) {
+        HStack(spacing: Detail.transportGap) {
             HStack(spacing: 4) {
                 skip(-15)
                 Button { player.toggle() } label: {
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 10))
+                    IconImage(player.isPlaying ? .pause : .play, size: 10)
                         .foregroundStyle(Palette.window)
-                        .frame(width: 28, height: 28)
+                        .frame(width: Detail.playButton, height: Detail.playButton)
                         .background(Palette.ink, in: Circle())
                         .contentShape(Circle())
                 }
@@ -332,21 +337,20 @@ private struct PlayerTransport: View {
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.45)
-            bookmarkButton
+            bookmarkButton.padding(.leading, 6)
             if let noAudio { Text(noAudio).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1) }
             Spacer(minLength: 0)
-            SpeedControl(rate: $player.rate).disabled(!enabled).opacity(enabled ? 1 : 0.45)
+            SpeedControl(rate: $player.rate).disabled(!enabled).opacity(enabled ? 1 : 0.45).fixedSize()
         }
         .padding(.leading, LanesPlayer.gutter)
-        .frame(height: 32)
+        .frame(height: Detail.transportHeight)
     }
 
     private func skip(_ seconds: TimeInterval) -> some View {
         Button { player.skip(seconds) } label: {
-            Image(systemName: seconds < 0 ? "gobackward.15" : "goforward.15")
-                .font(.system(size: 15, weight: .medium))
+            SkipGlyph(forward: seconds > 0)
                 .foregroundStyle(Palette.secondary)
-                .frame(width: 26, height: 26)
+                .frame(width: Detail.skipButton, height: Detail.skipButton)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -356,19 +360,23 @@ private struct PlayerTransport: View {
     private var bookmarkButton: some View {
         let open = bookmarked != nil
         return Button(action: add) {
-            HStack(spacing: 6) {
+            // A narrow window keeps the flag and drops the words rather than cut them.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 7) {
+                    BookmarkFlag().fill(Palette.accentFill).frame(width: 9, height: 11)
+                    Text("Add bookmark").fixedSize()
+                }
                 BookmarkFlag().fill(Palette.accentFill).frame(width: 9, height: 11)
-                Text("Add bookmark")
             }
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 12.5, weight: .semibold))
             .foregroundStyle(open ? Palette.accent : Palette.ink)
-            .padding(.horizontal, 10)
-            .frame(height: 26)
-            .background { if open { Capsule().fill(Palette.accentTint) } }
-            .modifier(GlassUnless(off: open))
-            .contentShape(Capsule())
+            .padding(.leading, 10).padding(.trailing, 12)
+            .frame(height: Detail.bookmarkHeight)
+            .background(open ? Palette.accentTint : Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Add bookmark")
         .disabled(adding || (!player.isAvailable && record.status != .recording))
         .help("Mark this moment, with an optional note")
         .popover(isPresented: Binding(get: { bookmarked != nil }, set: { if !$0 { bookmarked = nil } }), arrowEdge: .bottom) {
@@ -391,14 +399,44 @@ private struct PlayerTransport: View {
     }
 }
 
-private struct GlassUnless: ViewModifier {
-    let off: Bool
-    func body(content: Content) -> some View {
-        if off { content } else { content.mossadGlass(in: Capsule(), interactive: true) }
+/// The canvas's skip icon: a circular arrow with "15" inside, 18 pt in a 24 pt box, mirrored for forward.
+private struct SkipGlyph: View {
+    let forward: Bool
+
+    var body: some View {
+        ZStack {
+            SkipArrow(forward: forward)
+                .stroke(style: StrokeStyle(lineWidth: 1.8 * 18 / 24, lineCap: .round, lineJoin: .round))
+            Text("15").font(.system(size: 7.5 * 18 / 24, weight: .bold)).offset(y: 0.9)
+        }
+        .frame(width: 18, height: 18)
     }
 }
 
-/// 1×, 1.25×, 1.5×, 2× in one glass capsule.
+private struct SkipArrow: Shape {
+    let forward: Bool
+
+    /// The canvas's path in its 24 pt box: an arc of radius 8 around (12, 13) from 260° to 225°, and the head.
+    func path(in rect: CGRect) -> Path {
+        let k = rect.width / 24
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + (forward ? 24 - x : x) * k, y: rect.minY + y * k)
+        }
+        var p = Path()
+        let steps = 48
+        for i in 0...steps {
+            let a = (260 + 325 * Double(i) / Double(steps)) * .pi / 180
+            let q = pt(12 + 8 * cos(a), 13 + 8 * sin(a))
+            if i == 0 { p.move(to: q) } else { p.addLine(to: q) }
+        }
+        p.move(to: pt(6.3, 3.9))
+        p.addLine(to: pt(6.3, 7.4))
+        p.addLine(to: pt(9.8, 7.4))
+        return p
+    }
+}
+
+/// 1×, 1.25×, 1.5×, 2× in one quiet capsule.
 private struct SpeedControl: View {
     @Binding var rate: Float
     private let speeds: [Float] = [1, 1.25, 1.5, 2]
@@ -410,6 +448,7 @@ private struct SpeedControl: View {
                 Button { rate = s } label: {
                     Text(s == 1 ? "1×" : "\(s.formatted())×")
                         .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                        .fixedSize()
                         .foregroundStyle(on ? Palette.ink : Palette.secondary)
                         .padding(.horizontal, 9).padding(.vertical, 3)
                         .background {
@@ -422,8 +461,8 @@ private struct SpeedControl: View {
                 .accessibilityAddTraits(on ? [.isSelected] : [])
             }
         }
-        .padding(3)
-        .mossadGlass(in: Capsule())
+        .padding(2)
+        .background(Palette.fill, in: Capsule())
     }
 }
 

@@ -43,19 +43,22 @@ struct MeetingChatView: View {
                     if let error {
                         LabelColumn(label: "") { Text(error).font(.system(size: 13)).foregroundStyle(Palette.recording) }
                     }
+                    // Questions not asked yet, under the last answer, as the canvas shows them.
+                    if !messages.isEmpty, !running, !followUps.isEmpty {
+                        LabelColumn(label: "") { chips(followUps) }
+                    }
                 }
-                .detailColumn(top: top, bottom: Space.xl)
+                // Room for the floating composer, as the canvas leaves 80 pt under the last answer.
+                .detailColumn(top: top, bottom: 80)
             }
             .onChange(of: messages.count) { _, _ in withAnimation { proxy.scrollTo(messages.last?.id, anchor: .top) } }
             .onChange(of: steps.count) { _, _ in withAnimation { proxy.scrollTo("running", anchor: .bottom) } }
         }
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
-        .safeAreaBar(edge: .bottom) {
+        .overlay(alignment: .bottom) {
             composer
-                .padding(.leading, LanesPlayer.gutter)
-                .frame(maxWidth: 980, alignment: .leading)
-                .padding(.horizontal, 36).padding(.bottom, Space.m).padding(.top, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: Detail.composerWidth)
+                .padding(.horizontal, Detail.gutter).padding(.bottom, Space.l).padding(.top, 6)
+                .frame(maxWidth: .infinity)
         }
         .environment(\.openURL, OpenURLAction { url in
             if let link = ChatLink.parse(url), link.callID == record.id, let at = link.at {
@@ -75,20 +78,29 @@ struct MeetingChatView: View {
                 Text("Ask about this meeting").font(.system(size: 16, weight: .medium))
                 Text("Claude reads this meeting's summary and transcript, and can look at your other meetings when that helps. Times in the answer play the moment.")
                     .font(.system(size: 13)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-                // Wraps instead of cutting the questions short in a narrow detail pane.
-                FlowLayout(spacing: Space.s) {
-                    ForEach(examples, id: \.self) { e in
-                        Button { question = e; send() } label: {
-                            Text(e).font(.system(size: 12.5)).foregroundStyle(Palette.ink).lineLimit(1).fixedSize()
-                                .padding(.horizontal, 12).frame(height: 28)
-                                .background(Palette.fill, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.top, 4)
+                chips(examples).padding(.top, 4)
             }
         }
+    }
+
+    /// Wraps instead of cutting the questions short in a narrow detail pane.
+    private func chips(_ questions: [String]) -> some View {
+        FlowLayout(spacing: Space.s) {
+            ForEach(questions, id: \.self) { e in
+                Button { question = e; send() } label: {
+                    Text(e).font(.system(size: 12.5)).foregroundStyle(Palette.ink).lineLimit(1).fixedSize()
+                        .padding(.horizontal, 12).frame(height: 28)
+                        .background(Palette.fill, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var followUps: [String] {
+        let asked = Set(messages.filter { $0.role == .user }.map(\.text))
+        return examples.filter { !asked.contains($0) }
     }
 
     private let examples = [
@@ -97,32 +109,40 @@ struct MeetingChatView: View {
         "Write a short follow-up email from me.",
     ]
 
+    /// The canvas's composer: a 46 pt glass field with a quiet 1 pt ring and a solid accent send circle.
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        let shape = RoundedRectangle(cornerRadius: Detail.composerHeight / 2, style: .continuous)
+        return HStack(alignment: .bottom, spacing: 10) {
             if chat != nil {
-                Button(action: newChat) { Image(systemName: "square.and.pencil").foregroundStyle(Palette.secondary).frame(width: 18, height: 22) }
-                    .buttonStyle(.plain)
-                    .help("New chat about this meeting")
-                    .accessibilityLabel("New chat")
+                Button(action: newChat) {
+                    IconImage(.compose, size: 15).foregroundStyle(Palette.secondary)
+                        .frame(width: 22, height: Detail.composerSend).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("New chat about this meeting")
+                .accessibilityLabel("New chat")
             }
             TextField(messages.isEmpty ? "Ask about this meeting" : "Ask a follow-up", text: $question, axis: .vertical)
-                .textFieldStyle(.plain).font(.system(size: 13)).lineLimit(1...6)
-                .padding(.vertical, 3)
+                .textFieldStyle(.plain).font(.system(size: 13.5)).lineLimit(1...6)
+                .padding(.vertical, 8)
+                .frame(minHeight: Detail.composerSend)
                 .focused($focused)
                 .onSubmit(send)
             Button(action: send) {
-                Image(systemName: "arrow.up").font(.system(size: 11, weight: .bold))
+                IconImage(.send, size: 14)
                     .foregroundStyle(Palette.onAccent)
-                    .frame(width: 24, height: 24)
+                    .frame(width: Detail.composerSend, height: Detail.composerSend)
                     .background(Palette.accentFill, in: Circle())
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty || running)
-            .opacity(question.trimmingCharacters(in: .whitespaces).isEmpty || running ? 0.5 : 1)
+            // Stays solid when there is nothing to send, as the canvas draws it; send() ignores the click then.
             .accessibilityLabel("Send")
         }
-        .padding(.leading, 14).padding(.trailing, 7).padding(.vertical, 7)
-        .mossadGlass(cornerRadius: 19, interactive: true)
+        .padding(.leading, chat != nil ? 12 : 18).padding(.trailing, 6).padding(.vertical, 6)
+        .frame(minHeight: Detail.composerHeight)
+        .background(.ultraThinMaterial, in: shape)
+        .chromeGlass(in: shape, shadow: .floating)
     }
 
     /// The newest chat about this meeting, if there is one.

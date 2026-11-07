@@ -86,6 +86,7 @@ struct TranscriptTab: View {
                     Text(follow ? "· follows playback" : "· Follow playback")
                         .font(.system(size: 12, weight: follow ? .regular : .semibold))
                         .foregroundStyle(follow ? Palette.secondary : Palette.accent)
+                        .lineLimit(1).fixedSize()
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, -6)
@@ -116,7 +117,7 @@ struct TranscriptTab: View {
 
     private func findField(count: Int) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Palette.tertiaryMark)
+            IconImage(.search, size: 13).foregroundStyle(Palette.tertiaryMark)
             TextField("Find in transcript", text: $find).textFieldStyle(.plain).focused($findFocused)
                 .onSubmit { step(1, count: count) }
                 .onExitCommand { find = "" }
@@ -131,7 +132,7 @@ struct TranscriptTab: View {
         }
         .font(.system(size: 12.5))
         .padding(.horizontal, 10)
-        .frame(width: 280, height: 28)
+        .frame(minWidth: 160, idealWidth: 300, maxWidth: 300, minHeight: 28, maxHeight: 28)
         .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 

@@ -85,7 +85,7 @@ struct EditableMeetingTitle: View {
 struct NamedByMossadTag: View {
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: "sparkle").font(.system(size: 9, weight: .medium))
+            IconImage(.sparkle, size: 10)
             Text("Named by Mossad")
         }
         .font(.system(size: 11, weight: .medium))

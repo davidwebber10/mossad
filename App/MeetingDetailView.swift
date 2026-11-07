@@ -50,7 +50,7 @@ struct MeetingDetailView: View {
         }
         // The window's height, not the content's: the detail takes what it is given and the lanes fit it.
         GeometryReader { g in
-            content(people, lanes: lanes, maxLanes: g.size.height < 760 ? 6 : 12)
+            content(people, lanes: lanes, maxLanes: Self.maxLanes(height: g.size.height))
                 .frame(width: g.size.width, height: g.size.height, alignment: .top)
                 .clipped()
         }
@@ -79,7 +79,7 @@ struct MeetingDetailView: View {
     @ViewBuilder
     private func content(_ people: MeetingPeople, lanes: [SpeakerLanes.Lane], maxLanes: Int) -> some View {
         VStack(spacing: 0) {
-            // A short window keeps room for the tabs' content: 6 lanes under about 760 pt, else 12. The rest scroll.
+            // A short window keeps room for the tabs' content: up to 12 lanes, fewer as the window gets short. The rest scroll.
             MeetingHeader(record: record, people: people, lanes: lanes, player: player,
                           retentionDays: controller.deleteRecordings ? controller.recordingDays : nil,
                           maxLanes: maxLanes)
@@ -104,7 +104,16 @@ struct MeetingDetailView: View {
     private var processingFirstTime: Bool { ProcessingStep(status: record.status) != nil && record.summary == nil }
 
     /// Room under the tabs that sit on the band's edge.
-    private static let underTabs: CGFloat = 17
+    private static let underTabs = Detail.underTabs
+
+    /// The band without lanes (meta, title, ruler, transport, and padding) is about this tall.
+    private static let bandWithoutLanes: CGFloat = 260
+
+    /// As many lanes as leave the tab's content its reserve, from 4 to 12.
+    static func maxLanes(height: CGFloat) -> Int {
+        let fit = (height - bandWithoutLanes - Detail.lanesReserve) / (Detail.laneRow + Detail.laneGap)
+        return min(12, max(4, Int(fit)))
+    }
 
     @ViewBuilder
     private func tabContent(_ people: MeetingPeople) -> some View {
@@ -159,8 +168,8 @@ final class DetailCache {
 extension View {
     /// The detail's reading column: the page gutter, at most 980 pt, from the left like the header.
     func detailColumn(top: CGFloat, bottom: CGFloat = Space.xxl) -> some View {
-        frame(maxWidth: 980, alignment: .leading)
-            .padding(.horizontal, 36)
+        frame(maxWidth: Detail.columnMax, alignment: .leading)
+            .padding(.horizontal, Detail.gutter)
             .padding(.top, top)
             .padding(.bottom, bottom)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -195,7 +204,7 @@ private struct DetailTabs: View {
             }
         }
         .padding(3)
-        .mossadGlass(in: Capsule())
+        .chromeGlass(in: Capsule())
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Meeting tabs")
     }

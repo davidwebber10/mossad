@@ -58,4 +58,44 @@ final class SpeakerLanesTests: XCTestCase {
         measure { _ = SpeakerLanes.make(r, names: MarkdownWriter.displayNames(r), ownerName: "Dana Lee") }
         XCTAssertEqual(SpeakerLanes.make(r, names: MarkdownWriter.displayNames(r), ownerName: "Dana Lee").count, 137)
     }
+
+    // MARK: Blocks
+
+    func testBlocksMergeAcrossGapsNarrowerThanTheGapAtThisWidth() {
+        // 1000 s across 1000 pt: 1 pt is 1 s. A 3 s gap merges at a 5 pt merge gap; a 20 s gap does not.
+        let blocks = SpeakerLanes.blocks([0...10, 13...20, 40...50], duration: 1000, width: 1000, mergeGap: 5, minWidth: 3)
+        XCTAssertEqual(blocks, [0...20, 40...50])
+    }
+
+    func testBlocksGetAMinimumWidthAroundTheirCenter() {
+        // 1 pt is 10 s. A 2 s turn grows to 3 pt, which is 30 s, centered on the turn.
+        let blocks = SpeakerLanes.blocks([100...102], duration: 10_000, width: 1000, mergeGap: 0, minWidth: 3)
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(blocks[0].lowerBound, 86, accuracy: 0.001)
+        XCTAssertEqual(blocks[0].upperBound, 116, accuracy: 0.001)
+    }
+
+    func testBlocksThatTouchAfterWideningMerge() {
+        let blocks = SpeakerLanes.blocks([100...101, 110...111], duration: 10_000, width: 1000, mergeGap: 0, minWidth: 3)
+        XCTAssertEqual(blocks.count, 1)
+    }
+
+    func testWideningStaysInsideTheMeeting() {
+        let blocks = SpeakerLanes.blocks([0...1, 999...1000], duration: 1000, width: 100, mergeGap: 0, minWidth: 3)
+        XCTAssertEqual(blocks.first?.lowerBound, 0)
+        XCTAssertEqual(blocks.last?.upperBound, 1000)
+        XCTAssertEqual(blocks.first?.upperBound ?? 0, 30, accuracy: 0.001)
+        XCTAssertEqual(blocks.last?.lowerBound ?? 0, 970, accuracy: 0.001)
+    }
+
+    func testManySliversBecomeFewBlocks() {
+        // A turn of 2 s every 10 s for an hour, across 800 pt: about 4.5 s a point, so the gaps all merge.
+        let segments = stride(from: 0.0, to: 3600, by: 10).map { $0...($0 + 2) }
+        let blocks = SpeakerLanes.blocks(segments, duration: 3600, width: 800, mergeGap: 5, minWidth: 3)
+        XCTAssertEqual(blocks.count, 1)
+    }
+
+    func testBlocksWithNoWidthReturnTheSegments() {
+        XCTAssertEqual(SpeakerLanes.blocks([0...1, 5...6], duration: 10, width: 0, mergeGap: 5, minWidth: 3), [0...1, 5...6])
+    }
 }

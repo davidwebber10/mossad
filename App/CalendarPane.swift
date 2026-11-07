@@ -65,11 +65,15 @@ struct CalendarPane: View {
     let open: (CallRecord, String) -> Void
 
     var body: some View {
-        switch state.scope {
-        case .week: HourGrid(state: state, days: state.weekDays, records: records, matches: matches, deleting: $deleting, open: open)
-        case .day: HourGrid(state: state, days: [state.calendar.startOfDay(for: state.anchor)], records: records, matches: matches, deleting: $deleting, open: open)
-        case .month: MonthGrid(state: state, records: records, matches: matches, deleting: $deleting, open: open)
+        Group {
+            switch state.scope {
+            case .week: HourGrid(state: state, days: state.weekDays, records: records, matches: matches, deleting: $deleting, open: open)
+            case .day: HourGrid(state: state, days: [state.calendar.startOfDay(for: state.anchor)], records: records, matches: matches, deleting: $deleting, open: open)
+            case .month: MonthGrid(state: state, records: records, matches: matches, deleting: $deleting, open: open)
+            }
         }
+        // The page gutter, as the canvas pads the detail column; the grid keeps 12 pt of it for the scroller.
+        .padding(.leading, Detail.gutter).padding(.trailing, Detail.gutter - 12)
     }
 }
 
@@ -268,7 +272,7 @@ private struct HourGrid: View {
                 PlatformDot(platform: r.platform, size: 7, hollow: r.status != .written && r.status != .recording).padding(.top, 4)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(r.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.ink)
-                        .lineLimit(height > 44 ? 2 : 1)
+                        .lineLimit(1)
                     if height > 28 { meta(r).font(.system(size: 10.5)) }
                 }
                 .lineSpacing(1)

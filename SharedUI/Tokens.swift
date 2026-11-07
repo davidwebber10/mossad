@@ -150,6 +150,51 @@ enum Chrome {
     static let groupGap: CGFloat = 8
 }
 
+/// The meeting detail, from the canvas: the header band, the lanes player, the tab capsule, and the tab bodies.
+enum Detail {
+    /// The reading column and its gutter.
+    static let columnMax: CGFloat = 980
+    static let gutter: CGFloat = 36
+    /// The band: 30 pt above and below, then a hairline.
+    static let bandPadding: CGFloat = 30
+    static let titleSize: CGFloat = 26
+    static let titleMax: CGFloat = 740
+    /// The label column every tab and the lanes share, and the gap after it.
+    static let labelColumn: CGFloat = 150
+    static let labelGap: CGFloat = 12
+    static var labelGutter: CGFloat { labelColumn + labelGap }
+
+    /// A lane is one line of 12 pt text (16 pt) with an 11 pt track centered in it; the bars sit 1.5 pt inside
+    /// the track. Rows are 3 pt apart, so they repeat every 19 pt.
+    static let laneRow: CGFloat = 16
+    static let laneGap: CGFloat = 3
+    static let laneTrack: CGFloat = 11
+    static let laneTrackRadius: CGFloat = 3
+    static let laneBarInset: CGFloat = 1.5
+    static let laneBarRadius: CGFloat = 1.5
+    static let laneMinutes: CGFloat = 30
+    /// Turns closer than this many points join into one block, and a block is at least this wide.
+    static let laneMergeGap: CGFloat = 4
+    static let laneMinBlock: CGFloat = 3
+    /// Space the band leaves under the player for the tab's content when it picks how many lanes to show.
+    static let lanesReserve: CGFloat = 230
+
+    static let rulerHeight: CGFloat = 26
+    static let transportHeight: CGFloat = 32
+    static let transportGap: CGFloat = 12
+    static let playButton: CGFloat = 28
+    static let skipButton: CGFloat = 26
+    static let bookmarkHeight: CGFloat = 28
+
+    /// The tab capsule sits on the band's lower edge; this much of it hangs below.
+    static let underTabs: CGFloat = 17
+
+    /// The chat composer: a floating glass field centered over the tab, 720 pt inside 18 and 6 pt of padding.
+    static let composerWidth: CGFloat = 744
+    static let composerHeight: CGFloat = 46
+    static let composerSend: CGFloat = 34
+}
+
 /// Concentric radii: an inner radius is the outer one minus the padding between them. Capsules use `Capsule()`.
 enum Radius {
     static let control: CGFloat = 6

@@ -221,6 +221,11 @@ private struct MeetingRow: View {
                 }
                 .font(.system(size: 12))
                 .lineLimit(1)
+                // The open meeting says how many voices, on a line of its own, as the canvas shows it.
+                if selected, record.badge == .needsNames {
+                    let n = record.unknownSpeakers.count
+                    NamesPill(text: "\(n) \(n == 1 ? "voice needs" : "voices need") names", height: 18).padding(.top, 6)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             LengthText(record: record)
@@ -235,9 +240,7 @@ private struct MeetingRow: View {
     private var status: some View {
         switch record.badge {
         case .needsNames:
-            Text(" · ").foregroundStyle(Palette.secondary)
-            Text(record.unknownSpeakers.count > 1 ? "\(record.unknownSpeakers.count) need names" : "Needs names")
-                .fontWeight(.medium).foregroundStyle(Palette.accent)
+            if !selected { NamesPill(text: "Needs names", height: 17).padding(.leading, 8) }
         case .processing:
             Text(" · ").foregroundStyle(Palette.secondary)
             ProcessingMark().padding(.trailing, 5)
@@ -248,6 +251,23 @@ private struct MeetingRow: View {
         case .recording, nil:
             EmptyView()
         }
+    }
+}
+
+/// "Needs names" in the accent on its tint, the canvas's small pill.
+private struct NamesPill: View {
+    let text: String
+    let height: CGFloat
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Palette.accent)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .frame(height: height)
+            .background(Palette.accentTint, in: Capsule())
+            .fixedSize()
     }
 }
 

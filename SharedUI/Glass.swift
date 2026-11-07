@@ -47,6 +47,14 @@ enum ChromeShadow {
     case control
     /// 0 1 2 at 6%: the sidebar card.
     case card
+    /// 0 8 24 at 14%: what floats over scrolling content, such as the chat composer.
+    case floating
+}
+
+private extension ChromeShadow {
+    var opacity: Double { switch self { case .control: 0.08; case .card: 0.06; case .floating: 0.14 } }
+    var radius: CGFloat { switch self { case .control: 4; case .card: 1; case .floating: 12 } }
+    var y: CGFloat { switch self { case .control: 2; case .card: 1; case .floating: 8 } }
 }
 
 private struct ChromeGlass<S: InsettableShape>: ViewModifier {
@@ -67,8 +75,7 @@ private struct ChromeGlass<S: InsettableShape>: ViewModifier {
                 .background {
                     shape.fill(fill)
                         .overlay { shape.strokeBorder(increased ? Palette.hairline : Palette.glassRing, lineWidth: 1) }
-                        .shadow(color: .black.opacity(shadow == .card ? 0.06 : 0.08), radius: shadow == .card ? 1 : 4,
-                                y: shadow == .card ? 1 : 2)
+                        .shadow(color: .black.opacity(shadow.opacity), radius: shadow.radius, y: shadow.y)
                 }
         }
     }

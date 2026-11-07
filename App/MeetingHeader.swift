@@ -16,8 +16,8 @@ struct MeetingHeader: View {
         VStack(alignment: .leading, spacing: 0) {
             meta
             HStack(alignment: .lastTextBaseline, spacing: Space.xl) {
-                EditableMeetingTitle(record: record, size: 26)
-                    .frame(maxWidth: 740, alignment: .leading)
+                EditableMeetingTitle(record: record, size: Detail.titleSize)
+                    .frame(maxWidth: Detail.titleMax, alignment: .leading)
                 Spacer(minLength: 0)
                 if record.status == .recording {
                     TimelineView(.periodic(from: record.start, by: 1)) { context in
@@ -37,10 +37,9 @@ struct MeetingHeader: View {
                     .padding(.top, 38)
             }
         }
-        .frame(maxWidth: 980, alignment: .leading)
-        .padding(.horizontal, 36)
-        .padding(.top, 30)
-        .padding(.bottom, 30)
+        .frame(maxWidth: Detail.columnMax, alignment: .leading)
+        .padding(.horizontal, Detail.gutter)
+        .padding(.vertical, Detail.bandPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.band)
         .hairline(.bottom)
@@ -48,7 +47,7 @@ struct MeetingHeader: View {
 
     private func clockText(_ seconds: TimeInterval) -> some View {
         Text(longClock(seconds))
-            .font(.system(size: 26, weight: .semibold)).tracking(26 * -0.02).monospacedDigit()
+            .font(.system(size: Detail.titleSize, weight: .semibold)).tracking(Detail.titleSize * -0.02).monospacedDigit()
             .foregroundStyle(Palette.secondary)
             .fixedSize()
     }

@@ -43,4 +43,32 @@ public enum SpeakerLanes {
             return a.seconds != b.seconds ? a.seconds > b.seconds : a.name.localizedStandardCompare(b.name) == .orderedAscending
         }
     }
+
+    /// The lane's segments as drawn at one width: segments closer than `mergeGap` points join, and each block is
+    /// at least `minWidth` points wide, grown around its center and kept inside the meeting. A long meeting then
+    /// reads as a few readable blocks per speaker rather than hundreds of one-point slivers.
+    public static func blocks(_ segments: [ClosedRange<TimeInterval>], duration: TimeInterval, width: Double,
+                              mergeGap: Double, minWidth: Double) -> [ClosedRange<TimeInterval>] {
+        guard width > 0, duration > 0, !segments.isEmpty else { return segments }
+        let perPoint = duration / width
+        let gap = mergeGap * perPoint, least = min(minWidth * perPoint, duration)
+        var out: [ClosedRange<TimeInterval>] = []
+        func add(_ r: ClosedRange<TimeInterval>) {
+            if let last = out.last, r.lowerBound - last.upperBound <= gap {
+                out[out.count - 1] = last.lowerBound...max(last.upperBound, r.upperBound)
+            } else {
+                out.append(r)
+            }
+        }
+        for s in segments.sorted(by: { $0.lowerBound < $1.lowerBound }) { add(s) }
+        let merged = out
+        out = []
+        for b in merged {
+            guard b.upperBound - b.lowerBound < least else { add(b); continue }
+            let mid = (b.lowerBound + b.upperBound) / 2
+            let lower = min(max(0, mid - least / 2), duration - least)
+            add(lower...(lower + least))
+        }
+        return out
+    }
 }
