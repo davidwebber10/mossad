@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Combine
 import CoreAudio
 import Foundation
 import MossadCore
@@ -133,6 +134,8 @@ final class AppController: ObservableObject {
         let at: TimeInterval
         /// False marks the line instead of playing from it.
         var play = true
+        /// False only opens the Transcript tab, with no line marked.
+        var mark = true
     }
     /// When the last bookmark was made, so the controls can confirm it.
     @Published private(set) var lastBookmark: Date?
@@ -219,6 +222,14 @@ final class AppController: ObservableObject {
     @Published var commitmentsVersion = 0
     var findingCommitments = false
     private var iCloudTimer: Timer?
+    /// The search palette (Command-K) and its index, kept up to date as meetings, tasks, and chats change.
+    let search = SearchModel()
+    var searchObservers: [AnyCancellable] = []
+    /// Bumped by `openPerson`, so a People page already open selects the person too.
+    @Published var personRequests = 0
+    /// A task or a chat to select when its page shows; the page clears it.
+    @Published var taskToOpen: UUID?
+    @Published var chatToOpen: UUID?
 
     /// The mic is recorded raw: when Chrome also uses voice processing, macOS gives a second voice-processing
     /// client silence. Echo from the speakers is dropped later by TranscriptMerger.
@@ -245,6 +256,7 @@ final class AppController: ObservableObject {
         // The chosen calendars apply before anything matches a call to an invite.
         calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
+        observeForSearch()
 
         // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
         // processing, so the screens can be checked while the installed copy records a call.
@@ -358,6 +370,10 @@ final class AppController: ObservableObject {
             }
             let section = Section.allCases.first { $0.rawValue == name } ?? .meetings
             DispatchQueue.main.async { self.open(section) }
+        }
+        // Development hook: `MOSSAD_SEARCH=<query>` opens the search palette with that query.
+        if preview, let query = ProcessInfo.processInfo.environment["MOSSAD_SEARCH"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.openSearch(query) }
         }
         // Development hook: `MOSSAD_PERSON` opens that person's page.
         if let person = ProcessInfo.processInfo.environment["MOSSAD_PERSON"] {
@@ -732,6 +748,7 @@ final class AppController: ObservableObject {
     /// Opens the People page on one person; the page picks the name up when it loads.
     func openPerson(_ name: String) {
         personToOpen = name
+        personRequests += 1
         open(.people)
     }
 

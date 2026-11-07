@@ -37,6 +37,7 @@ struct ChatView: View {
         .onAppear(perform: reload)
         .onChange(of: controller.newChatRequest) { _, _ in newChat() }
         .onChange(of: controller.chatsVersion) { _, _ in reload() }
+        .onChange(of: controller.chatToOpen) { _, _ in reload() }
         .onChange(of: selection) { _, _ in error = nil }
     }
 
@@ -152,6 +153,11 @@ struct ChatView: View {
 
     private func reload() {
         chats = controller.chats.all()
+        // A chat opened from search.
+        if let wanted = controller.chatToOpen {
+            controller.chatToOpen = nil
+            if chats.contains(where: { $0.id == wanted }) { selection = wanted }
+        }
         // Development hook: `--open-latest-chat`.
         if selection == nil, CommandLine.arguments.contains("--open-latest-chat") { selection = chats.first?.id }
         // Development hook for screenshots: MOSSAD_CHAT=<the start of a chat id> opens that chat.

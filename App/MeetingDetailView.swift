@@ -59,7 +59,7 @@ struct MeetingDetailView: View {
                 guard let seek = controller.seekRequest, seek.callID == record.id else { return }
                 controller.seekRequest = nil
                 tabBinding.wrappedValue = .transcript
-                guard seek.play else { highlight = seek.at; return }
+                guard seek.play else { if seek.mark { highlight = seek.at }; return }
                 await play(from: seek.at)
             }
             .task(id: record.cloudKey) {
