@@ -46,3 +46,23 @@ final class SummaryBackfillTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(CallRecord.self, from: data).tagsSetByOwner)
     }
 }
+
+final class SummaryBackfillRunTests: XCTestCase {
+    func testRunPausesAfterThreeFailuresInARow() async {
+        var seen: [String] = []
+        let result = await SummaryBackfill.run(ids: ["a", "b", "c", "d", "e"]) { id in
+            seen.append(id)
+            return false
+        }
+        XCTAssertEqual(seen, ["a", "b", "c"])
+        XCTAssertTrue(result.paused)
+        XCTAssertEqual(result.updated, 0)
+    }
+
+    func testASuccessResetsTheFailureCount() async {
+        let outcomes = ["a": false, "b": false, "c": true, "d": false, "e": false, "f": true]
+        let result = await SummaryBackfill.run(ids: ["a", "b", "c", "d", "e", "f"]) { outcomes[$0] ?? false }
+        XCTAssertFalse(result.paused)
+        XCTAssertEqual(result.updated, 2)
+    }
+}

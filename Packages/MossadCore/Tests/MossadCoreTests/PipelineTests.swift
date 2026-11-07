@@ -326,6 +326,67 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(summarizer.lastKnownTags, ["Freight"])
     }
 
+    func testBackfillIsQuietButANormalRunNotifies() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        XCTAssertEqual(notified.count, 1)
+        XCTAssertFalse(try load(id).unknownSpeakers.isEmpty)
+        var r = try load(id)
+        r.summaryVersion = nil
+        try r.save(to: paths.callDirectory(id))
+        notifications.records = []
+        let ok = await p.backfill(id)
+        XCTAssertTrue(ok)
+        XCTAssertTrue(notified.isEmpty)
+        await p.regenerateSummary(id)
+        XCTAssertEqual(notified.count, 1)
+    }
+
+    func testBackfillKeepsTheCalendarTitleAndAttendees() async throws {
+        let id = try makeRecord(meetingID: "abc-defg-hij")
+        var r = try load(id)
+        r.status = .identified
+        r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 0, end: 5, text: "Hello")]
+        r.calendarTitle = "Kept title"
+        r.attendees = ["Sam Park"]
+        try r.save(to: paths.callDirectory(id))
+        let other = FakeCalendar(events: [CalendarEventInfo(title: "Other", start: start, end: start.addingTimeInterval(1800),
+                                                            attendees: ["Dana Lee"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)])
+        let p = pipeline(calendar: other)
+        await p.process(id)
+        XCTAssertEqual(try load(id).calendarTitle, "Other")
+        r = try load(id)
+        r.calendarTitle = "Kept title"
+        r.attendees = ["Sam Park"]
+        r.summaryVersion = nil
+        try r.save(to: paths.callDirectory(id))
+        _ = await p.backfill(id)
+        r = try load(id)
+        XCTAssertEqual(r.calendarTitle, "Kept title")
+        XCTAssertEqual(r.attendees, ["Sam Park"])
+    }
+
+    func testRestoreKeepsTheOwnersTitleTagsAndBookmarks() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        _ = await p.transcribeAgain(id, speakers: nil)
+        var r = try load(id)
+        r.customTitle = "Mine"
+        r.tags = ["Freight"]
+        r.tagsSetByOwner = true
+        r.markers = [TranscriptMarker(offset: 12, text: "Bookmark", isBookmark: true, note: "Check")]
+        try r.save(to: paths.callDirectory(id))
+        let restored = await p.restorePreviousTranscript(id)
+        XCTAssertTrue(restored)
+        r = try load(id)
+        XCTAssertEqual(r.customTitle, "Mine")
+        XCTAssertEqual(r.tags, ["Freight"])
+        XCTAssertEqual(r.tagsSetByOwner, true)
+        XCTAssertEqual(r.markers.first?.note, "Check")
+    }
+
     func testBackfillKeepsOwnerTagsAndTitleAndAddsAGeneratedTitle() async throws {
         let id = try makeRecord()
         let p = pipeline()

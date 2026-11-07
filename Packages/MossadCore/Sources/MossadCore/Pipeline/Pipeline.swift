@@ -13,6 +13,8 @@ public actor Pipeline {
     private var inFlight: Set<String> = []
     /// Calls whose tags the owner changed while they were processing; the summary must not overwrite those.
     private var tagsEditedByOwner: Set<String> = []
+    /// Calls running as the quiet backfill; see `regenerateSummary`.
+    private var quietRuns: Set<String> = []
 
     private let paths: Paths
     private let queue: ProcessingQueue
@@ -74,6 +76,7 @@ public actor Pipeline {
 
     private func processSteps(_ id: String) async {
         defer {
+            quietRuns.remove(id)
             stages[id] = nil
             transcribing.remove(id)
             onDetail(id, nil)
@@ -129,11 +132,14 @@ public actor Pipeline {
 
     /// Asks Claude for a new summary of a finished meeting, for example after the summary format changed.
     /// The transcript and speakers stay; only the summary step and the note run again.
-    public func regenerateSummary(_ id: String) async {
+    /// `quiet` is for the one-time backfill: no "name this voice" notification and no calendar match, so old
+    /// meetings keep their calendar title and attendees and the owner is not pinged once per meeting.
+    public func regenerateSummary(_ id: String, quiet: Bool = false) async {
         let dir = paths.callDirectory(id)
         guard var r = try? CallRecord.load(from: dir), r.status == .written, !r.utterances.isEmpty else { return }
         r.status = .identified
         do { try store(r, dir: dir) } catch { return }
+        if quiet { quietRuns.insert(id) }
         await process(id)
     }
 
@@ -147,7 +153,7 @@ public actor Pipeline {
             r.tagsSetByOwner = true
             try? store(r, dir: dir)
         }
-        await regenerateSummary(id)
+        await regenerateSummary(id, quiet: true)
         guard let r = try? CallRecord.load(from: paths.callDirectory(id)) else { return false }
         return r.status == .written && (r.summaryVersion ?? 0) >= SummaryBackfill.currentVersion
     }
@@ -205,6 +211,11 @@ public actor Pipeline {
               var r = try? CallRecord.load(from: dir, fileName: Self.previousFileName), !inFlight.contains(id) else { return false }
         // The note is written again from the old record; any path change follows the current one.
         r.markdownPath = current.markdownPath
+        // Edits made since the transcribe-again belong to the owner, not to the old record.
+        r.customTitle = current.customTitle
+        r.tags = current.tags
+        r.tagsSetByOwner = current.tagsSetByOwner
+        r.markers = current.markers
         r.status = .summarized
         do { try store(r, dir: dir) } catch { return false }
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.previousFileName))
@@ -415,11 +426,13 @@ public actor Pipeline {
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
-        detail(r.id, "Finding the calendar invite")
-        let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
-        if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
-            r.calendarTitle = event.title
-            r.attendees = event.attendees
+        if !quietRuns.contains(r.id) {
+            detail(r.id, "Finding the calendar invite")
+            let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+            if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
+                r.calendarTitle = event.title
+                r.attendees = event.attendees
+            }
         }
         if summarizer != nil, !r.utterances.isEmpty { detail(r.id, "Claude is writing the summary") }
         if let summarizer, !r.utterances.isEmpty {
@@ -455,7 +468,7 @@ public actor Pipeline {
         detail(r.id, "Making the recording")
         Recording.makeIfMissing(in: paths.callDirectory(r.id))
         // Without fingerprints a name is never learned, so asking after every call would only nag.
-        if voiceFingerprints, !r.unknownSpeakers.isEmpty { notify(r) }
+        if voiceFingerprints, !r.unknownSpeakers.isEmpty, !quietRuns.contains(r.id) { notify(r) }
     }
 
     /// Applies names chosen by David, learns those voices, and rewrites the summary and the file.

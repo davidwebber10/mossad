@@ -629,10 +629,18 @@ final class AppController: ObservableObject {
         liveTitling = Task { [weak self] in
             try? await Task.sleep(for: .seconds(300))
             guard !Task.isCancelled, let self, self.isRecording(callID) else { return }
+            // A calendar title or the owner's title wins, so no model call is spent on a title nobody shows.
+            let recorder = self.recorder
+            let hasTitle = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+                CaptureQueue.queue.async {
+                    let r = recorder.currentRecord
+                    done.resume(returning: r?.id != callID || r?.calendarTitle != nil || r?.customTitle != nil)
+                }
+            }
+            guard !hasTitle else { return }
             let text = self.live.snapshot.text(owner: owner, since: nil)
             guard let title = await UsageContext.$callID.withValue(callID, operation: { await titler.title(transcript: text) }),
                   !Task.isCancelled, self.isRecording(callID) else { return }
-            let recorder = self.recorder
             CaptureQueue.queue.async {
                 recorder.setGeneratedTitle(title, forCall: callID)
                 Task { @MainActor in self.refresh() }
@@ -893,22 +901,28 @@ final class AppController: ObservableObject {
         Log.info("Updating \(ids.count) older meetings with titles and decision times")
         Task(priority: .utility) { [weak self] in
             let began = Date()
-            var updated = 0
             let done = Set(ids)
-            for id in ids {
+            let result = await SummaryBackfill.run(ids: ids) { [weak self] id in
                 // Wait out a call; the phone and the owner come first.
-                while let self, self.isRecording { try? await Task.sleep(for: .seconds(30)) }
-                guard let self else { return }
-                var ok = false
-                await self.track { ok = await self.pipeline.backfill(id) }
-                if ok { updated += 1 }
+                while let self, await self.isRecording { try? await Task.sleep(for: .seconds(30)) }
+                guard let self else { return false }
+                return await self.runBackfill(id)
             }
-            UserDefaults.standard.set(true, forKey: key)
+            let updated = result.updated
+            // Not marked done, so the meetings still due continue next launch.
+            if result.paused { Log.info("Backfill paused after \(SummaryBackfill.maxConsecutiveFailures) failures; it continues next launch") }
+            else { UserDefaults.standard.set(true, forKey: key) }
             guard let self else { return }
             let cost = self.usage.all().filter { $0.date >= began && $0.purpose == .summary && $0.callID.map(done.contains) == true }.compactMap(\.costUSD).reduce(0, +)
             Log.info("Updated \(updated) meetings" + (cost > 0 ? String(format: " (about $%.2f)", cost) : ""))
             self.refresh()
         }
+    }
+
+    private func runBackfill(_ id: String) async -> Bool {
+        var ok = false
+        await track { ok = await self.pipeline.backfill(id) }
+        return ok
     }
 
     func transcribeAgain(_ id: String, speakers: Int?) {
