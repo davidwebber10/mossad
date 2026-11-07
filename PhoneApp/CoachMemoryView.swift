@@ -35,7 +35,7 @@ struct CoachMemoryView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack {
                                     Image(systemName: pattern.kind == .strength ? "plus.circle.fill" : "arrow.up.forward.circle.fill")
-                                        .foregroundStyle(pattern.kind == .strength ? .green : .orange)
+                                        .foregroundStyle(pattern.kind == .strength ? Palette.ok : Palette.accent)
                                     Text(pattern.name).font(.subheadline.weight(.semibold))
                                 }
                                 Text(pattern.note).font(.subheadline).foregroundStyle(.secondary)

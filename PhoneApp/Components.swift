@@ -35,30 +35,28 @@ func rich(_ text: String) -> AttributedString {
     (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
 }
 
-func scoreColor(_ score: Int) -> Color { score >= 4 ? .green : score == 3 ? .yellow : .orange }
+func scoreColor(_ score: Int) -> Color { score >= 4 ? Palette.ok : score == 3 ? Palette.secondary : Palette.accent }
 
-/// A rounded surface on the grouped background, for content that is not a list.
+/// A group on the page: no card around it, a hairline above, as the canvas separates groups by type and rules.
 struct Card<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) { content }
-            .padding(16)
+        VStack(alignment: .leading, spacing: Space.m) { content }
+            .padding(.top, Space.l)
+            .padding(.bottom, Space.xs)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 20))
+            .overlay(alignment: .top) { Hairline() }
+            .foregroundStyle(Palette.ink)
     }
 }
 
+/// A group's label in caps. The symbol is kept for callers but not drawn: the canvas labels groups with words.
 struct CardTitle: View {
     let text: String
     var symbol: String?
 
-    var body: some View {
-        Group {
-            if let symbol { Label(text, systemImage: symbol) } else { Text(text) }
-        }
-        .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-    }
+    var body: some View { PhoneLabel(text) }
 }
 
 /// The coach's score for a meeting, as a small colored "4".
@@ -75,47 +73,20 @@ struct ScoreBadge: View {
     }
 }
 
-/// A big number with a label, for the grids on People and Analytics.
+/// A figure as the canvas sets it: the number large, what it counts under it, no tile around it.
 struct StatTile: View {
     let value: String
     let label: String
     var detail: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(value).font(.title2.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
-            Text(label).font(.footnote).foregroundStyle(.secondary)
-            if let detail { Text(detail).font(.caption).foregroundStyle(.tertiary).lineLimit(1) }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).textRole(.title).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+            Text(label).textRole(.secondary).foregroundStyle(Palette.secondary)
+            if let detail { Text(detail).textRole(.secondary).foregroundStyle(Palette.tertiary).lineLimit(2) }
         }
-        .padding(14)
+        .padding(.vertical, Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
-    }
-}
-
-struct MeetingRow: View {
-    let record: CallRecord
-    var score: Int?
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: record.platform.symbol)
-                .font(.footnote).foregroundStyle(record.platform.tint)
-                .frame(width: 30, height: 30)
-                .background(record.platform.tint.opacity(0.14), in: .rect(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(record.title).font(.body.weight(.medium)).lineLimit(1)
-                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).monospacedDigit()
-            }
-            Spacer(minLength: 4)
-            if let score { ScoreBadge(score: score) }
-        }
-    }
-
-    /// "2:05 PM · 49 min · Jon Hueni, Ben Spiegel"
-    private var detail: String {
-        let others = Set(record.speakerNames.filter { !$0.key.hasPrefix("me:") }.values).sorted()
-        let people = others.isEmpty ? [] : [others.prefix(2).joined(separator: ", ") + (others.count > 2 ? " +\(others.count - 2)" : "")]
-        return ([record.start.formatted(.dateTime.hour().minute()), "\(record.minutes) min"] + people).joined(separator: " · ")
+        .accessibilityElement(children: .combine)
     }
 }

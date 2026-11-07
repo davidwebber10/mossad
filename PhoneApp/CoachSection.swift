@@ -39,8 +39,8 @@ struct CoachSection: View {
                     }
                 }
                 if let value = review.value { ValueCard(value: value) }
-                PointsCard(title: "What worked", symbol: "hand.thumbsup.fill", tint: .green, points: review.strengths, review: review, callID: record.id)
-                PointsCard(title: "What to work on", symbol: "arrow.up.forward.circle.fill", tint: .orange, points: review.improvements, review: review, callID: record.id)
+                PointsCard(title: "What worked", symbol: "hand.thumbsup.fill", tint: Palette.ok, points: review.strengths, review: review, callID: record.id)
+                PointsCard(title: "What to work on", symbol: "arrow.up.forward.circle.fill", tint: Palette.accent, points: review.improvements, review: review, callID: record.id)
                 if let card = review.scorecard { ScorecardCard(card: card) }
                 CoachThread(callID: record.id, thread: review.thread)
             }
@@ -77,8 +77,8 @@ private struct ScorecardCard: View {
                 .tint(scoreColor(d.score))
             }
             if !card.positives.isEmpty || !card.negatives.isEmpty { Divider() }
-            ForEach(card.positives, id: \.self) { point($0, "plus.circle.fill", .green) }
-            ForEach(card.negatives, id: \.self) { point($0, "minus.circle.fill", .orange) }
+            ForEach(card.positives, id: \.self) { point($0, "plus.circle.fill", Palette.ok) }
+            ForEach(card.negatives, id: \.self) { point($0, "minus.circle.fill", Palette.accent) }
         }
     }
 }
@@ -109,7 +109,7 @@ private struct ValueCard: View {
         }
     }
 
-    private var tint: Color { value.rating == .high ? .green : value.rating == .medium ? .yellow : .orange }
+    private var tint: Color { value.rating == .high ? Palette.ok : value.rating == .medium ? Palette.secondary : Palette.accent }
 }
 
 private struct PointsCard: View {
@@ -187,7 +187,7 @@ private struct PointView: View {
             }
             .font(.subheadline)
         }
-        if let error { Text(error).font(.caption).foregroundStyle(.red) }
+        if let error { Text(error).font(.caption).foregroundStyle(Palette.recording) }
     }
 
     private func thumb(agree: Bool) -> some View {
@@ -197,7 +197,7 @@ private struct PointView: View {
         } label: {
             Image(systemName: agree ? (chosen ? "hand.thumbsup.fill" : "hand.thumbsup") : (chosen ? "hand.thumbsdown.fill" : "hand.thumbsdown"))
                 .font(.body)
-                .foregroundStyle(chosen ? (agree ? Color.green : Color.orange) : Color.secondary)
+                .foregroundStyle(chosen ? (agree ? Palette.ok : Palette.accent) : Palette.secondary)
                 .frame(minWidth: 32, minHeight: 32)
         }
         .buttonStyle(.plain)
@@ -242,7 +242,7 @@ private struct CoachThread: View {
             if sending {
                 HStack(spacing: 8) { ProgressView(); Text("The coach is thinking…").font(.subheadline).foregroundStyle(.secondary) }
             }
-            if let error { Text(error).font(.caption).foregroundStyle(.red) }
+            if let error { Text(error).font(.caption).foregroundStyle(Palette.recording) }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Reply to the coach", text: $message, axis: .vertical)
                     .lineLimit(1...5)

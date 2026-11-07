@@ -91,74 +91,131 @@ final class RoomRecorder: ObservableObject {
     }
 }
 
-/// The full-screen recorder: a big timer, a live level meter, pause, and stop.
+/// The full-screen recorder as the canvas draws it: the red status capsule, a large timer, the room's level as
+/// bars, and one big stop button between pause and the meeting's name. The Mac transcribes after; the audio
+/// stays here until it has it.
 struct RecordingView: View {
     @EnvironmentObject var store: PhoneStore
     @StateObject private var recorder = RoomRecorder()
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var title = ""
     @FocusState private var naming: Bool
+    @ScaledMetric(relativeTo: .largeTitle) private var timerSize: CGFloat = 52
 
     var body: some View {
-        VStack(spacing: 28) {
-            HStack {
-                Button("Cancel") { dismiss() }.opacity(recorder.state == .idle ? 1 : 0).disabled(recorder.state != .idle)
-                Spacer()
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: Space.l) {
+                    status
+                    Text(coachClock(recorder.elapsed))
+                        .font(.system(size: timerSize, weight: .semibold)).monospacedDigit()
+                        .tracking(-timerSize * 0.02)
+                        .foregroundStyle(Palette.ink)
+                        .contentTransition(.numericText())
+                        .accessibilityLabel("Recorded \(duration(recorder.elapsed))")
+                    Text(recorder.state == .paused ? "Paused. Nothing is recorded until you resume."
+                         : "Keep the iPhone near the people talking.")
+                        .textRole(.secondary).foregroundStyle(Palette.secondary)
+                        .multilineTextAlignment(.center)
+                    meter
+                    controls.padding(.vertical, Space.s)
+                    VStack(alignment: .leading, spacing: Space.s) {
+                        PhoneLabel("Meeting name")
+                        TextField("What is this meeting? (optional)", text: $title)
+                            .textRole(.body)
+                            .focused($naming)
+                            .padding(.horizontal, Space.m).padding(.vertical, 11)
+                            .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+                    }
+                    if let error = recorder.error {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .textRole(.secondary).foregroundStyle(Palette.recording)
+                    }
+                    Text("Mossad on your Mac writes the notes: the transcript, who said what, and the summary.")
+                        .textRole(.secondary).foregroundStyle(Palette.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, Space.s)
+                }
+                .padding(.horizontal, Space.l)
+                .padding(.top, Space.s)
             }
-            Spacer()
-            VStack(spacing: 8) {
-                Label(recorder.state == .paused ? "Paused" : recorder.state == .recording ? "Recording in the room" : "Ready",
-                      systemImage: recorder.state == .recording ? "record.circle" : "mic")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(recorder.state == .recording ? Color.red : Color.secondary)
-                    .symbolEffect(.pulse, isActive: recorder.state == .recording)
-                Text(coachClock(recorder.elapsed))
-                    .font(.system(size: 64, weight: .light, design: .rounded)).monospacedDigit()
-                    .contentTransition(.numericText())
-            }
-            HStack(alignment: .center, spacing: 4) {
-                ForEach(Array(recorder.levels.enumerated()), id: \.offset) { _, l in
-                    Capsule().fill(recorder.state == .recording ? Color.red.opacity(0.8) : Color.secondary.opacity(0.3))
-                        .frame(width: 6, height: 6 + CGFloat(l) * 70)
+            .scrollDismissesKeyboard(.interactively)
+            .phonePage()
+            .navigationTitle("In-person meeting")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if recorder.state == .idle {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.tint(Palette.ink) }
                 }
             }
-            .frame(height: 80)
-            .animation(.linear(duration: 0.1), value: recorder.levels)
-            TextField("What is this meeting? (optional)", text: $title)
-                .multilineTextAlignment(.center).font(.title3).focused($naming)
-                .padding(.horizontal, 24)
-            if let error = recorder.error { Text(error).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center) }
-            Spacer()
-            controls
-            Text("Keep the phone on the table, near the people talking. Mossad on your Mac writes the notes.")
-                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 32)
         }
-        .padding()
         .interactiveDismissDisabled(recorder.state != .idle)
-        .task { if recorder.state == .idle { await recorder.start(into: store.recordingsFolder) } }
+        .task { if recorder.state == .idle, PhoneStore.hook("MOSSAD_ROOM") == nil { await recorder.start(into: store.recordingsFolder) } }
     }
 
-    @ViewBuilder
+    private var status: some View {
+        let live = recorder.state == .recording
+        return HStack(spacing: 6) {
+            Image(systemName: "circle.fill").font(.system(size: 7))
+                .foregroundStyle(live ? Palette.recording : Palette.tertiaryMark)
+                .symbolEffect(.pulse, isActive: live && !reduceMotion)
+                .accessibilityHidden(true)
+            Text(live ? "Recording the room" : recorder.state == .paused ? "Paused" : "Ready")
+        }
+        .textRole(.secondary)
+        .fontWeight(.semibold)
+        .foregroundStyle(live ? Palette.recording : Palette.secondary)
+        .padding(.horizontal, Space.m).padding(.vertical, 5)
+        .background(live ? Palette.recordingTint : Palette.fill, in: Capsule())
+    }
+
+    /// The last second of the room's level, newest on the right.
+    private var meter: some View {
+        HStack(alignment: .center, spacing: 3) {
+            ForEach(Array(recorder.levels.enumerated()), id: \.offset) { _, l in
+                Capsule()
+                    .fill(recorder.state == .recording ? Palette.recording.opacity(0.85) : Palette.bar)
+                    .frame(maxWidth: 6)
+                    .frame(height: 6 + CGFloat(l) * 34)
+            }
+        }
+        .frame(height: 44)
+        .frame(maxWidth: .infinity)
+        .animation(reduceMotion ? nil : .linear(duration: 0.1), value: recorder.levels)
+        .accessibilityHidden(true)
+    }
+
     private var controls: some View {
-        HStack(spacing: 40) {
+        HStack(spacing: Space.xl) {
             Button {
                 recorder.state == .paused ? recorder.resume() : recorder.pause()
             } label: {
-                Image(systemName: recorder.state == .paused ? "play.fill" : "pause.fill").font(.title2).frame(width: 64, height: 64)
+                Image(systemName: recorder.state == .paused ? "play.fill" : "pause.fill")
+                    .font(.title3).foregroundStyle(Palette.ink)
+                    .frame(width: 52, height: 52)
             }
-            .buttonStyle(.glass).buttonBorderShape(.circle)
+            .buttonStyle(.plain)
+            .mossadGlass(in: Circle(), interactive: true)
             .disabled(recorder.state == .idle)
             .accessibilityLabel(recorder.state == .paused ? "Resume" : "Pause")
             Button {
                 if let (rec, url) = recorder.stop(title: title) { store.send(rec, audio: url) }
                 dismiss()
             } label: {
-                Image(systemName: "stop.fill").font(.title).frame(width: 84, height: 84)
+                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.white)
+                    .frame(width: 26, height: 26)
+                    .frame(width: 78, height: 78)
+                    .background(Palette.recording, in: Circle())
+                    .padding(5)
+                    .background(Palette.recordingTint, in: Circle())
             }
-            .buttonStyle(.glassProminent).buttonBorderShape(.circle).tint(.red)
-            .disabled(recorder.state == .idle)
+            .buttonStyle(.plain)
+            .disabled(recorder.state == .idle && PhoneStore.hook("MOSSAD_ROOM") == nil)
             .accessibilityLabel("Stop and send to your Mac")
             .sensoryFeedback(.success, trigger: recorder.state == .idle)
+            // Balances pause, so the stop button sits in the middle.
+            Color.clear.frame(width: 52, height: 52)
         }
     }
 }

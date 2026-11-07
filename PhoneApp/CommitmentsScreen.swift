@@ -43,6 +43,7 @@ struct CommitmentsScreen: View {
                     Button("Add a commitment", systemImage: "plus") {
                         adding = Commitment(text: "", to: nil, callID: nil, callTitle: nil, madeAt: Date(), due: nil)
                     }
+                    .tint(Palette.ink)
                 }
             }
             .refreshable { await store.sync() }

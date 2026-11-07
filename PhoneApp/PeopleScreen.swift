@@ -190,7 +190,7 @@ private struct PhoneRelation: View {
                     Label {
                         Text(c.text).strikethrough(c.done != nil).font(.subheadline)
                     } icon: {
-                        Image(systemName: c.done != nil ? "checkmark.circle.fill" : "circle").foregroundStyle(c.done != nil ? .green : .secondary)
+                        Image(systemName: c.done != nil ? "checkmark.circle.fill" : "circle").foregroundStyle(c.done != nil ? Palette.ok : Palette.secondary)
                     }
                 }
             }
