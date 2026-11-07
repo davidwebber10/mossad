@@ -31,8 +31,8 @@ struct MainWindow: View {
         // The window's contentMinSize sets the limit. A minimum height here would apply below the toolbar, so it
         // asked for 600 pt plus the toolbar and the root grew past the window, centered, under the title bar.
         // Without any frame the content's own minimum held the window at 820 pt. So: any height, from the top.
-        // No minimum width here either: one wider than the window centered the root and slid the sidebar off the
-        // left edge. Content that cannot fit overflows to the right instead.
+        // No minimum width here either: the window's own minimum (Chrome.windowMinWidth) keeps the content from
+        // ever being wider than the window, which is what slid the sidebar off the left edge.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
         .environment(\.animationsActive, controller.windowVisible)
@@ -121,7 +121,10 @@ private struct Sidebar: View {
         .onKeyPress(.upArrow) { move(-1) }
         .onKeyPress(.home) { jump(to: AppController.Section.allCases.first) }
         .onKeyPress(.end) { jump(to: AppController.Section.allCases.last) }
-        .onKeyPress(characters: .letters) { press in jump(to: AppController.Section.typeSelect(press.characters, from: controller.section)) }
+        .onKeyPress(characters: .letters) { press in
+            // Only plain letters: a Command or Option shortcut is not a page name.
+            guard press.modifiers.subtracting(.shift).isEmpty else { return .ignored }
+            return jump(to: AppController.Section.typeSelect(press.characters, from: controller.section)) }
         .task(id: controller.commitmentsVersion) {
             openCommitments = controller.commitmentBook.visible.filter { $0.done == nil }.count
         }
@@ -303,7 +306,8 @@ private struct UpdateCard: View {
         }
     }
 
-    private var enabled: Bool { !updater.waitingForCall && updater.progress.canStart }
+    // canCheck is false while Sparkle has a session of its own open; a click then would do nothing.
+    private var enabled: Bool { updater.canCheck && !updater.waitingForCall && updater.progress.canStart }
 
     private func card(_ update: AvailableUpdate) -> some View {
         let preview = update.notes.preview

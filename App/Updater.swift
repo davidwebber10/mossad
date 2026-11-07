@@ -56,7 +56,7 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     /// "Update now": Sparkle's own install, which shows its progress and waits for a call to end.
     /// A VoiceOver press on a card that shows "Installs after this call" or "Installing…" does nothing.
     func installAvailable() {
-        guard progress.canStart, !waitingForCall else { return }
+        guard canCheck, progress.canStart, !waitingForCall else { return }
         progress.clicked()
         controller.checkForUpdates(nil)
     }

@@ -1168,7 +1168,13 @@ final class AppController: ObservableObject {
                 w.setContentSize(NSSize(width: previewWidth ?? 1240, height: previewHeight ?? 820))
             }
             w.center()
-            if previewWidth == nil, previewHeight == nil { w.setFrameAutosaveName("MossadMain") }
+            if previewWidth == nil, previewHeight == nil {
+                w.setFrameAutosaveName("MossadMain")
+                // A frame saved under the older, smaller minimum comes back as it was: widen it to the new one.
+                if let content = w.contentView?.frame.size, content.width < Chrome.windowMinWidth {
+                    w.setContentSize(NSSize(width: Chrome.windowMinWidth, height: content.height))
+                }
+            }
             window = w
             trafficLights = TrafficLights(window: w) { [weak self] in
                 if self?.fullScreen != $0 { self?.fullScreen = $0 }
