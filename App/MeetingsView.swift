@@ -257,7 +257,7 @@ extension CallRecord: @retroactive Identifiable {
     /// A call that is still recording or processing cannot be deleted; Skip this call covers the first.
     var canDelete: Bool { status == .written || status == .failed }
 
-    var badge: StatusBadge.Kind? {
+    var badge: MeetingBadge? {
         switch status {
         case .recording: .recording
         case .failed: .failed

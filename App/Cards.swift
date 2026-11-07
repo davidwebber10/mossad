@@ -25,9 +25,9 @@ struct Card<Accessory: View, Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(Theme.separator.opacity(contrast == .increased ? 1 : 0.6), lineWidth: contrast == .increased ? 1 : 0.5))
+            .strokeBorder(Palette.hairline.opacity(contrast == .increased ? 1 : 0.6), lineWidth: contrast == .increased ? 1 : 0.5))
     }
 }
 
