@@ -34,6 +34,8 @@ struct MeetingView: View {
                     if !record.utterances.isEmpty {
                         PhoneLanes(lanes: lanes, duration: length, moment: moment, decisions: record.decisions,
                                    bookmarks: record.markers.filter(\.isBookmark)) { read(at: $0) }
+                            // A chart: past this size the names would leave no room for the lanes; VoiceOver reads each lane.
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     }
                     PhoneSegments(options: Section.allCases.map { ($0, $0.rawValue) }, selection: $tab)
                         .frame(maxWidth: .infinity)

@@ -123,6 +123,7 @@ func shortLength(_ seconds: TimeInterval) -> String {
 /// One meeting: the platform dot, the title (up to two lines), the time, platform, and size of the room under it,
 /// the length on the right, and "2 voices need names" when the Mac is waiting on the owner.
 struct PhoneMeetingRow: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let record: CallRecord
     var divided = true
     /// Search results come from any day, so they show the date too.
@@ -136,9 +137,11 @@ struct PhoneMeetingRow: View {
                     Text(record.title)
                         .textRole(.headline)
                         .foregroundStyle(Palette.ink)
-                        .lineLimit(2)
+                        // Large type wraps instead of cutting the title short.
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                         .multilineTextAlignment(.leading)
-                    Text(detail).textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Text(detail).textRole(.secondary).foregroundStyle(Palette.secondary)
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
                     if !record.unknownSpeakers.isEmpty, record.status == .written {
                         let n = record.unknownSpeakers.count
                         NeedsYouChip(text: n == 1 ? "1 voice needs a name" : "\(n) voices need names").padding(.top, 4)

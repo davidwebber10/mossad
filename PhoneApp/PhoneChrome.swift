@@ -125,6 +125,14 @@ struct PhoneSegments<Value: Hashable>: View {
     @Namespace private var selectionSpace
 
     var body: some View {
+        // At the largest text sizes the segments do not fit; they scroll sideways rather than cut their names.
+        ViewThatFits(in: .horizontal) {
+            segments
+            ScrollView(.horizontal, showsIndicators: false) { segments }
+        }
+    }
+
+    private var segments: some View {
         HStack(spacing: 2) {
             ForEach(options, id: \.0) { value, title in
                 let on = value == selection
@@ -136,6 +144,7 @@ struct PhoneSegments<Value: Hashable>: View {
                         .fontWeight(on ? .semibold : .regular)
                         .foregroundStyle(on ? Palette.ink : Palette.secondary)
                         .lineLimit(1)
+                        .fixedSize()
                         .padding(.horizontal, 14).padding(.vertical, 7)
                         .background {
                             if on {
@@ -152,5 +161,6 @@ struct PhoneSegments<Value: Hashable>: View {
         }
         .padding(3)
         .mossadGlass(in: Capsule())
+        .fixedSize()
     }
 }
