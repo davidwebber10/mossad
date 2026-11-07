@@ -19,7 +19,7 @@ private struct MossadGlass<S: InsettableShape>: ViewModifier {
     @Environment(\.colorSchemeContrast) private var contrast
 
     func body(content: Content) -> some View {
-        if reduceTransparency {
+        if reduceTransparency || PreviewAccessibility.reduceTransparency {
             // The design's fallback, rather than the system's own frosted gray, so it stays warm paper.
             content
                 .background(Palette.surface, in: shape)
@@ -28,7 +28,7 @@ private struct MossadGlass<S: InsettableShape>: ViewModifier {
             content
                 .glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
                 // Glass has no edge of its own strong enough under Increase Contrast.
-                .overlay { if contrast == .increased { shape.strokeBorder(Palette.hairline, lineWidth: 1) } }
+                .overlay { if contrast == .increased || PreviewAccessibility.increaseContrast { shape.strokeBorder(Palette.hairline, lineWidth: 1) } }
         }
     }
 }

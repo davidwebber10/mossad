@@ -6,7 +6,8 @@ struct Card<Accessory: View, Content: View>: View {
     let title: String
     @ViewBuilder let accessory: () -> Accessory
     @ViewBuilder let content: () -> Content
-    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.colorSchemeContrast) private var systemContrast
+    private var contrast: ColorSchemeContrast { PreviewAccessibility.increaseContrast ? .increased : systemContrast }
 
     init(_ title: String, @ViewBuilder accessory: @escaping () -> Accessory, @ViewBuilder content: @escaping () -> Content) {
         self.title = title

@@ -55,7 +55,7 @@ private struct WindowBackdrop: View {
         let dark = scheme == .dark
         Palette.window
             .overlay {
-                if !reduceTransparency {
+                if !reduceTransparency, !PreviewAccessibility.reduceTransparency {
                     GeometryReader { g in
                         ZStack {
                             RadialGradient(colors: [Color(light: OKLCH(lightness: 0.9, chroma: 0.06, hue: 55), dark: OKLCH(lightness: 0.42, chroma: 0.07, hue: 55))

@@ -330,6 +330,11 @@ final class AppController: ObservableObject {
         if preview, let look = ProcessInfo.processInfo.environment["MOSSAD_APPEARANCE"] {
             NSApp.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
         }
+        // The high-contrast appearances carry the tokens' Increase Contrast values.
+        if PreviewAccessibility.increaseContrast {
+            let dark = (NSApp.appearance ?? NSApp.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            NSApp.appearance = NSAppearance(named: dark ? .accessibilityHighContrastDarkAqua : .accessibilityHighContrastAqua)
+        }
         // Development hook: `--open-naming` opens "Who is speaking?" for the first call that needs names.
         if CommandLine.arguments.contains("--open-naming"), let first = callsNeedingNames.first {
             DispatchQueue.main.async { self.openNaming(first.id) }
