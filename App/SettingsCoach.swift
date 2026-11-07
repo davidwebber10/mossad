@@ -124,7 +124,7 @@ private struct FocusProse: View {
     var body: some View {
         if let f = profile.activeFocus {
             VStack(alignment: .leading, spacing: 6) {
-                Text(f.plan).font(.system(size: 16, weight: .medium)).lineSpacing(3).foregroundStyle(Palette.ink)
+                Text(f.plan).font(.system(size: 16, weight: .medium)).cssLineHeight(1.4, size: 16).foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 if !f.results.isEmpty {
                     HStack(spacing: 10) {
@@ -147,10 +147,10 @@ private struct FocusProse: View {
                 if editing {
                     TextField("Your focus", text: $text, axis: .vertical).textFieldStyle(SheetFieldStyle())
                 } else {
-                    Text(f.plan).font(.system(size: 16, weight: .medium)).lineSpacing(3).foregroundStyle(Palette.ink)
+                    Text(f.plan).font(.system(size: 16, weight: .medium)).cssLineHeight(1.4, size: 16).foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(f.why).font(.system(size: 12.5)).foregroundStyle(Palette.secondary).lineSpacing(2)
+                Text(f.why).font(.system(size: 12.5)).foregroundStyle(Palette.secondary).cssLineHeight(1.45, size: 12.5)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
                 HStack(spacing: 6) {
@@ -197,6 +197,7 @@ private struct QuestionProse: View {
                 }
                 .accessibilityElement(children: .combine)
                 Text(q.statement).font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.ink)
+                    .cssLineHeight(size: 14)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
                 if !q.evidence.isEmpty {
@@ -285,6 +286,8 @@ private struct CoachKnowledge: View {
                         TextField(kind.title, text: Binding(get: { drafts[kind, default: ""] }, set: { drafts[kind] = $0 }), prompt: Text(hint(kind)))
                             // Fills the row instead of a fixed width, which pushed this page wider than the others.
                             .textFieldStyle(SettingsFieldStyle())
+                            // The canvas's 320 pt field, but it may shrink in a narrow window.
+                            .frame(maxWidth: 320 + 2 * Space.s)
                             .onSubmit { add(kind) }
                     } action: {
                         Button("Add") { add(kind) }
@@ -314,6 +317,7 @@ private struct CoachKnowledge: View {
     private func entry<Value: View, Action: View>(_ key: String, @ViewBuilder value: () -> Value, @ViewBuilder action: () -> Action) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Text(key).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                .cssLineHeight(size: 12)
                 .frame(width: 150, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             value().frame(maxWidth: .infinity, alignment: .leading)

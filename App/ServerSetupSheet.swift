@@ -39,7 +39,7 @@ struct ServerSetupSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(symbol: "server.rack", title: "Set up your server",
+            SheetHeader(icon: .cloud, title: "Set up your server",
                         subtitle: "About 5 minutes. Your meetings stay in your own Cloudflare account.")
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -254,7 +254,7 @@ private struct SetupStep<Content: View>: View {
             switch state {
             case .done:
                 Circle().fill(Palette.ok)
-                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                IconImage(.check, size: 12).foregroundStyle(.white)
             case .active:
                 Circle().fill(Palette.accentFill)
                 Text("\(number)").font(.system(size: 11.5, weight: .bold)).foregroundStyle(Palette.onAccent)

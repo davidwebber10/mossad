@@ -114,7 +114,7 @@ private struct SettingsListRow: View {
                     .frame(width: 28, height: 28)
                     .background(Palette.fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(page.title).font(.system(size: 13, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink)
+                    Text(page.title).font(.system(size: 13, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink).cssLineHeight(size: 13)
                     Text(page.contents).font(.system(size: 12)).foregroundStyle(Palette.secondary)
                         .lineLimit(1).truncationMode(.tail)
                 }
@@ -198,7 +198,7 @@ struct KeySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(symbol: "key", title: key.displayName, subtitle: "Stored in the Keychain. Mossad never shows it again.")
+            SheetHeader(icon: .key, title: key.displayName, subtitle: "Stored in the Keychain. Mossad never shows it again.")
             SecureField("Paste the key", text: $value)
                 .textFieldStyle(SheetFieldStyle(monospaced: true))
                 .onSubmit(save)

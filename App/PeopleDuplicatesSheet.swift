@@ -11,7 +11,7 @@ struct ExistingPersonHint: View {
         let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if !typed.isEmpty || !(email ?? "").isEmpty, let match = controller.library.existingName(name: typed, email: email) {
             HStack(spacing: 6) {
-                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Palette.ok)
+                IconImage(.check, size: 12).foregroundStyle(Palette.ok)
                     .accessibilityHidden(true)
                 Text(match == typed ? "\(match) is saved already. This voice joins them."
                                     : "Matches \(match), who is saved already. This voice joins them.")
@@ -34,7 +34,7 @@ struct PeopleDuplicatesSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(symbol: "person.2", title: "Possible duplicates",
+            SheetHeader(icon: .people, title: "Possible duplicates",
                         subtitle: "Merge keeps the name you pick and moves voice samples, the email, and meetings to it.")
             ScrollView {
                 VStack(spacing: 10) {
@@ -56,7 +56,7 @@ struct PeopleDuplicatesSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 person(pair.first).frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "arrow.left.arrow.right").font(.system(size: 12)).foregroundStyle(Palette.tertiaryMark)
+                IconImage(.merge, size: 13).foregroundStyle(Palette.tertiaryMark)
                     .accessibilityHidden(true)
                 person(pair.second).frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -64,7 +64,7 @@ struct PeopleDuplicatesSheet: View {
                 Label {
                     Text(reasonText(pair.reason))
                 } icon: {
-                    Image(systemName: reasonSymbol(pair.reason)).foregroundStyle(Palette.tertiaryMark)
+                    IconImage(reasonIcon(pair.reason), size: 12).foregroundStyle(Palette.tertiaryMark)
                 }
                 .font(.system(size: 12)).foregroundStyle(Palette.secondary)
                 Spacer()
@@ -74,9 +74,9 @@ struct PeopleDuplicatesSheet: View {
                     Button("Keep “\(pair.second)”") { merge(pair.first, pair.second) }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.triangle.merge").font(.system(size: 11))
+                        IconImage(.merge, size: 13)
                         Text("Merge")
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Palette.secondary)
+                        IconImage(.chevronDown, size: 10).foregroundStyle(Palette.secondary)
                     }
                 }
                 .menuStyle(.button)
@@ -111,11 +111,11 @@ struct PeopleDuplicatesSheet: View {
         }
     }
 
-    private func reasonSymbol(_ r: PeopleDuplicates.Reason) -> String {
+    private func reasonIcon(_ r: PeopleDuplicates.Reason) -> Icon {
         switch r {
-        case .sameEmail: "envelope"
-        case .sameName, .similarName: "pencil"
-        case .sameVoice: "waveform"
+        case .sameEmail: .document
+        case .sameName, .similarName: .pencil
+        case .sameVoice: .waveform
         }
     }
 }

@@ -190,7 +190,9 @@ private struct SidebarStatus: View {
             }
             if !permissions.allGood {
                 PermissionsCard()
-            } else if controller.processing > 0, controller.status == .idle {
+            }
+            UpdateCard(updater: controller.updater)
+            if permissions.allGood, controller.processing > 0, controller.status == .idle {
                 HStack(spacing: Space.s) {
                     Circle().fill(Palette.accentFill).frame(width: 7, height: 7)
                     Text("Processing \(controller.processing) \(controller.processing == 1 ? "call" : "calls")")
@@ -201,6 +203,41 @@ private struct SidebarStatus: View {
             }
         }
         .opacity(appearsActive ? 1 : 0.55)
+    }
+}
+
+/// The sidebar's call to act, as the canvas draws it: an accent-tinted card with a dot and a semibold title, quiet
+/// lines under it, and the action in accent.
+private struct SidebarCard<Lines: View>: View {
+    let title: String
+    let action: String
+    var actionEnabled = true
+    let perform: () -> Void
+    @ViewBuilder let lines: Lines
+
+    var body: some View {
+        Button(action: perform) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    Circle().fill(Palette.accentFill).frame(width: 7, height: 7)
+                    Text(title).fontWeight(.semibold).foregroundStyle(Palette.ink)
+                }
+                // No vertical fixedSize: when the window measures its minimum it asks the sidebar at a tiny width,
+                // and a fixed-size text there grows one word per line and held the window at 820 pt.
+                lines.foregroundStyle(Palette.secondary)
+                Text(action).fontWeight(.semibold).foregroundStyle(actionEnabled ? Palette.accent : Palette.secondary)
+                    .padding(.top, 6)
+            }
+            .font(.system(size: 12))
+            .lineSpacing(1.5)
+            .padding(EdgeInsets(top: 10, leading: 10, bottom: 8, trailing: 10))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        // Not disabled: a disabled button fades the whole card, and a waiting update still needs to read clearly.
+        .allowsHitTesting(actionEnabled)
     }
 }
 
@@ -216,31 +253,53 @@ private struct PermissionsCard: View {
     }
 
     var body: some View {
-        Button {
+        SidebarCard(title: permissions.problemCount == 1 ? "1 permission" : "\(permissions.problemCount) permissions",
+                    action: "Review…") {
             UserDefaults.standard.set(SettingsPage.general.rawValue, forKey: "settingsPage")
             controller.section = .settings
-        } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) {
-                    Circle().fill(Palette.accentFill).frame(width: 7, height: 7)
-                    Text(permissions.problemCount == 1 ? "1 permission" : "\(permissions.problemCount) permissions")
-                        .fontWeight(.semibold).foregroundStyle(Palette.ink)
-                }
-                // No vertical fixedSize: when the split view measures its minimum it asks the sidebar at a tiny width,
-                // and a fixed-size text there grows one word per line and held the window at 820 pt.
-                Text(missing).foregroundStyle(Palette.secondary).lineLimit(3)
-                Text("Review…").fontWeight(.semibold).foregroundStyle(Palette.accent).padding(.top, 6)
-            }
-            .font(.system(size: 12))
-            .lineSpacing(1.5)
-            .padding(EdgeInsets(top: 10, leading: 10, bottom: 8, trailing: 10))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        } lines: {
+            Text(missing).lineLimit(3)
         }
-        .buttonStyle(.plain)
         .accessibilityLabel("\(permissionsText(permissions.problemCount)): \(missing)")
         .accessibilityHint("Opens Settings")
+    }
+}
+
+/// "Update available / Mossad 1.9.0 / what it brings / Update now", in the permissions card's look. An update
+/// accepted during a call waits for the call to end, and the card says so.
+private struct UpdateCard: View {
+    @ObservedObject var updater: Updater
+
+    var body: some View {
+        if let update = updater.available { card(update) }
+    }
+
+    private var action: String {
+        if updater.waitingForCall { return "Installs after this call" }
+        return updater.installing ? "Installing…" : "Update now"
+    }
+
+    private func card(_ update: AvailableUpdate) -> some View {
+        let preview = update.notes.preview
+        return
+        SidebarCard(title: "Update available", action: action,
+                    actionEnabled: !updater.waitingForCall && !updater.installing) {
+            updater.installAvailable()
+        } lines: {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Mossad \(update.version)")
+                ForEach(Array(preview.lines.enumerated()), id: \.offset) { _, line in
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text("·")
+                        Text(line).lineLimit(2)
+                    }
+                }
+                if let more = preview.more { Text(more).foregroundStyle(Palette.tertiary).padding(.leading, 9) }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Update available: Mossad \(update.version). \(preview.lines.joined(separator: ". "))")
+        .accessibilityHint(updater.waitingForCall ? "Installs after this call" : "Installs the update")
     }
 }
 

@@ -193,6 +193,10 @@ enum Detail {
     static let composerWidth: CGFloat = 744
     static let composerHeight: CGFloat = 46
     static let composerSend: CGFloat = 34
+    /// The canvas's page body starts 10 pt under the toolbar row.
+    static let bodyTop: CGFloat = 10
+    /// Lists that read as a page (Commitments) stop at 960 pt.
+    static let listMax: CGFloat = 960
 }
 
 /// Concentric radii: an inner radius is the outer one minus the padding between them. Capsules use `Capsule()`.
@@ -269,6 +273,14 @@ enum TextRole: CaseIterable {
 }
 
 extension View {
+    /// The canvas's CSS line height (it sets 1.35 on the window): SwiftUI lays out SF text at about 1.19 em a line,
+    /// so the rest goes between lines and half above and below, as CSS spreads it. Without it every row reads
+    /// tighter than the canvas.
+    func cssLineHeight(_ multiple: CGFloat = 1.35, size: CGFloat) -> some View {
+        let extra = max(0, (multiple - 1.19) * size)
+        return lineSpacing(extra).padding(.vertical, extra / 2)
+    }
+
     /// Font, tracking, caps, and tabular numbers for a type step. Color stays with the caller (`Palette`).
     func textRole(_ role: TextRole) -> some View { modifier(TextRoleModifier(role: role)) }
 }

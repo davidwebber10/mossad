@@ -37,7 +37,7 @@ struct ShareSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(symbol: "link", title: "Share “\(record.title)”",
+            SheetHeader(icon: .link, title: "Share “\(record.title)”",
                         subtitle: record.start.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
             if hasServer { form } else { noServer }
         }
@@ -81,12 +81,12 @@ struct ShareSheet: View {
     private var form: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                part("Summary and action items", "The overview, topics, decisions, and action items.", "doc.plaintext", $options.summary)
-                part("Transcript", "Every line, with names and times.", "text.quote", $options.transcript)
+                part("Summary and action items", "The overview, topics, decisions, and action items.", .document, $options.summary)
+                part("Transcript", "Every line, with names and times.", .meetings, $options.transcript)
                 part("Recording", controller.hasRecording(record) ? "The audio, with a player. Tap a line to jump there." : "This meeting has no recording.",
-                     "waveform", $options.recording)
+                     .waveform, $options.recording)
                     .disabled(!controller.hasRecording(record))
-                part("AI chat", chatDetail, "sparkles", $options.chat)
+                part("AI chat", chatDetail, .sparkle, $options.chat)
                     .disabled(!controller.serverHasChat || !(options.summary || options.transcript))
 
                 HStack {
@@ -102,7 +102,7 @@ struct ShareSheet: View {
                 Label {
                     Text("The coach's review is never shared. People with the link can copy what they see.")
                 } icon: {
-                    Image(systemName: "lock").foregroundStyle(Palette.tertiaryMark)
+                    IconImage(.lock, size: 12).foregroundStyle(Palette.tertiaryMark)
                 }
                 .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -117,7 +117,7 @@ struct ShareSheet: View {
                             .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
                             .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         Button { copyLink(url) } label: {
-                            Label(copied ? "Copied" : "Copy link", systemImage: copied ? "checkmark" : "link")
+                            Label { Text(copied ? "Copied" : "Copy link") } icon: { IconImage(copied ? .checkSmall : .link, size: 13) }
                                 .labelStyle(.titleAndIcon)
                         }
                         .buttonStyle(.sheetPrimary)
@@ -130,7 +130,7 @@ struct ShareSheet: View {
                     }
                 }
                 if let error {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                    Label { Text(error) } icon: { IconImage(.warning, size: 13) }
                         .font(.system(size: 12)).foregroundStyle(Palette.recording)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 12)
@@ -165,8 +165,8 @@ struct ShareSheet: View {
         return "Visitors can ask about what you share. Your server's key pays."
     }
 
-    private func part(_ title: String, _ detail: String, _ symbol: String, _ on: Binding<Bool>) -> some View {
-        PartRow(title: title, detail: detail, symbol: symbol, on: on)
+    private func part(_ title: String, _ detail: String, _ icon: Icon, _ on: Binding<Bool>) -> some View {
+        PartRow(title: title, detail: detail, icon: icon, on: on)
     }
 
     private func publish() {
@@ -211,13 +211,13 @@ struct ShareSheet: View {
 private struct PartRow: View {
     let title: String
     let detail: String
-    let symbol: String
+    let icon: Icon
     let on: Binding<Bool>
 
     var body: some View {
         Toggle(isOn: on) {
             HStack(spacing: 12) {
-                Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(Palette.accent).frame(width: 20)
+                IconImage(icon, size: 15).foregroundStyle(Palette.accent).frame(width: 20)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).fontWeight(.medium)

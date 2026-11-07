@@ -69,7 +69,8 @@ struct LogView: View {
                 }
             }
             .textSelection(.enabled)
-            .padding(EdgeInsets(top: 0, leading: 36, bottom: 24, trailing: 36))
+            // The canvas starts the page 10 pt under the toolbar row, so the first day never sits under it.
+            .padding(EdgeInsets(top: Detail.bodyTop, leading: Detail.gutter, bottom: 24, trailing: Detail.gutter))
             .frame(maxWidth: 1172, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -146,7 +147,7 @@ private struct LogRow: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .font(.system(size: 11.5, design: .monospaced))
-        .lineSpacing(3)
+        .cssLineHeight(1.5, size: 11.5)
         .padding(.horizontal, 6).padding(.vertical, 2)
         .background(error ? Palette.errorWash : .clear, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         .padding(.horizontal, -6)

@@ -34,7 +34,7 @@ struct VoiceNamingView: View {
         let people = MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library)
         let talk = Dictionary(TranscriptBlock.talkTime(record).map { ($0.speaker, $0.seconds) }, uniquingKeysWith: +)
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(symbol: "waveform", title: title, subtitle: subtitle)
+            SheetHeader(icon: .waveform, title: title, subtitle: subtitle)
             ScrollView {
                 VStack(spacing: 12) {
                     ForEach(asking, id: \.self) { key in

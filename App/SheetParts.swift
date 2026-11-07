@@ -3,14 +3,14 @@ import SwiftUI
 /// The parts every sheet shares: an accent tile and a title over a hairline, a body, and the buttons under a
 /// hairline. Sheets are the opaque window color; only popovers and menus are glass.
 struct SheetHeader: View {
-    let symbol: String
+    /// The canvas's own icon for the sheet, drawn in the accent tile.
+    let icon: Icon
     let title: String
     var subtitle: String?
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 16, weight: .medium))
+            IconImage(icon, size: 16)
                 .foregroundStyle(Palette.accent)
                 .frame(width: 36, height: 36)
                 .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -179,7 +179,7 @@ struct SheetCheckbox: View {
             .fill(isOn ? Palette.accentFill : .clear)
             .overlay {
                 if isOn {
-                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.onAccent)
+                    IconImage(.checkSmall, size: 11).foregroundStyle(Palette.onAccent)
                 } else {
                     RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Palette.ring, lineWidth: 1.5)
                 }

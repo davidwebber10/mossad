@@ -72,7 +72,8 @@ struct CommitmentsView: View {
                             .font(.system(size: 13)).foregroundStyle(Palette.secondary)
                     }
                 }
-                .padding(.horizontal, 36).padding(.top, 18).padding(.bottom, Space.xxl)
+                .frame(maxWidth: Detail.listMax, alignment: .leading)
+                .padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop).padding(.bottom, Space.xxl)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }

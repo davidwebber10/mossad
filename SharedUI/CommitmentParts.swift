@@ -61,7 +61,7 @@ struct CommitmentRow<Trailing: View>: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(commitment.text)
                 .font(.system(size: textSize, weight: .medium))
-                .lineSpacing(textSize * 0.1)
+                .cssLineHeight(size: textSize)
                 .strikethrough(commitment.done != nil, color: Palette.secondary)
                 .foregroundStyle(commitment.done == nil ? Palette.ink : Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -74,6 +74,7 @@ struct CommitmentRow<Trailing: View>: View {
                 }
                 .font(.system(size: detailSize))
                 .foregroundStyle(Palette.secondary)
+                .cssLineHeight(size: detailSize)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

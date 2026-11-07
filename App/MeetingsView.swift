@@ -370,7 +370,7 @@ private struct MergeSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(symbol: "arrow.triangle.merge", title: "Merge with “\(record.title)”",
+            SheetHeader(icon: .merge, title: "Merge with “\(record.title)”",
                         subtitle: "Pick the parts of one meeting. Mossad joins them into the earliest one.")
             VStack(alignment: .leading, spacing: 0) {
                 ScrollView {

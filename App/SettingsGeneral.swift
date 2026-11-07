@@ -94,7 +94,7 @@ private struct PermissionRow: View {
         HStack(spacing: Space.m) {
             Group {
                 if item.state.isGood {
-                    Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary)
+                    IconImage(.check, size: 14).foregroundStyle(Palette.secondary)
                 } else {
                     Circle().fill(Palette.accentFill).frame(width: 8, height: 8)
                 }

@@ -18,7 +18,7 @@ struct OrgImportSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(symbol: "flowchart", title: "Org chart",
+            SheetHeader(icon: .viewOrg, title: "Org chart",
                         subtitle: org.chart == nil
                             ? "A CSV export with Last Name, First Name, Position Title, and Supervisor. It stays on this Mac."
                             : "\(org.fileName) · imported \(org.imported.map { $0.formatted(.dateTime.month(.abbreviated).day()) } ?? "today")")
@@ -196,7 +196,7 @@ struct OrgImportSheet: View {
         private var picker: some View {
             HStack(spacing: Space.s) {
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Palette.secondary)
+                    IconImage(.search, size: 13).foregroundStyle(Palette.secondary)
                         .accessibilityHidden(true)
                     TextField("Find in \(org.fileName)", text: $search)
                         .textFieldStyle(.plain).font(.system(size: 12.5))

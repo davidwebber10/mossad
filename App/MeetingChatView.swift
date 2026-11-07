@@ -54,12 +54,7 @@ struct MeetingChatView: View {
             .onChange(of: messages.count) { _, _ in withAnimation { proxy.scrollTo(messages.last?.id, anchor: .top) } }
             .onChange(of: steps.count) { _, _ in withAnimation { proxy.scrollTo("running", anchor: .bottom) } }
         }
-        .overlay(alignment: .bottom) {
-            composer
-                .frame(maxWidth: Detail.composerWidth)
-                .padding(.horizontal, Detail.gutter).padding(.bottom, Space.l).padding(.top, 6)
-                .frame(maxWidth: .infinity)
-        }
+        .floatingComposer(composer)
         .environment(\.openURL, OpenURLAction { url in
             if let link = ChatLink.parse(url), link.callID == record.id, let at = link.at {
                 seek(at)
@@ -109,10 +104,9 @@ struct MeetingChatView: View {
         "Write a short follow-up email from me.",
     ]
 
-    /// The canvas's composer: a 46 pt glass field with a quiet 1 pt ring and a solid accent send circle.
     private var composer: some View {
-        let shape = RoundedRectangle(cornerRadius: Detail.composerHeight / 2, style: .continuous)
-        return HStack(alignment: .bottom, spacing: 10) {
+        FloatingComposer(prompt: messages.isEmpty ? "Ask about this meeting" : "Ask a follow-up", text: $question,
+                         focused: $focused, hasLeading: chat != nil, send: send) {
             if chat != nil {
                 Button(action: newChat) {
                     IconImage(.compose, size: 15).foregroundStyle(Palette.secondary)
@@ -122,27 +116,7 @@ struct MeetingChatView: View {
                 .help("New chat about this meeting")
                 .accessibilityLabel("New chat")
             }
-            TextField(messages.isEmpty ? "Ask about this meeting" : "Ask a follow-up", text: $question, axis: .vertical)
-                .textFieldStyle(.plain).font(.system(size: 13.5)).lineLimit(1...6)
-                .padding(.vertical, 8)
-                .frame(minHeight: Detail.composerSend)
-                .focused($focused)
-                .onSubmit(send)
-            Button(action: send) {
-                IconImage(.send, size: 14)
-                    .foregroundStyle(Palette.onAccent)
-                    .frame(width: Detail.composerSend, height: Detail.composerSend)
-                    .background(Palette.accentFill, in: Circle())
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            // Stays solid when there is nothing to send, as the canvas draws it; send() ignores the click then.
-            .accessibilityLabel("Send")
         }
-        .padding(.leading, chat != nil ? 12 : 18).padding(.trailing, 6).padding(.vertical, 6)
-        .frame(minHeight: Detail.composerHeight)
-        .background(.ultraThinMaterial, in: shape)
-        .chromeGlass(in: shape, shadow: .floating)
     }
 
     /// The newest chat about this meeting, if there is one.

@@ -157,7 +157,7 @@ private struct ServerGroup: View {
                     Divider()
                     Button("Disconnect…", role: .destructive) { confirmDisconnect = true }
                 } label: {
-                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.secondary)
+                    IconImage(.chevronDown, size: 10).foregroundStyle(Palette.secondary)
                         .frame(width: 24, height: 24).contentShape(Rectangle())
                 }
                 .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
@@ -185,7 +185,7 @@ private struct PhonePairing: View {
         SettingsGroup(label: "Your iPhone") {
             HStack(alignment: .center, spacing: 20) {
                 VStack(spacing: 10) {
-                    Image(systemName: "qrcode").font(.system(size: 26, weight: .light)).foregroundStyle(Palette.tertiaryMark)
+                    IconImage(.qrLarge, size: 28).foregroundStyle(Palette.tertiaryMark)
                         .accessibilityHidden(true)
                     Button("Show code") { showCode = true }.buttonStyle(.settings)
                         .popover(isPresented: $showCode, arrowEdge: .trailing) { PairingCard() }

@@ -325,6 +325,7 @@ final class AppController: ObservableObject {
             Task { for id in today { await track { await self.pipeline.regenerateSummary(id) } } }
         }
         if preview { applyLivePreview() }
+        if preview, let update = ProcessInfo.processInfo.environment["MOSSAD_UPDATE_PREVIEW"] { updater.applyPreview(update) }
         // Development hook: `--light` shows the UI in light mode, to check both looks.
         if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
         // Development hook: `MOSSAD_APPEARANCE=dark|light` picks the look of a preview, to capture both.

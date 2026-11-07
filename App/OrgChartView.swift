@@ -21,8 +21,10 @@ struct OrgChartView: View {
     /// Columns showing every report, not only the first few.
     @State private var expanded: Set<String> = []
 
-    static let cardWidth: CGFloat = 224
-    static let columnGap: CGFloat = 24
+    /// The canvas's 196 pt cards with their padding came out wider than its own gap allowed; 200 pt cards 16 pt
+    /// apart keep four columns and the outside column inside a 1400 pt window.
+    static let cardWidth: CGFloat = 200
+    static let columnGap: CGFloat = 16
     static let shownReports = 8
     static let shownColumns = 6
 
@@ -53,7 +55,7 @@ struct OrgChartView: View {
 
     private func fileHeader(_ chart: OrgChart) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: "doc.text").font(.system(size: 15)).foregroundStyle(Palette.secondary)
+            IconImage(.note, size: 16).foregroundStyle(Palette.secondary)
                 .frame(width: 32, height: 32)
                 .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)
@@ -70,8 +72,8 @@ struct OrgChartView: View {
             Button("Review matches…", action: importChart).buttonStyle(.mossadFill)
             Button("Download template", action: downloadTemplate).buttonStyle(.mossadFill)
         }
-        .padding(.horizontal, 36).padding(.top, Space.m).padding(.bottom, 14)
-        .overlay(alignment: .bottom) { Hairline().padding(.horizontal, 36) }
+        .padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop).padding(.bottom, 14)
+        .overlay(alignment: .bottom) { Hairline().padding(.horizontal, Detail.gutter) }
     }
 
     private var importedText: String {
@@ -135,7 +137,8 @@ struct OrgChartView: View {
         let place = placement(chart)
         let center = focus ?? home(chart, place)
         return ScrollView([.vertical, .horizontal]) {
-            HStack(alignment: .top, spacing: 28) {
+            // The outside column starts level with the first row of columns, as the canvas places it.
+            HStack(alignment: .orgRow, spacing: 20) {
                 if let center {
                     tree(chart.team(around: center), chart: chart, place: place, home: home(chart, place))
                 }
@@ -143,7 +146,7 @@ struct OrgChartView: View {
                     sideColumn(place)
                 }
             }
-            .padding(.horizontal, 36).padding(.top, Space.xl).padding(.bottom, Space.xxl)
+            .padding(.horizontal, Detail.gutter).padding(.top, Space.xl).padding(.bottom, Space.xxl)
         }
         .scrollBounceBehavior(.basedOnSize)
         .onChange(of: query) { _, _ in search(chart) }
@@ -164,7 +167,7 @@ struct OrgChartView: View {
                     .overlay(alignment: .leading) {
                         HStack(spacing: Space.s) {
                             if let top = team.top, let up = chart.manager(of: top.id) {
-                                Button { show(up.id) } label: { Label("Up a level", systemImage: "arrow.up") }
+                                Button { show(up.id) } label: { Label { Text("Up a level") } icon: { IconImage(.arrowUp, size: 13) } }
                                     .buttonStyle(.mossadFill)
                                     .help("Show \(up.fullName)'s team")
                             }
@@ -198,6 +201,7 @@ struct OrgChartView: View {
                         columnView(column, chart: chart, place: place)
                     }
                 }
+                .alignmentGuide(.orgRow) { $0[.top] }
             }
         }
         .fixedSize()
@@ -283,10 +287,10 @@ struct OrgChartView: View {
                 }
             }
         }
-        .frame(width: 236, alignment: .leading)
+        .frame(width: Self.cardWidth, alignment: .leading)
         .padding(.leading, 20)
         .overlay(alignment: .leading) { Hairline(axis: .vertical) }
-        .padding(.top, 4)
+        .alignmentGuide(.orgRow) { $0[.top] }
     }
 
     private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -381,4 +385,12 @@ private struct Connector: Shape {
         }
         return path
     }
+}
+
+private extension VerticalAlignment {
+    /// The top of the chart's first row of columns.
+    enum OrgRow: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[.top] }
+    }
+    static let orgRow = VerticalAlignment(OrgRow.self)
 }

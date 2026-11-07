@@ -49,8 +49,8 @@ struct PersonProfileView: View {
                     LabelColumn(label: "Meetings") { meetings }
                 }
             }
-            .frame(maxWidth: 960, alignment: .leading)
-            .padding(.horizontal, 36).padding(.top, Space.xl).padding(.bottom, Space.xxl)
+            .frame(maxWidth: Detail.listMax, alignment: .leading)
+            .padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop).padding(.bottom, Space.xxl)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .environment(\.openURL, OpenURLAction { url in controller.openLink(url) ? .handled : .systemAction })
@@ -82,15 +82,17 @@ struct PersonProfileView: View {
             }
             Spacer()
             Menu {
-                Button("Edit name and email…", systemImage: "pencil", action: rename)
-                Menu("Merge into", systemImage: "arrow.triangle.merge") {
+                Button(action: rename) { Label { Text("Edit name and email…") } icon: { Icon.pencil.image } }
+                Menu {
                     ForEach(others, id: \.name) { target in Button(target.name) { merge(target) } }
+                } label: {
+                    Label { Text("Merge into") } icon: { Icon.merge.image }
                 }
                 .disabled(profile.isOwner || others.isEmpty)
                 Divider()
                 Button("Delete…", systemImage: "trash", role: .destructive, action: delete).disabled(profile.isOwner)
             } label: {
-                Image(systemName: "ellipsis").accessibilityLabel("Actions for \(profile.name)")
+                IconImage(.more, size: 15).accessibilityLabel("Actions for \(profile.name)")
             }
             .menuStyle(.button)
             .menuIndicator(.hidden)

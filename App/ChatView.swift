@@ -48,6 +48,8 @@ struct ChatView: View {
                 ScrollView {
                     welcome
                         .padding(.horizontal, 36)
+                        // The scroll view runs under the toolbar row, so the welcome centers below it, 80 pt high.
+                        .padding(.top, Chrome.toolbarHeight + Detail.bodyTop)
                         .padding(.bottom, 80)
                         // Full width, so the scroll view (and its edge under the toolbar) spans the pane.
                         .frame(maxWidth: .infinity)
@@ -58,15 +60,7 @@ struct ChatView: View {
                 exchange
             }
         }
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
-        .safeAreaBar(edge: .bottom) {
-            composer
-                .frame(maxWidth: isEmpty ? 720 : Self.column - LabelColumn<EmptyView>.labelWidth - Space.m)
-                .padding(.leading, isEmpty ? 0 : LabelColumn<EmptyView>.labelWidth + Space.m)
-                .frame(maxWidth: isEmpty ? 720 : Self.column, alignment: .leading)
-                .padding(.horizontal, 36).padding(.bottom, Space.l).padding(.top, 6)
-                .frame(maxWidth: .infinity)
-        }
+        .floatingComposer(composer)
         .environment(\.openURL, OpenURLAction { url in controller.openLink(url) ? .handled : .systemAction })
     }
 
@@ -100,7 +94,8 @@ struct ChatView: View {
                     }
                 }
                 .frame(maxWidth: Self.column, alignment: .leading)
-                .padding(.horizontal, 36).padding(.top, 28).padding(.bottom, Space.xl)
+                // Room for the floating composer, as the canvas leaves 80 pt under the last answer.
+                .padding(.horizontal, Detail.gutter).padding(.top, 28).padding(.bottom, 80)
                 .frame(maxWidth: .infinity)
             }
             .onChange(of: current.messages.count) { _, _ in
@@ -112,8 +107,7 @@ struct ChatView: View {
 
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Image(systemName: "sparkle")
-                .font(.system(size: 24, weight: .light))
+            IconImage(.sparkleLarge, size: 28)
                 .foregroundStyle(Palette.accent)
                 .accessibilityHidden(true)
             Text("Ask about your meetings")
@@ -149,30 +143,10 @@ struct ChatView: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            TextField(current.messages.isEmpty ? "Ask about your meetings" : "Ask a follow-up", text: $question, axis: .vertical)
-                .textFieldStyle(.plain).font(.system(size: 13.5)).lineLimit(1...6)
-                .padding(.vertical, 4)
-                .focused($focused)
-                .onSubmit(send)
-            Button(action: send) {
-                Image(systemName: "arrow.up").font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Palette.onAccent)
-                    .frame(width: 26, height: 26)
-                    .background(Palette.accentFill, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
-            .opacity(canSend ? 1 : 0.5)
-            .keyboardShortcut(.return, modifiers: .command)
-            .accessibilityLabel("Send")
-        }
-        .padding(.leading, 16).padding(.trailing, 7).padding(.vertical, 7)
-        .mossadGlass(cornerRadius: 20, interactive: true)
-        .onAppear { focused = true }
+        FloatingComposer(prompt: current.messages.isEmpty ? "Ask about your meetings" : "Ask a follow-up", text: $question,
+                         focused: $focused, send: send)
+            .onAppear { focused = true }
     }
-
-    private var canSend: Bool { !question.trimmingCharacters(in: .whitespaces).isEmpty && running == nil }
 
     // MARK: Actions
 
@@ -306,9 +280,10 @@ private struct ChatListRow: View {
                     .font(.system(size: 13, weight: selected ? .semibold : .medium))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1).truncationMode(.tail)
+                    .cssLineHeight(size: 13)
                 HStack(spacing: 5) {
                     if chat.callID != nil {
-                        Image(systemName: "waveform").font(.system(size: 9, weight: .medium)).foregroundStyle(Palette.tertiaryMark)
+                        IconImage(.waveform, size: 11).foregroundStyle(Palette.tertiaryMark)
                             .accessibilityLabel("About one meeting")
                     }
                     Text(shortTime(chat.updated))
@@ -338,9 +313,9 @@ private struct ExampleQuestion: View {
     var body: some View {
         Button(action: ask) {
             HStack(spacing: Space.s) {
-                Text(text).font(.system(size: 13)).foregroundStyle(Palette.ink)
+                Text(text).font(.system(size: 13)).foregroundStyle(Palette.ink).cssLineHeight(size: 13)
                 Spacer(minLength: Space.s)
-                Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .medium))
+                IconImage(.arrowUp, size: 11).rotationEffect(.degrees(45))
                     .foregroundStyle(Palette.tertiaryMark)
                     .opacity(hovering ? 1 : 0)
                     .accessibilityHidden(true)

@@ -177,7 +177,7 @@ struct PeopleView: View {
 
     private var footer: some View {
         HStack(spacing: Space.s) {
-            Image(systemName: "lock").font(.system(size: 11)).accessibilityHidden(true)
+            IconImage(.lock, size: 12)
             Text("Voice fingerprints are biometric data. They stay on this Mac in the Voices folder and are never uploaded.")
                 // Two lines in a narrow window rather than cutting the promise that the voices stay here.
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
@@ -206,7 +206,7 @@ struct PeopleView: View {
 
     private func editSheet(_ p: VoiceProfile) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(symbol: "pencil", title: "Edit \(p.name)", subtitle: "Mossad uses the email to match calendar invites.")
+            SheetHeader(icon: .pencil, title: "Edit \(p.name)", subtitle: "Mossad uses the email to match calendar invites.")
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Name", text: $newName).textFieldStyle(SheetFieldStyle())
                 TextField("Email (optional)", text: $newEmail).textFieldStyle(SheetFieldStyle())
@@ -365,7 +365,7 @@ private struct PeopleList: View {
         } label: {
             HStack(spacing: 4) {
                 Text((PeopleSort(rawValue: sort) ?? .recent).title + (needsSample ? " · Needs a sample" : ""))
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                IconImage(.chevronDown, size: 9)
             }
             .font(.system(size: 11.5, weight: .medium))
             .foregroundStyle(needsSample ? Palette.accent : Palette.secondary)

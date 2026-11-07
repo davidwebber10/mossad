@@ -19,7 +19,7 @@ struct TranscribeAgainSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(symbol: "waveform", title: "Transcribe “\(record.title)” again",
+            SheetHeader(icon: .waveform, title: "Transcribe “\(record.title)” again",
                         subtitle: "\(dayWord(record.start)), \(record.start.formatted(date: .omitted, time: .shortened)) · \(record.lengthText) · \(record.platform.displayName)")
             VStack(alignment: .leading, spacing: 14) {
                 Text("Mossad sends the audio to \(controller.transcriptionProvider.displayName) again, names the voices it knows, and writes a new summary and note.")
@@ -60,12 +60,12 @@ struct TranscribeAgainSheet: View {
                 .sheetCard(horizontal: 14, vertical: 12)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    note("dollarsign.circle") {
+                    note(.clock) {
                         Text("About \(Pricing.transcribeAgainEstimate(record, tracks: tracks).formatted(.currency(code: "USD")))")
                             .fontWeight(.semibold).foregroundStyle(Palette.ink)
                     }
-                    note("person.2") { Text("Voice names you gave stay, through the voice library.") }
-                    note("arrow.uturn.backward") { Text("Restore previous transcript stays in the More menu.") }
+                    note(.people) { Text("Voice names you gave stay, through the voice library.") }
+                    note(.chevronLeft) { Text("Restore previous transcript stays in the More menu.") }
                 }
                 .font(.system(size: 12))
                 .foregroundStyle(Palette.secondary)
@@ -94,9 +94,9 @@ struct TranscribeAgainSheet: View {
         }
     }
 
-    private func note<Content: View>(_ symbol: String, @ViewBuilder _ text: () -> Content) -> some View {
+    private func note<Content: View>(_ icon: Icon, @ViewBuilder _ text: () -> Content) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(Palette.tertiaryMark).frame(width: 16)
+            IconImage(icon, size: 12).foregroundStyle(Palette.tertiaryMark).frame(width: 16)
                 .accessibilityHidden(true)
             text()
         }

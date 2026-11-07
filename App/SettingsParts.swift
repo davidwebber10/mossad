@@ -31,7 +31,7 @@ struct SettingsFootnote: View {
     var body: some View {
         Text(text)
             .font(.system(size: 12)).foregroundStyle(Palette.secondary)
-            .lineSpacing(3)
+            .cssLineHeight(1.5, size: 12)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, Space.s)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -78,8 +78,10 @@ struct SettingsRowText: View {
                 }
             }
             .font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
+            .cssLineHeight(size: 13)
             if let detail {
                 Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    .cssLineHeight(size: 12)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -149,7 +151,8 @@ struct SettingsFieldStyle: TextFieldStyle {
             .font(monospaced ? .system(size: 11.5, design: .monospaced) : .system(size: 12))
             .foregroundStyle(Palette.ink)
             .padding(.horizontal, Space.s)
-            .frame(width: width, height: 24)
+            // The canvas gives a field's width without its 8 pt padding on each side (CSS content-box).
+            .frame(width: width.map { $0 + 2 * Space.s }, height: 24)
             .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
     }
 }
@@ -189,7 +192,7 @@ struct FillMenuLabel: View {
         HStack(spacing: 6) {
             Text(text).lineLimit(1).truncationMode(.tail)
             if width != nil { Spacer(minLength: 0) }
-            Image(systemName: "chevron.down").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(Palette.secondary)
+            IconImage(.chevronDown, size: 10).foregroundStyle(Palette.secondary)
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(Palette.ink)
@@ -249,7 +252,11 @@ struct RadioRow<Trailing: View>: View {
                 RadioMark(on: selected)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.system(size: 13, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink)
-                    if let detail { Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true) }
+                        .cssLineHeight(size: 13)
+                    if let detail {
+                        Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary).cssLineHeight(size: 12)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer(minLength: Space.m)
                 trailing
@@ -317,11 +324,12 @@ struct CopyField: View {
             Text(text)
                 .font(.system(size: 11.5, design: .monospaced))
                 .foregroundStyle(Palette.ink)
-                .lineSpacing(2)
+                .cssLineHeight(1.4, size: 11.5)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, Space.s).padding(.vertical, 4)
-                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                // The canvas's 24 pt minimum is without its 4 pt padding (CSS content-box).
+                .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                 .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             Button(copied ? "Copied" : label) {
                 copy(text)
