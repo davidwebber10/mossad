@@ -9,17 +9,11 @@ struct StorageSettings: View {
     @State private var checkResult: Bool?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Keep recordings in")
-                Spacer()
-                Picker("Keep recordings in", selection: $controller.storage) {
-                    Text("This Mac").tag("local")
-                    Text("Cloudflare R2").tag("r2")
-                    Text("Amazon S3").tag("s3")
-                }
-                .labelsHidden()
-                .fixedSize()
+        SettingsGroup(label: "Storage",
+                      footer: controller.storage == "local" ? nil : "Mossad uploads each meeting’s recording (about 14 MB an hour) after the note is written. Notes and transcripts stay on this Mac. Use a key that can only read and write this bucket.") {
+            SettingsRow(title: "Keep recordings in") {
+                FillPicker(title: "Keep recordings in", selection: $controller.storage,
+                           choices: [("local", "This Mac"), ("r2", "Cloudflare R2"), ("s3", "Amazon S3")])
             }
             if controller.storage != "local" {
                 field("Endpoint", text: $controller.cloudEndpoint,
@@ -27,39 +21,36 @@ struct StorageSettings: View {
                 field("Bucket", text: $controller.cloudBucket, prompt: "mossad-recordings")
                 if controller.storage == "s3" { field("Region", text: $controller.cloudRegion, prompt: "us-east-1") }
                 field("Access key ID", text: $controller.cloudAccessKeyID, prompt: "")
-                HStack {
-                    Text("Secret access key")
-                    Spacer()
-                    SecureField(controller.hasKey(.cloudSecret) ? "Saved in the Keychain" : "Paste the secret", text: $secret)
-                        .frame(width: 220)
-                        .onSubmit(saveSecret)
-                    if !secret.isEmpty { Button("Save", action: saveSecret).controlSize(.small) }
-                }
-                HStack {
-                    Text("Keep a local copy for")
-                    TextField("", value: $controller.cloudKeepLocalDays, format: .number)
-                        .multilineTextAlignment(.trailing).frame(width: 44)
-                    Stepper("", value: $controller.cloudKeepLocalDays, in: 0...3650).labelsHidden()
-                    Text("days").foregroundStyle(.secondary)
-                    Spacer()
-                    if checking { ProgressView().controlSize(.small) }
-                    if let ok = checkResult {
-                        Label(ok ? "Connected" : "Could not connect", systemImage: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(ok ? .green : .red)
+                SettingsRow(title: "Secret access key") {
+                    HStack(spacing: Space.s) {
+                        if !secret.isEmpty { Button("Save", action: saveSecret).buttonStyle(.settingsAccent) }
+                        SecureField("Secret access key", text: $secret,
+                                    prompt: Text(controller.hasKey(.cloudSecret) ? "Saved in the Keychain" : "Paste the secret"))
+                            .textFieldStyle(SettingsFieldStyle(width: 300))
+                            .onSubmit(saveSecret)
                     }
-                    Button("Test connection", action: check).controlSize(.small).disabled(controller.cloudArchive == nil || checking)
                 }
-                Text("Mossad uploads each meeting's recording (about 14 MB an hour) after the note is written. Notes and transcripts stay on this Mac. Use a key that can only read and write this bucket.")
-                    .font(.system(size: 11)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+                SettingsRow(title: "Keep a local copy for") {
+                    HStack(spacing: Space.s) {
+                        DaysField(title: "Days to keep a local copy", value: $controller.cloudKeepLocalDays, range: 0...3650)
+                        if checking { ProgressView().controlSize(.small) }
+                        if let ok = checkResult {
+                            HStack(spacing: 5) {
+                                Circle().fill(ok ? Palette.ok : Palette.recording).frame(width: 7, height: 7)
+                                Text(ok ? "Connected" : "Could not connect").foregroundStyle(ok ? Palette.okText : Palette.recording)
+                            }
+                            .font(.system(size: 12))
+                        }
+                        Button("Test connection", action: check).buttonStyle(.settings).disabled(controller.cloudArchive == nil || checking)
+                    }
+                }
             }
         }
     }
 
     private func field(_ title: String, text: Binding<String>, prompt: String) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            TextField("", text: text, prompt: Text(prompt)).frame(width: 300)
+        SettingsRow(title: title) {
+            TextField(title, text: text, prompt: Text(prompt)).textFieldStyle(SettingsFieldStyle(width: 300, monospaced: true))
         }
     }
 
