@@ -47,6 +47,7 @@ struct PhoneMeetingChat: View {
                              focused: $focused, disabled: running) { send() }
             }
         }
+        .dismissesKeyboard($focused)
     }
 
     private let examples = [

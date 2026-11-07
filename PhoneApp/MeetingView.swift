@@ -55,6 +55,7 @@ struct MeetingView: View {
                 .padding(.horizontal, Space.l)
                 .padding(.bottom, Space.xxl)
             }
+            .scrollDismissesKeyboard(.interactively)
             .task(id: tab == .transcript ? moment : nil) {
                 guard tab == .transcript, let moment,
                       let block = TranscriptBlock.blocks(record).last(where: { $0.start <= moment + 0.5 }) else { return }

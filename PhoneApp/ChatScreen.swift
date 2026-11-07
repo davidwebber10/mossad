@@ -21,6 +21,7 @@ struct ChatScreen: View {
             Group {
                 if chat.messages.isEmpty { ChatWelcome { question = $0; send() } } else { conversation }
             }
+            .dismissesKeyboard($focused)
             .safeAreaBar(edge: .bottom) { composer }
             .phonePage()
             .toolbar { toolbar }
@@ -188,6 +189,19 @@ struct ChatComposer: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: Space.s) {
+            // Return adds a line in this field, so the keyboard needs its own way out.
+            if focused.wrappedValue {
+                Button { focused.wrappedValue = false } label: {
+                    Image(systemName: "keyboard.chevron.compact.down").font(.body)
+                        .foregroundStyle(Palette.secondary)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+                .padding([.leading, .vertical], 6)
+                .padding(.trailing, -10)
+                .accessibilityLabel("Hide keyboard")
+                .transition(.opacity)
+            }
             TextField(prompt, text: $text, axis: .vertical)
                 .lineLimit(1...6)
                 .textRole(.body)
@@ -205,6 +219,14 @@ struct ChatComposer: View {
             .accessibilityLabel("Send")
         }
         .mossadGlass(in: RoundedRectangle(cornerRadius: 24, style: .continuous), interactive: true)
+        .animation(.snappy, value: focused.wrappedValue)
+    }
+}
+
+extension View {
+    /// A tap on the page, outside the composer, puts the keyboard away. Buttons and links in the page still win.
+    func dismissesKeyboard(_ focused: FocusState<Bool>.Binding) -> some View {
+        contentShape(Rectangle()).onTapGesture { focused.wrappedValue = false }
     }
 }
 
