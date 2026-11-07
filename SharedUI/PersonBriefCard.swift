@@ -1,68 +1,78 @@
 import MossadCore
 import SwiftUI
 
-/// The coach's read on one person: the best way to work with them, then the sections the coach chose.
+/// The coach's read on one person as prose, as the Mac's profile sets it: the headline in the lede step, where it
+/// came from, then each of the coach's sections as a label over one paragraph. No card around it.
 struct PersonBriefCard: View {
     let name: String
     let brief: PersonBrief?
+    /// How many calls the owner has had with them, for the line shown before the first read.
+    var calls = 0
     var refreshing = false
     var refresh: (() -> Void)?
-    var openCall: ((String) -> Void)?
 
     private var first: String { name.split(separator: " ").first.map(String.init) ?? name }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 6) {
-                Image(systemName: "person.text.rectangle").foregroundStyle(.tint)
-                Text("The coach's read on \(first)").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                Spacer()
-                if let brief {
-                    Text("From \(brief.calls) \(brief.calls == 1 ? "call" : "calls") · \(brief.updated.formatted(.relative(presentation: .named)))")
-                        .font(.caption).foregroundStyle(.tertiary)
-                }
-                if let refresh {
-                    if refreshing {
-                        ProgressView().controlSize(.small)
+        VStack(alignment: .leading, spacing: 0) {
+            LabelColumn(label: "The coach’s read") {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let brief {
+                        Text(brief.headline)
+                            .textRole(.lede).lineSpacing(3)
+                            .foregroundStyle(Palette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 6) {
+                            Text("From \(brief.calls) \(brief.calls == 1 ? "call" : "calls") · updated \(brief.updated.formatted(.relative(presentation: .named)))")
+                            refreshButton
+                        }
+                        .textRole(.secondary).foregroundStyle(Palette.tertiary)
                     } else {
-                        Button(action: refresh) { Image(systemName: "arrow.clockwise") }
-                            .buttonStyle(.borderless)
-                            .help("Read the calls with \(first) again")
-                            .accessibilityLabel("Refresh the coach's read")
+                        Text(calls >= 2
+                             ? "The coach has not read the calls with \(first) yet."
+                             : "After two calls with \(first), the coach writes how to work with them: their goals, how to get through to them, and how they communicate.")
+                            .textRole(.body).foregroundStyle(Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
             if let brief {
-                Text(brief.headline).font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 20, alignment: .top)], alignment: .leading, spacing: 16) {
-                    ForEach(brief.sections, id: \.title) { section in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(section.title).font(.callout.weight(.semibold))
-                            ForEach(section.points, id: \.text) { point in
-                                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                    Text("•").foregroundStyle(.secondary)
-                                    Text(point.text).fixedSize(horizontal: false, vertical: true)
-                                    if let id = point.callID, let openCall {
-                                        Button { openCall(id) } label: { Image(systemName: "arrow.up.right.circle").foregroundStyle(.tertiary) }
-                                            .buttonStyle(.plain)
-                                            .help("Open the call this came from")
-                                            .accessibilityLabel("Open the source call")
-                                    }
-                                }
-                                .font(.callout)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                ForEach(brief.sections, id: \.title) { section in
+                    LabelColumn(label: section.title) { prose(section.points) }
                 }
-            } else {
-                Text("After two calls with \(first), the coach writes how to work with them: their goals, how to get through to them, and how they communicate.")
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.accentColor.opacity(0.2), lineWidth: 0.5))
+        .textSelection(.enabled)
+    }
+
+    @ViewBuilder
+    private var refreshButton: some View {
+        if let refresh {
+            if refreshing {
+                Text("Reading…")
+            } else {
+                Button("Read again", action: refresh).buttonStyle(.plain).foregroundStyle(Palette.accent)
+            }
+        }
+    }
+
+    /// The points as one paragraph; a point from a call ends in a quiet link that opens it.
+    private func prose(_ points: [PersonBrief.Point]) -> some View {
+        var text = AttributedString()
+        for (i, point) in points.enumerated() {
+            if i > 0 { text += AttributedString(" ") }
+            text += AttributedString(point.text)
+            if let id = point.callID, let url = URL(string: "mossad://call/\(id)") {
+                var link = AttributedString(" ↗")
+                link.link = url
+                link.foregroundColor = Palette.tertiary
+                text += link
+            }
+        }
+        return Text(text)
+            .textRole(.body).lineSpacing(3)
+            .foregroundStyle(Palette.ink)
+            .tint(Palette.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

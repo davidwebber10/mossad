@@ -3,29 +3,62 @@ import SwiftUI
 
 private struct PersonRoute: Hashable { let name: String }
 
-/// Everyone you meet with: how often, how much they talk, what they owe, and what the coach notes about them.
+/// Everyone you meet with, as the canvas lists them: you first, then the others by the last time you met, with
+/// their mark, how often, and when.
 struct PeopleScreen: View {
+    enum Sort: String, CaseIterable { case recent = "Most recent", mostMet = "Most met", name = "A to Z" }
+
     @EnvironmentObject var store: PhoneStore
     @State private var stats: [String: PersonStats] = [:]
     @State private var query = ""
+    @AppStorage("peopleSort") private var sort = Sort.recent
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
-            List {
-                if query.isEmpty, let me = stats[store.owner] {
-                    Section("You") {
-                        NavigationLink(value: PersonRoute(name: store.owner)) { PersonRow(name: store.owner, stats: me) }
+        NavigationStack(path: $path) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if query.isEmpty, let me = stats[store.owner] {
+                        PhoneLabel("You").padding(.top, Space.l)
+                        NavigationLink(value: PersonRoute(name: store.owner)) {
+                            PersonRow(name: store.owner, stats: me, isOwner: true, divided: false)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    HStack(alignment: .firstTextBaseline) {
+                        PhoneLabel("People · \(people.count)")
+                        Menu {
+                            Picker("Sort", selection: $sort) {
+                                ForEach(Sort.allCases, id: \.self) { Text($0.rawValue) }
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text(sort.rawValue)
+                                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                            }
+                            .textRole(.secondary)
+                            .foregroundStyle(Palette.secondary)
+                            .fixedSize()
+                        }
+                        .accessibilityLabel("Sort, \(sort.rawValue)")
+                    }
+                    .padding(.top, Space.xl)
+                    ForEach(Array(people.enumerated()), id: \.element) { i, name in
+                        NavigationLink(value: PersonRoute(name: name)) {
+                            PersonRow(name: name, stats: stats[name]!, divided: i < people.count - 1)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                Section(query.isEmpty && stats[store.owner] != nil ? "People" : "") {
-                    ForEach(people, id: \.self) { name in
-                        NavigationLink(value: PersonRoute(name: name)) { PersonRow(name: name, stats: stats[name]!) }
-                    }
-                }
+                .padding(.horizontal, Space.l)
+                .padding(.bottom, Space.xl)
             }
             .overlay {
-                if stats.isEmpty { ContentUnavailableView("No people yet", systemImage: "person.2", description: Text("People appear once their voices are named on the Mac.")) }
+                if stats.isEmpty {
+                    EmptyState(symbol: "person.2", title: "No people yet", message: "People appear once their voices are named on the Mac.")
+                }
             }
+            .phonePage()
             .navigationTitle("People")
             .searchable(text: $query, prompt: "Name")
             .refreshable { await store.sync() }
@@ -36,107 +69,149 @@ struct PeopleScreen: View {
             .task(id: store.meetings.count) {
                 let records = store.meetings
                 stats = await Task.detached(priority: .userInitiated) { PersonStatistics.compute(records) }.value
+                // Development hook for screenshots: `MOSSAD_PERSON=<name>` opens a profile.
+                if let name = PhoneStore.hook("MOSSAD_PERSON"), path.isEmpty, stats[name] != nil { path.append(PersonRoute(name: name)) }
             }
         }
     }
 
-    /// Named people only, most recent first, without the owner.
+    /// Named people only, without the owner.
     private var people: [String] {
-        stats.filter { name, _ in name != store.owner && !name.hasPrefix("Speaker ") && (query.isEmpty || name.localizedCaseInsensitiveContains(query)) }
-            .sorted { ($0.value.lastHeard ?? .distantPast) > ($1.value.lastHeard ?? .distantPast) }
-            .map(\.key)
+        let named = stats.filter { name, _ in name != store.owner && !name.hasPrefix("Speaker ") && (query.isEmpty || name.localizedCaseInsensitiveContains(query)) }
+        switch sort {
+        case .recent: return named.sorted { ($0.value.lastHeard ?? .distantPast) > ($1.value.lastHeard ?? .distantPast) }.map(\.key)
+        case .mostMet:
+            return named.sorted { $0.value.meetings.count == $1.value.meetings.count ? $0.key < $1.key : $0.value.meetings.count > $1.value.meetings.count }
+                .map(\.key)
+        case .name: return named.keys.sorted { $0.localizedCompare($1) == .orderedAscending }
+        }
     }
+}
+
+/// "Today", "Yesterday", or "Oct 26".
+func shortDay(_ date: Date) -> String {
+    let cal = Calendar.current
+    if cal.isDateInToday(date) { return "Today" }
+    if cal.isDateInYesterday(date) { return "Yesterday" }
+    return date.formatted(.dateTime.month(.abbreviated).day())
 }
 
 private struct PersonRow: View {
     let name: String
     let stats: PersonStats
+    var isOwner = false
+    var divided = true
 
     var body: some View {
-        HStack(spacing: 12) {
-            PersonMark(name: name, size: 40)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(name).font(.headline)
-                Text("\(stats.meetings.count) \(stats.meetings.count == 1 ? "meeting" : "meetings")" + (stats.lastHeard.map { " · \($0.formatted(.relative(presentation: .named)))" } ?? ""))
-                    .font(.subheadline).foregroundStyle(.secondary)
+        HairlineRow(divided: divided) {
+            HStack(spacing: Space.m) {
+                PersonMark(name: name, size: 36, isOwner: isOwner)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name).textRole(.headline).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text(subtitle).textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .trailing, spacing: 2) {
+                    if !isOwner { Text(meetingsText) }
+                    if let last = stats.lastHeard { Text(shortDay(last)) }
+                }
+                .textRole(.secondary)
+                .foregroundStyle(Palette.secondary)
+                .fixedSize()
             }
         }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var meetingsText: String { "\(stats.meetings.count) \(stats.meetings.count == 1 ? "meeting" : "meetings")" }
+
+    /// The owner: how much they met; anyone else: the last meeting together.
+    private var subtitle: String {
+        if isOwner { return "\(meetingsText) · \(duration(stats.totalTalk))" }
+        return stats.meetings.first?.title ?? ""
     }
 }
 
+/// One person, as the canvas sets the profile: the mark and name, the coach's read first as prose, the numbers as
+/// a row of figures, then the relationship, the meetings, and who they meet with.
 struct PersonView: View {
     @EnvironmentObject var store: PhoneStore
     let name: String
     let stats: PersonStats
     @State private var relation: PersonRelation?
 
+    private var isOwner: Bool { name == store.owner }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(spacing: 10) {
-                    PersonMark(name: name, size: 72)
-                    Text(name).font(.title2.bold())
-                    if let last = stats.lastHeard {
-                        Text("Last met \(last.formatted(.relative(presentation: .named)))").font(.subheadline).foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-                if stats.meetings.count >= 2 || store.profile.people[name]?.brief != nil {
-                    PersonBriefCard(name: name, brief: store.profile.people[name]?.brief)
-                }
-                if name == store.owner {
-                    EmptyView()
-                } else if let r = relation {
-                    PhoneRelation(relation: r)
-                } else {
-                    ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
-                }
+            VStack(alignment: .leading, spacing: Space.s) {
+                header
+                PersonBriefCard(name: name, brief: store.profile.people[name]?.brief, calls: stats.meetings.count)
+                LabelColumn(label: "By the numbers") { numbers }
                 if let note = store.profile.people[name]?.note {
-                    Card {
-                        CardTitle(text: "The coach's note", symbol: "person.wave.2")
-                        Text(note)
+                    LabelColumn(label: "The coach’s note") {
+                        Text(note).textRole(.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                     }
+                }
+                if !isOwner {
+                    if let r = relation { PhoneRelation(relation: r) } else { PhoneProcessingMark().padding(.vertical, Space.xl) }
                 }
                 if !stats.actionItems.isEmpty {
                     Card {
-                        CardTitle(text: "Action items", symbol: "checklist")
+                        CardTitle(text: "Action items")
                         ForEach(Array(stats.actionItems.prefix(8).enumerated()), id: \.offset) { _, a in
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(a.item.task).font(.subheadline)
-                                Text("\(a.meetingTitle) · \(a.start.formatted(.dateTime.month(.abbreviated).day()))").font(.caption).foregroundStyle(.secondary)
+                                Text(a.item.task).textRole(.body).foregroundStyle(Palette.ink)
+                                Text("\(a.meetingTitle) · \(a.start.formatted(.dateTime.month(.abbreviated).day()))")
+                                    .textRole(.secondary).foregroundStyle(Palette.secondary)
                             }
                         }
                     }
                 }
                 Card {
-                    CardTitle(text: "Meetings", symbol: "calendar")
-                    ForEach(stats.meetings.prefix(12), id: \.id) { m in
-                        NavigationLink(value: m.id) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(m.title).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
-                                    Text(m.start.formatted(.dateTime.month(.abbreviated).day().hour().minute())).font(.caption).foregroundStyle(.secondary)
+                    CardTitle(text: "Meetings")
+                    VStack(spacing: 0) {
+                        ForEach(Array(stats.meetings.prefix(12).enumerated()), id: \.element.id) { i, m in
+                            NavigationLink(value: m.id) {
+                                HairlineRow(divided: i < min(stats.meetings.count, 12) - 1) {
+                                    HStack(alignment: .top, spacing: Space.m) {
+                                        PlatformDot(platform: m.platform).padding(.top, 6).accessibilityHidden(true)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(m.title).textRole(.headline).foregroundStyle(Palette.ink).lineLimit(2)
+                                                .multilineTextAlignment(.leading)
+                                            Text(m.start.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
+                                                .textRole(.secondary).foregroundStyle(Palette.secondary)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        Text(duration(m.talk)).textRole(.secondary).foregroundStyle(Palette.secondary)
+                                            .accessibilityLabel("\(duration(m.talk)) talking")
+                                    }
                                 }
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
                 if !stats.oftenWith.isEmpty {
                     Card {
-                        CardTitle(text: "Often with", symbol: "person.3")
-                        Text(stats.oftenWith.prefix(6).map { "\($0.name) (\($0.meetings))" }.joined(separator: ", ")).font(.subheadline)
+                        CardTitle(text: "Often with")
+                        Text(stats.oftenWith.prefix(6).map { "\($0.name) (\($0.meetings))" }.joined(separator: ", "))
+                            .textRole(.body).foregroundStyle(Palette.ink)
                     }
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
+            .padding(.horizontal, Space.l)
+            .padding(.bottom, Space.xxl)
         }
-        .background(Color(.systemGroupedBackground))
+        .phonePage()
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .principal) { Text("") } }
+        .environment(\.openURL, OpenURLAction { url in
+            guard let link = ChatLink.parse(url) else { return .systemAction }
+            store.open(link)
+            return .handled
+        })
         .task(id: store.meetings.count) {
             guard name != store.owner else { return }
             let records = store.meetings, owner = store.owner, name = name, commitments = store.commitments.visible
@@ -146,6 +221,43 @@ struct PersonView: View {
             }.value
             withAnimation(.smooth) { relation = r }
         }
+    }
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            PersonMark(name: name, size: 52, isOwner: isOwner)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(name).textRole(.title).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Text(summary).textRole(.secondary).foregroundStyle(Palette.secondary)
+            }
+        }
+        .padding(.top, Space.s)
+    }
+
+    /// "6 meetings · 2 h 6 min talking · last met today"
+    private var summary: String {
+        var parts = ["\(stats.meetings.count) \(stats.meetings.count == 1 ? "meeting" : "meetings")"]
+        if stats.totalTalk > 0 { parts.append("\(duration(stats.totalTalk)) talking") }
+        if let last = stats.lastHeard { parts.append("last met \(shortDay(last).lowercased())") }
+        return parts.joined(separator: " · ")
+    }
+
+    private var numbers: some View {
+        HStack(alignment: .top, spacing: Space.l) {
+            figure("\(stats.meetings.count)", stats.meetings.count == 1 ? "meeting" : "meetings")
+            figure(stats.totalTalk > 0 ? duration(stats.totalTalk) : "None", "talking")
+            figure(stats.averageShare.map { "\(Int(($0 * 100).rounded()))%" } ?? "–", "talk share")
+        }
+    }
+
+    private func figure(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).textRole(.title).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+            Text(label).textRole(.secondary).foregroundStyle(Palette.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -157,11 +269,13 @@ private struct PhoneRelation: View {
 
     var body: some View {
         let r = relation
+        LabelColumn(label: "Together") {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             StatTile(value: "\(r.calls)", label: "Meetings together")
             StatTile(value: duration(r.seconds), label: "Time together")
             StatTile(value: r.averageGapDays.map { "\(max(1, Int($0.rounded()))) days" } ?? "–", label: "Between meetings")
             StatTile(value: r.usualSlot.map(slot) ?? "–", label: "Usual time")
+        }
         }
         Card {
             CardTitle(text: "Talk balance", symbol: "person.2.wave.2")
@@ -198,7 +312,7 @@ private struct PhoneRelation: View {
         if !r.topics.isEmpty {
             Card {
                 CardTitle(text: "Topics together", symbol: "number")
-                Text(r.topics.map { "#\($0)" }.joined(separator: "  ")).font(.subheadline).foregroundStyle(.tint)
+                Text(r.topics.map { "#\($0)" }.joined(separator: "  ")).font(.subheadline).foregroundStyle(Palette.accent)
             }
         }
     }
@@ -214,8 +328,8 @@ private struct PhoneRelation: View {
                 }
                 GeometryReader { g in
                     HStack(spacing: 1) {
-                        Rectangle().fill(.tint).frame(width: g.size.width * share)
-                        Rectangle().fill(Color.secondary.opacity(0.35))
+                        Rectangle().fill(Palette.accentFill).frame(width: g.size.width * share)
+                        Rectangle().fill(Palette.bar)
                     }
                     .clipShape(Capsule())
                 }
