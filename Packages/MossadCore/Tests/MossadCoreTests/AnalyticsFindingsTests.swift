@@ -71,6 +71,9 @@ final class AnalyticsFindingsTests: XCTestCase {
         XCTAssertEqual(AnalyticsFindings.scheduled(mostlyAdHoc), "Over half is not on the calendar")
         let planned = report([call("a", date(10, 19), minutes: 60, scheduled: true)], from: date(10, 15, 0), to: date(10, 22, 0))
         XCTAssertEqual(AnalyticsFindings.scheduled(planned), "Almost all of it is on the calendar")
+        let even = report([call("a", date(10, 19), minutes: 30, scheduled: true), call("b", date(10, 20), minutes: 30)],
+                          from: date(10, 15, 0), to: date(10, 22, 0))
+        XCTAssertEqual(AnalyticsFindings.scheduled(even), "Half of it is on the calendar")
     }
 
     func testBusiestHoursNameTheTwoFullestHours() {
@@ -81,8 +84,19 @@ final class AnalyticsFindingsTests: XCTestCase {
         let one = report([call("a", date(10, 22, 11), minutes: 30)], from: date(10, 15, 0), to: date(10, 26, 0))
         XCTAssertEqual(AnalyticsFindings.busiestHours(one.heat), "Thursday at 11 is your busiest hour")
         let sameDay = report([call("a", date(10, 22, 11), minutes: 120)], from: date(10, 15, 0), to: date(10, 26, 0))
-        XCTAssertEqual(AnalyticsFindings.busiestHours(sameDay.heat), "Thursday at 11 and 12 are your busiest hours")
+        XCTAssertEqual(AnalyticsFindings.busiestHours(sameDay.heat), "Thursday at 11 and noon are your busiest hours")
         XCTAssertNil(AnalyticsFindings.busiestHours([]))
+    }
+
+    func testBusiestHoursSayNoonAndMidnightAndBreakTiesByTheEarlierHour() {
+        // Monday 12 to 13 and Tuesday 0 to 1, the same time each: Monday comes first in the week.
+        let r = report([call("a", date(10, 19, 12), minutes: 60), call("b", date(10, 20, 0), minutes: 60)],
+                       from: date(10, 15, 0), to: date(10, 26, 0))
+        XCTAssertEqual(AnalyticsFindings.busiestHours(r.heat), "Monday at noon and Tuesday at midnight are your busiest hours")
+        // Three equal hours: the two earliest in a Monday-first week win.
+        let tie = report([call("a", date(10, 25, 9), minutes: 30), call("b", date(10, 21, 15), minutes: 30), call("c", date(10, 19, 16), minutes: 30)],
+                         from: date(10, 15, 0), to: date(10, 26, 0))
+        XCTAssertEqual(AnalyticsFindings.busiestHours(tie.heat), "Monday at 4 and Wednesday at 3 are your busiest hours")
     }
 
     func testWorkdays() {
@@ -136,6 +150,10 @@ final class AnalyticsFindingsTests: XCTestCase {
                        "You talk less in groups than in the 30 days before; you cut in more than others do")
         XCTAssertEqual(AnalyticsFindings.communication(c, talkShare: 0.29, before: nil, beforeDays: 30),
                        "You talk 29% of the time; you cut in more than others do")
+        var close = AnalyticsReport.Communication()
+        close.groupShare = 0.25
+        XCTAssertEqual(AnalyticsFindings.communication(c, talkShare: 0.29, before: close, beforeDays: 30),
+                       "You talk 29% of the time; you cut in more than others do", "under 3 points is no change")
         c.interruptionsMadePerHour = 4
         XCTAssertEqual(AnalyticsFindings.communication(c, talkShare: nil, before: nil, beforeDays: 30),
                        "You cut in about as often as others do")

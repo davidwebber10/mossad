@@ -8,8 +8,8 @@ struct PeriodChoice: Equatable {
         case last7Days, last30Days, last90Days, thisMonth, lastMonth, thisQuarter, lastQuarter, thisYear, all, custom
         var id: String { rawValue }
 
-        /// The Mac's date picker, in the canvas's order. The iPhone menu keeps every preset.
-        static let picker: [Preset] = [.last7Days, .last30Days, .thisMonth, .lastMonth, .thisQuarter, .lastQuarter, .thisYear, .custom]
+        /// The Mac's date picker: the canvas's order, with 90 days and All time kept from before.
+        static let picker: [Preset] = [.last7Days, .last30Days, .last90Days, .thisMonth, .lastMonth, .thisQuarter, .lastQuarter, .thisYear, .all, .custom]
 
         var title: String {
             switch self {

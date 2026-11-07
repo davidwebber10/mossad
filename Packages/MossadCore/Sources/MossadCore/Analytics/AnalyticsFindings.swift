@@ -58,7 +58,8 @@ public enum AnalyticsFindings {
             .prefix(2)
             .sorted { order($0) < order($1) }
         guard let first = top.first else { return nil }
-        func hour(_ h: Int) -> String { "\(h % 12 == 0 ? 12 : h % 12)" }
+        // "at 12" could be either; the other hours read from the heat map's axis, as the canvas writes them.
+        func hour(_ h: Int) -> String { h == 0 ? "midnight" : h == 12 ? "noon" : "\(h % 12)" }
         func at(_ c: AnalyticsReport.HeatCell) -> String { "\(weekdays[c.weekday - 1]) at \(hour(c.hour))" }
         guard top.count == 2 else { return "\(at(first)) is your busiest hour" }
         let second = top[1]

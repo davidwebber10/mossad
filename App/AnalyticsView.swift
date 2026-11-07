@@ -72,7 +72,7 @@ struct AnalyticsView: View {
         }
         .background(Palette.window)
         .navigationTitle("Analytics")
-        .navigationSubtitle(compare ? data.map { "Compared with \(periodText($0.before.interval))" } ?? "" : "")
+        .navigationSubtitle(subtitle)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 DateRangeButton(choice: choice, compare: $compare, interval: data?.now.interval ?? interval, earliest: earliest)
@@ -80,6 +80,12 @@ struct AnalyticsView: View {
         }
         .task(id: TaskKey(range: choice.wrappedValue.range, meetings: controller.meetings.count, coach: controller.coachVersion,
                           commitments: controller.commitmentsVersion)) { await load() }
+    }
+
+    /// Says so when the period before is empty, because then no figure shows a change.
+    private var subtitle: String {
+        guard compare, let data else { return "" }
+        return data.before.calls == 0 ? "No calls in the period before" : "Compared with \(periodText(data.before.interval))"
     }
 
     private struct TaskKey: Equatable {

@@ -78,6 +78,8 @@ struct PeriodPanel: View {
                     PanelMonth(month: Self.cal.date(byAdding: .month, value: 1, to: month)!, start: start, end: end ?? hover, tap: tap,
                                hover: $hover, shift: canGoLater ? (1, "Later months") : nil, onShift: shift)
                 }
+                // A range being picked previews to the day under the pointer, and only while it is there.
+                .onHover { inside in if !inside { hover = nil } }
                 footer
             }
             .padding(EdgeInsets(top: 4, leading: 4, bottom: 2, trailing: 4))

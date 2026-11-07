@@ -186,7 +186,7 @@ struct CommunicationSection: View {
     private func rate(_ v: Double?) -> String { v.map { String(format: "%.1f", $0) } ?? "–" }
 }
 
-/// One number with its line across the period's calls, and a hairline at the average.
+/// One number with its line across the period's calls, and a hairline at the median.
 private struct TrendFigure: View {
     let title: String
     let value: String
@@ -203,9 +203,10 @@ private struct TrendFigure: View {
             .accessibilityElement(children: .combine)
             Group {
                 if points.count >= 2 {
-                    let mean = points.map(\.1).reduce(0, +) / Double(points.count)
+                    // The median, not the mean: one long monologue or a burst of questions would pull a mean away.
+                    let median = points.map(\.1).sorted()[points.count / 2]
                     Chart {
-                        RuleMark(y: .value("Average", mean))
+                        RuleMark(y: .value("Median", median))
                             .foregroundStyle(Palette.hairline)
                             .lineStyle(StrokeStyle(lineWidth: 1))
                         // One step per call, in order: calls hours apart would bunch up on a time axis.
