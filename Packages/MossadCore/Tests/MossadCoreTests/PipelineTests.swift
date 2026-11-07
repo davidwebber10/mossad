@@ -343,6 +343,40 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(notified.count, 1)
     }
 
+    func testAnOverlappingProcessCallDoesNotMakeAQuietRunNotify() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.summaryVersion = nil
+        try r.save(to: paths.callDirectory(id))
+        notifications.records = []
+        summarizer.delayOnCall = [2: .milliseconds(600)]
+        let backfill = Task { await p.backfill(id) }
+        while summarizer.calls < 2 { try await Task.sleep(for: .milliseconds(20)) }
+        await p.process(id)
+        _ = await backfill.value
+        XCTAssertTrue(notified.isEmpty)
+    }
+
+    func testAFailedQuietSummaryPutsTheMeetingBackAsWritten() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.summaryVersion = nil
+        try r.save(to: paths.callDirectory(id))
+        summarizer.fail = true
+        let ok = await p.backfill(id)
+        XCTAssertFalse(ok)
+        r = try load(id)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertNil(r.nextAttempt)
+        XCTAssertNil(r.failureReason)
+        XCTAssertEqual(r.attempts, 0)
+    }
+
     func testBackfillKeepsTheCalendarTitleAndAttendees() async throws {
         let id = try makeRecord(meetingID: "abc-defg-hij")
         var r = try load(id)
@@ -425,7 +459,7 @@ final class PipelineTests: XCTestCase {
         XCTAssertFalse(ok)
     }
 
-    /// A backfill that fails and is retried later by plain processing still keeps the old tags.
+    /// A backfill that fails and is retried by the next backfill still keeps the old tags.
     func testBackfillRetryAfterAFailureKeepsTags() async throws {
         let id = try makeRecord()
         let p = pipeline()
@@ -438,9 +472,10 @@ final class PipelineTests: XCTestCase {
         summarizer.fail = true
         let ok = await p.backfill(id)
         XCTAssertFalse(ok)
-        XCTAssertNotEqual(try load(id).status, .written)
+        XCTAssertEqual(try load(id).status, .written)
         summarizer.fail = false
-        await p.process(id)
+        let retried = await p.backfill(id)
+        XCTAssertTrue(retried)
         let after = try load(id)
         XCTAssertEqual(after.status, .written)
         XCTAssertEqual(after.tags, ["Freight"])

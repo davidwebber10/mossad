@@ -13,8 +13,8 @@ public actor Pipeline {
     private var inFlight: Set<String> = []
     /// Calls whose tags the owner changed while they were processing; the summary must not overwrite those.
     private var tagsEditedByOwner: Set<String> = []
-    /// Calls running as the quiet backfill; see `regenerateSummary`.
-    private var quietRuns: Set<String> = []
+    /// Calls running as the quiet backfill, with the record from before; see `regenerateSummary`.
+    private var quietRuns: [String: CallRecord] = [:]
 
     private let paths: Paths
     private let queue: ProcessingQueue
@@ -76,7 +76,6 @@ public actor Pipeline {
 
     private func processSteps(_ id: String) async {
         defer {
-            quietRuns.remove(id)
             stages[id] = nil
             transcribing.remove(id)
             onDetail(id, nil)
@@ -85,7 +84,8 @@ public actor Pipeline {
         }
         // `process` suspends at every await; without this a timer run and a call-end run could overlap.
         guard inFlight.insert(id).inserted else { return }
-        defer { inFlight.remove(id); tagsEditedByOwner.remove(id) }
+        // Only the run that owns the id clears its quiet mark; an overlapping call returns at the guard above.
+        defer { inFlight.remove(id); tagsEditedByOwner.remove(id); quietRuns[id] = nil }
         let dir = paths.callDirectory(id)
         guard var r = try? CallRecord.load(from: dir) else { return }
         do {
@@ -97,6 +97,8 @@ public actor Pipeline {
                 case .transcribed: try await identify(&r, dir: dir)
                 case .identified:
                     guard await summarize(&r) else {
+                        // A failed backfill must not leave the meeting waiting for a normal retry, which would notify.
+                        if let original = quietRuns[id] { r = original }
                         carryOwnerEdits(into: &r, dir: dir)
                         try store(r, dir: dir)
                         return
@@ -137,9 +139,10 @@ public actor Pipeline {
     public func regenerateSummary(_ id: String, quiet: Bool = false) async {
         let dir = paths.callDirectory(id)
         guard var r = try? CallRecord.load(from: dir), r.status == .written, !r.utterances.isEmpty else { return }
+        let original = r
         r.status = .identified
         do { try store(r, dir: dir) } catch { return }
-        if quiet { quietRuns.insert(id) }
+        if quiet { quietRuns[id] = original }
         await process(id)
     }
 
@@ -426,7 +429,7 @@ public actor Pipeline {
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
-        if !quietRuns.contains(r.id) {
+        if quietRuns[r.id] == nil {
             detail(r.id, "Finding the calendar invite")
             let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
             if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
@@ -468,7 +471,7 @@ public actor Pipeline {
         detail(r.id, "Making the recording")
         Recording.makeIfMissing(in: paths.callDirectory(r.id))
         // Without fingerprints a name is never learned, so asking after every call would only nag.
-        if voiceFingerprints, !r.unknownSpeakers.isEmpty, !quietRuns.contains(r.id) { notify(r) }
+        if voiceFingerprints, !r.unknownSpeakers.isEmpty, quietRuns[r.id] == nil { notify(r) }
     }
 
     /// Applies names chosen by David, learns those voices, and rewrites the summary and the file.

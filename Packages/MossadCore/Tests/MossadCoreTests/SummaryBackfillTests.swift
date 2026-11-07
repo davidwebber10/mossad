@@ -49,12 +49,12 @@ final class SummaryBackfillTests: XCTestCase {
 
 final class SummaryBackfillRunTests: XCTestCase {
     func testRunPausesAfterThreeFailuresInARow() async {
-        var seen: [String] = []
+        let seen = SeenIDs()
         let result = await SummaryBackfill.run(ids: ["a", "b", "c", "d", "e"]) { id in
-            seen.append(id)
+            seen.add(id)
             return false
         }
-        XCTAssertEqual(seen, ["a", "b", "c"])
+        XCTAssertEqual(seen.ids, ["a", "b", "c"])
         XCTAssertTrue(result.paused)
         XCTAssertEqual(result.updated, 0)
     }
@@ -65,4 +65,11 @@ final class SummaryBackfillRunTests: XCTestCase {
         XCTAssertFalse(result.paused)
         XCTAssertEqual(result.updated, 2)
     }
+}
+
+private final class SeenIDs: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _ids: [String] = []
+    var ids: [String] { lock.withLock { _ids } }
+    func add(_ id: String) { lock.withLock { _ids.append(id) } }
 }
