@@ -220,7 +220,7 @@ private struct RecordingStatus: View {
                     .help("End the recording now and write the note")
             }
             .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 10))
-            TalkShareStrip(model: controller.live)
+            TalkShareStrip(model: controller.live, owner: controller.ownerName)
             if controller.isMuted, !controller.isPaused {
                 MutedBanner(platform: platform, compact: true).padding(.horizontal, 6).padding(.bottom, 6)
             }
@@ -253,16 +253,18 @@ private struct PanelVoicesLine: View {
 /// Each voice's share of the talking so far, in its hue, the owner first. It updates with the live transcript.
 private struct TalkShareStrip: View {
     @ObservedObject var model: LiveTranscriptModel
+    let owner: String
 
     var body: some View {
-        let shares = model.transcript.talkShares.filter { $0.seconds > 0 }
+        let shares = model.transcript.talkShares(owner: owner).filter { $0.seconds > 0 }
         if !shares.isEmpty {
             GeometryReader { g in
                 let total = shares.reduce(0) { $0 + $1.seconds }
                 let gaps = CGFloat(shares.count - 1)
                 HStack(spacing: 1) {
-                    ForEach(Array(shares.enumerated()), id: \.offset) { i, share in
-                        Rectangle().fill(Palette.speaker(i))
+                    // Each voice's hue is the one its lines have in the live transcript.
+                    ForEach(Array(shares.enumerated()), id: \.offset) { _, share in
+                        Rectangle().fill(Palette.speaker(share.hue))
                             .frame(width: max(1, (g.size.width - gaps) * share.seconds / total))
                     }
                 }

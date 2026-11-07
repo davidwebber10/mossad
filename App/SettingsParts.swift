@@ -241,6 +241,7 @@ struct RadioRow<Trailing: View>: View {
     let selected: Bool
     let action: () -> Void
     @ViewBuilder var trailing: Trailing
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
@@ -254,6 +255,7 @@ struct RadioRow<Trailing: View>: View {
                 trailing
             }
             .padding(.vertical, 9)
+            .opacity(isEnabled ? 1 : 0.45)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

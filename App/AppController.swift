@@ -224,6 +224,8 @@ final class AppController: ObservableObject {
     init() {
         try? paths.ensureDirectories()
         Log.directory = paths.logs
+        // A preview only looks: its lines would fill the owner's log with starts that recorded nothing.
+        Log.writesFile = !CommandLine.arguments.contains("--ui-preview")
         library = VoiceLibrary(directory: paths.voices)
         recorder = Self.makeRecorder(paths: paths)
         Self.current = self
@@ -299,14 +301,14 @@ final class AppController: ObservableObject {
         }
         Log.info("Mossad started")
         // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
-        if CommandLine.arguments.contains("--show-recording") {
+        if preview, CommandLine.arguments.contains("--show-recording") {
             // MOSSAD_RECORDING_PLATFORM=inPerson|zoom|teams|meet and MOSSAD_RECORDING_SECONDS pick what it shows.
             let env = ProcessInfo.processInfo.environment
             let platform = env["MOSSAD_RECORDING_PLATFORM"].flatMap(Platform.init(rawValue:)) ?? .meet
             let seconds = env["MOSSAD_RECORDING_SECONDS"].flatMap(Double.init) ?? 75
             status = .recording(platform, since: Date().addingTimeInterval(-seconds))
         }
-        if CommandLine.arguments.contains("--show-muted") { isMuted = true }
+        if preview, CommandLine.arguments.contains("--show-muted") { isMuted = true }
         if !preview {
             backfillSummaries()
             backfillTitlesAndDecisionTimes()

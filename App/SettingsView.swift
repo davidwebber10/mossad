@@ -164,7 +164,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     /// The one line in the list.
     var contents: String {
         switch self {
-        case .general: "On/off, you, permissions, updates"
+        case .general: "On/off, you, permissions, org chart"
         case .recording: "Recording, voices, calendars, storage"
         case .ai: "Providers and other AI apps"
         case .sync: "Where meetings sync, iPhone, share links"

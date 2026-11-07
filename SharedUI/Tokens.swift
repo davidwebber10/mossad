@@ -51,6 +51,8 @@ enum Palette {
     /// Only while audio is captured, and for destructive actions.
     static let recording = Color(light: 0xC43D31, dark: 0xFF6B5E)
     static let recordingTint = Color(light: 0xC43D31, lightAlpha: 0.1, dark: 0xFF6B5E, darkAlpha: 0.14)
+    /// The faint ground under an error line in the log: lighter than the tint, so long text stays easy to read.
+    static let errorWash = Color(light: 0xC43D31, lightAlpha: 0.07, dark: 0xFF6B5E, darkAlpha: 0.1)
     /// Done, connected, granted: for marks only (dots, icons). Not for text.
     static let ok = Color(light: 0x1E8E5A, dark: 0x3FCB84)
     /// "Connected", "Granted" as text: a darker green in light mode so it meets 4.5:1 on the window and the

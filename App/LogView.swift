@@ -15,13 +15,14 @@ struct LogView: View {
     }
 
     /// Lines without a time belong to the day before them.
-    private var days: [(day: String, lines: [(id: Int, line: LogLine)])] {
-        var result: [(day: String, lines: [(id: Int, line: LogLine)])] = []
+    /// Each group's id is its first line's index: a day can come back after a gap, so its name is not unique.
+    private var days: [(id: Int, day: String, lines: [(id: Int, line: LogLine)])] {
+        var result: [(id: Int, day: String, lines: [(id: Int, line: LogLine)])] = []
         var current: Date?
         for (i, line) in visible.enumerated() {
             let date = line.date ?? current
             let day = date.map(Self.day) ?? ""
-            if result.last?.day != day { result.append((day, [])) }
+            if result.last?.day != day { result.append((i, day, [])) }
             result[result.count - 1].lines.append((i, line))
             current = date
         }
@@ -31,7 +32,7 @@ struct LogView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(days, id: \.day) { group in
+                ForEach(days, id: \.id) { group in
                     if !group.day.isEmpty {
                         Text(group.day).textRole(.label).foregroundStyle(Palette.tertiary)
                             .padding(.top, 14).padding(.bottom, 6)
@@ -147,9 +148,7 @@ private struct LogRow: View {
         .font(.system(size: 11.5, design: .monospaced))
         .lineSpacing(3)
         .padding(.horizontal, 6).padding(.vertical, 2)
-        .background(error ? LogRow.errorGround : .clear, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .background(error ? Palette.errorWash : .clear, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         .padding(.horizontal, -6)
     }
-
-    static let errorGround = Color(light: 0xC43D31, lightAlpha: 0.07, dark: 0xFF6B5E, darkAlpha: 0.1)
 }

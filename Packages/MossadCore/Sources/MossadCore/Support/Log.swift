@@ -10,6 +10,9 @@ public enum Log {
     /// File logging starts when the app sets this; until then only the unified log is used.
     nonisolated(unsafe) public static var directory: URL?
 
+    /// False for a run that only looks, such as a preview for screenshots: its lines stay out of the owner's file.
+    nonisolated(unsafe) public static var writesFile = true
+
     public static var fileURL: URL? { directory?.appendingPathComponent("mossad.log") }
 
     public static func info(_ message: String) { write("INFO", message); logger.info("\(message, privacy: .public)") }
@@ -18,7 +21,7 @@ public enum Log {
 
     private static func write(_ level: String, _ message: String) {
         let line = "\(ISO8601DateFormatter().string(from: Date())) \(level) \(message)\n"
-        guard let directory, let fileURL else { return }
+        guard writesFile, let directory, let fileURL else { return }
         queue.async {
             let fm = FileManager.default
             try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -32,6 +35,9 @@ public enum Log {
             }
         }
     }
+
+    /// Waits for the lines already logged to reach the file.
+    public static func flush() { queue.sync {} }
 
     private static func rotateIfNeeded(directory: URL, fileURL: URL) {
         let fm = FileManager.default

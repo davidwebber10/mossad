@@ -136,7 +136,11 @@ struct ServerSetupSheet: View {
             .fixedSize(horizontal: false, vertical: true)
             SheetFooter {
                 Button("Cancel") { dismiss() }.buttonStyle(.sheetSecondary).keyboardShortcut(.cancelAction)
-                Button("Done") { dismiss() }.buttonStyle(.sheetPrimary).keyboardShortcut(.defaultAction).disabled(!started)
+                // Continue runs the open step's check; Done comes with the last step.
+                Button(started ? "Done" : "Continue", action: next)
+                    .buttonStyle(.sheetPrimary)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canContinue)
             }
         }
         .mossadSheet(width: 560)
@@ -148,6 +152,17 @@ struct ServerSetupSheet: View {
                 pasted = c.secret
             }
         }
+    }
+
+    private var canContinue: Bool {
+        if started { return true }
+        if foundAddress == nil { return ServerConnection.address(from: address) != nil && addressCheck != .checking }
+        if hello == nil { return !secret.isEmpty && secretCheck != .checking }
+        return true
+    }
+
+    private func next() {
+        if started { dismiss() } else if foundAddress == nil { checkAddress() } else if hello == nil { checkSecret() } else { start() }
     }
 
     private func checkAddress() {

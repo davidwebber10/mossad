@@ -167,7 +167,7 @@ private struct LiveLines: View {
     /// they need a name after the call.
     private func who(_ line: LiveTranscript.Line) -> (name: String, hue: Int, unnamed: Bool) {
         guard line.source == .them else { return ("You", 0, false) }
-        let hue = 1 + Int(line.speaker?.unicodeScalars.first.map { $0.value } ?? 65) - 65
+        let hue = model.transcript.hue(of: line, owner: owner)
         if let name = line.speakerKey.flatMap({ model.transcript.names[$0] }) {
             return name == owner ? ("You", 0, false) : (String(name.split(separator: " ").first ?? ""), hue, false)
         }
