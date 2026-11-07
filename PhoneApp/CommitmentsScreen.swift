@@ -47,6 +47,14 @@ struct CommitmentsScreen: View {
                 }
             }
             .refreshable { await store.sync() }
+            // Search opened a task: show its list and the task.
+            .onChange(of: store.openTask, initial: true) { _, id in
+                guard let id else { return }
+                store.openTask = nil
+                guard let c = store.commitments.visible.first(where: { $0.id == id }) else { return }
+                mode = c.done == nil ? .open : .done
+                editing = c
+            }
             .sheet(item: $editing) { c in
                 NavigationStack {
                     CommitmentEditor(commitment: c, save: store.saveCommitment, delete: { store.deleteCommitment(c.id) },

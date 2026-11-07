@@ -1,76 +1,75 @@
 import MossadCore
 import SwiftUI
 
-private struct PersonRoute: Hashable { let name: String }
+struct PersonRoute: Hashable { let name: String }
 
 /// Everyone you meet with, as the canvas lists them: you first, then the others by the last time you met, with
-/// their mark, how often, and when.
+/// their mark, how often, and when. It opens from Analytics, inside that tab's navigation.
 struct PeopleScreen: View {
     enum Sort: String, CaseIterable { case recent = "Most recent", mostMet = "Most met", name = "A to Z" }
 
     @EnvironmentObject var store: PhoneStore
-    @State private var stats: [String: PersonStats] = [:]
     @State private var query = ""
     @AppStorage("peopleSort") private var sort = Sort.recent
-    @State private var path = NavigationPath()
+    /// The stack it sits in, for the profile hook.
+    @Binding var path: NavigationPath
+    @State private var opened = false
+
+    private var stats: [String: PersonStats] { store.personStats }
 
     var body: some View {
-        NavigationStack(path: $path) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    if query.isEmpty, let me = stats[store.owner] {
-                        PhoneLabel("You").padding(.top, Space.l)
-                        NavigationLink(value: PersonRoute(name: store.owner)) {
-                            PersonRow(name: store.owner, stats: me, isOwner: true, divided: false)
-                        }
-                        .buttonStyle(.plain)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                if query.isEmpty, let me = stats[store.owner] {
+                    PhoneLabel("You").padding(.top, Space.l)
+                    NavigationLink(value: PersonRoute(name: store.owner)) {
+                        PersonRow(name: store.owner, stats: me, isOwner: true, divided: false)
                     }
-                    HStack(alignment: .firstTextBaseline) {
-                        PhoneLabel("People · \(people.count)")
-                        Menu {
-                            Picker("Sort", selection: $sort) {
-                                ForEach(Sort.allCases, id: \.self) { Text($0.rawValue) }
-                            }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Text(sort.rawValue)
-                                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-                            }
-                            .textRole(.secondary)
-                            .foregroundStyle(Palette.secondary)
-                            .fixedSize()
-                        }
-                        .accessibilityLabel("Sort, \(sort.rawValue)")
-                    }
-                    .padding(.top, Space.xl)
-                    ForEach(Array(people.enumerated()), id: \.element) { i, name in
-                        NavigationLink(value: PersonRoute(name: name)) {
-                            PersonRow(name: name, stats: stats[name]!, divided: i < people.count - 1)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, Space.l)
-                .padding(.bottom, Space.xl)
-            }
-            .overlay {
-                if stats.isEmpty {
-                    EmptyState(symbol: "person.2", title: "No people yet", message: "People appear once their voices are named on the Mac.")
+                HStack(alignment: .firstTextBaseline) {
+                    PhoneLabel("People · \(people.count)")
+                    Menu {
+                        Picker("Sort", selection: $sort) {
+                            ForEach(Sort.allCases, id: \.self) { Text($0.rawValue) }
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text(sort.rawValue)
+                            Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                        }
+                        .textRole(.secondary)
+                        .foregroundStyle(Palette.secondary)
+                        .fixedSize()
+                    }
+                    .accessibilityLabel("Sort, \(sort.rawValue)")
+                }
+                .padding(.top, Space.xl)
+                ForEach(Array(people.enumerated()), id: \.element) { i, name in
+                    NavigationLink(value: PersonRoute(name: name)) {
+                        PersonRow(name: name, stats: stats[name]!, divided: i < people.count - 1)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .phonePage()
-            .navigationTitle("People")
-            .searchable(text: $query, prompt: "Name")
-            .refreshable { await store.sync() }
-            .navigationDestination(for: PersonRoute.self) { PersonView(name: $0.name, stats: stats[$0.name] ?? PersonStats()) }
-            .navigationDestination(for: String.self) { id in
-                if let r = store.meeting(id) { MeetingView(record: r) }
+            .padding(.horizontal, Space.l)
+            .padding(.bottom, Space.xl)
+        }
+        .overlay {
+            if stats.isEmpty {
+                EmptyState(symbol: "person.2", title: "No people yet", message: "People appear once their voices are named on the Mac.")
             }
-            .task(id: store.meetings.count) {
-                let records = store.meetings
-                stats = await Task.detached(priority: .userInitiated) { PersonStatistics.compute(records) }.value
-                // Development hook for screenshots: `MOSSAD_PERSON=<name>` opens a profile.
-                if let name = PhoneStore.hook("MOSSAD_PERSON"), path.isEmpty, stats[name] != nil { path.append(PersonRoute(name: name)) }
+        }
+        .phonePage()
+        .navigationTitle("People")
+        .searchable(text: $query, prompt: "Name")
+        .refreshable { await store.sync() }
+        .navigationDestination(for: PersonRoute.self) { PersonView(name: $0.name, stats: stats[$0.name] ?? PersonStats()) }
+        .task(id: stats.count) {
+            // Development hook for screenshots: `MOSSAD_PERSON=<name>` opens a profile.
+            if let name = PhoneStore.hook("MOSSAD_PERSON"), stats[name] != nil, !opened {
+                opened = true
+                path.append(PersonRoute(name: name))
             }
         }
     }
