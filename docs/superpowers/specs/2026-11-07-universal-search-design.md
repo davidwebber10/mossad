@@ -28,8 +28,9 @@ Analytics. The red "Record room" pill leaves the bar area.
 - iPhone: the Search tab (iOS 26 search role, the circle at the right of the tab bar) shows the same groups as a
   native list with the search field at the bottom; empty query shows recent searches, people, and tags.
 - iPhone bar: tabs Meetings, Tasks, Chat, Analytics, plus Search. Analytics gains a People section (the current People
-  screen's list and profile, reached from Analytics). "Record room" becomes a quiet row at the top of the Meetings
-  list (and still starts the room recorder); while recording, the existing recording UI stays.
+  screen's list and profile, reached from Analytics). "Record room" stays a floating button, but only on the Meetings
+  tab (not on Tasks, Chat, Analytics, or Search), placed so it never sits on the tab bar; while recording, the
+  existing recording UI stays.
 
 ## Non-goals
 
