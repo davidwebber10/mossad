@@ -32,6 +32,8 @@ enum Palette {
 
     static let ink = Color(light: 0x1C1A17, dark: 0xF1EEE8)
     static let secondary = Color(light: 0x6B665E, dark: 0xA6A097)
+    /// The sidebar's sections that are not open: a little softer than ink.
+    static let navText = Color(light: 0x3E3A34, dark: 0xD6D1C9)
     /// Tertiary text. The canvas's tertiary measures under 3.3:1, so text uses this darker (light) and lighter
     /// (dark) value of the same hue, which meets 4.5:1 on the window and on the surface. On fill or selection,
     /// use secondary.
@@ -106,6 +108,46 @@ enum Space {
     static let xl: CGFloat = 24
     /// Before a new story on dense pages.
     static let xxl: CGFloat = 40
+}
+
+/// The Mac window's chrome, from the canvas's window: the floating sidebar card, the list column, and the detail
+/// column's toolbar row with its glass capsules.
+enum Chrome {
+    /// The sidebar column, with the card inset 10 pt from the window (4 pt toward the list). The canvas sizes
+    /// boxes without their padding, so its 196 pt sidebar is a 196 pt card in a 210 pt column; the same holds
+    /// below for the list (300 + 12), the toolbar row (52 + 10), and the search (240 + 24).
+    static let sidebarWidth: CGFloat = 210
+    static let sidebarInset = EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 4)
+    static let sidebarPadding = EdgeInsets(top: 12, leading: 10, bottom: 12, trailing: 10)
+    static let sidebarRadius: CGFloat = 16
+    /// The traffic lights' row inside the card (24 pt and 2 pt above), and the space from it to the first section.
+    static let lightsRow: CGFloat = 26
+    static let lightsToNav: CGFloat = 22
+    static let navRowHeight: CGFloat = 30
+    static let navRowRadius: CGFloat = 8
+    static let navRowGap: CGFloat = 2
+    static let navRowPadding: CGFloat = 9
+    static let navIcon: CGFloat = 16
+    static let navIconGap: CGFloat = 9
+
+    /// The list column: 312 pt by default (300 inside 4 and 8 pt), resizable between these, with its own 36 pt
+    /// title row.
+    static let listWidth: CGFloat = 312
+    static let listWidthRange: ClosedRange<CGFloat> = 252...472
+    static let listTitleHeight: CGFloat = 36
+    static let listTop: CGFloat = 10
+    static let listTitleLeading: CGFloat = 14
+
+    /// The detail column's toolbar row and its glass controls.
+    static let toolbarHeight: CGFloat = 62
+    static let toolbarInsets = EdgeInsets(top: 10, leading: 36, bottom: 0, trailing: 16)
+    static let controlHeight: CGFloat = 30
+    static let controlPadding: CGFloat = 3
+    static let segment = CGSize(width: 32, height: 24)
+    static let iconCell = CGSize(width: 30, height: 24)
+    /// 240 and 12 pt padding on each side.
+    static let searchWidth: CGFloat = 264
+    static let groupGap: CGFloat = 8
 }
 
 /// Concentric radii: an inner radius is the outer one minus the padding between them. Capsules use `Capsule()`.

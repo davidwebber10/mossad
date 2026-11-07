@@ -38,22 +38,20 @@ struct CalendarControls: View {
     @ObservedObject var state: CalendarState
 
     var body: some View {
-        HStack(spacing: 6) {
-            navButton("chevron.left") { state.move(-1) }.accessibilityLabel("Previous")
-            Button("Today") { state.anchor = Date() }
-                .font(.system(size: 12, weight: .medium))
-            navButton("chevron.right") { state.move(1) }.accessibilityLabel("Next")
-            Text(state.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink).padding(.horizontal, 6).fixedSize()
+        HStack(spacing: Chrome.groupGap) {
+            ToolbarCapsule {
+                ToolbarIconButton(icon: .chevronLeft, label: "Previous", size: 14) { state.move(-1) }
+                Button("Today") { state.anchor = Date() }
+                    .buttonStyle(ChromeCellStyle())
+                    .font(.system(size: 12.5, weight: .medium))
+                    .padding(.horizontal, 6)
+                ToolbarIconButton(icon: .chevronRight, label: "Next", size: 14) { state.move(1) }
+            }
+            Text(state.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink).padding(.horizontal, 4).fixedSize()
             Picker("Scope", selection: $state.scope) {
                 ForEach(CalendarState.Scope.allCases, id: \.self) { Text($0.rawValue) }
             }
             .labelsHidden().fixedSize().controlSize(.small)
-        }
-    }
-
-    private func navButton(_ symbol: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
         }
     }
 }

@@ -10,28 +10,21 @@ struct SettingsView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            SettingsList(selection: $page, attention: attention)
-                .frame(width: 300)
-            Hairline(axis: .vertical)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(page.title).font(.system(size: 15, weight: .semibold)).tracking(-0.15).foregroundStyle(Palette.ink)
-                        Text(page.detail).font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityAddTraits(.isHeader)
-                    content
-                }
-                .padding(EdgeInsets(top: 4, leading: 36, bottom: 40, trailing: 36))
-                .frame(maxWidth: 760 + 72, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            ListColumn("Settings", widthKey: "settings") {
+                SettingsList(selection: $page, attention: attention)
             }
-            .id(page)
-            .frame(maxWidth: .infinity)
+            DetailColumn {
+                PageToolbar(title: page.title, subtitle: page.detail) { EmptyView() }
+            } content: {
+                ScrollView {
+                    content
+                        .padding(EdgeInsets(top: 10, leading: 36, bottom: 40, trailing: 36))
+                        .frame(maxWidth: 760 + 72, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .id(page)
+            }
         }
-        .background(Palette.window)
-        .navigationTitle("Settings")
         .onAppear {
             permissions.refresh()
             permissions.setInterval(1)
@@ -116,8 +109,7 @@ private struct SettingsListRow: View {
     var body: some View {
         Button(action: select) {
             HStack(spacing: 10) {
-                Image(systemName: page.symbol)
-                    .font(.system(size: 13, weight: .regular))
+                IconImage(page.icon, size: 15)
                     .foregroundStyle(Palette.accent)
                     .frame(width: 28, height: 28)
                     .background(Palette.fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -182,13 +174,13 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
+    var icon: Icon {
         switch self {
-        case .general: "gearshape"
-        case .recording: "mic"
-        case .ai: "sparkle"
-        case .sync: "cloud"
-        case .coach: "text.bubble"
+        case .general: .settings
+        case .recording: .mic
+        case .ai: .sparkle
+        case .sync: .cloud
+        case .coach: .coach
         }
     }
 }

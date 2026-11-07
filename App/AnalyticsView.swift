@@ -33,6 +33,21 @@ struct AnalyticsView: View {
     private var interval: DateInterval { choice.wrappedValue.range.interval(earliest: earliest) }
 
     var body: some View {
+        DetailColumn {
+            PageToolbar(title: "Analytics", subtitle: subtitle) {
+                DateRangeButton(choice: choice, compare: $compare, interval: data?.now.interval ?? interval, earliest: earliest)
+            }
+        } content: {
+            page
+        }
+        .task(id: TaskKey(range: choice.wrappedValue.range, meetings: controller.meetings.count, coach: controller.coachVersion,
+                          commitments: controller.commitmentsVersion)) { await load() }
+    }
+
+    /// Uses the pane's width up to a wide cap, so a large window has no empty band on the right.
+    private static let maxContentWidth: CGFloat = 1320
+
+    private var page: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 Group {
@@ -51,7 +66,7 @@ struct AnalyticsView: View {
                 .padding(.horizontal, 36)
                 .padding(.top, 10)
                 .padding(.bottom, 40)
-                .frame(maxWidth: 1072, alignment: .leading)
+                .frame(maxWidth: Self.maxContentWidth + 72, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             // Development hook for screenshots: MOSSAD_SCROLL_TO names a section label, such as "Who you meet with".
@@ -70,16 +85,6 @@ struct AnalyticsView: View {
                     .padding(.top, 2).padding(.trailing, 16)
             }
         }
-        .background(Palette.window)
-        .navigationTitle("Analytics")
-        .navigationSubtitle(subtitle)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                DateRangeButton(choice: choice, compare: $compare, interval: data?.now.interval ?? interval, earliest: earliest)
-            }
-        }
-        .task(id: TaskKey(range: choice.wrappedValue.range, meetings: controller.meetings.count, coach: controller.coachVersion,
-                          commitments: controller.commitmentsVersion)) { await load() }
     }
 
     /// Says so when the period before is empty, because then no figure shows a change.

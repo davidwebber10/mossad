@@ -32,3 +32,44 @@ private struct MossadGlass<S: InsettableShape>: ViewModifier {
         }
     }
 }
+
+extension View {
+    /// The canvas's own glass for the window chrome: the sidebar card and the toolbar's capsules. A translucent
+    /// warm fill, an inner 1 pt ring, and a soft shadow, rather than the system glass, whose rim and gray read
+    /// heavier than the design on warm paper. Nothing scrolls under the chrome, so it needs no blur.
+    func chromeGlass<S: InsettableShape>(in shape: S, fill: Color = Palette.glass, shadow: ChromeShadow = .control) -> some View {
+        modifier(ChromeGlass(shape: shape, fill: fill, shadow: shadow))
+    }
+}
+
+enum ChromeShadow {
+    /// 0 2 8 at 8%: the toolbar's capsules.
+    case control
+    /// 0 1 2 at 6%: the sidebar card.
+    case card
+}
+
+private struct ChromeGlass<S: InsettableShape>: ViewModifier {
+    let shape: S
+    let fill: Color
+    let shadow: ChromeShadow
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        if reduceTransparency || PreviewAccessibility.reduceTransparency {
+            content
+                .background(Palette.surface, in: shape)
+                .hairlineBorder(shape)
+        } else {
+            let increased = contrast == .increased || PreviewAccessibility.increaseContrast
+            content
+                .background {
+                    shape.fill(fill)
+                        .overlay { shape.strokeBorder(increased ? Palette.hairline : Palette.glassRing, lineWidth: 1) }
+                        .shadow(color: .black.opacity(shadow == .card ? 0.06 : 0.08), radius: shadow == .card ? 1 : 4,
+                                y: shadow == .card ? 1 : 2)
+                }
+        }
+    }
+}

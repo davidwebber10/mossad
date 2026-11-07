@@ -30,6 +30,30 @@ struct LogView: View {
     }
 
     var body: some View {
+        DetailColumn {
+            PageToolbar(title: "Log") {
+                HStack(spacing: 6) {
+                    chip("Info", .info)
+                    chip("Error", .error)
+                    chip("Debug", .debug)
+                }
+                ToolbarCircleButton(icon: .copy, label: "Copy", help: "Copy the lines shown", size: 14) {
+                    copy(visible.map(plain).joined(separator: "\n"))
+                }
+                ToolbarSearchField(prompt: "Filter", query: $filter)
+            }
+        } content: {
+            logLines
+        }
+        .task {
+            while !Task.isCancelled {
+                load()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    private var logLines: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(days, id: \.id) { group in
@@ -53,30 +77,6 @@ struct LogView: View {
         .defaultScrollAnchor(.top, for: .alignment)
         .defaultScrollAnchor(.bottom, for: .initialOffset)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
-        .background(Palette.window)
-        .navigationTitle("Log")
-        .toolbar {
-            ToolbarItem {
-                HStack(spacing: 6) {
-                    chip("Info", .info)
-                    chip("Error", .error)
-                    chip("Debug", .debug)
-                }
-            }
-            ToolbarItem {
-                Button {
-                    copy(visible.map(plain).joined(separator: "\n"))
-                } label: { Label("Copy", systemImage: "doc.on.doc") }
-                    .help("Copy the lines shown")
-            }
-            ToolbarItem { ToolbarSearchField(prompt: "Filter", query: $filter) }
-        }
-        .task {
-            while !Task.isCancelled {
-                load()
-                try? await Task.sleep(for: .seconds(2))
-            }
-        }
     }
 
     private func chip(_ title: String, _ level: LogLine.Level) -> some View {
@@ -85,10 +85,10 @@ struct LogView: View {
             if on { levels.remove(level) } else { levels.insert(level) }
         } label: {
             Text(title)
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(on ? Palette.accent : Palette.secondary)
-                .padding(.horizontal, 9)
-                .frame(height: 22)
+                .padding(.horizontal, 11)
+                .frame(height: 26)
                 .background(on ? Palette.accentTint : Palette.fill, in: Capsule())
                 .contentShape(Capsule())
         }

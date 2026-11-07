@@ -6,12 +6,11 @@ struct MainWindow: View {
     @State private var welcoming = false
 
     var body: some View {
-        NavigationSplitView {
+        // The canvas's chrome, drawn here rather than by a split view: the sidebar is a floating card that never
+        // collapses, and each page draws its own list column and toolbar row, with no band across the window.
+        HStack(spacing: 0) {
             Sidebar()
-                .navigationSplitViewColumnWidth(min: 180, ideal: 196, max: 240)
-                // The sidebar always shows: hiding it saved nothing and lost the way around.
-                .toolbar(removing: .sidebarToggle)
-        } detail: {
+                .frame(width: Chrome.sidebarWidth)
             Group {
                 switch controller.section {
                 case .meetings: MeetingsView()
@@ -23,7 +22,9 @@ struct MainWindow: View {
                 case .log: LogView()
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .ignoresSafeArea()
         .background { WindowBackdrop() }
         // The window's contentMinSize sets the limit. A minimum height here would apply below the toolbar, so it
         // asked for 600 pt plus the toolbar and the root grew past the window, centered, under the title bar.
@@ -58,49 +59,90 @@ private struct WindowBackdrop: View {
         Palette.window
             .overlay {
                 if !reduceTransparency, !PreviewAccessibility.reduceTransparency {
+                    // The canvas's two washes: ellipses 640 x 420 at (-4%, 18%) and 520 x 520 at (8%, 102%), each
+                    // fading out at 70% of its radius.
                     GeometryReader { g in
-                        ZStack {
-                            RadialGradient(colors: [Color(light: OKLCH(lightness: 0.9, chroma: 0.06, hue: 55), dark: OKLCH(lightness: 0.42, chroma: 0.07, hue: 55))
-                                .opacity(dark ? 0.55 : 0.8), .clear],
-                                           center: UnitPoint(x: -0.04 * 1400 / max(g.size.width, 1), y: 0.18), startRadius: 0, endRadius: 520)
-                            RadialGradient(colors: [Color(light: OKLCH(lightness: 0.9, chroma: 0.05, hue: 240), dark: OKLCH(lightness: 0.36, chroma: 0.06, hue: 240))
-                                .opacity(dark ? 0.5 : 0.55), .clear],
-                                           center: UnitPoint(x: 0.08 * 1400 / max(g.size.width, 1), y: 1.02), startRadius: 0, endRadius: 440)
+                        ZStack(alignment: .topLeading) {
+                            wash(Color(light: OKLCH(lightness: 0.9, chroma: 0.06, hue: 55), dark: OKLCH(lightness: 0.42, chroma: 0.07, hue: 55))
+                                    .opacity(dark ? 0.55 : 0.8),
+                                 radii: CGSize(width: 640, height: 420), at: CGPoint(x: -0.04 * g.size.width, y: 0.18 * g.size.height))
+                            wash(Color(light: OKLCH(lightness: 0.9, chroma: 0.05, hue: 240), dark: OKLCH(lightness: 0.36, chroma: 0.06, hue: 240))
+                                    .opacity(dark ? 0.5 : 0.55),
+                                 radii: CGSize(width: 520, height: 520), at: CGPoint(x: 0.08 * g.size.width, y: 1.02 * g.size.height))
                         }
                     }
                 }
             }
             .ignoresSafeArea()
     }
+
+    private func wash(_ color: Color, radii: CGSize, at center: CGPoint) -> some View {
+        EllipticalGradient(stops: [.init(color: color, location: 0), .init(color: color.opacity(0), location: 0.7)])
+            .frame(width: radii.width * 2, height: radii.height * 2)
+            .position(center)
+    }
 }
 
-/// The sections, with the open commitments and what needs the owner in Settings, then what Mossad is doing.
+/// The sections, with the open commitments and what needs the owner in Settings, then what Mossad is doing: a
+/// floating glass card inset from the window, with the traffic lights inside it.
 private struct Sidebar: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
     @State private var openCommitments = 0
+    @State private var hovered: AppController.Section?
+    @FocusState private var focused: Bool
 
     var body: some View {
-        List(AppController.Section.allCases, selection: Binding(get: { controller.section }, set: { if let s = $0 { controller.section = s } })) { section in
-            HStack(spacing: 9) {
-                Image(systemName: section.symbol)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Palette.accent)
-                    .frame(width: 18)
-                Text(section.rawValue).foregroundStyle(Palette.ink)
-                Spacer(minLength: 4)
-                trailing(section)
+        VStack(alignment: .leading, spacing: 0) {
+            // The native traffic lights sit here (TrafficLights places them); the row also moves the window.
+            WindowDragArea().frame(height: Chrome.lightsRow + Chrome.lightsToNav)
+            VStack(alignment: .leading, spacing: Chrome.navRowGap) {
+                ForEach(AppController.Section.allCases) { row($0) }
             }
-            .font(.system(size: 13, weight: controller.section == section ? .medium : .regular))
-            .accessibilityElement(children: .combine)
-            .tag(section)
+            Spacer(minLength: Space.m)
+            SidebarStatus()
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .safeAreaInset(edge: .bottom, spacing: 0) { SidebarStatus() }
+        .padding(Chrome.sidebarPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .chromeGlass(in: RoundedRectangle(cornerRadius: Chrome.sidebarRadius, style: .continuous), fill: Palette.sidebar, shadow: .card)
+        .padding(Chrome.sidebarInset)
+        .focusable()
+        .focused($focused)
+        .focusEffectDisabled()
+        .onKeyPress(.downArrow) { move(1) }
+        .onKeyPress(.upArrow) { move(-1) }
         .task(id: controller.commitmentsVersion) {
             openCommitments = controller.commitmentBook.visible.filter { $0.done == nil }.count
         }
+    }
+
+    private func row(_ section: AppController.Section) -> some View {
+        let on = controller.section == section
+        return Button { controller.section = section } label: {
+            HStack(spacing: Chrome.navIconGap) {
+                IconImage(section.icon, size: Chrome.navIcon).foregroundStyle(Palette.accent)
+                Text(section.rawValue).foregroundStyle(on ? Palette.ink : Palette.navText).lineLimit(1)
+                Spacer(minLength: 4)
+                trailing(section)
+            }
+            .font(.system(size: 13, weight: on ? .medium : .regular))
+            .padding(.horizontal, Chrome.navRowPadding)
+            .frame(height: Chrome.navRowHeight)
+            .background(on ? Palette.selection : hovered == section ? Palette.fill.opacity(0.5) : .clear,
+                        in: RoundedRectangle(cornerRadius: Chrome.navRowRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Chrome.navRowRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 ? section : (hovered == section ? nil : hovered) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    private func move(_ by: Int) -> KeyPress.Result {
+        let all = AppController.Section.allCases
+        guard let i = all.firstIndex(of: controller.section) else { return .ignored }
+        controller.section = all[min(max(i + by, 0), all.count - 1)]
+        return .handled
     }
 
     @ViewBuilder
@@ -158,8 +200,6 @@ private struct SidebarStatus: View {
                 .padding(.horizontal, 10)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 10)
         .opacity(appearsActive ? 1 : 0.55)
     }
 }

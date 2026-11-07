@@ -29,43 +29,20 @@ struct MeetingsView: View {
     var body: some View {
         Group {
             if controller.meetings.isEmpty {
-                EmptyMeetings()
+                DetailColumn { toolbar } content: { EmptyMeetings() }
             } else {
                 switch mode {
                 case .split: splitBody
                 case .calendar:
-                    if let id = opened, let r = controller.meetings.first(where: { $0.id == id }) {
-                        fullPaneDetail(r)
-                    } else {
-                        CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting) { r, period in
-                            open(r, from: period)
+                    DetailColumn { toolbar } content: {
+                        if let id = opened, let r = controller.meetings.first(where: { $0.id == id }) {
+                            fullPaneDetail(r)
+                        } else {
+                            CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting) { r, period in
+                                open(r, from: period)
+                            }
                         }
                     }
-                }
-            }
-        }
-        .background(Palette.window)
-        .navigationTitle("Meetings")
-        .toolbar {
-            ToolbarItemGroup {
-                if mode == .calendar, opened == nil, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
-                ModePicker(mode: Binding(get: { mode }, set: { previewMode = nil; savedMode = $0 }))
-            }
-            // Its own field, not `.searchable`: macOS always puts the system search last, and the canvas puts it
-            // between the view toggle and the meeting's own controls.
-            ToolbarItem { ToolbarSearchField(prompt: "Search titles and transcripts", query: $controller.meetingQuery) }
-            if mode == .split || opened != nil {
-                ToolbarItemGroup {
-                    let record = opened.flatMap { id in controller.meetings.first { $0.id == id } } ?? selected
-                    ExportMenu(record: record)
-                    Menu {
-                        if let record { MeetingMenuItems(record: record, deleting: $deleting) }
-                    } label: {
-                        Label("More", systemImage: "ellipsis")
-                    }
-                    .menuIndicator(.hidden)
-                    .disabled(record == nil)
-                    .help("More for this meeting")
                 }
             }
         }
@@ -138,15 +115,13 @@ struct MeetingsView: View {
 
     private var splitBody: some View {
         HStack(spacing: 0) {
-            VStack(spacing: 0) {
+            ListColumn("Meetings", widthKey: "meetings") {
                 CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, Space.s)
                 MeetingList(days: MeetingGroups.byDay(results.filter { $0.status != .recording }),
                             live: results.filter { $0.status == .recording },
                             selection: $controller.selectedMeetingID, deleting: $deleting)
             }
-            .frame(width: 300)
-            Hairline(axis: .vertical)
-            Group {
+            DetailColumn { toolbar } content: {
                 if let id = controller.selectedMeetingID, let m = controller.upcoming.first(where: { $0.id == id }) {
                     UpcomingDetailView(meeting: m)
                 } else if let r = selected {
@@ -156,7 +131,26 @@ struct MeetingsView: View {
                     ContentUnavailableView("Select a meeting", systemImage: "text.rectangle")
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// List or calendar, the search, then export and more for the open meeting: three glass groups.
+    private var toolbar: some View {
+        PageToolbar {
+            if mode == .calendar, opened == nil, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
+        } trailing: {
+            ModePicker(mode: Binding(get: { mode }, set: { previewMode = nil; savedMode = $0 }))
+            ToolbarSearchField(prompt: "Search titles and transcripts", query: $controller.meetingQuery)
+            if mode == .split || opened != nil {
+                let record = opened.flatMap { id in controller.meetings.first { $0.id == id } } ?? selected
+                ToolbarCapsule {
+                    ExportMenu(record: record)
+                    ToolbarMenuButton(icon: .more, label: "More", help: "More for this meeting") {
+                        if let record { MeetingMenuItems(record: record, deleting: $deleting) }
+                    }
+                    .disabled(record == nil)
+                }
+            }
         }
     }
 
@@ -195,36 +189,6 @@ struct MeetingsView: View {
     }
 }
 
-/// A page's search ("Search titles and transcripts") in the toolbar's glass; ⌘F focuses it and Esc clears it.
-struct ToolbarSearchField: View {
-    let prompt: String
-    @Binding var query: String
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Palette.secondary).accessibilityHidden(true)
-            TextField(prompt, text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .focused($focused)
-                .onExitCommand { query = ""; focused = false }
-            if !query.isEmpty {
-                Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.tertiaryMark)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, 10)
-        .frame(width: 240)
-        .background {
-            Button("Search") { focused = true }.keyboardShortcut("f").opacity(0).accessibilityHidden(true)
-        }
-    }
-}
-
 /// Export for the open meeting: a private link, or the note itself.
 private struct ExportMenu: View {
     @EnvironmentObject var controller: AppController
@@ -245,9 +209,15 @@ private struct ExportMenu: View {
                 .disabled(record.markdownPath == nil)
             }
         } label: {
-            Label("Export", systemImage: "arrow.down.to.line")
+            IconImage(.download, size: 15)
+                .frame(width: Chrome.iconCell.width, height: Chrome.iconCell.height)
+                .contentShape(Capsule())
         }
+        .menuStyle(.button)
+        .buttonStyle(ChromeCellStyle())
         .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("Export")
         .disabled(record == nil || record?.status == .recording)
         .help("Share or open this meeting's note")
     }
@@ -310,16 +280,10 @@ struct ModePicker: View {
     @Binding var mode: MeetingsView.Mode
 
     var body: some View {
-        Picker("View", selection: $mode) {
-            ForEach(MeetingsView.Mode.allCases, id: \.self) { m in
-                Label(m == .split ? "List" : "Calendar", systemImage: m == .split ? "list.bullet" : "calendar").tag(m)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelStyle(.iconOnly)
-        .labelsHidden()
-        .fixedSize()
-        .help("List or calendar")
+        ToolbarSegmented(selection: $mode, options: [
+            .init(value: .split, label: "List", icon: .viewList),
+            .init(value: .calendar, label: "Calendar", icon: .viewCalendar),
+        ], accessibilityLabel: "View")
     }
 }
 

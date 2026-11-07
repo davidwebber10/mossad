@@ -17,15 +17,15 @@ final class AppController: ObservableObject {
     enum Section: String, CaseIterable, Identifiable {
         case meetings = "Meetings", commitments = "Commitments", chat = "Chat", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
         var id: String { rawValue }
-        var symbol: String {
+        var icon: Icon {
             switch self {
-            case .meetings: "text.rectangle"
-            case .commitments: "checkmark.circle"
-            case .chat: "sparkle"
-            case .people: "person.2"
-            case .analytics: "chart.bar"
-            case .settings: "gearshape"
-            case .log: "list.bullet.rectangle"
+            case .meetings: .meetings
+            case .commitments: .commitments
+            case .chat: .sparkle
+            case .people: .people
+            case .analytics: .analytics
+            case .settings: .settings
+            case .log: .log
             }
         }
     }
@@ -145,6 +145,7 @@ final class AppController: ObservableObject {
     /// Used only on `CaptureQueue.queue`.
     private nonisolated let recorder: CallRecorder
     private var window: NSWindow?
+    private var trafficLights: TrafficLights?
     /// The menu bar panel shown in a window, for a preview's screenshots.
     var panelPreviewWindow: NSWindow?
     private var housekeeping: Timer?
@@ -1137,11 +1138,11 @@ final class AppController: ObservableObject {
                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                              backing: .buffered, defer: false)
             w.title = "Mossad"
-            // The system toolbar holds each pane's title, search, and actions; the sidebar runs the full height.
-            w.toolbarStyle = .unified
+            // No system toolbar: each page draws its own toolbar row, and the traffic lights sit in the sidebar card.
+            w.titlebarAppearsTransparent = true
+            w.titleVisibility = .hidden
             w.isReleasedWhenClosed = false
             let host = NSHostingController(rootView: MainWindow().environmentObject(self).environmentObject(permissions))
-            host.sceneBridgingOptions = [.toolbars]
             // Without this, every view update re-measures the whole window to set its size limits.
             host.sizingOptions = []
             w.contentViewController = host
@@ -1151,13 +1152,17 @@ final class AppController: ObservableObject {
                 let visible = (note.object as? NSWindow)?.occlusionState.contains(.visible) == true
                 Task { @MainActor in if self?.windowVisible != visible { self?.windowVisible = visible } }
             }
-            // Development hook for screenshots: MOSSAD_WINDOW_HEIGHT=<points> opens a preview's window that tall.
-            let previewHeight = CommandLine.arguments.contains("--ui-preview")
-                ? ProcessInfo.processInfo.environment["MOSSAD_WINDOW_HEIGHT"].flatMap(Double.init) : nil
-            if let previewHeight { w.setContentSize(NSSize(width: 1240, height: previewHeight)) }
+            // Development hooks for screenshots: MOSSAD_WINDOW_WIDTH and MOSSAD_WINDOW_HEIGHT (points) size a preview.
+            let env = CommandLine.arguments.contains("--ui-preview") ? ProcessInfo.processInfo.environment : [:]
+            let previewWidth = env["MOSSAD_WINDOW_WIDTH"].flatMap(Double.init)
+            let previewHeight = env["MOSSAD_WINDOW_HEIGHT"].flatMap(Double.init)
+            if previewWidth != nil || previewHeight != nil {
+                w.setContentSize(NSSize(width: previewWidth ?? 1240, height: previewHeight ?? 820))
+            }
             w.center()
-            if previewHeight == nil { w.setFrameAutosaveName("MossadMain") }
+            if previewWidth == nil, previewHeight == nil { w.setFrameAutosaveName("MossadMain") }
             window = w
+            trafficLights = TrafficLights(window: w)
         }
         refresh()
         // A preview for screenshots stays behind the owner's windows and never takes focus.

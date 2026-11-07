@@ -23,17 +23,15 @@ struct ChatView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ChatList(chats: chats, selection: $selection, delete: delete)
-                .frame(width: 300)
-            Hairline(axis: .vertical)
-            conversation.frame(maxWidth: .infinity)
-        }
-        .background(Palette.window)
-        .navigationTitle("Chat")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: newChat) { Label("New chat", systemImage: "square.and.pencil") }
-                    .help("New chat (⌘N)")
+            ListColumn("Chat", widthKey: "chat") {
+                ChatList(chats: chats, selection: $selection, delete: delete)
+            }
+            DetailColumn {
+                PageToolbar {
+                    ToolbarCircleButton(icon: .compose, label: "New chat", help: "New chat (⌘N)", action: newChat)
+                }
+            } content: {
+                conversation
             }
         }
         .onAppear(perform: reload)

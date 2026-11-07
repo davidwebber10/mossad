@@ -12,18 +12,27 @@ struct DateRangeButton: View {
     @State private var picking = false
 
     var body: some View {
-        ControlGroup {
-            Button { step(-1) } label: { Label("Earlier", systemImage: "chevron.left") }
-                .help("The period before")
-            Button { picking.toggle() } label: { Text(periodText(interval)).monospacedDigit() }
-                .help("Choose the period")
-                .accessibilityLabel("Period, \(periodText(interval))")
-                .popover(isPresented: $picking, arrowEdge: .bottom) {
-                    PeriodPanel(choice: $choice, compare: $compare, interval: interval, earliest: earliest) { picking = false }
-                }
-            Button { step(1) } label: { Label("Later", systemImage: "chevron.right") }
+        // One glass capsule: the arrows are 30 x 24 cells, and the dates never cut off.
+        ToolbarCapsule {
+            ToolbarIconButton(icon: .chevronLeft, label: "Earlier", help: "The period before", size: 14) { step(-1) }
+            Button { picking.toggle() } label: {
+                Text(periodText(interval)).monospacedDigit()
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Palette.ink)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.horizontal, 8)
+                    .frame(height: Chrome.iconCell.height)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Choose the period")
+            .accessibilityLabel("Period, \(periodText(interval))")
+            .popover(isPresented: $picking, arrowEdge: .bottom) {
+                PeriodPanel(choice: $choice, compare: $compare, interval: interval, earliest: earliest) { picking = false }
+            }
+            ToolbarIconButton(icon: .chevronRight, label: "Later", help: "The period after", size: 14) { step(1) }
                 .disabled(interval.end >= Calendar.current.startOfDay(for: Date()))
-                .help("The period after")
         }
     }
 

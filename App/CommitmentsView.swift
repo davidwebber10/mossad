@@ -25,56 +25,7 @@ struct CommitmentsView: View {
     private var doneItems: [Commitment] { groups.first { $0.kind == .done }?.items ?? [] }
 
     var body: some View {
-        Group {
-            if book.visible.isEmpty {
-                EmptyState(symbol: "checkmark.circle", title: "No commitments yet",
-                           message: "After each call, Mossad finds what you promised to do, with due dates when you gave one. You can also add your own.",
-                           action: ("Add a commitment", add))
-                    .pageCentered()
-            } else if mode == .open, openGroups.isEmpty, query.isEmpty {
-                EmptyState(symbol: "checkmark.circle", title: "Nothing open", message: keptText)
-                    .pageCentered()
-            } else if mode == .done, doneItems.isEmpty, query.isEmpty {
-                EmptyState(symbol: "checkmark.circle", title: "Nothing done yet",
-                           message: "Mark a commitment done with its circle, and it moves here.")
-                    .pageCentered()
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        switch mode {
-                        case .open: openList
-                        case .done: doneList
-                        }
-                        if (mode == .open ? openGroups.isEmpty : doneItems.isEmpty) && !query.isEmpty {
-                            Text("No commitments match “\(query)”.")
-                                .font(.system(size: 13)).foregroundStyle(Palette.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 36).padding(.top, 18).padding(.bottom, Space.xxl)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Palette.window)
-        .navigationTitle("Commitments")
-        .navigationSubtitle(subtitle)
-        .toolbar {
-            ToolbarItem {
-                Picker("Show", selection: $mode) {
-                    ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .help("Open or done commitments")
-            }
-            ToolbarItem { ToolbarSearchField(prompt: "Search commitments", query: $query) }
-            ToolbarItem {
-                Button(action: add) { Label("Add", systemImage: "plus") }
-                    .help("Add a commitment")
-            }
-        }
+        DetailColumn { toolbar } content: { page }
         .task(id: controller.commitmentsVersion) { book = controller.commitmentBook }
         .onAppear {
             // Development hook for screenshots: MOSSAD_COMMITMENTS=done opens the Done view.
@@ -92,6 +43,48 @@ struct CommitmentsView: View {
         .sheet(item: $adding) { c in
             NavigationStack { CommitmentEditor(commitment: c, isNew: true, save: controller.saveCommitment, delete: nil) }
                 .frame(minWidth: 420, minHeight: 300)
+        }
+    }
+
+    @ViewBuilder
+    private var page: some View {
+        if book.visible.isEmpty {
+            EmptyState(symbol: "checkmark.circle", title: "No commitments yet",
+                       message: "After each call, Mossad finds what you promised to do, with due dates when you gave one. You can also add your own.",
+                       action: ("Add a commitment", add))
+                .pageCentered()
+        } else if mode == .open, openGroups.isEmpty, query.isEmpty {
+            EmptyState(symbol: "checkmark.circle", title: "Nothing open", message: keptText)
+                .pageCentered()
+        } else if mode == .done, doneItems.isEmpty, query.isEmpty {
+            EmptyState(symbol: "checkmark.circle", title: "Nothing done yet",
+                       message: "Mark a commitment done with its circle, and it moves here.")
+                .pageCentered()
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    switch mode {
+                    case .open: openList
+                    case .done: doneList
+                    }
+                    if (mode == .open ? openGroups.isEmpty : doneItems.isEmpty) && !query.isEmpty {
+                        Text("No commitments match “\(query)”.")
+                            .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                    }
+                }
+                .padding(.horizontal, 36).padding(.top, 18).padding(.bottom, Space.xxl)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var toolbar: some View {
+        PageToolbar(title: "Commitments", subtitle: subtitle) {
+            ToolbarSegmented(selection: $mode, options: Mode.allCases.map { .init(value: $0, label: $0.rawValue) },
+                           accessibilityLabel: "Show")
+                .help("Open or done commitments")
+            ToolbarSearchField(prompt: "Search commitments", query: $query)
+            ToolbarCircleButton(icon: .plus, label: "Add", help: "Add a commitment", action: add)
         }
     }
 

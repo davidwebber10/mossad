@@ -52,46 +52,18 @@ struct PeopleView: View {
     var body: some View {
         Group {
             if loaded, profiles.isEmpty {
-                EmptyState(symbol: "person.2", title: "No people yet",
-                           message: "Mossad learns your voice in your first call. Name the other voices after a call and they show here.")
-                    .frame(maxHeight: .infinity)
+                DetailColumn { toolbar } content: {
+                    EmptyState(symbol: "person.2", title: "No people yet",
+                               message: "Mossad learns your voice in your first call. Name the other voices after a call and they show here.")
+                        .frame(maxHeight: .infinity)
+                }
             } else if mode == .org {
-                OrgChartView(org: org, profiles: profiles, stats: stats, query: query,
-                             open: { name in mode = .list; select(name) }, importChart: { importing = true })
+                DetailColumn { toolbar } content: {
+                    OrgChartView(org: org, profiles: profiles, stats: stats, query: query,
+                                 open: { name in mode = .list; select(name) }, importChart: { importing = true })
+                }
             } else {
                 listAndProfile
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Palette.window)
-        .navigationTitle("People")
-        .navigationSubtitle(subtitle)
-        .toolbar {
-            ToolbarItem {
-                Picker("View", selection: Binding(get: { mode }, set: { mode = $0 })) {
-                    Label("List", systemImage: "list.bullet").tag(Mode.list)
-                    Label("Org chart", systemImage: "flowchart").tag(Mode.org)
-                }
-                .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
-                .labelsHidden()
-                .fixedSize()
-                .help("List or org chart")
-            }
-            ToolbarItem { ToolbarSearchField(prompt: "Search names and emails", query: $query) }
-            ToolbarItem {
-                Menu {
-                    Button("Import org chart…", systemImage: "square.and.arrow.down") { importing = true }
-                    if !duplicates.isEmpty {
-                        Button("Review possible duplicates…", systemImage: "person.2") { reviewingDuplicates = true }
-                    }
-                    Divider()
-                    Button("Delete all saved voices…", systemImage: "trash", role: .destructive) { confirmDeleteAll = true }
-                } label: {
-                    Label("More", systemImage: "ellipsis")
-                }
-                .menuIndicator(.hidden)
-                .help("More for People")
             }
         }
         .onReceive(controller.$meetings) { _ in Task { await reload() } }
@@ -151,7 +123,7 @@ struct PeopleView: View {
 
     private var listAndProfile: some View {
         HStack(spacing: 0) {
-            VStack(spacing: 0) {
+            ListColumn("People", widthKey: "people") {
                 if !duplicates.isEmpty {
                     DuplicatesBanner(count: duplicates.count) { reviewingDuplicates = true }
                 }
@@ -159,25 +131,46 @@ struct PeopleView: View {
                            selection: $selection, sort: $sort, needsSample: $needsSample, query: query,
                            rename: startEditing, delete: { deleting = $0 })
             }
-            .frame(width: 300)
-            Hairline(axis: .vertical)
-            VStack(spacing: 0) {
-                Group {
-                    if let p = selected {
-                        PersonProfileView(profile: p, stats: stats[p.name] ?? PersonStats(),
-                                          org: org.match(p.name), chart: org.chart,
-                                          others: profiles.filter { $0.name != p.name },
-                                          rename: { startEditing(p) }, merge: { merge(p, into: $0) },
-                                          delete: { deleting = p }, select: select)
-                            .id(p.name)
-                    } else {
-                        EmptyState(symbol: "person.crop.circle", title: "Select a person",
-                                   message: "Their profile shows the coach's read, how much they talk, and who they meet with.")
-                            .frame(maxHeight: .infinity)
+            DetailColumn { toolbar } content: {
+                VStack(spacing: 0) {
+                    Group {
+                        if let p = selected {
+                            PersonProfileView(profile: p, stats: stats[p.name] ?? PersonStats(),
+                                              org: org.match(p.name), chart: org.chart,
+                                              others: profiles.filter { $0.name != p.name },
+                                              rename: { startEditing(p) }, merge: { merge(p, into: $0) },
+                                              delete: { deleting = p }, select: select)
+                                .id(p.name)
+                        } else {
+                            EmptyState(symbol: "person.crop.circle", title: "Select a person",
+                                       message: "Their profile shows the coach's read, how much they talk, and who they meet with.")
+                                .frame(maxHeight: .infinity)
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    footer
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                footer
+            }
+        }
+    }
+
+    /// List or org chart, the search, and More. The org chart has no list column, so the row names the chart.
+    private var toolbar: some View {
+        PageToolbar(title: mode == .org ? "People" : nil, subtitle: mode == .org ? subtitle : nil) {
+            ToolbarSegmented(selection: Binding(get: { mode }, set: { mode = $0 }), options: [
+                .init(value: .list, label: "List", icon: .viewList),
+                .init(value: .org, label: "Org chart", icon: .viewOrg),
+            ], accessibilityLabel: "View")
+            ToolbarSearchField(prompt: "Search names and emails", query: $query)
+            ToolbarCapsule {
+                ToolbarMenuButton(icon: .more, label: "More", help: "More for People") {
+                    Button("Import org chart…", systemImage: "square.and.arrow.down") { importing = true }
+                    if !duplicates.isEmpty {
+                        Button("Review possible duplicates…", systemImage: "person.2") { reviewingDuplicates = true }
+                    }
+                    Divider()
+                    Button("Delete all saved voices…", systemImage: "trash", role: .destructive) { confirmDeleteAll = true }
+                }
             }
         }
     }
