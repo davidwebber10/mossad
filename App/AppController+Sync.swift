@@ -7,21 +7,19 @@ import Security
 struct SyncActivity: Equatable {
     var running = false
     var last: Date?
-    /// The last failure, kept even while it is not shown, so a repeat can count.
-    var failure: FriendlyError?
-    /// Failed syncs in a row: a single dropped connection is retried quietly and only shows when it repeats.
-    var failures = 0
+    /// The problem to show: a single dropped connection is retried quietly, shows only when it repeats, and does
+    /// not clear a problem already shown.
+    var status = SyncStatus()
     /// During the first sync to a new store: meetings sent so far, of how many.
     var progress: (done: Int, total: Int)?
 
     static func == (a: SyncActivity, b: SyncActivity) -> Bool {
-        a.running == b.running && a.last == b.last && a.failure == b.failure && a.failures == b.failures && a.progress?.done == b.progress?.done && a.progress?.total == b.progress?.total
+        a.running == b.running && a.last == b.last && a.status == b.status && a.progress?.done == b.progress?.done && a.progress?.total == b.progress?.total
     }
 }
 
 extension SyncActivity {
-    /// The failure to show: none for a cancelled sync, and a quiet retry's only after it repeats.
-    var error: FriendlyError? { failure.flatMap { $0.shouldShow(failures: failures) ? $0 : nil } }
+    var error: FriendlyError? { status.shown }
 }
 
 extension AppController {
@@ -177,11 +175,9 @@ extension AppController {
                 }
                 self.syncRunning = false
                 // A sync the app stopped itself is neither a success nor a failure.
-                let stopped = failure?.kind == .cancelled
-                let before = self.syncActivity
-                self.syncActivity = SyncActivity(running: false, last: failure == nil ? Date() : before.last,
-                                                 failure: stopped ? before.failure : failure,
-                                                 failures: failure == nil ? 0 : stopped ? before.failures : before.failures + 1)
+                var status = self.syncActivity.status
+                if let failure { status.failed(failure) } else { status.succeeded() }
+                self.syncActivity = SyncActivity(running: false, last: failure == nil ? Date() : self.syncActivity.last, status: status)
                 if self.syncAgain {
                     self.syncAgain = false
                     self.syncNow()
