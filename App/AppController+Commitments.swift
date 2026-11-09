@@ -25,9 +25,12 @@ extension AppController {
     }
 
     func changeCommitments(_ change: (inout CommitmentBook) -> Void) {
-        var book = commitmentBook
-        change(&book)
-        do { try book.save(to: paths.commitments) } catch { Log.error("Saving commitments failed: \(error)") }
+        // A book that cannot be read is not an empty book: saving a changed empty one would replace every commitment.
+        do {
+            var book = try CommitmentBook.load(from: paths.commitments)
+            change(&book)
+            try book.save(to: paths.commitments)
+        } catch { Log.error("Saving commitments failed: \(error)") }
         commitmentsVersion += 1
         syncNow()
     }

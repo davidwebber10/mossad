@@ -187,15 +187,47 @@ public enum WeeklyEmail {
             .compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (title: r.title, date: r.start, review: $0) } }
         // A period with no coached calls has nothing to say; count it as sent.
         guard !reviews.isEmpty else { return now }
+        // The digest is a paid request. It is kept until the email is sent, so a mailer that refuses the send (a
+        // domain that is not verified yet) does not buy a new digest on every run.
+        let key = "email-\(kind.rawValue)-\(Int(range.start.timeIntervalSince1970))"
+        let cache = paths.coach.appendingPathComponent("\(key).json")
+        var ledger = RetryLedger.load(from: paths.coach)
+        let digest: WeeklyDigest
+        if let kept = (try? Data(contentsOf: cache)).flatMap({ try? JSONDecoder.coach.decode(WeeklyDigest.self, from: $0) }) {
+            digest = kept
+        } else {
+            switch ledger.state(key, now: now) {
+            case .gaveUp:
+                Log.error("The \(kind.rawValue) coaching email could not be written after \(RetryLedger.maxAttempts) tries; this period is left out")
+                ledger.clear(key)
+                ledger.save(to: paths.coach)
+                return now
+            case .waiting: return nil
+            case .ready: break
+            }
+            do {
+                let profile = try CoachProfile.load(from: paths.coach)
+                digest = try await writer.digest(owner: owner, reviews: reviews, profile: profile, kind: kind)
+                try? FileManager.default.createDirectory(at: paths.coach, withIntermediateDirectories: true)
+                try? JSONEncoder.coach.encode(digest).write(to: cache, options: .atomic)
+            } catch {
+                Log.error("The \(kind.rawValue) coaching email failed: \(error)")
+                if !RetryLedger.isUnbilled(error), !(error is UnreadableFile) {
+                    ledger.fail(key, reason: Pipeline.failureReason(error), now: now)
+                    ledger.save(to: paths.coach)
+                }
+                return nil
+            }
+        }
         do {
-            let profile = try CoachProfile.load(from: paths.coach)
-            let digest = try await writer.digest(owner: owner, reviews: reviews, profile: profile, kind: kind)
             let facts = EmailFacts.gather(paths: paths, owner: owner, range: range, now: now, calendar: calendar)
             let period = CoachEmailDesign.periodLabel(kind, range, calendar: calendar)
             try await mailer.send(to: to.trimmingCharacters(in: .whitespaces), subject: digest.subject,
                                   html: CoachEmailDesign.html(kind: kind, period: period, digest: digest, facts: facts),
                                   text: CoachEmailDesign.text(kind: kind, period: period, digest: digest, facts: facts))
             Log.info("Sent the \(kind.rawValue) coaching email for \(reviews.count) calls")
+            try? FileManager.default.removeItem(at: cache)
+            if ledger.entries[key] != nil { ledger.clear(key); ledger.save(to: paths.coach) }
             return now
         } catch {
             Log.error("The \(kind.rawValue) coaching email failed: \(error)")

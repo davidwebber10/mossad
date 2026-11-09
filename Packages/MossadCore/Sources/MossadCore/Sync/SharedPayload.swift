@@ -49,10 +49,11 @@ public struct ReviewNotes: Codable, Sendable {
 }
 
 extension SyncState {
-    /// Shared records to upload, and chats deleted here to delete in iCloud.
-    public func planShared(_ payloads: [SharedPayload]) -> (upload: [SharedPayload], delete: [String]) {
+    /// Shared records to upload, and the chats to delete in the store: only the ones deleted here on purpose
+    /// (`deletedChats`). A chat that is merely not in `payloads` may be a file that could not be read.
+    public func planShared(_ payloads: [SharedPayload], deletedChats: Set<UUID> = []) -> (upload: [SharedPayload], delete: [String]) {
         let keys = Set(payloads.map(\.key))
         return (payloads.filter { uploaded[$0.key] != $0.hash },
-                uploaded.keys.filter { $0.hasPrefix("chat:") && !keys.contains($0) }.sorted())
+                deletedChats.map { "chat:\($0.uuidString)" }.filter { !keys.contains($0) }.sorted())
     }
 }

@@ -12,6 +12,14 @@ extension AppController {
 
     var coachProfile: CoachProfile { (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile() }
 
+    /// Loads the profile, changes it, and saves it. A profile that cannot be read throws, and nothing is saved:
+    /// an empty profile saved in its place would be the end of the coach's memory.
+    func changeCoachProfile(_ change: (inout CoachProfile) -> Void) throws {
+        var profile = try CoachProfile.load(from: paths.coach)
+        change(&profile)
+        try profile.save(to: paths.coach)
+    }
+
     func coachReview(_ callID: String) -> CoachReview? { CoachReview.load(in: paths.callDirectory(callID)) }
 
     /// Reviews the calls that are due, one at a time, then sends the weekly email when it is due.
@@ -39,11 +47,11 @@ extension AppController {
         for name in names {
             do {
                 let brief = try await writer.brief(for: name, records: records, profile: coachProfile)
-                var profile = coachProfile
-                var person = profile.people[name] ?? CoachPerson(note: "", calls: 0, lastSeen: brief.updated)
-                person.brief = brief
-                profile.people[name] = person
-                try profile.save(to: paths.coach)
+                try changeCoachProfile { profile in
+                    var person = profile.people[name] ?? CoachPerson(note: "", calls: 0, lastSeen: brief.updated)
+                    person.brief = brief
+                    profile.people[name] = person
+                }
                 coachVersion += 1
             } catch {
                 Log.error("The coach's read on a person failed: \(error)")
@@ -104,9 +112,9 @@ extension AppController {
         let feedback = CoachFeedback(agree: agree, note: note?.nonEmpty)
         review.feedback[point.title] = feedback
         try review.save(in: dir)
-        var profile = coachProfile
-        profile.remember(feedback, on: point, callID: callID, title: record.title)
-        try profile.save(to: paths.coach)
+        try changeCoachProfile { profile in
+            profile.remember(feedback, on: point, callID: callID, title: record.title)
+        }
         coachVersion += 1
         syncNow()
         if let note = feedback.note {
@@ -127,42 +135,50 @@ extension AppController {
         var latest = CoachReview.load(in: dir) ?? review
         latest.thread += [ChatMessage(role: .user, text: message), ChatMessage(role: .assistant, text: answer.reply)]
         try latest.save(in: dir)
-        var profile = coachProfile
-        profile.updateGuidance(add: answer.add, remove: answer.remove, at: Date())
-        profile.updateFacts(add: answer.addFacts, remove: answer.removeFacts)
-        try profile.save(to: paths.coach)
+        try changeCoachProfile { profile in
+            profile.updateGuidance(add: answer.add, remove: answer.remove, at: Date())
+            profile.updateFacts(add: answer.addFacts, remove: answer.removeFacts)
+        }
         coachVersion += 1
         syncNow()
     }
 
     func acceptFocus(_ id: UUID, plan: String?) {
-        var profile = coachProfile
-        profile.acceptFocus(id, plan: plan, at: Date())
-        try? profile.save(to: paths.coach)
+        do {
+            try changeCoachProfile { profile in
+                profile.acceptFocus(id, plan: plan, at: Date())
+            }
+        } catch { Log.error("Saving the coach's memory failed: \(error)") }
         coachVersion += 1
         syncNow()
     }
 
     func answerQuestion(_ id: UUID, _ status: CoachQuestion.Status, note: String?) {
-        var profile = coachProfile
-        profile.answer(id, status, note: note, at: Date())
-        try? profile.save(to: paths.coach)
+        do {
+            try changeCoachProfile { profile in
+                profile.answer(id, status, note: note, at: Date())
+            }
+        } catch { Log.error("Saving the coach's memory failed: \(error)") }
         coachVersion += 1
         syncNow()
     }
 
     func dismissFocus(_ id: UUID) {
-        var profile = coachProfile
-        profile.dismissFocus(id, at: Date())
-        try? profile.save(to: paths.coach)
+        do {
+            try changeCoachProfile { profile in
+                profile.dismissFocus(id, at: Date())
+            }
+        } catch { Log.error("Saving the coach's memory failed: \(error)") }
         coachVersion += 1
         syncNow()
     }
 
     func setCoachVoice(_ voice: CoachVoice) {
-        var profile = coachProfile
-        profile.voice = voice
-        try? profile.save(to: paths.coach)
+        do {
+            try changeCoachProfile { profile in
+                profile.voice = voice
+            }
+        } catch { Log.error("Saving the coach's memory failed: \(error)") }
         coachVersion += 1
         syncNow()
     }
@@ -170,30 +186,37 @@ extension AppController {
     /// Deletes this call's review and runs the coach, which reviews it again in the current format.
     func reviewAgain(_ callID: String) {
         try? FileManager.default.removeItem(at: paths.callDirectory(callID).appendingPathComponent(CoachReview.fileName))
+        CoachRunner.forget(callID, paths: paths)
         coachVersion += 1
         runCoach()
     }
 
     func addCoachFact(_ kind: CoachFact.Kind, _ text: String) {
-        var profile = coachProfile
-        profile.updateFacts(add: [CoachFact(kind: kind, text: text)], remove: [])
-        try? profile.save(to: paths.coach)
+        do {
+            try changeCoachProfile { profile in
+                profile.updateFacts(add: [CoachFact(kind: kind, text: text)], remove: [])
+            }
+        } catch { Log.error("Saving the coach's memory failed: \(error)") }
         coachVersion += 1
         syncNow()
     }
 
     func removeCoachFact(_ text: String) {
-        var profile = coachProfile
-        profile.updateFacts(add: [], remove: [text])
-        try? profile.save(to: paths.coach)
+        do {
+            try changeCoachProfile { profile in
+                profile.updateFacts(add: [], remove: [text])
+            }
+        } catch { Log.error("Saving the coach's memory failed: \(error)") }
         coachVersion += 1
         syncNow()
     }
 
     func removeCoachGuidance(_ text: String) {
-        var profile = coachProfile
-        profile.updateGuidance(add: [], remove: [text], at: Date())
-        try? profile.save(to: paths.coach)
+        do {
+            try changeCoachProfile { profile in
+                profile.updateGuidance(add: [], remove: [text], at: Date())
+            }
+        } catch { Log.error("Saving the coach's memory failed: \(error)") }
         coachVersion += 1
         syncNow()
     }

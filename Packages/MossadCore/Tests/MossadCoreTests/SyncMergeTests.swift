@@ -58,16 +58,32 @@ final class SyncMergeTests: XCTestCase {
         XCTAssertEqual(Chat.newer(b, a).messages.count, 1)
     }
 
-    func testSharedPayloadsOnlyUploadChangesAndDeleteRemovedChats() {
+    func testSharedPayloadsOnlyUploadChangesAndDeleteOnlyChatsDeletedHere() {
         var state = SyncState()
         let chat = Chat(title: "A")
         let p1 = SharedPayload.chat(chat)
         state.uploaded[p1.key] = p1.hash
+        // Uploaded before and not in the list now: its file may be unreadable. Not a delete.
         state.uploaded["chat:gone"] = "x"
         var edited = chat
         edited.title = "B"
-        let plan = state.planShared([SharedPayload.chat(edited)])
+        let deleted = UUID()
+        let plan = state.planShared([SharedPayload.chat(edited)], deletedChats: [deleted])
         XCTAssertEqual(plan.upload.map(\.key), [p1.key])
-        XCTAssertEqual(plan.delete, ["chat:gone"])
+        XCTAssertEqual(plan.delete, ["chat:\(deleted.uuidString)"])
+    }
+
+    /// Messages added on both devices while apart all stay.
+    func testAChatChangedOnBothDevicesKeepsEveryMessage() {
+        var a = Chat(title: "Budget")
+        a.messages = [ChatMessage(role: .user, text: "first")]
+        var b = a
+        a.messages.append(ChatMessage(role: .user, text: "on the Mac"))
+        a.updated = Date(timeIntervalSince1970: 1_800_000_100)
+        b.messages.append(ChatMessage(role: .user, text: "on the phone"))
+        b.updated = Date(timeIntervalSince1970: 1_800_000_200)
+        let merged = Chat.merged(a, b)
+        XCTAssertEqual(merged.messages.map(\.text), ["first", "on the phone", "on the Mac"])
+        XCTAssertEqual(Chat.merged(b, a), merged, "both devices end with the same chat")
     }
 }

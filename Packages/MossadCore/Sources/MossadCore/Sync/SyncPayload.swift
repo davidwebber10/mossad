@@ -70,6 +70,8 @@ public struct SyncState: Codable, Equatable, Sendable {
     public static let fileName = "state.json"
     public var uploaded: [String: String] = [:]
     public var changeToken: Data?
+    /// Records that a pull could not take, with how many pulls failed, so a record that never works is left behind.
+    public var failures: [String: Int]?
 
     public init() {}
 
@@ -78,17 +80,19 @@ public struct SyncState: Codable, Equatable, Sendable {
         public var delete: [String]
     }
 
-    /// New or changed meetings to upload, and uploaded meetings that no longer exist, to delete.
-    public func plan(_ payloads: [SyncPayload]) -> Plan {
+    /// New or changed meetings to upload, and uploaded meetings that no longer exist, to delete. `present` is every
+    /// call folder that exists: a meeting that is there but not in `payloads` (it is processed again, or its record
+    /// cannot be read) is not a deleted meeting.
+    public func plan(_ payloads: [SyncPayload], present: Set<String> = []) -> Plan {
         let ids = Set(payloads.map(\.id))
         return Plan(upload: payloads.filter { uploaded[$0.id] != $0.hash },
-                    delete: uploaded.keys.filter { !ids.contains($0) && !SharedPayload.isShared($0) }.sorted())
+                    delete: uploaded.keys.filter { !ids.contains($0) && !present.contains($0) && !SharedPayload.isShared($0) }.sorted())
     }
 
     public static func load(from dir: URL, fileName: String = fileName) throws -> SyncState {
-        let url = dir.appendingPathComponent(fileName)
-        guard FileManager.default.fileExists(atPath: url.path) else { return SyncState() }
-        return try JSONDecoder().decode(SyncState.self, from: Data(contentsOf: url))
+        // The state can be made again from the store, so a file that does not decode is moved aside and the next
+        // sync starts clean instead of failing for good.
+        try StoredFile.load(SyncState.self, from: dir.appendingPathComponent(fileName)) ?? SyncState()
     }
 
     public func save(to dir: URL, fileName: String = fileName) throws {

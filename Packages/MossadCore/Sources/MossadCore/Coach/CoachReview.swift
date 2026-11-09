@@ -201,8 +201,8 @@ public struct CoachReview: Codable, Equatable, Sendable {
         return try? JSONDecoder.coach.decode(CoachReview.self, from: data)
     }
 
+    /// The call's folder must be there: a review must not bring back the folder of a deleted meeting.
     public func save(in dir: URL) throws {
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try JSONEncoder.coach.encode(self).write(to: dir.appendingPathComponent(Self.fileName), options: .atomic)
     }
 }

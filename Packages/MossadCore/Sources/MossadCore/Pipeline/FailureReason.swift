@@ -23,6 +23,15 @@ extension Pipeline {
         }
     }
 
+    /// The provider refused the key (HTTP 401). Nothing is billed, so the call waits for a good key without
+    /// using up attempts.
+    static func keyRejected(_ error: Error) -> Bool {
+        switch error {
+        case TranscriptionError.http(401, _), SummaryError.http(401, _), ProviderError.http(_, 401, _): true
+        default: false
+        }
+    }
+
     /// A refused request keeps the provider's own words when they read as a sentence, so the card can say why.
     private static func said(_ code: Int, _ body: String) -> String {
         guard (400..<500).contains(code), let message = FriendlyError.providerMessage(body) else { return "" }

@@ -63,8 +63,15 @@ public actor CloudKitStore: RecordStore {
         while true {
             do {
                 let changes = try await database.recordZoneChanges(inZoneWith: Self.zone, since: ck)
-                let modified = changes.modificationResultsByID.compactMap { _, result -> ChangedRecord? in
-                    guard case .success(let m) = result else { return nil }
+                var failed: Error?
+                let modified = changes.modificationResultsByID.compactMap { id, result -> ChangedRecord? in
+                    guard case .success(let m) = result else {
+                        if case .failure(let error) = result {
+                            Log.error("iCloud could not send \(id.recordName): \(error)")
+                            failed = failed ?? error
+                        }
+                        return nil
+                    }
                     let record = m.record
                     var fields: [String: StoredValue] = [:]
                     var files: [String: URL] = [:]
@@ -80,6 +87,8 @@ public actor CloudKitStore: RecordStore {
                     return ChangedRecord(name: record.recordID.recordName, type: record.recordType, fields: fields,
                                          assetKeys: Array(files.keys), localFiles: files)
                 }
+                // The token would move past the record that failed, and iCloud would never send it again.
+                if let failed { throw failed }
                 let deleted = changes.deletions.map { (name: $0.recordID.recordName, type: $0.recordType) }
                 let next = try NSKeyedArchiver.archivedData(withRootObject: changes.changeToken, requiringSecureCoding: true)
                 return StoreChanges(modified: modified, deleted: deleted, token: next, more: changes.moreComing)
@@ -93,7 +102,8 @@ public actor CloudKitStore: RecordStore {
     }
 
     public func data(_ record: ChangedRecord, _ key: String) async throws -> Data? {
-        record.localFiles[key].flatMap { try? Data(contentsOf: $0) }
+        // An asset that came with the change and cannot be read is a failure, not a record without data.
+        try record.localFiles[key].map { try Data(contentsOf: $0) }
     }
 
     public func discard(_ names: [String]) async {

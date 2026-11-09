@@ -293,9 +293,8 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     }
 
     public static func load(from dir: URL) throws -> CoachProfile {
-        let url = dir.appendingPathComponent(fileName)
-        guard FileManager.default.fileExists(atPath: url.path) else { return CoachProfile() }
-        return try JSONDecoder.coach.decode(CoachProfile.self, from: Data(contentsOf: url))
+        // A file that does not decode is moved aside and throws, so a save after it cannot replace the memory.
+        try StoredFile.load(CoachProfile.self, from: dir.appendingPathComponent(fileName), decoder: .coach) ?? CoachProfile()
     }
 
     public func save(to dir: URL) throws {
