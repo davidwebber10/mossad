@@ -90,6 +90,27 @@ public struct TranscriptMarker: Codable, Equatable, Sendable {
     }
 }
 
+/// A time the owner was muted in the call app, in seconds of the mic track. The mic writes the real samples; silence
+/// goes over the span when the recording ends (or when a crashed recording is recovered). `end` is nil while the
+/// span is open.
+public struct MuteSpan: Codable, Equatable, Sendable {
+    public var start: TimeInterval
+    public var end: TimeInterval?
+
+    public init(start: TimeInterval, end: TimeInterval?) {
+        self.start = start
+        self.end = end
+    }
+
+    /// The spans as ranges, an open one running to `length`, each cut to the file.
+    public static func ranges(_ spans: [MuteSpan], length: TimeInterval) -> [ClosedRange<TimeInterval>] {
+        spans.compactMap { span in
+            let start = max(0, span.start), end = min(span.end ?? length, length)
+            return end > start ? start...end : nil
+        }
+    }
+}
+
 extension CallRecord {
     /// Sets the note of the bookmark within a second of `offset`, or adds a bookmark there. A blank note
     /// clears the note and keeps the bookmark. Returns false when a blank note had no bookmark to clear.
@@ -225,6 +246,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var cloudKey: String?
     /// How many people spoke, when the person said so for a new transcription.
     public var speakersExpected: Int?
+    /// When the owner was muted in the call app; silence goes over these spans in the mic track.
+    public var muteSpans: [MuteSpan] = []
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -301,6 +324,7 @@ extension CallRecord {
         markers = try c.decodeIfPresent([TranscriptMarker].self, forKey: .markers) ?? []
         cloudKey = try c.decodeIfPresent(String.self, forKey: .cloudKey)
         speakersExpected = try c.decodeIfPresent(Int.self, forKey: .speakersExpected)
+        muteSpans = try c.decodeIfPresent([MuteSpan].self, forKey: .muteSpans) ?? []
     }
 }
 

@@ -67,3 +67,28 @@ final class LiveTranscriptTests: XCTestCase {
         XCTAssertEqual(t.lines.count, 7, "the echo stays in the data; only the view hides it")
     }
 }
+
+final class LiveTranscriberFailureTests: XCTestCase {
+    /// After a socket error the session only logged: the track kept converting audio for a dead socket, and the live
+    /// transcript stayed empty to the end of the call. Now the owner of the session is told, once.
+    func testAConnectionThatFailsReportsItOnceAndTakesNoMoreAudio() {
+        let failed = expectation(description: "failure reported")
+        failed.assertForOverFulfill = true
+        // Nothing listens on this local port, so the connection is refused at once. No network is used.
+        let session = LiveTranscriber(apiKey: "test", url: URL(string: "ws://127.0.0.1:9/")!, onFailure: { failed.fulfill() }) { _ in }
+        XCTAssertTrue(session.isAlive)
+        wait(for: [failed], timeout: 10)
+        XCTAssertFalse(session.isAlive)
+        session.send(sineBuffer(seconds: 0.5, sampleRate: 16_000, channels: 1))
+        session.stop()
+    }
+
+    func testAStoppedSessionDoesNotReportAFailure() {
+        let failed = expectation(description: "no failure")
+        failed.isInverted = true
+        let session = LiveTranscriber(apiKey: "test", url: URL(string: "ws://127.0.0.1:9/")!, onFailure: { failed.fulfill() }) { _ in }
+        session.stop()
+        XCTAssertFalse(session.isAlive)
+        wait(for: [failed], timeout: 1)
+    }
+}

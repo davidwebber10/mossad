@@ -2,13 +2,13 @@
 import AVFoundation
 import Foundation
 
-/// Captures the microphone. With voice processing on, Apple's echo cancellation removes
-/// what the speakers play, so other people's voices do not leak into the "me" track.
+/// Captures the microphone. The app records it raw (`voiceProcessing: false`): macOS gives a second voice-processing
+/// client silence when the browser also uses it, and the echo from the speakers is dropped later by `TranscriptMerger`.
 public final class MicCapture: TrackSource, @unchecked Sendable {
     /// Replaced on every restart: after a device change the old engine can report the old format and send nothing.
     private var engine = AVAudioEngine()
     private let voiceProcessing: Bool
-    private var onBuffer: ((AVAudioPCMBuffer) -> Void)?
+    private var feed: AudioFeed?
     private var observer: NSObjectProtocol?
     private var failureHandler: (() -> Void)?
 
@@ -16,9 +16,15 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
         self.voiceProcessing = voiceProcessing
     }
 
-    public func start(_ onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws {
-        self.onBuffer = onBuffer
+    public func start(_ feed: AudioFeed) throws {
+        self.feed = feed
         try configureAndStart()
+    }
+
+    /// With no input device (a closed MacBook whose headset disconnected) the input format has 0 Hz and no channels.
+    /// `installTap` raises an Objective-C exception for it, which Swift cannot catch, so it must never get there.
+    static func checkInput(sampleRate: Double, channels: UInt32) throws {
+        guard sampleRate > 0, channels > 0 else { throw CaptureError.message("no microphone is connected") }
     }
 
     /// The engine stops itself when the input or output hardware changes (AirPods connect, a USB mic is
@@ -37,7 +43,7 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
     }
 
     private func configureAndStart() throws {
-        guard let onBuffer else { return }
+        guard let feed else { return }
         observer = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine,
                                                           queue: CaptureQueue.operations) { [weak self] _ in self?.restart() }
         let input = engine.inputNode
@@ -47,7 +53,12 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
             input.voiceProcessingOtherAudioDuckingConfiguration = .init(enableAdvancedDucking: false, duckingLevel: .min)
         }
         let format = input.outputFormat(forBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in onBuffer(buffer) }
+        try Self.checkInput(sampleRate: format.sampleRate, channels: format.channelCount)
+        // Also after a restart on a new device: its first buffer is placed exactly on the timeline.
+        feed.beginSegment()
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, when in
+            feed.push(buffer, hostTime: when.isHostTimeValid ? when.hostTime : nil)
+        }
         engine.prepare()
         try engine.start()
         Log.info("Mic started (\(format.sampleRate) Hz, \(format.channelCount) ch, voice processing \(voiceProcessing))")
@@ -58,7 +69,7 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
     public func stop() {
         if let observer { NotificationCenter.default.removeObserver(observer) }
         observer = nil
-        onBuffer = nil
+        feed = nil
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         if voiceProcessing { try? engine.inputNode.setVoiceProcessingEnabled(false) }

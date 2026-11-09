@@ -117,6 +117,145 @@ final class TrackWriterTests: XCTestCase {
         writer.close()
     }
 
+    func chunk(_ seconds: Double, start: TimeInterval?, arrival: TimeInterval, new: Bool = false, rate: Double = 16_000) -> AudioFeed.Chunk {
+        AudioFeed.Chunk(samples: sineBuffer(seconds: seconds, sampleRate: rate, channels: 1), start: start, arrival: arrival, newSegment: new)
+    }
+
+    /// Where the sound starts and ends in a file, by 10 ms blocks.
+    private func soundRange(_ url: URL) throws -> (start: Double, end: Double) {
+        let samples = try AudioSamples.read(url, from: 0, to: 10_000)
+        let loud = stride(from: 0, to: samples.count - 160, by: 160).filter { i in samples[i..<(i + 160)].contains { abs($0) > 0.01 } }
+        return (Double(loud.first ?? 0) / 16_000, Double((loud.last ?? 0) + 160) / 16_000)
+    }
+
+    /// A source that starts late kept its offset for the whole call when it was under the tolerance, and the echo
+    /// filter then missed the echo. The first buffer of a source goes exactly where its capture time says.
+    func testTheFirstBufferOfASourceIsPlacedExactly() throws {
+        let base = t0.timeIntervalSinceReferenceDate
+        var urls: [URL] = []
+        for (name, late) in [("me", 0.1), ("them", 0.45)] {
+            let url = dir.appendingPathComponent("\(name).caf")
+            let writer = try TrackWriter(url: url, startTime: t0, clock: { self.t0 })
+            writer.ingest(chunk(1, start: base + late, arrival: base + late + 1.02, new: true))
+            writer.ingest(chunk(1, start: base + late + 1, arrival: base + late + 2.03))
+            writer.close()
+            urls.append(url)
+            XCTAssertEqual(try soundRange(url).start, late, accuracy: 0.011)
+            XCTAssertEqual(try audioDuration(url), late + 2, accuracy: 0.011)
+        }
+    }
+
+    func testJitterBetweenBuffersAddsNoSilence() throws {
+        let base = t0.timeIntervalSinceReferenceDate
+        let url = dir.appendingPathComponent("j.caf")
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { self.t0 })
+        writer.ingest(chunk(1, start: base, arrival: base + 1, new: true))
+        writer.ingest(chunk(1, start: base + 1.05, arrival: base + 2.1))
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 2, accuracy: 0.011)
+    }
+
+    func testAGapLongerThanJitterIsPaddedByTheCaptureTime() throws {
+        let base = t0.timeIntervalSinceReferenceDate
+        let url = dir.appendingPathComponent("p.caf")
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { self.t0 })
+        writer.ingest(chunk(1, start: base, arrival: base + 1, new: true))
+        // The writer queue was busy: the chunk is handed over late, but its capture time says where it belongs.
+        writer.ingest(chunk(1, start: base + 1.3, arrival: base + 9))
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 2.3, accuracy: 0.011)
+    }
+
+    /// A device clock that runs fast must not push the track ahead of the other one.
+    func testATrackAheadOfItsCaptureTimesDropsTheExcess() throws {
+        let base = t0.timeIntervalSinceReferenceDate
+        let url = dir.appendingPathComponent("a.caf")
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { self.t0 })
+        writer.ingest(chunk(2, start: base, arrival: base + 2, new: true))
+        writer.ingest(chunk(1, start: base + 1.5, arrival: base + 2.5))
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 2.5, accuracy: 0.011)
+    }
+
+    /// Buffers with no capture time that arrive in a burst (a busy main thread) are all kept.
+    func testALateBurstWithoutCaptureTimesIsKept() throws {
+        let url = dir.appendingPathComponent("b.caf")
+        var now = t0.addingTimeInterval(1)
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        now = t0.addingTimeInterval(1.2)
+        try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 2, accuracy: 0.011)
+    }
+
+    /// A full disk: every write fails. The writer keeps the first error and the count for the recorder's health check.
+    func testFailedWritesAreCountedWithTheFirstError() throws {
+        struct DiskFull: LocalizedError { var errorDescription: String? { "No space left on device" } }
+        let base = t0.timeIntervalSinceReferenceDate
+        let writer = try TrackWriter(url: dir.appendingPathComponent("f.caf"), startTime: t0, clock: { self.t0 })
+        writer.ingest(chunk(1, start: base, arrival: base + 1, new: true))
+        XCTAssertEqual(writer.writeErrors.count, 0)
+        writer.writeFault = DiskFull()
+        writer.ingest(chunk(1, start: base + 1, arrival: base + 2))
+        writer.ingest(chunk(1, start: base + 2, arrival: base + 3))
+        XCTAssertEqual(writer.writeErrors.count, 2)
+        XCTAssertEqual(writer.writeErrors.first, "No space left on device")
+        XCTAssertEqual(writer.duration, 1, accuracy: 0.01, "a failed write does not move the file position")
+        writer.close()
+    }
+
+    /// 44.1 kHz delivered as "48 kHz" was inside the old 15 % band and played 9 % too fast, with holes of silence.
+    func testANearRateIsCorrectedAfterTwoWindowsThatAgree() throws {
+        XCTAssertEqual(TrackWriter.standardRate(measured: 44_100, declared: 48_000), 44_100)
+        XCTAssertEqual(TrackWriter.standardRate(measured: 46_500, declared: 48_000), 48_000)
+        let url = dir.appendingPathComponent("n.caf")
+        var now = t0
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        for _ in 0..<300 {
+            now = now.addingTimeInterval(0.1)
+            let b = sineBuffer(seconds: 0.1, sampleRate: 48_000, channels: 1)
+            b.frameLength = 4_410
+            try writer.append(b)
+        }
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 30, accuracy: 0.3)
+        XCTAssertLessThan(try silentShare(url, from: 8, to: 30), 0.01, "after the correction there are no holes")
+    }
+
+    /// One late buffer at the edge of a window must not change the rate of a healthy device.
+    func testOneOddWindowDoesNotChangeANearRate() throws {
+        let url = dir.appendingPathComponent("o.caf")
+        var now = t0
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        for i in 0..<200 {
+            // The buffer that closes the first window comes 0.25 s late; the next ones catch up.
+            now = t0.addingTimeInterval(Double(i + 1) * 0.1 + (i == 30 ? 0.25 : 0))
+            try writer.append(sineBuffer(seconds: 0.1, sampleRate: 48_000, channels: 1))
+        }
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 20, accuracy: 0.3, "nothing was relabeled, so nothing was stretched")
+    }
+
+    func testRewriteSilencesSpansAndKeepsTheLength() throws {
+        let url = dir.appendingPathComponent("mute.caf")
+        try writeTestAudio(url, seconds: 10, frequency: 440)
+        try rewriteAudioFile(url, keep: nil, silence: [2...4, 9...30])
+        XCTAssertEqual(try audioDuration(url), 10, accuracy: 0.01)
+        XCTAssertEqual(try AudioSamples.read(url, from: 2, to: 4).map(abs).max(), 0)
+        XCTAssertEqual(try AudioSamples.read(url, from: 9, to: 10).map(abs).max(), 0)
+        XCTAssertGreaterThan(try AudioSamples.read(url, from: 1, to: 1.9).map(abs).max() ?? 0, 0.3)
+        XCTAssertGreaterThan(try AudioSamples.read(url, from: 4.1, to: 8.9).map(abs).max() ?? 0, 0.3)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["mute.caf"])
+    }
+
+    func testAFailedRewriteLeavesNoTempFile() throws {
+        let url = dir.appendingPathComponent("bad.caf")
+        try Data(repeating: 7, count: 4096).write(to: url)
+        XCTAssertThrowsError(try trimAudioFile(url, to: 1))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["bad.caf"])
+    }
+
     func testTrimShortensFile() throws {
         let url = dir.appendingPathComponent("trim.caf")
         try writeTestAudio(url, seconds: 10, frequency: 440)

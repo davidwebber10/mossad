@@ -94,4 +94,30 @@ final class ProcessingQueueTests: XCTestCase {
         XCTAssertEqual(r.status, .recorded)
         XCTAssertEqual(r.end.timeIntervalSince(t0), 120, accuracy: 0.1)
     }
+
+    /// The mic track keeps the real samples until the call ends, so a crashed call has the muted time in it.
+    func testRecoverySilencesTheMutedSpansOfACrashedCall() throws {
+        var r = try record("muted", .recording, start: t0)
+        r.muteSpans = [MuteSpan(start: 10, end: 20), MuteSpan(start: 80, end: nil)]
+        try r.save(to: paths.callDirectory("muted"))
+        let me = paths.callDirectory("muted").appendingPathComponent("me.caf")
+        try writeTestAudio(me, seconds: 90, frequency: 440)
+        ProcessingQueue(paths: paths).recoverInterrupted()
+        let recovered = try CallRecord.load(from: paths.callDirectory("muted"))
+        XCTAssertEqual(recovered.status, .recorded)
+        XCTAssertEqual(recovered.muteSpans, [MuteSpan(start: 10, end: 20), MuteSpan(start: 80, end: 90)])
+        XCTAssertEqual(try audioDuration(me), 90, accuracy: 0.01)
+        XCTAssertEqual(try AudioSamples.read(me, from: 10, to: 20).map(abs).max(), 0)
+        XCTAssertEqual(try AudioSamples.read(me, from: 80, to: 90).map(abs).max(), 0, "muted at the crash: silence to the end")
+        XCTAssertGreaterThan(try AudioSamples.read(me, from: 21, to: 79).map(abs).max() ?? 0, 0.3)
+    }
+
+    func testACallRecordFromBeforeMuteSpansStillLoads() throws {
+        try record("old", .recorded, start: t0)
+        let url = paths.callDirectory("old").appendingPathComponent(CallRecord.fileName)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        XCTAssertNotNil(json.removeValue(forKey: "muteSpans"))
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory("old")).muteSpans, [])
+    }
 }

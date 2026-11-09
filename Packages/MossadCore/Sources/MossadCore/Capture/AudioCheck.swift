@@ -80,15 +80,19 @@ extension AudioCheck {
         }
         let meter = LevelMeter(capacity: 400)
         let tap = ProcessTap(processObjectIDs: [me])
+        let feed = AudioFeed(label: "check") { meter.record(level($0.samples)) }
         do {
-            try tap.start { meter.record(level($0)) }
+            try tap.start(feed)
         } catch {
+            tap.stop()
+            feed.close()
             engine.stop()
             return .failed("The tap could not start: \(error)")
         }
         queue(buffer(tone(seconds: 1.2, sampleRate: 48_000)), on: player)
         try? await Task.sleep(for: .milliseconds(1_600))
         tap.stop()
+        feed.close()
         player.stop()
         engine.stop()
         return heardTone(meter.history) ? .heard : .silent
@@ -115,19 +119,28 @@ extension AudioCheck {
 public final class MicLevelCheck: @unchecked Sendable {
     public let meter = LevelMeter(capacity: 120)
     private var mic: MicCapture?
+    private var feed: AudioFeed?
 
     public init() {}
 
     public func start() throws {
         let capture = MicCapture(voiceProcessing: false)
         let meter = meter
-        try capture.start { meter.record(AudioCheck.level($0)) }
+        let feed = AudioFeed(label: "check") { meter.record(AudioCheck.level($0.samples)) }
+        do { try capture.start(feed) } catch {
+            capture.stop()
+            feed.close()
+            throw error
+        }
         mic = capture
+        self.feed = feed
     }
 
     public func stop() {
         mic?.stop()
         mic = nil
+        feed?.close()
+        feed = nil
     }
 }
 #endif

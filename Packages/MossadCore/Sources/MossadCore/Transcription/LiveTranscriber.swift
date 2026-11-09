@@ -1,8 +1,11 @@
 import AVFoundation
 import Foundation
+import Synchronization
 
 /// One AssemblyAI streaming session for one track. Audio comes from the capture threads; messages go to
 /// `onMessage` on a background queue. Billed while the connection is open, so it is closed on pause and end.
+/// A connection that fails is not opened again here: `onFailure` runs once, and the owner of the session starts a new
+/// one at the track's current length, so the new session's times still match the file.
 public final class LiveTranscriber: @unchecked Sendable {
     /// Speaker labels only for the call audio: the mic is the owner.
     static func url(speakers: Bool) -> URL {
@@ -15,14 +18,21 @@ public final class LiveTranscriber: @unchecked Sendable {
     private let task: URLSessionWebSocketTask
     private var pending = Data()
     private var open = true
+    /// Read on the capture side before any work, so a dead session costs nothing.
+    private let alive = Atomic<Bool>(true)
     private let onMessage: @Sendable (Data) -> Void
+    private let onFailure: (@Sendable () -> Void)?
 
-    public init(apiKey: String, speakers: Bool = false, session: URLSession = .shared, onMessage: @escaping @Sendable (Data) -> Void) {
-        var request = URLRequest(url: Self.url(speakers: speakers))
+    public var isAlive: Bool { alive.load(ordering: .relaxed) }
+
+    public init(apiKey: String, speakers: Bool = false, session: URLSession = .shared, url: URL? = nil,
+                onFailure: (@Sendable () -> Void)? = nil, onMessage: @escaping @Sendable (Data) -> Void) {
+        var request = URLRequest(url: url ?? Self.url(speakers: speakers))
         // The key goes in a header, never in the URL, so it is not logged with the address.
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         task = session.webSocketTask(with: request)
         self.onMessage = onMessage
+        self.onFailure = onFailure
         task.resume()
         receive()
     }
@@ -35,7 +45,17 @@ public final class LiveTranscriber: @unchecked Sendable {
             case .success(.data(let data)): self.onMessage(data)
             case .success: break
             case .failure(let error):
-                if self.queue.sync(execute: { self.open }) { Log.error("Live transcript stopped: \(error.localizedDescription)") }
+                // Only a session that was not stopped on purpose failed.
+                let failed = self.queue.sync {
+                    defer { self.open = false }
+                    return self.open
+                }
+                self.alive.store(false, ordering: .relaxed)
+                if failed {
+                    Log.error("Live transcript stopped: \(error.localizedDescription)")
+                    self.task.cancel(with: .goingAway, reason: nil)
+                    self.onFailure?()
+                }
                 return
             }
             self.receive()
@@ -44,6 +64,7 @@ public final class LiveTranscriber: @unchecked Sendable {
 
     /// Takes a 16 kHz mono buffer from the track writer.
     public func send(_ buffer: AVAudioPCMBuffer) {
+        guard isAlive else { return }
         let data = Self.pcm16(buffer)
         queue.async {
             guard self.open else { return }
@@ -57,6 +78,7 @@ public final class LiveTranscriber: @unchecked Sendable {
 
     /// Ends the session: the server finalizes the open turn, then the connection closes.
     public func stop() {
+        alive.store(false, ordering: .relaxed)
         queue.async {
             guard self.open else { return }
             self.open = false

@@ -50,11 +50,27 @@ public struct ProcessingQueue: Sendable {
                 try? FileManager.default.removeItem(at: dir)
                 Log.info("Discarded interrupted call \(r.id) (\(Int(duration)) s)")
             } else {
+                silenceMutedSpans(&r, in: dir, micLength: durations[0])
                 r.end = r.start.addingTimeInterval(duration)
                 r.status = .recorded
                 try? r.save(to: dir)
                 Log.info("Recovered interrupted call \(r.id) (\(Int(duration)) s)")
             }
+        }
+    }
+
+    /// The mic track holds the real samples until the call ends, so a crashed call still has the muted time in it.
+    /// A mute that was on at the crash runs to the end of the track.
+    private func silenceMutedSpans(_ r: inout CallRecord, in dir: URL, micLength: Double?) {
+        guard !r.muteSpans.isEmpty, let micLength else { return }
+        if let open = r.muteSpans.indices.last, r.muteSpans[open].end == nil { r.muteSpans[open].end = max(micLength, r.muteSpans[open].start) }
+        let spans = MuteSpan.ranges(r.muteSpans, length: micLength)
+        guard !spans.isEmpty else { return }
+        do {
+            try rewriteAudioFile(dir.appendingPathComponent(Track.me.fileName), keep: nil, silence: spans)
+        } catch {
+            // The call is kept: losing it is worse than a muted span that stayed.
+            Log.error("Silencing the muted time of \(r.id) failed: \(error)")
         }
     }
 
