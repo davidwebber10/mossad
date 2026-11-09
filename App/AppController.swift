@@ -375,6 +375,11 @@ final class AppController: ObservableObject {
                 DispatchQueue.main.async { self.openPanelPreview() }
                 return
             }
+            // `--open-window Onboarding` opens setup alone; MOSSAD_ONBOARDING_STEP picks the step in a preview.
+            if name == "Onboarding" {
+                DispatchQueue.main.async { self.openOnboarding() }
+                return
+            }
             let section = Section.allCases.first { $0.rawValue == name } ?? .meetings
             DispatchQueue.main.async { self.open(section) }
         }
@@ -1177,7 +1182,8 @@ final class AppController: ObservableObject {
         calendars = calendar.calendars()
         if UserDefaults.standard.stringArray(forKey: "calendarIDs") == nil, !calendars.isEmpty {
             // The first time, read only the owner's own calendars, not shared or subscribed ones.
-            chosenCalendars = CalendarInfo.defaults(calendars, ownerName: ownerName)
+            chosenCalendars = CalendarInfo.defaults(calendars, ownerName: ownerName,
+                                                    ownerEmail: UserDefaults.standard.string(forKey: "ownerEmail") ?? "")
             Log.info("Calendars: \(calendars.map { "\($0.title) [\($0.account)]\(chosenCalendars.contains($0.id) ? " *" : "")" }.joined(separator: "; "))")
             return
         }

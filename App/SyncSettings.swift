@@ -166,11 +166,18 @@ private struct ServerGroup: View {
 /// The pairing code for the iPhone: a quiet tile with Show code, which opens the code in a card that hides
 /// itself after a minute, because it holds the secret.
 private struct PhonePairing: View {
+    var body: some View {
+        SettingsGroup(label: "Your iPhone") { PhonePairingRows() }
+    }
+}
+
+/// The pairing tile and its switches, for Settings and for setup's sync step.
+struct PhonePairingRows: View {
     @EnvironmentObject var controller: AppController
     @State private var showCode = false
 
     var body: some View {
-        SettingsGroup(label: "Your iPhone") {
+        Group {
             HStack(alignment: .center, spacing: 20) {
                 VStack(spacing: 10) {
                     IconImage(.qrLarge, size: 28).foregroundStyle(Palette.tertiaryMark)

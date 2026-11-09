@@ -3,7 +3,6 @@ import SwiftUI
 
 struct MainWindow: View {
     @EnvironmentObject var controller: AppController
-    @State private var welcoming = false
     @State private var width: CGFloat = .infinity
 
     var body: some View {
@@ -36,21 +35,16 @@ struct MainWindow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
         .environment(\.animationsActive, controller.windowVisible)
-        .sheet(isPresented: $welcoming) { WelcomeView() }
         .overlay(alignment: .topTrailing) { if Rehearsal.isOn { RehearsalMark().padding(.top, 16).padding(.trailing, 16) } }
         .overlay { SearchOverlay(model: controller.search) }
-        // Development hook for screenshots: `--welcome-inline` draws the welcome in the window, not in a sheet.
-        .overlay {
-            if CommandLine.arguments.contains("--welcome-inline") {
-                WelcomeView().background(.background, in: RoundedRectangle(cornerRadius: 16)).shadow(radius: 30)
-            }
-        }
         .onAppear {
-            // Only a new install: someone with meetings already set Mossad up.
-            // A preview opened on another page reads its meetings after this runs, so it never welcomes unasked.
-            welcoming = !UserDefaults.standard.bool(forKey: "welcomeDone") && controller.meetings.isEmpty
-                && !CommandLine.arguments.contains("--ui-preview")
-                || CommandLine.arguments.contains("--welcome")
+            // Only a new install: someone with meetings already set Mossad up. A preview never opens setup unasked,
+            // and Rehearsal opens it at launch instead.
+            if !Rehearsal.isOn, Onboarding.opensAtLaunch(finished: controller.onboardingFinished, hasMeetings: !controller.meetings.isEmpty,
+                                                         preview: CommandLine.arguments.contains("--ui-preview"),
+                                                         forced: CommandLine.arguments.contains("--welcome"), rehearsal: false) {
+                controller.openOnboarding()
+            }
         }
     }
 }
@@ -69,7 +63,7 @@ private struct SearchOverlay: View {
 
 /// Warm paper with two soft washes, warm at the top left and cool at the bottom left, so the sidebar's glass has
 /// something to carry, as in the canvas.
-private struct WindowBackdrop: View {
+struct WindowBackdrop: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 

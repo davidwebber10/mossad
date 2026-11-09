@@ -157,6 +157,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // booting is one of them.
             || ProcessInfo.processInfo.systemUptime < 180
         // `--background`: a restart after an update, which must not pull the owner away from their work.
+        // Rehearsal opens straight into setup, every time.
+        if Rehearsal.isOn, !CommandLine.arguments.contains("--ui-preview") {
+            DispatchQueue.main.async { AppController.current?.openOnboarding() }
+            return
+        }
         guard !atLogin, !CommandLine.arguments.contains("--ui-preview"), !CommandLine.arguments.contains("--open-window"),
               !CommandLine.arguments.contains("--background") else { return }
         DispatchQueue.main.async { AppController.current?.open(AppController.current?.section ?? .meetings) }

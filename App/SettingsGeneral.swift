@@ -8,6 +8,7 @@ struct GeneralSettings: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @AppStorage("ownerEmail") private var ownerEmail = ""
 
     var body: some View {
         LabelColumnStack {
@@ -17,6 +18,10 @@ struct GeneralSettings: View {
                     TextField("Your name", text: $controller.ownerName)
                         .textFieldStyle(SettingsFieldStyle(width: 160))
                         .onSubmit { controller.rebuildPipeline() }
+                }
+                SettingsRow(title: "Work email", detail: "Finds you in meeting invites.") {
+                    TextField("Work email", text: $ownerEmail, prompt: Text("you@example.com"))
+                        .textFieldStyle(SettingsFieldStyle(width: 160))
                 }
                 SettingsRow(title: "Company", titleNote: "optional") {
                     TextField("Company", text: $controller.organization, prompt: Text("Example Inc."))
@@ -45,6 +50,11 @@ struct GeneralSettings: View {
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, Space.s)
+                }
+            }
+            SettingsGroup(label: "Setup", footer: "Walks through the same steps as the first launch: you, permissions, AI keys, calendars, the recording check, and sync. What you set already stays.") {
+                SettingsRow(title: "Run setup again", detail: "Opens the setup window from the first step.") {
+                    Button("Run setup again…") { controller.runSetupAgain() }.buttonStyle(.settings)
                 }
             }
             OrgChartSettings()
