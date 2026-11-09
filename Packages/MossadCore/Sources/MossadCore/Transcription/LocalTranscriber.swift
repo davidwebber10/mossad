@@ -7,6 +7,9 @@ actor LocalEngine {
     static let shared = LocalEngine()
     private var parakeet: [LocalModel: AsrManager] = [:]
     private var diarizer: DiarizerManager?
+    #if os(macOS)
+    private var whisper: WhisperEngine?
+    #endif
 
     func words(_ file: URL, model: LocalModel) async throws -> [TimedWord] {
         switch model {
@@ -18,8 +21,23 @@ actor LocalEngine {
             #else
             throw LocalModelError.notSupported(model)
             #endif
+        case .whisperTurbo:
+            #if os(macOS)
+            try await whisperEngine().words(file)
+            #else
+            throw LocalModelError.notSupported(model)
+            #endif
         }
     }
+
+    #if os(macOS)
+    private func whisperEngine() async throws -> WhisperEngine {
+        if let whisper { return whisper }
+        let engine = try await WhisperEngine.load()
+        whisper = engine
+        return engine
+    }
+    #endif
 
     private func parakeetWords(_ file: URL, model: LocalModel, version: AsrModelVersion) async throws -> [TimedWord] {
         if parakeet[model] == nil {

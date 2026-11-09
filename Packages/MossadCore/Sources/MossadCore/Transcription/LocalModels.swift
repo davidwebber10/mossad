@@ -5,12 +5,14 @@ public enum LocalModel: String, CaseIterable, Sendable {
     case parakeetV3 = "parakeet-tdt-v3"
     case parakeetV2 = "parakeet-tdt-v2"
     case appleSpeech = "apple-speech"
+    case whisperTurbo = "whisper-large-v3-turbo"
 
     public var name: String {
         switch self {
         case .parakeetV3: "Parakeet TDT v3"
         case .parakeetV2: "Parakeet TDT v2 (English only)"
         case .appleSpeech: "Apple Speech"
+        case .whisperTurbo: "Whisper Large v3 Turbo"
         }
     }
 
@@ -23,6 +25,8 @@ public enum LocalModel: String, CaseIterable, Sendable {
             "Free, and the audio never leaves this Mac. A download of about 500 MB, once. About 300 times faster than real time. English only, a little more accurate in English than v3. Weaker on product names."
         case .appleSpeech:
             "Free, and the audio never leaves this Mac. Nothing to download beyond the speech files macOS keeps itself. About 60 times faster than real time. US English only. Less proven on real calls than Parakeet."
+        case .whisperTurbo:
+            "Free, and the audio never leaves this Mac. A download of about 650 MB, once. About 15 times faster than real time. About 100 languages, found by itself. Can repeat or invent a line in long silences."
         }
     }
 

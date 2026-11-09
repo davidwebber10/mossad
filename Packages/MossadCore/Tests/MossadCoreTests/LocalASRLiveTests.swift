@@ -13,6 +13,7 @@ final class LocalASRLiveTests: XCTestCase {
     func testParakeetV3() async throws { try await run(.parakeetV3) }
     func testParakeetV2() async throws { try await run(.parakeetV2) }
     func testAppleSpeech() async throws { try await run(.appleSpeech) }
+    func testWhisperTurbo() async throws { try await run(.whisperTurbo) }
 
     private func run(_ model: LocalModel) async throws {
         guard ProcessInfo.processInfo.environment["MOSSAD_LOCAL_ASR_TEST"] == "1" else { throw XCTSkip("MOSSAD_LOCAL_ASR_TEST not set") }

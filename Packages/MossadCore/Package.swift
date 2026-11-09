@@ -7,9 +7,13 @@ let package = Package(
     products: [.library(name: "MossadCore", targets: ["MossadCore"])],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio", exact: "0.17.7"),
+        .package(url: "https://github.com/argmaxinc/WhisperKit", exact: "1.1.1"),
     ],
     targets: [
-        .target(name: "MossadCore", dependencies: [.product(name: "FluidAudio", package: "FluidAudio")]),
+        .target(name: "MossadCore", dependencies: [
+            .product(name: "FluidAudio", package: "FluidAudio"),
+            .product(name: "WhisperKit", package: "WhisperKit", condition: .when(platforms: [.macOS])),
+        ]),
         .testTarget(name: "MossadCoreTests", dependencies: ["MossadCore"]),
     ]
 )

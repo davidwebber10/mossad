@@ -5,8 +5,8 @@ final class LocalModelTests: XCTestCase {
     private let segments: [(start: Double, end: Double, speaker: String)] = [(0, 2, "S1"), (2, 10, "S2")]
 
     func testLocalModelsInOrderWithStableIDs() {
-        XCTAssertEqual(TranscriptionProvider.local.models.map(\.id), ["parakeet-tdt-v3", "parakeet-tdt-v2", "apple-speech"])
-        XCTAssertEqual(TranscriptionProvider.local.models.map(\.name), ["Parakeet TDT v3", "Parakeet TDT v2 (English only)", "Apple Speech"])
+        XCTAssertEqual(TranscriptionProvider.local.models.map(\.id), ["parakeet-tdt-v3", "parakeet-tdt-v2", "apple-speech", "whisper-large-v3-turbo"])
+        XCTAssertEqual(TranscriptionProvider.local.models.map(\.name), ["Parakeet TDT v3", "Parakeet TDT v2 (English only)", "Apple Speech", "Whisper Large v3 Turbo"])
     }
 
     func testTheTranscriberUsesTheChosenModelAndFallsBackToTheFirst() {
@@ -14,6 +14,7 @@ final class LocalModelTests: XCTestCase {
         XCTAssertEqual(model("parakeet-tdt-v2"), .parakeetV2)
         XCTAssertEqual(model("parakeet-tdt-v3"), .parakeetV3)
         XCTAssertEqual(model("apple-speech"), .appleSpeech)
+        XCTAssertEqual(model("whisper-large-v3-turbo"), .whisperTurbo)
         XCTAssertEqual(model(""), .parakeetV3)
         XCTAssertEqual(model("a-model-that-is-gone"), .parakeetV3, "a model removed from the list falls back to the default")
     }
@@ -133,6 +134,39 @@ final class AppleSpeechMappingTests: XCTestCase {
         let text = timed("Ship", 0.5, 0.9) + AttributedString(" ") + timed("it", 1, 1.2) + AttributedString(".")
         let w = AppleSpeechEngine.words(in: text)
         XCTAssertEqual(w, [TimedWord(text: "Ship", start: 0.5, end: 0.9), TimedWord(text: "it.", start: 1, end: 1.2)])
+    }
+}
+
+final class WhisperMappingTests: XCTestCase {
+    func testWhisperWordsDropSpecialTokensAndEachSegmentStartsAWord() {
+        let w = WhisperEngine.words([
+            [("<|en|>", 0, 0), (" We", 0.1, 0.3), (" don", 0.4, 0.6), ("'t", 0.6, 0.7), (" wait.", 0.8, 1.2)],
+            [("Then", 2, 2.3), (" go", 2.4, 2.6)],
+        ])
+        XCTAssertEqual(w.map(\.text), ["We", "don't", "wait.", "Then", "go"])
+        XCTAssertEqual(w[1], TimedWord(text: "don't", start: 0.4, end: 0.7))
+        XCTAssertEqual(w[3].start, 2)
+    }
+
+    func testAMissingWhisperModelIsNotDownloadedWhenNotAllowed() async {
+        do {
+            _ = try await WhisperEngine.load(base: tempDirectory(), download: false)
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertEqual(error as? LocalModelError, .modelMissing(.whisperTurbo))
+        }
+    }
+
+    func testAnUnreadableWhisperModelReadsAsMissing() async throws {
+        let base = tempDirectory()
+        let folder = WhisperEngine.modelFolder(base: base).appendingPathComponent("AudioEncoder.mlmodelc")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        do {
+            _ = try await WhisperEngine.load(base: base, download: false)
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertEqual(error as? LocalModelError, .modelMissing(.whisperTurbo))
+        }
     }
 }
 #endif
