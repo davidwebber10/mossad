@@ -7,6 +7,8 @@ public struct FriendlyError: Equatable, Sendable {
     public enum Context: String, Sendable, CaseIterable {
         case syncing, uploadingAudio, transcribing, identifying, summarizing, coaching, recording, sendingEmail, chatting
         case importingOrgChart, checkingUpdates, connectingServer, sharing, general
+        /// Setup's Check button, which tries a pasted key with one free request.
+        case checkingKey
 
         /// Steps Mossad runs again by itself: the pipeline, sync, and the iPhone's outbox.
         public var retriesItself: Bool {
@@ -23,7 +25,7 @@ public struct FriendlyError: Equatable, Sendable {
             case .sendingEmail: "the mail service"
             case .checkingUpdates: "the update server"
             case .syncing, .uploadingAudio, .connectingServer, .sharing: "your server"
-            case .recording, .importingOrgChart, .general: "the service"
+            case .recording, .importingOrgChart, .general, .checkingKey: "the service"
             }
         }
 
@@ -44,6 +46,7 @@ public struct FriendlyError: Equatable, Sendable {
             case .connectingServer: "Mossad couldn't connect to your server"
             case .sharing: "The share link didn't update"
             case .general: "That didn't work"
+            case .checkingKey: "Mossad couldn't check the key"
             }
         }
     }
@@ -148,6 +151,8 @@ public struct FriendlyError: Equatable, Sendable {
         case .unauthorized where isServer, .wrongSecret:
             return ("Your server didn't accept the secret",
                     context == .connectingServer ? "Copy the secret again from your Mac, then try again." : "Connect the server again in \(syncSettings).", false)
+        case .unauthorized where context == .checkingKey:
+            return ("\(S) didn't accept the API key", "Copy the key again from your \(named ? s : "provider's") account, then paste it here.", false)
         case .unauthorized: return ("\(S) didn't accept the API key", "Check the \(key) in \(keySettings(context)).", false)
         case .missingKey: return ("Mossad needs your \(key)", "Add the key in \(keySettings(context)), then retry.", false)
         case .billing:

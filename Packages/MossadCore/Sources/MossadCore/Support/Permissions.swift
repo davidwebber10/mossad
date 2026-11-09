@@ -13,7 +13,6 @@ public enum PermissionKind: Hashable, Sendable {
     case microphone, systemAudio, accessibility, calendars, notifications
     case automation(String)
 
-    static let appBundleID = "com.dwebber.mossad"
 
     /// Privacy lists with a "+" button also take an app dropped from Finder.
     public var acceptsDraggedApp: Bool {
@@ -23,7 +22,10 @@ public enum PermissionKind: Hashable, Sendable {
         }
     }
 
-    public var settingsURL: URL {
+    /// The pane for this permission; Notifications opens the running app's own entry.
+    public var settingsURL: URL { settingsURL(bundleID: AppIdentity.current.appID) }
+
+    public func settingsURL(bundleID: String) -> URL {
         let security = "x-apple.systempreferences:com.apple.preference.security?"
         let s = switch self {
         case .microphone: security + "Privacy_Microphone"
@@ -31,7 +33,7 @@ public enum PermissionKind: Hashable, Sendable {
         case .accessibility: security + "Privacy_Accessibility"
         case .calendars: security + "Privacy_Calendars"
         case .automation: security + "Privacy_Automation"
-        case .notifications: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(Self.appBundleID)"
+        case .notifications: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleID)"
         }
         return URL(string: s)!
     }

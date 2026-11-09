@@ -38,6 +38,13 @@ final class UpcomingTests: XCTestCase {
         XCTAssertEqual(CalendarInfo.defaults([all[1], all[3]], ownerName: "David Webber"), ["2", "4"])
     }
 
+    func testTheWorkEmailFindsTheOwnersCalendarWhenTheNameDoesNot() {
+        let list = [CalendarInfo(id: "a", title: "ops-lead@example.com", account: "Google"),
+                    CalendarInfo(id: "b", title: "Team", account: "Google")]
+        XCTAssertEqual(CalendarInfo.defaults(list, ownerName: "Alex Rivera"), ["a", "b"])
+        XCTAssertEqual(CalendarInfo.defaults(list, ownerName: "Alex Rivera", ownerEmail: " Ops-Lead@example.com "), ["a"])
+    }
+
     func testFindsTheCallLinkAndPlatform() throws {
         let m = try XCTUnwrap(UpcomingMeeting.from([event("Sync", in: 5, text: "Join: https://meet.google.com/abc-defg-hij?authuser=0\nNotes")], now: now).first)
         XCTAssertEqual(m.platform, .meet)

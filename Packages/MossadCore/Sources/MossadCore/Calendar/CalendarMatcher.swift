@@ -35,9 +35,12 @@ public struct CalendarInfo: Identifiable, Equatable, Sendable, Hashable {
 
     /// The owner's own calendars: titled with their name, or the account's main calendar (titled with the
     /// account's own address). All of them when there is none, so matching never silently stops.
-    public static func defaults(_ calendars: [CalendarInfo], ownerName: String) -> Set<String> {
+    /// The work email the owner gave in setup also marks their calendar.
+    public static func defaults(_ calendars: [CalendarInfo], ownerName: String, ownerEmail: String = "") -> Set<String> {
+        let email = ownerEmail.trimmingCharacters(in: .whitespaces)
         let own = calendars.filter {
             $0.title.caseInsensitiveCompare(ownerName) == .orderedSame
+                || (!email.isEmpty && $0.title.caseInsensitiveCompare(email) == .orderedSame)
                 || ($0.title.contains("@") && ($0.title.caseInsensitiveCompare($0.account) == .orderedSame || isOwnersAddress($0.title, ownerName: ownerName)))
         }
         return Set((own.isEmpty ? calendars : own).map(\.id))

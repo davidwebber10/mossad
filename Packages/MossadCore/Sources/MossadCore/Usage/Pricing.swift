@@ -87,6 +87,34 @@ public enum Pricing {
                               inputTokens: characters / 4 + promptTokens, outputTokens: summaryOutputTokens, estimated: true))
     }
 
+    /// About 9,000 words are spoken in an hour of meetings, about 4 characters to a token.
+    static let hourTranscriptTokens = 13_500
+
+    /// What an hour of meetings costs: both tracks transcribed, and one summary of the hour's transcript.
+    public static func hourEstimate(transcription: TranscriptionProvider, ai: AIProvider, model: String) -> Double {
+        let hour: Double = 3600
+        let audio: UsageEvent.Service? = switch transcription {
+        case .assemblyai: .assemblyai
+        case .deepgram: .deepgram
+        case .elevenlabs: .elevenlabs
+        case .openai: .openai
+        case .local: nil
+        }
+        let service: UsageEvent.Service = switch ai {
+        case .anthropic: .claude
+        case .openai: .openai
+        case .openrouter: .openrouter
+        }
+        let name = model.isEmpty ? ai.defaultModel : model
+        let transcript = audio.map {
+            cost(UsageEvent(date: Date(), callID: nil, service: $0, purpose: .transcription,
+                            model: $0 == .assemblyai ? defaultBatchModel : nil, audioSeconds: hour * 2, estimated: true))
+        } ?? 0
+        let summary = cost(UsageEvent(date: Date(), callID: nil, service: service, purpose: .summary, model: name,
+                                      inputTokens: hourTranscriptTokens + promptTokens, outputTokens: summaryOutputTokens, estimated: true))
+        return transcript + summary
+    }
+
     /// Usage for calls processed before the log existed: both tracks transcribed for the whole call, and one
     /// summary with the transcript as input (about 4 characters per token).
     public static func estimates(for records: [CallRecord], logged: [UsageEvent]) -> [UsageEvent] {
