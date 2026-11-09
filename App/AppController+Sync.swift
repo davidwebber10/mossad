@@ -37,7 +37,7 @@ extension AppController {
             SharedAIKey.delete()
             return
         }
-        let shared = SharedAIKey(provider: aiProvider.rawValue, model: aiModel.isEmpty ? aiProvider.defaultModel : aiModel, key: key)
+        let shared = SharedAIKey(provider: aiProvider.rawValue, model: aiProvider.resolvedModel(aiModel), key: key)
         guard SharedAIKey.load() != shared else { return }
         do { try shared.save() } catch { Log.error("Sharing the AI key with the iPhone failed: \(error)") }
     }
@@ -197,7 +197,7 @@ extension AppController {
         link.options = options
         link.title = record.title
         link.expires = options.days.map { (existing?.created ?? now).addingTimeInterval(Double($0) * 86_400) }
-        let model = aiProvider == .anthropic ? (aiModel.isEmpty ? aiProvider.defaultModel : aiModel) : nil
+        let model = aiProvider == .anthropic ? aiProvider.resolvedModel(aiModel) : nil
         let meeting = SharedMeeting(MeetingView(record), owner: ownerName, options: options, expires: link.expires, model: model)
         let audio = options.recording ? try await recordingFile(record) : nil
         try await ServerClient(c).putShare(link, meeting: meeting, audio: audio)

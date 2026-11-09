@@ -177,6 +177,8 @@ final class AppController: ObservableObject {
     @AppStorage("transcriptionModel") var transcriptionModel = ""
     @AppStorage("aiProvider") var aiProvider = AIProvider.anthropic
     @AppStorage("aiModel") var aiModel = ""
+    /// The provider and key the "Latest" models were last read for.
+    private var latestModelsSignature = ""
     /// The picked OpenRouter model's rating, from its listed prices.
     @Published var openRouterRating: Rating?
     @AppStorage("mailProvider") var mailProvider = MailProvider.resend
@@ -325,6 +327,7 @@ final class AppController: ObservableObject {
             }
             housekeeping = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
                 Task { await self?.runHousekeeping() }
+                Task { @MainActor in self?.refreshLatestModels() }
             }
             ProcessingQueue(paths: paths).recoverInterrupted()
         }
@@ -461,6 +464,24 @@ final class AppController: ObservableObject {
 
     func hasKey(_ key: APIKey) -> Bool { keychain.get(key) != nil }
 
+    /// Reads the provider's model list off the main thread when the provider or key changed, or once a day, so the
+    /// "Latest" choices follow new models. A changed model rebuilds the pipeline.
+    func refreshLatestModels() {
+        let provider = aiProvider, key = keychain.get(provider.key)
+        let signature = "\(provider.rawValue)-\(key?.hashValue ?? 0)"
+        guard !LatestModel.aliases(for: provider).isEmpty, key != nil,
+              signature != latestModelsSignature || LatestModelCache.shared.needsRefresh(provider) else { return }
+        latestModelsSignature = signature
+        Task.detached { [weak self] in
+            guard await LatestModelCache.shared.refresh(provider, apiKey: key) else { return }
+            await MainActor.run {
+                guard let self, self.aiProvider == provider, LatestModel.isAlias(self.aiModel) else { return }
+                Log.info("The latest \(provider.displayName) model is now \(provider.resolvedModel(self.aiModel))")
+                self.rebuildPipeline()
+            }
+        }
+    }
+
     /// The chosen AI model, or nil without its key (or without a picked OpenRouter model).
     var languageModel: (any LanguageModel)? {
         guard let key = keychain.get(aiProvider.key), !(aiModel.isEmpty && aiProvider.defaultModel.isEmpty) else { return nil }
@@ -474,6 +495,7 @@ final class AppController: ObservableObject {
 
     /// Recreates the pipeline with the current keys and settings.
     func rebuildPipeline() {
+        refreshLatestModels()
         updateSharedAIKey()
         updateSharedServer()
         let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
@@ -701,7 +723,7 @@ final class AppController: ObservableObject {
     /// Once per call, after about 5 minutes of live transcript, asks a small model for a provisional title so the
     /// menu and the list show it while the call runs. The summary's title replaces it.
     private func startLiveTitling(callID: String) {
-        let chosen = aiModel.isEmpty ? aiProvider.defaultModel : aiModel
+        let chosen = aiProvider.resolvedModel(aiModel)
         guard let key = keychain.get(aiProvider.key), let model = aiProvider.smallModel ?? (chosen.isEmpty ? nil : chosen) else { return }
         let titler = LiveTitler(llm: aiProvider.model(model, apiKey: key, usage: usage))
         let owner = ownerName

@@ -52,7 +52,7 @@ struct AISettings: View {
                        choices: AIProvider.allCases.map { ($0, $0.displayName) })
             ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)
         } rating: {
-            if let rating = Rating.model(controller.aiModel.isEmpty ? controller.aiProvider.defaultModel : controller.aiModel, provider: controller.aiProvider)
+            if let rating = Rating.model(controller.aiProvider.resolvedModel(controller.aiModel), provider: controller.aiProvider)
                 ?? (controller.aiProvider == .openrouter ? controller.openRouterRating : nil) {
                 RatingView(rating: rating, aspects: Rating.modelAspects)
             }
@@ -138,6 +138,12 @@ struct ModelPicker: View {
         return "\(m.name) · \(r.dollars)"
     }
 
+    /// "Opus Latest · Claude Opus 5.5": the model the alias asks for now.
+    private func label(_ alias: LatestModel.Alias) -> String {
+        let id = provider.resolvedModel(alias.id)
+        return "\(alias.name) · \(models.first { $0.id == id }?.name ?? id)"
+    }
+
     var body: some View {
         let current = model.isEmpty ? provider.defaultModel : model
         Group {
@@ -157,14 +163,20 @@ struct ModelPicker: View {
                     .disabled(models.isEmpty)
                 }
             } else {
-                let list = models.contains { $0.id == current } || current.isEmpty ? models : [ModelInfo(id: current, name: current)] + models
+                let known = models.contains { $0.id == current } || current.isEmpty || LatestModel.isAlias(current)
+                let list = known ? models : [ModelInfo(id: current, name: current)] + models
+                let fallback = LatestModel.isAlias(current) ? [] : [(current, current)]
                 FillPicker(title: "Model", selection: Binding(get: { current }, set: { model = $0 }),
-                           choices: list.isEmpty ? [(current, current)] : list.map { ($0.id, label($0)) })
+                           choices: list.isEmpty ? fallback : list.map { ($0.id, label($0)) },
+                           leading: LatestModel.aliases(for: provider).map { ($0.id, label($0)) })
             }
         }
         .task(id: "\(provider.rawValue)-\(controller.hasKey(provider.key))") {
             defer { if provider == .openrouter { controller.openRouterRating = models.first { $0.id == model }.flatMap { Rating.model($0, provider: .openrouter) } } }
-            models = (try? await ModelCatalog.fetch(provider, apiKey: controller.keychain.get(provider.key))) ?? []
+            let fetched = (try? await ModelCatalog.fetch(provider, apiKey: controller.keychain.get(provider.key))) ?? []
+            // The list read here is as new as any, so the "Latest" choices follow it at once.
+            if LatestModelCache.shared.update(provider, models: fetched), LatestModel.isAlias(model) { controller.rebuildPipeline() }
+            models = fetched
         }
     }
 }

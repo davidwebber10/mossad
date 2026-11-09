@@ -164,16 +164,20 @@ struct FillPicker<Value: Hashable>: View {
     @Binding var selection: Value
     let choices: [(value: Value, label: String)]
     var width: CGFloat?
+    /// Choices above the others, set apart by a separator.
+    var leading: [(value: Value, label: String)] = []
 
     var body: some View {
         Menu {
             Picker(title, selection: $selection) {
+                ForEach(leading, id: \.value) { Text($0.label).tag($0.value) }
+                if !leading.isEmpty { Divider() }
                 ForEach(choices, id: \.value) { Text($0.label).tag($0.value) }
             }
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            FillMenuLabel(text: choices.first { $0.value == selection }?.label ?? "", width: width)
+            FillMenuLabel(text: (leading + choices).first { $0.value == selection }?.label ?? "", width: width)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
