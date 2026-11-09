@@ -7,6 +7,10 @@ public enum PermissionState: Equatable, Sendable {
     case needsApp
 
     public var isGood: Bool { self == .granted }
+
+    /// macOS shows a permission prompt once. A permission this run already asked for that still reads "not asked"
+    /// (Calendars does, right after Don't Allow) was refused: asking again shows nothing, so it needs Settings.
+    public func afterAsking(_ asked: Bool) -> PermissionState { asked && self == .notAsked ? .denied : self }
 }
 
 public enum PermissionKind: Hashable, Sendable {

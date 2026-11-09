@@ -64,3 +64,16 @@ final class PermissionsTests: XCTestCase {
         XCTAssertTrue(screen.contains(f), "\(f)")
     }
 }
+
+final class AskedPermissionTests: XCTestCase {
+    /// After "Don't Allow" macOS can still report Calendars as not asked, and asking again shows nothing.
+    func testNotAskedAfterAskingCountsAsDenied() {
+        XCTAssertEqual(PermissionState.notAsked.afterAsking(true), .denied)
+    }
+
+    func testOtherStatesStandAfterAsking() {
+        XCTAssertEqual(PermissionState.granted.afterAsking(true), .granted)
+        XCTAssertEqual(PermissionState.notAsked.afterAsking(false), .notAsked)
+        XCTAssertEqual(PermissionState.needsApp.afterAsking(true), .needsApp)
+    }
+}

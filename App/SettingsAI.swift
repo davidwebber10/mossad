@@ -126,7 +126,7 @@ private struct RatingView: View {
 
 /// The model menu for the AI provider, filled from the provider's own list. OpenRouter has hundreds of
 /// models, so it gets a field to type in with a filtered menu beside it.
-private struct ModelPicker: View {
+struct ModelPicker: View {
     @EnvironmentObject var controller: AppController
     let provider: AIProvider
     @Binding var model: String

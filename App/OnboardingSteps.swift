@@ -252,7 +252,10 @@ struct AIStep: View {
                 picker: FillPicker(title: "Transcription provider", selection: $controller.transcriptionProvider,
                                    choices: TranscriptionProvider.allCases.map { ($0, $0.displayName) }),
                 service: KeyCheck.Service(controller.transcriptionProvider),
-                apiKey: controller.transcriptionProvider.key)
+                apiKey: controller.transcriptionProvider.key,
+                modelRow: controller.transcriptionProvider.models.count > 1 ? AnyView(
+                    FillPicker(title: "Transcription model", selection: $controller.transcriptionModel,
+                               choices: controller.transcriptionProvider.models.map { ($0.id, $0.name) })) : nil)
             .onChange(of: controller.transcriptionProvider) { _, p in
                 controller.transcriptionModel = p.models.first?.id ?? ""
                 controller.rebuildPipeline()
@@ -264,7 +267,10 @@ struct AIStep: View {
                 picker: FillPicker(title: "Notes provider", selection: $controller.aiProvider,
                                    choices: AIProvider.allCases.map { ($0, $0.displayName) }),
                 service: KeyCheck.Service(controller.aiProvider),
-                apiKey: controller.aiProvider.key)
+                apiKey: controller.aiProvider.key,
+                // The same menu as Settings: the provider's own list once its key is saved, with the price.
+                modelRow: AnyView(ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)))
+            .onChange(of: controller.aiModel) { _, _ in controller.rebuildPipeline() }
             .onChange(of: controller.aiProvider) { _, _ in
                 controller.aiModel = ""
                 controller.rebuildPipeline()
@@ -290,6 +296,8 @@ private struct ProviderKeyBlock<Picker: View>: View {
     let picker: Picker
     let service: KeyCheck.Service?
     let apiKey: APIKey?
+    /// The model menu, under the provider.
+    var modelRow: AnyView? = nil
     @State private var typed = ""
     @State private var replacing = false
 
@@ -304,6 +312,14 @@ private struct ProviderKeyBlock<Picker: View>: View {
                 picker
             }
             .padding(.vertical, Onboard.rowPadding)
+            if let modelRow {
+                HStack(spacing: Space.m) {
+                    Text("Model").font(.system(size: 13.5, weight: .medium))
+                    Spacer(minLength: Space.m)
+                    modelRow
+                }
+                .padding(.vertical, Onboard.rowPadding)
+            }
             keyRow.padding(.vertical, Onboard.rowPadding)
         }
         .onChange(of: service) { _, _ in typed = ""; replacing = false }

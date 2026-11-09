@@ -17,6 +17,8 @@ final class PermissionsMonitor: ObservableObject {
     }
 
     @Published private(set) var items: [Item] = []
+    /// Permissions whose prompt this run already showed.
+    private var asked: Set<PermissionKind> = []
     private var timer: Timer?
     private let dragHelper = DragHelper()
 
@@ -50,7 +52,7 @@ final class PermissionsMonitor: ObservableObject {
                 for i in self.items.indices {
                     let kind = self.items[i].kind
                     guard let state = states[kind] else { continue }
-                    self.items[i].state = Self.remember(state, for: kind)
+                    self.items[i].state = Self.remember(state, for: kind).afterAsking(self.asked.contains(kind))
                 }
                 self.dragHelper.closeIfGranted(states)
             }
@@ -148,7 +150,9 @@ final class PermissionsMonitor: ObservableObject {
 
     func fix(_ item: Item) {
         let kind = item.kind
-        switch (kind, item.state) {
+        let state = item.state.afterAsking(asked.contains(kind))
+        if state == .notAsked { asked.insert(kind) }
+        switch (kind, state) {
         case (_, .granted):
             return
         case (.microphone, .notAsked):
