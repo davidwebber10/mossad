@@ -61,7 +61,8 @@ extension AppController {
         mirrorEngine = nil
         updateSharedServer()
         let owner = ownerName
-        Task { try? await ServerClient(c).putConfig(owner: owner) }
+        // Rehearsal never writes to a server: a setup walkthrough must not change the owner's real one.
+        if !Rehearsal.isOn { Task { try? await ServerClient(c).putConfig(owner: owner) } }
         syncNow()
     }
 

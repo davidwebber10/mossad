@@ -8,6 +8,7 @@ final class OnboardingWindow {
     static let shared = OnboardingWindow()
     private var window: NSWindow?
     private var trafficLights: TrafficLights?
+    private var closeObserver: NSObjectProtocol?
     private(set) var model: OnboardingModel?
 
     var isOpen: Bool { window?.isVisible == true }
@@ -37,6 +38,10 @@ final class OnboardingWindow {
             if !preview { w.setFrameAutosaveName("MossadOnboarding") }
             window = w
             trafficLights = TrafficLights(window: w) { _ in }
+            // The red button closes the window directly: stop the mic check and let go of the model then too.
+            closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.release() }
+            }
         }
         // A preview for screenshots stays behind the owner's windows and never takes focus.
         if preview {
@@ -48,8 +53,14 @@ final class OnboardingWindow {
     }
 
     func close() {
-        model?.stopMic()
         window?.close()
+        release()
+    }
+
+    private func release() {
+        model?.stopMic()
+        if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+        closeObserver = nil
         window = nil
         trafficLights = nil
         model = nil

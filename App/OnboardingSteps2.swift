@@ -322,7 +322,9 @@ struct DoneStep: View {
 
     /// Never in Rehearsal, and never in a UI preview: a preview build would put its own copy in the login items.
     private func setLogin(_ on: Bool) {
-        guard !Rehearsal.isOn, !CommandLine.arguments.contains("--ui-preview") else { return }
+        // Only an installed copy: a development build run by hand once put itself in the owner's login items.
+        guard !Rehearsal.isOn, !CommandLine.arguments.contains("--ui-preview"),
+              Bundle.main.bundleURL.path.hasPrefix("/Applications/") else { return }
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             UserDefaults.standard.set(true, forKey: "didSetLoginItem")
