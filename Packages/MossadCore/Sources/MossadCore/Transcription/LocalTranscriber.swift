@@ -12,6 +12,12 @@ actor LocalEngine {
         switch model {
         case .parakeetV3: try await parakeetWords(file, model: model, version: .v3)
         case .parakeetV2: try await parakeetWords(file, model: model, version: .v2)
+        case .appleSpeech:
+            #if os(macOS)
+            try await AppleSpeechEngine.words(file)
+            #else
+            throw LocalModelError.notSupported(model)
+            #endif
         }
     }
 
