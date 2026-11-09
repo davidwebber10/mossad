@@ -155,12 +155,12 @@ struct SummaryTab: View {
         } else if record.status == .written {
             LabelColumn(label: "Summary") {
                 HStack {
-                    Text(controller.languageModel != nil ? "No summary for this meeting."
+                    Text(controller.hasLanguageModel ? "No summary for this meeting."
                          : controller.aiProvider.requiresKey ? "No summary for this meeting. Add the \(controller.aiProvider.displayName) key in Settings."
                          : "No summary for this meeting. Choose a model in Settings.")
                         .foregroundStyle(Palette.secondary)
                     Spacer()
-                    if controller.languageModel == nil { Button("Retry summary") { controller.retry(record.id) } }
+                    if !controller.hasLanguageModel { Button("Retry summary") { controller.retry(record.id) } }
                 }
             }
         }

@@ -5,6 +5,8 @@ import MossadCore
 @main
 struct MossadEntry {
     static func main() {
+        // The build flag says what this copy does; the bundle id picks its folder and Keychain. They must agree.
+        if let mismatch = AppIdentity.current.mismatch(rehearsalBuild: Rehearsal.isOn) { preconditionFailure(mismatch) }
         // `--import-keys` copies API keys from the environment (Doppler) into the Keychain and exits.
         if CommandLine.arguments.contains("--import-keys") {
             let stored = importKeys(from: ProcessInfo.processInfo.environment, into: .app)
@@ -149,6 +151,7 @@ final class SecondsClock: ObservableObject {
 
 /// Makes Mossad behave like a normal app from the Dock: a click on its icon opens the window, and starting it
 /// by hand does too. A start at login stays quiet in the menu bar.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let event = NSAppleEventManager.shared().currentAppleEvent
@@ -165,6 +168,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !atLogin, !CommandLine.arguments.contains("--ui-preview"), !CommandLine.arguments.contains("--open-window"),
               !CommandLine.arguments.contains("--background") else { return }
         DispatchQueue.main.async { AppController.current?.open(AppController.current?.section ?? .meetings) }
+    }
+
+    /// Quit, logout, or a restart during a call ends the recording cleanly first, with no question. After 3 s the
+    /// app quits anyway; the next launch recovers what reached the disk.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let controller = AppController.current, controller.isRecording else { return .terminateNow }
+        Log.info("Quit during a call: ending the recording first")
+        quitPending = true
+        controller.endCallForQuit { Task { @MainActor in self.finishQuit() } }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            self.finishQuit()
+        }
+        return .terminateLater
+    }
+
+    private var quitPending = false
+
+    private func finishQuit() {
+        guard quitPending else { return }
+        quitPending = false
+        NSApp.reply(toApplicationShouldTerminate: true)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

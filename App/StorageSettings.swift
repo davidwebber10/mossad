@@ -41,7 +41,7 @@ struct StorageSettings: View {
                             }
                             .font(.system(size: 12))
                         }
-                        Button("Test connection", action: check).buttonStyle(.settings).disabled(controller.cloudArchive == nil || checking)
+                        Button("Test connection", action: check).buttonStyle(.settings).disabled(!controller.hasCloudArchive || checking)
                     }
                 }
             }
@@ -59,7 +59,7 @@ struct StorageSettings: View {
         guard !value.isEmpty else { return }
         do { try controller.keychain.set(value, for: .cloudSecret) } catch { Log.error("Saving the cloud secret failed") }
         secret = ""
-        controller.objectWillChange.send()
+        controller.keysChanged()
     }
 
     private func check() {

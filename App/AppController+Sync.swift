@@ -56,6 +56,7 @@ extension AppController {
         serverMCP = hello.mcp?.absoluteString ?? ""
         serverHasChat = hello.chat
         do { try keychain.set(c.secret, for: .serverSecret) } catch { Log.error("Saving the server secret failed") }
+        keysChanged()
         serverAddress = c.address.absoluteString
         if syncThere || syncWith == .off || !Self.hasICloud { syncWith = .server }
         syncEngine = nil
@@ -70,6 +71,7 @@ extension AppController {
     /// Goes back to iCloud; the server and its data stay as they are.
     func disconnectServer() {
         keychain.delete(.serverSecret)
+        keysChanged()
         serverAddress = ""
         serverMCP = ""
         if syncWith == .server { syncWith = Self.hasICloud ? .icloud : .off }
@@ -134,7 +136,7 @@ extension AppController {
     /// Uploads new and changed meetings and pulls what the iPhone changed. One sync at a time; a sync asked for
     /// during one runs again after it.
     func syncNow() {
-        guard !Rehearsal.isOn else { return }
+        guard !isInert else { return }
         let mirror = mirrorSync
         guard let cloud = currentSync ?? mirror else { return }
         if syncRunning { syncAgain = true; return }

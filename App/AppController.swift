@@ -99,8 +99,8 @@ final class AppController: ObservableObject {
     var personToOpen: String?
     /// The one controller, for the app delegate's Dock handling.
     nonisolated(unsafe) static weak var current: AppController?
-    /// Checks GitHub releases for new versions; never in the UI preview.
-    private(set) lazy var updater = Updater(start: !CommandLine.arguments.contains("--ui-preview") && !Rehearsal.isOn) { [weak self] in self?.isRecording ?? false }
+    /// Checks GitHub releases for new versions; never in an inert copy.
+    private(set) lazy var updater = Updater(start: !isInert) { [weak self] in self?.isRecording ?? false }
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
     /// alive, so animations check this and stop while it is hidden.
     @Published private(set) var windowVisible = false
@@ -147,8 +147,17 @@ final class AppController: ObservableObject {
     private var bookmarkKey: GlobalHotKey?
 
     let paths = Paths.live
+    /// Held for the life of the app: only the copy that has it records, recovers, and processes in this folder.
+    private var instanceLock: InstanceLock?
+    /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
+    /// and syncs nothing.
+    private(set) var isInert = false
     let library: VoiceLibrary
     let keychain = Keychain.app
+    /// What views show from the Keychain and the coach's files, read again only when it changes (+Display).
+    let keyCache = VersionedCache<APIKey, Bool>()
+    let coachProfileCache = VersionedCache<Int, CoachProfile>()
+    let coachReviewCache = VersionedCache<String, CoachReview?>()
     /// Every billed AssemblyAI and Claude request, for the costs in Analytics.
     let usage = UsageLog(directory: Paths.live.usage)
     let permissions = PermissionsMonitor()
@@ -275,7 +284,13 @@ final class AppController: ObservableObject {
         // processing, so the screens can be checked while the installed copy records a call.
         let preview = CommandLine.arguments.contains("--ui-preview")
         // Rehearsal only walks through setup: like a preview, it starts no detection, recording, processing, or sync.
-        let inert = preview || Rehearsal.isOn
+        // A second copy on the same folder would delete or cut the first copy's live recording at launch.
+        if !preview, !Rehearsal.isOn {
+            instanceLock = InstanceLock(root: paths.root)
+            if instanceLock == nil { Log.error("Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings") }
+        }
+        let inert = preview || Rehearsal.isOn || instanceLock == nil
+        isInert = inert
         // Reading the calendar records nothing, so the preview shows the real upcoming meetings too.
         if inert { refreshUpcoming() }
         if !inert {
@@ -351,15 +366,6 @@ final class AppController: ObservableObject {
             Task { await track { await self.pipeline.continueSplitMeetings() } }
         }
         Log.info("Mossad started")
-        // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
-        if preview, CommandLine.arguments.contains("--show-recording") {
-            // MOSSAD_RECORDING_PLATFORM=inPerson|zoom|teams|meet and MOSSAD_RECORDING_SECONDS pick what it shows.
-            let env = ProcessInfo.processInfo.environment
-            let platform = env["MOSSAD_RECORDING_PLATFORM"].flatMap(Platform.init(rawValue:)) ?? .meet
-            let seconds = env["MOSSAD_RECORDING_SECONDS"].flatMap(Double.init) ?? 75
-            status = .recording(platform, since: Date().addingTimeInterval(-seconds))
-        }
-        if preview, CommandLine.arguments.contains("--show-muted") { isMuted = true }
         if !inert {
             backfillSummaries()
             backfillTitlesAndDecisionTimes()
@@ -369,57 +375,7 @@ final class AppController: ObservableObject {
                 if coachEnabled { await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName)) }
             }
         }
-        // Development hook: `--regenerate-summaries` writes new summaries for today's finished meetings.
-        if !inert, CommandLine.arguments.contains("--regenerate-summaries") {
-            let today = meetings.filter { Calendar.current.isDateInToday($0.start) && $0.status == .written }.map(\.id)
-            Task { for id in today { await track { await self.pipeline.regenerateSummary(id) } } }
-        }
-        if preview { applyLivePreview() }
-        if let failure = Self.errorPreview("sync") {
-            var status = SyncStatus()
-            status.show(failure)
-            syncActivity = SyncActivity(last: Date().addingTimeInterval(-7200), status: status)
-        }
-        if preview, let update = ProcessInfo.processInfo.environment["MOSSAD_UPDATE_PREVIEW"] { updater.applyPreview(update) }
-        // Development hook: `--light` shows the UI in light mode, to check both looks.
-        if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
-        // Development hook: `MOSSAD_APPEARANCE=dark|light` picks the look of a preview, to capture both.
-        if preview, let look = ProcessInfo.processInfo.environment["MOSSAD_APPEARANCE"] {
-            NSApp.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
-        }
-        // The high-contrast appearances carry the tokens' Increase Contrast values.
-        if PreviewAccessibility.increaseContrast {
-            let dark = (NSApp.appearance ?? NSApp.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            NSApp.appearance = NSAppearance(named: dark ? .accessibilityHighContrastDarkAqua : .accessibilityHighContrastAqua)
-        }
-        // Development hook: `--open-naming` opens "Who is speaking?" for the first call that needs names.
-        if CommandLine.arguments.contains("--open-naming"), let first = callsNeedingNames.first {
-            DispatchQueue.main.async { self.openNaming(first.id) }
-        }
-        // Development hook: `--open-window [Meetings|People|Settings|Log]`, or `MenuPanel` in a preview for the
-        // menu bar panel's content in a window of its own.
-        if let i = CommandLine.arguments.firstIndex(of: "--open-window") {
-            let name = CommandLine.arguments.dropFirst(i + 1).first
-            if preview, name == "MenuPanel" {
-                DispatchQueue.main.async { self.openPanelPreview() }
-                return
-            }
-            // `--open-window Onboarding` opens setup alone; MOSSAD_ONBOARDING_STEP picks the step in a preview.
-            if name == "Onboarding" {
-                DispatchQueue.main.async { self.openOnboarding() }
-                return
-            }
-            let section = Section.allCases.first { $0.rawValue == name } ?? .meetings
-            DispatchQueue.main.async { self.open(section) }
-        }
-        // Development hook: `MOSSAD_SEARCH=<query>` opens the search palette with that query.
-        if preview, let query = ProcessInfo.processInfo.environment["MOSSAD_SEARCH"] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.openSearch(query) }
-        }
-        // Development hook: `MOSSAD_PERSON` opens that person's page.
-        if let person = ProcessInfo.processInfo.environment["MOSSAD_PERSON"] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.openPerson(person) }
-        }
+        DevHooks.run(self, inert: inert)
     }
 
     // MARK: State
@@ -476,7 +432,8 @@ final class AppController: ObservableObject {
         return records
     }
 
-    func hasKey(_ key: APIKey) -> Bool { keychain.get(key) != nil }
+    /// Cached, because views ask while they draw; `keysChanged()` after each Keychain write.
+    func hasKey(_ key: APIKey) -> Bool { keyCache.value(key, version: 0) { keychain.get(key) != nil } }
 
     /// Reads the provider's model list off the main thread when the provider or key changed, or once a day, so the
     /// "Latest" choices follow new models. A changed model rebuilds the pipeline.
@@ -587,12 +544,30 @@ final class AppController: ObservableObject {
         updater.callEnded()
     }
 
+    /// Quit during a call: closes the tracks and saves the call as recorded, so the next launch processes it.
+    /// `done` runs on the capture queue.
+    nonisolated func endCallForQuit(_ done: @escaping @Sendable () -> Void) {
+        let recorder = recorder
+        CaptureQueue.queue.async {
+            _ = recorder.end(at: Date(), trimTo: nil)
+            done()
+        }
+    }
+
     /// Development hooks for screenshots, in a preview only, with nothing recorded or sent:
     /// `MOSSAD_LIVE=<live.json>` shows those lines and some audio levels for a meeting saved as recording,
     /// `MOSSAD_MUTED=1` shows the muted note, and `MOSSAD_PROGRESS=upload|queued|summarizing` shows that progress
-    /// for each meeting being processed.
-    private func applyLivePreview() {
+    /// for each meeting being processed. `--show-recording` shows the recording state (MOSSAD_RECORDING_PLATFORM=
+    /// inPerson|zoom|teams|meet and MOSSAD_RECORDING_SECONDS pick it), and `--show-muted` the muted state.
+    /// Called by `DevHooks` in a preview only.
+    func applyLivePreview() {
         let env = ProcessInfo.processInfo.environment
+        if CommandLine.arguments.contains("--show-recording") {
+            let platform = env["MOSSAD_RECORDING_PLATFORM"].flatMap(Platform.init(rawValue:)) ?? .meet
+            let seconds = env["MOSSAD_RECORDING_SECONDS"].flatMap(Double.init) ?? 75
+            status = .recording(platform, since: Date().addingTimeInterval(-seconds))
+        }
+        if CommandLine.arguments.contains("--show-muted") { isMuted = true }
         if let path = env["MOSSAD_LIVE"], let transcript = try? LiveTranscript.load(from: URL(fileURLWithPath: path)) {
             live.show(transcript)
             for i in 0..<160 {
@@ -667,7 +642,7 @@ final class AppController: ObservableObject {
 
     /// Records a meeting in a room through the mic, until Stop. Detection ignores calls meanwhile.
     func recordInPerson() {
-        guard case .idle = status, isOn, !Rehearsal.isOn else { return }
+        guard case .idle = status, isOn, !isInert else { return }
         let start = Date()
         status = .recording(.inPerson, since: start)
         isPaused = false
@@ -829,7 +804,7 @@ final class AppController: ObservableObject {
         offUntil = 0
         resumeTimer?.invalidate()
         resumeTimer = nil
-        if !Rehearsal.isOn { detection.start() }
+        if !isInert { detection.start() }
         objectWillChange.send()
         Log.info("Mossad turned on")
     }
@@ -980,7 +955,7 @@ final class AppController: ObservableObject {
 
     /// Uploads finished recordings and removes old local copies, off the main actor.
     func syncCloud() {
-        guard !Rehearsal.isOn, let archive = cloudArchive else { return }
+        guard !isInert, let archive = cloudArchive else { return }
         let days = cloudKeepLocalDays
         cloudSyncing = true
         Task.detached(priority: .utility) {
@@ -1183,7 +1158,7 @@ final class AppController: ObservableObject {
 
     /// Processes calls waiting in the queue, such as a recording that arrived from the iPhone.
     func processPending() {
-        guard !Rehearsal.isOn else { return }
+        guard !isInert else { return }
         Task { await track { await self.pipeline.runPending() } }
     }
 

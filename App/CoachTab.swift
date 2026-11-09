@@ -13,7 +13,7 @@ struct CoachTab: View {
 
     var body: some View {
         // Read on each coach run, so a review that lands while the tab is open shows at once.
-        let review = controller.coachVersion >= 0 ? controller.coachReview(record.id) : nil
+        let review = controller.shownCoachReview(record.id)
         if let review {
             content(review)
         } else if !controller.coachEnabled {
@@ -29,7 +29,7 @@ struct CoachTab: View {
     }
 
     private func content(_ review: CoachReview) -> some View {
-        let profile = controller.coachProfile
+        let profile = controller.shownCoachProfile
         let metrics = CallMetrics(record: record, owner: controller.ownerName,
                                   history: profile.history.filter { $0.callID != record.id }.compactMap(\.delivery))
         // The stored lines only: `review.lines` stands in the first strength and improvement for an older review,

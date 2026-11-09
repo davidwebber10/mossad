@@ -9,7 +9,7 @@ extension AppController {
 
     /// Reads new calls for what the owner promised, one at a time.
     func runCommitments() {
-        guard !Rehearsal.isOn else { return }
+        guard !isInert else { return }
         guard !findingCommitments, let llm = languageModel else { return }
         if commitmentsSince == 0 { commitmentsSince = Date().addingTimeInterval(-Self.commitmentsBackfillDays * 86_400).timeIntervalSince1970 }
         findingCommitments = true
