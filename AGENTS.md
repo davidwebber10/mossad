@@ -14,7 +14,7 @@ The product goal is zero interaction. Any change that adds a click, a prompt, or
 | --- | --- |
 | `App/` | App target. Menu, main window (Meetings, People, Settings, Log), permissions UI, notifications, and `AppController`, which wires everything together. |
 | `Packages/MossadCore/` | Swift package with all logic and all unit tests. Put new logic here, not in `App/`. |
-| `Packages/MossadCore/Sources/MossadCore/Detection/` | `CallDetector` (pure state machine), `DetectionService` (2 s tick), `MeetingMatcher` (pure rules for bundle IDs, URLs, and window titles), and the probes. |
+| `Packages/MossadCore/Sources/MossadCore/Detection/` | `CallDetector` (pure state machine), `DetectionService` (2 s tick), `MeetingMatcher` (pure rules for bundle IDs, URLs, and window titles), `UnconfirmedCallWatch` (warns the owner once per mic session when an app seems to be in a call that Mossad cannot confirm; the notification's Record calls `DetectionService.forceStart`), and the probes. |
 | `.../Capture/` | `ProcessTap` (Core Audio process tap), `MicCapture` (AVAudioEngine; the app records the raw mic because voice processing goes silent when the browser also uses it), `TrackWriter`, `CallRecorder`. |
 | `.../Records/` | `CallRecord` (persisted as `call.json`), `ProcessingQueue`, `MeetingIndex`. |
 | `.../Pipeline/Pipeline.swift` | Actor that moves a call through `recorded → transcribed → identified → summarized → written`, with retries. |

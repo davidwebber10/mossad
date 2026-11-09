@@ -99,3 +99,12 @@ final class BrowserCopiesTests: XCTestCase {
         XCTAssertEqual(MeetingMatcher.trustedTabs([], browserCopies: 1), [])
     }
 }
+
+final class MeetWindowTitleTests: XCTestCase {
+    func testChromeWindowTitlesOfAMeetCall() {
+        XCTAssertTrue(MeetingMatcher.meetWindowIsMeeting("Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)"))
+        XCTAssertTrue(MeetingMatcher.meetWindowIsMeeting("Meet – Weekly sync - Camera and microphone recording - Google Chrome"))
+        XCTAssertFalse(MeetingMatcher.meetWindowIsMeeting("Google Meet - Google Chrome"))
+        XCTAssertFalse(MeetingMatcher.meetWindowIsMeeting("Inbox - Gmail - Google Chrome"))
+    }
+}

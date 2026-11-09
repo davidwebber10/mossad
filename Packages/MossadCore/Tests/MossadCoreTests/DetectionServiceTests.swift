@@ -10,8 +10,10 @@ final class FakeMic: MicUsageProbing {
 final class FakeTabs: BrowserTabProbing {
     var tabs: [String: [BrowserTab]] = [:]
     var queried: [String] = []
+    var unreadable: Set<String> = []
     func tabs(browserBundleID: String) -> [BrowserTab]? {
         queried.append(browserBundleID)
+        if unreadable.contains(browserBundleID) { return nil }
         return tabs[browserBundleID] ?? []
     }
 }
@@ -258,5 +260,66 @@ final class DetectionServiceTests: XCTestCase {
         service.tick(at: now.addingTimeInterval(8))
         service.tick(at: now.addingTimeInterval(10))
         XCTAssertEqual(events.count, 2)
+    }
+
+    // MARK: Calls Mossad cannot confirm
+
+    /// A second copy of Chrome (a test tool's) made the tab list unknown, and the owner's Meet call went unrecorded
+    /// without a word. The window titles of every copy still show the Meet window, so the call starts.
+    func testAnUnreadableTabListFallsBackToTheMeetWindowTitle() {
+        let chrome = "com.google.Chrome"
+        tabs.unreadable = [chrome]
+        windows.titles[chrome] = ["Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)"]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        XCTAssertEqual(events, [.started(platform: .meet, bundleID: chrome, at: now)])
+    }
+
+    func testAnUnreadableTabListWithTheMicOnWarnsAfterTenSeconds() {
+        let chrome = "com.google.Chrome"
+        tabs.unreadable = [chrome]
+        windows.titles[chrome] = ["Inbox - Google Chrome"]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var warnings: [UnconfirmedCall] = []
+        service.onUnconfirmed = { warnings.append($0) }
+        for i in 0...6 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(warnings, [UnconfirmedCall(bundleID: chrome, platform: nil, reason: .cannotSeeMeeting)])
+    }
+
+    func testAMeetingTabInTheBackgroundWarns() {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: false),
+                             BrowserTab(url: "https://docs.google.com/x", title: "Doc", isActive: true)]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var warnings: [UnconfirmedCall] = []
+        service.onUnconfirmed = { warnings.append($0) }
+        for i in 0...6 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(warnings, [UnconfirmedCall(bundleID: chrome, platform: .meet, reason: .meetingTabNotSelected)])
+    }
+
+    /// Dictation or a voice note in a browser with no meeting tab is not a call, and says nothing.
+    func testAKnownTabListWithNoMeetingDoesNotWarn() {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://docs.google.com/x", title: "Doc", isActive: true)]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var warnings: [UnconfirmedCall] = []
+        service.onUnconfirmed = { warnings.append($0) }
+        for i in 0...10 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(warnings, [])
+    }
+
+    func testRecordOnTheWarningStartsTheCall() {
+        let chrome = "com.google.Chrome"
+        tabs.unreadable = [chrome]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        service.forceStartNow(bundleID: chrome, platform: .meet, at: now.addingTimeInterval(1))
+        XCTAssertEqual(events, [.started(platform: .meet, bundleID: chrome, at: now.addingTimeInterval(1))])
+        service.tick(at: now.addingTimeInterval(3))
+        XCTAssertEqual(events.count, 1)
     }
 }

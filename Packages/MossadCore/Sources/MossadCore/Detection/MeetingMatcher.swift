@@ -71,6 +71,12 @@ public enum MeetingMatcher {
         return nil
     }
 
+    /// A browser window's title starts with its selected tab's title, and every copy of the browser shows its
+    /// windows to Accessibility, so a Meet call is visible here when the tab list came from the wrong copy.
+    public static func meetWindowIsMeeting(_ title: String) -> Bool {
+        !meetTabLeftMeeting(title: title)
+    }
+
     public static func meetTabLeftMeeting(title: String) -> Bool {
         let t = title.trimmingCharacters(in: .whitespaces)
         return !(t.hasPrefix("Meet - ") || t.hasPrefix("Meet – "))

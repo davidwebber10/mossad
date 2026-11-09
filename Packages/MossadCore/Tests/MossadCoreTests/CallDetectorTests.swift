@@ -157,3 +157,26 @@ final class CallDetectorTests: XCTestCase {
         XCTAssertEqual(d.currentBundleID, "com.google.Chrome")
     }
 }
+
+final class CallDetectorForceTests: XCTestCase {
+    let t0 = Date(timeIntervalSince1970: 4_000_000)
+
+    /// The owner pressed Record on the warning: the call starts at once, and only the mic can end it, because the
+    /// meeting itself was never seen.
+    func testAForcedCallEndsOnlyWhenTheMicStops() {
+        var d = CallDetector()
+        XCTAssertEqual(d.force(platform: .meet, bundleID: "com.google.Chrome", at: t0),
+                       .started(platform: .meet, bundleID: "com.google.Chrome", at: t0))
+        let gone = MeetingCandidate(platform: .meet, bundleID: "com.google.Chrome", micActive: true, meetingPresent: false)
+        for i in 1...30 { XCTAssertNil(d.process(DetectionSnapshot(time: t0.addingTimeInterval(Double(i) * 2), candidates: [gone]))) }
+        let quiet = MeetingCandidate(platform: .meet, bundleID: "com.google.Chrome", micActive: false, meetingPresent: nil)
+        XCTAssertNil(d.process(DetectionSnapshot(time: t0.addingTimeInterval(62), candidates: [quiet])))
+        if case .ended = d.process(DetectionSnapshot(time: t0.addingTimeInterval(70), candidates: [quiet])) {} else { XCTFail("should end") }
+    }
+
+    func testForceDoesNothingDuringACall() {
+        var d = CallDetector()
+        _ = d.force(platform: .meet, bundleID: "com.google.Chrome", at: t0)
+        XCTAssertNil(d.force(platform: .zoom, bundleID: "us.zoom.xos", at: t0))
+    }
+}

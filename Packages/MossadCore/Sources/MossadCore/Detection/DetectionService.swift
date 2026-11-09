@@ -26,6 +26,9 @@ public final class DetectionService: @unchecked Sendable {
     private var tabCache: [String: (time: Date, tabs: [BrowserTab]?)] = [:]
     private var tickTime = Date()
     private var lastLogged: [String: String] = [:]
+    private var watch = UnconfirmedCallWatch()
+    /// Apps in this tick that use the mic like a call while no meeting can be confirmed.
+    private var suspects: [UnconfirmedCall] = []
     /// The current call's meeting ID from its browser tab, for matching the calendar invite.
     public private(set) var meetingID: String?
 
@@ -42,6 +45,8 @@ public final class DetectionService: @unchecked Sendable {
     public var onCallProcesses: ([AudioObjectID]) -> Void = { _ in }
     /// Called when the person mutes or unmutes in the call app, during a call.
     public var onMuteChange: (Bool) -> Void = { _ in }
+    /// Called once per mic session when an app seems to be in a call that Mossad cannot confirm, so nothing records.
+    public var onUnconfirmed: (UnconfirmedCall) -> Void = { _ in }
 
     public init(mic: MicUsageProbing, tabs: BrowserTabProbing, windows: WindowTitleProbing, mute: MuteProbing? = nil,
                 detector: CallDetector = CallDetector(), tick: TimeInterval = 2) {
@@ -89,14 +94,32 @@ public final class DetectionService: @unchecked Sendable {
             }
             onEvent(event)
         }
+        if let warning = watch.update(at: time, suspects: suspects, inCall: detector.isInCall) {
+            Log.info("\(warning.bundleID) uses the mic, but Mossad cannot confirm a meeting (\(warning.reason.rawValue)); asking the owner")
+            onUnconfirmed(warning)
+        }
         if detector.isInCall {
             onCallProcesses(audioProcessIDs)
             checkMute(at: time)
         }
     }
 
+    /// Starts recording the app now, for the owner's Record on a warning. Runs on the detection queue.
+    public func forceStart(bundleID: String, platform: Platform) {
+        queue.async { [weak self] in self?.forceStartNow(bundleID: bundleID, platform: platform, at: Date()) }
+    }
+
+    func forceStartNow(bundleID: String, platform: Platform, at time: Date) {
+        guard !isSuspended, let event = detector.force(platform: platform, bundleID: bundleID, at: time) else { return }
+        Log.info("The owner chose to record \(bundleID) as \(platform.displayName)")
+        currentPlatform = platform
+        meetingID = nil
+        onEvent(event)
+    }
+
     public func snapshot(at time: Date) -> DetectionSnapshot {
         tickTime = time
+        suspects = []
         let processes = mic.processes()
         lastProcesses = processes
         activeMeetingIDs = [:]
@@ -130,6 +153,9 @@ public final class DetectionService: @unchecked Sendable {
             let titles = windows.windowTitles(bundleID: group)
             if isCurrent, let titles { logChange("zoom", "zoom windows: \(titles)") }
             let present = titles.map { $0.contains(where: MeetingMatcher.zoomWindowIsMeeting) }
+            if micActive, !isCurrent, present == false {
+                suspects.append(UnconfirmedCall(bundleID: group, platform: .zoom, reason: .noMeetingWindow))
+            }
             return MeetingCandidate(platform: .zoom, bundleID: group, micActive: micActive, meetingPresent: present)
         case .teamsApp:
             let titles = windows.windowTitles(bundleID: group)
@@ -153,8 +179,16 @@ public final class DetectionService: @unchecked Sendable {
 
     private func browserCandidate(group: String, micActive: Bool, isCurrent: Bool) -> MeetingCandidate? {
         guard let list = readTabs(group, isCurrent: isCurrent) else {
-            // Unreadable tabs never start a call; during a call they count as unknown.
-            guard isCurrent, let platform = currentPlatform else { return nil }
+            // The window titles of every copy of the browser can still show a Meet call (Accessibility).
+            if !isCurrent || currentPlatform == .meet,
+               windows.windowTitles(bundleID: group)?.contains(where: MeetingMatcher.meetWindowIsMeeting) == true {
+                return MeetingCandidate(platform: .meet, bundleID: group, micActive: micActive, meetingPresent: true)
+            }
+            // Otherwise unreadable tabs never start a call; during a call they count as unknown.
+            guard isCurrent, let platform = currentPlatform else {
+                if micActive { suspects.append(UnconfirmedCall(bundleID: group, platform: nil, reason: .cannotSeeMeeting)) }
+                return nil
+            }
             return MeetingCandidate(platform: platform, bundleID: group, micActive: micActive, meetingPresent: nil)
         }
         let meetingTabs = list.compactMap { tab -> (Platform, BrowserTab)? in
@@ -169,7 +203,12 @@ public final class DetectionService: @unchecked Sendable {
         }
         // To start a call the meeting tab must be the selected tab: a pinned background Teams or Meet tab
         // must not turn dictation or another site's mic use into a call.
-        guard let first = meetingTabs.first(where: { $0.1.isActive }) else { return nil }
+        guard let first = meetingTabs.first(where: { $0.1.isActive }) else {
+            if micActive, let background = meetingTabs.first {
+                suspects.append(UnconfirmedCall(bundleID: group, platform: background.0, reason: .meetingTabNotSelected))
+            }
+            return nil
+        }
         activeMeetingIDs[group] = MeetingMatcher.meetingID(forTabURL: first.1.url)
         return MeetingCandidate(platform: first.0, bundleID: group, micActive: micActive, meetingPresent: true)
     }

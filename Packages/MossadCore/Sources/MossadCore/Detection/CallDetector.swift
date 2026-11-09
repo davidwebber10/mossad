@@ -54,12 +54,26 @@ public struct CallDetector: Sendable {
     private var lastMicActive: Date?
     private var goneCount = 0
     private var goneSince: Date?
+    /// Started by the owner's Record on a warning: the meeting was never seen, so only the mic can end the call.
+    private var forced = false
 
     public init(config: Config = .init()) {
         self.config = config
     }
 
     public var isInCall: Bool { currentBundleID != nil }
+
+    /// Starts a call now, for the owner's Record on a warning. Nil during a call.
+    public mutating func force(platform: Platform, bundleID: String, at time: Date) -> DetectorEvent? {
+        guard currentBundleID == nil else { return nil }
+        currentBundleID = bundleID
+        currentPlatform = platform
+        lastMicActive = time
+        goneCount = 0
+        goneSince = nil
+        forced = true
+        return .started(platform: platform, bundleID: bundleID, at: time)
+    }
 
     public mutating func process(_ snapshot: DetectionSnapshot) -> DetectorEvent? {
         guard let bundleID = currentBundleID else {
@@ -73,7 +87,9 @@ public struct CallDetector: Sendable {
         }
 
         let candidate = snapshot.candidates.first { $0.bundleID == bundleID }
-        if candidate == nil || candidate?.meetingPresent == false {
+        if forced {
+            // The meeting was never seen, so its absence says nothing.
+        } else if candidate == nil || candidate?.meetingPresent == false {
             goneCount += 1
             if goneSince == nil { goneSince = snapshot.time }
             let micInUse = candidate?.micActive == true
@@ -99,6 +115,7 @@ public struct CallDetector: Sendable {
         lastMicActive = nil
         goneCount = 0
         goneSince = nil
+        forced = false
         return .ended(at: time, trimTo: trimTo)
     }
 }

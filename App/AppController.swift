@@ -281,6 +281,10 @@ final class AppController: ObservableObject {
         if !inert {
             enableLaunchAtLoginOnce()
             notifier.onOpen = { [weak self] callID in self?.openNaming(callID) }
+            notifier.onRecord = { [weak self] bundleID, platform in
+                guard let self, case .idle = self.status else { return }
+                self.detection.forceStart(bundleID: bundleID, platform: platform)
+            }
 
             let detection = detection
             let recorder = recorder
@@ -298,6 +302,12 @@ final class AppController: ObservableObject {
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
                 CaptureQueue.queue.async { self.capture(event, processIDs: ids, meetingID: meetingID, recorder: recorder) }
                 Task { @MainActor in self.show(event) }
+            }
+            detection.onUnconfirmed = { @Sendable [weak self] call in
+                Task { @MainActor in
+                    guard let self, case .idle = self.status else { return }
+                    self.notifier.postUnconfirmed(call)
+                }
             }
             detection.onMuteChange = { @Sendable [weak self] muted in
                 CaptureQueue.queue.async { recorder.setMuted(muted) }
@@ -1110,6 +1120,7 @@ final class AppController: ObservableObject {
             } catch {
                 Log.error("Could not start recording: \(error)")
                 Task { @MainActor in
+                    self.notifier.postCannotRecord(FriendlyError(error, context: .recording), platform: platform)
                     // Only clear the status of this call, never of a newer one.
                     if case .recording(_, let since) = self.status, since == at { self.status = .idle }
                 }
@@ -1144,6 +1155,7 @@ final class AppController: ObservableObject {
         if case .recording(.inPerson, _) = status { return }
         switch event {
         case .started(let platform, _, let at):
+            notifier.clearUnconfirmed()
             status = .recording(platform, since: at)
             isPaused = false
             isMuted = false
