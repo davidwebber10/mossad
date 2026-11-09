@@ -38,7 +38,30 @@ final class CallDetectorTests: XCTestCase {
         started(&d)
         XCTAssertNil(d.process(snap(2, [meet(mic: true, present: false)])))
         XCTAssertNil(d.process(snap(4, [meet(mic: true, present: nil)])))
-        XCTAssertEqual(d.process(snap(6, [meet(mic: true, present: false)])), .ended(at: t0.addingTimeInterval(6), trimTo: nil))
+        XCTAssertEqual(d.process(snap(6, [meet(mic: false, present: false)])), .ended(at: t0.addingTimeInterval(6), trimTo: nil))
+    }
+
+    /// Chrome once answered with no Meet tab for a few seconds at a time while the call went on, and each answer
+    /// ended the call; the pieces under a minute were discarded. With the mic still in use, a missing tab must
+    /// last before it ends the call.
+    func testAMissingTabWhileTheMicIsInUseDoesNotEndTheCallAtOnce() {
+        var d = CallDetector()
+        started(&d)
+        for s in stride(from: 2.0, through: 30, by: 2) {
+            XCTAssertNil(d.process(snap(s, [meet(mic: true, present: false)])), "ended at \(s)")
+        }
+        XCTAssertEqual(d.process(snap(32, [meet(mic: true, present: false)])), .ended(at: t0.addingTimeInterval(32), trimTo: nil))
+    }
+
+    func testATabThatComesBackKeepsTheCall() {
+        var d = CallDetector()
+        started(&d)
+        for s in stride(from: 2.0, through: 20, by: 2) { XCTAssertNil(d.process(snap(s, [meet(mic: true, present: false)]))) }
+        XCTAssertNil(d.process(snap(22, [meet(mic: true, present: true)])))
+        for s in stride(from: 24.0, through: 50, by: 2) {
+            XCTAssertNil(d.process(snap(s, [meet(mic: true, present: false)])), "ended at \(s)")
+        }
+        XCTAssertTrue(d.isInCall)
     }
 
     func testDoesNotStartWithoutMic() {

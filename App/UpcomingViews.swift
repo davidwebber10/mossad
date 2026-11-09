@@ -55,7 +55,8 @@ struct UpcomingRow: View {
     /// " · Zoom · Will record": Mossad records any call it detects; an invite with no call link is only a reminder.
     private var detail: String {
         guard let p = meeting.platform else { return " · No call link" }
-        return " · \(p.shortName)" + (controller.isOn ? " · Will record" : "")
+        guard controller.isOn else { return " · \(p.shortName)" }
+        return " · \(p.shortName) · " + (controller.noRecord.choice(for: meeting) == .record ? "Will record" : "Won't record")
     }
 }
 
@@ -75,10 +76,20 @@ struct UpcomingDetailView: View {
                         if let p = meeting.platform { Text("· \(p.displayName)") }
                     }
                     .font(.system(size: 13)).foregroundStyle(.secondary)
-                    if let link = meeting.link {
-                        Button("Join \(meeting.platform?.displayName ?? "the call")") { NSWorkspace.shared.open(link) }
-                            .buttonStyle(.borderedProminent).padding(.top, 4)
+                    HStack(spacing: 8) {
+                        if let link = meeting.link {
+                            Button("Join \(meeting.platform?.displayName ?? "the call")") { NSWorkspace.shared.open(link) }
+                                .buttonStyle(.borderedProminent)
+                        }
+                        Picker("Recording", selection: Binding(get: { controller.noRecord.choice(for: meeting) },
+                                                               set: { controller.setRecording($0, for: meeting) })) {
+                            Text("Record").tag(RecordingChoice.record)
+                            Text("Don't record this meeting").tag(RecordingChoice.skipThisMeeting)
+                            Text("Don't record this series").tag(RecordingChoice.skipSeries)
+                        }
+                        .labelsHidden().pickerStyle(.menu).fixedSize()
                     }
+                    .padding(.top, 4)
                 }
                 if !meeting.attendees.isEmpty {
                     Card("Invited") {

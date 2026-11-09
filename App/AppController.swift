@@ -107,7 +107,12 @@ final class AppController: ObservableObject {
     private var occlusionObserver: NSObjectProtocol?
     /// Calendar events still to come, for the Upcoming list and the menu bar.
     /// The chosen calendars' events for the next days; `upcoming` filters them against the meetings.
-    @Published private(set) var calendarEvents: [CalendarEventInfo] = []
+    @Published private(set) var calendarEvents: [CalendarEventInfo] = [] {
+        didSet { noRecordGate.update(events: calendarEvents) }
+    }
+    /// The upcoming meetings the owner chose not to record.
+    @Published private(set) var noRecord = NoRecordBook()
+    private let noRecordGate = NoRecordGate()
     /// Calls still to come, without the ones being recorded or already recorded.
     var upcoming: [UpcomingMeeting] { UpcomingMeeting.from(calendarEvents, recorded: meetings) }
     /// The Mac's calendars, for the choice in Settings.
@@ -253,6 +258,8 @@ final class AppController: ObservableObject {
             syncWith = .off
         }
         shareBook = ShareBook.load(from: paths.shares)
+        noRecord = NoRecordBook.load(from: paths.noRecord)
+        noRecordGate.update(book: noRecord)
         // The chosen calendars apply before anything matches a call to an invite.
         calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
@@ -276,6 +283,11 @@ final class AppController: ObservableObject {
                 let ids = detection.audioProcessIDs
                 let meetingID = detection.meetingID
                 guard let self else { return }
+                // Before anything records or streams: a meeting the owner marked stays off the record.
+                if case .started(let platform, _, let at) = event, self.noRecordGate.blocks(platform: platform, meetingID: meetingID, at: at) {
+                    Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
+                    return
+                }
                 // Recorder commands go straight from the detection queue to the capture queue, so they keep
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
                 CaptureQueue.queue.async { self.capture(event, processIDs: ids, meetingID: meetingID, recorder: recorder) }
@@ -763,6 +775,13 @@ final class AppController: ObservableObject {
         scheduleTurnOn()
         objectWillChange.send()
         Log.info("Mossad turned off" + (date.map { " until \($0.formatted())" } ?? ""))
+    }
+
+    func setRecording(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
+        noRecord.set(choice, for: meeting)
+        noRecord.removeExpired(now: Date())
+        noRecordGate.update(book: noRecord)
+        do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the recording choice failed: \(error)") }
     }
 
     func turnOn() {

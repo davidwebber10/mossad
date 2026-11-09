@@ -32,6 +32,8 @@ public struct Paths: Sendable {
     public var sync: URL { root.appendingPathComponent("Sync") }
     /// The owner's share links, so they can be updated or stopped.
     public var shares: URL { root.appendingPathComponent("Shares") }
+    /// The upcoming meetings the owner chose not to record.
+    public var noRecord: URL { root.appendingPathComponent("NoRecord") }
     /// `usage.jsonl`: each billed request, for the costs in Analytics.
     public var usage: URL { root.appendingPathComponent("Usage") }
 
