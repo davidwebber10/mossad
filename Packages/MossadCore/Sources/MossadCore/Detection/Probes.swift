@@ -8,10 +8,11 @@ public struct AudioProcess: Equatable, Sendable {
     public var objectID: AudioObjectID
     public var pid: pid_t
     public var bundleID: String
-    public var isRunningInput: Bool
-    public var isRunningOutput: Bool
+    /// Nil when the state could not be read, or was not read: unknown is never "not running".
+    public var isRunningInput: Bool?
+    public var isRunningOutput: Bool?
 
-    public init(objectID: AudioObjectID, pid: pid_t, bundleID: String, isRunningInput: Bool, isRunningOutput: Bool) {
+    public init(objectID: AudioObjectID, pid: pid_t, bundleID: String, isRunningInput: Bool?, isRunningOutput: Bool?) {
         self.objectID = objectID
         self.pid = pid
         self.bundleID = bundleID
@@ -22,6 +23,13 @@ public struct AudioProcess: Equatable, Sendable {
 
 public protocol MicUsageProbing: AnyObject {
     func processes() -> [AudioProcess]
+    /// The same list for one detection tick; nil when the list itself could not be read. Outside a call the probe
+    /// may skip states that cannot matter (see `MicUsageProbe`).
+    func scan(callActive: Bool) -> [AudioProcess]?
+}
+
+public extension MicUsageProbing {
+    func scan(callActive: Bool) -> [AudioProcess]? { processes() }
 }
 
 public protocol BrowserTabProbing: AnyObject {

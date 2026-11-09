@@ -20,6 +20,10 @@ public final class DetectionService: @unchecked Sendable {
     private var muteTimer: DispatchSourceTimer?
     private var currentPlatform: Platform?
     private var lastProcesses: [AudioProcess] = []
+    static let tickLeewayMilliseconds = 300
+    /// The last known mic and sound state of each app: a state that cannot be read keeps its last known value.
+    private var lastMic: [String: Bool] = [:]
+    private var lastOutput: [String: Bool] = [:]
     private var activeMeetingIDs: [String: String] = [:]
     /// During a call the tab read is the costly part of a tick (AppleScript on the main thread), and the mic
     /// already shows when the call ends; so the tabs of the call's browser are read at most this often.
@@ -106,7 +110,8 @@ public final class DetectionService: @unchecked Sendable {
     public func start() {
         guard timer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: interval)
+        // The leeway lets the system fire the tick together with other timers; a call still starts within seconds.
+        timer.schedule(deadline: .now(), repeating: interval, leeway: .milliseconds(Self.tickLeewayMilliseconds))
         timer.setEventHandler { [weak self] in self?.tick(at: Date()) }
         timer.resume()
         self.timer = timer
@@ -145,6 +150,8 @@ public final class DetectionService: @unchecked Sendable {
         currentPlatform = nil
         meetingID = nil
         lastProcesses = []
+        lastMic = [:]
+        lastOutput = [:]
         activeMeetingIDs = [:]
         signAtStart = []
         tabCache = [:]
@@ -234,7 +241,7 @@ public final class DetectionService: @unchecked Sendable {
     func forceStartNow(bundleID: String, platform: Platform, at time: Date) {
         guard !isSuspended else { return }
         // A warning can be answered long after it came; an app that no longer uses the mic is not in a call.
-        guard mic.processes().contains(where: { $0.isRunningInput && Self.groupID(for: $0.bundleID) == bundleID }) else {
+        guard mic.processes().contains(where: { $0.isRunningInput == true && Self.groupID(for: $0.bundleID) == bundleID }) else {
             Log.info("Not recording \(bundleID): it no longer uses the mic")
             return
         }
@@ -256,19 +263,28 @@ public final class DetectionService: @unchecked Sendable {
     public func snapshot(at time: Date) -> DetectionSnapshot {
         tickTime = time
         suspects = []
-        let processes = mic.processes()
+        // A list that cannot be read is unknown: the last list stays, so a live call does not lose its mic.
+        let processes = mic.scan(callActive: detector.isInCall) ?? lastProcesses
         lastProcesses = processes
         activeMeetingIDs = [:]
         signAtStart = []
-        var micByApp: [String: Bool] = [:]
-        var outputByApp: [String: Bool] = [:]
+        var inputs: [String: [Bool?]] = [:]
+        var outputs: [String: [Bool?]] = [:]
         var order: [String] = []
         for p in processes {
             guard let group = Self.groupID(for: p.bundleID) else { continue }
-            if micByApp[group] == nil { order.append(group) }
-            micByApp[group] = (micByApp[group] ?? false) || p.isRunningInput
-            outputByApp[group] = (outputByApp[group] ?? false) || p.isRunningOutput
+            if inputs[group] == nil { order.append(group) }
+            inputs[group, default: []].append(p.isRunningInput)
+            outputs[group, default: []].append(p.isRunningOutput)
         }
+        var micByApp: [String: Bool] = [:]
+        var outputByApp: [String: Bool] = [:]
+        for group in order {
+            micByApp[group] = Self.anyRunning(inputs[group] ?? []) ?? lastMic[group] ?? false
+            outputByApp[group] = Self.anyRunning(outputs[group] ?? []) ?? lastOutput[group] ?? false
+        }
+        lastMic = micByApp
+        lastOutput = outputByApp
 
         let current = detector.currentBundleID
         // Every WebKit app plays and records through the shared WebKit GPU process, which counts as Safari's.
@@ -451,6 +467,13 @@ public final class DetectionService: @unchecked Sendable {
         }
         if let recent, abs(tickTime.timeIntervalSince(recent.time)) < Self.labelsFreshFor { return recent.labels }
         return mute?.labels(bundleID: group, platform: .teams, meetingID: nil)
+    }
+
+    /// Whether any process of an app runs: true with one "yes", false only when every answer is a "no", and nil
+    /// (unknown) when a read failed and no other process says "yes".
+    static func anyRunning(_ states: [Bool?]) -> Bool? {
+        if states.contains(true) { return true }
+        return states.contains(where: { $0 == nil }) ? nil : false
     }
 
     static func teamsControls(in labels: [String]) -> Bool {

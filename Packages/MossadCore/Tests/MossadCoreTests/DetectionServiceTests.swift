@@ -4,7 +4,14 @@ import CoreAudio
 
 final class FakeMic: MicUsageProbing {
     var list: [AudioProcess] = []
+    /// The list itself cannot be read.
+    var unreadable = false
+    var callActiveSeen: [Bool] = []
     func processes() -> [AudioProcess] { list }
+    func scan(callActive: Bool) -> [AudioProcess]? {
+        callActiveSeen.append(callActive)
+        return unreadable ? nil : list
+    }
 }
 
 final class FakeTabs: BrowserTabProbing {
@@ -52,8 +59,55 @@ final class DetectionServiceTests: XCTestCase {
     lazy var service = DetectionService(mic: mic, tabs: tabs, windows: windows)
     let now = Date(timeIntervalSince1970: 2_000_000)
 
-    func proc(_ id: AudioObjectID, _ bundle: String, input: Bool, output: Bool = true) -> AudioProcess {
+    func proc(_ id: AudioObjectID, _ bundle: String, input: Bool?, output: Bool? = true) -> AudioProcess {
         AudioProcess(objectID: id, pid: pid_t(id), bundleID: bundle, isRunningInput: input, isRunningOutput: output)
+    }
+
+    /// Unknown is not false: a mic state that cannot be read keeps a Meet call, which a released mic ends in 6 s.
+    func testAMicStateThatCannotBeReadDoesNotEndTheCall() {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        mic.list = [proc(1, chrome, input: true)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        XCTAssertEqual(events.count, 1)
+        mic.list = [proc(1, chrome, input: nil, output: nil)]
+        for i in 1...10 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 1, "the call must go on while the mic state is unknown")
+        mic.unreadable = true
+        for i in 11...20 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 1, "the call must go on while the list is unknown")
+        mic.unreadable = false
+        mic.list = [proc(1, chrome, input: false)]
+        for i in 21...26 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 2, "a known released mic ends the call")
+    }
+
+    func testAnUnknownMicStateNeverStartsACall() {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        mic.list = [proc(1, chrome, input: nil)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    func testTheScanLearnsWhetherACallRuns() {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        mic.list = [proc(1, chrome, input: true)]
+        service.tick(at: now)
+        service.tick(at: now.addingTimeInterval(2))
+        XCTAssertEqual(mic.callActiveSeen, [false, true])
+    }
+
+    func testOneProcessThatRunsWinsOverOneThatIsUnknown() {
+        XCTAssertEqual(DetectionService.anyRunning([nil, true]), true)
+        XCTAssertNil(DetectionService.anyRunning([false, nil]))
+        XCTAssertEqual(DetectionService.anyRunning([false, false]), false)
+        XCTAssertEqual(DetectionService.anyRunning([]), false)
     }
 
     /// An in-person recording owns the mic, so the tick skips the Core Audio scan it would throw away.
