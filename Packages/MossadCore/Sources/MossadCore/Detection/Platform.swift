@@ -24,4 +24,6 @@ public enum AppKind: Equatable, Sendable {
     case teamsApp
     /// A browser, identified by its main bundle ID (helpers map to their browser).
     case browser(String)
+    /// A browser that can hold a call but whose tabs Mossad cannot read (Firefox, for example).
+    case unreadableBrowser(String)
 }

@@ -244,6 +244,14 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var markers: [TranscriptMarker] = []
     /// Where the recording is archived in the bucket, once uploaded.
     public var cloudKey: String?
+    /// The size in bytes of the recording that was uploaded to `cloudKey`. A local recording of another size is
+    /// not in the cloud (a merge made a new one), so it is uploaded again and kept until then.
+    public var cloudSize: Int64?
+    /// The transcription service's job per track ("me", "them") while it runs, so a restart polls that job
+    /// instead of paying for a new one.
+    public var transcriptionJobs: [String: String]?
+    /// True when the note was written without a summary after the summary failed; a later run tries again.
+    public var summaryMissing: Bool?
     /// How many people spoke, when the person said so for a new transcription.
     public var speakersExpected: Int?
     /// When the owner was muted in the call app; silence goes over these spans in the mic track.
@@ -271,11 +279,11 @@ public struct CallRecord: Codable, Equatable, Sendable {
 
     public static let fileName = "call.json"
 
-    public func save(to dir: URL) throws {
+    public func save(to dir: URL, fileName: String = CallRecord.fileName) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(self).write(to: dir.appendingPathComponent(Self.fileName), options: .atomic)
+        try encoder.encode(self).write(to: dir.appendingPathComponent(fileName), options: .atomic)
     }
 
     public static func load(from dir: URL, fileName: String = fileName) throws -> CallRecord {
@@ -323,6 +331,9 @@ extension CallRecord {
         parts = try c.decodeIfPresent([CallPart].self, forKey: .parts) ?? []
         markers = try c.decodeIfPresent([TranscriptMarker].self, forKey: .markers) ?? []
         cloudKey = try c.decodeIfPresent(String.self, forKey: .cloudKey)
+        cloudSize = try c.decodeIfPresent(Int64.self, forKey: .cloudSize)
+        transcriptionJobs = try c.decodeIfPresent([String: String].self, forKey: .transcriptionJobs)
+        summaryMissing = try c.decodeIfPresent(Bool.self, forKey: .summaryMissing)
         speakersExpected = try c.decodeIfPresent(Int.self, forKey: .speakersExpected)
         muteSpans = try c.decodeIfPresent([MuteSpan].self, forKey: .muteSpans) ?? []
     }

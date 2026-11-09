@@ -27,9 +27,12 @@ public final class BrowserTabProbe: BrowserTabProbing, @unchecked Sendable {
         let source = Self.script(browserBundleID: browserBundleID)
         let began = Date()
         let output = onMain { () -> String? in
+            // Compiled once per browser, so each later read costs the main thread only the Apple events.
+            let script = CompiledScripts.shared[browserBundleID] ?? NSAppleScript(source: source)
             var error: NSDictionary?
-            let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
+            let result = script?.executeAndReturnError(&error)
             if let error { Log.debug("Tab probe \(browserBundleID) failed: \(error)") }
+            CompiledScripts.shared[browserBundleID] = error == nil ? script : nil
             return result?.stringValue
         } ?? nil
         let slow = Date().timeIntervalSince(began) > Self.slowRead
@@ -43,24 +46,47 @@ public final class BrowserTabProbe: BrowserTabProbing, @unchecked Sendable {
             }
         }
         guard let output else { return nil }
-        let list = output.split(separator: "\n").map { line in
-            let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-            // Titles may contain tabs: the URL is first and the active flag is last.
-            let title = parts.count > 2 ? parts[1..<(parts.count - 1)].joined(separator: "\t") : (parts.count > 1 ? parts[1] : "")
-            return BrowserTab(url: parts.first ?? "", title: title, isActive: parts.count > 2 && parts.last == "1")
-        }
+        let list = Self.parse(output)
         let copies = NSRunningApplication.runningApplications(withBundleIdentifier: browserBundleID).count
         let trusted = MeetingMatcher.trustedTabs(list, browserCopies: copies)
         if trusted == nil { Log.debug("\(copies) copies of \(browserBundleID) are running; a list with no meeting is unknown") }
         return trusted
     }
+
+    public func automationDenied(browserBundleID: String) -> Bool {
+        lock.withLock { blocked.contains(browserBundleID) }
+    }
 }
 
 extension BrowserTabProbe {
+    /// One line per tab: the URL, the title, and "1" for the selected tab of the front window, split by tab characters.
+    static func parse(_ output: String) -> [BrowserTab] {
+        output.split(separator: "\n").map { line in
+            let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            // Titles may contain tabs: the URL is first and the active flag is last.
+            let title = parts.count > 2 ? parts[1..<(parts.count - 1)].joined(separator: "\t") : (parts.count > 1 ? parts[1] : "")
+            return BrowserTab(url: parts.first ?? "", title: title, isActive: parts.count > 2 && parts.last == "1")
+        }
+    }
+
     static func script(browserBundleID: String) -> String {
         let safari = browserBundleID == "com.apple.Safari"
+        let arc = browserBundleID.lowercased() == "company.thebrowser.browser"
         let titleProperty = safari ? "name" : "title"
-        let activeIndex = safari ? "index of current tab of w" : "active tab index of w"
+        // Each browser names the selected tab its own way: Chrome and its family give its index, Safari its tab,
+        // and Arc its tab with an id (Arc has no `active tab index`).
+        let readActive: String
+        let isActive: String
+        if safari {
+            readActive = "set ai to index of current tab of w"
+            isActive = "i = ai"
+        } else if arc {
+            readActive = "set ai to id of active tab of w\n                set ids to id of every tab of w"
+            isActive = "(item i of ids) = ai"
+        } else {
+            readActive = "set ai to active tab index of w"
+            isActive = "i = ai"
+        }
         // Only the selected tab of the front window counts as active. A short timeout keeps a busy
         // browser from holding the main thread (the default Apple event timeout is two minutes).
         // Inside the tell block `tab` means the browser's tab class, so the separators are made before it.
@@ -73,12 +99,12 @@ extension BrowserTabProbe {
                 set wi to 0
                 repeat with w in windows
                     set wi to wi + 1
-                    set ai to \(activeIndex)
+                    \(readActive)
                     set urls to URL of every tab of w
                     set titles to \(titleProperty) of every tab of w
                     repeat with i from 1 to count of urls
                         set flag to "0"
-                        if wi = 1 and i = ai then set flag to "1"
+                        if wi = 1 and \(isActive) then set flag to "1"
                         set out to out & (item i of urls) & sep & (item i of titles) & sep & flag & nl
                     end repeat
                 end repeat
@@ -96,6 +122,10 @@ extension BrowserTabProbe {
     }
 }
 
+@MainActor private enum CompiledScripts {
+    static var shared: [String: NSAppleScript] = [:]
+}
+
 /// NSAppleScript must run on the main thread. Detection never waits more than `timeout` for it: a busy
 /// or stuck main thread makes the answer unknown (nil) instead of stopping detection.
 func onMain<T: Sendable>(timeout: TimeInterval = 5, _ body: @escaping @MainActor () -> T) -> T? {
@@ -103,10 +133,13 @@ func onMain<T: Sendable>(timeout: TimeInterval = 5, _ body: @escaping @MainActor
     let result = MainResult<T>()
     let done = DispatchSemaphore(value: 0)
     DispatchQueue.main.async {
+        // Nobody waits for an answer that comes after the timeout, so the work is not done at all.
+        guard !result.abandoned else { return }
         result.value = MainActor.assumeIsolated { body() }
         done.signal()
     }
     guard done.wait(timeout: .now() + timeout) == .success else {
+        result.abandoned = true
         Log.error("Main thread did not answer within \(Int(timeout)) s; tabs are unknown")
         return nil
     }
@@ -115,6 +148,16 @@ func onMain<T: Sendable>(timeout: TimeInterval = 5, _ body: @escaping @MainActor
 
 /// Written on the main thread before the semaphore signals, read after the wait.
 private final class MainResult<T>: @unchecked Sendable {
-    var value: T?
+    private let lock = NSLock()
+    private var _value: T?
+    private var _abandoned = false
+    var value: T? {
+        get { lock.withLock { _value } }
+        set { lock.withLock { _value = newValue } }
+    }
+    var abandoned: Bool {
+        get { lock.withLock { _abandoned } }
+        set { lock.withLock { _abandoned = newValue } }
+    }
 }
 #endif

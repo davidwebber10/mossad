@@ -155,12 +155,15 @@ struct SummaryTab: View {
         } else if record.status == .written {
             LabelColumn(label: "Summary") {
                 HStack {
-                    Text(controller.languageModel != nil ? "No summary for this meeting."
-                         : controller.aiProvider.requiresKey ? "No summary for this meeting. Add the \(controller.aiProvider.displayName) key in Settings."
-                         : "No summary for this meeting. Choose a model in Settings.")
+                    let model = controller.hasLanguageModel
+                    Text(!model ? (controller.aiProvider.requiresKey ? "No summary for this meeting. Add the \(controller.aiProvider.displayName) key in Settings."
+                                   : "No summary for this meeting. Choose a model in Settings.")
+                         : record.summaryMissing == true ? "The summary failed" + (record.failureReason.map { ": \($0)." } ?? ".") + " Mossad tries again once a day."
+                         : "No summary for this meeting.")
                         .foregroundStyle(Palette.secondary)
                     Spacer()
-                    if controller.languageModel == nil { Button("Retry summary") { controller.retry(record.id) } }
+                    // `retry` does nothing for a written meeting; a new summary needs a model.
+                    if model { Button("Retry summary") { controller.regenerateSummary(record.id) } }
                 }
             }
         }

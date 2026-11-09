@@ -16,7 +16,7 @@ public enum LatestModel {
         switch provider {
         case .anthropic: [
             Alias(id: "latest:opus", name: "Opus Latest", fallback: "claude-opus-5-5"),
-            Alias(id: "latest:fable", name: "Fable Latest", fallback: "claude-fable-5-1"),
+            Alias(id: "latest:fable", name: "Fable Latest", fallback: "claude-fable-5-2"),
             Alias(id: "latest:sonnet", name: "Sonnet Latest", fallback: "claude-sonnet-5-5"),
             Alias(id: "latest:haiku", name: "Haiku Latest", fallback: "claude-haiku-5-5"),
         ]

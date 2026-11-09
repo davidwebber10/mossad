@@ -20,7 +20,7 @@ struct PersonProfileView: View {
     @State private var refreshing = false
 
     private var first: String { profile.name.split(separator: " ").first.map(String.init) ?? profile.name }
-    private var brief: PersonBrief? { controller.coachProfile.people[profile.name]?.brief }
+    private var brief: PersonBrief? { controller.shownCoachProfile.people[profile.name]?.brief }
 
     var body: some View {
         ScrollView {

@@ -189,12 +189,15 @@ public enum SummaryError: Error, CustomStringConvertible {
     case http(Int, String)
     case refused
     case malformed
+    /// The reply reached the output limit before it ended.
+    case cutOff
 
     public var description: String {
         switch self {
         case .http(let code, let body): "Claude HTTP \(code): \(body)"
         case .refused: "Claude refused to summarize this transcript"
         case .malformed: "Claude returned a reply that is not the expected JSON"
+        case .cutOff: "Claude's reply was cut off at the output limit"
         }
     }
 }

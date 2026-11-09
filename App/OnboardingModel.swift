@@ -112,6 +112,7 @@ final class OnboardingModel: ObservableObject {
                     try controller.keychain.set(key, for: apiKey)
                     controller.rebuildPipeline()
                     keyChecks[service] = .passed
+                    controller.keysChanged()
                 } catch {
                     Log.error("Saving the \(apiKey.rawValue) key failed")
                     keyChecks[service] = .failed(FriendlyError(error, context: .checkingKey, service: "the Keychain"))

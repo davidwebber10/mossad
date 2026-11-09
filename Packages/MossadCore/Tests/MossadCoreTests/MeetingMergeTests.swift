@@ -41,6 +41,41 @@ final class MeetingMergeTests: XCTestCase {
         XCTAssertEqual(merged.status, .identified)
     }
 
+    /// A call split two times: B joins A, then C joins the joined record. C's "A" must not take B's key.
+    func testAThirdPartJoinedLaterKeepsEveryVoiceApart() {
+        func part(_ id: String, _ start: TimeInterval, _ name: String?) -> CallRecord {
+            var r = record(id, start: start, end: start + 100, [Utterance(track: .them, speakerLabel: "A", start: 1, end: 3, text: id)],
+                           names: name.map { ["them:A": $0] } ?? [:], unknown: name == nil ? ["them:A"] : [])
+            r.speakerEmbeddings = ["them:A": [Float(start)]]
+            return r
+        }
+        let durations: [String: TimeInterval] = ["one": 100, "two": 100, "three": 100]
+        let ab = MeetingMerge.combine([part("one", 0, "Sam Carter"), part("two", 103, "Dana Lee")], durations: durations)
+        let abc = MeetingMerge.combine([ab, part("three", 206, nil)], durations: ["one": 200, "three": 100])
+
+        XCTAssertEqual(abc.utterances.map(\.speakerKey), ["them:A", "them:A2", "them:A3"])
+        XCTAssertEqual(abc.speakerNames, ["them:A": "Sam Carter", "them:A2": "Dana Lee"])
+        XCTAssertEqual(abc.unknownSpeakers, ["them:A3"])
+        XCTAssertEqual(abc.speakerEmbeddings.count, 3)
+        XCTAssertEqual(abc.parts.count, 3)
+
+        // A joined record that comes second moves its own part numbers too.
+        let later = MeetingMerge.combine([part("zero", -200, "Alex Rivera"), ab.with { $0.id = "one" }], durations: ["zero": 100, "one": 200])
+        XCTAssertEqual(later.speakerNames, ["them:A": "Alex Rivera", "them:A2": "Sam Carter", "them:A3": "Dana Lee"])
+    }
+
+    /// The joined recording is a new file: the old upload does not hold it.
+    func testTheJoinedRecordIsNotArchivedYet() {
+        var first = record("one", start: 0, end: 200, [])
+        first.cloudKey = "calls/one/recording.m4a"
+        first.cloudSize = 100
+        first.summaryMissing = true
+        let merged = MeetingMerge.combine([first, record("two", start: 203, end: 500, [])], durations: ["one": 200, "two": 297])
+        XCTAssertNil(merged.cloudKey)
+        XCTAssertNil(merged.cloudSize)
+        XCTAssertNil(merged.summaryMissing)
+    }
+
     func testBookmarkNotesMoveWithTheirPart() {
         let first = record("one", start: 0, end: 200, [])
         var second = record("two", start: 203, end: 500, [])
@@ -76,5 +111,13 @@ final class MeetingMergeTests: XCTestCase {
         try AudioJoin.join([a, nil, b], durations: [2, 1.5, 3], to: out)
         XCTAssertEqual(try audioDuration(out), 6.5, accuracy: 0.05)
         XCTAssertLessThan(try AudioSamples.read(out, from: 2.2, to: 3.3).map(abs).max() ?? 1, 0.01)
+    }
+}
+
+private extension CallRecord {
+    func with(_ change: (inout CallRecord) -> Void) -> CallRecord {
+        var copy = self
+        change(&copy)
+        return copy
     }
 }

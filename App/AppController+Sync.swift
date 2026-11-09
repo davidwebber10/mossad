@@ -56,6 +56,7 @@ extension AppController {
         serverMCP = hello.mcp?.absoluteString ?? ""
         serverHasChat = hello.chat
         do { try keychain.set(c.secret, for: .serverSecret) } catch { Log.error("Saving the server secret failed") }
+        keysChanged()
         serverAddress = c.address.absoluteString
         if syncThere || syncWith == .off || !Self.hasICloud { syncWith = .server }
         syncEngine = nil
@@ -70,6 +71,7 @@ extension AppController {
     /// Goes back to iCloud; the server and its data stay as they are.
     func disconnectServer() {
         keychain.delete(.serverSecret)
+        keysChanged()
         serverAddress = ""
         serverMCP = ""
         if syncWith == .server { syncWith = Self.hasICloud ? .icloud : .off }
@@ -134,7 +136,7 @@ extension AppController {
     /// Uploads new and changed meetings and pulls what the iPhone changed. One sync at a time; a sync asked for
     /// during one runs again after it.
     func syncNow() {
-        guard !Rehearsal.isOn else { return }
+        guard !isInert else { return }
         let mirror = mirrorSync
         guard let cloud = currentSync ?? mirror else { return }
         if syncRunning { syncAgain = true; return }
@@ -173,14 +175,16 @@ extension AppController {
                 // Chats, ratings, and memories from the phone show here at once.
                 if received > 0 {
                     self.coachVersion += 1; self.chatsVersion += 1; self.commitmentsVersion += 1
-                    // A room recording from the iPhone is a new call to process.
-                    if self.processing == 0 { self.processPending() }
+                    // A room recording from the iPhone is a new call to process, also while another call is
+                    // processed: the pipeline takes each call once, and the hourly run would be a long wait.
+                    self.processPending()
                 }
                 self.syncRunning = false
                 // A sync the app stopped itself is neither a success nor a failure.
                 var status = self.syncActivity.status
                 if let failure { status.failed(failure) } else { status.succeeded() }
                 self.syncActivity = SyncActivity(running: false, last: failure == nil ? Date() : self.syncActivity.last, status: status)
+                self.retryShareStops()
                 if self.syncAgain {
                     self.syncAgain = false
                     self.syncNow()
@@ -212,6 +216,33 @@ extension AppController {
         if let c = serverConnection { try await ServerClient(c).deleteShare(link) }
         shareBook.remove(link.token)
         saveShares()
+    }
+
+    /// Stops every link of a meeting that is gone (deleted, or merged into another), so its page does not stay
+    /// public with no meeting left to stop it from. A link the server could not be told about is kept, marked, and
+    /// tried again after each sync.
+    func stopSharing(callID: String) {
+        guard shareBook.links.contains(where: { $0.callID == callID }) else { return }
+        shareBook.markStopping(callID: callID)
+        saveShares()
+        retryShareStops()
+    }
+
+    func retryShareStops() {
+        let links = shareBook.links.filter { $0.stopping == true }
+        guard !links.isEmpty, !stoppingShares else { return }
+        stoppingShares = true
+        Task {
+            for link in links {
+                do {
+                    try await stopSharing(link)
+                    Log.info("Stopped the share link of a meeting that is gone")
+                } catch {
+                    Log.error("A share link of a removed meeting could not be stopped yet; it is tried again after the next sync: \(error)")
+                }
+            }
+            stoppingShares = false
+        }
     }
 
     func shareURL(_ link: MeetingLink) -> URL? { serverConnection.map { link.url(on: $0.address) } }

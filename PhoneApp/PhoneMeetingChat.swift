@@ -3,15 +3,16 @@ import SwiftUI
 
 /// The Chat tab of one meeting on the phone: the latest chat about it, saved with the other chats.
 struct PhoneMeetingChat: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     let record: CallRecord
     @State private var chatID: UUID?
     @State private var fresh = false
     @State private var question = ""
-    @State private var running = false
-    @State private var steps: [String] = []
-    @State private var error: FriendlyError? = PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample)
     @FocusState private var focused: Bool
+
+    /// The question that runs and its error live in the store, so they outlive this section of the meeting.
+    private var run: ChatRun { store.chatRun(record.id) }
+    private var running: Bool { run.running }
 
     private var chat: Chat? {
         if let chatID { return store.chats.first { $0.id == chatID } }
@@ -31,10 +32,10 @@ struct PhoneMeetingChat: View {
             if running {
                 HStack(spacing: 10) {
                     PhoneProcessingMark()
-                    Text(steps.last ?? "Thinking…").textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Text(run.steps.last ?? "Thinking…").textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
                 }
             }
-            if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
+            if let error = run.error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
             HStack(alignment: .bottom, spacing: Space.s) {
                 if chat != nil {
                     Button { chatID = nil; fresh = true } label: {
@@ -71,24 +72,25 @@ struct PhoneMeetingChat: View {
         chatID = current.id
         fresh = false
         question = ""
-        error = nil
-        steps = []
-        running = true
-        let sink = StepSink { step in Task { @MainActor in steps.append(step) } }
+        let run = run, store = store, callID = record.id
+        run.error = nil
+        run.steps = []
+        run.running = true
+        let sink = StepSink { step in Task { @MainActor in run.steps.append(step) } }
         Task {
             do {
-                let answer = try await store.answer(q, history: history, about: record.id, onStep: sink.add)
+                let answer = try await store.answer(q, history: history, about: callID, onStep: { sink.add($0) })
                 var latest = store.chats.first { $0.id == current.id } ?? current
-                latest.messages.append(ChatMessage(role: .assistant, text: answer, steps: steps))
+                latest.messages.append(ChatMessage(role: .assistant, text: answer, steps: sink.all))
                 latest.updated = Date()
                 store.save(latest)
                 store.finish(latest.id)
             } catch {
                 Log.error("Chat failed: \(error)")
                 let friendly = FriendlyError(error, context: .chatting)
-                if friendly.shouldShow(failures: 1) { self.error = friendly }
+                if friendly.shouldShow(failures: 1) { run.error = friendly }
             }
-            running = false
+            run.running = false
         }
     }
 

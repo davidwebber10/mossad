@@ -26,6 +26,7 @@ struct SettingsView: View {
             }
         }
         .onAppear {
+            controller.keysChanged()
             permissions.refresh()
             permissions.setInterval(1)
             // Development hook for screenshots: MOSSAD_SETTINGS_PAGE names a page.
@@ -56,8 +57,8 @@ struct SettingsView: View {
             + (controller.liveTranscriptEnabled && controller.transcriptionProvider != .assemblyai ? [.assemblyai] : [])
         if keys.contains(where: { !controller.hasKey($0) }) { pages.insert(.ai) }
         if controller.syncActivity.error != nil { pages.insert(.sync) }
-        if controller.coachEnabled, controller.coachVersion >= 0,
-           controller.coachProfile.proposedFocus != nil || !controller.coachProfile.openQuestions.isEmpty {
+        let coach = controller.shownCoachProfile
+        if controller.coachEnabled, coach.proposedFocus != nil || !coach.openQuestions.isEmpty {
             pages.insert(.coach)
         }
         return pages
@@ -224,6 +225,7 @@ struct KeySheet: View {
         } catch {
             Log.error("Saving the \(key.rawValue) key failed")
         }
+        controller.keysChanged()
         dismiss()
     }
 }

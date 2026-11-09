@@ -101,8 +101,8 @@ final class AppController: ObservableObject {
     var personToOpen: String?
     /// The one controller, for the app delegate's Dock handling.
     nonisolated(unsafe) static weak var current: AppController?
-    /// Checks GitHub releases for new versions; never in the UI preview.
-    private(set) lazy var updater = Updater(start: !CommandLine.arguments.contains("--ui-preview") && !Rehearsal.isOn) { [weak self] in self?.isRecording ?? false }
+    /// Checks GitHub releases for new versions; never in an inert copy.
+    private(set) lazy var updater = Updater(start: !isInert) { [weak self] in self?.isRecording ?? false }
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
     /// alive, so animations check this and stop while it is hidden.
     @Published private(set) var windowVisible = false
@@ -149,8 +149,22 @@ final class AppController: ObservableObject {
     private var bookmarkKey: GlobalHotKey?
 
     let paths = Paths.live
+    /// Held for the life of the app: only the copy that has it records, recovers, and processes in this folder.
+    private var instanceLock: InstanceLock?
+    /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
+    /// and syncs nothing.
+    private(set) var isInert = false
+    /// Another copy held the folder's lock at launch (+SecondCopy). The menu says so, and nothing is processed.
+    @Published private(set) var isSecondCopy = false
+    /// The second copy saw the lock free: the menu offers "Restart Mossad".
+    @Published var otherCopyQuit = false
+    @Published var restartFailed = false
     let library: VoiceLibrary
     let keychain = Keychain.app
+    /// What views show from the Keychain and the coach's files, read again only when it changes (+Display).
+    let keyCache = VersionedCache<APIKey, Bool>()
+    let coachProfileCache = VersionedCache<Int, CoachProfile>()
+    let coachReviewCache = VersionedCache<String, CoachReview?>()
     /// Every billed AssemblyAI and Claude request, for the costs in Analytics.
     let usage = UsageLog(directory: Paths.live.usage)
     let permissions = PermissionsMonitor()
@@ -166,6 +180,10 @@ final class AppController: ObservableObject {
     /// The menu bar panel shown in a window, for a preview's screenshots.
     var panelPreviewWindow: NSWindow?
     private var housekeeping: Timer?
+    private var wakeObserver: NSObjectProtocol?
+    var stoppingShares = false
+    private var refreshing = false
+    private var refreshAgain = false
     private var outputWatcher: OutputDeviceWatcher?
     private var browserLaunchObserver: NSObjectProtocol?
 
@@ -270,6 +288,7 @@ final class AppController: ObservableObject {
         shareBook = ShareBook.load(from: paths.shares)
         noRecord = NoRecordBook.load(from: paths.noRecord)
         noRecordGate.update(book: noRecord)
+        noRecordGate.persistSession(in: paths.noRecord)
         // The chosen calendars apply before anything matches a call to an invite.
         calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
@@ -279,7 +298,21 @@ final class AppController: ObservableObject {
         // processing, so the screens can be checked while the installed copy records a call.
         let preview = CommandLine.arguments.contains("--ui-preview")
         // Rehearsal only walks through setup: like a preview, it starts no detection, recording, processing, or sync.
-        let inert = preview || Rehearsal.isOn
+        // A second copy on the same folder would delete or cut the first copy's live recording at launch.
+        if !preview, !Rehearsal.isOn {
+            switch InstanceLock.acquire(root: paths.root) {
+            case .held(let lock): instanceLock = lock
+            case .taken:
+                isSecondCopy = true
+                Log.error("Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings")
+                waitForInstanceLock()
+            case .failed(let code):
+                // Not a sign of another copy, so this copy works as before the lock existed.
+                Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
+            }
+        }
+        let inert = preview || Rehearsal.isOn || isSecondCopy
+        isInert = inert
         // Reading the calendar records nothing, so the preview shows the real upcoming meetings too.
         if inert { refreshUpcoming() }
         if !inert {
@@ -289,6 +322,10 @@ final class AppController: ObservableObject {
                 guard let self, case .idle = self.status else { return }
                 self.detection.forceStart(bundleID: bundleID, platform: platform)
             }
+            notifier.onNotACall = { [weak self] call in self?.quietUnconfirmed(call) }
+            for answer in UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall")).active(at: Date()) {
+                detection.dismissUnconfirmed(answer.call, until: answer.until)
+            }
 
             let detection = detection
             let recorder = recorder
@@ -296,11 +333,20 @@ final class AppController: ObservableObject {
                 // Read the call's audio processes on the detection queue, where they were just computed.
                 let ids = detection.audioProcessIDs
                 let meetingID = detection.meetingID
+                let forced = detection.callIsForced
                 guard let self else { return }
-                // Before anything records or streams: a meeting the owner marked stays off the record.
-                if case .started(let platform, _, let at) = event, self.noRecordGate.blocks(platform: platform, meetingID: meetingID, at: at) {
-                    Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
-                    return
+                // Before anything records or streams: a meeting the owner marked stays off the record, for the whole
+                // call session (a late end, a mic gap, Off then On, a restart); the owner's Record wins. At launch the calendar comes a moment
+                // after detection, so the first call waits for it.
+                switch event {
+                case .started(let platform, let bundleID, let at):
+                    self.noRecordGate.waitForCalendar(timeout: 3)
+                    if self.noRecordGate.blocksStart(platform: platform, bundleID: bundleID, meetingID: meetingID, at: at, forced: forced) {
+                        Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
+                        return
+                    }
+                case .ended(let at, _):
+                    if self.noRecordGate.callEnded(at: at) { return }
                 }
                 // Recorder commands go straight from the detection queue to the capture queue, so they keep
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
@@ -311,16 +357,25 @@ final class AppController: ObservableObject {
                 Task { @MainActor in
                     guard let self, case .idle = self.status else { return }
                     self.notifier.postUnconfirmed(call)
+                    // A missing permission is said one time a day, not on each use of the mic.
+                    if call.reason == .noAutomation { self.quietUnconfirmed(call) }
                 }
             }
             detection.onMuteChange = { @Sendable [weak self] muted in
+                // A call that stays off the record has no recorder and no menu state to follow.
+                if self?.noRecordGate.isBlockingCall == true { return }
                 CaptureQueue.queue.async { recorder.setMuted(muted) }
-                Task { @MainActor in self?.isMuted = muted }
+                Task { @MainActor in
+                    // A change that arrives after the end of its call must not leave the menu on "muted".
+                    guard let self, self.isRecording else { return }
+                    self.isMuted = muted
+                }
             }
             // A recording that loses one side of the call (no permission, a full disk, a dead source) says so once.
             let notifier = notifier
             CaptureQueue.queue.async { recorder.onProblem = { problem, _ in notifier.postCaptureProblem(problem) } }
-            detection.onCallProcesses = { @Sendable ids in
+            detection.onCallProcesses = { @Sendable [weak self] ids in
+                self?.noRecordGate.seen(at: Date())
                 CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
             }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
@@ -350,23 +405,22 @@ final class AppController: ObservableObject {
                 Task { await self?.runHousekeeping() }
                 Task { @MainActor in self?.refreshLatestModels() }
             }
+            // A call that failed while the Mac went to sleep (no network) tries again at wake, not up to an hour later.
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(20))
+                    self?.processPending()
+                }
+            }
             ProcessingQueue(paths: paths).recoverInterrupted()
         }
-        refresh()
+        loadMeetings()
         if !inert {
             relinkEmails()
             Task { await track { await self.pipeline.continueSplitMeetings() } }
         }
         Log.info("Mossad started")
-        // Development hook: `--show-recording` shows the recording state in the UI without recording anything.
-        if preview, CommandLine.arguments.contains("--show-recording") {
-            // MOSSAD_RECORDING_PLATFORM=inPerson|zoom|teams|meet and MOSSAD_RECORDING_SECONDS pick what it shows.
-            let env = ProcessInfo.processInfo.environment
-            let platform = env["MOSSAD_RECORDING_PLATFORM"].flatMap(Platform.init(rawValue:)) ?? .meet
-            let seconds = env["MOSSAD_RECORDING_SECONDS"].flatMap(Double.init) ?? 75
-            status = .recording(platform, since: Date().addingTimeInterval(-seconds))
-        }
-        if preview, CommandLine.arguments.contains("--show-muted") { isMuted = true }
         if !inert {
             backfillSummaries()
             backfillTitlesAndDecisionTimes()
@@ -376,57 +430,7 @@ final class AppController: ObservableObject {
                 if coachEnabled { await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName)) }
             }
         }
-        // Development hook: `--regenerate-summaries` writes new summaries for today's finished meetings.
-        if !inert, CommandLine.arguments.contains("--regenerate-summaries") {
-            let today = meetings.filter { Calendar.current.isDateInToday($0.start) && $0.status == .written }.map(\.id)
-            Task { for id in today { await track { await self.pipeline.regenerateSummary(id) } } }
-        }
-        if preview { applyLivePreview() }
-        if let failure = Self.errorPreview("sync") {
-            var status = SyncStatus()
-            status.show(failure)
-            syncActivity = SyncActivity(last: Date().addingTimeInterval(-7200), status: status)
-        }
-        if preview, let update = ProcessInfo.processInfo.environment["MOSSAD_UPDATE_PREVIEW"] { updater.applyPreview(update) }
-        // Development hook: `--light` shows the UI in light mode, to check both looks.
-        if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
-        // Development hook: `MOSSAD_APPEARANCE=dark|light` picks the look of a preview, to capture both.
-        if preview, let look = ProcessInfo.processInfo.environment["MOSSAD_APPEARANCE"] {
-            NSApp.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
-        }
-        // The high-contrast appearances carry the tokens' Increase Contrast values.
-        if PreviewAccessibility.increaseContrast {
-            let dark = (NSApp.appearance ?? NSApp.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            NSApp.appearance = NSAppearance(named: dark ? .accessibilityHighContrastDarkAqua : .accessibilityHighContrastAqua)
-        }
-        // Development hook: `--open-naming` opens "Who is speaking?" for the first call that needs names.
-        if CommandLine.arguments.contains("--open-naming"), let first = callsNeedingNames.first {
-            DispatchQueue.main.async { self.openNaming(first.id) }
-        }
-        // Development hook: `--open-window [Meetings|People|Settings|Log]`, or `MenuPanel` in a preview for the
-        // menu bar panel's content in a window of its own.
-        if let i = CommandLine.arguments.firstIndex(of: "--open-window") {
-            let name = CommandLine.arguments.dropFirst(i + 1).first
-            if preview, name == "MenuPanel" {
-                DispatchQueue.main.async { self.openPanelPreview() }
-                return
-            }
-            // `--open-window Onboarding` opens setup alone; MOSSAD_ONBOARDING_STEP picks the step in a preview.
-            if name == "Onboarding" {
-                DispatchQueue.main.async { self.openOnboarding() }
-                return
-            }
-            let section = Section.allCases.first { $0.rawValue == name } ?? .meetings
-            DispatchQueue.main.async { self.open(section) }
-        }
-        // Development hook: `MOSSAD_SEARCH=<query>` opens the search palette with that query.
-        if preview, let query = ProcessInfo.processInfo.environment["MOSSAD_SEARCH"] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.openSearch(query) }
-        }
-        // Development hook: `MOSSAD_PERSON` opens that person's page.
-        if let person = ProcessInfo.processInfo.environment["MOSSAD_PERSON"] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.openPerson(person) }
-        }
+        DevHooks.run(self, inert: inert)
     }
 
     // MARK: State
@@ -448,7 +452,28 @@ final class AppController: ObservableObject {
         meetings.filter { $0.status == .written && !$0.unknownSpeakers.isEmpty }
     }
 
+    /// Reads the meeting list off the main thread. Only records whose file changed are decoded again (see
+    /// `RecordCache`), and a refresh asked for during one runs once more after it, so the list ends up current.
     func refresh() {
+        if refreshing { refreshAgain = true; return }
+        refreshing = true
+        let paths = paths
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let records = Self.previewFailures(MeetingIndex(paths: paths).all())
+            await MainActor.run {
+                guard let self else { return }
+                self.meetings = records
+                self.refreshing = false
+                if self.refreshAgain {
+                    self.refreshAgain = false
+                    self.refresh()
+                }
+            }
+        }
+    }
+
+    /// The first list at launch, before anything reads `meetings`.
+    private func loadMeetings() {
         meetings = Self.previewFailures(MeetingIndex(paths: paths).all())
     }
 
@@ -463,7 +488,7 @@ final class AppController: ObservableObject {
 
     /// `processing` puts the newest meeting back in its summary step after two busy replies; `failed` marks it
     /// failed with a raw gateway page as its reason. Only in memory.
-    private static func previewFailures(_ records: [CallRecord]) -> [CallRecord] {
+    nonisolated private static func previewFailures(_ records: [CallRecord]) -> [CallRecord] {
         guard CommandLine.arguments.contains("--ui-preview"),
               let list = ProcessInfo.processInfo.environment["MOSSAD_ERROR_PREVIEW"]?.split(separator: ","),
               let i = records.indices.filter({ records[$0].status == .written }).max(by: { records[$0].start < records[$1].start })
@@ -483,7 +508,8 @@ final class AppController: ObservableObject {
         return records
     }
 
-    func hasKey(_ key: APIKey) -> Bool { keychain.get(key) != nil }
+    /// Cached, because views ask while they draw; `keysChanged()` after each Keychain write.
+    func hasKey(_ key: APIKey) -> Bool { keyCache.value(key, version: 0) { keychain.get(key) != nil } }
 
     /// Reads the provider's model list off the main thread when the provider or key changed, or once a day, so the
     /// "Latest" choices follow new models. A changed model rebuilds the pipeline.
@@ -518,7 +544,8 @@ final class AppController: ObservableObject {
                      region: mailRegion, accessKeyID: mailAccessKeyID)
     }
 
-    /// Recreates the pipeline with the current keys and settings.
+    /// Gives the pipeline the current keys and settings. The pipeline itself lives as long as the app, so a call in
+    /// flight stays known to it; a second pipeline would process that call again.
     func rebuildPipeline() {
         refreshLatestModels()
         updateSharedAIKey()
@@ -533,6 +560,11 @@ final class AppController: ObservableObject {
         }
         let summarizer: Summarizing? = languageModel.map { LLMSummarizer(llm: $0, ownerName: owner, organization: organization) }
         let notifier = notifier
+        if let pipeline {
+            pipeline.configure(Pipeline.Configuration(transcriber: transcriber, summarizer: summarizer, ownerName: owner,
+                                                      voiceFingerprints: voiceFingerprints))
+            return
+        }
         pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: embeddings,
                             calendar: calendar, summarizer: summarizer, notify: { record in
                                 Task { @MainActor in notifier.postNewVoices(record) }
@@ -546,11 +578,23 @@ final class AppController: ObservableObject {
                             onProgress: { [weak self] id, p in
                                 Task { @MainActor in self?.progress[id] = p }
                             },
-                            titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) })
+                            titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) },
+                            onDiscard: { [weak self] record in
+                                Task { @MainActor in self?.forget(record) }
+                            })
+    }
+
+    /// A meeting that is gone (deleted, or merged into another) leaves nothing behind outside this Mac: its
+    /// archived recording and its public share links go too.
+    private func forget(_ record: CallRecord) {
+        if let archive = cloudArchive, record.cloudKey != nil { Task { await archive.delete(record) } }
+        stopSharing(callID: record.id)
     }
 
     /// Puts a record saved by the pipeline into the list, so the step shows while the call is processed.
     private func update(_ record: CallRecord) {
+        // A list that is being read now may hold this record from before the save; read once more after it.
+        if refreshing { refreshAgain = true }
         if let i = meetings.firstIndex(where: { $0.id == record.id }) { meetings[i] = record } else { refresh() }
     }
 
@@ -594,12 +638,30 @@ final class AppController: ObservableObject {
         updater.callEnded()
     }
 
+    /// Quit during a call: closes the tracks and saves the call as recorded, so the next launch processes it.
+    /// `done` runs on the capture queue.
+    nonisolated func endCallForQuit(_ done: @escaping @Sendable () -> Void) {
+        let recorder = recorder
+        CaptureQueue.queue.async {
+            _ = recorder.end(at: Date(), trimTo: nil)
+            done()
+        }
+    }
+
     /// Development hooks for screenshots, in a preview only, with nothing recorded or sent:
     /// `MOSSAD_LIVE=<live.json>` shows those lines and some audio levels for a meeting saved as recording,
     /// `MOSSAD_MUTED=1` shows the muted note, and `MOSSAD_PROGRESS=upload|queued|summarizing` shows that progress
-    /// for each meeting being processed.
-    private func applyLivePreview() {
+    /// for each meeting being processed. `--show-recording` shows the recording state (MOSSAD_RECORDING_PLATFORM=
+    /// inPerson|zoom|teams|meet and MOSSAD_RECORDING_SECONDS pick it), and `--show-muted` the muted state.
+    /// Called by `DevHooks` in a preview only.
+    func applyLivePreview() {
         let env = ProcessInfo.processInfo.environment
+        if CommandLine.arguments.contains("--show-recording") {
+            let platform = env["MOSSAD_RECORDING_PLATFORM"].flatMap(Platform.init(rawValue:)) ?? .meet
+            let seconds = env["MOSSAD_RECORDING_SECONDS"].flatMap(Double.init) ?? 75
+            status = .recording(platform, since: Date().addingTimeInterval(-seconds))
+        }
+        if CommandLine.arguments.contains("--show-muted") { isMuted = true }
         if let path = env["MOSSAD_LIVE"], let transcript = try? LiveTranscript.load(from: URL(fileURLWithPath: path)) {
             live.show(transcript)
             for i in 0..<160 {
@@ -674,7 +736,7 @@ final class AppController: ObservableObject {
 
     /// Records a meeting in a room through the mic, until Stop. Detection ignores calls meanwhile.
     func recordInPerson() {
-        guard case .idle = status, isOn, !Rehearsal.isOn else { return }
+        guard case .idle = status, isOn, !isInert else { return }
         let start = Date()
         status = .recording(.inPerson, since: start)
         isPaused = false
@@ -822,6 +884,8 @@ final class AppController: ObservableObject {
         liveRestart?.cancel()
         liveRestart = nil
         live.save()
+        // No later save: the pipeline removes `live.json`, and a save two seconds after the last words put it back.
+        live.fileURL = nil
         liveNaming?.cancel()
         liveNaming = nil
         liveTitling?.cancel()
@@ -860,7 +924,7 @@ final class AppController: ObservableObject {
         offUntil = 0
         resumeTimer?.invalidate()
         resumeTimer = nil
-        if !Rehearsal.isOn { detection.start() }
+        if !isInert { detection.start() }
         objectWillChange.send()
         Log.info("Mossad turned on")
     }
@@ -942,6 +1006,8 @@ final class AppController: ObservableObject {
     func chatAnswer(_ question: String, history: [ChatMessage], about callID: String? = nil,
                     onStep: @escaping @Sendable (String) -> Void) async throws -> String {
         guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
+        // The chat's `remember` tool writes the coach's profile.
+        defer { coachVersion += 1 }
         return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths,
                                                                           about: callID, onStep: onStep)
     }
@@ -973,11 +1039,12 @@ final class AppController: ObservableObject {
     }
 
     func deleteMeeting(_ callID: String) {
+        guard !isSecondCopy else { return }
         let archived = meetings.first { $0.id == callID }
-        let archive = cloudArchive
         Task {
-            if let archived, let archive { await archive.delete(archived) }
+            // The pipeline first: it refuses a call that is still processing, and then the cloud copy must stay.
             if await pipeline.delete(callID: callID) {
+                if let archived { forget(archived) } else { stopSharing(callID: callID) }
                 if selectedMeetingID == callID { selectedMeetingID = nil }
                 refresh()
             }
@@ -1011,11 +1078,12 @@ final class AppController: ObservableObject {
 
     /// Uploads finished recordings and removes old local copies, off the main actor.
     func syncCloud() {
-        guard !Rehearsal.isOn, let archive = cloudArchive else { return }
+        // One loop at a time: two would upload the same recording together.
+        guard !isInert, !cloudSyncing, let archive = cloudArchive, let pipeline else { return }
         let days = cloudKeepLocalDays
         cloudSyncing = true
         Task.detached(priority: .utility) {
-            let uploaded = await archive.sync(keepLocalDays: days)
+            let uploaded = await archive.sync(keepLocalDays: days, pipeline: pipeline)
             await MainActor.run {
                 self.cloudSyncing = false
                 if uploaded > 0 { self.refresh() }
@@ -1099,6 +1167,7 @@ final class AppController: ObservableObject {
 
     /// Joins the meetings into the earliest one and opens it.
     func mergeMeetings(_ ids: [String]) {
+        guard !isSecondCopy else { return }
         Task {
             let merged = await pipeline.merge(callIDs: ids)
             refresh()
@@ -1108,6 +1177,7 @@ final class AppController: ObservableObject {
 
     /// A person's new name reaches every past meeting and note.
     func renamePerson(_ old: String, to new: String) {
+        guard !isSecondCopy else { return }
         Task {
             await pipeline.renamePerson(old, to: new)
             refresh()
@@ -1117,7 +1187,7 @@ final class AppController: ObservableObject {
     /// Meetings that used a saved person's email as the name get the person's name instead.
     func relinkEmails() {
         let pairs = library.profiles.compactMap { p in p.email.map { ($0, p.name) } }
-        guard !pairs.isEmpty else { return }
+        guard !pairs.isEmpty, !isSecondCopy else { return }
         Task {
             for (email, name) in pairs where email != name { await pipeline.renamePerson(email, to: name) }
             refresh()
@@ -1153,7 +1223,7 @@ final class AppController: ObservableObject {
                 Task { @MainActor in
                     self.notifier.postCannotRecord(FriendlyError(error, context: .recording), platform: platform)
                     // Only clear the status of this call, never of a newer one.
-                    if case .recording(_, let since) = self.status, since == at { self.status = .idle }
+                    if case .recording(_, let since) = self.status, since == at { self.status = .idle } else { self.failedStarts.insert(at) }
                 }
             }
         case .ended(let at, let trimTo):
@@ -1182,16 +1252,32 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// "Not a call": no more warnings for this app and reason for the rest of the day, also after a restart.
+    private func quietUnconfirmed(_ call: UnconfirmedCall) {
+        let now = Date()
+        let until = UnconfirmedDismissals.endOfDay(after: now)
+        var answers = UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall"))
+        answers.add(call, until: until, now: now)
+        UserDefaults.standard.set(answers.data, forKey: "notACall")
+        detection.dismissUnconfirmed(call, until: until)
+    }
+
+    /// Call starts whose recording failed, by start time, until the UI has seen them.
+    private var failedStarts: Set<Date> = []
+
     private func show(_ event: DetectorEvent) {
         if case .recording(.inPerson, _) = status { return }
         switch event {
         case .started(let platform, _, let at):
             notifier.clearUnconfirmed()
+            // The failure can arrive first: a recording that did not start must not show as one.
+            if failedStarts.remove(at) != nil { return }
             status = .recording(platform, since: at)
             isPaused = false
             isMuted = false
             startLive(reset: true)
         case .ended:
+            failedStarts.removeAll()
             updater.callEnded()
             status = .idle
             isPaused = false
@@ -1201,6 +1287,7 @@ final class AppController: ObservableObject {
     }
 
     private func track(_ work: @escaping () async -> Void) async {
+        guard !isSecondCopy else { return }
         processing += 1
         refresh()
         await work()
@@ -1214,7 +1301,7 @@ final class AppController: ObservableObject {
 
     /// Processes calls waiting in the queue, such as a recording that arrived from the iPhone.
     func processPending() {
-        guard !Rehearsal.isOn else { return }
+        guard !isInert else { return }
         Task { await track { await self.pipeline.runPending() } }
     }
 

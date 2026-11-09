@@ -36,6 +36,15 @@ public struct Chat: Codable, Equatable, Sendable, Identifiable {
         a.updated == b.updated ? (a.messages.count >= b.messages.count ? a : b) : (a.updated > b.updated ? a : b)
     }
 
+    /// Both devices added to the same chat while apart: the newer copy, plus the messages only the other has.
+    public static func merged(_ a: Chat, _ b: Chat) -> Chat {
+        var out = newer(a, b)
+        let other = out == a ? b : a
+        let ids = Set(out.messages.map(\.id))
+        out.messages += other.messages.filter { !ids.contains($0.id) }
+        return out
+    }
+
     static let titleLength = 46
 
     /// The first question, cut at a word near 46 characters.
@@ -61,10 +70,16 @@ public struct ChatStore: Sendable {
 
     private func url(_ id: UUID) -> URL { directory.appendingPathComponent("\(id.uuidString).json") }
 
+    /// One chat, or nil when there is none. Throws when its file cannot be read.
+    public func load(_ id: UUID) throws -> Chat? {
+        try StoredFile.load(Chat.self, from: url(id), decoder: .coach)
+    }
+
+    /// A chat file that does not decode is moved aside (see `StoredFile`) and left out.
     public func all() -> [Chat] {
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        return files.filter { $0.pathExtension == "json" }
-            .compactMap { try? JSONDecoder.coach.decode(Chat.self, from: Data(contentsOf: $0)) }
+        return files.filter { $0.pathExtension == "json" && $0.lastPathComponent != Self.deletedFileName && !StoredFile.isQuarantined($0) }
+            .compactMap { try? StoredFile.load(Chat.self, from: $0, decoder: .coach) }
             .sorted { $0.updated > $1.updated }
     }
 
@@ -73,7 +88,26 @@ public struct ChatStore: Sendable {
         try JSONEncoder.coach.encode(chat).write(to: url(chat.id), options: .atomic)
     }
 
-    public func delete(_ id: UUID) {
+    /// `record` keeps the id in a list of deletes made here, so the sync deletes it on the other device. A chat
+    /// that is only missing (it did not decode, or the folder could not be read) is never deleted elsewhere.
+    public func delete(_ id: UUID, record: Bool = true) {
         try? FileManager.default.removeItem(at: url(id))
+        if record { setDeleted(deleted().union([id])) }
+    }
+
+    static let deletedFileName = "deleted.json"
+
+    /// Chats deleted on this device that the store may still have.
+    public func deleted() -> Set<UUID> {
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent(Self.deletedFileName)),
+              let ids = try? JSONDecoder().decode([UUID].self, from: data) else { return [] }
+        return Set(ids)
+    }
+
+    public func setDeleted(_ ids: Set<UUID>) {
+        let url = directory.appendingPathComponent(Self.deletedFileName)
+        guard !ids.isEmpty else { try? FileManager.default.removeItem(at: url); return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? JSONEncoder().encode(ids.sorted { $0.uuidString < $1.uuidString }).write(to: url, options: .atomic)
     }
 }

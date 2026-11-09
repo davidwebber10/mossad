@@ -18,9 +18,19 @@ public final class VoiceLibrary: @unchecked Sendable {
     private var storage: [VoiceProfile]
     public var matchThreshold: Float = 0.65
 
+    /// Set when `voices.json` was there and could not be read; a damaged file is moved aside first.
+    public let loadError: Error?
+
     public init(directory: URL) {
         url = directory.appendingPathComponent("voices.json")
-        storage = (try? JSONDecoder().decode([VoiceProfile].self, from: Data(contentsOf: url))) ?? []
+        do {
+            storage = try StoredFile.load([VoiceProfile].self, from: url) ?? []
+            loadError = nil
+        } catch {
+            // Unreadable is not empty: a read error keeps the file, and saves are refused until a restart reads it.
+            storage = []
+            loadError = error
+        }
     }
 
     public var profiles: [VoiceProfile] { lock.withLock { storage } }
@@ -39,6 +49,11 @@ public final class VoiceLibrary: @unchecked Sendable {
     public func add(_ embedding: [Float], to name: String, isOwner: Bool = false) throws {
         try lock.withLock {
             if let i = storage.firstIndex(where: { $0.name == name }) {
+                // The same call identified again ("Transcribe again") gives the same sample; one copy is enough.
+                if storage[i].embeddings.contains(embedding) {
+                    if isOwner, !storage[i].isOwner { storage[i].isOwner = true; try save() }
+                    return
+                }
                 storage[i].embeddings.append(embedding)
                 storage[i].embeddings = Array(storage[i].embeddings.suffix(Self.maxEmbeddings))
                 if isOwner { storage[i].isOwner = true }
@@ -107,6 +122,8 @@ public final class VoiceLibrary: @unchecked Sendable {
     }
 
     private func save() throws {
+        // A file that is still there but could not be read must not be replaced by what this copy knows.
+        if let loadError, (loadError as? UnreadableFile)?.kept == nil { throw loadError }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(storage).write(to: url, options: .atomic)
     }

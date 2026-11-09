@@ -5,7 +5,7 @@ import VisionKit
 
 /// Settings on the iPhone: where meetings come from (iCloud or the owner's server), and how to connect.
 struct PhoneSettingsView: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var connecting = PhoneStore.hook("MOSSAD_CONNECT") != nil
     @State private var confirmDisconnect = false
@@ -119,7 +119,7 @@ struct PhoneSettingsView: View {
 /// Connect to the owner's server: scan the code the Mac shows, use the one the Mac put in iCloud Keychain,
 /// or type it in. Each way is checked before it is used.
 struct ConnectServerView: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var scanning = false
     @State private var address = ""

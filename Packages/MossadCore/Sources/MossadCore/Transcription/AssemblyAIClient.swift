@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 /// Where a track is in AssemblyAI's batch process, for the progress line.
@@ -27,6 +28,24 @@ extension Transcribing {
     }
 }
 
+/// Where a transcription keeps the service's job id while the job runs, so a quit or a crash during the wait
+/// polls the same job on the next run instead of paying for a second one. The pipeline sets it per track.
+public struct TranscriptionJobStore: Sendable {
+    /// The job saved by an earlier run, if any.
+    public var saved: String?
+    /// Saves the new job id, or clears it (nil) when the job ended without a result.
+    public var save: @Sendable (String?) async -> Void
+
+    public init(saved: String?, save: @escaping @Sendable (String?) async -> Void) {
+        self.saved = saved
+        self.save = save
+    }
+}
+
+public enum TranscriptionJob {
+    @TaskLocal public static var store: TranscriptionJobStore?
+}
+
 /// Batch transcription with speaker labels through the AssemblyAI v2 REST API.
 public struct AssemblyAIClient: Transcribing {
     static let base = URL(string: "https://api.assemblyai.com/v2")!
@@ -40,9 +59,14 @@ public struct AssemblyAIClient: Transcribing {
     /// Uploads per attempt. A slow or dropping network (a plane) fails an upload now and then.
     static let uploadTries = 3
     private let usage: UsageLog?
+    /// The longest wait for one job; nil uses three times the audio's length, at least half an hour.
+    private let maxWait: TimeInterval?
+    /// Polls per status check: one dropped connection (the Mac sleeps after a call) must not fail a paid job.
+    static let pollTries = 5
 
     public init(apiKey: String, session: URLSession = .shared, pollInterval: Duration = .seconds(5), usage: UsageLog? = nil,
-                retryPause: Duration = .seconds(10)) {
+                retryPause: Duration = .seconds(10), maxWait: TimeInterval? = nil) {
+        self.maxWait = maxWait
         self.retryPause = retryPause
         self.usage = usage
         self.apiKey = apiKey
@@ -55,6 +79,68 @@ public struct AssemblyAIClient: Transcribing {
     }
 
     public func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        let jobs = TranscriptionJob.store
+        var job: TranscriptResponse
+        if let saved = jobs?.saved, let resumed = try await resume(saved) {
+            Log.info("Resuming AssemblyAI job \(saved) for the \(track.rawValue) track")
+            job = resumed
+        } else {
+            job = try await create(file: file, track: track, speakers: speakers, progress: progress)
+            await jobs?.save(job.id)
+        }
+        let limit = maxWait ?? Self.maxWait(for: file)
+        let clock = ContinuousClock(), began = clock.now
+        while true {
+            switch job.status {
+            case "completed":
+                usage?.record(service: .assemblyai, purpose: .transcription, model: job.speech_model, audioSeconds: job.audio_duration)
+                return (job.utterances ?? []).flatMap { Self.split($0, track: track) }
+            case "error":
+                await jobs?.save(nil)
+                throw TranscriptionError.failed(job.error ?? "unknown error")
+            default:
+                if clock.now - began > .seconds(limit) {
+                    // A job that never ends must not hold the call forever; the next attempt starts a new one.
+                    await jobs?.save(nil)
+                    throw TranscriptionError.failed("no result after \(Int(limit / 60)) minutes")
+                }
+                progress(job.status == "queued" ? .queued : .transcribing)
+                try await Task.sleep(for: pollInterval)
+                job = try await poll(job.id)
+            }
+        }
+    }
+
+    /// Three times the audio's length, at least 30 minutes.
+    static func maxWait(for file: URL) -> TimeInterval {
+        let seconds = (try? AVAudioFile(forReading: file)).map { Double($0.length) / $0.fileFormat.sampleRate } ?? 0
+        return max(1800, seconds * 3)
+    }
+
+    /// The saved job, or nil when AssemblyAI no longer knows it (a new job starts). A dropped connection throws.
+    private func resume(_ id: String) async throws -> TranscriptResponse? {
+        do {
+            let job = try await poll(id)
+            return job.status == "error" ? nil : job
+        } catch TranscriptionError.http(let status, _) where (400..<500).contains(status) && status != 401 {
+            return nil
+        }
+    }
+
+    private func poll(_ id: String) async throws -> TranscriptResponse {
+        for attempt in 1... {
+            do {
+                return try await send(request("transcript/\(id)", method: "GET"), body: nil)
+            } catch {
+                guard attempt < Self.pollTries, Self.isPassing(error) else { throw error }
+                Log.info("Checking AssemblyAI job \(id) failed (\(error.localizedDescription)); trying again")
+                try await Task.sleep(for: retryPause)
+            }
+        }
+        fatalError("unreachable")
+    }
+
+    private func create(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> TranscriptResponse {
         progress(.uploading(0))
         let uploadURL = try await upload(file, progress: progress)
         var body: [String: Any] = [
@@ -71,20 +157,7 @@ public struct AssemblyAIClient: Transcribing {
             body["speaker_options"] = ["max_speakers_expected": Self.maxRoomSpeakers]
         }
         let create = try JSONSerialization.data(withJSONObject: body)
-        var job: TranscriptResponse = try await send(request("transcript", method: "POST", json: true), body: create)
-        while true {
-            switch job.status {
-            case "completed":
-                usage?.record(service: .assemblyai, purpose: .transcription, model: job.speech_model, audioSeconds: job.audio_duration)
-                return (job.utterances ?? []).flatMap { Self.split($0, track: track) }
-            case "error":
-                throw TranscriptionError.failed(job.error ?? "unknown error")
-            default:
-                progress(job.status == "queued" ? .queued : .transcribing)
-                try await Task.sleep(for: pollInterval)
-                job = try await send(request("transcript/\(job.id)", method: "GET"), body: nil)
-            }
-        }
+        return try await send(request("transcript", method: "POST", json: true), body: create)
     }
 
     private func upload(_ file: URL, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> UploadResponse {

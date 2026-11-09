@@ -20,7 +20,8 @@ public struct ServerConnection: Codable, Equatable, Sendable {
         c.path = ""
         c.query = nil
         c.fragment = nil
-        if c.scheme != "http" { c.scheme = "https" }
+        // The secret goes in a header on every call, so plain http is only for a server on this machine.
+        if c.scheme != "http" || !["localhost", "127.0.0.1"].contains(host) { c.scheme = "https" }
         return c.url
     }
 
@@ -79,9 +80,18 @@ public struct ServerClient: Sendable {
         public var chat: Bool
     }
 
-    /// Whether the address is a Mossad server, and whether it takes the secret.
+    /// Whether the address is a Mossad server, and whether it takes the secret. The first call goes without the
+    /// secret, so an address that is not a Mossad server (a typing mistake) never receives it.
     public func hello() async throws -> Hello {
-        let (data, response) = try await session.data(for: connection.request("api/hello"))
+        var open = connection.request("api/hello")
+        open.setValue(nil, forHTTPHeaderField: "Authorization")
+        let first = try await hello(open)
+        guard !connection.secret.isEmpty else { return first }
+        return try await hello(connection.request("api/hello"))
+    }
+
+    private func hello(_ request: URLRequest) async throws -> Hello {
+        let (data, response) = try await session.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200,
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any], body["mossad"] as? Bool == true else { throw ServerError.notMossad }
         return Hello(authorized: body["authorized"] as? Bool == true, mcp: (body["mcp"] as? String).flatMap(URL.init(string:)), chat: body["chat"] as? Bool == true)
@@ -119,7 +129,12 @@ public struct ServerStore: RecordStore {
         client = ServerClient(connection, session: session)
     }
 
-    public var stateFileName: String { "state-server.json" }
+    /// One state file per server address: another server's change numbers and upload marks mean nothing here.
+    public var stateFileName: String {
+        let address = client.connection.address.absoluteString.lowercased()
+        let hash = SHA256.hash(data: Data(address.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
+        return "state-server-\(hash).json"
+    }
     public var wantsMeetingView: Bool { true }
 
     public func prepare() async throws {

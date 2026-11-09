@@ -16,6 +16,13 @@ public struct AppIdentity: Sendable, Equatable {
 
     public var isRehearsal: Bool { bundleID == Self.rehearsalBundleID }
 
+    /// Why the bundle id disagrees with how the app was built, or nil when they agree. The build flag decides what
+    /// the app does; the bundle id picks the folder and the Keychain, so a mismatch would mix the two copies' data.
+    public func mismatch(rehearsalBuild: Bool) -> String? {
+        guard isRehearsal != rehearsalBuild else { return nil }
+        return "The \(rehearsalBuild ? "Rehearsal" : "Mossad") build has the bundle id \(bundleID ?? "none")"
+    }
+
     /// The Mac app's own id, for its Keychain service and its System Settings entries. The iPhone app and the tests
     /// use the Mac's; only Rehearsal has its own.
     public var appID: String { isRehearsal ? Self.rehearsalBundleID : Self.mainBundleID }

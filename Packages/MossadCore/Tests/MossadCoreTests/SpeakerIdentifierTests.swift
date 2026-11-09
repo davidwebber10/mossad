@@ -89,7 +89,7 @@ final class SpeakerIdentifierTests: XCTestCase {
     }
 
     func testMatchedSpeakerAddsEmbeddingToProfile() async throws {
-        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        try library.add([0, 0.995, 0.1, 0], to: "Alex Rivera")
         try writeSegments(meURL, total: 20, [(0, 5, 200)])
         try writeSegments(themURL, total: 20, [(6, 12, 400)])
         _ = try await identify([u(.me, "A", 0, 5), u(.them, "A", 6, 12)])

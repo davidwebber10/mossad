@@ -24,7 +24,10 @@ public struct S3Config: Sendable, Equatable {
 /// and a signed GET URL lets the player stream a recording without the secret.
 public enum S3Presigner {
     public static func url(_ c: S3Config, method: String, key: String, date: Date = Date(), expires: Int = 900) -> URL {
-        let host = c.pathStyle ? (c.endpoint.host ?? "") : "\(c.bucket).\(c.endpoint.host ?? "")"
+        // The signed host header carries a port that is not the default one (MinIO on :9000), as the request does.
+        let port = c.endpoint.port.map { ":\($0)" } ?? ""
+        let name = c.pathStyle ? (c.endpoint.host ?? "") : "\(c.bucket).\(c.endpoint.host ?? "")"
+        let host = name + port
         let segments = (c.pathStyle ? [c.bucket] : []) + key.split(separator: "/").map(String.init)
         let path = "/" + segments.map(encode).joined(separator: "/")
         let stamp = Self.stamp(date), day = String(stamp.prefix(8))
@@ -41,8 +44,7 @@ public enum S3Presigner {
         var key = SymmetricKey(data: Data("AWS4\(c.secret)".utf8))
         for part in [day, c.region, "s3", "aws4_request"] { key = SymmetricKey(data: hmac(key, part)) }
         let signature = hex(hmac(key, toSign))
-        let port = c.endpoint.port.map { ":\($0)" } ?? ""
-        return URL(string: "\(c.endpoint.scheme ?? "https")://\(host)\(port)\(path)?\(query)&X-Amz-Signature=\(signature)")!
+        return URL(string: "\(c.endpoint.scheme ?? "https")://\(host)\(path)?\(query)&X-Amz-Signature=\(signature)")!
     }
 
     private static func hmac(_ key: SymmetricKey, _ text: String) -> Data {

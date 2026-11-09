@@ -49,11 +49,14 @@ final class PermissionsMonitor: ObservableObject {
             for kind in kinds { states[kind] = await Self.check(kind) }
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                for i in self.items.indices {
-                    let kind = self.items[i].kind
+                var next = self.items
+                for i in next.indices {
+                    let kind = next[i].kind
                     guard let state = states[kind] else { continue }
-                    self.items[i].state = Self.remember(state, for: kind).afterAsking(self.asked.contains(kind))
+                    next[i].state = Self.remember(state, for: kind).afterAsking(self.asked.contains(kind))
                 }
+                // Each assignment redraws Settings, which checks once a second while it is open.
+                if next.map(\.state) != self.items.map(\.state) { self.items = next }
                 self.dragHelper.closeIfGranted(states)
             }
         }

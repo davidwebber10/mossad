@@ -1,10 +1,44 @@
 import Foundation
 
+/// Letters for unnamed voices: A to Z, then AA, AB, and so on, so the 27th voice is not "A" again.
+public enum SpeakerLetter {
+    public static func at(_ index: Int) -> String {
+        var n = max(0, index), out = ""
+        repeat {
+            out = String(Character(UnicodeScalar(UInt8(65 + n % 26)))) + out
+            n = n / 26 - 1
+        } while n >= 0
+        return out
+    }
+}
+
 /// Renders a call record as the Markdown file agents read.
 public enum MarkdownWriter {
     public static func fileName(for r: CallRecord) -> String {
-        let title = r.title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
-        return "\(format(r.start, "yyyy-MM-dd HHmm")) - \(title).md"
+        "\(format(r.start, "yyyy-MM-dd HHmm")) - \(fileTitle(r.title)).md"
+    }
+
+    /// A file name is at most 255 bytes; the date, a suffix for a second note of the same minute, and ".md" need room.
+    static let maxTitleBytes = 180
+
+    /// The title as part of a file name: one line, no path separators, and short enough for the file system.
+    static func fileTitle(_ title: String) -> String {
+        var out = oneLine(title).replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        while out.utf8.count > maxTitleBytes { out.removeLast() }
+        return out.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// A line break in a title would end the YAML value and the heading.
+    static func oneLine(_ s: String) -> String {
+        s.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// The note for a call. Two calls with the same start minute and title would share one file, and deleting one
+    /// meeting would delete the other's note; the second one gets its call ID in the name.
+    public static func noteURL(for r: CallRecord, in folder: URL) -> URL {
+        let url = folder.appendingPathComponent(fileName(for: r))
+        guard url.path != r.markdownPath, FileManager.default.fileExists(atPath: url.path) else { return url }
+        return folder.appendingPathComponent(String(fileName(for: r).dropLast(3)) + " (\(r.id)).md")
     }
 
     /// Speaker key → display name. Unknown speakers are lettered "Speaker A", "Speaker B", … by first appearance.
@@ -12,7 +46,7 @@ public enum MarkdownWriter {
         var names = r.speakerNames
         var next = 0
         for u in r.utterances where names[u.speakerKey] == nil {
-            names[u.speakerKey] = "Speaker \(Character(UnicodeScalar(UInt8(65 + next % 26))))"
+            names[u.speakerKey] = "Speaker \(SpeakerLetter.at(next))"
             next += 1
         }
         return names
@@ -40,14 +74,14 @@ public enum MarkdownWriter {
             "end: \"\(format(r.end, "HH:mm"))\"",
             "duration_minutes: \(Int((r.end.timeIntervalSince(r.start) / 60).rounded()))",
             "platform: \(r.platform.displayName)",
-            "title: \(quoted(r.title))",
+            "title: \(quoted(oneLine(r.title)))",
             "attendees: [\(r.attendees.map(quoted).joined(separator: ", "))]",
             "speakers: [\(speakers.map(quoted).joined(separator: ", "))]",
             "audio: ~/Mossad/Audio/\(r.id)",
         ]
         if let kind = r.kind { lines.insert("kind: \(quoted(kind))", at: lines.count - 4) }
         if !r.tags.isEmpty { lines.insert("tags: [\(r.tags.map(quoted).joined(separator: ", "))]", at: lines.count - 4) }
-        lines += ["---", "# \(r.title)", ""]
+        lines += ["---", "# \(oneLine(r.title))", ""]
         if let summary = r.summary {
             lines += ["## Summary", "", summary, ""]
             for topic in r.topics { lines += ["### \(topic.title)", "", topic.summary, ""] }

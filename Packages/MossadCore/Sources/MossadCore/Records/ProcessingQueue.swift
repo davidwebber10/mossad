@@ -12,10 +12,25 @@ public struct ProcessingQueue: Sendable {
         self.paths = paths
     }
 
-    /// All records in the audio directory, oldest first.
+    /// All records in the audio directory, oldest first. What cannot be read is left out; a caller that deletes or
+    /// overwrites because something is missing must use `scan()` instead.
     public func allRecords() -> [CallRecord] {
-        let dirs = (try? FileManager.default.contentsOfDirectory(at: paths.audio, includingPropertiesForKeys: nil)) ?? []
-        return dirs.compactMap { try? CallRecord.load(from: $0) }.sorted { $0.start < $1.start }
+        (try? scan().records) ?? []
+    }
+
+    /// Every call folder, with the records that could be read. Throws when the folder itself cannot be listed.
+    /// Unchanged records come from a cache, so a scan decodes only what changed since the last one.
+    public func scan() throws -> RecordScan {
+        let dirs = try FileManager.default.contentsOfDirectory(at: paths.audio, includingPropertiesForKeys: [.isDirectoryKey])
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+        var records: [CallRecord] = []
+        var unreadable: [String] = []
+        for dir in dirs {
+            do { records.append(try RecordCache.shared.record(in: dir)) } catch { unreadable.append(dir.lastPathComponent) }
+        }
+        RecordCache.shared.prune(root: paths.audio, kept: Set(dirs.map { $0.appendingPathComponent(CallRecord.fileName).path }))
+        return RecordScan(records: records.sorted { $0.start < $1.start }, folders: Set(dirs.map(\.lastPathComponent)),
+                          unreadable: unreadable.sorted())
     }
 
     public func pending(now: Date) -> [CallRecord] {

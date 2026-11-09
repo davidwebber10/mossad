@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 
 /// Tries a network step again after a short pause when it failed for a reason that passes: a dropped or slow
@@ -23,6 +24,9 @@ public enum TransientRetry {
                     .cannotFindHost, .dnsLookupFailed, .secureConnectionFailed].contains(e.code)
         }
         if case .http(let code, _) = error as? ServerError { return code >= 500 }
+        if let e = error as? CKError {
+            return [.networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy].contains(e.code)
+        }
         return false
     }
 }

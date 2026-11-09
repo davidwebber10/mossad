@@ -24,6 +24,7 @@ actor MemoryStore: RecordStore {
     }
 
     func delete(_ names: [String]) async throws -> Set<String> {
+        deletes += names
         for n in names where entries[n] != nil { seq += 1; entries[n]!.deleted = true; entries[n]!.seq = seq }
         return Set(names)
     }
@@ -37,7 +38,15 @@ actor MemoryStore: RecordStore {
             token: Data(String(after.last?.seq ?? since).utf8), more: false)
     }
 
-    func data(_ record: ChangedRecord, _ key: String) async throws -> Data? { entries[record.name]?.data[key] }
+    /// Record names whose assets fail to download, with the error.
+    private var failing: [String: Error] = [:]
+    func fail(_ name: String, with error: Error?) { failing[name] = error }
+    private(set) var deletes: [String] = []
+
+    func data(_ record: ChangedRecord, _ key: String) async throws -> Data? {
+        if let error = failing[record.name] { throw error }
+        return entries[record.name]?.data[key]
+    }
 
     func discard(_ names: [String]) async { _ = try? await delete(names) }
 

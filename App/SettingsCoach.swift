@@ -9,7 +9,7 @@ struct CoachSettings: View {
     @State private var sending = false
 
     var body: some View {
-        let profile = controller.coachVersion >= 0 ? controller.coachProfile : CoachProfile()
+        let profile = controller.shownCoachProfile
         LabelColumnStack {
             SettingsGroup(label: "Communication coach") {
                 SettingsSwitchRow(title: "Review each call", isOn: $controller.coachEnabled)

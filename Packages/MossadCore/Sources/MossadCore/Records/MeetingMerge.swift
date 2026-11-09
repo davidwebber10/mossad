@@ -6,8 +6,10 @@ public enum MeetingMerge {
     public static let continuationGap: TimeInterval = 120
 
     /// The earliest record absorbs the others. Times move by each part's place in the joined audio, and
-    /// speaker labels of later parts get the part number ("A" becomes "A2"), so two different people who
-    /// were both "A" stay apart. `durations` is each record's audio length, by record ID.
+    /// speaker labels of later parts get the part's number in the joined meeting ("A" becomes "A2"), so two
+    /// different people who were both "A" stay apart. `durations` is each record's audio length, by record ID.
+    /// What was made from the old audio is cleared: the archive key (the joined recording is a new file), a
+    /// transcription job, and the summary.
     public static func combine(_ records: [CallRecord], durations: [String: TimeInterval]) -> CallRecord {
         let sorted = records.sorted { $0.start < $1.start }
         var merged = sorted[0]
@@ -17,19 +19,28 @@ public enum MeetingMerge {
         merged.speakerEmbeddings = [:]
         merged.parts = []
         merged.markers = []
+        merged.cloudKey = nil
+        merged.cloudSize = nil
+        merged.transcriptionJobs = nil
+        merged.summaryMissing = nil
         var me: [Utterance]? = [], them: [Utterance]? = []
         var offset: TimeInterval = 0
-        for (index, r) in sorted.enumerated() {
-            let suffix = index == 0 ? "" : "\(index + 1)"
+        for r in sorted {
+            // A record that was merged before holds several parts, and its labels carry their numbers already.
+            let before = merged.parts.count
+            func label(_ l: String) -> String { partLabel(l, movedBy: before) }
             func move(_ u: Utterance) -> Utterance {
                 var u = u
-                u.speakerLabel += suffix
+                u.speakerLabel = label(u.speakerLabel)
                 u.start += offset
                 u.end += offset
                 u.words = u.words?.map { Word(text: $0.text, start: $0.start + offset, end: $0.end + offset) }
                 return u
             }
-            func key(_ k: String) -> String { k + suffix }
+            func key(_ k: String) -> String {
+                guard let colon = k.firstIndex(of: ":") else { return label(k) }
+                return String(k[...colon]) + label(String(k[k.index(after: colon)...]))
+            }
             merged.utterances += r.utterances.map(move)
             me = me.flatMap { list in r.meUtterances.map { list + $0.map(move) } }
             them = them.flatMap { list in r.themUtterances.map { list + $0.map(move) } }
@@ -63,6 +74,17 @@ public enum MeetingMerge {
         merged.failedStep = nil
         merged.failureReason = nil
         return merged
+    }
+
+    /// "A" in the first part stays "A"; in part 3 it is "A3". A label that has a part number already ("A2", from an
+    /// earlier merge) moves by the parts in front of it.
+    static func partLabel(_ label: String, movedBy parts: Int) -> String {
+        let digits = label.reversed().prefix { $0.isNumber }.count
+        let name = String(label.dropLast(digits))
+        // A label that is only a number is a name, not a part number.
+        guard !name.isEmpty else { return parts == 0 ? label : "\(label)-\(parts + 1)" }
+        let part = (Int(label.suffix(digits)) ?? 1) + parts
+        return part == 1 ? name : "\(name)\(part)"
     }
 
     public struct PartBreak: Equatable, Sendable {
