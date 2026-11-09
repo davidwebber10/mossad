@@ -121,6 +121,9 @@ public struct LLMSummarizer: Summarizing {
     moment the owner flagged as important during the call: make sure the summary covers what was said around it. \
     A note after the time, such as "(★ Bookmarked at 2:31 PM: Ask Dana about budget)", is the owner's own words \
     about that moment; use it. \
+    A line such as "(Screen: "Q3 plan Revenue up 12%")" or "(Screen shared by Dana Lee: "…")" is text read from a \
+    screen that was shared at that moment, not something a person said: use it for the names, numbers, and terms \
+    that were on screen. \
     Write a title of at most 60 characters that names the topic; for a meeting of two or three people, add who it \
     was with, by first name.
     """

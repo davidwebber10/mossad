@@ -66,6 +66,8 @@ public actor Pipeline {
     private var progress: [String: ProcessingProgress] = [:]
     /// Calls in the transcription step; a late stage update after it must not overwrite the next sub-step.
     private var transcribing: Set<String> = []
+    /// Reads the text on the kept frames of shared screens; nil where that is not done (tests, the iPhone).
+    private let screenStep: ScreenStep?
 
     /// `onStep` receives the record after every save of `call.json`, so the UI can show the live step.
     public init(paths: Paths, transcriber: Transcribing, library: VoiceLibrary, embeddings: EmbeddingProvider,
@@ -75,7 +77,8 @@ public actor Pipeline {
                 onDetail: @escaping @Sendable (String, String?) -> Void = { _, _ in },
                 onProgress: @escaping @Sendable (String, ProcessingProgress?) -> Void = { _, _ in },
                 titles: @escaping @Sendable ([String]) -> [String] = { _ in [] },
-                onDiscard: @escaping @Sendable (CallRecord) -> Void = { _ in }) {
+                onDiscard: @escaping @Sendable (CallRecord) -> Void = { _ in }, screenStep: ScreenStep? = nil) {
+        self.screenStep = screenStep
         self.titles = titles
         self.onStep = onStep
         self.onProgress = onProgress
@@ -308,6 +311,7 @@ public actor Pipeline {
         r.tags = current.tags
         r.tagsSetByOwner = current.tagsSetByOwner
         r.markers = current.markers
+        r.screens = current.screens
         r.status = .summarized
         do { try store(r, dir: dir) } catch { return false }
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.previousFileName))
@@ -573,6 +577,7 @@ public actor Pipeline {
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
+        await readScreens(&r)
         if quietRuns[r.id] == nil {
             detail(r.id, "Finding the calendar invite")
             let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
@@ -608,6 +613,16 @@ public actor Pipeline {
         }
         r.status = .summarized
         return true
+    }
+
+    /// The text on the shared screens, before the summary, so the summary sees it as lines of the transcript.
+    /// Nothing changes for a call with no frames on disk.
+    private func readScreens(_ r: inout CallRecord) async {
+        let dir = paths.callDirectory(r.id)
+        guard let screenStep, FrameStore.hasFrames(in: dir) else { return }
+        detail(r.id, "Reading the shared screens")
+        let known = Set(r.speakerNames.values).union(r.attendees).union(library.profiles.map(\.name))
+        if let screens = await screenStep.run(in: dir, known: known.sorted()) { r.screens = screens }
     }
 
     private func knownTags() -> [String] { Tags.known(queue.allRecords()) }
@@ -746,6 +761,10 @@ public actor Pipeline {
                 try AudioJoin.join(inputs, durations: lengths, to: temp)
                 joined.append((temp, dir.appendingPathComponent(name)))
             }
+            // The frames of shared screens move with their part; the first part's own stay as they are until the end.
+            var starts: [TimeInterval] = [], total: TimeInterval = 0
+            for length in lengths { starts.append(total); total += length }
+            try FrameStore.join(records.map { paths.callDirectory($0.id) }, offsets: starts)
             plan.phase = .replacing
             try plan.save(in: dir)
             if remake, has(target, Recording.fileName) {
@@ -814,6 +833,7 @@ public actor Pipeline {
                 try? fm.removeItem(at: final)
             }
         }
+        FrameStore.undoJoin(in: dir)
         try? fm.removeItem(at: dir.appendingPathComponent(MergePlan.recordFile))
         try? fm.removeItem(at: dir.appendingPathComponent(MergePlan.fileName))
     }
@@ -831,6 +851,7 @@ public actor Pipeline {
                 return false
             }
         }
+        FrameStore.finishJoin(in: dir)
         for r in parts {
             if let note = r.markdownPath { try? fm.removeItem(atPath: note) }
             try? fm.removeItem(at: paths.callDirectory(r.id))

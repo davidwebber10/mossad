@@ -90,6 +90,12 @@ public struct ChatTools: Sendable {
                                 line: "[\(MarkdownWriter.timestamp(u.start))] \(display[u.speakerKey] ?? u.speakerKey): \(u.text)"))
                 if hits.count >= min(limit, Self.maxLimit) { return hits }
             }
+            // Text that was on a shared screen at that time.
+            for s in r.screens ?? [] where s.text.localizedCaseInsensitiveContains(q) {
+                hits.append(Hit(callID: r.id, title: r.title, date: r.start, at: s.offset,
+                                line: "[\(MarkdownWriter.timestamp(s.offset))] (\(s.lineText))"))
+                if hits.count >= min(limit, Self.maxLimit) { return hits }
+            }
         }
         return hits
     }
@@ -158,7 +164,7 @@ public struct ChatTools: Sendable {
                     "owner": ["type": "string"], "from": ["type": "string"], "to": ["type": "string"],
                  ] as [String: Any]]),
         currentCallDefinition,
-    ] }
+    ] + screenDefinitions }
 
     /// Runs a tool call from Claude and returns its result as text.
     public func run(_ name: String, input: [String: Any]) -> String {
@@ -177,6 +183,10 @@ public struct ChatTools: Sendable {
             return currentCall(minutes: (input["minutes"] as? NSNumber)?.doubleValue)
         case "read_meeting":
             return (input["call_id"] as? String).flatMap(readMeeting) ?? "No meeting with that call_id."
+        case "list_screens":
+            return listScreens(input)
+        case "get_screen":
+            return getScreen(input)
         case "action_items":
             let items = actionItems(owner: input["owner"] as? String, from: from, to: to)
             return items.isEmpty ? "No action items match." : items.map {
@@ -206,6 +216,7 @@ public struct ChatTools: Sendable {
         case "search_transcripts": return "Searching transcripts for “\(input["query"] as? String ?? "")”"
         case "current_call": return "Listening to the call"
         case "read_meeting": return "Reading \((input["call_id"] as? String).flatMap(title) ?? "a meeting")"
+        case "list_screens", "get_screen": return "Looking at the screens shared in \(meetingID(input).flatMap(title) ?? "a meeting")"
         case "action_items": return (input["owner"] as? String).map { "Listing action items for \($0)" } ?? "Listing action items"
         case "coach_profile": return "Reading what the coach knows about you"
         case "coach_reviews": return "Reading the coach's reviews"

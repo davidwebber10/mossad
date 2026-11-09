@@ -49,7 +49,14 @@ public struct MCPServer: Sendable {
             }
             // Fresh records on every call: the app may have written a new meeting since the last one.
             let tools = ChatTools(records: ProcessingQueue(paths: paths).allRecords(), owner: owner, paths: paths)
-            result = ["content": [["type": "text", "text": tools.run(name, input: params["arguments"] as? [String: Any] ?? [:])]]]
+            let input = params["arguments"] as? [String: Any] ?? [:]
+            var content: [[String: Any]] = [["type": "text", "text": tools.run(name, input: input)]]
+            // The picture of a shared screen goes out only when the caller asks for it.
+            if name == "get_screen", input["include_image"] as? Bool == true,
+               let image = tools.screenImageURL(input).flatMap({ FrameImage.jpeg(at: $0) }) {
+                content.append(["type": "image", "data": image.base64EncodedString(), "mimeType": "image/jpeg"])
+            }
+            result = ["content": content]
         default:
             return encode(["jsonrpc": "2.0", "id": id, "error": ["code": -32601, "message": "Method not found"]])
         }

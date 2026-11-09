@@ -30,6 +30,18 @@ public enum CaptureQueue {
     }()
 }
 
+/// What the capture of the shared screen needs to know about a call.
+public struct ScreenCall: Sendable {
+    public var directory: URL
+    public var platform: Platform
+    public var bundleID: String
+    public var meetingID: String?
+    /// Where the recording is now, in seconds of the audio files (paused time left out). Any thread.
+    public var offset: @Sendable () -> TimeInterval
+    /// Adds a line to the transcript. Any thread.
+    public var addMarker: @Sendable (TimeInterval, String) -> Void
+}
+
 /// Records one call: the "them" tap and the "me" mic, each to its own file, plus `call.json`.
 /// Everything runs on `CaptureQueue.queue`, except the members marked "any thread".
 public final class CallRecorder: @unchecked Sendable {
@@ -42,6 +54,9 @@ public final class CallRecorder: @unchecked Sendable {
     private let micAllowed: () -> Bool
     private let freeBytes: () -> Int64?
     private let silenceMuted: (inout CallRecord, URL) throws -> Void
+    /// Makes the capture of the shared screen for a call, or nil when that is off or not allowed.
+    private let makeScreens: ((ScreenCall) -> ScreenCapturing?)?
+    private var screens: ScreenCapturing?
     public static let retryInterval: TimeInterval = 10
     /// A source that sends nothing this long is restarted. It can start on a new device and stay silent; a tap sends
     /// buffers even when the call is quiet, so silence from it is never "nothing".
@@ -119,8 +134,10 @@ public final class CallRecorder: @unchecked Sendable {
                 clock: @escaping () -> Date = Date.init, captureClock: CaptureClock = .host,
                 systemAudioAllowed: @escaping () -> Bool = { true }, micAllowed: @escaping () -> Bool = { true },
                 freeBytes: (() -> Int64?)? = nil,
-                silenceMuted: @escaping (inout CallRecord, URL) throws -> Void = { try MutedAudio.apply(to: &$0, in: $1) }) {
+                silenceMuted: @escaping (inout CallRecord, URL) throws -> Void = { try MutedAudio.apply(to: &$0, in: $1) },
+                makeScreens: ((ScreenCall) -> ScreenCapturing?)? = nil) {
         self.silenceMuted = silenceMuted
+        self.makeScreens = makeScreens
         self.systemAudioAllowed = systemAudioAllowed
         self.micAllowed = micAllowed
         self.freeBytes = freeBytes ?? {
@@ -134,6 +151,8 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     public var isRecording: Bool { record != nil }
+    /// The same, for any thread: work that can wait asks this before it starts.
+    public var isRecordingNow: Bool { lineLock.withLock { lines.me != nil } }
     /// Started by hand for an in-person meeting: detection neither ends it nor taps a call app for it.
     public private(set) var isManual = false
 
@@ -198,7 +217,10 @@ public final class CallRecorder: @unchecked Sendable {
         // The mic first: it is fast, and a slow tap start must not cost David's first words.
         startMe()
         // In a room there is no call app to tap; the them track stays empty.
-        if platform != .inPerson { startThem(processIDs) }
+        if platform != .inPerson {
+            startThem(processIDs)
+            startScreens(r, dir: dir)
+        }
         Log.info("Recording \(id) (\(platform.displayName))")
         // A missing permission or a full disk is told now, not after the call.
         checkHealth(manual: platform == .inPerson)
@@ -403,6 +425,7 @@ public final class CallRecorder: @unchecked Sendable {
             r.markers.append(TranscriptMarker(offset: mute.offset, text: "Muted from \(Self.time(mute.date)) to the end of the recording"))
         }
         let paused = pausedTotal
+        let screens = screens
         // Sources first, then what is still in the feeds, so the writers have every sample before they close.
         let lastSound = stopAll()
         let dir = paths.callDirectory(r.id)
@@ -426,6 +449,7 @@ public final class CallRecorder: @unchecked Sendable {
                     Log.error("Trim \(track.rawValue) failed: \(error)")
                 }
             }
+            screens?.trim(to: length)
         }
         r.end = end
         r.status = .recorded
@@ -513,11 +537,28 @@ public final class CallRecorder: @unchecked Sendable {
         seconds < 60 ? "\(Int(seconds)) s" : "\(Int((seconds / 60).rounded())) min"
     }
 
+    /// The shared screen is captured by the same rules as the audio: not in a room, not while paused, and only the
+    /// part of the call that the audio keeps. Its markers come from its own queue, so they pass through this one.
+    private func startScreens(_ r: CallRecord, dir: URL) {
+        guard let makeScreens else { return }
+        let id = r.id
+        screens = makeScreens(ScreenCall(directory: dir, platform: r.platform, bundleID: r.bundleID, meetingID: r.meetingID,
+                                         offset: { [weak self] in self?.recordedLength ?? 0 },
+                                         addMarker: { [weak self] offset, text in
+            CaptureQueue.queue.async {
+                guard let self, self.record?.id == id else { return }
+                self.addMarker(at: offset, text)
+            }
+        }))
+        screens?.start()
+    }
+
     /// Stops both sources but keeps the files open. The paused time is left out of both tracks.
     public func pause() {
         guard isRecording, !isPaused else { return }
         isPaused = true
         pauseStart = (clock(), recordedLength)
+        screens?.stop()
         themSource?.stop()
         meSource?.stop()
         themSource = nil
@@ -544,6 +585,7 @@ public final class CallRecorder: @unchecked Sendable {
         healthFrom = clock()
         startMe()
         if !isManual { startThem(themProcessIDs) }
+        screens?.start()
         Log.info("Recording resumed")
     }
 
@@ -584,6 +626,9 @@ public final class CallRecorder: @unchecked Sendable {
     /// Stops the sources, writes what the feeds still hold, and closes the files. Returns where the last sound on
     /// either track ended, in file seconds.
     private func stopAll() -> TimeInterval? {
+        // Before the folder can be deleted: after this the screen capture writes nothing more.
+        screens?.close()
+        screens = nil
         themSource?.stop()
         meSource?.stop()
         let lines = lineLock.withLock {
