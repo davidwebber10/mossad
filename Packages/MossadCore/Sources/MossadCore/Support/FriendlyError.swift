@@ -229,6 +229,7 @@ public struct FriendlyError: Equatable, Sendable {
         case SummaryError.malformed: return .init(kind: .unreadable, service: "the AI service")
         case MailError.http(let code, let body): return http(code, body, service: "Resend")
         case ChatError.tooManySteps: return .init(kind: .tooManySteps)
+        case let e as LocalModelError: return .init(kind: .transcriptionFailed, service: e.model.name, said: e.message)
         case ServerError.notMossad: return .init(kind: .notMossad)
         case ServerError.wrongSecret: return .init(kind: .wrongSecret, service: "your server")
         case ServerError.http(let code, let message):
