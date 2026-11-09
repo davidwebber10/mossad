@@ -280,6 +280,7 @@ final class AppController: ObservableObject {
         shareBook = ShareBook.load(from: paths.shares)
         noRecord = NoRecordBook.load(from: paths.noRecord)
         noRecordGate.update(book: noRecord)
+        noRecordGate.persistSession(in: paths.noRecord)
         // The chosen calendars apply before anything matches a call to an invite.
         calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
@@ -313,6 +314,10 @@ final class AppController: ObservableObject {
                 guard let self, case .idle = self.status else { return }
                 self.detection.forceStart(bundleID: bundleID, platform: platform)
             }
+            notifier.onNotACall = { [weak self] call in self?.quietUnconfirmed(call) }
+            for answer in UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall")).active(at: Date()) {
+                detection.dismissUnconfirmed(answer.call, until: answer.until)
+            }
 
             let detection = detection
             let recorder = recorder
@@ -320,11 +325,20 @@ final class AppController: ObservableObject {
                 // Read the call's audio processes on the detection queue, where they were just computed.
                 let ids = detection.audioProcessIDs
                 let meetingID = detection.meetingID
+                let forced = detection.callIsForced
                 guard let self else { return }
-                // Before anything records or streams: a meeting the owner marked stays off the record.
-                if case .started(let platform, _, let at) = event, self.noRecordGate.blocks(platform: platform, meetingID: meetingID, at: at) {
-                    Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
-                    return
+                // Before anything records or streams: a meeting the owner marked stays off the record, for the whole
+                // call session (a late end, a mic gap, Off then On, a restart); the owner's Record wins. At launch the calendar comes a moment
+                // after detection, so the first call waits for it.
+                switch event {
+                case .started(let platform, let bundleID, let at):
+                    self.noRecordGate.waitForCalendar(timeout: 3)
+                    if self.noRecordGate.blocksStart(platform: platform, bundleID: bundleID, meetingID: meetingID, at: at, forced: forced) {
+                        Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
+                        return
+                    }
+                case .ended(let at, _):
+                    if self.noRecordGate.callEnded(at: at) { return }
                 }
                 // Recorder commands go straight from the detection queue to the capture queue, so they keep
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
@@ -335,13 +349,22 @@ final class AppController: ObservableObject {
                 Task { @MainActor in
                     guard let self, case .idle = self.status else { return }
                     self.notifier.postUnconfirmed(call)
+                    // A missing permission is said one time a day, not on each use of the mic.
+                    if call.reason == .noAutomation { self.quietUnconfirmed(call) }
                 }
             }
             detection.onMuteChange = { @Sendable [weak self] muted in
+                // A call that stays off the record has no recorder and no menu state to follow.
+                if self?.noRecordGate.isBlockingCall == true { return }
                 CaptureQueue.queue.async { recorder.setMuted(muted) }
-                Task { @MainActor in self?.isMuted = muted }
+                Task { @MainActor in
+                    // A change that arrives after the end of its call must not leave the menu on "muted".
+                    guard let self, self.isRecording else { return }
+                    self.isMuted = muted
+                }
             }
-            detection.onCallProcesses = { @Sendable ids in
+            detection.onCallProcesses = { @Sendable [weak self] ids in
+                self?.noRecordGate.seen(at: Date())
                 CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
             }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
@@ -1115,7 +1138,7 @@ final class AppController: ObservableObject {
                 Task { @MainActor in
                     self.notifier.postCannotRecord(FriendlyError(error, context: .recording), platform: platform)
                     // Only clear the status of this call, never of a newer one.
-                    if case .recording(_, let since) = self.status, since == at { self.status = .idle }
+                    if case .recording(_, let since) = self.status, since == at { self.status = .idle } else { self.failedStarts.insert(at) }
                 }
             }
         case .ended(let at, let trimTo):
@@ -1144,16 +1167,32 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// "Not a call": no more warnings for this app and reason for the rest of the day, also after a restart.
+    private func quietUnconfirmed(_ call: UnconfirmedCall) {
+        let now = Date()
+        let until = UnconfirmedDismissals.endOfDay(after: now)
+        var answers = UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall"))
+        answers.add(call, until: until, now: now)
+        UserDefaults.standard.set(answers.data, forKey: "notACall")
+        detection.dismissUnconfirmed(call, until: until)
+    }
+
+    /// Call starts whose recording failed, by start time, until the UI has seen them.
+    private var failedStarts: Set<Date> = []
+
     private func show(_ event: DetectorEvent) {
         if case .recording(.inPerson, _) = status { return }
         switch event {
         case .started(let platform, _, let at):
             notifier.clearUnconfirmed()
+            // The failure can arrive first: a recording that did not start must not show as one.
+            if failedStarts.remove(at) != nil { return }
             status = .recording(platform, since: at)
             isPaused = false
             isMuted = false
             startLive(reset: true)
         case .ended:
+            failedStarts.removeAll()
             updater.callEnded()
             status = .idle
             isPaused = false

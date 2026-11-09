@@ -27,16 +27,31 @@ public protocol MicUsageProbing: AnyObject {
 public protocol BrowserTabProbing: AnyObject {
     /// `nil` when the tabs cannot be read (browser not running or Automation denied).
     func tabs(browserBundleID: String) -> [BrowserTab]?
+    /// True when the owner has not allowed Automation for this browser, so its tabs stay unknown.
+    func automationDenied(browserBundleID: String) -> Bool
 }
 
-/// Labels of the call app's controls (buttons, menu items) that can show the mute state; nil when unreadable.
+public extension BrowserTabProbing {
+    func automationDenied(browserBundleID: String) -> Bool { false }
+}
+
+/// Labels of the call app's controls (buttons, menu items) that can show the mute state. Nil when unreadable or
+/// when the read was cut short; an empty list only after a full, clean read that found the call's window.
 public protocol MuteProbing: AnyObject {
-    func labels(bundleID: String, platform: Platform) -> [String]?
+    /// `meetingID` narrows a browser to the window of the current call when its title shows the meeting code.
+    func labels(bundleID: String, platform: Platform, meetingID: String?) -> [String]?
 }
 
 public protocol WindowTitleProbing: AnyObject {
-    /// `nil` when window titles cannot be read (Accessibility not granted).
+    /// `nil` when window titles cannot be read (Accessibility not granted, or any copy of the app did not answer).
     func windowTitles(bundleID: String) -> [String]?
+    /// The titles of the copies of the app that answered; nil only when none did. For "does any copy show a
+    /// meeting?", where one good answer is enough.
+    func answeredWindowTitles(bundleID: String) -> [String]?
     func isRunning(bundleID: String) -> Bool
+}
+
+public extension WindowTitleProbing {
+    func answeredWindowTitles(bundleID: String) -> [String]? { windowTitles(bundleID: bundleID) }
 }
 #endif
