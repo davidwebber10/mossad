@@ -189,8 +189,8 @@ struct CheckStep: View {
         case .idle: "Mossad plays a short tone and listens for it, the way it hears a call. Your speakers can be off."
         case .playing: "Playing the tone…"
         case .heard: "Mossad heard the tone. It will hear the other people on your calls."
-        case .silent: "Mossad did not hear the tone. In System Settings › Privacy & Security › Screen & System Audio Recording, turn Mossad on, then play it again."
-        case .failed: "Mossad could not listen to system audio. Check that System audio recording is allowed for Mossad, then play it again."
+        case .silent: "Mossad did not hear the tone. In System Settings › Privacy & Security › Screen & System Audio Recording, turn \(Rehearsal.isOn ? "Mossad Rehearsal" : "Mossad") on, then play it again."
+        case .failed: "Mossad could not listen to system audio. Check that System audio recording is allowed for \(Rehearsal.isOn ? "Mossad Rehearsal" : "Mossad"), then play it again."
         }
     }
 
