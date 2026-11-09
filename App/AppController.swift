@@ -154,6 +154,8 @@ final class AppController: ObservableObject {
     private(set) var isInert = false
     /// Another copy held the folder's lock at launch (+SecondCopy). The menu says so, and nothing is processed.
     @Published private(set) var isSecondCopy = false
+    /// The second copy saw the lock free: the menu offers "Restart Mossad".
+    @Published var otherCopyQuit = false
     let library: VoiceLibrary
     let keychain = Keychain.app
     /// What views show from the Keychain and the coach's files, read again only when it changes (+Display).
@@ -1056,6 +1058,7 @@ final class AppController: ObservableObject {
 
     /// Joins the meetings into the earliest one and opens it.
     func mergeMeetings(_ ids: [String]) {
+        guard !isSecondCopy else { return }
         Task {
             let merged = await pipeline.merge(callIDs: ids)
             refresh()
@@ -1065,6 +1068,7 @@ final class AppController: ObservableObject {
 
     /// A person's new name reaches every past meeting and note.
     func renamePerson(_ old: String, to new: String) {
+        guard !isSecondCopy else { return }
         Task {
             await pipeline.renamePerson(old, to: new)
             refresh()
@@ -1074,7 +1078,7 @@ final class AppController: ObservableObject {
     /// Meetings that used a saved person's email as the name get the person's name instead.
     func relinkEmails() {
         let pairs = library.profiles.compactMap { p in p.email.map { ($0, p.name) } }
-        guard !pairs.isEmpty else { return }
+        guard !pairs.isEmpty, !isSecondCopy else { return }
         Task {
             for (email, name) in pairs where email != name { await pipeline.renamePerson(email, to: name) }
             refresh()
