@@ -41,28 +41,42 @@ public final class CallRecorder: @unchecked Sendable {
     private let systemAudioAllowed: () -> Bool
     private let micAllowed: () -> Bool
     private let freeBytes: () -> Int64?
+    private let silenceMuted: (inout CallRecord, URL) throws -> Void
     public static let retryInterval: TimeInterval = 10
     /// A source that sends nothing this long is restarted. It can start on a new device and stay silent; a tap sends
     /// buffers even when the call is quiet, so silence from it is never "nothing".
     public static let stallLimit: TimeInterval = 10
     /// After `CaptureHealth.stallRestartLimit` restarts in a row, a silent source is restarted this often.
     static let slowStallLimit: TimeInterval = 60
-    /// A tap of all system audio is rebuilt this often, to get back to the call app's own audio.
+    /// While the tap records all system audio, the call app's own audio is tried again this often, and twice as
+    /// long after each failure, up to the maximum.
     static let processTapRetryInterval: TimeInterval = 30
-    /// The mute state comes from a poll, so an unmute is seen late. Without a later "still muted" report, the span
-    /// ends this long before the unmute was seen: better some muted seconds kept than the owner's first words lost.
+    static let processTapRetryMax: TimeInterval = 480
+    /// The mute state comes from a poll, so an unmute is seen late. Only when the report does not say when "muted"
+    /// was last seen, the span ends this long before the unmute was seen.
     public static let unmuteLead: TimeInterval = 3
 
     /// One track: its writer, and the feed that carries audio from the audio thread to it.
     private final class Line {
         let writer: TrackWriter
-        let feed: AudioFeed
+        /// Replaced when a new source takes over from one that still runs. Capture queue only.
+        var feed: AudioFeed
+        let clock: CaptureClock
+        let label: String
         var startedAt: TimeInterval = 0
         var stallRestarts = 0
         var rejectedLogged = 0
+        var rejectedLoggedAt = Date.distantPast
         init(writer: TrackWriter, clock: CaptureClock, label: String) {
             self.writer = writer
+            self.clock = clock
+            self.label = label
             feed = AudioFeed(label: label, clock: clock) { writer.ingest($0) }
+        }
+        /// A second feed into the same writer, which hands nothing on until it is released.
+        func heldFeed() -> AudioFeed {
+            let writer = writer
+            return AudioFeed(label: label, clock: clock, held: true) { writer.ingest($0) }
         }
     }
 
@@ -78,6 +92,8 @@ public final class CallRecorder: @unchecked Sendable {
     private var nextThemRetry = Date.distantPast
     private var nextMeRetry = Date.distantPast
     private var nextProcessTapRetry = Date.distantPast
+    private var processTapRetryWait = CallRecorder.processTapRetryInterval
+    private var freeSpace: (bytes: Int64?, at: Date) = (nil, .distantPast)
     private var themGlobalSince: Date?
     private var markedGlobal = false
     private var loggedNoSystemAudio = false
@@ -86,7 +102,6 @@ public final class CallRecorder: @unchecked Sendable {
     /// Wall time the finished pauses took: the files leave it out.
     private var pausedTotal: TimeInterval = 0
     private var muteStart: (date: Date, offset: TimeInterval)?
-    private var lastSeenMuted: TimeInterval?
     public var isMuted: Bool { muteStart != nil }
     private var healthFrom = Date.distantPast
     private var nextHealthCheck = Date.distantPast
@@ -103,7 +118,9 @@ public final class CallRecorder: @unchecked Sendable {
     public init(paths: Paths, makeThem: @escaping ([AudioObjectID]) -> TrackSource, makeMe: @escaping () -> TrackSource,
                 clock: @escaping () -> Date = Date.init, captureClock: CaptureClock = .host,
                 systemAudioAllowed: @escaping () -> Bool = { true }, micAllowed: @escaping () -> Bool = { true },
-                freeBytes: (() -> Int64?)? = nil) {
+                freeBytes: (() -> Int64?)? = nil,
+                silenceMuted: @escaping (inout CallRecord, URL) throws -> Void = { try MutedAudio.apply(to: &$0, in: $1) }) {
+        self.silenceMuted = silenceMuted
         self.systemAudioAllowed = systemAudioAllowed
         self.micAllowed = micAllowed
         self.freeBytes = freeBytes ?? {
@@ -150,9 +167,8 @@ public final class CallRecorder: @unchecked Sendable {
 
     @discardableResult
     public func begin(platform: Platform, bundleID: String, processIDs: [AudioObjectID], meetingID: String? = nil, at start: Date) throws -> String {
-        // Never delete a call here: close the previous one so it is processed like any other.
-        // The detector sends a mute change only once, so a mute that is on carries over to the new call.
-        let stillMuted = isRecording && isMuted
+        // Never delete a call here: close the previous one so it is processed like any other. Its mute ends with it:
+        // a new call starts unmuted, and only a mute report for the new call opens a span in it.
         if isRecording, let previous = record { _ = end(at: start, trimTo: nil); Log.info("Closed \(previous.id) for a new call") }
         let id = freeCallID(for: start)
         let dir = paths.callDirectory(id)
@@ -184,7 +200,6 @@ public final class CallRecorder: @unchecked Sendable {
         // In a room there is no call app to tap; the them track stays empty.
         if platform != .inPerson { startThem(processIDs) }
         Log.info("Recording \(id) (\(platform.displayName))")
-        if stillMuted { setMuted(true) }
         // A missing permission or a full disk is told now, not after the call.
         checkHealth(manual: platform == .inPerson)
         return id
@@ -216,16 +231,41 @@ public final class CallRecorder: @unchecked Sendable {
             source.stop()
             startThem(ids)
         } else if source.isGlobal, !ids.isEmpty, now >= nextProcessTapRetry {
-            // A tap that fell back to all system audio must not stay for the call.
-            Log.info("Recording all system audio; trying the call app's own audio again")
-            source.stop()
-            startThem(ids)
+            retryProcessTap(ids, line: line, old: source)
         }
         if themSource?.isGlobal == true, !markedGlobal, let since = themGlobalSince, now.timeIntervalSince(since) >= CaptureHealth.grace {
             markedGlobal = true
             Log.error("The call app's own audio cannot be tapped; the call track has all system audio")
             addMarker(at: recordedLength, "The call audio includes every sound the Mac played from \(Self.time(since))")
         }
+    }
+
+    /// A tap that fell back to all system audio must not stay for the call, but a working tap is never stopped for
+    /// a try: the new tap starts first, into a feed of its own that holds its audio back. Only when it runs on the
+    /// call app's own audio does the old tap stop; the writer drops the short overlap.
+    private func retryProcessTap(_ ids: [AudioObjectID], line: Line, old: TrackSource) {
+        let feed = line.heldFeed()
+        let source = makeThem(ids)
+        feed.beginSegment()
+        let started = (try? source.start(feed)) != nil
+        guard started, !source.isGlobal else {
+            source.stop()
+            feed.close()
+            processTapRetryWait = min(processTapRetryWait * 2, Self.processTapRetryMax)
+            nextProcessTapRetry = clock().addingTimeInterval(processTapRetryWait)
+            Log.info("The call app's own audio still cannot be tapped; all system audio is recorded, next try in \(Int(processTapRetryWait)) s")
+            return
+        }
+        old.stop()
+        line.feed.close()
+        line.feed = feed
+        line.startedAt = captureClock.now()
+        feed.release()
+        themSource = source
+        themProcessIDs = ids
+        themGlobalSince = nil
+        processTapRetryWait = Self.processTapRetryInterval
+        Log.info("Recording the call app's own audio again")
     }
 
     /// True when the source sent nothing since it started, or for `stallLimit`. Audio since the start clears the count.
@@ -282,7 +322,7 @@ public final class CallRecorder: @unchecked Sendable {
             themSource = source
             if source.isGlobal {
                 if themGlobalSince == nil { themGlobalSince = clock() }
-                nextProcessTapRetry = clock().addingTimeInterval(Self.processTapRetryInterval)
+                nextProcessTapRetry = clock().addingTimeInterval(processTapRetryWait)
             } else {
                 themGlobalSince = nil
             }
@@ -324,13 +364,17 @@ public final class CallRecorder: @unchecked Sendable {
         guard now >= nextHealthCheck else { return }
         nextHealthCheck = now.addingTimeInterval(5)
         for (line, name) in [(me, "mic"), (them, "call audio tap")] {
-            guard let line, line.feed.rejected > line.rejectedLogged else { continue }
+            // The first time, then one line a minute.
+            guard let line, line.feed.rejected > line.rejectedLogged, now.timeIntervalSince(line.rejectedLoggedAt) >= 60 else { continue }
             line.rejectedLogged = line.feed.rejected
+            line.rejectedLoggedAt = now
             Log.error("The \(name) sent \(line.rejectedLogged) buffers that Mossad could not read")
         }
+        // The system can take a while to work out the free space, so once a minute is enough.
+        if now.timeIntervalSince(freeSpace.at) >= 60 { freeSpace = (freeBytes(), now) }
         let problems = CaptureHealth.problems(
             elapsed: now.timeIntervalSince(healthFrom), micAllowed: micAllowed(), systemAudioAllowed: systemAudioAllowed(),
-            freeBytes: freeBytes(), me: health(me, running: meSource != nil),
+            freeBytes: freeSpace.bytes, me: health(me, running: meSource != nil),
             them: manual ? nil : them.map { health($0, running: themSource != nil) })
         for problem in problems where told.insert(problem.kind).inserted {
             Log.error("\(problem.title). \(problem.message)")
@@ -346,31 +390,6 @@ public final class CallRecorder: @unchecked Sendable {
 
     // MARK: End
 
-    /// Ends the call when the app quits: runs `end` on the capture queue and waits for it, at most `timeout`.
-    /// Call it from any thread but the capture queue. Nil when nothing was recording, the call was too short, or the
-    /// wait timed out (the audio is on disk then, and the next launch recovers the call).
-    @discardableResult
-    public func endForQuit(at time: Date = Date(), timeout: TimeInterval = 5) -> CallRecord? {
-        let result = QuitResult()
-        let done = DispatchSemaphore(value: 0)
-        CaptureQueue.queue.async {
-            result.set(self.end(at: time, trimTo: nil, byPerson: true))
-            done.signal()
-        }
-        guard done.wait(timeout: .now() + timeout) == .success else {
-            Log.error("The recording did not close within \(Int(timeout)) s; the next launch recovers it")
-            return nil
-        }
-        return result.value
-    }
-
-    private final class QuitResult: @unchecked Sendable {
-        private let lock = NSLock()
-        private var record: CallRecord?
-        var value: CallRecord? { lock.withLock { record } }
-        func set(_ r: CallRecord?) { lock.withLock { record = r } }
-    }
-
     /// Stops recording. Returns the saved record, or nil when the call was shorter than the minimum and was deleted.
     public func end(at time: Date, trimTo: Date?, byPerson: Bool = false) -> CallRecord? {
         guard var r = record else { return nil }
@@ -385,7 +404,7 @@ public final class CallRecorder: @unchecked Sendable {
         }
         let paused = pausedTotal
         // Sources first, then what is still in the feeds, so the writers have every sample before they close.
-        let (lastSound, meLength) = stopAll()
+        let lastSound = stopAll()
         let dir = paths.callDirectory(r.id)
         // File seconds from here on: the paused time is not in the files.
         let wallEnd = max(0, time.timeIntervalSince(r.start) - paused)
@@ -401,18 +420,22 @@ public final class CallRecorder: @unchecked Sendable {
             Log.info("Discarded short call \(r.id)")
             return nil
         }
-        // A mute still on runs to the end of the mic track.
-        if let open = r.muteSpans.indices.last, r.muteSpans[open].end == nil { r.muteSpans[open].end = max(meLength, r.muteSpans[open].start) }
-        let muted = MuteSpan.ranges(r.muteSpans, length: meLength)
-        for track in [Track.me, .them] {
-            let silence = track == .me ? muted : []
-            guard trimTo != nil || !silence.isEmpty else { continue }
-            do { try rewriteAudioFile(dir.appendingPathComponent(track.fileName), keep: trimTo == nil ? nil : length, silence: silence) } catch {
-                Log.error("Finishing \(track.rawValue) (trim, muted spans) failed: \(error)")
+        if trimTo != nil {
+            for track in [Track.me, .them] {
+                do { try trimAudioFile(dir.appendingPathComponent(track.fileName), to: length) } catch {
+                    Log.error("Trim \(track.rawValue) failed: \(error)")
+                }
             }
         }
         r.end = end
         r.status = .recorded
+        // Silence over the muted spans, written in place (a mute still on runs to the end of the mic track). When
+        // that fails, the call is kept but held back: what was said while muted must never reach a transcript.
+        do { try silenceMuted(&r, dir) } catch {
+            Log.error("\(r.id): \(error.localizedDescription); the call waits until that works")
+            MutedAudio.hold(&r)
+            onProblem?(.mutedNotSilenced, r.platform)
+        }
         do { try r.save(to: dir) } catch { Log.error("Saving \(r.id) failed: \(error)") }
         Log.info("Recorded \(r.id): \(Int(end.timeIntervalSince(r.start))) s")
         return r
@@ -420,32 +443,32 @@ public final class CallRecorder: @unchecked Sendable {
 
     /// Follows the call app's mute button. The mic track keeps the real samples while the call runs, because the mute
     /// state is read by a poll and comes late; `end` writes silence over the muted spans. A span runs from the first
-    /// "muted" to the last one: call this with true on each poll that still sees "muted", so the time between that
-    /// poll and the unmute, which nobody saw, is kept.
-    public func setMuted(_ muted: Bool) {
+    /// "muted" to the last time "muted" was seen (`lastSeenMuted`, from the detector): what came after it, until the
+    /// unmute was seen, nobody watched, so it is kept.
+    public func setMuted(_ muted: Bool, lastSeenMuted: Date? = nil) {
         guard isRecording, let line = me else { return }
         let position = line.writer.position
         if muted {
-            guard muteStart == nil else {
-                lastSeenMuted = position
-                return
-            }
+            guard muteStart == nil else { return }
             muteStart = (clock(), position)
-            lastSeenMuted = nil
             line.writer.isMuted = true
-            edit { $0.muteSpans.append(MuteSpan(start: position, end: nil)) }
+            edit {
+                $0.muteSpans.append(MuteSpan(start: position, end: nil))
+                $0.mutedAudioPending = true
+            }
             Log.info("Muted in the call; the muted time is silenced when the call ends")
         } else if let mute = muteStart {
-            let end = lastSeenMuted ?? position - Self.unmuteLead
+            // File time of the last "muted" sighting: now, less the wall time since then.
+            let end = lastSeenMuted.map { position - max(0, clock().timeIntervalSince($0)) } ?? position - Self.unmuteLead
             let text = "Muted from \(Self.time(mute.date)) to \(Self.time(clock())) (\(Self.length(clock().timeIntervalSince(mute.date))))"
             muteStart = nil
-            lastSeenMuted = nil
             line.writer.isMuted = false
             edit { r in
                 if let open = r.muteSpans.indices.last, r.muteSpans[open].end == nil {
-                    // A mute shorter than the unknown time silences nothing.
+                    // A mute that was seen only once silences nothing.
                     if end > r.muteSpans[open].start { r.muteSpans[open].end = end } else { r.muteSpans.remove(at: open) }
                 }
+                r.mutedAudioPending = !r.muteSpans.isEmpty
                 r.markers.append(TranscriptMarker(offset: mute.offset, text: text))
             }
             Log.info("Unmuted in the call")
@@ -559,8 +582,8 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     /// Stops the sources, writes what the feeds still hold, and closes the files. Returns where the last sound on
-    /// either track ended and the mic track's length, in file seconds.
-    private func stopAll() -> (lastSound: TimeInterval?, meLength: TimeInterval) {
+    /// either track ended, in file seconds.
+    private func stopAll() -> TimeInterval? {
         themSource?.stop()
         meSource?.stop()
         let lines = lineLock.withLock {
@@ -583,19 +606,20 @@ public final class CallRecorder: @unchecked Sendable {
         pauseStart = nil
         pausedTotal = 0
         muteStart = nil
-        lastSeenMuted = nil
         themSource = nil
         meSource = nil
         themProcessIDs = []
         nextThemRetry = .distantPast
         nextMeRetry = .distantPast
         nextProcessTapRetry = .distantPast
+        processTapRetryWait = Self.processTapRetryInterval
+        freeSpace = (nil, .distantPast)
         themGlobalSince = nil
         markedGlobal = false
         loggedNoSystemAudio = false
         record = nil
         isManual = false
-        return (lastSound, lines.me?.writer.duration ?? 0)
+        return lastSound
     }
 }
 #endif

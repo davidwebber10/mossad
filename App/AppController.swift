@@ -361,10 +361,14 @@ final class AppController: ObservableObject {
                     if call.reason == .noAutomation { self.quietUnconfirmed(call) }
                 }
             }
+            // The recorder ends a mute span where "muted" was last seen, not where the unmute was seen.
+            detection.onMuteChangeAt = { @Sendable [weak self] muted, lastMutedSeen in
+                if self?.noRecordGate.isBlockingCall == true { return }
+                CaptureQueue.queue.async { recorder.setMuted(muted, lastSeenMuted: lastMutedSeen) }
+            }
             detection.onMuteChange = { @Sendable [weak self] muted in
                 // A call that stays off the record has no recorder and no menu state to follow.
                 if self?.noRecordGate.isBlockingCall == true { return }
-                CaptureQueue.queue.async { recorder.setMuted(muted) }
                 Task { @MainActor in
                     // A change that arrives after the end of its call must not leave the menu on "muted".
                     guard let self, self.isRecording else { return }
@@ -413,7 +417,8 @@ final class AppController: ObservableObject {
                     self?.processPending()
                 }
             }
-            ProcessingQueue(paths: paths).recoverInterrupted()
+            // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
+            if !ProcessingQueue(paths: paths).recoverInterrupted().isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
         }
         loadMeetings()
         if !inert {
@@ -643,7 +648,7 @@ final class AppController: ObservableObject {
     nonisolated func endCallForQuit(_ done: @escaping @Sendable () -> Void) {
         let recorder = recorder
         CaptureQueue.queue.async {
-            _ = recorder.end(at: Date(), trimTo: nil)
+            _ = recorder.end(at: Date(), trimTo: nil, byPerson: true)
             done()
         }
     }

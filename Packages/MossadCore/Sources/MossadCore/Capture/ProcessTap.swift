@@ -34,6 +34,8 @@ public final class ProcessTap: TrackSource, @unchecked Sendable {
     private var ioProcID: AudioDeviceIOProcID?
     private let queue = DispatchQueue(label: "com.dwebber.mossad.tap", qos: .userInitiated)
     public private(set) var isGlobal = false
+    private let unexpectedCount = Count()
+    private final class Count: Sendable { let value = Atomic<Int>(0) }
 
     /// An empty list taps all system audio.
     public init(processObjectIDs: [AudioObjectID]) {
@@ -105,14 +107,16 @@ public final class ProcessTap: TrackSource, @unchecked Sendable {
                 Log.info("Tap input layout \(layout): the output device has \(extra) input streams of its own; using buffers \(chosen!)")
             }
         }
-        let expectedCount = layout?.count
-        let warned = WarnOnce()
+        let expectedCount = layout?.count ?? 0
+        let unexpected = unexpectedCount
+        unexpected.value.store(0, ordering: .relaxed)
 
         try check(AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, queue) { _, input, inputTime, _, _ in
             // The audio thread: copy into the feed and return. No allocation, no lock, no file.
             let list = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
             let count = list.count
-            if let expectedCount, count != expectedCount { warned.once("Tap delivers \(count) buffers, not the \(expectedCount) its device listed") }
+            // Only a flag here; `stop` logs it.
+            if expectedCount != 0, count != expectedCount { unexpected.value.store(count, ordering: .relaxed) }
             guard let buffers = TapLayout.tapBuffers(count: count, channels: { Int(list[$0].mNumberChannels) },
                                                      tapChannels: tapChannels, interleaved: interleaved) else {
                 feed.reject()
@@ -140,6 +144,8 @@ public final class ProcessTap: TrackSource, @unchecked Sendable {
         if tapID != kAudioObjectUnknown { log(AudioHardwareDestroyProcessTap(tapID), "destroy tap") }
         // A block that was already on its way finishes before the next source writes to the same feed.
         queue.sync {}
+        let odd = unexpectedCount.value.exchange(0, ordering: .relaxed)
+        if odd != 0 { Log.error("The tap delivered \(odd) buffers, not the number its device listed") }
         ioProcID = nil
         aggregateID = AudioObjectID(kAudioObjectUnknown)
         tapID = AudioObjectID(kAudioObjectUnknown)
@@ -197,27 +203,19 @@ func check(_ status: OSStatus, _ what: String) throws {
     guard status == noErr else { throw CaptureError.status(status, what) }
 }
 
-/// Logs one message from the audio thread, on another queue, the first time only.
-private final class WarnOnce: @unchecked Sendable {
-    private let done = Atomic<Bool>(false)
-    func once(_ message: @autoclosure () -> String) {
-        guard !done.exchange(true, ordering: .relaxed) else { return }
-        let text = message()
-        DispatchQueue.global(qos: .utility).async { Log.error(text) }
-    }
-}
-
 /// Calls back when the tap must be rebuilt: the default output device changed (headphones connected, USB headset
 /// unplugged), that device changed its sample rate (AirPods go from 48 kHz to 24 kHz when a call takes their mic), or
-/// the Mac woke from sleep. Changes that come together give one call.
+/// the Mac woke from sleep. Changes that come together give one call. Core Audio can stall at just these moments, so
+/// the listeners and every Core Audio call run on a queue of their own, never on the main thread.
 public final class OutputDeviceWatcher: @unchecked Sendable {
     private static let system = AudioObjectID(kAudioObjectSystemObject)
+    private let queue = DispatchQueue(label: "com.dwebber.mossad.output-watcher", qos: .utility)
     private var defaultAddress = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
                                                             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
     private var rateAddress = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate,
                                                          mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
     private let onChange: @Sendable () -> Void
-    // Main queue only.
+    // On `queue` only.
     private var deviceBlock: AudioObjectPropertyListenerBlock?
     private var rateBlock: AudioObjectPropertyListenerBlock?
     private var device = AudioObjectID(kAudioObjectUnknown)
@@ -226,23 +224,28 @@ public final class OutputDeviceWatcher: @unchecked Sendable {
 
     public init(onChange: @escaping @Sendable () -> Void) {
         self.onChange = onChange
-        let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            self?.watchRate()
-            self?.changed()
-        }
-        let rateBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.changed() }
-        self.deviceBlock = deviceBlock
-        self.rateBlock = rateBlock
-        AudioObjectAddPropertyListenerBlock(Self.system, &defaultAddress, DispatchQueue.main, deviceBlock)
+        let queue = queue
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil,
-                                                                         queue: .main) { [weak self] _ in self?.changed() }
-        DispatchQueue.main.async { [weak self] in self?.watchRate() }
+                                                                         queue: nil) { [weak self] _ in queue.async { self?.changed() } }
+        queue.async { [weak self] in
+            guard let self else { return }
+            let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+                self?.watchRate()
+                self?.changed()
+            }
+            let rateBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.changed() }
+            self.deviceBlock = deviceBlock
+            self.rateBlock = rateBlock
+            AudioObjectAddPropertyListenerBlock(Self.system, &self.defaultAddress, queue, deviceBlock)
+            self.watchRate()
+        }
     }
 
     deinit {
-        if let deviceBlock { AudioObjectRemovePropertyListenerBlock(Self.system, &defaultAddress, DispatchQueue.main, deviceBlock) }
-        if let rateBlock, device != kAudioObjectUnknown { AudioObjectRemovePropertyListenerBlock(device, &rateAddress, DispatchQueue.main, rateBlock) }
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+        // Whatever the queue still runs holds only a weak reference, so nothing else touches these now.
+        if let deviceBlock { AudioObjectRemovePropertyListenerBlock(Self.system, &defaultAddress, queue, deviceBlock) }
+        if let rateBlock, device != kAudioObjectUnknown { AudioObjectRemovePropertyListenerBlock(device, &rateAddress, queue, rateBlock) }
         pending?.cancel()
     }
 
@@ -252,9 +255,9 @@ public final class OutputDeviceWatcher: @unchecked Sendable {
         var current = AudioObjectID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioObjectID>.size)
         guard AudioObjectGetPropertyData(Self.system, &defaultAddress, 0, nil, &size, &current) == noErr, current != device else { return }
-        if device != kAudioObjectUnknown { AudioObjectRemovePropertyListenerBlock(device, &rateAddress, DispatchQueue.main, rateBlock) }
+        if device != kAudioObjectUnknown { AudioObjectRemovePropertyListenerBlock(device, &rateAddress, queue, rateBlock) }
         device = current
-        if device != kAudioObjectUnknown { AudioObjectAddPropertyListenerBlock(device, &rateAddress, DispatchQueue.main, rateBlock) }
+        if device != kAudioObjectUnknown { AudioObjectAddPropertyListenerBlock(device, &rateAddress, queue, rateBlock) }
     }
 
     private func changed() {
@@ -262,7 +265,7 @@ public final class OutputDeviceWatcher: @unchecked Sendable {
         let onChange = onChange
         let item = DispatchWorkItem { onChange() }
         pending = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: item)
+        queue.asyncAfter(deadline: .now() + 0.5, execute: item)
     }
 }
 #endif

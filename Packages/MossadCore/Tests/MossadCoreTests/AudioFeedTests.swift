@@ -55,6 +55,28 @@ final class AudioFeedTests: XCTestCase {
         XCTAssertEqual(chunks.all.map(\.start), [99.9, nil, nil])
     }
 
+    /// A source that starts while the one it replaces still runs collects audio, and hands it on only when released.
+    func testAHeldFeedHandsNothingOnUntilItIsReleased() {
+        let clock = clock, chunks = chunks
+        let feed = AudioFeed(clock: CaptureClock(now: { clock.now }, fromHost: nil), held: true) { chunks.add($0) }
+        feed.beginSegment()
+        feed.push(ramp(0..<50))
+        feed.flush()
+        XCTAssertTrue(chunks.all.isEmpty)
+        feed.release()
+        XCTAssertEqual(chunks.samples, (0..<50).map(Float.init))
+        XCTAssertEqual(chunks.all.map(\.newSegment), [true])
+        feed.close()
+    }
+
+    /// Buffers that come late in a burst carry true capture times that are some seconds old. They keep them.
+    func testAnOldButPossibleCaptureTimeIsKept() {
+        let feed = feed()
+        feed.push(ramp(0..<10), hostTime: 90_000)   // 10 s before the arrival
+        feed.close()
+        XCTAssertEqual(chunks.all.map(\.start), [90])
+    }
+
     func testEachSourceStartIsANewSegment() {
         let feed = feed()
         feed.beginSegment()

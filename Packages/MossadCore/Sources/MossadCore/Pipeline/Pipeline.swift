@@ -99,6 +99,8 @@ public actor Pipeline {
 
     public func runPending() async {
         finishInterruptedMerges()
+        // Calls held because their muted parts could not be silenced (a full disk): try that again.
+        for r in queue.allRecords() where r.mutedAudioPending && r.status == .failed && r.failedStep == .recorded { await retry(r.id) }
         for r in queue.pending(now: now()) { await process(r.id) }
         await retryMissingSummaries()
     }
@@ -151,7 +153,13 @@ public actor Pipeline {
                 carryOwnerEdits(into: &r, dir: dir)
                 if let step = ProcessingStep(status: r.status) { startStep(r, step) }
                 switch r.status {
-                case .recorded: try await transcribe(&r, dir: dir)
+                case .recorded:
+                    // The mic track may still hold what was said while muted. Never send it anywhere like that.
+                    if r.mutedAudioPending {
+                        try MutedAudio.apply(to: &r, in: dir)
+                        try store(r, dir: dir)
+                    }
+                    try await transcribe(&r, dir: dir)
                 case .transcribed: try await identify(&r, dir: dir)
                 case .identified:
                     guard await summarize(&r) else {
@@ -171,6 +179,12 @@ public actor Pipeline {
                 carryOwnerEdits(into: &r, dir: dir)
                 try store(r, dir: dir)
             }
+        } catch let error as MutedAudio.NotSilenced {
+            // Held back, with no attempts used: each launch and each hourly run tries the silence again.
+            Log.error("Processing \(id) waits: \(error.localizedDescription)")
+            MutedAudio.hold(&r)
+            carryOwnerEdits(into: &r, dir: dir)
+            try? store(r, dir: dir)
         } catch let error as MissingAPIKey {
             // Not the call's fault: wait for the key without using up attempts or a backoff delay.
             Log.error("Processing \(id) waits for an API key")

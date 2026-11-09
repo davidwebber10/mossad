@@ -29,6 +29,10 @@ public final class TrackWriter: @unchecked Sendable {
         AVLinearPCMIsNonInterleaved: false,
     ] }
 
+    /// Held for a whole buffer, file write included: one writer at a time.
+    private let ioLock = NSLock()
+    /// Held only for a moment, for the values other threads read (the app's main thread reads the duration), so a
+    /// slow disk or a long run of silence after a sleep never makes them wait.
     private let lock = NSLock()
     private var file: AVAudioFile?
     private var converter: AVAudioConverter?
@@ -47,6 +51,7 @@ public final class TrackWriter: @unchecked Sendable {
     private var errors = 0
     private var firstError: String?
     private var lastErrorLog: TimeInterval = -.infinity
+    private var lastAheadLog: TimeInterval = -.infinity
     /// For tests: every write fails with this error, as on a full disk.
     var writeFault: Error?
     /// Some devices deliver fewer samples than their format says: AirPods in a call run at 24 kHz while the
@@ -110,28 +115,32 @@ public final class TrackWriter: @unchecked Sendable {
     /// Writes a buffer that arrived now, with no capture time. For tests and simple callers.
     public func append(_ buffer: AVAudioPCMBuffer) throws {
         guard buffer.frameLength > 0, let mono = Self.downmix(buffer) else { return }
-        try lock.withLock { try place(mono, start: nil, arrival: now(), newSegment: false) }
+        try ioLock.withLock { try place(mono, start: nil, arrival: now(), newSegment: false) }
     }
 
     /// Writes a chunk from the feed. Errors are kept for the recorder's health check, never thrown away.
     public func ingest(_ chunk: AudioFeed.Chunk) {
-        lock.withLock {
+        ioLock.withLock {
             do { try place(chunk.samples, start: chunk.start, arrival: chunk.arrival, newSegment: chunk.newSegment) } catch {
-                errors += 1
-                if firstError == nil { firstError = error.localizedDescription }
+                let count = lock.withLock {
+                    errors += 1
+                    if firstError == nil { firstError = error.localizedDescription }
+                    return errors
+                }
                 // The first error, then one line a minute, so a full disk does not fill the log.
                 let t = now()
                 if t - lastErrorLog >= 60 {
                     lastErrorLog = t
-                    Log.error("Writing \(file?.url.lastPathComponent ?? "audio") failed (\(errors) times): \(error)")
+                    Log.error("Writing \(file?.url.lastPathComponent ?? "audio") failed (\(count) times): \(error)")
                 }
             }
         }
     }
 
-    /// Call with the lock held. `mono` is at the rate its source declared.
+    /// Call with `ioLock` held. `mono` is at the rate its source declared.
     private func place(_ mono: AVAudioPCMBuffer, start: TimeInterval?, arrival: TimeInterval, newSegment: Bool) throws {
-        guard file != nil, !stalled, pausedAt == nil, mono.frameLength > 0 else { return }
+        let (paused, timelineStart, muted, written) = lock.withLock { (pausedAt != nil, self.timelineStart, self.muted, self.written) }
+        guard file != nil, !stalled, !paused, mono.frameLength > 0 else { return }
         if newSegment { rateCheck = nil }
         let declared = mono.format.sampleRate
         let rate = measureRate(declared: declared, frames: mono.frameLength, now: arrival)
@@ -151,9 +160,13 @@ public final class TrackWriter: @unchecked Sendable {
         let tolerance = newSegment ? 0 : Self.gapTolerance
         if Double(behind) > tolerance * Self.sampleRate {
             try writeSilence(frames: behind, live: Double(behind) <= Self.liveGapLimit * Self.sampleRate)
-        } else if start != nil, Double(-behind) > Self.aheadTolerance * Self.sampleRate {
+        } else if start != nil, Double(-behind) > (newSegment ? 0 : Self.aheadTolerance) * Self.sampleRate {
+            // A new source that started before the old one stopped sends the overlap a second time: drop exactly that.
             let excess = AVAudioFrameCount(min(-behind, AVAudioFramePosition(converted.frameLength)))
-            Log.info("Audio ran \(String(format: "%.2f", Double(-behind) / Self.sampleRate)) s ahead of its clock; dropped the excess")
+            if !newSegment, arrival - lastAheadLog >= 10 {
+                lastAheadLog = arrival
+                Log.info("Audio ran \(String(format: "%.2f", Double(-behind) / Self.sampleRate)) s ahead of its clock; dropped the excess")
+            }
             guard excess < converted.frameLength else { return }
             converted = Self.dropFirst(converted, frames: excess)
         }
@@ -161,7 +174,7 @@ public final class TrackWriter: @unchecked Sendable {
         let level = Self.rms(converted)
         meter?.record(muted ? 0 : level)
         sink?.send(muted ? Self.silence(frames: converted.frameLength) : converted)
-        if level >= Self.soundThreshold { lastSoundFrame = written }
+        if level >= Self.soundThreshold { lock.withLock { lastSoundFrame = self.written } }
     }
 
     static func relabel(_ buffer: AVAudioPCMBuffer, rate: Double) -> AVAudioPCMBuffer {
@@ -229,7 +242,7 @@ public final class TrackWriter: @unchecked Sendable {
     }
 
     public func close() {
-        lock.withLock {
+        ioLock.withLock {
             if let converter, let out = AVAudioPCMBuffer(pcmFormat: Self.outputFormat, frameCapacity: 4096) {
                 var error: NSError?
                 converter.convert(to: out, error: &error) { _, status in
@@ -255,7 +268,7 @@ public final class TrackWriter: @unchecked Sendable {
         guard buffer.frameLength > 0 else { return }
         if let writeFault { throw writeFault }
         try file?.write(from: buffer)
-        written += AVAudioFramePosition(buffer.frameLength)
+        lock.withLock { written += AVAudioFramePosition(buffer.frameLength) }
     }
 
     /// The live stream gets short gaps too, so its times stay the file's times. A longer gap (the Mac slept)
@@ -358,5 +371,39 @@ public func rewriteAudioFile(_ url: URL, keep: TimeInterval?, silence spans: [Cl
     } catch {
         try? FileManager.default.removeItem(at: temp)
         throw error
+    }
+}
+
+/// Writes silence over spans of a PCM track where it lies, with no copy: it needs no free disk space, so it works on
+/// a full disk, and it is fast. Silence in PCM is zero bytes. Works on a file that was never closed.
+public func silenceAudioFile(_ url: URL, spans: [ClosedRange<TimeInterval>]) throws {
+    guard !spans.isEmpty else { return }
+    func check(_ status: OSStatus, _ what: String) throws {
+        guard status == noErr else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [NSLocalizedDescriptionKey: "\(what) failed (\(status))"]) }
+    }
+    var opened: AudioFileID?
+    try check(AudioFileOpenURL(url as CFURL, .readWritePermission, 0, &opened), "open track")
+    guard let file = opened else { throw CaptureFormatError(rate: 0) }
+    defer { AudioFileClose(file) }
+    var format = AudioStreamBasicDescription()
+    var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+    try check(AudioFileGetProperty(file, kAudioFilePropertyDataFormat, &size, &format), "read format")
+    var bytes: Int64 = 0
+    size = UInt32(MemoryLayout<Int64>.size)
+    try check(AudioFileGetProperty(file, kAudioFilePropertyAudioDataByteCount, &size, &bytes), "read length")
+    guard format.mFormatID == kAudioFormatLinearPCM, format.mBytesPerPacket > 0, format.mSampleRate > 0 else {
+        throw CaptureFormatError(rate: format.mSampleRate)
+    }
+    let frame = Int64(format.mBytesPerPacket)
+    let zeros = [UInt8](repeating: 0, count: 1 << 16)
+    for span in spans {
+        var offset = max(0, Int64(span.lowerBound * format.mSampleRate)) * frame
+        let end = min(bytes, Int64((span.upperBound * format.mSampleRate).rounded(.up)) * frame)
+        while offset < end {
+            var count = UInt32(min(Int64(zeros.count), end - offset))
+            try check(AudioFileWriteBytes(file, false, offset, &count, zeros), "write silence")
+            guard count > 0 else { throw CaptureFormatError(rate: format.mSampleRate) }
+            offset += Int64(count)
+        }
     }
 }

@@ -112,6 +112,49 @@ final class ProcessingQueueTests: XCTestCase {
         XCTAssertGreaterThan(try AudioSamples.read(me, from: 21, to: 79).map(abs).max() ?? 0, 0.3)
     }
 
+    /// The disk is full or the track cannot be written: the call is kept, but nothing may transcribe it.
+    func testRecoveryHoldsACallWhoseMutedPartsCannotBeSilenced() throws {
+        var r = try record("held", .recording, start: t0)
+        r.muteSpans = [MuteSpan(start: 10, end: 20)]
+        r.mutedAudioPending = true
+        try r.save(to: paths.callDirectory("held"))
+        let me = paths.callDirectory("held").appendingPathComponent("me.caf")
+        try writeTestAudio(me, seconds: 90, frequency: 440)
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: me.path)
+        let queue = ProcessingQueue(paths: paths)
+        XCTAssertEqual(queue.recoverInterrupted(), ["held"])
+        let held = try CallRecord.load(from: paths.callDirectory("held"))
+        XCTAssertEqual(held.status, .failed)
+        XCTAssertEqual(held.failedStep, .recorded)
+        XCTAssertEqual(held.failureReason, MutedAudio.failureReason)
+        XCTAssertTrue(held.mutedAudioPending)
+        XCTAssertEqual(try audioDuration(me), 90, accuracy: 0.01, "the audio is kept")
+        XCTAssertTrue(queue.pending(now: t0.addingTimeInterval(86_400)).isEmpty)
+    }
+
+    func testRecoveryClearsThePendingMarkWhenTheSilenceWorked() throws {
+        var r = try record("ok", .recording, start: t0)
+        r.muteSpans = [MuteSpan(start: 10, end: nil)]
+        r.mutedAudioPending = true
+        try r.save(to: paths.callDirectory("ok"))
+        try writeTestAudio(paths.callDirectory("ok").appendingPathComponent("me.caf"), seconds: 90, frequency: 440)
+        XCTAssertEqual(ProcessingQueue(paths: paths).recoverInterrupted(), [])
+        let recovered = try CallRecord.load(from: paths.callDirectory("ok"))
+        XCTAssertEqual(recovered.status, .recorded)
+        XCTAssertFalse(recovered.mutedAudioPending)
+    }
+
+    /// A quit during the trim leaves its temp copy in the call folder.
+    func testRecoveryRemovesATempTrackThatAQuitLeft() throws {
+        try record("temp", .recording, start: t0)
+        let dir = paths.callDirectory("temp")
+        try writeTestAudio(dir.appendingPathComponent("me.caf"), seconds: 90)
+        try writeTestAudio(dir.appendingPathComponent(UUID().uuidString + ".caf"), seconds: 5)
+        try writeTestAudio(dir.appendingPathComponent("clip.caf"), seconds: 5)
+        ProcessingQueue(paths: paths).recoverInterrupted()
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasSuffix(".caf") }.sorted(), ["clip.caf", "me.caf"])
+    }
+
     func testACallRecordFromBeforeMuteSpansStillLoads() throws {
         try record("old", .recorded, start: t0)
         let url = paths.callDirectory("old").appendingPathComponent(CallRecord.fileName)

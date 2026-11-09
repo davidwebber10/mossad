@@ -33,6 +33,7 @@ public enum CaptureProblem: Hashable, Sendable {
     case micNotRecording
     case callAudioNotRecording
     case micSilent
+    case mutedNotSilenced
 
     public var title: String {
         switch self {
@@ -43,6 +44,7 @@ public enum CaptureProblem: Hashable, Sendable {
         case .micNotRecording: "Your microphone is not recorded"
         case .callAudioNotRecording: "The call audio is not recorded"
         case .micSilent: "Your microphone sends only silence"
+        case .mutedNotSilenced: "Mossad is holding a call back"
         }
     }
 
@@ -60,6 +62,8 @@ public enum CaptureProblem: Hashable, Sendable {
             "Mossad tries again on its own. Check the microphone in System Settings > Sound."
         case .callAudioNotRecording:
             "Mossad tries again on its own. Only your side of the call is recorded until then."
+        case .mutedNotSilenced:
+            "The parts where you were muted could not be removed from the recording, so it is not transcribed yet. Mossad tries again on its own. Free some disk space."
         case .micSilent:
             "Check that Mossad may use the microphone and that the right microphone is chosen in System Settings > Sound."
         }

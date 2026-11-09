@@ -177,6 +177,17 @@ final class TrackWriterTests: XCTestCase {
         XCTAssertEqual(try audioDuration(url), 2.5, accuracy: 0.011)
     }
 
+    /// A new source that started before the old one stopped sends the overlap again. It is written once.
+    func testTheOverlapOfANewSourceIsDroppedExactly() throws {
+        let base = t0.timeIntervalSinceReferenceDate
+        let url = dir.appendingPathComponent("v.caf")
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { self.t0 })
+        writer.ingest(chunk(2, start: base, arrival: base + 2, new: true))
+        writer.ingest(chunk(1, start: base + 1.9, arrival: base + 2.9, new: true))
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 2.9, accuracy: 0.011)
+    }
+
     /// Buffers with no capture time that arrive in a burst (a busy main thread) are all kept.
     func testALateBurstWithoutCaptureTimesIsKept() throws {
         let url = dir.appendingPathComponent("b.caf")
@@ -247,6 +258,27 @@ final class TrackWriterTests: XCTestCase {
         XCTAssertGreaterThan(try AudioSamples.read(url, from: 1, to: 1.9).map(abs).max() ?? 0, 0.3)
         XCTAssertGreaterThan(try AudioSamples.read(url, from: 4.1, to: 8.9).map(abs).max() ?? 0, 0.3)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["mute.caf"])
+    }
+
+    /// Silence over the muted spans is written where the track lies: no copy, so no free disk space is needed.
+    func testSilenceIsWrittenInPlaceInTheTrackFormat() throws {
+        let url = dir.appendingPathComponent("me.caf")
+        var now = t0
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        for _ in 0..<10 {
+            now = now.addingTimeInterval(1)
+            try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        }
+        writer.close()
+        let node = try FileManager.default.attributesOfItem(atPath: url.path)[.systemFileNumber] as? Int
+        try silenceAudioFile(url, spans: [2...4, 9...30])
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: url.path)[.systemFileNumber] as? Int, node, "the same file, not a copy")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["me.caf"])
+        XCTAssertEqual(try audioDuration(url), 10, accuracy: 0.01)
+        XCTAssertEqual(try AudioSamples.read(url, from: 2, to: 4).map(abs).max(), 0)
+        XCTAssertEqual(try AudioSamples.read(url, from: 9, to: 10).map(abs).max(), 0)
+        XCTAssertGreaterThan(try AudioSamples.read(url, from: 0.1, to: 1.99).map(abs).max() ?? 0, 0.3)
+        XCTAssertGreaterThan(try AudioSamples.read(url, from: 4.01, to: 8.99).map(abs).max() ?? 0, 0.3)
     }
 
     func testAFailedRewriteLeavesNoTempFile() throws {

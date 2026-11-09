@@ -39,10 +39,14 @@ public struct ProcessingQueue: Sendable {
         }
     }
 
-    /// Finishes calls that were still recording when the app stopped.
-    public func recoverInterrupted() {
+    /// Finishes calls that were still recording when the app stopped. Returns the calls whose muted parts could not
+    /// be silenced: they are kept, held back from processing, and tried again by the pipeline.
+    @discardableResult
+    public func recoverInterrupted() -> [String] {
+        var held: [String] = []
         for var r in allRecords() where r.status == .recording {
             let dir = paths.callDirectory(r.id)
+            removeTempTracks(in: dir)
             // The longer track: one track can be empty when its capture failed to start.
             // A missing file is an empty track; a file that exists but cannot be read is unknown (nil).
             let durations = [Track.me, .them].map { track -> Double? in
@@ -65,27 +69,26 @@ public struct ProcessingQueue: Sendable {
                 try? FileManager.default.removeItem(at: dir)
                 Log.info("Discarded interrupted call \(r.id) (\(Int(duration)) s)")
             } else {
-                silenceMutedSpans(&r, in: dir, micLength: durations[0])
                 r.end = r.start.addingTimeInterval(duration)
                 r.status = .recorded
+                // The mic track holds the real samples until the call ends, so a crashed call has the muted time in it.
+                do { try MutedAudio.apply(to: &r, in: dir) } catch {
+                    Log.error("Interrupted call \(r.id): \(error.localizedDescription); it waits until that works")
+                    MutedAudio.hold(&r)
+                    held.append(r.id)
+                }
                 try? r.save(to: dir)
                 Log.info("Recovered interrupted call \(r.id) (\(Int(duration)) s)")
             }
         }
+        return held
     }
 
-    /// The mic track holds the real samples until the call ends, so a crashed call still has the muted time in it.
-    /// A mute that was on at the crash runs to the end of the track.
-    private func silenceMutedSpans(_ r: inout CallRecord, in dir: URL, micLength: Double?) {
-        guard !r.muteSpans.isEmpty, let micLength else { return }
-        if let open = r.muteSpans.indices.last, r.muteSpans[open].end == nil { r.muteSpans[open].end = max(micLength, r.muteSpans[open].start) }
-        let spans = MuteSpan.ranges(r.muteSpans, length: micLength)
-        guard !spans.isEmpty else { return }
-        do {
-            try rewriteAudioFile(dir.appendingPathComponent(Track.me.fileName), keep: nil, silence: spans)
-        } catch {
-            // The call is kept: losing it is worse than a muted span that stayed.
-            Log.error("Silencing the muted time of \(r.id) failed: \(error)")
+    /// A rewrite that a quit stopped leaves its temp file (a UUID name) in the call folder.
+    private func removeTempTracks(in dir: URL) {
+        for url in (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        where url.pathExtension == "caf" && UUID(uuidString: url.deletingPathExtension().lastPathComponent) != nil {
+            try? FileManager.default.removeItem(at: url)
         }
     }
 

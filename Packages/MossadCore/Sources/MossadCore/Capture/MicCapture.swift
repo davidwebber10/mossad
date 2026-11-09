@@ -1,6 +1,7 @@
 #if os(macOS)
 import AVFoundation
 import Foundation
+import Synchronization
 
 /// Captures the microphone. The app records it raw (`voiceProcessing: false`): macOS gives a second voice-processing
 /// client silence when the browser also uses it, and the echo from the speakers is dropped later by `TranscriptMerger`.
@@ -9,6 +10,10 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
     private var engine = AVAudioEngine()
     private let voiceProcessing: Bool
     private var feed: AudioFeed?
+    /// Each engine start has its own number. AVAudioEngine does not promise that no tap block runs after
+    /// `removeTap`, so a late block of an older engine checks the number and writes nothing.
+    private let generation = Generation()
+    private final class Generation: Sendable { let value = Atomic<Int>(0) }
     private var observer: NSObjectProtocol?
     private var failureHandler: (() -> Void)?
 
@@ -32,6 +37,7 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
     private func restart() {
         Log.info("Audio configuration changed; restarting mic")
         if let observer { NotificationCenter.default.removeObserver(observer) }
+        generation.value.add(1, ordering: .relaxed)
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         if voiceProcessing { try? engine.inputNode.setVoiceProcessingEnabled(false) }
@@ -56,7 +62,10 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
         try Self.checkInput(sampleRate: format.sampleRate, channels: format.channelCount)
         // Also after a restart on a new device: its first buffer is placed exactly on the timeline.
         feed.beginSegment()
+        let generation = generation
+        let mine = generation.value.add(1, ordering: .relaxed).newValue
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, when in
+            guard generation.value.load(ordering: .relaxed) == mine else { return }
             feed.push(buffer, hostTime: when.isHostTimeValid ? when.hostTime : nil)
         }
         engine.prepare()
@@ -70,6 +79,7 @@ public final class MicCapture: TrackSource, @unchecked Sendable {
         if let observer { NotificationCenter.default.removeObserver(observer) }
         observer = nil
         feed = nil
+        generation.value.add(1, ordering: .relaxed)
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         if voiceProcessing { try? engine.inputNode.setVoiceProcessingEnabled(false) }

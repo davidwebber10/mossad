@@ -256,6 +256,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var speakersExpected: Int?
     /// When the owner was muted in the call app; silence goes over these spans in the mic track.
     public var muteSpans: [MuteSpan] = []
+    /// True while the mic track still holds what was said in a mute span. Nothing may transcribe, upload, or play the
+    /// track until `MutedAudio.apply` wrote the silence and cleared this.
+    public var mutedAudioPending = false
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -336,6 +339,7 @@ extension CallRecord {
         summaryMissing = try c.decodeIfPresent(Bool.self, forKey: .summaryMissing)
         speakersExpected = try c.decodeIfPresent(Int.self, forKey: .speakersExpected)
         muteSpans = try c.decodeIfPresent([MuteSpan].self, forKey: .muteSpans) ?? []
+        mutedAudioPending = try c.decodeIfPresent(Bool.self, forKey: .mutedAudioPending) ?? false
     }
 }
 

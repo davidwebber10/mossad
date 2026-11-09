@@ -105,6 +105,50 @@ final class PipelineTests: XCTestCase {
                         onStep: { notifications.steps.append($0) }, onDetail: { _, text in notifications.detail(text) })
     }
 
+    /// A call held because its muted parts could not be silenced is tried again by the pipeline's regular run. The
+    /// silence is written before anything is sent to transcription.
+    func testAHeldCallIsSilencedAndThenProcessed() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        var r = try CallRecord.load(from: dir)
+        r.muteSpans = [MuteSpan(start: 2, end: 6)]
+        MutedAudio.hold(&r)
+        try r.save(to: dir)
+        await pipeline().runPending()
+        let done = try CallRecord.load(from: dir)
+        XCTAssertEqual(done.status, .written)
+        XCTAssertFalse(done.mutedAudioPending)
+        XCTAssertNil(done.failureReason)
+        XCTAssertEqual(try AudioSamples.read(dir.appendingPathComponent("me.caf"), from: 2, to: 6).map(abs).max(), 0)
+        XCTAssertGreaterThan(try AudioSamples.read(dir.appendingPathComponent("me.caf"), from: 0, to: 1.9).map(abs).max() ?? 0, 0.1)
+    }
+
+    /// While the silence cannot be written, nothing is transcribed: not by the regular run and not by Retry.
+    func testACallWithMutedPartsStillInItIsNeverTranscribed() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        var r = try CallRecord.load(from: dir)
+        r.muteSpans = [MuteSpan(start: 2, end: 6)]
+        r.mutedAudioPending = true
+        try r.save(to: dir)
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: dir.appendingPathComponent("me.caf").path)
+        let p = pipeline()
+        await p.process(id)
+        await p.runPending()
+        await p.retry(id)
+        XCTAssertEqual(transcriber.calls, [])
+        let held = try CallRecord.load(from: dir)
+        XCTAssertEqual(held.status, .failed)
+        XCTAssertEqual(held.failedStep, .recorded)
+        XCTAssertEqual(held.failureReason, MutedAudio.failureReason)
+        XCTAssertTrue(held.mutedAudioPending)
+        XCTAssertEqual(held.attempts, 0, "waiting for the silence uses no attempts")
+        // The disk has room again.
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: dir.appendingPathComponent("me.caf").path)
+        await p.runPending()
+        XCTAssertEqual(try CallRecord.load(from: dir).status, .written)
+    }
+
     func testAMicVoiceNamedLikeSomeoneOnTheCallIsTheirEcho() async throws {
         // Alex Rivera is known; his voice (400 Hz) is on the call audio and also leaks into the mic as me:B.
         // The owner barely speaks (only while the call audio plays), so the echo label has the most quiet-time

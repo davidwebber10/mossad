@@ -54,8 +54,9 @@ public final class AudioFeed: @unchecked Sendable {
     public static let defaultCapacity = 1 << 20   // about 22 s at 48 kHz
     static let chunkCapacity = 4096
     static let drainInterval: DispatchTimeInterval = .milliseconds(50)
-    /// How long before now a buffer's capture time can be.
-    static let stampWindow: TimeInterval = 2
+    /// How long before now a buffer's capture time can be. Buffers that come late in a burst (a stalled audio
+    /// thread) carry true, old times and must keep them; only a stamp no device could have buffered is bad.
+    static let stampWindow: TimeInterval = 30
 
     private let clock: CaptureClock
     private let capacity: Int
@@ -78,9 +79,13 @@ public final class AudioFeed: @unchecked Sendable {
     private var lastSegment = -1
     private var formats: [Double: AVAudioFormat] = [:]
     private var closed = false
+    private var held: Bool
 
+    /// `held`: the feed takes audio but hands nothing on until `release()`, for a source that starts while the
+    /// source it replaces still runs.
     public init(label: String = "audio", clock: CaptureClock = .host, capacity: Int = AudioFeed.defaultCapacity,
-                onChunk: @escaping (Chunk) -> Void) {
+                held: Bool = false, onChunk: @escaping (Chunk) -> Void) {
+        self.held = held
         self.clock = clock
         self.capacity = capacity
         self.onChunk = onChunk
@@ -219,9 +224,18 @@ public final class AudioFeed: @unchecked Sendable {
     /// Hands every waiting chunk to the writer now. Never call it on the feed's own queue.
     public func flush() { queue.sync { drain() } }
 
+    /// Starts handing on what a held feed collected.
+    public func release() {
+        queue.sync {
+            held = false
+            drain()
+        }
+    }
+
     /// Stops the timer after the last chunk is handed on.
     public func close() {
         queue.sync {
+            held = false
             drain()
             closed = true
             timer?.cancel()
@@ -230,7 +244,7 @@ public final class AudioFeed: @unchecked Sendable {
     }
 
     private func drain() {
-        guard !closed else { return }
+        guard !closed, !held else { return }
         let end = chunkWrite.load(ordering: .acquiring)
         var c = chunkRead.load(ordering: .relaxed)
         while c < end {

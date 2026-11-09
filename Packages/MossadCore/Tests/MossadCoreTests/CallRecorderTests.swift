@@ -60,11 +60,21 @@ final class CallRecorderTests: XCTestCase {
     var problems: [CaptureProblem] { told.all }
     lazy var recorder = makeRecorder()
 
+    /// When set, each tap the recorder makes is the next one of these, not `them`.
+    var taps: [FakeSource] = []
+    var silenceFails = false
+
     func makeRecorder(systemAudioAllowed: @escaping () -> Bool = { true }, micAllowed: @escaping () -> Bool = { true },
                       freeBytes: @escaping () -> Int64? = { nil }) -> CallRecorder {
-        let recorder = CallRecorder(paths: paths, makeThem: { self.themMade.append($0); return self.them }, makeMe: { self.me },
-                                    clock: { self.now }, captureClock: .following { self.now },
-                                    systemAudioAllowed: systemAudioAllowed, micAllowed: micAllowed, freeBytes: freeBytes)
+        let recorder = CallRecorder(paths: paths, makeThem: {
+            self.themMade.append($0)
+            return self.taps.isEmpty ? self.them : self.taps.removeFirst()
+        }, makeMe: { self.me }, clock: { self.now }, captureClock: .following { self.now },
+                                    systemAudioAllowed: systemAudioAllowed, micAllowed: micAllowed, freeBytes: freeBytes,
+                                    silenceMuted: { r, dir in
+            if self.silenceFails { throw MutedAudio.NotSilenced(underlying: "No space left on device") }
+            try MutedAudio.apply(to: &r, in: dir)
+        })
         let told = told
         recorder.onProblem = { problem, _ in told.add(problem) }
         return recorder
@@ -413,18 +423,82 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(r.markers.filter { $0.text.hasPrefix("Muted from ") }.count, 1)
     }
 
-    /// With a report on each poll, the span ends at the last poll that still saw "muted".
-    func testAMuteSpanEndsAtTheLastTimeMutedWasSeen() throws {
+    /// The detector says when it last saw "muted": the span ends exactly there, with nothing more taken off.
+    func testAMuteSpanEndsExactlyWhenMutedWasLastSeen() throws {
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         speak(from: 0, to: 20)
         recorder.setMuted(true)
-        speak(from: 20, to: 60) { second in if second <= 50 { self.recorder.setMuted(true) } }
-        recorder.setMuted(false)
+        speak(from: 20, to: 60)
+        recorder.setMuted(false, lastSeenMuted: t0.addingTimeInterval(59))
         speak(from: 60, to: 90)
         let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
-        XCTAssertEqual(r.muteSpans, [MuteSpan(start: 20, end: 50)])
-        XCTAssertEqual(try loudest(id, from: 20.1, to: 49.9), 0)
-        XCTAssertGreaterThan(try loudest(id, from: 50.1, to: 60), 0.3)
+        XCTAssertEqual(r.muteSpans, [MuteSpan(start: 20, end: 59)])
+        XCTAssertEqual(try loudest(id, from: 20.1, to: 58.9), 0)
+        XCTAssertGreaterThan(try loudest(id, from: 59.1, to: 60), 0.3)
+    }
+
+    /// The owner changed to another tab while muted, so the mute state was unknown; the owner unmuted and spoke.
+    /// The detector reports "unmuted" 10 s later. Those 10 s nobody watched are kept, not silenced.
+    func testTheUnknownTimeBeforeAnUnmuteReportIsKept() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 20)
+        recorder.setMuted(true)
+        speak(from: 20, to: 50)
+        recorder.setMuted(false, lastSeenMuted: t0.addingTimeInterval(40))
+        speak(from: 50, to: 90)
+        let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
+        XCTAssertEqual(r.muteSpans, [MuteSpan(start: 20, end: 40)])
+        XCTAssertEqual(try loudest(id, from: 20.1, to: 39.9), 0)
+        XCTAssertGreaterThan(try loudest(id, from: 40.1, to: 50), 0.3, "the 10 s of the unknown window are in the track")
+        XCTAssertFalse(r.mutedAudioPending)
+    }
+
+    /// The pause is not in the file, so the last sighting is converted to file time.
+    func testAMuteSpanEndIsInFileTimeAfterAPause() throws {
+        _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 30)
+        recorder.pause()
+        now = t0.addingTimeInterval(630)
+        recorder.resume()
+        speak(from: 630, to: 650)   // file 30...50
+        recorder.setMuted(true)
+        speak(from: 650, to: 680)   // file 50...80
+        recorder.setMuted(false, lastSeenMuted: t0.addingTimeInterval(675))
+        speak(from: 680, to: 720)
+        let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
+        XCTAssertEqual(r.muteSpans, [MuteSpan(start: 50, end: 75)])
+    }
+
+    // MARK: A silence pass that fails
+
+    /// A full disk: the muted parts cannot be silenced. The audio is kept, but the call must not reach the
+    /// pipeline as "recorded", or what was said while muted goes to the transcription provider.
+    func testACallWhoseMutedPartsCannotBeSilencedIsHeldBack() throws {
+        silenceFails = true
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 20)
+        recorder.setMuted(true)
+        XCTAssertTrue(try CallRecord.load(from: paths.callDirectory(id)).mutedAudioPending, "saved when the span opens, for a crash")
+        speak(from: 20, to: 60)
+        recorder.setMuted(false, lastSeenMuted: now)
+        speak(from: 60, to: 90)
+        let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
+        XCTAssertEqual(r.status, .failed)
+        XCTAssertEqual(r.failedStep, .recorded)
+        XCTAssertEqual(r.failureReason, MutedAudio.failureReason)
+        XCTAssertTrue(r.mutedAudioPending)
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)), r)
+        XCTAssertEqual(try audioDuration(paths.callDirectory(id).appendingPathComponent("me.caf")), 90, accuracy: 0.1, "the audio is kept")
+        XCTAssertEqual(problems, [.mutedNotSilenced], "the owner is told once")
+        XCTAssertTrue(ProcessingQueue(paths: paths).pending(now: now.addingTimeInterval(86_400)).isEmpty)
+    }
+
+    func testACallWithNoMuteIsNotPending() throws {
+        _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 70)
+        let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
+        XCTAssertEqual(r.status, .recorded)
+        XCTAssertFalse(r.mutedAudioPending)
     }
 
     func testAMuteSpanIsSavedWhenItOpensAndTheTrackKeepsTheSamplesUntilTheEnd() throws {
@@ -452,15 +526,19 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(r.markers.filter { $0.text.hasPrefix("Muted from ") }.count, 1)
     }
 
-    /// The detector reports a mute change once, so a mute that is on must carry over when a new call closes the old one.
-    func testAMuteCarriesOverWhenANewCallClosesTheOldOne() throws {
+    /// A mute belongs to its call. Carried into a new call whose mute button cannot be read, it stayed open and
+    /// silenced that call's whole mic track.
+    func testANewCallStartsUnmuted() throws {
         _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [1], at: t0)
         now = t0.addingTimeInterval(100)
         recorder.setMuted(true)
         now = t0.addingTimeInterval(300)
         let second = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [2], at: now)
-        XCTAssertTrue(recorder.isMuted)
-        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(second)).muteSpans, [MuteSpan(start: 0, end: nil)])
+        XCTAssertFalse(recorder.isMuted)
+        speak(from: 300, to: 400)
+        let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
+        XCTAssertEqual(r.muteSpans, [])
+        XCTAssertGreaterThan(try loudest(second, from: 1, to: 99), 0.3)
     }
 
     // MARK: Sources that fail quietly
@@ -538,29 +616,62 @@ final class CallRecorderTests: XCTestCase {
 
     // MARK: All system audio
 
+    private func tap(global: Bool, failStarts: Int = 0) -> FakeSource {
+        let source = FakeSource()
+        source.isGlobal = global
+        source.failStarts = failStarts
+        return source
+    }
+
     /// A tap that fell back to all system audio stayed for the call: music went to the transcript as "them".
-    func testATapOfAllSystemAudioIsTriedAgainAndMarkedInTheTranscript() throws {
-        them.isGlobal = true
+    /// It is marked in the transcript, and the call app's own audio is tried again. A try never stops the tap that
+    /// works: stopping it each 30 s cut a hole in the call track each time.
+    func testATryForTheCallAppsOwnAudioNeverStopsTheTapThatWorks() throws {
+        let global = tap(global: true), stillGlobal = tap(global: true), failing = tap(global: false, failStarts: 1)
+        taps = [global, stillGlobal, failing]
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [5], at: t0)
+        for second in 1...100 {
+            now = t0.addingTimeInterval(Double(second))
+            global.send(1)
+            me.send(1)
+            recorder.updateThemProcesses([5])
+        }
+        XCTAssertEqual(themMade.count, 3, "tried after 30 s, then after 60 s more: the wait doubles")
+        XCTAssertFalse(global.stopped, "the tap that works was never stopped")
+        XCTAssertTrue(stillGlobal.stopped && failing.stopped)
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).markers.map { String($0.text.prefix(30)) }, ["The call audio includes every "])
+        _ = recorder.end(at: now, trimTo: nil)
+        let samples = try AudioSamples.read(paths.callDirectory(id).appendingPathComponent("them.caf"), from: 0, to: 100)
+        XCTAssertEqual(samples.count, 1_600_000, accuracy: 1_600)
+        let silent = stride(from: 0, to: samples.count - 160, by: 160).filter { i in samples[i..<(i + 160)].allSatisfy { $0 == 0 } }.count
+        XCTAssertEqual(silent, 0, "no hole in the call track")
+    }
+
+    func testTheSwitchToTheCallAppsOwnAudioLosesNoAudioAndWritesTheOverlapOnce() throws {
+        let global = tap(global: true), own = tap(global: false)
+        taps = [global, own]
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [5], at: t0)
         for second in 1...29 {
             now = t0.addingTimeInterval(Double(second))
-            them.send(1, amplitude: 0)
-            me.send(1)
+            global.send(1)
             recorder.updateThemProcesses([5])
         }
-        XCTAssertEqual(themMade.count, 1)
-        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).markers.map { String($0.text.prefix(30)) }, ["The call audio includes every "])
+        // The new tap starts and already has half a second that the old tap also sends before it stops.
         now = t0.addingTimeInterval(30)
+        own.seconds = 0.5
+        global.send(1)
         recorder.updateThemProcesses([5])
-        XCTAssertEqual(themMade.count, 2, "tried again after 30 s")
-        them.isGlobal = false   // this time the call app's own audio could be tapped
+        XCTAssertTrue(own.started)
+        XCTAssertTrue(global.stopped, "stopped only after the new tap ran")
         for second in 31...70 {
             now = t0.addingTimeInterval(Double(second))
-            them.send(1, amplitude: 0)
-            me.send(1)
+            own.send(1)
             recorder.updateThemProcesses([5])
         }
         XCTAssertEqual(themMade.count, 2)
+        _ = recorder.end(at: now, trimTo: nil)
+        XCTAssertEqual(try audioDuration(paths.callDirectory(id).appendingPathComponent("them.caf")), 70, accuracy: 0.05, "the overlap is in the track once")
+        XCTAssertGreaterThan(try loudest(id, .them, from: 29, to: 32), 0.3)
     }
 
     // MARK: IDs, pauses, quit
@@ -620,22 +731,6 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(recorder.meDuration, 70, accuracy: 0.05)
         _ = recorder.end(at: now, trimTo: nil)
         XCTAssertEqual(try audioDuration(paths.callDirectory(id).appendingPathComponent("me.caf")), 70, accuracy: 0.1)
-    }
-
-    /// Quit during a call left the record as "recording", with an open pause or mute not written.
-    func testQuitEndsTheCallCleanlyFromAnotherThread() throws {
-        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
-        speak(from: 0, to: 40)
-        recorder.setMuted(true)
-        speak(from: 40, to: 90)
-        let r = try XCTUnwrap(recorder.endForQuit(at: now))
-        XCTAssertEqual(r.status, .recorded)
-        XCTAssertFalse(recorder.isRecording)
-        let saved = try CallRecord.load(from: paths.callDirectory(id))
-        XCTAssertEqual(saved.status, .recorded)
-        XCTAssertEqual(saved.muteSpans, [MuteSpan(start: 40, end: 90)])
-        XCTAssertEqual(try loudest(id, from: 40.1, to: 90), 0)
-        XCTAssertNil(recorder.endForQuit(at: now), "nothing is recording any more")
     }
 
     /// The app reads the durations on the main thread while the capture queue starts and ends calls.
