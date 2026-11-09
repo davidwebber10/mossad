@@ -23,7 +23,9 @@ export async function tooManyFailures(env: Env, request: Request, failed: boolea
 
 export async function handleAPI(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const parts = url.pathname.split('/').slice(2).map(decodeURIComponent);
+  let parts: string[];
+  // A path such as "/api/%E0" does not decode; that is a bad request, not a server failure.
+  try { parts = url.pathname.split('/').slice(2).map(decodeURIComponent); } catch { return json({ error: 'Not found.' }, 404); }
   const owner = await isOwner(request, env);
   if (await tooManyFailures(env, request, !owner && !!bearer(request))) return json({ error: 'Too many wrong secrets. Try again in an hour.' }, 429);
   if (parts[0] === 'hello' && request.method === 'GET') {
@@ -115,6 +117,8 @@ async function changes(env: Env, since: number): Promise<Response> {
   });
 }
 
+const linesPerInsert = 25;
+
 /** Copies a meeting's view into the tables the MCP reads. */
 export async function indexMeeting(env: Env, id: string) {
   const object = await env.FILES.get(`records/${id}/view`);
@@ -125,8 +129,14 @@ export async function indexMeeting(env: Env, id: string) {
     env.DB.prepare('DELETE FROM lines WHERE call_id = ?').bind(id),
     env.DB.prepare('INSERT INTO meetings (id, start, view) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET start = excluded.start, view = excluded.view')
       .bind(id, Date.parse(view.start), JSON.stringify(rest)),
-    ...lines.map((l) => env.DB.prepare('INSERT INTO lines (call_id, at, speaker, text) VALUES (?, ?, ?, ?)').bind(id, l.at, l.speaker, l.text)),
   ];
+  // 25 lines per statement (D1 takes 100 values in one), so a meeting of up to about 12,000 lines is one batch. A
+  // batch is one transaction: a failure leaves the old lines, not half of the new ones.
+  for (let i = 0; i < lines.length; i += linesPerInsert) {
+    const rows = lines.slice(i, i + linesPerInsert);
+    statements.push(env.DB.prepare(`INSERT INTO lines (call_id, at, speaker, text) VALUES ${rows.map(() => '(?, ?, ?, ?)').join(', ')}`)
+      .bind(...rows.flatMap((l) => [id, l.at, l.speaker, l.text])));
+  }
   for (let i = 0; i < statements.length; i += 500) await env.DB.batch(statements.slice(i, i + 500));
 }
 

@@ -10,13 +10,24 @@ async function config(env: Env): Promise<Record<string, string>> {
   return Object.fromEntries(results.map((r) => [r.key, r.value]));
 }
 
-/** The meetings without transcripts; a tool that needs lines reads them per meeting. */
-async function meetings(env: Env, withLines: boolean): Promise<MeetingView[]> {
+/** The most transcript lines one search reads. A year of meetings is half a million lines; a search must not load them all. */
+export const maxSearchLines = 4000;
+
+/**
+ * The meetings without transcripts, or with only the transcript lines that contain `query`. The database does the
+ * search, so the Worker never holds every line of every meeting. The tools then see the same lines they would have
+ * found themselves.
+ */
+export async function meetings(env: Env, query?: string): Promise<MeetingView[]> {
   const { results } = await env.DB.prepare('SELECT view FROM meetings ORDER BY start DESC').all<{ view: string }>();
   const views = results.map((r) => ({ ...(JSON.parse(r.view) as Omit<MeetingView, 'lines'>), lines: [] as Line[] }));
-  if (!withLines || !views.length) return views;
-  const { results: lines } = await env.DB.prepare('SELECT call_id, at, speaker, text FROM lines ORDER BY call_id, at')
-    .all<{ call_id: string; at: number; speaker: string; text: string }>();
+  const q = query?.trim() ?? '';
+  // A "#tag" query reads tags only.
+  if (!q || q.startsWith('#') || !views.length) return views;
+  // Newest meetings first (call ids start with the date), so the cap drops the oldest hits.
+  const { results: lines } = await env.DB.prepare(
+    'SELECT call_id, at, speaker, text FROM lines WHERE instr(lower(text), lower(?)) > 0 ORDER BY call_id DESC, at LIMIT ?')
+    .bind(q, maxSearchLines).all<{ call_id: string; at: number; speaker: string; text: string }>();
   const byID = new Map(views.map((v) => [v.id, v]));
   for (const l of lines) byID.get(l.call_id)?.lines.push({ at: l.at, speaker: l.speaker, text: l.text });
   return views;
@@ -27,13 +38,14 @@ async function linesFor(env: Env, id: string): Promise<Line[]> {
   return results;
 }
 
-async function toolsFor(env: Env, name: string, args: Record<string, unknown>): Promise<MeetingTools> {
+export async function toolsFor(env: Env, name: string, args: Record<string, unknown>): Promise<MeetingTools> {
   const c = await config(env);
-  // Transcript lines are the big part: load them only for the tools that search or read them.
-  const needsAll = name === 'search_transcripts' || name === 'search' || ((name === 'find_meetings') && typeof args.query === 'string' && args.query.trim() !== '');
-  const list = await meetings(env, needsAll);
+  // Transcript lines are the big part: only the lines that match the query are read, and only for the tools that search.
+  const searches = name === 'search_transcripts' || name === 'search' || name === 'find_meetings';
+  const query = searches && typeof args.query === 'string' ? args.query.trim() : '';
+  const list = await meetings(env, query);
   const id = typeof args.call_id === 'string' ? args.call_id : typeof args.id === 'string' ? args.id : '';
-  if (!needsAll && id) {
+  if (!query && id) {
     const m = list.find((v) => v.id === id);
     if (m) m.lines = await linesFor(env, id);
   }
