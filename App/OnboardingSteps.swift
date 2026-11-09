@@ -265,13 +265,17 @@ struct AIStep: View {
             ProviderKeyBlock(
                 model: model,
                 label: "Notes",
-                detail: "Writes the summary, the action items, and the coach's notes, and answers in Chat.",
+                detail: ["Writes the summary, the action items, and the coach's notes, and answers in Chat.", controller.aiProvider.note]
+                    .compactMap { $0 }.joined(separator: " "),
                 picker: FillPicker(title: "Notes provider", selection: $controller.aiProvider,
                                    choices: AIProvider.allCases.map { ($0, $0.displayName) }),
                 service: KeyCheck.Service(controller.aiProvider),
                 apiKey: controller.aiProvider.key,
                 // The same menu as Settings: the provider's own list once its key is saved, with the price.
-                modelRow: AnyView(ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)))
+                modelRow: AnyView(ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)),
+                keyless: controller.aiProvider == .localServer ? AnyView(LocalServerSetup(onboarding: true))
+                    : controller.aiProvider == .apple ? AnyView(HStack(spacing: Space.s) { PassLine(text: "No key needed"); Spacer(); AppleModelStatus() })
+                    : nil)
             .onChange(of: controller.aiModel) { _, _ in controller.rebuildPipeline() }
             .onChange(of: controller.aiProvider) { _, _ in
                 controller.aiModel = ""
@@ -300,6 +304,8 @@ private struct ProviderKeyBlock<Picker: View>: View {
     let apiKey: APIKey?
     /// The model menu, under the provider.
     var modelRow: AnyView? = nil
+    /// What shows in place of the key for a provider that needs none, such as the local server's address.
+    var keyless: AnyView? = nil
     @State private var typed = ""
     @State private var replacing = false
 
@@ -322,7 +328,7 @@ private struct ProviderKeyBlock<Picker: View>: View {
                 }
                 .padding(.vertical, Onboard.rowPadding)
             }
-            keyRow.padding(.vertical, Onboard.rowPadding)
+            if let keyless, service == nil { keyless } else { keyRow.padding(.vertical, Onboard.rowPadding) }
         }
         .onChange(of: service) { _, _ in typed = ""; replacing = false }
     }

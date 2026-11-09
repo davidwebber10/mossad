@@ -177,10 +177,14 @@ final class AppController: ObservableObject {
     @AppStorage("transcriptionModel") var transcriptionModel = ""
     @AppStorage("aiProvider") var aiProvider = AIProvider.anthropic
     @AppStorage("aiModel") var aiModel = ""
+    /// The local AI server's address, such as Ollama's http://localhost:11434/v1. Meeting text goes nowhere else.
+    @AppStorage("localServerURL") var localServerURL = LocalServer.ollama.absoluteString
     /// The provider and key the "Latest" models were last read for.
     private var latestModelsSignature = ""
     /// The picked OpenRouter model's rating, from its listed prices.
     @Published var openRouterRating: Rating?
+    /// Counts the local server checks, so the model menu reads the server's list again after one.
+    @Published var localServerChecks = 0
     @AppStorage("mailProvider") var mailProvider = MailProvider.resend
     @AppStorage("mailDomain") var mailDomain = ""
     @AppStorage("mailEurope") var mailEurope = false
@@ -467,7 +471,7 @@ final class AppController: ObservableObject {
     /// Reads the provider's model list off the main thread when the provider or key changed, or once a day, so the
     /// "Latest" choices follow new models. A changed model rebuilds the pipeline.
     func refreshLatestModels() {
-        let provider = aiProvider, key = keychain.get(provider.key)
+        let provider = aiProvider, key = provider.key.flatMap { keychain.get($0) }
         let signature = "\(provider.rawValue)-\(key?.hashValue ?? 0)"
         guard !LatestModel.aliases(for: provider).isEmpty, key != nil,
               signature != latestModelsSignature || LatestModelCache.shared.needsRefresh(provider) else { return }
@@ -482,10 +486,14 @@ final class AppController: ObservableObject {
         }
     }
 
-    /// The chosen AI model, or nil without its key (or without a picked OpenRouter model).
+    /// The local server's address as typed, or Ollama's when it does not read as an address.
+    var localServerBase: URL { LocalServer.url(from: localServerURL) ?? LocalServer.ollama }
+
+    /// The chosen AI model, or nil without its key (or without a picked OpenRouter or local server model).
     var languageModel: (any LanguageModel)? {
-        guard let key = keychain.get(aiProvider.key), !(aiModel.isEmpty && aiProvider.defaultModel.isEmpty) else { return nil }
-        return aiProvider.model(aiModel, apiKey: key, usage: usage)
+        let key = aiProvider.key.flatMap { keychain.get($0) }
+        guard key != nil || !aiProvider.requiresKey, !(aiModel.isEmpty && aiProvider.defaultModel.isEmpty) else { return nil }
+        return aiProvider.model(aiModel, apiKey: key, usage: usage, serverURL: localServerBase)
     }
 
     var mailSettings: MailSettings {
@@ -724,8 +732,9 @@ final class AppController: ObservableObject {
     /// menu and the list show it while the call runs. The summary's title replaces it.
     private func startLiveTitling(callID: String) {
         let chosen = aiProvider.resolvedModel(aiModel)
-        guard let key = keychain.get(aiProvider.key), let model = aiProvider.smallModel ?? (chosen.isEmpty ? nil : chosen) else { return }
-        let titler = LiveTitler(llm: aiProvider.model(model, apiKey: key, usage: usage))
+        let key = aiProvider.key.flatMap { keychain.get($0) }
+        guard key != nil || !aiProvider.requiresKey, let model = aiProvider.smallModel ?? (chosen.isEmpty ? nil : chosen) else { return }
+        let titler = LiveTitler(llm: aiProvider.model(model, apiKey: key, usage: usage, serverURL: localServerBase))
         let owner = ownerName
         liveTitling?.cancel()
         liveTitling = Task { [weak self] in
