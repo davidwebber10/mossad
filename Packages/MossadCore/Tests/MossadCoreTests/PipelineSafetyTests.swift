@@ -328,4 +328,33 @@ extension PipelineTests {
         let left = try fm.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix("premerge-") || $0 == "merge.json" || $0 == "call.merged.json" }
         XCTAssertEqual(left, [])
     }
+
+    // MARK: Review fixes
+
+    /// A failed call kept its job. "Transcribe again" with a speaker count must start its own job.
+    func testTranscribeAgainDoesNotResumeAJobFromBefore() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.transcriptionJobs = ["me": "old-me", "them": "old-them"]
+        try r.save(to: paths.callDirectory(id))
+        let jobs = JobTranscriber()
+        jobs.release()
+        p.configure(Pipeline.Configuration(transcriber: jobs, summarizer: summarizer, ownerName: "David Webber"))
+        await p.transcribeAgain(id, speakers: 3)
+        XCTAssertEqual(jobs.resumed, [:], "no old job was resumed")
+        XCTAssertEqual(try load(id).status, .written)
+    }
+
+    func testDeleteGivesBackTheRecordAsItWasOnDisk() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        await p.setCloudKey(callID: id, key: "calls/\(id)/recording.m4a", size: 10)
+        let removed = await p.remove(callID: id)
+        XCTAssertEqual(removed?.cloudKey, "calls/\(id)/recording.m4a")
+        let again = await p.remove(callID: id)
+        XCTAssertNil(again)
+    }
 }

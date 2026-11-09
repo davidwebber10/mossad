@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { indexMeeting } from '../src/api';
-import { maxSearchLines, toolsFor } from '../src/mcp';
+import { callIDDay, maxSearchLines, toolsFor } from '../src/mcp';
 import type { Env, MeetingView } from '../src/types';
 
 interface Row { call_id: string; at: number; speaker: string; text: string }
@@ -19,8 +19,12 @@ function fakeEnv(views: Omit<MeetingView, 'lines'>[], lines: Row[]) {
         if (sql.includes('FROM meetings')) return { results: views.map((v) => ({ view: JSON.stringify(v) })) };
         if (sql.includes('FROM lines WHERE call_id')) return { results: lines.filter((l) => l.call_id === statement.params[0]) };
         if (sql.includes('FROM lines')) {
-          const q = String(statement.params[0]).toLowerCase();
-          return { results: lines.filter((l) => l.text.toLowerCase().includes(q)).slice(0, Number(statement.params[1])) };
+          const params = [...statement.params];
+          const q = String(params.shift()).toLowerCase();
+          const limit = Number(params.pop());
+          const after = sql.includes('call_id >= ?') ? String(params.shift()) : '';
+          const before = sql.includes('call_id < ?') ? String(params.shift()) : '\uffff';
+          return { results: lines.filter((l) => l.text.toLowerCase().includes(q) && l.call_id >= after && l.call_id < before).slice(0, limit) };
         }
         return { results: [] };
       },
@@ -58,6 +62,17 @@ describe('search over many meetings', () => {
     expect(lineQueries[0].sql).toContain('WHERE instr(lower(text), lower(?)) > 0');
     expect(lineQueries[0].sql).toContain('LIMIT ?');
     expect(lineQueries[0].params).toEqual(['Numbers', maxSearchLines]);
+  });
+
+  it('limits the lines to the date range in the database, so the cap cannot hide an old meeting', async () => {
+    const { env, statements } = fakeEnv(views, lines);
+    const args = { query: 'the', from: '2026-11-03', to: '2026-11-03' };
+    const tools = await toolsFor(env, 'search_transcripts', args);
+    expect(tools.run('search_transcripts', args)).toContain('call_id: 20261103-090000');
+    const q = statements.find((s) => s.sql.includes('FROM lines'))!;
+    expect(q.sql).toContain('AND call_id >= ? AND call_id < ?');
+    expect(q.params).toEqual(['the', '20261102', '20261105', maxSearchLines]);
+    expect(callIDDay('nope', 0)).toBeNull();
   });
 
   it('finds meetings by a word in the transcript, and reads no lines without a query', async () => {

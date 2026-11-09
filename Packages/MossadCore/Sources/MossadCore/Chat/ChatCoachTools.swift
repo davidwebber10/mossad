@@ -75,7 +75,9 @@ extension ChatTools {
             return statsText(DateInterval(start: start, end: max(start, end)), usage: UsageLog(directory: paths.usage).all())
         case "remember":
             guard let raw = input["kind"] as? String, let text = (input["text"] as? String)?.nonBlank else { return "Nothing to remember." }
-            var profile = self.profile
+            // A profile that cannot be read is not an empty one: nothing is saved in its place.
+            var profile: CoachProfile
+            do { profile = try CoachProfile.load(from: paths.coach) } catch { return "Could not save: the coach's memory cannot be read." }
             if raw == "preference" {
                 profile.updateGuidance(add: [text], remove: [], at: Date())
             } else if let kind = CoachFact.Kind(rawValue: raw) {

@@ -122,7 +122,8 @@ public struct AssemblyAIClient: Transcribing {
         do {
             let job = try await poll(id)
             return job.status == "error" ? nil : job
-        } catch TranscriptionError.http(let status, _) where (400..<500).contains(status) && status != 401 {
+        } catch TranscriptionError.http(let status, _) where status == 404 || status == 400 {
+            // Only "no such job" starts a new, paid job. A busy answer (429, 408) throws, and the saved job is kept.
             return nil
         }
     }
@@ -176,7 +177,7 @@ public struct AssemblyAIClient: Transcribing {
 
     /// A dropped connection or a server error, which can pass; not a bad key or a bad request.
     static func isPassing(_ error: Error) -> Bool {
-        if case TranscriptionError.http(let status, _) = error { return status >= 500 }
+        if case TranscriptionError.http(let status, _) = error { return status >= 500 || status == 429 || status == 408 }
         return error is URLError
     }
 

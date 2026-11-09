@@ -56,6 +56,8 @@ struct UpcomingRow: View {
     private var detail: String {
         guard let p = meeting.platform else { return " · No call link" }
         guard controller.isOn else { return " · \(p.shortName)" }
+        // A list that could not be read blocks every call with an invite; "Will record" would be false.
+        if controller.noRecord.unreadable { return " · \(p.shortName) · Not recorded: list damaged" }
         return " · \(p.shortName) · " + (controller.noRecord.choice(for: meeting) == .record ? "Will record" : "Won't record")
     }
 }

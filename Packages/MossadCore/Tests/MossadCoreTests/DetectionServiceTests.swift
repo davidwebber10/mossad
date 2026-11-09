@@ -403,6 +403,24 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(events.count, 1)
     }
 
+    /// A call that Mossad sees but keeps off the record (the do-not-record list): Record on the notice sends its
+    /// start again as the owner's choice, and the call still ends like a detected call.
+    func testRecordOnABlockedCallSendsItsStartAgainAsTheOwnersChoice() {
+        let chrome = "com.google.Chrome"
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        var events: [DetectorEvent] = []
+        var forced: [Bool] = []
+        service.onEvent = { [unowned service] in events.append($0); forced.append(service.callIsForced) }
+        service.tick(at: now)
+        XCTAssertEqual(events, [.started(platform: .meet, bundleID: chrome, at: now)])
+        service.recordBlockedCallNow(bundleID: chrome, platform: .meet, at: now.addingTimeInterval(5))
+        XCTAssertEqual(events.last, .started(platform: .meet, bundleID: chrome, at: now.addingTimeInterval(5)))
+        XCTAssertEqual(forced, [false, true])
+        service.tick(at: now.addingTimeInterval(6))
+        XCTAssertEqual(events.count, 2, "no third start")
+    }
+
     // MARK: Review findings
 
     /// Mossad was turned off during a call and on again: the detector still held the old call, so nothing recorded.

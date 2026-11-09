@@ -72,6 +72,8 @@ public struct SyncState: Codable, Equatable, Sendable {
     public var changeToken: Data?
     /// Records that a pull could not take, with how many pulls failed, so a record that never works is left behind.
     public var failures: [String: Int]?
+    /// Phone recordings that did not import yet, tried again with a growing pause.
+    public var recordings: [PendingRecording]?
 
     public init() {}
 
@@ -98,5 +100,31 @@ public struct SyncState: Codable, Equatable, Sendable {
     public func save(to dir: URL, fileName: String = fileName) throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try JSONEncoder().encode(self).write(to: dir.appendingPathComponent(fileName), options: .atomic)
+    }
+}
+
+/// A room recording from the iPhone that this Mac could not import. It is tried again by name with a growing pause
+/// for up to 7 days of failures that are about the recording itself; the owner is told after one day.
+public struct PendingRecording: Codable, Equatable, Sendable {
+    public var name: String
+    public var start: Date?
+    public var end: Date?
+    public var title: String?
+    public var firstFailure: Date
+    /// The first failure that was not caused on this Mac or by the network; the 7 days count from here.
+    public var countedSince: Date?
+    public var attempts: Int
+    public var next: Date
+    public var reason: String
+    public var told: Bool?
+    public var gaveUp: Bool?
+    public var toldGaveUp: Bool?
+
+    var fields: [String: StoredValue] {
+        var f: [String: StoredValue] = [:]
+        if let start { f["start"] = .date(start) }
+        if let end { f["end"] = .date(end) }
+        if let title { f["title"] = .string(title) }
+        return f
     }
 }

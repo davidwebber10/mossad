@@ -52,6 +52,8 @@ public actor CoachRunner {
     /// go on, so one call that never works cannot cost a request every hour or hold back every other review.
     @discardableResult
     public func run(onReview: @Sendable (String) async -> Void = { _ in }) async -> Int {
+        // A profile that was set aside starts empty; reviews wait until the other device's copy is merged in.
+        guard !StoredFile.awaitsMerge(paths.coach.appendingPathComponent(CoachProfile.fileName)) else { return 0 }
         let records = ProcessingQueue(paths: paths).allRecords()
         let reviewed = Set(records.map(\.id).filter { CoachReview.load(in: paths.callDirectory($0)) != nil })
         var profile: CoachProfile

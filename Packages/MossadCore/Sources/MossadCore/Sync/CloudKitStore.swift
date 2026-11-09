@@ -63,35 +63,19 @@ public actor CloudKitStore: RecordStore {
         while true {
             do {
                 let changes = try await database.recordZoneChanges(inZoneWith: Self.zone, since: ck)
-                var failed: Error?
+                var failed: [(name: String, error: any Error)] = []
                 let modified = changes.modificationResultsByID.compactMap { id, result -> ChangedRecord? in
-                    guard case .success(let m) = result else {
-                        if case .failure(let error) = result {
-                            Log.error("iCloud could not send \(id.recordName): \(error)")
-                            failed = failed ?? error
-                        }
+                    switch result {
+                    case .success(let m): return Self.changed(m.record)
+                    case .failure(let error):
+                        Log.error("iCloud could not send \(id.recordName): \(error)")
+                        failed.append((id.recordName, error))
                         return nil
                     }
-                    let record = m.record
-                    var fields: [String: StoredValue] = [:]
-                    var files: [String: URL] = [:]
-                    for key in record.allKeys() {
-                        switch record[key] {
-                        case let s as String: fields[key] = .string(s)
-                        case let d as Date: fields[key] = .date(d)
-                        case let list as [String]: fields[key] = .strings(list)
-                        case let asset as CKAsset: if let url = asset.fileURL { files[key] = url }
-                        default: continue
-                        }
-                    }
-                    return ChangedRecord(name: record.recordID.recordName, type: record.recordType, fields: fields,
-                                         assetKeys: Array(files.keys), localFiles: files)
                 }
-                // The token would move past the record that failed, and iCloud would never send it again.
-                if let failed { throw failed }
                 let deleted = changes.deletions.map { (name: $0.recordID.recordName, type: $0.recordType) }
                 let next = try NSKeyedArchiver.archivedData(withRootObject: changes.changeToken, requiringSecureCoding: true)
-                return StoreChanges(modified: modified, deleted: deleted, token: next, more: changes.moreComing)
+                return StoreChanges(modified: modified, deleted: deleted, token: next, more: changes.moreComing, failed: failed)
             } catch let error as CKError where error.code == .zoneNotFound {
                 // Nothing uploaded yet.
                 return StoreChanges(modified: [], deleted: [], token: token, more: false)
@@ -99,6 +83,28 @@ public actor CloudKitStore: RecordStore {
                 ck = nil
             }
         }
+    }
+
+    static func changed(_ record: CKRecord) -> ChangedRecord {
+        var fields: [String: StoredValue] = [:]
+        var files: [String: URL] = [:]
+        for key in record.allKeys() {
+            switch record[key] {
+            case let s as String: fields[key] = .string(s)
+            case let d as Date: fields[key] = .date(d)
+            case let list as [String]: fields[key] = .strings(list)
+            case let asset as CKAsset: if let url = asset.fileURL { files[key] = url }
+            default: continue
+            }
+        }
+        return ChangedRecord(name: record.recordID.recordName, type: record.recordType, fields: fields,
+                             assetKeys: Array(files.keys), localFiles: files)
+    }
+
+    /// The assets that came with a change are temporary files; a later try reads the record again.
+    public func refetch(_ record: ChangedRecord) async throws -> ChangedRecord? {
+        do { return Self.changed(try await database.record(for: Self.id(record.name))) }
+        catch let error as CKError where error.code == .unknownItem { return nil }
     }
 
     public func data(_ record: ChangedRecord, _ key: String) async throws -> Data? {

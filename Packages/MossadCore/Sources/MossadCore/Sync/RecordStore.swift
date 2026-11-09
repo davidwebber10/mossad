@@ -43,6 +43,8 @@ public struct StoreChanges: Sendable {
     public var deleted: [(name: String, type: String)]
     public var token: Data?
     public var more: Bool
+    /// Records the store could not send in this page. The pull counts them like records it could not read.
+    public var failed: [(name: String, error: any Error)] = []
 }
 
 /// Where synced records live: iCloud's private database, or the owner's own server.
@@ -62,9 +64,12 @@ public protocol RecordStore: Sendable {
     func data(_ record: ChangedRecord, _ key: String) async throws -> Data?
     /// Removes records the Mac imported (room recordings), without waiting.
     func discard(_ names: [String]) async
+    /// The same record, read again by name for a later try; nil when the store no longer has it.
+    func refetch(_ record: ChangedRecord) async throws -> ChangedRecord?
 }
 
 extension RecordStore {
+    public func refetch(_ record: ChangedRecord) async throws -> ChangedRecord? { record }
     public var stateFileName: String { SyncState.fileName }
     public var wantsMeetingView: Bool { false }
 }

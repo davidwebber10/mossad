@@ -59,6 +59,14 @@ struct RecordingSettings: View {
                     .padding(.top, Space.s).padding(.bottom, 4)
                 }
             }
+            SettingsGroup(label: "Do not record", footer: controller.noRecord.unreadable
+                          ? "The do-not-record list could not be read, so calls with an invite are not recorded. Reset the list, or set a choice for any upcoming meeting, to record them again."
+                          : "Removes every \"Don't record\" choice you made for upcoming meetings.") {
+                Button("Reset do-not-record list") { controller.resetNoRecordList() }
+                    .buttonStyle(SettingsTextButtonStyle(color: Palette.recording, weight: .medium))
+                    .font(.system(size: 13))
+                    .padding(.vertical, 9)
+            }
             StorageSettings()
             SettingsGroup(label: "Folders") {
                 folderRow("Meetings", controller.paths.meetings)
