@@ -88,6 +88,16 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "not-recorded-\(bundleID)", content: content, trigger: nil))
     }
 
+    /// This copy does not record, because another copy uses the same data folder. Said when it starts, and once
+    /// more when the other copy quits, because only the menu shows it otherwise.
+    func postSecondCopy(otherQuit: Bool) {
+        let content = UNMutableNotificationContent()
+        content.title = otherQuit ? "The other copy of Mossad quit" : "Another copy of Mossad is running"
+        content.body = otherQuit ? "This copy does not record yet. Choose Restart Mossad in its menu to record."
+            : "This copy does not record. The other copy records your calls."
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "second-copy", content: content, trigger: nil))
+    }
+
     /// A damaged file was set aside; said one time for each file.
     func postSetAside(_ r: StoredFile.Recovery) {
         let what: String = switch r.file {

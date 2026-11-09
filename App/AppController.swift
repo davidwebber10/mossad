@@ -171,7 +171,7 @@ final class AppController: ObservableObject {
     private let detection = DetectionService(mic: MicUsageProbe(), tabs: BrowserTabProbe(), windows: WindowTitleProbe(),
                                              mute: AccessibilityMuteProbe())
     private let calendar = EventKitCalendarSource()
-    private let notifier = Notifier()
+    let notifier = Notifier()
     private var pipeline: Pipeline!
     /// Used only on `CaptureQueue.queue`, except its meters, sinks, and track durations, which any thread can read.
     private nonisolated let recorder: CallRecorder
@@ -305,6 +305,7 @@ final class AppController: ObservableObject {
             case .taken:
                 isSecondCopy = true
                 Log.error("Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings")
+                notifier.postSecondCopy(otherQuit: false)
                 waitForInstanceLock()
             case .failed(let code):
                 // Not a sign of another copy, so this copy works as before the lock existed.
@@ -657,7 +658,9 @@ final class AppController: ObservableObject {
 
     /// Quit during a call: closes the tracks and saves the call as recorded, so the next launch processes it.
     /// `done` runs on the capture queue.
-    nonisolated func endCallForQuit(_ done: @escaping @Sendable () -> Void) {
+    func endCallForQuit(_ done: @escaping @Sendable () -> Void) {
+        // The live transcript saves its last text and its usage before the tracks close.
+        stopLive()
         let recorder = recorder
         CaptureQueue.queue.async {
             _ = recorder.end(at: Date(), trimTo: nil, byPerson: true)

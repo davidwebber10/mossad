@@ -165,4 +165,13 @@ final class OutboxTests: XCTestCase {
         XCTAssertTrue(o.canRemove("b", active: "a", busy: ["c"]))
         XCTAssertFalse(o.canRemove("z", active: nil, busy: []))
     }
+
+    /// A Mac call that started in the same second gets the plain id, so the Mac imports the room recording as
+    /// `<id>-iphone`; that meeting settles the row too.
+    func testARecordingImportedWithThePhoneSuffixSettles() {
+        var o = Outbox()
+        o.begin(rec("20261109-120000"))
+        o.finish("20261109-120000", end: t0, title: nil)
+        XCTAssertEqual(o.settle(arrived: ["20261109-120000-iphone"]), ["20261109-120000"])
+    }
 }

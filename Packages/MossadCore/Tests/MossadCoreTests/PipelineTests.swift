@@ -724,6 +724,24 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(note.contains("Joined with a recording from"), note)
     }
 
+    /// A call held back because its muted parts could not be silenced must not be joined: the joined audio would
+    /// carry the muted speech into the recording, the archive, and a later transcription.
+    func testMergeRefusesACallWhoseMutedPartsAreNotSilencedYet() async throws {
+        let first = try makeRecord()
+        let p = pipeline()
+        await p.process(first)
+        let second = try makeSecondPart(after: first, gap: 600, meetingID: nil)
+        await p.process(second)
+        var held = try load(second)
+        held.mutedAudioPending = true
+        try held.save(to: paths.callDirectory(second))
+
+        let merged = await p.merge(callIDs: [first, second])
+
+        XCTAssertNil(merged)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.callDirectory(second).path))
+    }
+
     func testARecordingSplitByARestartContinuesOnItsOwn() async throws {
         let first = try makeRecord(meetingID: "abc-defg-hij")
         let p = pipeline()

@@ -13,7 +13,10 @@ extension AppController {
                 // Only a look: the lock is free again at once.
                 var free = false
                 if case .held = InstanceLock.acquire(root: paths.root) { free = true }
-                if free != otherCopyQuit { otherCopyQuit = free }
+                if free != otherCopyQuit {
+                    otherCopyQuit = free
+                    if free { notifier.postSecondCopy(otherQuit: true) }
+                }
             }
         }
     }

@@ -123,7 +123,8 @@ public struct Outbox: Equatable, Sendable {
     /// Removes the entries whose meeting arrived, and returns their ids so the app deletes their audio. A finished
     /// entry counts even when it is not marked sent: the upload may have worked just before the app stopped.
     public mutating func settle(arrived: Set<String>) -> [String] {
-        let done = entries.filter { $0.state != .recording && arrived.contains($0.id) }.map(\.id)
+        // The Mac imports a recording as `<id>-iphone` when one of its own calls started in the same second.
+        let done = entries.filter { $0.state != .recording && (arrived.contains($0.id) || arrived.contains($0.id + "-iphone")) }.map(\.id)
         entries.removeAll { done.contains($0.id) }
         return done
     }

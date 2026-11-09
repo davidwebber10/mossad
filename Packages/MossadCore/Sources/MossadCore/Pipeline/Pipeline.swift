@@ -705,6 +705,11 @@ public actor Pipeline {
         let records = callIDs.compactMap { try? CallRecord.load(from: paths.callDirectory($0)) }.sorted { $0.start < $1.start }
         guard records.count >= 2, records.count == Set(callIDs).count,
               records.allSatisfy({ $0.status == .written || $0.status == .failed }) else { return nil }
+        // A call whose muted parts are not silenced yet would carry that speech into the joined audio.
+        if let held = records.first(where: \.mutedAudioPending) {
+            Log.info("Not joining \(held.id): its muted parts are not silenced yet")
+            return nil
+        }
         let target = records[0]
         let dir = paths.callDirectory(target.id)
         guard records.allSatisfy({ !inFlight.contains($0.id) }),

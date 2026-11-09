@@ -232,6 +232,16 @@ public final class AudioFeed: @unchecked Sendable {
         }
     }
 
+    /// Stops the feed and drops what it holds, for a source whose try failed: its audio repeats what the working
+    /// source already wrote.
+    public func discard() {
+        queue.sync {
+            closed = true
+            timer?.cancel()
+            timer = nil
+        }
+    }
+
     /// Stops the timer after the last chunk is handed on.
     public func close() {
         queue.sync {

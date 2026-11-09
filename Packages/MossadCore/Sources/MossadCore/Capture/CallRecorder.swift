@@ -250,7 +250,7 @@ public final class CallRecorder: @unchecked Sendable {
         let started = (try? source.start(feed)) != nil
         guard started, !source.isGlobal else {
             source.stop()
-            feed.close()
+            feed.discard()
             processTapRetryWait = min(processTapRetryWait * 2, Self.processTapRetryMax)
             nextProcessTapRetry = clock().addingTimeInterval(processTapRetryWait)
             Log.info("The call app's own audio still cannot be tapped; all system audio is recorded, next try in \(Int(processTapRetryWait)) s")

@@ -69,6 +69,19 @@ final class AudioFeedTests: XCTestCase {
         feed.close()
     }
 
+    /// A held feed whose source failed its try is thrown away: the audio it collected repeats what the working
+    /// source already wrote, so it must never reach the writer.
+    func testADiscardedHeldFeedHandsNothingOn() {
+        let clock = clock, chunks = chunks
+        let feed = AudioFeed(clock: CaptureClock(now: { clock.now }, fromHost: nil), held: true) { chunks.add($0) }
+        feed.beginSegment()
+        feed.push(ramp(0..<50))
+        feed.discard()
+        feed.push(ramp(50..<60))
+        feed.flush()
+        XCTAssertTrue(chunks.all.isEmpty)
+    }
+
     /// Buffers that come late in a burst carry true capture times that are some seconds old. They keep them.
     func testAnOldButPossibleCaptureTimeIsKept() {
         let feed = feed()
