@@ -60,6 +60,18 @@ final class RoomAudioTests: XCTestCase {
         XCTAssertEqual(try RoomAudio.finish(id, in: dir), 1, accuracy: 0.1)
     }
 
+    func testTheStartComesBackFromTheId() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(RoomAudio.start(of: CallID.make(start)), start)
+        XCTAssertNil(RoomAudio.start(of: "not-an-id"))
+    }
+
+    func testAJoinInProgressIsNotARecording() throws {
+        let dir = temp()
+        try Data().write(to: dir.appendingPathComponent("20270115-090000.joining.m4a"))
+        XCTAssertEqual(RoomAudio.ids(in: dir), [])
+    }
+
     func testDeleteRemovesEveryFileOfOneRecording() throws {
         let dir = temp()
         try writePart(RoomAudio.part("a", 1, in: dir), seconds: 0.1)

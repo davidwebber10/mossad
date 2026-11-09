@@ -24,11 +24,19 @@ public struct Outbox: Equatable, Sendable {
         }
 
         public var isSent: Bool { if case .sent = state { true } else { false } }
+
+        /// Whether the row offers "Send again": the store took it, and the Mac had time to write the notes.
+        public func canSendAgain(now: Date) -> Bool {
+            if case .sent(_, let at) = state { now.timeIntervalSince(at) >= Outbox.offerSendAgainAfter } else { false }
+        }
     }
 
     /// A sent recording whose meeting has not come back after this long is sent again: the Mac may have failed to
     /// import it, and it ignores a recording whose call exists.
     public static let resendAfter: TimeInterval = 6 * 3600
+
+    /// The Mac usually writes the notes within minutes of the upload; after this long the row offers "Send again".
+    public static let offerSendAgainAfter: TimeInterval = 15 * 60
 
     public private(set) var entries: [Entry]
 
@@ -88,6 +96,11 @@ public struct Outbox: Equatable, Sendable {
         let unfinished = entries.filter { $0.state == .recording && $0.id != active }.map(\.id)
         let orphans = audioIDs.subtracting(known).subtracting([active].compactMap { $0 }).sorted()
         return unfinished + orphans
+    }
+
+    /// Entries with no audio on disk, apart from the recording in progress: nothing can upload or recover them.
+    public func withoutAudio(audioIDs: Set<String>, active: String?) -> [String] {
+        entries.map(\.id).filter { $0 != active && !audioIDs.contains($0) }
     }
 
     private mutating func update(_ id: String, _ change: (inout Entry) -> Void) {

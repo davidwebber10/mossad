@@ -94,4 +94,27 @@ final class OutboxTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
         XCTAssertEqual(try Outbox.load(from: file), Outbox(), "A missing file is an empty outbox")
     }
+
+    func testSendAgainShowsOnlyAfterTheMacHadTimeToWriteTheNotes() {
+        var box = Outbox()
+        box.begin(PhoneRecording(id: "a", start: t0, end: t0, title: nil))
+        XCTAssertFalse(box["a"]!.canSendAgain(now: t0))
+        box.finish("a", end: t0.addingTimeInterval(600), title: nil)
+        XCTAssertFalse(box["a"]!.canSendAgain(now: t0.addingTimeInterval(7200)))
+        box.markSent("a", store: "icloud", at: t0.addingTimeInterval(700))
+        XCTAssertFalse(box["a"]!.canSendAgain(now: t0.addingTimeInterval(760)))
+        XCTAssertTrue(box["a"]!.canSendAgain(now: t0.addingTimeInterval(700 + Outbox.offerSendAgainAfter)))
+    }
+
+    func testFinishedEntriesWithNoAudioAreFound() {
+        var box = Outbox()
+        for id in ["a", "b", "c", "d"] { box.begin(PhoneRecording(id: id, start: t0, end: t0, title: nil)) }
+        box.finish("a", end: t0, title: nil)
+        box.finish("b", end: t0, title: nil)
+        box.markSent("b", store: "icloud", at: t0)
+        box.finish("c", end: t0, title: nil)
+        // "d" still records: the launch scan handles it, and the recording in progress is never dropped.
+        XCTAssertEqual(box.withoutAudio(audioIDs: ["c"], active: nil), ["a", "b", "d"])
+        XCTAssertEqual(box.withoutAudio(audioIDs: ["c"], active: "d"), ["a", "b"])
+    }
 }

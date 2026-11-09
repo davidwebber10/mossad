@@ -41,10 +41,19 @@ public enum RoomAudio {
     public static func ids(in dir: URL) -> Set<String> {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
         return Set(names.compactMap { name in
+            if name.hasSuffix(".joining.m4a") { return nil }
             if name.hasSuffix(".m4a") { return String(name.dropLast(4)) }
             if name.hasSuffix(".caf"), let r = name.range(of: partMark) { return String(name[..<r.lowerBound]) }
             return nil
         })
+    }
+
+    /// The start of a recording from its id, which is the start time (`CallID`), for audio that lost its entry.
+    public static func start(of id: String) -> Date? {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyyMMdd-HHmmss"
+        return f.date(from: id)
     }
 
     /// Seconds of audio in a file, or nil when it cannot be read.
