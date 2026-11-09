@@ -71,7 +71,7 @@ extension AudioCheck {
             return .failed("The tone could not play: \(error)")
         }
         // Silence first, so macOS lists Mossad as a process that plays audio before the tap looks for it.
-        player.scheduleBuffer(buffer([Float](repeating: 0, count: 9_600)), completionHandler: nil)
+        queue(buffer([Float](repeating: 0, count: 9_600)), on: player)
         player.play()
         try? await Task.sleep(for: .milliseconds(300))
         guard let me = ownProcessObject() else {
@@ -86,12 +86,17 @@ extension AudioCheck {
             engine.stop()
             return .failed("The tap could not start: \(error)")
         }
-        player.scheduleBuffer(buffer(tone(seconds: 1.2, sampleRate: 48_000)), completionHandler: nil)
+        queue(buffer(tone(seconds: 1.2, sampleRate: 48_000)), on: player)
         try? await Task.sleep(for: .milliseconds(1_600))
         tap.stop()
         player.stop()
         engine.stop()
         return heardTone(meter.history) ? .heard : .silent
+    }
+
+    /// Queues without waiting for it to play.
+    private static func queue(_ buffer: AVAudioPCMBuffer, on player: AVAudioPlayerNode) {
+        player.scheduleBuffer(buffer, completionHandler: nil)
     }
 
     private static func ownProcessObject() -> AudioObjectID? {

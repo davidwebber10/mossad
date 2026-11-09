@@ -37,6 +37,7 @@ struct MainWindow: View {
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
         .environment(\.animationsActive, controller.windowVisible)
         .sheet(isPresented: $welcoming) { WelcomeView() }
+        .overlay(alignment: .topTrailing) { if Rehearsal.isOn { RehearsalMark().padding(.top, 16).padding(.trailing, 16) } }
         .overlay { SearchOverlay(model: controller.search) }
         // Development hook for screenshots: `--welcome-inline` draws the welcome in the window, not in a sheet.
         .overlay {

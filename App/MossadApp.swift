@@ -7,12 +7,14 @@ struct MossadEntry {
     static func main() {
         // `--import-keys` copies API keys from the environment (Doppler) into the Keychain and exits.
         if CommandLine.arguments.contains("--import-keys") {
-            let stored = importKeys(from: ProcessInfo.processInfo.environment, into: Keychain())
+            let stored = importKeys(from: ProcessInfo.processInfo.environment, into: .app)
             print(stored.isEmpty ? "No keys found in the environment." : "Stored: " + stored.map(\.rawValue).joined(separator: ", "))
             exit(stored.isEmpty ? 1 : 0)
         }
         // `--mcp` serves the meetings to other AI apps over stdio, read-only, with no UI and no recording.
         if CommandLine.arguments.contains("--mcp") {
+            // Rehearsal never serves the meetings.
+            if Rehearsal.isOn { print("Mossad Rehearsal does not serve MCP."); exit(1) }
             let owner = UserDefaults.standard.string(forKey: "ownerName") ?? NSFullUserName()
             MCPServer(paths: .live, owner: owner).run()
             exit(0)
@@ -45,6 +47,8 @@ struct MenuBarIcon: View {
     var body: some View {
         if case .recording(_, let since) = controller.status {
             RecordingMenuBarIcon(since: since)
+        } else if Rehearsal.isOn {
+            Image(nsImage: Self.rehearsal)
         } else {
             Image(nsImage: controller.isOn ? Self.idle : Self.off)
         }
@@ -86,6 +90,21 @@ struct MenuBarIcon: View {
         }
         image.isTemplate = true
         image.accessibilityDescription = "Mossad"
+        return image
+    }()
+
+    /// The bars with a small "Rehearsal" after them, so the copy for trying setup never passes for the real app.
+    static let rehearsal: NSImage = {
+        let font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        let text = NSAttributedString(string: "Rehearsal", attributes: [.font: font, .foregroundColor: NSColor.black])
+        let size = NSSize(width: ceil(18 + 4 + text.size().width), height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            drawBars(.black, in: NSRect(x: 0, y: 0, width: 18, height: 18))
+            text.draw(at: NSPoint(x: 22, y: (rect.height - text.size().height) / 2))
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Mossad Rehearsal"
         return image
     }()
 

@@ -71,7 +71,7 @@ final class PhoneStore: ObservableObject {
     /// Where this iPhone syncs: iCloud (the default), the owner's own server, or nowhere.
     @Published private(set) var syncWith = SyncChoice(rawValue: UserDefaults.standard.string(forKey: "syncWith") ?? "") ?? .icloud
     private var engine: (key: String, sync: CloudSync)?
-    private let keychain = Keychain()
+    private let keychain = Keychain.app
     private var chatStore: ChatStore { ChatStore(directory: paths.chats) }
     /// `MOSSAD_ROOT` points the simulator at a sample folder; nothing syncs then.
     private let offline = ProcessInfo.processInfo.environment["MOSSAD_ROOT"] != nil

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Mossad Rehearsal</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Mossad Rehearsal asks for this permission in setup, as Mossad does to read meeting links in browser tabs.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Mossad Rehearsal plays a short tone and listens for it in the setup check. It records nothing.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Mossad Rehearsal shows your calendars and your next meeting in setup.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Mossad Rehearsal listens to your microphone in the setup check. It records nothing.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+</dict>
+</plist>

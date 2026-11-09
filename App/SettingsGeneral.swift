@@ -23,8 +23,10 @@ struct GeneralSettings: View {
                         .textFieldStyle(SettingsFieldStyle(width: 160))
                         .onSubmit { controller.rebuildPipeline() }
                 }
-                SettingsSwitchRow(title: "Open Mossad at login", isOn: $launchAtLogin)
+                SettingsSwitchRow(title: "Open Mossad at login", detail: Rehearsal.isOn ? "Rehearsal never opens at login." : nil, isOn: $launchAtLogin)
+                    .disabled(Rehearsal.isOn)
                     .onChange(of: launchAtLogin) { _, on in
+                        guard !Rehearsal.isOn else { return }
                         do {
                             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
                         } catch {

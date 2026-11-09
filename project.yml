@@ -58,6 +58,48 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  # The same app for walking through setup as a new user: its own bundle id (so macOS asks for every permission
+  # fresh), its own data folder and Keychain service, and no detection, recording, sync, MCP, updates, or login item.
+  MossadRehearsal:
+    type: application
+    platform: macOS
+    sources: [App, SharedUI]
+    dependencies:
+      - package: MossadCore
+      - package: Sparkle
+    info:
+      path: Rehearsal/Info.plist
+      properties:
+        CFBundleDisplayName: Mossad Rehearsal
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # No feed: Rehearsal never checks for updates.
+        SUEnableAutomaticChecks: false
+        NSMicrophoneUsageDescription: Mossad Rehearsal listens to your microphone in the setup check. It records nothing.
+        NSAudioCaptureUsageDescription: Mossad Rehearsal plays a short tone and listens for it in the setup check. It records nothing.
+        NSCalendarsFullAccessUsageDescription: Mossad Rehearsal shows your calendars and your next meeting in setup.
+        NSAppleEventsUsageDescription: Mossad Rehearsal asks for this permission in setup, as Mossad does to read meeting links in browser tabs.
+    entitlements:
+      path: Rehearsal/MossadRehearsal.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+        com.apple.security.automation.apple-events: true
+        com.apple.security.personal-information.calendars: true
+    settings:
+      base:
+        PRODUCT_NAME: Mossad Rehearsal
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwebber.mossad.rehearsal
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) REHEARSAL
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: 35VNBDXR6B
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_VERSION: "6.0"
+        MARKETING_VERSION: "2.0"
+        CURRENT_PROJECT_VERSION: "1"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
   MossadPhone:
     type: application
     platform: iOS

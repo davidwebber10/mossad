@@ -100,7 +100,7 @@ final class AppController: ObservableObject {
     /// The one controller, for the app delegate's Dock handling.
     nonisolated(unsafe) static weak var current: AppController?
     /// Checks GitHub releases for new versions; never in the UI preview.
-    private(set) lazy var updater = Updater(start: !CommandLine.arguments.contains("--ui-preview")) { [weak self] in self?.isRecording ?? false }
+    private(set) lazy var updater = Updater(start: !CommandLine.arguments.contains("--ui-preview") && !Rehearsal.isOn) { [weak self] in self?.isRecording ?? false }
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
     /// alive, so animations check this and stop while it is hidden.
     @Published private(set) var windowVisible = false
@@ -143,7 +143,7 @@ final class AppController: ObservableObject {
 
     let paths = Paths.live
     let library: VoiceLibrary
-    let keychain = Keychain()
+    let keychain = Keychain.app
     /// Every billed AssemblyAI and Claude request, for the costs in Analytics.
     let usage = UsageLog(directory: Paths.live.usage)
     let permissions = PermissionsMonitor()
@@ -261,9 +261,11 @@ final class AppController: ObservableObject {
         // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
         // processing, so the screens can be checked while the installed copy records a call.
         let preview = CommandLine.arguments.contains("--ui-preview")
+        // Rehearsal only walks through setup: like a preview, it starts no detection, recording, processing, or sync.
+        let inert = preview || Rehearsal.isOn
         // Reading the calendar records nothing, so the preview shows the real upcoming meetings too.
-        if preview { refreshUpcoming() }
-        if !preview {
+        if inert { refreshUpcoming() }
+        if !inert {
             enableLaunchAtLoginOnce()
             notifier.onOpen = { [weak self] callID in self?.openNaming(callID) }
 
@@ -315,7 +317,7 @@ final class AppController: ObservableObject {
             ProcessingQueue(paths: paths).recoverInterrupted()
         }
         refresh()
-        if !preview {
+        if !inert {
             relinkEmails()
             Task { await track { await self.pipeline.continueSplitMeetings() } }
         }
@@ -329,7 +331,7 @@ final class AppController: ObservableObject {
             status = .recording(platform, since: Date().addingTimeInterval(-seconds))
         }
         if preview, CommandLine.arguments.contains("--show-muted") { isMuted = true }
-        if !preview {
+        if !inert {
             backfillSummaries()
             backfillTitlesAndDecisionTimes()
             // The coach's reads on people: a minute after launch, so a call being processed goes first.
@@ -339,7 +341,7 @@ final class AppController: ObservableObject {
             }
         }
         // Development hook: `--regenerate-summaries` writes new summaries for today's finished meetings.
-        if !preview, CommandLine.arguments.contains("--regenerate-summaries") {
+        if !inert, CommandLine.arguments.contains("--regenerate-summaries") {
             let today = meetings.filter { Calendar.current.isDateInToday($0.start) && $0.status == .written }.map(\.id)
             Task { for id in today { await track { await self.pipeline.regenerateSummary(id) } } }
         }
@@ -608,7 +610,7 @@ final class AppController: ObservableObject {
 
     /// Records a meeting in a room through the mic, until Stop. Detection ignores calls meanwhile.
     func recordInPerson() {
-        guard case .idle = status, isOn else { return }
+        guard case .idle = status, isOn, !Rehearsal.isOn else { return }
         let start = Date()
         status = .recording(.inPerson, since: start)
         isPaused = false
@@ -762,7 +764,7 @@ final class AppController: ObservableObject {
         offUntil = 0
         resumeTimer?.invalidate()
         resumeTimer = nil
-        detection.start()
+        if !Rehearsal.isOn { detection.start() }
         objectWillChange.send()
         Log.info("Mossad turned on")
     }
@@ -913,7 +915,7 @@ final class AppController: ObservableObject {
 
     /// Uploads finished recordings and removes old local copies, off the main actor.
     func syncCloud() {
-        guard let archive = cloudArchive else { return }
+        guard !Rehearsal.isOn, let archive = cloudArchive else { return }
         let days = cloudKeepLocalDays
         cloudSyncing = true
         Task.detached(priority: .utility) {
@@ -1114,6 +1116,7 @@ final class AppController: ObservableObject {
 
     /// Processes calls waiting in the queue, such as a recording that arrived from the iPhone.
     func processPending() {
+        guard !Rehearsal.isOn else { return }
         Task { await track { await self.pipeline.runPending() } }
     }
 

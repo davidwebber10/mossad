@@ -16,6 +16,7 @@ extension AppController {
 
     /// Reviews the calls that are due, one at a time, then sends the weekly email when it is due.
     func runCoach() {
+        guard !Rehearsal.isOn else { return }
         guard coachEnabled, !coaching, let llm = languageModel else { return }
         coaching = true
         let runner = CoachRunner(paths: paths, coach: LLMCoach(llm: llm, ownerName: ownerName), owner: ownerName,

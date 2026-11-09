@@ -25,7 +25,7 @@ extension SyncActivity {
 extension AppController {
     /// Whether this build may use iCloud: CloudKit stops the app when the entitlement is missing.
     static let hasICloud: Bool = {
-        guard let task = SecTaskCreateFromSelf(nil),
+        guard !Rehearsal.isOn, let task = SecTaskCreateFromSelf(nil),
               let value = SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-services" as CFString, nil) else { return false }
         return (value as? [String])?.contains("CloudKit") == true
     }()
@@ -132,6 +132,7 @@ extension AppController {
     /// Uploads new and changed meetings and pulls what the iPhone changed. One sync at a time; a sync asked for
     /// during one runs again after it.
     func syncNow() {
+        guard !Rehearsal.isOn else { return }
         let mirror = mirrorSync
         guard let cloud = currentSync ?? mirror else { return }
         if syncRunning { syncAgain = true; return }
