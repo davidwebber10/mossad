@@ -71,6 +71,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: Self.cannotRecordID, content: content, trigger: nil))
     }
 
+    /// A recording runs, but it loses one side of the call or cannot be saved. One notification per kind of problem.
+    func postCaptureProblem(_ problem: CaptureProblem) {
+        let content = UNMutableNotificationContent()
+        content.title = problem.title
+        content.body = problem.message
+        content.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "capture-problem-\(problem.title)", content: content, trigger: nil))
+    }
+
     private static func appName(_ bundleID: String) -> String {
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")

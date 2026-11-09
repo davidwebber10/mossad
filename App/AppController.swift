@@ -73,6 +73,8 @@ final class AppController: ObservableObject {
     @AppStorage("cloudAccessKeyID") var cloudAccessKeyID = ""
     @AppStorage("cloudKeepLocalDays") var cloudKeepLocalDays = 30
     private var liveSessions: [LiveTranscriber] = []
+    private var liveRestart: Task<Void, Never>?
+    private var liveFailures = 0
     private var liveTitling: Task<Void, Never>?
     private var liveStart = Date()
     /// When the open streaming sessions started, to log the time AssemblyAI bills.
@@ -157,7 +159,7 @@ final class AppController: ObservableObject {
     private let calendar = EventKitCalendarSource()
     private let notifier = Notifier()
     private var pipeline: Pipeline!
-    /// Used only on `CaptureQueue.queue`.
+    /// Used only on `CaptureQueue.queue`, except its meters, sinks, and track durations, which any thread can read.
     private nonisolated let recorder: CallRecorder
     private var window: NSWindow?
     private var trafficLights: TrafficLights?
@@ -248,7 +250,9 @@ final class AppController: ObservableObject {
     /// tie them to the main thread and stop the app when they run there.
     nonisolated private static func makeRecorder(paths: Paths) -> CallRecorder {
         CallRecorder(paths: paths, makeThem: { ProcessTap(processObjectIDs: $0) }, makeMe: { MicCapture(voiceProcessing: false) },
-                     systemAudioAllowed: { TCC.preflight("kTCCServiceAudioCapture").map { $0 == 0 } ?? true })
+                     systemAudioAllowed: { TCC.preflight("kTCCServiceAudioCapture").map { $0 == 0 } ?? true },
+                     // Not asked yet is not a refusal: only a known "no" is told to the owner.
+                     micAllowed: { ![.denied, .restricted].contains(AVCaptureDevice.authorizationStatus(for: .audio)) })
     }
 
     init() {
@@ -313,6 +317,9 @@ final class AppController: ObservableObject {
                 CaptureQueue.queue.async { recorder.setMuted(muted) }
                 Task { @MainActor in self?.isMuted = muted }
             }
+            // A recording that loses one side of the call (no permission, a full disk, a dead source) says so once.
+            let notifier = notifier
+            CaptureQueue.queue.async { recorder.onProblem = { problem, _ in notifier.postCaptureProblem(problem) } }
             detection.onCallProcesses = { @Sendable ids in
                 CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
             }
@@ -682,7 +689,10 @@ final class AppController: ObservableObject {
                 }
             } catch {
                 Log.error("Could not start the in-person recording: \(error)")
-                Task { @MainActor in if case .recording(.inPerson, let since) = self.status, since == start { self.status = .idle } }
+                Task { @MainActor in
+                    self.notifier.postCannotRecord(FriendlyError(error, context: .recording), platform: .inPerson)
+                    if case .recording(.inPerson, let since) = self.status, since == start { self.status = .idle }
+                }
             }
         }
         startLive(reset: true)
@@ -708,6 +718,7 @@ final class AppController: ObservableObject {
     private func startLive(reset: Bool) {
         stopLive()
         if reset { live.reset() } else { live.newSession() }
+        if reset { liveFailures = 0 }
         guard liveTranscriptEnabled, case .recording(_, let since) = status, let key = keychain.get(.assemblyai) else { return }
         liveStart = since
         // In a room the mic hears everyone and there is no call audio: one stream, with speaker labels, shown
@@ -722,7 +733,9 @@ final class AppController: ObservableObject {
         let streams: [(Track, AudioSink)] = room ? [(.me, recorder.meSink)] : [(.me, recorder.meSink), (.them, recorder.themSink)]
         for (track, sink) in streams {
             let source: Track = room ? .them : track
-            let session = LiveTranscriber(apiKey: key, speakers: source == .them) { [weak self] message in
+            let session = LiveTranscriber(apiKey: key, speakers: source == .them, onFailure: { [weak self] in
+                Task { @MainActor in self?.liveSessionFailed() }
+            }) { [weak self] message in
                 Task { @MainActor in
                     guard let self else { return }
                     self.live.apply(message, source: source, at: Date().timeIntervalSince(self.liveStart),
@@ -789,7 +802,25 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// A live session lost its connection. The recording goes on; new sessions open where the tracks are now, after a
+    /// wait that grows with each failure in a row, and no more after six (a refused key would fail without end).
+    private func liveSessionFailed() {
+        guard !liveSessions.isEmpty, liveRestart == nil else { return }
+        if let opened = liveOpened, Date().timeIntervalSince(opened) > 120 { liveFailures = 0 }
+        guard liveFailures < 6 else { return Log.error("Live transcript: giving up for this call after \(liveFailures) failures") }
+        liveFailures += 1
+        let delay = min(5 * pow(2, Double(liveFailures - 1)), 300)
+        liveRestart = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            self.liveRestart = nil
+            if case .recording = self.status, !self.isPaused { self.startLive(reset: false) }
+        }
+    }
+
     private func stopLive() {
+        liveRestart?.cancel()
+        liveRestart = nil
         live.save()
         liveNaming?.cancel()
         liveNaming = nil
