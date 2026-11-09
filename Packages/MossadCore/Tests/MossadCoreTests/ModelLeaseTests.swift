@@ -53,6 +53,20 @@ final class ModelLeaseTests: XCTestCase {
         XCTAssertEqual(released.count, 1, "one release, not one for each use")
     }
 
+    /// Some hundred uses in a call must end with one release, also when uses overlap.
+    func testManyUsesLeaveOneRelease() async throws {
+        let released = Counter()
+        let l = lease(idle: .milliseconds(150), released)
+        for _ in 0..<200 {
+            l.begin()
+            l.begin()
+            l.end()
+            l.end()
+        }
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(released.count, 1)
+    }
+
     func testMemoryPressureReleasesAFreeModelAtOnce() async throws {
         let released = Counter()
         let l = lease(idle: .seconds(600), released)

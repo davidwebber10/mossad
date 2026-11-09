@@ -11,13 +11,16 @@ struct LiveSendQueue {
     /// Dropping for this long without the queue running empty means the uplink cannot carry the stream.
     static let stuckAfter: TimeInterval = 10
     /// One send carries at most this much, so a queue that waited goes out in few messages.
-    static let sendBytes = 32_000
+    static let sendBytes = 16_000
+    /// Drops further apart than this are not one stretch of a slow network.
+    static let dropGap: TimeInterval = 3
 
     private var waiting: [Data] = []
     private(set) var waitingBytes = 0
     private(set) var droppedBytes = 0
     private(set) var inFlight = false
     private var droppingSince: TimeInterval?
+    private var lastDrop: TimeInterval?
 
     /// Adds a chunk; false when the queue has been over its limit for too long.
     mutating func add(_ chunk: Data, at time: TimeInterval) -> Bool {
@@ -31,6 +34,9 @@ struct LiveSendQueue {
             dropped = true
         }
         guard dropped else { return true }
+        // A queue that stayed below its limit for a while and drops one chunk now starts a new count.
+        if let last = lastDrop, time - last > Self.dropGap { droppingSince = nil }
+        lastDrop = time
         if droppingSince == nil { droppingSince = time }
         return time - (droppingSince ?? time) < Self.stuckAfter
     }

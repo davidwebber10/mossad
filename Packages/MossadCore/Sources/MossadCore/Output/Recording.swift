@@ -13,9 +13,26 @@ public enum Recording {
 
     /// Never fails a step: without a recording the raw tracks are simply kept longer.
     public static func makeIfMissing(in dir: URL) {
+        // One encoder for a folder at a time. A second one (the pipeline's write step and the app's later pass for
+        // the same meeting) waits, and then finds the file: two encoders once wrote the same partial file, and a
+        // half file got the final name for some seconds.
+        let key = dir.standardizedFileURL.path
+        busy.lock()
+        while inProgress.contains(key) { busy.wait() }
+        inProgress.insert(key)
+        busy.unlock()
+        defer {
+            busy.lock()
+            inProgress.remove(key)
+            busy.broadcast()
+            busy.unlock()
+        }
         guard !FileManager.default.fileExists(atPath: url(in: dir).path) else { return }
         do { try make(in: dir) } catch { Log.error("Recording for \(dir.lastPathComponent) failed: \(error)") }
     }
+
+    private static let busy = NSCondition()
+    nonisolated(unsafe) private static var inProgress: Set<String> = []
 
     /// The folders of the written calls that have no recording yet: calls from before this feature, and calls
     /// written while another call recorded.
@@ -24,7 +41,10 @@ public enum Recording {
             // The file check first: nearly every call has its recording, and then its record is not read at all.
             guard !FileManager.default.fileExists(atPath: url(in: dir).path),
                   let r = try? RecordCache.shared.record(in: dir), r.status == .written else { return false }
-            return true
+            // A recording that lives in the archive, or whose tracks are gone (the 30 day rule), cannot be made
+            // again here. Listing it gave one false error line for each such meeting at each pass.
+            guard r.cloudKey == nil else { return false }
+            return [Track.me, .them].contains { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0.fileName).path) }
         }
     }
 

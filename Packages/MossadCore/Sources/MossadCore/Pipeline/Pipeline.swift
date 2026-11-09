@@ -630,7 +630,27 @@ public actor Pipeline {
         await heavy.waitForQuiet("the work on \(id)")
     }
 
+    /// Makes the recording file of a call folder. A test puts its own in, to edit a call during the encode.
+    private var makeRecording: @Sendable (URL) -> Void = { Recording.makeIfMissing(in: $0) }
+    func setRecordingMaker(_ make: @escaping @Sendable (URL) -> Void) { makeRecording = make }
+
     private func write(_ r: inout CallRecord) async throws {
+        let dir = paths.callDirectory(r.id)
+        // The recording first: a mix and an AAC encode of the whole call, off this actor. While a call records, the
+        // note does not wait for it: the app makes the missing recording when no call records
+        // (`Recording.backfill`), and until then the player mixes the two tracks.
+        if await heavy.isHeld {
+            Log.info("A call records; the recording of \(r.id) is made later")
+        } else {
+            detail(r.id, "Making the recording")
+            let make = makeRecording
+            try? await HeavyWork.run { make(dir) }
+        }
+        // The encode takes seconds, and this actor was free for the owner's edits in that time (a title, a tag, a
+        // name, a bookmark). Each edit saved the record at once, so the record is taken fresh from the disk. From
+        // here to the save of the written record nothing awaits: the note and the record hold the same content.
+        if let fresh = try? CallRecord.load(from: dir), fresh.status == r.status { r = fresh }
+        carryOwnerEdits(into: &r, dir: dir)
         detail(r.id, "Writing the note")
         let url = MarkdownWriter.noteURL(for: r, in: paths.meetings)
         if let old = r.markdownPath, old != url.path { try? FileManager.default.removeItem(atPath: old) }
@@ -638,16 +658,6 @@ public actor Pipeline {
         r.markdownPath = url.path
         r.status = .written
         Log.info("Wrote \(url.lastPathComponent)")
-        // A mix and an AAC encode of the whole call, off this actor. While a call records, the note does not wait
-        // for it: the app makes the missing recording when no call records (`Recording.backfill`), and until then
-        // the player mixes the two tracks.
-        if await heavy.isHeld {
-            Log.info("A call records; the recording of \(r.id) is made later")
-        } else {
-            detail(r.id, "Making the recording")
-            let dir = paths.callDirectory(r.id)
-            try? await HeavyWork.run { Recording.makeIfMissing(in: dir) }
-        }
         // Without fingerprints a name is never learned, so asking after every call would only nag.
         if voiceFingerprints, !r.unknownSpeakers.isEmpty, quietRuns[r.id] == nil { notify(r) }
     }

@@ -13,6 +13,9 @@ public final class ModelLease: Sendable {
         var generation = 0
         var releaseWhenFree = false
         var release: (@Sendable () async -> Void)?
+        /// The one wait for the idle time. A voice model is used some hundred times for a call; each use once
+        /// left its own sleeping task behind.
+        var timer: Task<Void, Never>?
     }
 
     private let state = Mutex(State())
@@ -37,6 +40,8 @@ public final class ModelLease: Sendable {
         state.withLock {
             $0.users += 1
             $0.generation += 1
+            $0.timer?.cancel()
+            $0.timer = nil
         }
     }
 
@@ -54,11 +59,20 @@ public final class ModelLease: Sendable {
             return
         }
         let idle = idle, name = name
-        Task(priority: .utility) { [weak self] in
-            try? await Task.sleep(for: idle)
+        let timer = Task(priority: .utility) { [weak self] in
+            do { try await Task.sleep(for: idle) } catch { return }
             guard let self, self.state.withLock({ $0.users == 0 && $0.generation == generation }) else { return }
             Log.info("Releasing the \(name): not used for \(idle.components.seconds) s")
             await release()
+        }
+        state.withLock { s in
+            // Another use began or ended meanwhile: its own timer counts.
+            if s.generation == generation, s.users == 0 {
+                s.timer?.cancel()
+                s.timer = timer
+            } else {
+                timer.cancel()
+            }
         }
     }
 

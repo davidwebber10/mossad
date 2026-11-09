@@ -181,6 +181,22 @@ final class LiveTranscriberFailureTests: XCTestCase {
         for i in 0..<25 { XCTAssertTrue(q.add(Data(count: 3_200), at: 100 + Double(i) * 0.1), "an old burst does not count") }
     }
 
+    /// One late chunk a minute after an old burst is not a network that cannot carry the stream.
+    func testDropsFarApartDoNotAddUp() {
+        var q = LiveSendQueue()
+        for i in 0..<25 { XCTAssertTrue(q.add(Data(count: 3_200), at: Double(i) * 0.1)) }
+        // The queue stays near its limit (never empty) for a minute, with no drop, then drops again.
+        XCTAssertTrue(q.add(Data(count: 3_200), at: 60), "the old drops are not counted with this one")
+        for second in 61..<70 { XCTAssertTrue(q.add(Data(count: 3_200), at: Double(second))) }
+        XCTAssertFalse(q.add(Data(count: 3_200), at: 70), "10 s of drops close to each other still close the session")
+    }
+
+    func testOneMessageHoldsHalfASecondOfAudioAtMost() {
+        var q = LiveSendQueue()
+        for i in 0..<10 { _ = q.add(Data(count: 3_200), at: Double(i) * 0.1) }
+        XCTAssertEqual(q.next()?.count, 16_000)
+    }
+
     /// While muted, the mic stream was silence at the full 32 KB each second.
     func testAMutedMicSendsItsFirstSecondAndThenOnlyAKeepAlive() {
         var t = SilenceThrottle()

@@ -151,7 +151,11 @@ final class AppController: ObservableObject {
     private var upcomingTimer: Timer?
     /// The Meetings search text; a tag click sets it to "#Tag".
     @Published var meetingQuery = "" {
-        didSet { if meetingQuery != oldValue { filterMeetings(debounce: true) } }
+        didSet {
+            guard meetingQuery != oldValue else { return }
+            // A tag click, or the first text in an empty field, is not typing: the list must not show whole first.
+            filterMeetings(debounce: !(meetingQuery.hasPrefix("#") || oldValue.isEmpty))
+        }
     }
     /// The meetings that match `meetingQuery`; nil while it is empty, when every meeting matches. A text search
     /// reads every transcript, so it runs off the main thread, a moment after the last key press.
@@ -365,12 +369,16 @@ final class AppController: ObservableObject {
             enableLaunchAtLoginOnce()
             notifier.onOpen = { [weak self] callID in self?.openNaming(callID) }
             notifier.onRecord = { [weak self] bundleID, platform in
-                guard let self, case .idle = self.status else { return }
-                self.detection.forceStart(bundleID: bundleID, platform: platform)
+                self?.afterLaunch {
+                    guard let self, case .idle = self.status else { return }
+                    self.detection.forceStart(bundleID: bundleID, platform: platform)
+                }
             }
             notifier.onRecordBlocked = { [weak self] bundleID, platform in
-                guard let self, case .idle = self.status else { return }
-                self.detection.recordBlockedCall(bundleID: bundleID, platform: platform)
+                self?.afterLaunch {
+                    guard let self, case .idle = self.status else { return }
+                    self.detection.recordBlockedCall(bundleID: bundleID, platform: platform)
+                }
             }
             notifier.onNotACall = { [weak self] call in self?.quietUnconfirmed(call) }
             for answer in UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall")).active(at: Date()) {
@@ -480,12 +488,32 @@ final class AppController: ObservableObject {
             await self?.finishLaunch(records, held: held, inert: inert)
         }
         Log.info("Mossad started")
+        // The launch used to block when a record could not be read from a volume that does not answer, and that was
+        // visible. Now the app shows, so say when detection could not start.
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(30))
+            if let self, !self.meetingsLoaded { Log.error("The meetings are still not read 30 s after launch; calls are not detected until they are") }
+        }
+        // Started now, so it knows about Low Data Mode before the first call.
+        _ = NetworkPath.shared
     }
 
     /// The rest of the launch, once the records are read: everything that needs the meeting list or the recovery.
+    /// Recordings that the owner asked for before the recovery at launch was done; they start after it.
+    private var waitingForLaunch: [() -> Void] = []
+
+    private func afterLaunch(_ work: @escaping () -> Void) {
+        if meetingsLoaded { work() } else { waitingForLaunch.append(work) }
+    }
+
     private func finishLaunch(_ records: [CallRecord], held: [String], inert: Bool) {
         meetings = records
         meetingsLoaded = true
+        defer {
+            let waiting = waitingForLaunch
+            waitingForLaunch = []
+            waiting.forEach { $0() }
+        }
         if !inert {
             // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
             if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
@@ -814,6 +842,8 @@ final class AppController: ObservableObject {
 
     /// Records a meeting in a room through the mic, until Stop. Detection ignores calls meanwhile.
     func recordInPerson() {
+        // The recovery at launch treats each call that still says "recording" as a crashed one.
+        guard meetingsLoaded else { return afterLaunch { [weak self] in self?.recordInPerson() } }
         guard case .idle = status, isOn, !isInert else { return }
         let start = Date()
         status = .recording(.inPerson, since: start)

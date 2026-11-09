@@ -169,6 +169,7 @@ public final class DetectionService: @unchecked Sendable {
         lastIdleControlsRead = .distantPast
         lastLogged = [:]
         watch.reset()
+        mic.forget()
         muteLock.withLock {
             muteTarget = nil
             lastLabels = nil
@@ -364,7 +365,7 @@ public final class DetectionService: @unchecked Sendable {
                 // Joined muted: Teams holds no mic, but it plays the call and shows the controls. A slow read, so a
                 // Teams that only plays a sound costs one walk each 10 s.
                 lastIdleControlsRead = tickTime
-                if let labels = mute?.labels(bundleID: group, platform: .teams, meetingID: nil), Self.teamsControls(in: labels) {
+                if let labels = mute?.labels(bundleID: group, platform: .teams, meetingID: nil, pace: .callerPaced), Self.teamsControls(in: labels) {
                     present = true
                     sure = true
                     signAtStart.insert(group)
@@ -443,7 +444,8 @@ public final class DetectionService: @unchecked Sendable {
         }
         if fresh { unknownLabelReads = 0 }
         guard let target, muteLock.withLock({ tracker.isDue(at: time) }) else { return }
-        let labels = mute.labels(bundleID: target.bundleID, platform: target.platform, meetingID: target.meetingID)
+        let pace: MuteReadPace = muteLock.withLock({ tracker.muted == true }) ? .whileMuted : .backoff
+        let labels = mute.labels(bundleID: target.bundleID, platform: target.platform, meetingID: target.meetingID, pace: pace)
         let state = labels.flatMap { MuteState.from(labels: $0, platform: target.platform) }
         var seen: Date?
         let change: Bool? = muteLock.withLock {

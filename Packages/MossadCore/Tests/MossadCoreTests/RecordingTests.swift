@@ -39,6 +39,37 @@ final class RecordingTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: Recording.url(in: paths.callDirectory("live")).path))
     }
 
+    /// A meeting whose recording is in the archive, or whose tracks are gone, gave an error line at each pass.
+    func testAMeetingThatCannotGetARecordingIsNotListedAsMissing() throws {
+        let paths = Paths(root: tempDirectory())
+        try paths.ensureDirectories()
+        defer { try? FileManager.default.removeItem(at: paths.root) }
+        func call(_ id: String, tracks: Bool, cloudKey: String? = nil) throws {
+            let dir = paths.callDirectory(id)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            var r = CallRecord(id: id, platform: .meet, bundleID: "com.google.Chrome", start: Date(), end: Date(), status: .written)
+            r.cloudKey = cloudKey
+            try r.save(to: dir)
+            if tracks { try writeSegments(dir.appendingPathComponent("me.caf"), total: 5, [(0, 2, 200)]) }
+        }
+        try call("can", tracks: true)
+        try call("no-tracks", tracks: false)
+        try call("archived", tracks: true, cloudKey: "recordings/archived.m4a")
+        XCTAssertEqual(Recording.missing(audioRoot: paths.audio).map(\.lastPathComponent), ["can"])
+    }
+
+    /// The pipeline's write step and the app's later pass can ask for the same recording at the same time.
+    func testTwoRequestsForOneRecordingMakeOneWholeFile() throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 60, [(0, 50, 200)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 60, [(5, 55, 400)])
+        DispatchQueue.concurrentPerform(iterations: 4) { _ in Recording.makeIfMissing(in: dir) }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted(), ["me.caf", "recording.m4a", "them.caf"])
+        let file = try AVAudioFile(forReading: Recording.url(in: dir))
+        XCTAssertEqual(Double(file.length) / file.fileFormat.sampleRate, 60, accuracy: 0.5)
+    }
+
     func testNoTracksThrows() {
         XCTAssertThrowsError(try Recording.make(in: tempDirectory()))
     }

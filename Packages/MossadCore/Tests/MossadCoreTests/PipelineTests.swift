@@ -164,6 +164,44 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(Recording.missing(audioRoot: paths.audio), [])
     }
 
+    /// The encode of the recording takes seconds, and the owner can edit the call in that time. The note once kept
+    /// the old title and the old file name, while the record had the new one.
+    func testAnEditDuringTheRecordingEncodeIsInTheNoteAndInTheRecord() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        let started = DispatchSemaphore(value: 0), proceed = DispatchSemaphore(value: 0)
+        let p = pipeline()
+        await p.setRecordingMaker { dir in
+            started.signal()
+            proceed.wait()
+            Recording.makeIfMissing(in: dir)
+        }
+        let run = Task { await p.process(id) }
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global().async {
+                started.wait()
+                c.resume()
+            }
+        }
+        await p.setTitle(callID: id, "Budget review")
+        await p.setTags(callID: id, ["Freight"])
+        proceed.signal()
+        await run.value
+        let r = try CallRecord.load(from: dir)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.customTitle, "Budget review")
+        XCTAssertEqual(r.tags, ["Freight"])
+        let notes = try FileManager.default.contentsOfDirectory(atPath: paths.meetings.path).filter { $0.hasSuffix(".md") }
+        XCTAssertEqual(notes.count, 1, "one note, under the new name")
+        XCTAssertTrue(notes[0].contains("Budget review"))
+        XCTAssertEqual(r.markdownPath, paths.meetings.appendingPathComponent(notes[0]).path)
+        let note = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertTrue(note.contains("title: Budget review") || note.contains("title: \"Budget review\""), note.prefix(300).description)
+        XCTAssertTrue(note.contains("Freight"))
+        XCTAssertEqual(note, MarkdownWriter.render(r), "the note is the record's own content")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
+    }
+
     func testTheGateIsOpenWhenNothingSaysACallRecords() async {
         let gate = HeavyWorkGate()
         let held = await gate.isHeld

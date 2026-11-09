@@ -87,6 +87,45 @@ final class MicUsageProbeTests: XCTestCase {
         XCTAssertEqual(probe.scan(callActive: true)?.first?.pid, 77)
     }
 
+    /// The audio server can list a process before it knows its name.
+    func testAnEmptyBundleIDIsAskedAgain() {
+        source.objects = [1: .init(bundleID: "")]
+        source.order = [1]
+        XCTAssertEqual(probe.scan(callActive: true), [])
+        source.objects[1]?.bundleID = chrome
+        XCTAssertEqual(probe.scan(callActive: true)?.first?.bundleID, chrome)
+    }
+
+    /// After a restart of the audio server the same numbers can name other processes.
+    func testAfterAnUnreadableOrEmptyListEveryObjectIsReadAgain() {
+        source.objects = [1: .init(bundleID: "com.example.player")]
+        source.order = [1]
+        XCTAssertEqual(probe.scan(callActive: true), [])
+        source.order = nil
+        XCTAssertNil(probe.scan(callActive: true))
+        source.objects = [1: .init(bundleID: chrome, input: true)]
+        source.order = [1]
+        XCTAssertEqual(probe.scan(callActive: true)?.first?.bundleID, chrome)
+        source.order = []
+        XCTAssertEqual(probe.scan(callActive: true), [])
+        source.objects = [1: .init(bundleID: zoom)]
+        source.order = [1]
+        XCTAssertEqual(probe.scan(callActive: true)?.first?.bundleID, zoom)
+    }
+
+    func testForgetAndTheRegularRefreshReadEveryObjectAgain() {
+        source.objects = [1: .init(bundleID: chrome)]
+        source.order = [1]
+        _ = probe.scan(callActive: true)
+        source.objects = [1: .init(bundleID: zoom)]
+        XCTAssertEqual(probe.scan(callActive: true)?.first?.bundleID, chrome, "the name is kept between scans")
+        probe.forget()
+        XCTAssertEqual(probe.scan(callActive: true)?.first?.bundleID, zoom)
+        source.objects = [1: .init(bundleID: chrome)]
+        for _ in 0..<MicUsageProbe.scansBeforeRefresh { _ = probe.scan(callActive: true) }
+        XCTAssertEqual(probe.scan(callActive: true)?.first?.bundleID, chrome, "and read again after 5 minutes of scans")
+    }
+
     /// With no input device running, no app can use the mic: the mic state is known without a read.
     func testOutsideACallWithNoInputDeviceRunningOnlyZoomAndTeamsAreAskedForSound() {
         source.objects = [1: .init(bundleID: chrome, input: false, output: true), 2: .init(bundleID: zoom, input: false, output: true)]

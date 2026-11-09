@@ -56,3 +56,24 @@ final class Loudest: @unchecked Sendable {
     var value: Float { lock.withLock { level } }
     func take(_ l: Float) { lock.withLock { level = max(level, l) } }
 }
+
+/// What a walk of the call app keeps in its cache, and what decides alone.
+final class MuteControlTests: XCTestCase {
+    /// A Zoom menu item can keep its old title; the window button is right. The two together are unknown.
+    func testAMenuItemAndAWindowButtonThatDisagreeAreUnknown() {
+        XCTAssertNil(MuteState.from(labels: ["Unmute Audio", "Mute audio"], platform: .zoom))
+        XCTAssertNil(MuteState.from(labels: ["Mute mic", "Unmute mic"], platform: .teams))
+        XCTAssertEqual(MuteState.from(labels: ["Mute Audio", "Mute audio"], platform: .zoom), false)
+    }
+
+    /// A cut walk that found only "Microphone settings" was kept, and then no walk looked for the button again.
+    func testACutWalkIsKeptOnlyWithTheOwnersOwnControl() {
+        XCTAssertFalse(MuteState.keepsControls(labels: ["Microphone settings", "Mute tab"], cut: true, platform: .meet))
+        XCTAssertTrue(MuteState.keepsControls(labels: ["Mute tab", "Turn off microphone"], cut: true, platform: .meet))
+        XCTAssertTrue(MuteState.keepsControls(labels: ["Turn on microphone", "Turn off microphone"], cut: true, platform: .meet),
+                      "two controls that disagree are still the real controls")
+        XCTAssertTrue(MuteState.keepsControls(labels: ["Microphone settings"], cut: false, platform: .meet), "a full walk found all there is")
+        XCTAssertFalse(MuteState.keepsControls(labels: [], cut: false, platform: .meet))
+        XCTAssertFalse(MuteState.hasControl(labels: ["Myself video, Sam Carter, Unmuted"], platform: .teams))
+    }
+}

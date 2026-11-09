@@ -6,6 +6,26 @@ public enum MuteState {
     /// nil when no known label is present, or when the labels disagree (a second meeting's waiting page, a menu
     /// item): unknown never mutes the recording.
     public static func from(labels: [String], platform: Platform) -> Bool? {
+        let (muted, unmuted) = controls(in: labels, platform: platform)
+        guard muted != unmuted else { return nil }
+        return muted
+    }
+
+    /// True when the labels hold the owner's own mute or unmute control. "Microphone settings" or a participant's
+    /// mic sign does not count.
+    public static func hasControl(labels: [String], platform: Platform) -> Bool {
+        let (muted, unmuted) = controls(in: labels, platform: platform)
+        return muted || unmuted
+    }
+
+    /// Whether the controls of a walk are worth a place in the cache. A full walk found all there is. A cut walk
+    /// found only a part: without the owner's own control, cached reads would answer "unknown" for the rest of
+    /// the call and no walk would look for the button again.
+    public static func keepsControls(labels: [String], cut: Bool, platform: Platform) -> Bool {
+        !labels.isEmpty && (!cut || hasControl(labels: labels, platform: platform))
+    }
+
+    private static func controls(in labels: [String], platform: Platform) -> (muted: Bool, unmuted: Bool) {
         let lower = labels.map { $0.lowercased() }
         func has(_ prefixes: String...) -> Bool { lower.contains { l in prefixes.contains { l.hasPrefix($0) } } }
         let muted: Bool
@@ -18,15 +38,14 @@ public enum MuteState {
             muted = has("unmute audio", "unmute my audio")
             unmuted = has("mute audio", "mute my audio")
         case .inPerson:
-            return nil
+            return (false, false)
         case .teams:
             // "Unmute mic" / "Mute mic" in the new Teams app, "Unmute (⌘+Shift+M)" / "Mute (…)" in the old one.
             // Participant tiles ("Myself video, …, Unmuted") do not start with either word.
             muted = has("unmute")
             unmuted = has("mute")
         }
-        guard muted != unmuted else { return nil }
-        return muted
+        return (muted, unmuted)
     }
 }
 

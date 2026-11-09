@@ -14,10 +14,15 @@ struct WalkBackoff: Equatable, Sendable {
     private(set) var walks = 0
     private(set) var lastWalk: Date?
 
-    func mayWalk(at time: Date) -> Bool {
+    /// While the last known state is "muted", the wait never grows past this: "muted" that cannot be read again
+    /// turns into "unmuted" after 10 s, so the button must be looked for at least twice in that time.
+    static let mutedWaitLimit: TimeInterval = 5
+
+    func mayWalk(at time: Date, whileMuted: Bool = false) -> Bool {
         guard walks > 0, let lastWalk else { return true }
+        let wait = Self.waits[min(walks, Self.waits.count) - 1]
         // A little slack, so a 3 s check that fires a few milliseconds early still walks.
-        return time.timeIntervalSince(lastWalk) >= Self.waits[min(walks, Self.waits.count) - 1] - 0.1
+        return time.timeIntervalSince(lastWalk) >= (whileMuted ? min(wait, Self.mutedWaitLimit) : wait) - 0.1
     }
 
     /// True once the walks are at the slowest step.
@@ -59,6 +64,10 @@ public final class AccessibilityMuteProbe: MuteProbing, @unchecked Sendable {
     }
 
     public func labels(bundleID: String, platform: Platform, meetingID: String?) -> [String]? {
+        labels(bundleID: bundleID, platform: platform, meetingID: meetingID, pace: .backoff)
+    }
+
+    public func labels(bundleID: String, platform: Platform, meetingID: String?, pace: MuteReadPace) -> [String]? {
         guard AXIsProcessTrusted() else { return nil }
         // Every copy of the app: a second, hidden copy of Chrome (a test tool's) has the same ID.
         let pids = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier)
@@ -106,8 +115,9 @@ public final class AccessibilityMuteProbe: MuteProbing, @unchecked Sendable {
             // A new call, a new copy of the app, or a change of its windows (the owner came back to the call's tab,
             // the meeting window opened or closed): the tree is worth a new look at once.
             if entry.key != key || entry.windows != allTitles { entry = Entry(key: key, windows: allTitles) }
-            let allowed = entry.backoff.mayWalk(at: time)
-            if allowed {
+            // A caller with its own slow pace may always look, and its looks do not count.
+            let allowed = pace == .callerPaced || entry.backoff.mayWalk(at: time, whileMuted: pace == .whileMuted)
+            if allowed, pace != .callerPaced {
                 entry.backoff.walked(at: time)
                 if entry.backoff.walks == WalkBackoff.waits.count {
                     Log.info("The mute controls of \(bundleID) do not stay readable; looking for them only every \(Int(WalkBackoff.waits.last ?? 60)) s")
@@ -156,16 +166,17 @@ public final class AccessibilityMuteProbe: MuteProbing, @unchecked Sendable {
             }
             for child in (read(e, kAXChildrenAttribute) as? [AXUIElement]) ?? [] { walk(child, depth: depth + 1) }
         }
-        // The menu bar first: it is small, and when it names the mute state the windows (the large part: video
-        // tiles, chat, the participant list) are not walked at all.
+        // The menu bar first (it is small, so a cut walk still has it), and then always the windows too. A menu
+        // item can keep an old title until its menu opens, so it never decides alone while a window control can be
+        // read: when the two disagree, `MuteState.from` gives unknown, and unknown never mutes.
         menus.forEach { walk($0, depth: 0) }
-        if cut || MuteState.from(labels: found, platform: platform) == nil {
-            roots.forEach { walk($0, depth: 0) }
-        }
-        // The controls a cut walk found are kept too: reading them again is cheap, and a tree too large to walk
-        // in time would otherwise be walked again at every check.
+        roots.forEach { walk($0, depth: 0) }
+        // The controls of a cut walk are kept only when the owner's own mute control is among them: reading them
+        // again is cheap, and a tree too large to walk in time would otherwise be walked again at every check.
+        // Without that control nothing is kept, and the backoff decides when the next walk looks for it.
+        let keep = MuteState.keepsControls(labels: found, cut: cut, platform: platform)
         lock.withLock {
-            if entries[bundleID]?.key == key { entries[bundleID]?.elements = elements }
+            if entries[bundleID]?.key == key { entries[bundleID]?.elements = keep ? elements : [] }
         }
         // A cut walk, or a copy that did not answer, still proves the labels it found, but not their absence.
         if found.isEmpty, cut || anyCopyFailed { return nil }

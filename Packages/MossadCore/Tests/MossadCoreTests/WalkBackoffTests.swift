@@ -43,6 +43,18 @@ final class WalkBackoffTests: XCTestCase {
         XCTAssertFalse(b.isOff)
     }
 
+    /// "Muted" that cannot be read turns into "unmuted" after 10 s, so while muted the walks stay 5 s apart at most.
+    func testWhileMutedTheWalksAreNeverMoreThanFiveSecondsApart() {
+        var b = WalkBackoff()
+        var walks: [Double] = []
+        for second in 0..<30 {
+            let time = t0.addingTimeInterval(Double(second))
+            if b.mayWalk(at: time, whileMuted: true) { b.walked(at: time); walks.append(Double(second)) }
+        }
+        XCTAssertEqual(walks, [0, 3, 8, 13, 18, 23, 28])
+        XCTAssertFalse(b.mayWalk(at: t0.addingTimeInterval(30)), "not muted any more: the long wait applies")
+    }
+
     func testFourWalksInARowTurnDetectionAsGoodAsOff() {
         var b = WalkBackoff()
         for i in 0..<3 { b.walked(at: t0.addingTimeInterval(Double(i))) }

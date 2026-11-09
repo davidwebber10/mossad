@@ -32,6 +32,10 @@ public final class MicUsageProbe: MicUsageProbing {
 
     private let source: AudioProcessSource
     private var known: [AudioObjectID: Known] = [:]
+    /// What is known is read again after this many scans (5 minutes of ticks), after an empty or unreadable list
+    /// (the audio server started again and can give the old numbers to other processes), and after `forget()`.
+    static let scansBeforeRefresh = 150
+    private var scans = 0
 
     public convenience init() { self.init(source: CoreAudioProcessSource()) }
 
@@ -39,8 +43,22 @@ public final class MicUsageProbe: MicUsageProbing {
 
     public func processes() -> [AudioProcess] { scan(callActive: true) ?? [] }
 
+    public func forget() { known = [:] }
+
     public func scan(callActive: Bool) -> [AudioProcess]? {
-        guard let ids = source.processObjects() else { return nil }
+        guard let ids = source.processObjects() else {
+            known = [:]
+            return nil
+        }
+        guard !ids.isEmpty else {
+            known = [:]
+            return []
+        }
+        scans += 1
+        if scans >= Self.scansBeforeRefresh {
+            scans = 0
+            known = [:]
+        }
         let live = Set(ids)
         known = known.filter { live.contains($0.key) }
         // An unknown gate is an open gate: read each app.
@@ -48,7 +66,8 @@ public final class MicUsageProbe: MicUsageProbing {
         return ids.compactMap { id in
             if known[id] == nil {
                 // A failed read is tried again at the next scan.
-                guard let bundleID = source.bundleID(of: id) else { return nil }
+                // So is an empty ID: a process can be listed before the audio server knows its name.
+                guard let bundleID = source.bundleID(of: id), !bundleID.isEmpty else { return nil }
                 let kind = MeetingMatcher.appKind(bundleID: bundleID)
                 let startsWithoutMic = kind == .zoomApp || kind == .teamsApp
                 known[id] = Known(bundleID: bundleID, pid: nil, isMeetingApp: kind != nil, startsWithoutMic: startsWithoutMic)

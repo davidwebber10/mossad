@@ -7,6 +7,8 @@ final class FakeMic: MicUsageProbing {
     /// The list itself cannot be read.
     var unreadable = false
     var callActiveSeen: [Bool] = []
+    var forgets = 0
+    func forget() { forgets += 1 }
     func processes() -> [AudioProcess] { list }
     func scan(callActive: Bool) -> [AudioProcess]? {
         callActiveSeen.append(callActive)
@@ -31,6 +33,11 @@ final class FakeMute: MuteProbing {
     var labels: [String]? = nil
     var calls = 0
     var lastMeetingID: String?
+    var paces: [MuteReadPace] = []
+    func labels(bundleID: String, platform: Platform, meetingID: String?, pace: MuteReadPace) -> [String]? {
+        paces.append(pace)
+        return labels(bundleID: bundleID, platform: platform, meetingID: meetingID)
+    }
     func labels(bundleID: String, platform: Platform, meetingID: String?) -> [String]? {
         calls += 1
         lastMeetingID = meetingID
@@ -108,6 +115,40 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertNil(DetectionService.anyRunning([false, nil]))
         XCTAssertEqual(DetectionService.anyRunning([false, false]), false)
         XCTAssertEqual(DetectionService.anyRunning([]), false)
+    }
+
+    /// While the owner is muted the probe must look for a lost button often enough for the 10 s rule.
+    func testTheMuteCheckTellsTheProbeWhenTheLastStateIsMuted() {
+        let mute = FakeMute()
+        let s = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        mic.list = [proc(1, chrome, input: true)]
+        s.tick(at: now)
+        mute.labels = ["Turn off microphone"]
+        s.checkMute(at: now)
+        mute.labels = ["Turn on microphone"]
+        s.checkMute(at: now.addingTimeInterval(3))
+        mute.labels = nil
+        s.checkMute(at: now.addingTimeInterval(4))
+        XCTAssertEqual(mute.paces, [.backoff, .backoff, .whileMuted])
+    }
+
+    /// The idle Teams check has its own 10 s pace; it must not push the probe's walks further apart.
+    func testTheIdleTeamsCheckDoesNotCountForTheBackoff() {
+        let mute = FakeMute()
+        let s = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        let teams = "com.microsoft.teams2"
+        windows.titles[teams] = ["Chat | Microsoft Teams"]
+        windows.running = [teams]
+        mic.list = [proc(4, teams, input: false, output: true)]
+        s.tick(at: now)
+        XCTAssertEqual(mute.paces, [.callerPaced])
+    }
+
+    func testAResetAlsoClearsWhatTheMicProbeRemembers() {
+        service.reset()
+        XCTAssertEqual(mic.forgets, 1)
     }
 
     // MARK: Tab reads outside a call
