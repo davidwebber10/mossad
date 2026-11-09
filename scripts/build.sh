@@ -14,8 +14,10 @@ call_state() {
   osascript -l JavaScript - "${MOSSAD_ROOT:-$HOME/Mossad}/Audio" 2>/dev/null <<'JS'
 ObjC.import('Foundation')
 function run(argv) {
-  const names = $.NSFileManager.defaultManager.contentsOfDirectoryAtPathError(argv[0], null)
-  if (names.isNil()) return 'idle' // no folder yet: no calls
+  const files = $.NSFileManager.defaultManager
+  if (!files.fileExistsAtPath(argv[0])) return 'idle' // no folder yet: no calls
+  const names = files.contentsOfDirectoryAtPathError(argv[0], null)
+  if (names.isNil()) return '' // a folder that cannot be read: unknown
   for (const name of ObjC.deepUnwrap(names)) {
     const text = $.NSString.stringWithContentsOfFileEncodingError(argv[0] + '/' + name + '/call.json', $.NSUTF8StringEncoding, null)
     if (text.isNil()) continue
@@ -42,7 +44,12 @@ fi
 # Only the menu bar app: copies started with --mcp by other AI apps keep serving. The app ends a live call
 # cleanly when it gets this signal, so wait for it to end before the new copy starts (it needs the folder's lock).
 pkill -f "$APP_PROCESS" || true
-for _ in $(seq 1 50); do pgrep -f "$APP_PROCESS" >/dev/null || break; sleep 0.1; done
+gone() {
+  for _ in $(seq 1 50); do pgrep -f "$APP_PROCESS" >/dev/null || return 0; sleep 0.1; done
+  return 1
+}
+# A copy that does not answer would keep the lock and run from a replaced bundle. The next launch recovers its call.
+gone || { pkill -9 -f "$APP_PROCESS" || true; gone || { echo "The old copy of Mossad did not end." >&2; exit 1; }; }
 rm -rf /Applications/Mossad.app
 cp -R build/Build/Products/Release/Mossad.app /Applications/
 if [ "${1:-}" != "--no-launch" ]; then open /Applications/Mossad.app; fi
