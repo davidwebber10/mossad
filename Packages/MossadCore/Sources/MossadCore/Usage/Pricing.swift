@@ -60,6 +60,8 @@ public enum Pricing {
         case .deepgram: return hours * deepgramPerHour
         case .elevenlabs: return hours * elevenLabsPerHour
         case .openrouter: return 0
+        // A model on the owner's own server or on this Mac.
+        case .local: return 0
         case .openai:
             if e.purpose == .transcription { return hours * openAITranscriptionPerHour }
             // A model this table does not know costs nothing here rather than a guess.
@@ -104,6 +106,7 @@ public enum Pricing {
         case .anthropic: .claude
         case .openai: .openai
         case .openrouter: .openrouter
+        case .localServer, .apple: .local
         }
         let name = ai.resolvedModel(model)
         let transcript = audio.map {

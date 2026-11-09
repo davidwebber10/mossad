@@ -9,6 +9,8 @@ public enum APIKey: String, CaseIterable, Sendable {
     /// Sends the coach's weekly email.
     case resend
     case openai, openrouter, deepgram, elevenlabs
+    /// An optional key for the owner's local AI server, when it asks for one.
+    case localServer
     case postmark, sendgrid, mailgun, brevo
     /// The secret access key for Amazon SES.
     case sesSecret
@@ -25,6 +27,7 @@ public enum APIKey: String, CaseIterable, Sendable {
         case .resend: env["RESEND_API_KEY"]
         case .openai: env["OPENAI_API_KEY"]
         case .openrouter: env["OPENROUTER_API_KEY"]
+        case .localServer: env["MOSSAD_LOCAL_SERVER_KEY"]
         case .deepgram: env["DEEPGRAM_API_KEY"]
         case .elevenlabs: env["ELEVENLABS_API_KEY"]
         case .postmark: env["POSTMARK_SERVER_TOKEN"]

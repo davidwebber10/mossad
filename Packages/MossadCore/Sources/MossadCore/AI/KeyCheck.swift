@@ -16,11 +16,13 @@ public enum KeyCheck {
             }
         }
 
-        public init(_ provider: AIProvider) {
+        /// Nil for the local providers, which need no key.
+        public init?(_ provider: AIProvider) {
             switch provider {
             case .anthropic: self = .anthropic
             case .openai: self = .openai
             case .openrouter: self = .openrouter
+            case .localServer, .apple: return nil
             }
         }
 

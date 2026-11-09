@@ -25,7 +25,7 @@ public enum LatestModel {
             Alias(id: "latest:gpt-mini", name: "GPT Mini Latest", fallback: nil),
             Alias(id: "latest:gpt-nano", name: "GPT Nano Latest", fallback: nil),
         ]
-        case .openrouter: []
+        case .openrouter, .localServer, .apple: []
         }
     }
 

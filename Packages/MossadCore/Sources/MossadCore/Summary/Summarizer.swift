@@ -135,8 +135,9 @@ public struct LLMSummarizer: Summarizing {
         return "\(known)\(titles)Meeting: \(title)\n\nTranscript:\n\(transcript)"
     }
 
-    public func summarize(transcript: String, title: String, knownTags: [String], people: [String]) async throws -> MeetingSummary {
-        let schema = Schema.object([
+    /// The shape of every summary, from any model, in one request or in parts.
+    static var schema: [String: Any] {
+        Schema.object([
             "summary": Schema.string,
             "topics": Schema.array(Schema.object(["title": Schema.string, "summary": Schema.string])),
             "action_items": Schema.array(Schema.object(["owner": Schema.nullableString, "task": Schema.string])),
@@ -147,9 +148,18 @@ public struct LLMSummarizer: Summarizing {
             "tags": Schema.array(Schema.string),
             "title": Schema.string,
         ])
-        let result = try await llm.json(system: Self.systemPrompt(owner: ownerName, organization: organization),
-                                        user: Self.userPrompt(knownTags: knownTags, title: title, transcript: transcript, people: people), schema: schema,
+    }
+
+    public func summarize(transcript: String, title: String, knownTags: [String], people: [String]) async throws -> MeetingSummary {
+        let system = Self.systemPrompt(owner: ownerName, organization: organization)
+        let result: Output
+        if let small = llm as? any ContextLimitedModel {
+            result = try await summarizeInParts(small, system: system, transcript: transcript, title: title, knownTags: knownTags, people: people)
+        } else {
+            result = try await llm.json(system: system,
+                                        user: Self.userPrompt(knownTags: knownTags, title: title, transcript: transcript, people: people), schema: Self.schema,
                                         effort: .medium, purpose: .summary, as: Output.self)
+        }
         let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)
         return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items, decisions: result.decisions.map { Decision(text: $0.text, at: $0.at_seconds.flatMap { $0 >= 0 ? $0 : nil }) },
                               headline: headline.isEmpty ? nil : headline,
@@ -157,12 +167,12 @@ public struct LLMSummarizer: Summarizing {
                               tags: (result.tags ?? []).compactMap(\.nonBlank), title: result.title?.nonBlank.map(Titles.clean))
     }
 
-    private struct DecisionOutput: Decodable {
+    struct DecisionOutput: Decodable {
         let text: String
         let at_seconds: Double?
     }
 
-    private struct Output: Decodable {
+    struct Output: Decodable {
         let summary: String
         let topics: [SummaryTopic]
         let action_items: [ActionItem]

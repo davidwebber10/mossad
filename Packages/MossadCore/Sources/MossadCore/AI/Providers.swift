@@ -2,6 +2,10 @@ import Foundation
 
 public enum AIProvider: String, CaseIterable, Sendable, Identifiable {
     case anthropic, openai, openrouter
+    /// An OpenAI-compatible server the owner runs, such as Ollama or LM Studio.
+    case localServer
+    /// Apple's on-device model, through the FoundationModels framework.
+    case apple
 
     public var id: String { rawValue }
     public var displayName: String {
@@ -9,21 +13,40 @@ public enum AIProvider: String, CaseIterable, Sendable, Identifiable {
         case .anthropic: "Anthropic"
         case .openai: "OpenAI"
         case .openrouter: "OpenRouter"
+        case .localServer: "Local server"
+        case .apple: "Apple on-device"
         }
     }
-    public var key: APIKey {
+    /// The key in the Keychain: required for the cloud providers, optional for a local server, none for Apple.
+    public var key: APIKey? {
         switch self {
         case .anthropic: .anthropic
         case .openai: .openai
         case .openrouter: .openrouter
+        case .localServer: .localServer
+        case .apple: nil
         }
     }
-    /// The model used until one is picked. OpenRouter has hundreds, so it waits for a choice.
+    public var requiresKey: Bool { !isLocal }
+    /// Runs without a cloud service: nothing is billed and no key is needed.
+    public var isLocal: Bool { self == .localServer || self == .apple }
+
+    /// What a person should know before picking it, when there is more to say than the model's rating.
+    public var note: String? {
+        switch self {
+        case .anthropic, .openai, .openrouter: nil
+        case .localServer: "Free. Meeting text goes only to the server address below. Quality and speed depend on the model."
+        case .apple: "Apple on-device: free and private, lower quality, slower on long meetings. It needs Apple Intelligence."
+        }
+    }
+
+    /// The model used until one is picked. OpenRouter and a local server have many, so they wait for a choice.
     public var defaultModel: String {
         switch self {
         case .anthropic: "claude-opus-5-5"
         case .openai: "gpt-6.1-sol"
-        case .openrouter: ""
+        case .openrouter, .localServer: ""
+        case .apple: AppleModelInfo.id
         }
     }
 
@@ -32,20 +55,25 @@ public enum AIProvider: String, CaseIterable, Sendable, Identifiable {
     public var smallModel: String? {
         switch self {
         case .anthropic: "claude-haiku-5-5"
-        case .openai, .openrouter: nil
+        case .openai, .openrouter, .localServer, .apple: nil
         }
     }
 
-    public func model(_ name: String, apiKey: String, usage: UsageLog?, cache: LatestModelCache = .shared,
-                      session: URLSession = .shared) -> any LanguageModel {
+    /// `serverURL` is the local server's address; the other providers ignore it.
+    public func model(_ name: String, apiKey: String?, usage: UsageLog?, serverURL: URL = LocalServer.ollama,
+                      cache: LatestModelCache = .shared, session: URLSession = .shared) -> any LanguageModel {
         let name = resolvedModel(name, cache: cache)
+        let key = apiKey ?? ""
         return switch self {
-        case .anthropic: AnthropicModel(apiKey: apiKey, model: name, session: session, usage: usage)
-        case .openai: OpenAIModel(apiKey: apiKey, model: name, session: session, usage: usage)
-        case .openrouter: OpenRouterModel(apiKey: apiKey, model: name, session: session, usage: usage)
+        case .anthropic: AnthropicModel(apiKey: key, model: name, session: session, usage: usage)
+        case .openai: OpenAIModel(apiKey: key, model: name, session: session, usage: usage)
+        case .openrouter: OpenRouterModel(apiKey: key, model: name, session: session, usage: usage)
+        case .localServer: LocalServerModel(baseURL: serverURL, model: name, apiKey: apiKey, session: session, usage: usage)
+        case .apple: AppleModelInfo.make(usage: usage)
         }
     }
 }
+
 
 public enum TranscriptionProvider: String, CaseIterable, Sendable, Identifiable {
     case assemblyai, deepgram, elevenlabs, openai, local

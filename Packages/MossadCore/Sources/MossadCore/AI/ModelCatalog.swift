@@ -50,9 +50,19 @@ public enum ModelCatalog {
         }
     }
 
-    public static func fetch(_ provider: AIProvider, apiKey: String?, session: URLSession = .shared) async throws -> [ModelInfo] {
+    /// `serverURL` is the local server's address; nothing else uses it.
+    public static func fetch(_ provider: AIProvider, apiKey: String?, serverURL: URL? = nil, session: URLSession = .shared) async throws -> [ModelInfo] {
         var request: URLRequest
         switch provider {
+        case .apple:
+            return [ModelInfo(id: AppleModelInfo.id, name: AppleModelInfo.name)]
+        case .localServer:
+            let base = serverURL ?? LocalServer.ollama
+            request = URLRequest(url: LocalServer.endpoint(base, "models"), timeoutInterval: 10)
+            if let apiKey, !apiKey.isEmpty { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
+            let (data, status) = try await LocalServerModel.load(request, session: session, base: base)
+            guard (200..<300).contains(status) else { throw ProviderError.http("Local server", status, data.snippet) }
+            return LocalServer.parseModels(data)
         case .anthropic:
             request = URLRequest(url: URL(string: "https://api.anthropic.com/v1/models?limit=100")!)
             request.setValue(apiKey ?? "", forHTTPHeaderField: "x-api-key")
@@ -71,6 +81,7 @@ public enum ModelCatalog {
         case .anthropic: return parseAnthropic(data)
         case .openai: return parseOpenAI(data)
         case .openrouter: return parseOpenRouter(data)
+        case .localServer, .apple: return []
         }
     }
 }
