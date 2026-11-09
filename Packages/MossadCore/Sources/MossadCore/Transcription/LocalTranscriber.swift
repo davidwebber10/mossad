@@ -2,9 +2,36 @@ import AVFoundation
 import FluidAudio
 import Foundation
 
-/// Loads the on-device models once and keeps them: the chosen model for words, FluidAudio's diarizer for speakers.
+/// Loads the on-device models at their first use and keeps them while they are in use: the chosen model for words,
+/// FluidAudio's diarizer for speakers. They are let go after a few idle minutes and when memory runs short (see
+/// `ModelLease`), and only one model for words is held at a time.
 actor LocalEngine {
     static let shared = LocalEngine()
+    nonisolated let lease = ModelLease("on-device speech models")
+
+    private init() {
+        lease.onRelease { await LocalEngine.shared.releaseModels() }
+    }
+
+    /// Frees every model, unless a transcription began meanwhile.
+    func releaseModels() {
+        guard lease.isFree else { return }
+        parakeet = [:]
+        diarizer = nil
+        #if os(macOS)
+        whisper = nil
+        qwen = nil
+        #endif
+    }
+
+    /// A change of model in Settings must not leave the old one in memory next to the new one.
+    private func keepOnly(_ model: LocalModel) {
+        parakeet = parakeet.filter { $0.key == model }
+        #if os(macOS)
+        if model != .whisperTurbo { whisper = nil }
+        if model != .qwen3 { qwen = nil }
+        #endif
+    }
     private var parakeet: [LocalModel: AsrManager] = [:]
     private var diarizer: DiarizerManager?
     #if os(macOS)
@@ -13,6 +40,13 @@ actor LocalEngine {
     #endif
 
     func words(_ file: URL, model: LocalModel) async throws -> [TimedWord] {
+        lease.begin()
+        defer { lease.end() }
+        keepOnly(model)
+        return try await loadedWords(file, model: model)
+    }
+
+    private func loadedWords(_ file: URL, model: LocalModel) async throws -> [TimedWord] {
         switch model {
         case .parakeetV3: try await parakeetWords(file, model: model, version: .v3)
         case .parakeetV2: try await parakeetWords(file, model: model, version: .v2)
@@ -56,8 +90,12 @@ actor LocalEngine {
     #endif
 
     private func parakeetWords(_ file: URL, model: LocalModel, version: AsrModelVersion) async throws -> [TimedWord] {
-        if parakeet[model] == nil {
-            let manager = AsrManager()
+        // Held here for the whole run: another run can drop the shared copy at any await (a change of model).
+        let manager: AsrManager
+        if let loaded = parakeet[model] {
+            manager = loaded
+        } else {
+            manager = AsrManager()
             let models: AsrModels
             do {
                 models = try await AsrModels.downloadAndLoad(version: version, progressHandler: Self.logProgress(model))
@@ -68,18 +106,21 @@ actor LocalEngine {
             parakeet[model] = manager
         }
         var state = try TdtDecoderState()
-        let result = try await parakeet[model]!.transcribe(file, decoderState: &state)
+        let result = try await manager.transcribe(file, decoderState: &state)
         return buildWordTimings(from: result.tokenTimings ?? []).map { TimedWord(text: $0.word, start: $0.startTime, end: $0.endTime) }
     }
 
     func speakers(_ file: URL) async throws -> [(start: Double, end: Double, speaker: String)] {
+        lease.begin()
+        defer { lease.end() }
         if diarizer == nil {
             let manager = DiarizerManager()
             manager.initialize(models: try await DiarizerModels.downloadIfNeeded())
             diarizer = manager
         }
+        guard let diarizer else { throw LocalModelError.notSupported(.parakeetV3) }
         let samples = try AudioConverter().resampleAudioFile(file)
-        return try diarizer!.performCompleteDiarization(samples).segments.map {
+        return try diarizer.performCompleteDiarization(samples).segments.map {
             (start: Double($0.startTimeSeconds), end: Double($0.endTimeSeconds), speaker: $0.speakerId)
         }
     }

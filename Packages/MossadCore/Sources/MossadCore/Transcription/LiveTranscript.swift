@@ -96,14 +96,20 @@ public struct LiveTranscript: Codable, Equatable, Sendable {
     /// a "You" line that repeats a call line from the same few seconds is that echo. Short lines such as
     /// "Yeah." stay, since they are as likely to be the owner's own.
     public var visibleLines: [Line] {
-        let calls = lines.filter { $0.source == .them }
+        // Published four times a second for the whole call: each call line is split into words once, and only when
+        // a mic line is near it in time, not once for each pair of lines.
+        let calls = lines.indices.filter { lines[$0].source == .them }
+        var callWords: [Int: Set<String>] = [:]
         return lines.filter { line in
             guard line.source == .me else { return true }
+            let near = calls.filter { abs(lines[$0].time - line.time) <= Self.echoWindow }
+            guard !near.isEmpty else { return true }
             let mine = Self.words(line.text)
             guard mine.count >= Self.echoMinimumWords else { return true }
-            return !calls.contains { call in
-                abs(call.time - line.time) <= Self.echoWindow
-                    && Double(mine.filter(Set(Self.words(call.text)).contains).count) / Double(mine.count) >= Self.echoShare
+            return !near.contains { i in
+                let words = callWords[i] ?? Set(Self.words(lines[i].text))
+                callWords[i] = words
+                return Double(mine.filter(words.contains).count) / Double(mine.count) >= Self.echoShare
             }
         }
     }

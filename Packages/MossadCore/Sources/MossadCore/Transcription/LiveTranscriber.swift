@@ -2,6 +2,79 @@ import AVFoundation
 import Foundation
 import Synchronization
 
+/// The audio that waits for the network, with a limit. A slow uplink (a hotel, a phone hotspot) once let the
+/// waiting audio grow in memory for the whole call. Above the limit the oldest audio goes; when that lasts, the
+/// session is not worth its share of the uplink, which the call needs for video.
+struct LiveSendQueue {
+    /// 2 s of 16 kHz 16-bit audio.
+    static let limitBytes = 64_000
+    /// Dropping for this long without the queue running empty means the uplink cannot carry the stream.
+    static let stuckAfter: TimeInterval = 10
+    /// One send carries at most this much, so a queue that waited goes out in few messages.
+    static let sendBytes = 32_000
+
+    private var waiting: [Data] = []
+    private(set) var waitingBytes = 0
+    private(set) var droppedBytes = 0
+    private(set) var inFlight = false
+    private var droppingSince: TimeInterval?
+
+    /// Adds a chunk; false when the queue has been over its limit for too long.
+    mutating func add(_ chunk: Data, at time: TimeInterval) -> Bool {
+        waiting.append(chunk)
+        waitingBytes += chunk.count
+        var dropped = false
+        while waitingBytes > Self.limitBytes, waiting.count > 1 {
+            let old = waiting.removeFirst()
+            waitingBytes -= old.count
+            droppedBytes += old.count
+            dropped = true
+        }
+        guard dropped else { return true }
+        if droppingSince == nil { droppingSince = time }
+        return time - (droppingSince ?? time) < Self.stuckAfter
+    }
+
+    /// The next message for the socket, when none is on its way.
+    mutating func next() -> Data? {
+        guard !inFlight, !waiting.isEmpty else { return nil }
+        var message = waiting.removeFirst()
+        while let more = waiting.first, message.count + more.count <= Self.sendBytes {
+            message.append(more)
+            waiting.removeFirst()
+        }
+        waitingBytes -= message.count
+        if waiting.isEmpty { droppingSince = nil }
+        inFlight = true
+        return message
+    }
+
+    mutating func sent() { inFlight = false }
+}
+
+/// While the owner is muted the mic stream is silence. The first second of it goes out (it ends the open turn);
+/// after that only a short piece now and then, so the connection stays open at a fiftieth of the traffic.
+struct SilenceThrottle {
+    static let leadBytes = 32_000
+    static let keepAliveEveryBytes = 160_000
+    private var silentBytes = 0
+    private var skippedBytes = 0
+
+    mutating func shouldSend(bytes: Int, silent: Bool) -> Bool {
+        guard silent else {
+            silentBytes = 0
+            skippedBytes = 0
+            return true
+        }
+        silentBytes += bytes
+        if silentBytes <= Self.leadBytes { return true }
+        skippedBytes += bytes
+        guard skippedBytes >= Self.keepAliveEveryBytes else { return false }
+        skippedBytes = 0
+        return true
+    }
+}
+
 /// One AssemblyAI streaming session for one track. Audio comes from the capture threads; messages go to
 /// `onMessage` on a background queue. Billed while the connection is open, so it is closed on pause and end.
 /// A connection that fails is not opened again here: `onFailure` runs once, and the owner of the session starts a new
@@ -17,6 +90,10 @@ public final class LiveTranscriber: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.dwebber.mossad.live")
     private let task: URLSessionWebSocketTask
     private var pending = Data()
+    private var outbox = LiveSendQueue()
+    private var throttle = SilenceThrottle()
+    private let skipsSilence: Bool
+    private let dropped = Atomic<Int>(0)
     private var open = true
     /// Read on the capture side before any work, so a dead session costs nothing.
     private let alive = Atomic<Bool>(true)
@@ -24,8 +101,11 @@ public final class LiveTranscriber: @unchecked Sendable {
     private let onFailure: (@Sendable () -> Void)?
 
     public var isAlive: Bool { alive.load(ordering: .relaxed) }
+    /// Audio that never went out because the uplink was too slow. The service's times are short by this much.
+    public var droppedSeconds: TimeInterval { Double(dropped.load(ordering: .relaxed)) / 32_000 }
 
-    public init(apiKey: String, speakers: Bool = false, session: URLSession = .shared, url: URL? = nil,
+    /// `skipsSilence` is for the owner's mic on a call: its times are not used, and it is silence while muted.
+    public init(apiKey: String, speakers: Bool = false, skipsSilence: Bool = false, session: URLSession = .shared, url: URL? = nil,
                 onFailure: (@Sendable () -> Void)? = nil, onMessage: @escaping @Sendable (Data) -> Void) {
         var request = URLRequest(url: url ?? Self.url(speakers: speakers))
         // The key goes in a header, never in the URL, so it is not logged with the address.
@@ -33,6 +113,7 @@ public final class LiveTranscriber: @unchecked Sendable {
         task = session.webSocketTask(with: request)
         self.onMessage = onMessage
         self.onFailure = onFailure
+        self.skipsSilence = skipsSilence
         task.resume()
         receive()
     }
@@ -68,12 +149,37 @@ public final class LiveTranscriber: @unchecked Sendable {
         let data = Self.pcm16(buffer)
         queue.async {
             guard self.open else { return }
+            if self.skipsSilence, !self.throttle.shouldSend(bytes: data.count, silent: data.allSatisfy({ $0 == 0 })) { return }
             self.pending.append(data)
             guard self.pending.count >= Self.chunkBytes else { return }
             let chunk = self.pending
             self.pending = Data()
-            self.task.send(.data(chunk)) { _ in }
+            let carries = self.outbox.add(chunk, at: ProcessInfo.processInfo.systemUptime)
+            self.dropped.store(self.outbox.droppedBytes, ordering: .relaxed)
+            guard carries else { return self.giveUp() }
+            self.pump()
         }
+    }
+
+    /// One message on its way at a time, so what waits is counted here and not hidden in the URL session. On the queue.
+    private func pump() {
+        guard open, let message = outbox.next() else { return }
+        task.send(.data(message)) { [weak self] _ in
+            self?.queue.async {
+                self?.outbox.sent()
+                self?.pump()
+            }
+        }
+    }
+
+    /// The uplink cannot carry the stream. On the queue.
+    private func giveUp() {
+        guard open else { return }
+        open = false
+        alive.store(false, ordering: .relaxed)
+        Log.error("Live transcript stopped: the network is too slow for it (\(Int(droppedSeconds)) s of audio did not go out)")
+        task.cancel(with: .goingAway, reason: nil)
+        onFailure?()
     }
 
     /// Ends the session: the server finalizes the open turn, then the connection closes.

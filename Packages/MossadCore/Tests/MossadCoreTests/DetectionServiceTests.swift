@@ -110,6 +110,64 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(DetectionService.anyRunning([]), false)
     }
 
+    // MARK: Tab reads outside a call
+
+    private func dictationInChrome() -> String {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://example.com/notes", title: "Notes", isActive: true)]
+        windows.titles[chrome] = ["Notes"]
+        mic.list = [proc(1, chrome, input: true)]
+        return chrome
+    }
+
+    /// A browser that used the mic for dictation was asked for its tabs every 2 s for as long as that lasted.
+    func testANoMeetingAnswerOutsideACallHoldsForTenSeconds() {
+        let chrome = dictationInChrome()
+        for i in 0..<5 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(tabs.queried, [chrome], "one read for the ticks at 0, 2, 4, 6, and 8 s")
+        service.tick(at: now.addingTimeInterval(10))
+        XCTAssertEqual(tabs.queried.count, 2)
+    }
+
+    func testTheTabsAreReadAgainAtOnceWhenTheMicStopsAndStarts() {
+        let chrome = dictationInChrome()
+        service.tick(at: now)
+        mic.list = [proc(1, chrome, input: false)]
+        service.tick(at: now.addingTimeInterval(2))
+        mic.list = [proc(1, chrome, input: true)]
+        service.tick(at: now.addingTimeInterval(4))
+        XCTAssertEqual(tabs.queried.count, 2)
+    }
+
+    /// The owner joins a call in the browser that already used the mic: the window title changes, so the next
+    /// tick reads the tabs and the call starts with no wait.
+    func testACallThatStartsDuringOtherMicUseIsSeenAtTheNextTick() {
+        let chrome = dictationInChrome()
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        windows.titles[chrome] = ["Meet - abc-defg-hij"]
+        service.tick(at: now.addingTimeInterval(2))
+        XCTAssertEqual(events, [.started(platform: .meet, bundleID: chrome, at: now.addingTimeInterval(2))])
+    }
+
+    func testAnUnreadableAnswerIsNotHeld() {
+        let chrome = dictationInChrome()
+        tabs.unreadable = [chrome]
+        service.tick(at: now)
+        service.tick(at: now.addingTimeInterval(2))
+        XCTAssertEqual(tabs.queried.count, 2, "unknown is asked again; the probe has its own backoff")
+    }
+
+    func testAfterACallTheTabsAreReadAgainAtOnce() {
+        let chrome = dictationInChrome()
+        service.tick(at: now)
+        service.reset()
+        service.tick(at: now.addingTimeInterval(2))
+        XCTAssertEqual(tabs.queried.count, 2)
+    }
+
     /// An in-person recording owns the mic, so the tick skips the Core Audio scan it would throw away.
     func testASuspendedServiceDoesNotScan() {
         final class CountingMic: MicUsageProbing { var calls = 0; func processes() -> [AudioProcess] { calls += 1; return [] } }
@@ -285,7 +343,8 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(tabs.queried.count, 1)
     }
 
-    func testBeforeACallTheTabsAreReadOnEveryTick() {
+    /// Without readable window titles there is no proof that the tabs are the same, so nothing is held.
+    func testBeforeACallTheTabsAreReadOnEveryTickWhenTheWindowTitlesAreUnknown() {
         mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
         tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://www.youtube.com/watch?v=x", title: "YouTube", isActive: true)]
         for s in stride(from: 0.0, through: 8, by: 2) { service.tick(at: now.addingTimeInterval(s)) }

@@ -91,4 +91,59 @@ final class LiveTranscriberFailureTests: XCTestCase {
         XCTAssertFalse(session.isAlive)
         wait(for: [failed], timeout: 1)
     }
+
+    // MARK: What waits for the network
+
+    func testAudioGoesOutOneMessageAtATimeInOrder() {
+        var q = LiveSendQueue()
+        XCTAssertTrue(q.add(Data([1, 1]), at: 0))
+        XCTAssertEqual(q.next(), Data([1, 1]))
+        XCTAssertTrue(q.add(Data([2]), at: 0.1))
+        XCTAssertTrue(q.add(Data([3]), at: 0.2))
+        XCTAssertNil(q.next(), "one message is on its way")
+        q.sent()
+        XCTAssertEqual(q.next(), Data([2, 3]), "what waited goes out together")
+        q.sent()
+        XCTAssertNil(q.next())
+        XCTAssertEqual(q.waitingBytes, 0)
+    }
+
+    /// On a slow uplink the waiting audio grew in memory for the whole call.
+    func testWaitingAudioHasALimitAndTheOldestGoesFirst() {
+        var q = LiveSendQueue()
+        for i in 0..<30 { XCTAssertTrue(q.add(Data(repeating: UInt8(i), count: 3_200), at: Double(i) * 0.1)) }
+        XCTAssertLessThanOrEqual(q.waitingBytes, LiveSendQueue.limitBytes)
+        XCTAssertEqual(q.droppedBytes, 10 * 3_200)
+        XCTAssertEqual(q.next()?.first, 10, "the oldest chunks were dropped; the newest wait")
+    }
+
+    func testAQueueThatStaysFullSaysTheUplinkCannotCarryTheStream() {
+        var q = LiveSendQueue()
+        var carries = true
+        var time = 0.0
+        while carries, time < 60 {
+            carries = q.add(Data(count: 3_200), at: time)
+            time += 0.1
+        }
+        XCTAssertFalse(carries)
+        XCTAssertEqual(time, 2 + LiveSendQueue.stuckAfter, accuracy: 0.3, "2 s to fill, then 10 s of dropping")
+    }
+
+    func testAQueueThatRunsEmptyStartsItsCountAgain() {
+        var q = LiveSendQueue()
+        for i in 0..<25 { _ = q.add(Data(count: 3_200), at: Double(i) * 0.1) }
+        while q.next() != nil { q.sent() }
+        XCTAssertEqual(q.waitingBytes, 0)
+        for i in 0..<25 { XCTAssertTrue(q.add(Data(count: 3_200), at: 100 + Double(i) * 0.1), "an old burst does not count") }
+    }
+
+    /// While muted, the mic stream was silence at the full 32 KB each second.
+    func testAMutedMicSendsItsFirstSecondAndThenOnlyAKeepAlive() {
+        var t = SilenceThrottle()
+        var sent = 0
+        for _ in 0..<600 where t.shouldSend(bytes: 3_200, silent: true) { sent += 3_200 }
+        XCTAssertEqual(sent, 32_000 + 11 * 3_200, "1 s, then one chunk each 5 s of the minute")
+        XCTAssertTrue(t.shouldSend(bytes: 3_200, silent: false), "speech always goes out")
+        XCTAssertTrue(t.shouldSend(bytes: 3_200, silent: true), "and the next silence starts with its first second again")
+    }
 }

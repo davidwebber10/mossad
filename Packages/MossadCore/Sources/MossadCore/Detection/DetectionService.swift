@@ -29,6 +29,13 @@ public final class DetectionService: @unchecked Sendable {
     /// already shows when the call ends; so the tabs of the call's browser are read at most this often.
     static let tabRefreshDuringCall: TimeInterval = 10
     private var tabCache: [String: (time: Date, tabs: [BrowserTab]?)] = [:]
+    /// Outside a call, a browser that uses the mic for something else (dictation, a voice search) was asked for
+    /// its tabs at every tick, for as long as that lasted. A "no meeting here" answer now holds this long. It is
+    /// read again at once when the browser's mic use stops and starts, or its window titles change (a new tab, a
+    /// tab switch, a page that loaded), so a call that starts is still seen at the next tick. Without readable
+    /// window titles (no Accessibility) nothing is held.
+    static let idleTabRefresh: TimeInterval = 10
+    private var idleTabs: [String: (time: Date, tabs: [BrowserTab], titles: [String])] = [:]
     private var tickTime = Date()
     private var lastLogged: [String: String] = [:]
     private var watch = UnconfirmedCallWatch()
@@ -155,6 +162,7 @@ public final class DetectionService: @unchecked Sendable {
         activeMeetingIDs = [:]
         signAtStart = []
         tabCache = [:]
+        idleTabs = [:]
         suspects = []
         callSignSeen = false
         callIsForced = false
@@ -285,6 +293,8 @@ public final class DetectionService: @unchecked Sendable {
         }
         lastMic = micByApp
         lastOutput = outputByApp
+        // A browser whose mic use stopped is read again when it starts.
+        idleTabs = idleTabs.filter { micByApp[$0.key] == true }
 
         let current = detector.currentBundleID
         // Every WebKit app plays and records through the shared WebKit GPU process, which counts as Safari's.
@@ -484,9 +494,26 @@ public final class DetectionService: @unchecked Sendable {
         if isCurrent, let cached = tabCache[group], tickTime.timeIntervalSince(cached.time) < Self.tabRefreshDuringCall {
             return cached.tabs
         }
+        // The window titles are the proof that nothing changed. When they cannot be read, the tabs are read.
+        let titles = isCurrent ? nil : windows.answeredWindowTitles(bundleID: group)
+        if !isCurrent, let titles, let cached = idleTabs[group], cached.titles == titles,
+           tickTime.timeIntervalSince(cached.time) < Self.idleTabRefresh {
+            return cached.tabs
+        }
         let list = tabs.tabs(browserBundleID: group)
         tabCache[group] = (tickTime, list)
+        idleTabs[group] = nil
+        // Only a known "no meeting here" is kept: an unknown answer is asked again, and a meeting starts the call.
+        if !isCurrent, let titles, let list, !Self.showsMeeting(list) { idleTabs[group] = (tickTime, list, titles) }
         return list
+    }
+
+    /// A selected tab that is a meeting: what starts a call.
+    static func showsMeeting(_ list: [BrowserTab]) -> Bool {
+        list.contains { tab in
+            guard tab.isActive, let platform = MeetingMatcher.platform(forTabURL: tab.url) else { return false }
+            return !(platform == .meet && MeetingMatcher.meetTabLeftMeeting(title: tab.title))
+        }
     }
 
     /// Debug lines only when they change, so a long call does not write one line every tick.

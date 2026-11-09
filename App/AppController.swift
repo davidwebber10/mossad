@@ -857,6 +857,9 @@ final class AppController: ObservableObject {
         if reset { live.reset() } else { live.newSession() }
         if reset { liveFailures = 0 }
         guard liveTranscriptEnabled, case .recording(_, let since) = status, let key = keychain.get(.assemblyai) else { return }
+        // The two audio streams take about half a megabit of upload. On a network the owner marked to save data
+        // (Low Data Mode), the call's own video and sound get all of it.
+        guard !NetworkPath.shared.isConstrained else { return Log.info("Live transcript is off: the network is in Low Data Mode") }
         liveStart = since
         // In a room the mic hears everyone and there is no call audio: one stream, with speaker labels, shown
         // like call audio so each voice gets its own name.
@@ -870,15 +873,21 @@ final class AppController: ObservableObject {
         let streams: [(Track, AudioSink)] = room ? [(.me, recorder.meSink)] : [(.me, recorder.meSink), (.them, recorder.themSink)]
         for (track, sink) in streams {
             let source: Track = room ? .them : track
-            let session = LiveTranscriber(apiKey: key, speakers: source == .them, onFailure: { [weak self] in
+            // The owner's mic on a call is silence while muted, and its times in the track are not used: its
+            // silence is not sent. The stream that names voices keeps every sample, so its times stay the file's.
+            let box = LiveSessionBox()
+            let session = LiveTranscriber(apiKey: key, speakers: source == .them, skipsSilence: source == .me, onFailure: { [weak self] in
                 Task { @MainActor in self?.liveSessionFailed() }
             }) { [weak self] message in
+                // Audio that a slow network dropped is missing from the service's times.
+                let dropped = box.session?.droppedSeconds ?? 0
                 Task { @MainActor in
                     guard let self else { return }
                     self.live.apply(message, source: source, at: Date().timeIntervalSince(self.liveStart),
-                                    audioOffset: source == .them ? themOffset : 0)
+                                    audioOffset: source == .them ? themOffset + dropped : 0)
                 }
             }
+            box.session = session
             sink.set { buffer in session.send(buffer) }
             liveSessions.append(session)
         }
@@ -931,6 +940,9 @@ final class AppController: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(20))
                 guard let snapshot = self?.live.snapshot, !Task.isCancelled else { return }
+                // A hot Mac needs its processor for the call; the names can wait.
+                let thermal = ProcessInfo.processInfo.thermalState
+                if thermal == .serious || thermal == .critical { continue }
                 let names = await Task.detached(priority: .utility) { await namer.names(for: snapshot, themURL: themURL) }.value
                 guard !Task.isCancelled, names.count > snapshot.names.count else { continue }
                 Log.info("Live transcript: \(names.count) voices named")
@@ -1585,8 +1597,14 @@ final class LiveTranscriptModel: ObservableObject {
             scheduled = true
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(250))
-                transcript = pending
-                visibleLines = pending.visibleLines
+                let snapshot = pending
+                // The echo filter compares mic lines with call lines: off the main thread.
+                let visible = await Task.detached(priority: .userInitiated) { snapshot.visibleLines }.value
+                // A reset meanwhile (the call ended) wins.
+                if scheduled {
+                    transcript = snapshot
+                    visibleLines = visible
+                }
                 scheduled = false
             }
         }
@@ -1612,5 +1630,16 @@ final class LiveTranscriptModel: ObservableObject {
         pending = LiveTranscript()
         transcript = pending
         visibleLines = []
+        scheduled = false
+    }
+}
+
+/// Lets a live session's message handler read the session, which exists only after the handler is made.
+private final class LiveSessionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private weak var value: LiveTranscriber?
+    var session: LiveTranscriber? {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
     }
 }
