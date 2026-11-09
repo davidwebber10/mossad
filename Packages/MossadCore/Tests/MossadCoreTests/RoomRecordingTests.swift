@@ -44,7 +44,7 @@ final class RoomRecordingTests: XCTestCase {
 
     func testAMediaServicesResetStartsANewFile() {
         var r = started()
-        XCTAssertEqual(r.recorderDied(), [.newSegment])
+        XCTAssertEqual(r.recorderDied(at: t0), [.newSegment])
         _ = r.resumed(ok: true, newSegment: true)
         XCTAssertEqual(r.segments, 2)
     }
@@ -52,7 +52,7 @@ final class RoomRecordingTests: XCTestCase {
     func testAResetDuringAPauseMakesTheResumeUseANewFile() {
         var r = started()
         _ = r.ownerPause()
-        XCTAssertEqual(r.recorderDied(), [])
+        XCTAssertEqual(r.recorderDied(at: t0), [])
         XCTAssertEqual(r.ownerResume(), [.newSegment])
     }
 
@@ -114,5 +114,54 @@ final class RoomRecordingTests: XCTestCase {
         XCTAssertFalse(RoomRecording.keep(measured: nil, counted: 20, discard: false))
         XCTAssertFalse(RoomRecording.keep(measured: 75, counted: 74, discard: true), "The owner waited at the dialog a little")
         XCTAssertTrue(RoomRecording.keep(measured: 75, counted: 74, discard: false))
+    }
+
+    // MARK: Review fixes
+
+    func testARecorderThatKeepsDyingStopsWithANotification() {
+        var r = started()
+        XCTAssertEqual(r.recorderDied(at: t0.addingTimeInterval(1)), [.newSegment])
+        _ = r.resumed(ok: true, newSegment: true)
+        XCTAssertEqual(r.recorderDied(at: t0.addingTimeInterval(2)), [.newSegment])
+        _ = r.resumed(ok: true, newSegment: true)
+        XCTAssertEqual(r.recorderDied(at: t0.addingTimeInterval(3)), [.cancelAlerts, .notify(.stopped), .tellOwner(.stopped)])
+        XCTAssertEqual(r.phase, .paused(.failed), "A new part each second records almost nothing")
+        XCTAssertEqual(r.segments, 3)
+    }
+
+    func testRestartsThatAreFarApartAreNotALoop() {
+        var r = started()
+        for i in 1...5 {
+            XCTAssertEqual(r.recorderDied(at: t0.addingTimeInterval(Double(i) * 60)), [.newSegment])
+            _ = r.resumed(ok: true, newSegment: true)
+        }
+        XCTAssertEqual(r.phase, .recording)
+    }
+
+    func testARecorderThatStallsAgainAndAgainStopsToo() {
+        var r = started()
+        var t = t0
+        var last: [RoomRecording.Action] = []
+        for _ in 0..<3 {
+            _ = r.tick(isRecording: false, at: t)
+            t += RoomRecording.stallGrace
+            last = r.tick(isRecording: false, at: t)
+            if last == [.resumeRecorder] { _ = r.resumed(ok: true, newSegment: false) }
+            t += 0.1
+        }
+        XCTAssertEqual(last, [.cancelAlerts, .notify(.stopped), .tellOwner(.stopped)])
+        XCTAssertEqual(r.phase, .paused(.failed))
+    }
+
+    func testTheEndOfAnInterruptionAlsoResumesARecordingThatFailed() {
+        var r = started()
+        _ = r.tick(isRecording: false, at: t0.addingTimeInterval(1))
+        _ = r.tick(isRecording: false, at: t0.addingTimeInterval(4))
+        _ = r.resumed(ok: false, newSegment: false)
+        _ = r.resumed(ok: false, newSegment: true)
+        XCTAssertEqual(r.phase, .paused(.failed))
+        XCTAssertEqual(r.interruption(began: false, shouldResume: true), [.newSegment])
+        XCTAssertEqual(r.resumed(ok: true, newSegment: true), [.cancelAlerts])
+        XCTAssertEqual(r.phase, .recording)
     }
 }

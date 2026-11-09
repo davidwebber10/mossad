@@ -42,6 +42,11 @@ public struct RoomRecording: Equatable, Sendable {
     /// "Discard" is honored only under this length: the dialog shows under a minute, so a long recording means the
     /// owner waited at the dialog or the timer read wrong. Keeping too much costs less than losing a meeting.
     public static let discardLimit: TimeInterval = 300
+    /// This many restarts of the recorder inside the window mean it cannot record (a full disk lets a new file
+    /// start and then fail on its first write). The recording then stops and says so, instead of a new file each
+    /// second under a screen that says "Recording".
+    public static let restartLimit = 3
+    public static let restartWindow: TimeInterval = 30
 
     public private(set) var phase = Phase.idle
     /// The seconds the app saw the recorder record: its own count, not the recorder's `currentTime`.
@@ -54,6 +59,8 @@ public struct RoomRecording: Equatable, Sendable {
     private var needsNewSegment = false
     /// The resume in progress came from the owner's tap, so its failure needs no notification.
     private var ownerAsked = false
+    /// When the recorder had to be started again, to catch one that keeps dying.
+    private var restarts: [Date] = []
 
     public init() {}
 
@@ -66,6 +73,17 @@ public struct RoomRecording: Equatable, Sendable {
         lastTick = now
         stalledSince = nil
         needsNewSegment = false
+        restarts = []
+    }
+
+    /// Notes a restart, and gives the actions that stop the recording when there were too many in a short time.
+    private mutating func tooManyRestarts(at now: Date) -> [Action]? {
+        restarts = restarts.filter { now.timeIntervalSince($0) < Self.restartWindow } + [now]
+        guard restarts.count >= Self.restartLimit else { return nil }
+        restarts = []
+        needsNewSegment = true
+        phase = .paused(.failed)
+        return [.cancelAlerts, .notify(.stopped), .tellOwner(.stopped)]
     }
 
     /// Called often (the app ticks 10 times a second) with what the recorder says about itself.
@@ -84,6 +102,7 @@ public struct RoomRecording: Equatable, Sendable {
         }
         guard now.timeIntervalSince(since) >= Self.stallGrace else { return [] }
         stalledSince = nil
+        if let stop = tooManyRestarts(at: now) { return stop }
         // The recorder object may still work (a short stop); if not, `resumed(ok: false)` moves to a new file.
         return [needsNewSegment ? .newSegment : .resumeRecorder]
     }
@@ -95,6 +114,9 @@ public struct RoomRecording: Equatable, Sendable {
             phase = .paused(.interruption)
             return [.pauseRecorder, .schedule(.paused, after: Self.pauseAlertDelay)]
         }
+        // A recording that failed during the interruption (the watchdog acted before the system said why) gets its
+        // chance too, now that the microphone is free.
+        if phase == .paused(.failed), shouldResume { return [resumeAction] }
         guard phase == .paused(.interruption) else { return [] }
         if shouldResume { return [resumeAction] }
         return [.cancelAlerts, .notify(.paused), .tellOwner(.paused)]
@@ -141,9 +163,10 @@ public struct RoomRecording: Equatable, Sendable {
 
     /// The audio server restarted, or the recorder finished on its own (a full disk, an encoder error). The
     /// recorder object is dead; what it wrote stays.
-    public mutating func recorderDied() -> [Action] {
+    public mutating func recorderDied(at now: Date) -> [Action] {
         needsNewSegment = true
         guard phase == .recording else { return [] }
+        if let stop = tooManyRestarts(at: now) { return stop }
         return [.newSegment]
     }
 

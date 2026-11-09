@@ -117,4 +117,41 @@ final class OutboxTests: XCTestCase {
         XCTAssertEqual(box.withoutAudio(audioIDs: ["c"], active: nil), ["a", "b", "d"])
         XCTAssertEqual(box.withoutAudio(audioIDs: ["c"], active: "d"), ["a", "b"])
     }
+
+    // MARK: Review fixes
+
+    func testAutomaticSendAgainStopsAfterAFewTries() {
+        var o = Outbox()
+        o.begin(rec("a"))
+        o.finish("a", end: t0, title: nil)
+        var now = t0
+        for _ in 0..<Outbox.automaticSends {
+            XCTAssertEqual(o.due(store: "icloud", now: now).map(\.id), ["a"])
+            o.markSent("a", store: "icloud", at: now)
+            now += Outbox.resendAfter
+        }
+        XCTAssertEqual(o.due(store: "icloud", now: now + 30 * 86_400), [], "The Mac never made the meeting; stop sending")
+        XCTAssertTrue(o["a"]!.canSendAgain(now: now), "The owner can still ask")
+        o.sendAgain("a")
+        XCTAssertEqual(o.due(store: "icloud", now: now).map(\.id), ["a"])
+        o.markSent("a", store: "icloud", at: now)
+        XCTAssertEqual(o.due(store: "server:https://notes.example.com", now: now).map(\.id), ["a"], "Another store always gets it")
+    }
+
+    func testTheTitleIsKeptWhileTheRecordingRunsAndTroubleShowsUntilFinished() throws {
+        var o = Outbox()
+        o.begin(rec("a"))
+        o.retitle("a", "Planning")
+        o.setTrouble("a", .notSaved)
+        let file = temp().appendingPathComponent(Outbox.fileName)
+        try o.save(to: file)
+        o = try Outbox.load(from: file)
+        XCTAssertEqual(o["a"]?.recording.title, "Planning")
+        XCTAssertEqual(o["a"]?.trouble, .notSaved)
+        o.finish("a", end: t0, title: nil)
+        XCTAssertEqual(o["a"]?.recording.title, "Planning", "A recovered recording keeps the typed name")
+        XCTAssertNil(o["a"]?.trouble)
+        o.setTrouble("a", .partUnreadable)
+        XCTAssertEqual(o["a"]?.trouble, .partUnreadable)
+    }
 }

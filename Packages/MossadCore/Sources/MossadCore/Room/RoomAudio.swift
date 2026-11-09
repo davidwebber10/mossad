@@ -16,6 +16,9 @@ public enum RoomAudio {
     ] }
 
     private static let partMark = ".part"
+    private static let asideMark = ".unreadable.caf"
+    /// Where the audio starts in a CAF file as the recorder writes it.
+    private static let cafHeader = 4096
 
     /// `<id>.part<n>.caf`, from 1.
     public static func part(_ id: String, _ n: Int, in dir: URL) -> URL {
@@ -37,11 +40,13 @@ public enum RoomAudio {
         .map(\.1)
     }
 
-    /// The ids of every recording with audio in the folder, finished or not.
-    public static func ids(in dir: URL) -> Set<String> {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+    /// The ids of every recording with audio in the folder, finished or not. Empty when there is no folder yet;
+    /// nil when the folder cannot be listed, which is unknown and not "no recordings".
+    public static func ids(in dir: URL) -> Set<String>? {
+        guard FileManager.default.fileExists(atPath: dir.path) else { return [] }
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return nil }
         return Set(names.compactMap { name in
-            if name.hasSuffix(".joining.m4a") { return nil }
+            if name.hasSuffix(".joining.m4a") || name.hasSuffix(asideMark) { return nil }
             if name.hasSuffix(".m4a") { return String(name.dropLast(4)) }
             if name.hasSuffix(".caf"), let r = name.range(of: partMark) { return String(name[..<r.lowerBound]) }
             return nil
@@ -70,6 +75,28 @@ public enum RoomAudio {
         return lengths.isEmpty ? nil : lengths.reduce(0, +)
     }
 
+    /// Whether a recording that the app never finished is under `minimum` by every measure, so it can be deleted
+    /// as the Mac drops a short call. Every part must open, and its bytes must agree with what it says: a part that
+    /// does not open, or says less than it holds, may be the meeting. The app's own count is gone after a stop, so
+    /// nothing else backs the number.
+    public static func isSurelyShort(_ id: String, in dir: URL, minimum: TimeInterval) -> Bool {
+        let done = finished(id, in: dir)
+        if FileManager.default.fileExists(atPath: done.path) { return length(of: done).map { $0 < minimum } ?? false }
+        let parts = parts(of: id, in: dir)
+        guard !parts.isEmpty else { return false }
+        var said: TimeInterval = 0, held: TimeInterval = 0
+        for p in parts {
+            guard let size = try? p.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return false }
+            // A part the recorder created but never wrote to holds no audio.
+            if size <= cafHeader { continue }
+            guard let f = try? AVAudioFile(forReading: p), f.fileFormat.sampleRate > 0 else { return false }
+            let bytesPerFrame = Double(max(1, f.fileFormat.streamDescription.pointee.mBytesPerFrame))
+            said += Double(f.length) / f.fileFormat.sampleRate
+            held += Double(size - cafHeader) / bytesPerFrame / f.fileFormat.sampleRate
+        }
+        return max(said, held) < minimum
+    }
+
     /// When the recorder last wrote to the recording: the end of a recording the app never finished.
     public static func lastWrite(of id: String, in dir: URL) -> Date? {
         let files = parts(of: id, in: dir) + [finished(id, in: dir)]
@@ -81,38 +108,72 @@ public enum RoomAudio {
         public var errorDescription: String? { "The recording part \(file) could not be read." }
     }
 
-    /// Joins the parts into `<id>.m4a` and deletes them, and returns the length. Safe to run again after a crash:
-    /// the finished file appears only once complete. A part that cannot be read stops the join and stays on disk.
+    /// The result of a join: the seconds in the finished file, and the names of parts that could not be read in
+    /// full, which stay on disk under a name that nothing deletes.
+    public struct Joined: Equatable, Sendable {
+        public var length: TimeInterval
+        public var setAside: [String] = []
+    }
+
+    /// Joins the parts into `<id>.m4a` and deletes them. Safe to run again after a crash: the finished file appears
+    /// only once complete. A part that cannot be read, or whose read stops before its end, throws `Unreadable` and
+    /// every part stays on disk; any other error (such as a full disk) also leaves every part.
+    ///
+    /// With `salvage`, for a part that will not read: what can be read is joined (also the readable start of a bad
+    /// part), and each bad part moves aside as `<id>.part<n>.unreadable.caf`. With nothing readable it still throws.
     @discardableResult
-    public static func finish(_ id: String, in dir: URL) throws -> TimeInterval {
+    public static func finish(_ id: String, in dir: URL, salvage: Bool = false) throws -> Joined {
         let out = finished(id, in: dir)
         let parts = parts(of: id, in: dir)
         if FileManager.default.fileExists(atPath: out.path) {
             for p in parts { try? FileManager.default.removeItem(at: p) }
-            return length(of: out) ?? 0
+            return Joined(length: length(of: out) ?? 0)
         }
         let partial = dir.appendingPathComponent("\(id).joining.m4a")
         try? FileManager.default.removeItem(at: partial)
         var written: AVAudioFramePosition = 0
+        var bad: [URL] = []
         do {
             let output = try AVAudioFile(forWriting: partial, settings: PhoneRecording.settings,
                                          commonFormat: .pcmFormatFloat32, interleaved: false)
             for p in parts {
                 guard let input = try? AVAudioFile(forReading: p) else {
                     // A part the recorder created but never wrote to holds no audio.
-                    if ((try? p.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) <= 4096 { continue }
-                    throw Unreadable(file: p.lastPathComponent)
+                    if ((try? p.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) <= cafHeader { continue }
+                    guard salvage else { throw Unreadable(file: p.lastPathComponent) }
+                    bad.append(p)
+                    continue
                 }
                 written += try append(input, to: output)
+                // A read throws at the end of a file and also when it fails in the middle; only the position tells
+                // them apart. The parts are the only copy, so a short read never counts as the end.
+                if input.framePosition < input.length {
+                    guard salvage else { throw Unreadable(file: p.lastPathComponent) }
+                    bad.append(p)
+                }
             }
             output.close()
+            guard written > 0 else { throw Unreadable(file: (bad.first ?? parts.first)?.lastPathComponent ?? id) }
         } catch {
             try? FileManager.default.removeItem(at: partial)
             throw error
         }
-        try FileManager.default.moveItem(at: partial, to: out)
-        for p in parts { try? FileManager.default.removeItem(at: p) }
-        return Double(written) / TrackWriter.sampleRate
+        // The bad parts move aside before the finished file appears: once it is there, a later pass deletes
+        // whatever still has a part's name.
+        var aside: [String] = []
+        do {
+            for p in bad {
+                let name = String(p.lastPathComponent.dropLast(4)) + asideMark
+                try FileManager.default.moveItem(at: p, to: dir.appendingPathComponent(name))
+                aside.append(name)
+            }
+            try FileManager.default.moveItem(at: partial, to: out)
+        } catch {
+            try? FileManager.default.removeItem(at: partial)
+            throw error
+        }
+        for p in parts where !bad.contains(p) { try? FileManager.default.removeItem(at: p) }
+        return Joined(length: Double(written) / TrackWriter.sampleRate, setAside: aside)
     }
 
     /// Deletes every file of a recording.

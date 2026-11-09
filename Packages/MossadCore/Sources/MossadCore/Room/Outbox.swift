@@ -14,8 +14,19 @@ public struct Outbox: Equatable, Sendable {
             case sent(store: String?, at: Date)
         }
 
+        /// Why a row needs a word to the owner.
+        public enum Trouble: String, Codable, Sendable {
+            /// The parts could not be joined yet; the app tries again.
+            case notSaved
+            /// A part could not be read and is kept on the iPhone; the rest was joined and sent.
+            case partUnreadable
+        }
+
         public var recording: PhoneRecording
         public var state: State
+        /// Uploads a store took since the owner last asked, which limits the automatic ones.
+        public var sends = 0
+        public var trouble: Trouble?
         public var id: String { recording.id }
 
         public init(recording: PhoneRecording, state: State) {
@@ -38,6 +49,10 @@ public struct Outbox: Equatable, Sendable {
     /// The Mac usually writes the notes within minutes of the upload; after this long the row offers "Send again".
     public static let offerSendAgainAfter: TimeInterval = 15 * 60
 
+    /// Uploads without the owner's tap. A meeting that the Mac never makes (it skipped it, or the owner deleted it
+    /// there) must not upload every few hours for ever; the audio and "Send again" stay.
+    public static let automaticSends = 3
+
     public private(set) var entries: [Entry]
 
     public init(_ entries: [Entry] = []) { self.entries = entries }
@@ -55,16 +70,33 @@ public struct Outbox: Equatable, Sendable {
             $0.recording.end = max(end, $0.recording.start)
             if let title { $0.recording.title = title }
             $0.state = .waiting
+            $0.trouble = nil
         }
     }
 
+    /// The name the owner types during the recording, kept so a recording the app never finished still has it.
+    public mutating func retitle(_ id: String, _ title: String?) {
+        update(id) { $0.recording.title = title }
+    }
+
+    public mutating func setTrouble(_ id: String, _ trouble: Entry.Trouble?) {
+        update(id) { $0.trouble = trouble }
+    }
+
     public mutating func markSent(_ id: String, store: String, at: Date) {
-        update(id) { $0.state = .sent(store: store, at: at) }
+        update(id) {
+            $0.state = .sent(store: store, at: at)
+            $0.sends += 1
+        }
     }
 
     /// The owner's "Send again".
     public mutating func sendAgain(_ id: String) {
-        update(id) { if $0.isSent { $0.state = .waiting } }
+        update(id) {
+            guard $0.isSent else { return }
+            $0.state = .waiting
+            $0.sends = 0
+        }
     }
 
     public mutating func remove(_ id: String) { entries.removeAll { $0.id == id } }
@@ -76,7 +108,8 @@ public struct Outbox: Equatable, Sendable {
             switch e.state {
             case .recording: false
             case .waiting: true
-            case .sent(let to, let at): (to != nil && to != store) || now.timeIntervalSince(at) >= Self.resendAfter
+            case .sent(let to, let at):
+                (to != nil && to != store) || (e.sends < Self.automaticSends && now.timeIntervalSince(at) >= Self.resendAfter)
             }
         }
     }
@@ -166,7 +199,7 @@ extension Outbox.Entry.State: Codable {
 }
 
 extension Outbox.Entry {
-    private enum Keys: String, CodingKey { case recording, state, sent }
+    private enum Keys: String, CodingKey { case recording, state, sent, sends, trouble }
 
     /// Reads the older entries too, which had only `sent`; those count as sent now, to the store in use.
     public init(from decoder: Decoder) throws {
@@ -177,11 +210,15 @@ extension Outbox.Entry {
         } else {
             self.state = try c.decodeIfPresent(Bool.self, forKey: .sent) == true ? .sent(store: nil, at: Date()) : .waiting
         }
+        sends = try c.decodeIfPresent(Int.self, forKey: .sends) ?? (isSent ? 1 : 0)
+        trouble = try? c.decodeIfPresent(Trouble.self, forKey: .trouble)
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Keys.self)
         try c.encode(recording, forKey: .recording)
         try c.encode(state, forKey: .state)
+        try c.encode(sends, forKey: .sends)
+        try c.encodeIfPresent(trouble, forKey: .trouble)
     }
 }
