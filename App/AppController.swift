@@ -117,6 +117,8 @@ final class AppController: ObservableObject {
     private let noRecordGate = NoRecordGate()
     /// Calls still to come, without the ones being recorded or already recorded.
     var upcoming: [UpcomingMeeting] { UpcomingMeeting.from(calendarEvents, recorded: meetings) }
+    /// Every call invite in the fetched days, for the calendar; the list shows only the next few.
+    var calendarUpcoming: [UpcomingMeeting] { UpcomingMeeting.from(calendarEvents, limit: .max, recorded: meetings) }
     /// The Mac's calendars, for the choice in Settings.
     @Published private(set) var calendars: [CalendarInfo] = []
     /// The calendars Mossad reads; saved once chosen, and defaulted to the owner's own on first use.

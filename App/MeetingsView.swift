@@ -15,6 +15,8 @@ struct MeetingsView: View {
     @State private var merging: CallRecord?
     /// The meeting opened full-pane from Calendar mode.
     @State private var opened: String?
+    /// The upcoming invite opened full-pane from Calendar mode.
+    @State private var openedUpcoming: UpcomingMeeting?
     @State private var openedFrom = ""
     @StateObject private var calendarState = CalendarState()
 
@@ -37,8 +39,16 @@ struct MeetingsView: View {
                     DetailColumn { toolbar } content: {
                         if let id = opened, let r = controller.meetings.first(where: { $0.id == id }) {
                             fullPaneDetail(r)
+                        } else if let m = openedUpcoming {
+                            VStack(spacing: 0) {
+                                backBar(title: m.title) { openedUpcoming = nil }
+                                UpcomingDetailView(meeting: m)
+                            }
                         } else {
-                            CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting) { r, period in
+                            // Invites show only without a search: a search narrows what was recorded.
+                            CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting,
+                                         upcoming: controller.meetingQuery.isEmpty ? controller.calendarUpcoming : [],
+                                         openUpcoming: { m in openedFrom = calendarState.title; openedUpcoming = m }) { r, period in
                                 open(r, from: period)
                             }
                         }
@@ -108,7 +118,7 @@ struct MeetingsView: View {
                 calendarState.anchor = d.addingTimeInterval(12 * 3600)
             }
         }
-        .onChange(of: mode) { _, _ in opened = nil }
+        .onChange(of: mode) { _, _ in opened = nil; openedUpcoming = nil }
     }
 
     // MARK: List
@@ -137,7 +147,7 @@ struct MeetingsView: View {
     /// List or calendar, the search, then export and more for the open meeting: three glass groups.
     private var toolbar: some View {
         PageToolbar {
-            if mode == .calendar, opened == nil, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
+            if mode == .calendar, opened == nil, openedUpcoming == nil, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
         } trailing: {
             ModePicker(mode: Binding(get: { mode }, set: { previewMode = nil; savedMode = $0 }))
             ToolbarSearchField(prompt: "Search titles and transcripts", query: $controller.meetingQuery)
@@ -164,8 +174,16 @@ struct MeetingsView: View {
 
     private func fullPaneDetail(_ r: CallRecord) -> some View {
         VStack(spacing: 0) {
+            backBar(title: r.title) { opened = nil }
+            MeetingDetailView(record: r, style: .fullPage, deleting: $deleting).id(r.id)
+        }
+    }
+
+    /// Back, then "Meetings › <period> › <title>".
+    private func backBar(title: String, back: @escaping () -> Void) -> some View {
+        VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Button { opened = nil } label: {
+                Button { back() } label: {
                     Image(systemName: "chevron.left").font(.system(size: 12, weight: .semibold))
                         .frame(width: 26, height: 26)
                         .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
@@ -174,17 +192,16 @@ struct MeetingsView: View {
                 .accessibilityLabel("Back")
                 .keyboardShortcut("[", modifiers: .command)
                 .keyboardShortcut(.escape, modifiers: [])
-                Button("Meetings") { opened = nil }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
+                Button("Meetings") { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
                 Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
-                Button(openedFrom) { opened = nil }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
+                Button(openedFrom) { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
                 Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
-                Text(r.title).fontWeight(.medium).lineLimit(1)
+                Text(title).fontWeight(.medium).lineLimit(1)
                 Spacer()
             }
             .font(.system(size: 13))
             .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
             Hairline()
-            MeetingDetailView(record: r, style: .fullPage, deleting: $deleting).id(r.id)
         }
     }
 }

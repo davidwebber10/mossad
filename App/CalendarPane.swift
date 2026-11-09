@@ -1,3 +1,4 @@
+import AppKit
 import MossadCore
 import SwiftUI
 
@@ -6,8 +7,16 @@ import SwiftUI
 final class CalendarState: ObservableObject {
     enum Scope: String, CaseIterable { case day = "Day", week = "Week", month = "Month" }
 
-    @AppStorage("calendarScope") var scope = Scope.week { willSet { objectWillChange.send() } }
+    @AppStorage("calendarScope") var savedScope = Scope.week { willSet { objectWillChange.send() } }
     @Published var anchor = Date()
+    /// Development hook for screenshots: MOSSAD_CALENDAR_SCOPE=day|week|month, in a preview only, never saved.
+    private let previewScope: Scope? = CommandLine.arguments.contains("--ui-preview")
+        ? ProcessInfo.processInfo.environment["MOSSAD_CALENDAR_SCOPE"].flatMap { Scope(rawValue: $0.capitalized) } : nil
+
+    var scope: Scope {
+        get { previewScope ?? savedScope }
+        set { savedScope = newValue }
+    }
 
     var calendar: Calendar { .current }
 
@@ -62,14 +71,17 @@ struct CalendarPane: View {
     /// Search matches; other calls are dimmed.
     let matches: Set<String>
     @Binding var deleting: CallRecord?
+    /// Calendar events still to come, drawn hollow and dashed: they have not happened yet.
+    var upcoming: [UpcomingMeeting] = []
+    var openUpcoming: (UpcomingMeeting) -> Void = { _ in }
     let open: (CallRecord, String) -> Void
 
     var body: some View {
         Group {
             switch state.scope {
-            case .week: HourGrid(state: state, days: state.weekDays, records: records, matches: matches, deleting: $deleting, open: open)
-            case .day: HourGrid(state: state, days: [state.calendar.startOfDay(for: state.anchor)], records: records, matches: matches, deleting: $deleting, open: open)
-            case .month: MonthGrid(state: state, records: records, matches: matches, deleting: $deleting, open: open)
+            case .week: HourGrid(state: state, days: state.weekDays, records: records, matches: matches, deleting: $deleting, upcoming: upcoming, openUpcoming: openUpcoming, open: open)
+            case .day: HourGrid(state: state, days: [state.calendar.startOfDay(for: state.anchor)], records: records, matches: matches, deleting: $deleting, upcoming: upcoming, openUpcoming: openUpcoming, open: open)
+            case .month: MonthGrid(state: state, records: records, matches: matches, deleting: $deleting, upcoming: upcoming, openUpcoming: openUpcoming, open: open)
             }
         }
         // The page gutter, as the canvas pads the detail column; the grid keeps 12 pt of it for the scroller.
@@ -85,6 +97,8 @@ private struct HourGrid: View {
     let records: [CallRecord]
     let matches: Set<String>
     @Binding var deleting: CallRecord?
+    let upcoming: [UpcomingMeeting]
+    let openUpcoming: (UpcomingMeeting) -> Void
     let open: (CallRecord, String) -> Void
     @State private var hovered: String?
     @State private var card: String?
@@ -108,6 +122,10 @@ private struct HourGrid: View {
                                 ForEach(CalendarLayout.day(records, on: day, calendar: state.calendar), id: \.id) { item in
                                     if let r = byID[item.id] { event(r, item, x: gutter + CGFloat(i) * columnWidth, width: columnWidth, day: day) }
                                 }
+                                ForEach(upcoming.filter { state.calendar.isDate($0.start, inSameDayAs: day) }) { m in
+                                    UpcomingBlock(meeting: m, compact: !isDay, hour: hour, dayStart: state.calendar.startOfDay(for: day), width: columnWidth) { openUpcoming(m) }
+                                        .offset(x: gutter + CGFloat(i) * columnWidth, y: 0)
+                                }
                                 if state.calendar.isDateInToday(day) { NowLine().offset(x: gutter + CGFloat(i) * columnWidth, y: 0).frame(width: columnWidth) }
                             }
                             if let id = card, let r = records.first(where: { $0.id == id }) {
@@ -128,7 +146,8 @@ private struct HourGrid: View {
 
     /// 8 AM, as the canvas draws the working day, unless a meeting in view starts earlier.
     private var firstHour: Int {
-        let starts = records.filter { r in days.contains { state.calendar.isDate(r.start, inSameDayAs: $0) } }.map { state.calendar.component(.hour, from: $0.start) }
+        let starts = (records.map(\.start) + upcoming.map(\.start))
+            .filter { d in days.contains { state.calendar.isDate(d, inSameDayAs: $0) } }.map { state.calendar.component(.hour, from: $0) }
         return min(8, starts.min() ?? 8)
     }
 
@@ -377,6 +396,8 @@ private struct MonthGrid: View {
     let records: [CallRecord]
     let matches: Set<String>
     @Binding var deleting: CallRecord?
+    let upcoming: [UpcomingMeeting]
+    let openUpcoming: (UpcomingMeeting) -> Void
     let open: (CallRecord, String) -> Void
 
     var body: some View {
@@ -406,6 +427,8 @@ private struct MonthGrid: View {
         let inMonth = cal.isDate(day, equalTo: state.anchor, toGranularity: .month)
         let today = cal.isDateInToday(day)
         let items = records.filter { cal.isDate($0.start, inSameDayAs: day) }.sorted { $0.start < $1.start }
+        let coming = upcoming.filter { cal.isDate($0.start, inSameDayAs: day) }
+        let room = max(0, 3 - items.count)
         let number = cal.component(.day, from: day) == 1 ? day.formatted(.dateTime.month(.abbreviated).day()) : "\(cal.component(.day, from: day))"
         return VStack(alignment: .leading, spacing: 3) {
             Text(number)
@@ -420,8 +443,11 @@ private struct MonthGrid: View {
                     .opacity(matches.contains(r.id) ? 1 : 0.3)
                     .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
             }
-            if items.count > 3 {
-                Button("+\(items.count - 3) more") {
+            ForEach(coming.prefix(room)) { m in
+                MonthUpcomingItem(meeting: m) { openUpcoming(m) }
+            }
+            if items.count + coming.count > 3 {
+                Button("+\(items.count + coming.count - 3) more") {
                     state.anchor = day
                     state.scope = .day
                 }
@@ -467,11 +493,103 @@ private struct MonthItem: View {
         .onHover { hovering = $0 }
     }
 
-    /// "10am", "2:30pm".
-    private var time: String {
-        let c = Calendar.current.dateComponents([.hour, .minute], from: record.start)
-        let h = (c.hour ?? 0) % 12 == 0 ? 12 : (c.hour ?? 0) % 12
-        let suffix = (c.hour ?? 0) < 12 ? "am" : "pm"
-        return c.minute == 0 ? "\(h)\(suffix)" : String(format: "%d:%02d%@", h, c.minute ?? 0, suffix)
+    private var time: String { monthTime(record.start) }
+}
+
+// MARK: Upcoming
+
+/// An upcoming invite in the Day or Week grid: a dashed outline and a hollow dot, because it has not happened.
+/// It shows Join on hover, and opens the invite's page.
+private struct UpcomingBlock: View {
+    let meeting: UpcomingMeeting
+    let compact: Bool
+    let hour: CGFloat
+    let dayStart: Date
+    let width: CGFloat
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        let top = CGFloat(meeting.start.timeIntervalSince(dayStart) / 3600) * hour
+        let height = max(20, CGFloat(meeting.end.timeIntervalSince(meeting.start) / 3600) * hour)
+        let inset: CGFloat = 4
+        let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 6) {
+                Group {
+                    if let p = meeting.platform { PlatformDot(platform: p, size: 7, hollow: true) }
+                    else { Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 7, height: 7) }
+                }
+                .padding(.top, compact ? 4 : 5)
+                // Two lines need the room a recorded event needs; a short invite in Day keeps its time on one line.
+                if height >= (compact ? 32 : 44) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(meeting.title).font(.system(size: compact ? 11.5 : 13, weight: .semibold)).foregroundStyle(Palette.secondary).lineLimit(1)
+                        Text(subtitle).font(.system(size: compact ? 10.5 : 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    }
+                } else if compact {
+                    Text(meeting.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.secondary).lineLimit(1)
+                } else {
+                    HStack(spacing: 8) {
+                        Text(meeting.title).font(.system(size: 13, weight: .semibold))
+                        Text(subtitle).font(.system(size: 12))
+                    }
+                    .foregroundStyle(Palette.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if hovering, !compact, let link = meeting.link {
+                    Button("Join") { NSWorkspace.shared.open(link) }.controlSize(.small)
+                }
+            }
+            .padding(.leading, compact ? 8 : 12).padding(.trailing, compact ? 7 : 12).padding(.vertical, compact ? 3 : 6)
+            .frame(width: width - inset * 2 - 2, height: height - 1, alignment: .topLeading)
+            .clipped()
+            .background(hovering ? Palette.fill : .clear, in: shape)
+            .overlay(shape.strokeBorder(Palette.ring, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .help(meeting.link == nil ? meeting.title : "\(meeting.title): click for details")
+        .accessibilityLabel("Upcoming: \(meeting.title), \(meeting.start.formatted(date: .omitted, time: .shortened))")
+        .offset(x: inset, y: top)
+        .onHover { hovering = $0 }
     }
+
+    private var subtitle: String {
+        let time = (meeting.start..<max(meeting.end, meeting.start)).formatted(.interval.hour().minute())
+        return meeting.platform.map { "\(time) · \($0.shortName)" } ?? time
+    }
+}
+
+/// An upcoming invite in a Month cell: a hollow dot and quiet text.
+private struct MonthUpcomingItem: View {
+    let meeting: UpcomingMeeting
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Circle().strokeBorder(meeting.platform?.color ?? Palette.ring, lineWidth: 1.5).frame(width: 7, height: 7)
+                Text(monthTime(meeting.start)).foregroundStyle(Palette.tertiary).monospacedDigit()
+                Text(meeting.title).foregroundStyle(Palette.secondary).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 11))
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(hovering ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Upcoming: \(meeting.title)")
+        .onHover { hovering = $0 }
+    }
+}
+
+/// "10am", "2:30pm": the Month grid's time, the same for recorded and upcoming meetings.
+private func monthTime(_ date: Date) -> String {
+    let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+    let h = (c.hour ?? 0) % 12 == 0 ? 12 : (c.hour ?? 0) % 12
+    let suffix = (c.hour ?? 0) < 12 ? "am" : "pm"
+    return c.minute == 0 ? "\(h)\(suffix)" : String(format: "%d:%02d%@", h, c.minute ?? 0, suffix)
 }
