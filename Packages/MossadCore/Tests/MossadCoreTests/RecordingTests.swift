@@ -117,4 +117,18 @@ final class TranscriptBlockTests: XCTestCase {
         ])
         XCTAssertEqual(TranscriptBlock.blocks(r).count, 2)
     }
+
+    /// The turn that plays now must be the same one the scan of every turn found.
+    func testTheCurrentTurnIsTheLastOneThatStartedBeforeThePlayTime() {
+        let starts: [TimeInterval] = [0, 4, 4, 9.5, 30, 31, 120]
+        let blocks = starts.enumerated().map { i, start in
+            TranscriptBlock(id: i, speaker: "A", speakerKey: "them:A", start: start, end: start + 1, lines: [])
+        }
+        XCTAssertTrue(TranscriptBlock.startsAscend(blocks))
+        for time in stride(from: -1.0, through: 130, by: 0.25) {
+            XCTAssertEqual(TranscriptBlock.current(at: time, in: blocks), blocks.last { $0.start <= time }?.id, "at \(time) s")
+        }
+        XCTAssertNil(TranscriptBlock.current(at: 5, in: []))
+        XCTAssertFalse(TranscriptBlock.startsAscend(blocks.reversed()))
+    }
 }

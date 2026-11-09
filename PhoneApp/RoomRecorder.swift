@@ -42,6 +42,7 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
     @ObservationIgnored private var started = Date()
     @ObservationIgnored private var dir = URL(fileURLWithPath: NSTemporaryDirectory())
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var inFront = true
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     /// The last reason the system gave for a failed start or resume, for the error card.
     @ObservationIgnored private var lastFailure: Error?
@@ -77,12 +78,7 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
             rules = RoomRecording()
             rules.start(at: now)
             observe()
-            let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.tick() }
-            }
-            // Common modes, so the watchdog and the count also run while a list scrolls.
-            RunLoop.main.add(timer, forMode: .common)
-            self.timer = timer
+            setTimer(inFront: UIApplication.shared.applicationState != .background)
             RecordingAlerts.requestPermission()
             return PhoneRecording(id: id, start: now, end: now, title: nil)
         } catch {
@@ -173,13 +169,35 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
             center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { Self.preferBuiltInMic() }
             },
+            center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { if self?.id != nil { self?.setTimer(inFront: false) } }
+            },
+            center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { if self?.id != nil { self?.setTimer(inFront: true) } }
+            },
         ]
+    }
+
+    /// Ten times a second while the app is in front, for the level meter. With the screen locked or the app in the
+    /// background nobody sees the meter, and a meeting can last hours: once a second is enough for the watchdog
+    /// and the count.
+    private func setTimer(inFront: Bool) {
+        timer?.invalidate()
+        self.inFront = inFront
+        let timer = Timer(timeInterval: inFront ? 0.1 : 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+        timer.tolerance = inFront ? 0.02 : 0.2
+        // Common modes, so the watchdog and the count also run while a list scrolls.
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     /// Compares what the recorder does with what the screen says, ten times a second.
     private func tick() {
         guard id != nil else { return }
         run(rules.tick(isRecording: recorder?.isRecording ?? false, at: Date()))
+        guard inFront else { return }
         var level: Float = 0
         if state == .recording, let recorder {
             recorder.updateMeters()
