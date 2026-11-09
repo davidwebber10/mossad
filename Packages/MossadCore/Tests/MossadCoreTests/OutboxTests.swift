@@ -154,4 +154,15 @@ final class OutboxTests: XCTestCase {
         o.setTrouble("a", .partUnreadable)
         XCTAssertEqual(o["a"]?.trouble, .partUnreadable)
     }
+
+    func testTheOwnerCanRemoveARowThatIsNotBusy() {
+        var o = Outbox()
+        for id in ["a", "b", "c"] { o.begin(rec(id)) }
+        o.finish("b", end: t0, title: nil)
+        XCTAssertFalse(o.canRemove("a", active: "a", busy: []), "Not the recording in progress")
+        XCTAssertTrue(o.canRemove("a", active: nil, busy: []), "A recording that could not be saved can go")
+        XCTAssertFalse(o.canRemove("b", active: nil, busy: ["b"]), "Not while it uploads or its parts are joined")
+        XCTAssertTrue(o.canRemove("b", active: "a", busy: ["c"]))
+        XCTAssertFalse(o.canRemove("z", active: nil, busy: []))
+    }
 }

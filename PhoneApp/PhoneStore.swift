@@ -660,6 +660,21 @@ final class PhoneStore {
         }
     }
 
+    /// Whether a row offers "Remove".
+    func canRemoveRecording(_ id: String) -> Bool {
+        outbox.canRemove(id, active: recorder.id, busy: uploading.union(joining))
+    }
+
+    /// The owner's "Remove": the row, its audio, and any parts set aside. Nothing else deletes a recording that the
+    /// Mac does not have.
+    func removeRecording(_ id: String) {
+        guard canRemoveRecording(id) else { return }
+        RoomAudio.delete(id, in: recordingsFolder, setAside: true)
+        outbox.remove(id)
+        saveOutbox()
+        Log.info("The owner removed the room recording \(id)")
+    }
+
     /// The owner's "Send again" on a recording whose meeting has not come back.
     func sendAgain(_ id: String) {
         outbox.sendAgain(id)

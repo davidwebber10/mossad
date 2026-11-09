@@ -176,9 +176,15 @@ public enum RoomAudio {
         return Joined(length: Double(written) / TrackWriter.sampleRate, setAside: aside)
     }
 
-    /// Deletes every file of a recording.
-    public static func delete(_ id: String, in dir: URL) {
+    /// Deletes the files of a recording. The parts set aside as unreadable go only with `setAside`, which is the
+    /// owner's own "Remove".
+    public static func delete(_ id: String, in dir: URL, setAside: Bool = false) {
         for f in parts(of: id, in: dir) + [finished(id, in: dir)] { try? FileManager.default.removeItem(at: f) }
+        guard setAside else { return }
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        for name in names where name.hasPrefix(id + partMark) && name.hasSuffix(asideMark) {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+        }
     }
 
     private static func append(_ input: AVAudioFile, to output: AVAudioFile) throws -> AVAudioFramePosition {

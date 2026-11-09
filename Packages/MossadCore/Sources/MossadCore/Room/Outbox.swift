@@ -101,6 +101,12 @@ public struct Outbox: Equatable, Sendable {
 
     public mutating func remove(_ id: String) { entries.removeAll { $0.id == id } }
 
+    /// Whether the owner may remove a row with its audio: never the recording in progress, and not while the row
+    /// uploads or its parts are joined (`busy`). Only the owner removes; nothing does it automatically.
+    public func canRemove(_ id: String, active: String?, busy: Set<String>) -> Bool {
+        self[id] != nil && id != active && !busy.contains(id)
+    }
+
     /// The entries to upload to `store` now: the waiting ones, and the sent ones that went to another store or whose
     /// meeting has not come back in time.
     public func due(store: String, now: Date) -> [Entry] {

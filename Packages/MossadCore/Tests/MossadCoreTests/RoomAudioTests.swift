@@ -165,4 +165,16 @@ final class RoomAudioTests: XCTestCase {
         XCTAssertGreaterThan(length, 3)
         XCTAssertEqual(try RoomAudio.finish(id, in: dir).length, length, accuracy: 0.1)
     }
+
+    func testTheOwnersRemoveAlsoDeletesThePartsSetAside() throws {
+        let dir = temp(), id = "20270115-090000", other = "20270116-090000"
+        try writePart(RoomAudio.part(id, 1, in: dir), seconds: 1)
+        try Data(repeating: 7, count: 50_000).write(to: RoomAudio.part(id, 2, in: dir))
+        let aside = try RoomAudio.finish(id, in: dir, salvage: true).setAside
+        try Data(repeating: 7, count: 50_000).write(to: dir.appendingPathComponent("\(other).part1.unreadable.caf"))
+        RoomAudio.delete(id, in: dir, setAside: true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent(aside[0]).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: RoomAudio.finished(id, in: dir).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("\(other).part1.unreadable.caf").path))
+    }
 }

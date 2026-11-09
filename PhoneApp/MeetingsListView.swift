@@ -8,6 +8,8 @@ struct MeetingsListView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var recording = PhoneStore.hook("MOSSAD_ROOM") != nil
     @State private var settings = PhoneStore.hook("MOSSAD_SETTINGS") != nil
+    /// The room recording the owner asked to remove, until the dialog answers.
+    @State private var removing: String?
     /// A meeting opens out of its row.
     @Namespace private var zoom
 
@@ -107,6 +109,21 @@ struct MeetingsListView: View {
                 }
             }
             .accessibilityElement(children: .combine)
+            // A press and hold, as the rows are not in a List and have no swipe. VoiceOver gets it as an action.
+            .contextMenu {
+                if store.canRemoveRecording(item.id) {
+                    Button("Remove", systemImage: "trash", role: .destructive) { removing = item.id }
+                }
+            }
+        }
+        .confirmationDialog("Delete this recording from the iPhone? It is not on your Mac.",
+                            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                            titleVisibility: .visible) {
+            Button("Delete recording", role: .destructive) {
+                if let id = removing { store.removeRecording(id) }
+                removing = nil
+            }
+            Button("Keep", role: .cancel) { removing = nil }
         }
     }
 
