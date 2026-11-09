@@ -421,6 +421,19 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(events.count, 2, "no third start")
     }
 
+    /// The owner was muted in a call that was kept off the record, then pressed Record: the recorder starts
+    /// unmuted, so the mute state must be reported again, or muted speech goes into the transcript.
+    func testRecordOnABlockedCallReportsTheMuteStateAgain() {
+        let mute = FakeMute()
+        let (service, changes) = meetCall(mute)
+        mute.labels = ["Turn on microphone"]
+        service.checkMute(at: now.addingTimeInterval(1))
+        XCTAssertEqual(changes(), [true])
+        service.recordBlockedCallNow(bundleID: "com.google.Chrome", platform: .meet, at: now.addingTimeInterval(5))
+        service.checkMute(at: now.addingTimeInterval(6))
+        XCTAssertEqual(changes(), [true, true])
+    }
+
     // MARK: Review findings
 
     /// Mossad was turned off during a call and on again: the detector still held the old call, so nothing recorded.

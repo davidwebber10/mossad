@@ -227,6 +227,8 @@ public final class DetectionService: @unchecked Sendable {
         Log.info("The owner chose to record \(bundleID), which was kept off the record")
         callIsForced = true
         onEvent(.started(platform: current, bundleID: bundleID, at: time))
+        // The recorder starts unmuted, so the current mute state must go out again.
+        watchMute(bundleID: bundleID, platform: current)
     }
 
     func forceStartNow(bundleID: String, platform: Platform, at time: Date) {

@@ -392,6 +392,9 @@ final class AppController: ObservableObject {
                 self?.noRecordGate.seen(at: Date())
                 CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
             }
+            // Before detection starts: a call that starts during a slow launch must not look like a crashed one.
+            // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
+            if !ProcessingQueue(paths: paths).recoverInterrupted().isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
                 offUntil = 0
                 detection.start()
@@ -427,8 +430,6 @@ final class AppController: ObservableObject {
                     self?.processPending()
                 }
             }
-            // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
-            if !ProcessingQueue(paths: paths).recoverInterrupted().isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
         }
         loadMeetings()
         if !inert {
