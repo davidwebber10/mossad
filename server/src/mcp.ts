@@ -18,16 +18,28 @@ export const maxSearchLines = 4000;
  * search, so the Worker never holds every line of every meeting. The tools then see the same lines they would have
  * found themselves.
  */
-export async function meetings(env: Env, query?: string): Promise<MeetingView[]> {
+/** "2026-11-03" moved by some days, as the start of a call id ("20261103"); null when it is not a date. */
+export function callIDDay(day: unknown, shift: number): string | null {
+  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const t = Date.parse(`${day}T00:00:00Z`);
+  return Number.isNaN(t) ? null : new Date(t + shift * 86_400_000).toISOString().slice(0, 10).replaceAll('-', '');
+}
+
+export async function meetings(env: Env, query?: string, from?: unknown, to?: unknown): Promise<MeetingView[]> {
   const { results } = await env.DB.prepare('SELECT view FROM meetings ORDER BY start DESC').all<{ view: string }>();
   const views = results.map((r) => ({ ...(JSON.parse(r.view) as Omit<MeetingView, 'lines'>), lines: [] as Line[] }));
   const q = query?.trim() ?? '';
   // A "#tag" query reads tags only.
   if (!q || q.startsWith('#') || !views.length) return views;
-  // Newest meetings first (call ids start with the date), so the cap drops the oldest hits.
+  // A call id starts with its date, so a date range limits the lines in the database: the cap then counts only
+  // lines of that range, and a common word in an old range is still found. One day of room on each side covers
+  // the time zone; the tools apply the exact range after.
+  const after = callIDDay(from, -1), before = callIDDay(to, 2);
+  const range = (after ? ' AND call_id >= ?' : '') + (before ? ' AND call_id < ?' : '');
+  // Newest meetings first, so the cap drops the oldest hits.
   const { results: lines } = await env.DB.prepare(
-    'SELECT call_id, at, speaker, text FROM lines WHERE instr(lower(text), lower(?)) > 0 ORDER BY call_id DESC, at LIMIT ?')
-    .bind(q, maxSearchLines).all<{ call_id: string; at: number; speaker: string; text: string }>();
+    `SELECT call_id, at, speaker, text FROM lines WHERE instr(lower(text), lower(?)) > 0${range} ORDER BY call_id DESC, at LIMIT ?`)
+    .bind(...[q, after, before].filter((v): v is string => v !== null), maxSearchLines).all<{ call_id: string; at: number; speaker: string; text: string }>();
   const byID = new Map(views.map((v) => [v.id, v]));
   for (const l of lines) byID.get(l.call_id)?.lines.push({ at: l.at, speaker: l.speaker, text: l.text });
   return views;
@@ -43,7 +55,7 @@ export async function toolsFor(env: Env, name: string, args: Record<string, unkn
   // Transcript lines are the big part: only the lines that match the query are read, and only for the tools that search.
   const searches = name === 'search_transcripts' || name === 'search' || name === 'find_meetings';
   const query = searches && typeof args.query === 'string' ? args.query.trim() : '';
-  const list = await meetings(env, query);
+  const list = await meetings(env, query, args.from, args.to);
   const id = typeof args.call_id === 'string' ? args.call_id : typeof args.id === 'string' ? args.id : '';
   if (!query && id) {
     const m = list.find((v) => v.id === id);
