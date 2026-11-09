@@ -78,3 +78,19 @@ final class KeyCheckTests: XCTestCase {
         XCTAssertEqual(StubURLProtocol.requests.count, 1)
     }
 }
+
+final class AppIdentityBuildTests: XCTestCase {
+    func testTheBundleAgreesWithTheBuild() {
+        XCTAssertNil(AppIdentity(bundleID: AppIdentity.mainBundleID).mismatch(rehearsalBuild: false))
+        XCTAssertNil(AppIdentity(bundleID: AppIdentity.rehearsalBundleID).mismatch(rehearsalBuild: true))
+    }
+
+    func testARehearsalBuildWithTheRealBundleIDIsCaught() {
+        // It would use the real folder and the real keys.
+        XCTAssertNotNil(AppIdentity(bundleID: AppIdentity.mainBundleID).mismatch(rehearsalBuild: true))
+    }
+
+    func testARealBuildWithRehearsalsBundleIDIsCaught() {
+        XCTAssertNotNil(AppIdentity(bundleID: AppIdentity.rehearsalBundleID).mismatch(rehearsalBuild: false))
+    }
+}
