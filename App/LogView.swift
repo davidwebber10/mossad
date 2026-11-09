@@ -5,7 +5,10 @@ import SwiftUI
 /// The last 500 log lines as they are: monospace time, level, and message, grouped by day. Errors sit on a
 /// faint red ground in full-contrast text; info stays secondary. Reloads every 2 s while visible.
 struct LogView: View {
+    @EnvironmentObject var controller: AppController
     @State private var lines: [LogLine] = []
+    /// The size and the change time of the file at the last read: an unchanged file is not read again.
+    @State private var stamp = ""
     @State private var levels: Set<LogLine.Level> = [.info, .error, .other]
     @State private var filter = ""
 
@@ -47,7 +50,8 @@ struct LogView: View {
         }
         .task {
             while !Task.isCancelled {
-                load()
+                // A window that is closed or covered keeps this view: nothing to show, so nothing to read.
+                if controller.windowVisible { await load() }
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -119,10 +123,18 @@ struct LogView: View {
             .compactMap { $0 }.joined(separator: " ")
     }
 
-    private func load() {
-        guard let url = Log.fileURL, let content = try? String(contentsOf: url, encoding: .utf8) else { return }
-        let tail = content.split(separator: "\n", omittingEmptySubsequences: false).suffix(500).joined(separator: "\n")
-        let parsed = LogLine.parse(tail)
+    /// Reads the end of the file off the main thread, and only when the file changed.
+    private func load() async {
+        guard let url = Log.fileURL else { return }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let now = "\(attributes?[.size] as? Int ?? -1) \((attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)"
+        guard now != stamp else { return }
+        let parsed = await Task.detached(priority: .utility) { () -> [LogLine]? in
+            guard let content = Log.tail(of: url) else { return nil }
+            return LogLine.parse(content.split(separator: "\n", omittingEmptySubsequences: false).suffix(500).joined(separator: "\n"))
+        }.value
+        guard let parsed else { return }
+        stamp = now
         if parsed != lines { lines = parsed }
     }
 }

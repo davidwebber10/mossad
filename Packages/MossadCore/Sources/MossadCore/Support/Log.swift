@@ -21,21 +21,53 @@ public enum Log {
     public static func error(_ message: String) { write("ERROR", message); logger.error("\(message, privacy: .private)") }
     public static func debug(_ message: String) { write("DEBUG", message); logger.debug("\(message, privacy: .private)") }
 
+    /// The open log file, used on `queue` only. It stays open between lines: each line used to cost a new date
+    /// formatter object, a directory check, a size check, and an open and a close.
+    nonisolated(unsafe) private static var descriptor: Int32 = -1
+    nonisolated(unsafe) private static var openPath: String?
+
     private static func write(_ level: String, _ message: String) {
-        let line = "\(ISO8601DateFormatter().string(from: Date())) \(level) \(message)\n"
+        let line = "\(Date().ISO8601Format()) \(level) \(message)\n"
         guard writesFile, let directory, let fileURL else { return }
         queue.async {
-            let fm = FileManager.default
-            try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
-            rotateIfNeeded(directory: directory, fileURL: fileURL)
-            if let handle = try? FileHandle(forWritingTo: fileURL) {
-                handle.seekToEndOfFile()
-                handle.write(Data(line.utf8))
-                try? handle.close()
-            } else {
-                try? Data(line.utf8).write(to: fileURL)
+            let path = fileURL.path
+            if descriptor >= 0 {
+                // Another folder, a file that was deleted or rotated (also by the copy that serves `--mcp`), or a
+                // file that is full: open again.
+                var open = stat(), onDisk = stat()
+                if openPath != path || fstat(descriptor, &open) != 0 || stat(path, &onDisk) != 0
+                    || onDisk.st_ino != open.st_ino || onDisk.st_dev != open.st_dev || open.st_size > maxBytes {
+                    close(descriptor)
+                    descriptor = -1
+                }
             }
+            if descriptor < 0 {
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                rotateIfNeeded(directory: directory, fileURL: fileURL)
+                // Append mode: each line lands at the end of the file, also when two processes write.
+                descriptor = open(path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+                openPath = path
+            }
+            guard descriptor >= 0 else { return }
+            let bytes = Array(line.utf8)
+            _ = Darwin.write(descriptor, bytes, bytes.count)
         }
+    }
+
+    /// The end of a log file as text, from the first whole line in its last `bytes` bytes. The Log page shows 500
+    /// lines; the file can hold 5 MB.
+    public static func tail(of url: URL, bytes: Int = 128 * 1024) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd() else { return nil }
+        let start = size > UInt64(bytes) ? size - UInt64(bytes) : 0
+        guard (try? handle.seek(toOffset: start)) != nil, var data = try? handle.readToEnd() else { return nil }
+        // The read can start in the middle of a line (or of a character): the lines begin after the first newline.
+        if start > 0 {
+            guard let newline = data.firstIndex(of: 0x0A) else { return "" }
+            data = data[(newline + 1)...]
+        }
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// Waits for the lines already logged to reach the file.

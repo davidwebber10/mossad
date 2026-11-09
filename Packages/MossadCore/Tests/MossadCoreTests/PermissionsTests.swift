@@ -76,4 +76,11 @@ final class AskedPermissionTests: XCTestCase {
         XCTAssertEqual(PermissionState.notAsked.afterAsking(false), .notAsked)
         XCTAssertEqual(PermissionState.needsApp.afterAsking(true), .needsApp)
     }
+
+    /// The checks ran every 10 s all day, and every second after the window closed on the Settings page.
+    func testPermissionsAreCheckedFastOnlyWhileTheirPageShows() {
+        XCTAssertEqual(PermissionCheckRate.interval(pageOpen: true, windowShows: true, background: 300), 1)
+        XCTAssertEqual(PermissionCheckRate.interval(pageOpen: true, windowShows: false, background: 300), 300)
+        XCTAssertEqual(PermissionCheckRate.interval(pageOpen: false, windowShows: true, background: 300), 300)
+    }
 }

@@ -295,6 +295,61 @@ final class TrackWriterTests: XCTestCase {
         XCTAssertEqual(try audioDuration(url), 4, accuracy: 0.01)
     }
 
+    /// A call's audio comes in pieces of about 10 ms; each was one write to the file, 94 a second.
+    func testSmallPiecesReachTheFileInFewWritesAndNothingIsLost() throws {
+        let url = dir.appendingPathComponent("small.caf")
+        var now = t0
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        var expected: [Float] = []
+        var sizes = Set<Int>()
+        for i in 0..<500 {
+            now = now.addingTimeInterval(0.01)
+            let b = AVAudioPCMBuffer(pcmFormat: TrackWriter.outputFormat, frameCapacity: 160)!
+            b.frameLength = 160
+            for j in 0..<160 { b.floatChannelData![0][j] = Float((i * 160 + j) % 2_000) / 4_000 }
+            expected += UnsafeBufferPointer(start: b.floatChannelData![0], count: 160)
+            try writer.append(b)
+            sizes.insert(try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? 0)
+        }
+        XCTAssertEqual(writer.duration, 5, accuracy: 0.001, "the length counts what was taken, also what still waits")
+        XCTAssertLessThanOrEqual(sizes.count, 52, "500 pieces of 10 ms are about 50 writes of 100 ms")
+        writer.close()
+        let read = try AudioSamples.read(url, from: 0, to: 10)
+        XCTAssertEqual(read.count, expected.count)
+        XCTAssertEqual(zip(read, expected).map { abs($0 - $1) }.max() ?? 1, 0, accuracy: 0.0001)
+    }
+
+    func testAPausedTrackIsWholeOnDisk() throws {
+        let url = dir.appendingPathComponent("paused.caf")
+        var now = t0
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        for _ in 0..<105 {
+            now = now.addingTimeInterval(0.01)
+            try writer.append(sineBuffer(seconds: 0.01, sampleRate: 16_000, channels: 1))
+        }
+        writer.pause()
+        XCTAssertEqual(try audioDuration(url), 1.05, accuracy: 0.001)
+        writer.close()
+    }
+
+    /// A long piece (the silence of a gap) is written at once, after the short pieces that came before it.
+    func testShortAndLongPiecesKeepTheirOrder() throws {
+        let url = dir.appendingPathComponent("order.caf")
+        var now = t0
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        for _ in 0..<50 {
+            now = now.addingTimeInterval(0.01)
+            try writer.append(sineBuffer(seconds: 0.01, sampleRate: 16_000, channels: 1))
+        }
+        now = now.addingTimeInterval(2)   // a gap: 2 s of silence, then sound again
+        try writer.append(sineBuffer(seconds: 0.01, sampleRate: 16_000, channels: 1))
+        writer.close()
+        XCTAssertEqual(try audioDuration(url), 2.5, accuracy: 0.02)
+        XCTAssertGreaterThan(try AudioSamples.read(url, from: 0.3, to: 0.49).map(abs).max() ?? 0, 0.3, "the sound before the gap")
+        XCTAssertEqual(try AudioSamples.read(url, from: 0.6, to: 2.4).map(abs).max(), 0, "then the silence")
+        XCTAssertGreaterThan(try AudioSamples.read(url, from: 2.49, to: 2.51).map(abs).max() ?? 0, 0.3, "then the sound after it")
+    }
+
     private func fileNumber(_ url: URL) throws -> Int? {
         try FileManager.default.attributesOfItem(atPath: url.path)[.systemFileNumber] as? Int
     }

@@ -284,7 +284,10 @@ public struct CallRecord: Codable, Equatable, Sendable {
 
     public func save(to dir: URL, fileName: String = CallRecord.fileName) throws {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        // Not pretty-printed: a record holds every word with its times, three times over, and the line breaks and
+        // the indent were about half of the file. Each step and each edit writes the whole file. Any JSON reader
+        // (older builds, the iPhone, `--mcp`) reads both forms.
+        encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         try encoder.encode(self).write(to: dir.appendingPathComponent(fileName), options: .atomic)
     }

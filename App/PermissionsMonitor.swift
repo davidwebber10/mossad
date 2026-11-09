@@ -29,17 +29,45 @@ final class PermissionsMonitor: ObservableObject {
         items = Self.baseItems()
         refresh()
         // A slow check in the background; the Settings view asks for fast checks while it is open.
-        setInterval(10)
+        schedule()
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
+        // The fast checks are for a page the owner looks at. A window that closes on that page does not tell the
+        // page, so the window's own visibility decides.
+        NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.schedule() }
+        }
     }
 
+    /// Each check asks the system about every permission and every installed browser. In the background a change
+    /// is rare, and becoming active checks at once.
+    static let backgroundInterval: TimeInterval = 300
+    private var wantsFast = false
+    private var interval: TimeInterval = 0
+
+    /// 1 s while a page that shows the permissions is open; anything longer means the background rate.
     func setInterval(_ seconds: TimeInterval) {
+        wantsFast = seconds <= 1
+        schedule()
+    }
+
+    private var aWindowShows: Bool {
+        NSApp?.windows.contains { $0.canBecomeMain && $0.isVisible && $0.occlusionState.contains(.visible) } ?? false
+    }
+
+    private func schedule() {
+        let next = PermissionCheckRate.interval(pageOpen: wantsFast, windowShows: aWindowShows, background: Self.backgroundInterval)
+        guard next != interval else { return }
+        // Back in view after a slow stretch: the page must not show an old state.
+        if next < interval { refresh() }
+        interval = next
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: next, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
+        timer.tolerance = next / 10
+        self.timer = timer
     }
 
     func refresh() {

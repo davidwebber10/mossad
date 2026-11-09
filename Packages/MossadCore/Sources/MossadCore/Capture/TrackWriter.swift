@@ -84,6 +84,8 @@ public final class TrackWriter: @unchecked Sendable {
     /// A paused recording leaves the paused time out: on resume the timeline moves on by the pause, so no
     /// silence is written and a long pause cannot look like a stalled track. Both tracks pause together.
     public func pause() {
+        // A paused track is whole on disk.
+        ioLock.withLock { try? flush() }
         lock.withLock { if pausedAt == nil { pausedAt = now() } }
     }
 
@@ -251,6 +253,7 @@ public final class TrackWriter: @unchecked Sendable {
                 }
                 try? write(out)
             }
+            try? flush()
             file?.close()
             file = nil
         }
@@ -264,11 +267,41 @@ public final class TrackWriter: @unchecked Sendable {
         return (sum / Float(n)).squareRoot()
     }
 
+    /// A call's audio arrives in about 94 pieces a second, and each piece was one write to the file. Pieces now
+    /// wait here until there is a tenth of a second of them, so a track has about 10 writes a second.
+    static let flushFrames: AVAudioFrameCount = 1_600
+    private var waiting: AVAudioPCMBuffer?
+
     private func write(_ buffer: AVAudioPCMBuffer) throws {
-        guard buffer.frameLength > 0 else { return }
+        let frames = buffer.frameLength
+        guard frames > 0 else { return }
         if let writeFault { throw writeFault }
-        try file?.write(from: buffer)
-        lock.withLock { written += AVAudioFramePosition(buffer.frameLength) }
+        guard frames < Self.flushFrames, buffer.format == Self.outputFormat, let source = buffer.floatChannelData else {
+            // A long piece (a second of silence): what waits goes first, to keep the order.
+            try flush()
+            try file?.write(from: buffer)
+            lock.withLock { written += AVAudioFramePosition(frames) }
+            return
+        }
+        let held = waiting ?? AVAudioPCMBuffer(pcmFormat: Self.outputFormat, frameCapacity: Self.flushFrames * 2)!
+        waiting = held
+        (held.floatChannelData![0] + Int(held.frameLength)).update(from: source[0], count: Int(frames))
+        held.frameLength += frames
+        // Counted now: the timeline goes by what was taken, not by what reached the disk.
+        lock.withLock { written += AVAudioFramePosition(frames) }
+        if held.frameLength >= Self.flushFrames { try flush() }
+    }
+
+    /// Writes what waits. Call with `ioLock` held. When the write fails, the pieces are lost and are not counted,
+    /// as when each piece was written by itself: the next buffer then fills the hole with silence.
+    private func flush() throws {
+        guard let held = waiting, held.frameLength > 0 else { return }
+        let frames = held.frameLength
+        defer { held.frameLength = 0 }
+        do { try file?.write(from: held) } catch {
+            lock.withLock { written -= AVAudioFramePosition(frames) }
+            throw error
+        }
     }
 
     /// The live stream gets short gaps too, so its times stay the file's times. A longer gap (the Mac slept)
