@@ -19,6 +19,13 @@ final class MuteStateTests: XCTestCase {
         XCTAssertEqual(MuteState.from(labels: ["Mute mic", "Mute mic"] + tiles, platform: .teams), false)
         XCTAssertEqual(MuteState.from(labels: ["Unmute mic", "Unmute mic"] + tiles, platform: .teams), true)
     }
+
+    /// A second meeting's waiting page with its mic off once made the owner's live call count as muted.
+    func testLabelsThatDisagreeAreUnknown() {
+        XCTAssertNil(MuteState.from(labels: ["Turn off microphone", "Turn on microphone"], platform: .meet))
+        XCTAssertNil(MuteState.from(labels: ["Mute audio", "Unmute audio"], platform: .zoom))
+        XCTAssertNil(MuteState.from(labels: ["Mute mic", "Unmute Dana Lee"], platform: .teams))
+    }
 }
 
 final class MutedTrackTests: XCTestCase {

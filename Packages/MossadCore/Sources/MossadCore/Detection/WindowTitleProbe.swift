@@ -5,11 +5,22 @@ import ApplicationServices
 
 /// Reads window titles of a running app through the Accessibility API.
 public final class WindowTitleProbe: WindowTitleProbing {
-    public init() {}
+    public init() {
+        AccessibilityTimeout.apply()
+    }
 
     public func windowTitles(bundleID: String) -> [String]? {
         guard AXIsProcessTrusted() else { return nil }
-        return Self.combine(NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map { app -> [String]? in
+        return Self.combine(perProcess(bundleID))
+    }
+
+    public func answeredWindowTitles(bundleID: String) -> [String]? {
+        guard AXIsProcessTrusted() else { return nil }
+        return Self.answered(perProcess(bundleID))
+    }
+
+    private func perProcess(_ bundleID: String) -> [[String]?] {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map { app -> [String]? in
             let element = AXUIElementCreateApplication(app.processIdentifier)
             AXUIElementSetMessagingTimeout(element, 0.5)
             var windows: CFTypeRef?
@@ -21,6 +32,7 @@ public final class WindowTitleProbe: WindowTitleProbing {
             guard let list = windows as? [AXUIElement] else { return [] }
             var titles: [String] = []
             for window in list {
+                AXUIElementSetMessagingTimeout(window, 0.5)
                 var title: CFTypeRef?
                 switch AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &title) {
                 case .success: if let t = title as? String { titles.append(t) }
@@ -29,7 +41,7 @@ public final class WindowTitleProbe: WindowTitleProbing {
                 }
             }
             return titles
-        })
+        }
     }
 
     /// The titles of all of an app's processes, or nil when any of them could not be read.
@@ -42,6 +54,12 @@ public final class WindowTitleProbe: WindowTitleProbing {
         return all
     }
 
+    /// The titles of the processes that answered, or nil when none did.
+    static func answered(_ perProcess: [[String]?]) -> [String]? {
+        let read = perProcess.compactMap { $0 }
+        return read.isEmpty ? nil : read.flatMap { $0 }
+    }
+
     public func isRunning(bundleID: String) -> Bool {
         !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
     }
@@ -51,5 +69,17 @@ public final class WindowTitleProbe: WindowTitleProbing {
         let key = "AXTrustedCheckOptionPrompt"
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
+}
+
+/// A timeout set on one element covers that element object only; the elements reached from it (windows, their
+/// children) use the process-wide default of about 6 s. Setting it on the system-wide element changes that default,
+/// so a busy app cannot hold the detection queue for 6 s on each request.
+enum AccessibilityTimeout {
+    static let seconds: Float = 1
+    private static let once: Void = {
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), seconds)
+    }()
+
+    static func apply() { _ = once }
 }
 #endif

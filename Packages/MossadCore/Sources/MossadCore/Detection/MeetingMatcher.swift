@@ -4,7 +4,13 @@ import Foundation
 public enum MeetingMatcher {
     static let zoomBundleID = "us.zoom.xos"
     static let teamsBundleID = "com.microsoft.teams2"
+    static let safariBundleID = "com.apple.Safari"
+    /// The browsers whose tabs Mossad reads. Beta, Canary, and Dev are apps of their own: their IDs start with
+    /// stable Chrome's ID, and their helpers must not count as stable Chrome's.
     public static let browserBundleIDs = [
+        "com.google.Chrome.beta",
+        "com.google.Chrome.canary",
+        "com.google.Chrome.dev",
         "com.google.Chrome",
         "company.thebrowser.Browser",
         "com.apple.Safari",
@@ -12,15 +18,35 @@ public enum MeetingMatcher {
         "com.brave.Browser",
     ]
 
+    /// Browsers that can hold a call but whose tabs Mossad cannot read: their mic use is a call Mossad cannot see.
+    public static let unreadableBrowserBundleIDs = [
+        "org.mozilla.firefox",
+        "org.mozilla.firefoxdeveloperedition",
+        "org.mozilla.nightly",
+        "com.vivaldi.Vivaldi",
+        "com.operasoftware.Opera",
+        "com.google.chrome.for.testing",
+        "org.chromium.Chromium",
+        "app.zen-browser.zen",
+        "com.kagi.kagimacOS",
+    ]
+
+    /// Bundle IDs compare without case: Arc's helpers report a lower-case ID (`company.thebrowser.browser.helper`).
     public static func appKind(bundleID: String) -> AppKind? {
-        if bundleID == zoomBundleID || bundleID.hasPrefix(zoomBundleID + ".") { return .zoomApp }
-        if bundleID == teamsBundleID || bundleID.hasPrefix(teamsBundleID + ".") { return .teamsApp }
-        // Safari plays audio through the shared WebKit GPU process.
-        if bundleID.hasPrefix("com.apple.WebKit") { return .browser("com.apple.Safari") }
-        for browser in browserBundleIDs where bundleID == browser || bundleID.hasPrefix(browser + ".") {
-            return .browser(browser)
+        let id = bundleID.lowercased()
+        func owns(_ base: String) -> Bool {
+            let b = base.lowercased()
+            return id == b || id.hasPrefix(b + ".")
         }
-        return nil
+        if owns(zoomBundleID) { return .zoomApp }
+        if owns(teamsBundleID) { return .teamsApp }
+        // Safari plays audio through the shared WebKit GPU process.
+        if id.hasPrefix("com.apple.webkit") { return .browser(safariBundleID) }
+        // The longest ID that fits wins: "com.google.chrome.for.testing" is not a helper of "com.google.Chrome".
+        let readable = browserBundleIDs.filter(owns).max { $0.count < $1.count }
+        let unreadable = unreadableBrowserBundleIDs.filter(owns).max { $0.count < $1.count }
+        if let unreadable, unreadable.count > (readable?.count ?? 0) { return .unreadableBrowser(unreadable) }
+        return readable.map { .browser($0) }
     }
 
     public static func platform(forTabURL string: String) -> Platform? {
@@ -40,6 +66,11 @@ public enum MeetingMatcher {
 
     public static func zoomWindowIsMeeting(_ title: String) -> Bool {
         title == "Zoom Meeting" || title == "Zoom Webinar"
+    }
+
+    /// A Teams web tab that shows a call: the same title rule as the app's meeting window.
+    public static func teamsTabIsMeeting(_ tab: BrowserTab) -> Bool {
+        platform(forTabURL: tab.url) == .teams && teamsWindowIsMeeting(tab.title)
     }
 
     public static func teamsWindowIsMeeting(_ title: String) -> Bool {

@@ -8,6 +8,7 @@ final class MeetingMatcherTests: XCTestCase {
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.google.Chrome"), .browser("com.google.Chrome"))
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.google.Chrome.helper"), .browser("com.google.Chrome"))
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "company.thebrowser.Browser"), .browser("company.thebrowser.Browser"))
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "company.thebrowser.browser.helper"), .browser("company.thebrowser.Browser"))
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.apple.Safari"), .browser("com.apple.Safari"))
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.apple.WebKit.GPU"), .browser("com.apple.Safari"))
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.microsoft.edgemac"), .browser("com.microsoft.edgemac"))
@@ -78,6 +79,34 @@ final class MeetingMatcherHelperTests: XCTestCase {
     func testNativeAppHelpersMapToApp() {
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.microsoft.teams2.helper"), .teamsApp)
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "us.zoom.xos.Helper"), .zoomApp)
+    }
+
+    /// Chromium records the mic in a helper process, and Arc's helpers use a lower-case ID.
+    func testBrowserHelpersMatchWithoutCase() {
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "company.thebrowser.browser.helper"), .browser("company.thebrowser.Browser"))
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "company.thebrowser.Browser.helper.renderer"), .browser("company.thebrowser.Browser"))
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.microsoft.edgemac.helper"), .browser("com.microsoft.edgemac"))
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.brave.browser.helper"), .browser("com.brave.Browser"))
+    }
+
+    func testChromeBetaAndCanaryAreNotStableChrome() {
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.google.Chrome.beta"), .browser("com.google.Chrome.beta"))
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.google.Chrome.canary.helper"), .browser("com.google.Chrome.canary"))
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.google.Chrome.helper"), .browser("com.google.Chrome"))
+    }
+
+    /// Detection must never fail without a word: a browser whose tabs Mossad cannot read is still known.
+    func testBrowsersMossadCannotReadAreKnown() {
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "org.mozilla.firefox"), .unreadableBrowser("org.mozilla.firefox"))
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "org.mozilla.firefox.helper"), .unreadableBrowser("org.mozilla.firefox"))
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.vivaldi.Vivaldi"), .unreadableBrowser("com.vivaldi.Vivaldi"))
+        XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.google.chrome.for.testing"), .unreadableBrowser("com.google.chrome.for.testing"))
+    }
+
+    func testTeamsTabsOfACall() {
+        XCTAssertTrue(MeetingMatcher.teamsTabIsMeeting(BrowserTab(url: "https://teams.microsoft.com/v2/", title: "Meeting with Dana Lee | Microsoft Teams")))
+        XCTAssertFalse(MeetingMatcher.teamsTabIsMeeting(BrowserTab(url: "https://teams.microsoft.com/v2/", title: "Chat | Dana Lee | Microsoft Teams")))
+        XCTAssertFalse(MeetingMatcher.teamsTabIsMeeting(BrowserTab(url: "https://example.com/", title: "Meeting with Dana Lee | Microsoft Teams")))
     }
 }
 
