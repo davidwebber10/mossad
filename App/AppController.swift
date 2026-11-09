@@ -156,6 +156,7 @@ final class AppController: ObservableObject {
     @Published private(set) var isSecondCopy = false
     /// The second copy saw the lock free: the menu offers "Restart Mossad".
     @Published var otherCopyQuit = false
+    @Published var restartFailed = false
     let library: VoiceLibrary
     let keychain = Keychain.app
     /// What views show from the Keychain and the coach's files, read again only when it changes (+Display).

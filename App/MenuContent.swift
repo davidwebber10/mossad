@@ -121,7 +121,8 @@ struct MenuContent: View {
         switch controller.status {
         case .idle where controller.isSecondCopy:
             StatusRow(title: controller.otherCopyQuit ? "The other copy quit" : "Another copy of Mossad is running",
-                      detail: controller.otherCopyQuit ? "Restart Mossad to record." : "This copy does not record.") {
+                      detail: controller.restartFailed ? "Could not restart. Quit and open Mossad again."
+                          : controller.otherCopyQuit ? "Restart Mossad to record." : "This copy does not record.") {
                 Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 8, height: 8)
             } action: {
                 EmptyView()

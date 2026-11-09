@@ -29,10 +29,17 @@ extension AppController {
         Log.info("Restarting as the working copy")
         Task {
             do {
-                _ = try await NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config)
+                let app = try await NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config)
+                // Quit only with proof of a new process: the system can hand back this one, and then no copy would run.
+                guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier, !app.isTerminated else {
+                    Log.error("Could not restart as the working copy: no new process started (pid \(app.processIdentifier))")
+                    restartFailed = true
+                    return
+                }
                 NSApp.terminate(nil)
             } catch {
                 Log.error("Could not restart as the working copy: \(error)")
+                restartFailed = true
             }
         }
     }
