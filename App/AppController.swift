@@ -128,10 +128,12 @@ final class AppController: ObservableObject {
     /// Calls still to come, without the ones being recorded or already recorded.
     /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
     /// is computed once for each of those and for each minute.
-    var upcoming: [UpcomingMeeting] {
+    var upcoming: [UpcomingMeeting] { Array(calendarUpcoming.prefix(UpcomingMeeting.limit)) }
+    /// Every call invite in the fetched days, for the calendar; the list shows only the next few.
+    var calendarUpcoming: [UpcomingMeeting] {
         let minute = Int(Date().timeIntervalSince1970 / 60)
         if let memo = upcomingMemo, memo.minute == minute { return memo.list }
-        let list = UpcomingMeeting.from(calendarEvents, recorded: meetings)
+        let list = UpcomingMeeting.from(calendarEvents, limit: .max, recorded: meetings)
         upcomingMemo = (minute, list)
         return list
     }
