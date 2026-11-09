@@ -80,3 +80,22 @@ final class MeetingMatcherHelperTests: XCTestCase {
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "us.zoom.xos.Helper"), .zoomApp)
     }
 }
+
+final class BrowserCopiesTests: XCTestCase {
+    private let search = BrowserTab(url: "https://www.example.com/search?q=chair", title: "Search", isActive: true)
+    private let meet = BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - Weekly", isActive: false)
+
+    /// A test tool's hidden Chrome has the same app ID; the question can reach it instead of the owner's Chrome.
+    func testWithTwoCopiesAListWithNoMeetingIsUnknown() {
+        XCTAssertNil(MeetingMatcher.trustedTabs([search], browserCopies: 2))
+    }
+
+    func testWithTwoCopiesAListWithAMeetingStands() {
+        XCTAssertEqual(MeetingMatcher.trustedTabs([search, meet], browserCopies: 2), [search, meet])
+    }
+
+    func testWithOneCopyTheListStands() {
+        XCTAssertEqual(MeetingMatcher.trustedTabs([search], browserCopies: 1), [search])
+        XCTAssertEqual(MeetingMatcher.trustedTabs([], browserCopies: 1), [])
+    }
+}

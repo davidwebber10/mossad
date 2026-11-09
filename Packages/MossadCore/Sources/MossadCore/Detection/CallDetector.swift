@@ -41,6 +41,10 @@ public struct CallDetector: Sendable {
         /// so a stopped mic is the sign that you left. Short: a call ended too early by a brief mic gap is
         /// joined again by the automatic continuation when it restarts.
         public var meetMicIdle: TimeInterval = 6
+        /// While the call app still uses the mic, a missing meeting (a browser that answered with no Meet tab) must
+        /// last this long before it ends the call: brief empty answers once cut a meeting into discarded pieces.
+        /// Leaving releases the mic, which ends the call within seconds anyway.
+        public var goneWithMicGrace: TimeInterval = 30
         public init() {}
     }
 
@@ -49,6 +53,7 @@ public struct CallDetector: Sendable {
     private var currentPlatform: Platform?
     private var lastMicActive: Date?
     private var goneCount = 0
+    private var goneSince: Date?
 
     public init(config: Config = .init()) {
         self.config = config
@@ -63,15 +68,20 @@ public struct CallDetector: Sendable {
             currentPlatform = c.platform
             lastMicActive = snapshot.time
             goneCount = 0
+            goneSince = nil
             return .started(platform: c.platform, bundleID: c.bundleID, at: snapshot.time)
         }
 
         let candidate = snapshot.candidates.first { $0.bundleID == bundleID }
         if candidate == nil || candidate?.meetingPresent == false {
             goneCount += 1
-            if goneCount >= config.goneConfirmTicks { return end(at: snapshot.time, trimTo: nil) }
+            if goneSince == nil { goneSince = snapshot.time }
+            let micInUse = candidate?.micActive == true
+            let lasted = snapshot.time.timeIntervalSince(goneSince ?? snapshot.time) >= config.goneWithMicGrace
+            if goneCount >= config.goneConfirmTicks, !micInUse || lasted { return end(at: snapshot.time, trimTo: nil) }
         } else if candidate?.meetingPresent == true {
             goneCount = 0
+            goneSince = nil
         }  // Unknown (nil) leaves the count as it was.
 
         if candidate?.micActive == true {
@@ -88,6 +98,7 @@ public struct CallDetector: Sendable {
         currentPlatform = nil
         lastMicActive = nil
         goneCount = 0
+        goneSince = nil
         return .ended(at: time, trimTo: trimTo)
     }
 }

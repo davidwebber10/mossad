@@ -64,6 +64,13 @@ public enum MeetingMatcher {
     }
 
     /// Meet keeps the same URL on its post-call page; in a call the title carries the meeting code or name.
+    /// With more than one copy of a browser running (a test tool's hidden Chrome has the same app ID), the question
+    /// can reach the wrong copy, so a list with no meeting in it says nothing about the owner's call.
+    public static func trustedTabs(_ tabs: [BrowserTab], browserCopies: Int) -> [BrowserTab]? {
+        guard browserCopies > 1, !tabs.contains(where: { platform(forTabURL: $0.url) != nil }) else { return tabs }
+        return nil
+    }
+
     public static func meetTabLeftMeeting(title: String) -> Bool {
         let t = title.trimmingCharacters(in: .whitespaces)
         return !(t.hasPrefix("Meet - ") || t.hasPrefix("Meet – "))
