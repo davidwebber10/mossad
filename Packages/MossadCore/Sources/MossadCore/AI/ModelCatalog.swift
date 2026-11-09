@@ -6,12 +6,15 @@ public struct ModelInfo: Equatable, Sendable, Identifiable, Hashable {
     /// US dollars per million tokens, when the list gives them (OpenRouter does).
     public var inputPerMillion: Double?
     public var outputPerMillion: Double?
+    /// When the model came out, in seconds since 1970, when the list gives it (OpenAI does).
+    public var created: Int?
 
-    public init(id: String, name: String, inputPerMillion: Double? = nil, outputPerMillion: Double? = nil) {
+    public init(id: String, name: String, inputPerMillion: Double? = nil, outputPerMillion: Double? = nil, created: Int? = nil) {
         self.id = id
         self.name = name
         self.inputPerMillion = inputPerMillion
         self.outputPerMillion = outputPerMillion
+        self.created = created
     }
 }
 
@@ -29,9 +32,9 @@ public enum ModelCatalog {
     }
 
     static func parseOpenAI(_ json: Data) -> [ModelInfo] {
-        data(json).compactMap { $0["id"] as? String }
-            .filter { id in id.hasPrefix("gpt-") && !openAIExclusions.contains { id.contains($0) } }
-            .sorted().map { ModelInfo(id: $0, name: $0) }
+        data(json).compactMap { m in (m["id"] as? String).map { ModelInfo(id: $0, name: $0, created: m["created"] as? Int) } }
+            .filter { m in m.id.hasPrefix("gpt-") && !openAIExclusions.contains { m.id.contains($0) } }
+            .sorted { $0.id < $1.id }
     }
 
     static func parseOpenRouter(_ json: Data) -> [ModelInfo] {

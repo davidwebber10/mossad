@@ -105,7 +105,7 @@ public enum Pricing {
         case .openai: .openai
         case .openrouter: .openrouter
         }
-        let name = model.isEmpty ? ai.defaultModel : model
+        let name = ai.resolvedModel(model)
         let transcript = audio.map {
             cost(UsageEvent(date: Date(), callID: nil, service: $0, purpose: .transcription,
                             model: $0 == .assemblyai ? defaultBatchModel : nil, audioSeconds: hour * 2, estimated: true))

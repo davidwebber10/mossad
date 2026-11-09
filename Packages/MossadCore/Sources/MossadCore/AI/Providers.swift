@@ -36,12 +36,13 @@ public enum AIProvider: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    public func model(_ name: String, apiKey: String, usage: UsageLog?) -> any LanguageModel {
-        let name = name.isEmpty ? defaultModel : name
+    public func model(_ name: String, apiKey: String, usage: UsageLog?, cache: LatestModelCache = .shared,
+                      session: URLSession = .shared) -> any LanguageModel {
+        let name = resolvedModel(name, cache: cache)
         return switch self {
-        case .anthropic: AnthropicModel(apiKey: apiKey, model: name, usage: usage)
-        case .openai: OpenAIModel(apiKey: apiKey, model: name, usage: usage)
-        case .openrouter: OpenRouterModel(apiKey: apiKey, model: name, usage: usage)
+        case .anthropic: AnthropicModel(apiKey: apiKey, model: name, session: session, usage: usage)
+        case .openai: OpenAIModel(apiKey: apiKey, model: name, session: session, usage: usage)
+        case .openrouter: OpenRouterModel(apiKey: apiKey, model: name, session: session, usage: usage)
         }
     }
 }
