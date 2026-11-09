@@ -5,8 +5,8 @@ final class LocalModelTests: XCTestCase {
     private let segments: [(start: Double, end: Double, speaker: String)] = [(0, 2, "S1"), (2, 10, "S2")]
 
     func testLocalModelsInOrderWithStableIDs() {
-        XCTAssertEqual(TranscriptionProvider.local.models.map(\.id), ["parakeet-tdt-v3", "parakeet-tdt-v2", "apple-speech", "whisper-large-v3-turbo"])
-        XCTAssertEqual(TranscriptionProvider.local.models.map(\.name), ["Parakeet TDT v3", "Parakeet TDT v2 (English only)", "Apple Speech", "Whisper Large v3 Turbo"])
+        XCTAssertEqual(TranscriptionProvider.local.models.map(\.id), ["parakeet-tdt-v3", "parakeet-tdt-v2", "apple-speech", "whisper-large-v3-turbo", "qwen3-asr-0.6b"])
+        XCTAssertEqual(TranscriptionProvider.local.models.map(\.name), ["Parakeet TDT v3", "Parakeet TDT v2 (English only)", "Apple Speech", "Whisper Large v3 Turbo", "Qwen3-ASR 0.6B (Experimental)"])
     }
 
     func testTheTranscriberUsesTheChosenModelAndFallsBackToTheFirst() {
@@ -15,6 +15,7 @@ final class LocalModelTests: XCTestCase {
         XCTAssertEqual(model("parakeet-tdt-v3"), .parakeetV3)
         XCTAssertEqual(model("apple-speech"), .appleSpeech)
         XCTAssertEqual(model("whisper-large-v3-turbo"), .whisperTurbo)
+        XCTAssertEqual(model("qwen3-asr-0.6b"), .qwen3)
         XCTAssertEqual(model(""), .parakeetV3)
         XCTAssertEqual(model("a-model-that-is-gone"), .parakeetV3, "a model removed from the list falls back to the default")
     }
@@ -167,6 +168,34 @@ final class WhisperMappingTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? LocalModelError, .modelMissing(.whisperTurbo))
         }
+    }
+}
+
+final class QwenMappingTests: XCTestCase {
+    func testTheTextKeepsItsPunctuationAndTakesTheAlignerTimes() {
+        let w = QwenEngine.words(text: "Ship it, today. — Yes!", aligned: [("Ship", 0, 0.3), ("it", 0.3, 0.5), ("today", 0.6, 1), ("Yes", 1.5, 1.8)],
+                                 offset: 30)
+        XCTAssertEqual(w.map(\.text), ["Ship", "it,", "today.—", "Yes!"])
+        XCTAssertEqual(w[0], TimedWord(text: "Ship", start: 30, end: 30.3))
+        XCTAssertEqual(w[3].start, 31.5)
+    }
+
+    func testFewerAlignedWordsLeaveTheRestAtTheLastTime() {
+        let w = QwenEngine.words(text: "One two", aligned: [("One", 1, 1.2)], offset: 0)
+        XCTAssertEqual(w.last, TimedWord(text: "two", start: 1.2, end: 1.2))
+    }
+
+    func testWindowsCoverAllAudioAndCutAtSilence() {
+        let rate = 100
+        var samples = [Float](repeating: 0.5, count: 70 * rate)
+        for i in (27 * rate)..<(27 * rate + 20) { samples[i] = 0 }
+        let windows = QwenEngine.windows(samples, rate: rate)
+        XCTAssertEqual(windows.first?.lowerBound, 0)
+        XCTAssertEqual(windows.last?.upperBound, samples.count)
+        for (a, b) in zip(windows, windows.dropFirst()) { XCTAssertEqual(a.upperBound, b.lowerBound) }
+        XCTAssertTrue(windows.allSatisfy { $0.count <= 30 * rate })
+        XCTAssertEqual(Double(windows[0].upperBound) / Double(rate), 27, accuracy: 0.2)
+        XCTAssertEqual(QwenEngine.windows([], rate: rate), [])
     }
 }
 #endif

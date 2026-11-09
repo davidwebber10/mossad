@@ -9,6 +9,7 @@ actor LocalEngine {
     private var diarizer: DiarizerManager?
     #if os(macOS)
     private var whisper: WhisperEngine?
+    private var qwen: QwenEngine?
     #endif
 
     func words(_ file: URL, model: LocalModel) async throws -> [TimedWord] {
@@ -27,8 +28,23 @@ actor LocalEngine {
             #else
             throw LocalModelError.notSupported(model)
             #endif
+        case .qwen3:
+            #if os(macOS)
+            try await qwenEngine().words(file)
+            #else
+            throw LocalModelError.notSupported(model)
+            #endif
         }
     }
+
+    #if os(macOS)
+    private func qwenEngine() async throws -> QwenEngine {
+        if let qwen { return qwen }
+        let engine = try await QwenEngine.load()
+        qwen = engine
+        return engine
+    }
+    #endif
 
     #if os(macOS)
     private func whisperEngine() async throws -> WhisperEngine {

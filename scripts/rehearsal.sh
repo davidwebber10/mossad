@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 xcodegen generate --quiet
-xcodebuild -project Mossad.xcodeproj -scheme MossadRehearsal -configuration Release -derivedDataPath build/rehearsal \
+xcodebuild -project Mossad.xcodeproj -skipPackagePluginValidation -scheme MossadRehearsal -configuration Release -derivedDataPath build/rehearsal \
   -allowProvisioningUpdates build -quiet
 APP="/Applications/Mossad Rehearsal.app"
 pkill -f "^/Applications/Mossad Rehearsal\.app/Contents/MacOS/Mossad Rehearsal" || true
