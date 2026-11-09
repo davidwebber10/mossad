@@ -17,14 +17,20 @@ public enum Recording {
         do { try make(in: dir) } catch { Log.error("Recording for \(dir.lastPathComponent) failed: \(error)") }
     }
 
-    /// Makes the recording for written calls that have none yet, such as calls from before this feature.
-    public static func backfill(audioRoot: URL) {
-        for dir in (try? FileManager.default.contentsOfDirectory(at: audioRoot, includingPropertiesForKeys: nil)) ?? [] {
+    /// The folders of the written calls that have no recording yet: calls from before this feature, and calls
+    /// written while another call recorded.
+    public static func missing(audioRoot: URL) -> [URL] {
+        ((try? FileManager.default.contentsOfDirectory(at: audioRoot, includingPropertiesForKeys: nil)) ?? []).filter { dir in
             // The file check first: nearly every call has its recording, and then its record is not read at all.
             guard !FileManager.default.fileExists(atPath: url(in: dir).path),
-                  let r = try? RecordCache.shared.record(in: dir), r.status == .written else { continue }
-            makeIfMissing(in: dir)
+                  let r = try? RecordCache.shared.record(in: dir), r.status == .written else { return false }
+            return true
         }
+    }
+
+    /// Makes the recording for written calls that have none yet.
+    public static func backfill(audioRoot: URL) {
+        for dir in missing(audioRoot: audioRoot) { makeIfMissing(in: dir) }
     }
 
     @discardableResult

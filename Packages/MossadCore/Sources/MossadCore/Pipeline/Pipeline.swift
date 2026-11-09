@@ -638,11 +638,16 @@ public actor Pipeline {
         r.markdownPath = url.path
         r.status = .written
         Log.info("Wrote \(url.lastPathComponent)")
-        // A mix and an AAC encode of the whole call: after a call that records now, and off this actor.
-        await waitForQuiet(r.id)
-        detail(r.id, "Making the recording")
-        let dir = paths.callDirectory(r.id)
-        try? await HeavyWork.run { Recording.makeIfMissing(in: dir) }
+        // A mix and an AAC encode of the whole call, off this actor. While a call records, the note does not wait
+        // for it: the app makes the missing recording when no call records (`Recording.backfill`), and until then
+        // the player mixes the two tracks.
+        if await heavy.isHeld {
+            Log.info("A call records; the recording of \(r.id) is made later")
+        } else {
+            detail(r.id, "Making the recording")
+            let dir = paths.callDirectory(r.id)
+            try? await HeavyWork.run { Recording.makeIfMissing(in: dir) }
+        }
         // Without fingerprints a name is never learned, so asking after every call would only nag.
         if voiceFingerprints, !r.unknownSpeakers.isEmpty, quietRuns[r.id] == nil { notify(r) }
     }

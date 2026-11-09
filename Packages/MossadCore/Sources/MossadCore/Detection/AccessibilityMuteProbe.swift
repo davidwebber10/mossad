@@ -85,10 +85,13 @@ public final class AccessibilityMuteProbe: MuteProbing, @unchecked Sendable {
             }
             let windows = (value as? [AXUIElement]) ?? []
             let titles = windows.map { (attribute($0, kAXTitleAttribute) as? String) ?? "" }
-            allTitles += titles
             if isBrowser {
-                roots += Self.callWindows(titles: titles, platform: platform, meetingID: meetingID).map { windows[$0] }
+                // Only the call's windows count as a change: the owner's other browser windows change all the time.
+                let call = Self.callWindows(titles: titles, platform: platform, meetingID: meetingID)
+                roots += call.map { windows[$0] }
+                allTitles += call.map { titles[$0] }
             } else {
+                allTitles += titles
                 roots += windows
                 // Zoom and Teams also name the action in their menus.
                 if let menu = attribute(app, kAXMenuBarAttribute) { menus.append(menu as! AXUIElement) }

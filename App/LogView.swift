@@ -52,9 +52,10 @@ struct LogView: View {
             while !Task.isCancelled {
                 // A window that is closed or covered keeps this view: nothing to show, so nothing to read.
                 if controller.windowVisible { await load() }
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(controller.windowVisible ? 2 : 30))
             }
         }
+        .onChange(of: controller.windowVisible) { _, visible in if visible { Task { await load() } } }
     }
 
     private var logLines: some View {

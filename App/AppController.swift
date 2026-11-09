@@ -155,6 +155,7 @@ final class AppController: ObservableObject {
     /// reads every transcript, so it runs off the main thread, a moment after the last key press.
     @Published private(set) var meetingMatches: Set<String>?
     private var filterTask: Task<Void, Never>?
+    private var makingRecordings = false
 
     private func filterMeetings(debounce: Bool) {
         filterTask?.cancel()
@@ -1403,6 +1404,7 @@ final class AppController: ObservableObject {
         processing += 1
         refresh()
         await work()
+        makeMissingRecordings()
         syncCloud()
         runCoach()
         runCommitments()
@@ -1417,14 +1419,29 @@ final class AppController: ObservableObject {
         Task(priority: .utility) { await track { await self.pipeline.runPending() } }
     }
 
+    /// A meeting written while the next call recorded has no recording yet (the encode waited). Each time some
+    /// work ends and no call records, the missing ones are made, one run at a time, and then archived.
+    private func makeMissingRecordings() {
+        guard !isInert, !isRecording, !makingRecordings else { return }
+        makingRecordings = true
+        let audio = paths.audio
+        Task(priority: .background) { [weak self] in
+            let missing = await Task.detached(priority: .background) { Recording.missing(audioRoot: audio) }.value
+            for dir in missing {
+                // A call that starts meanwhile gets the processor; the rest waits for the next time.
+                guard let self, !self.isRecording else { break }
+                // Encoding an hour of audio takes seconds, so this stays off the main actor.
+                await Task.detached(priority: .background) { Recording.makeIfMissing(in: dir) }.value
+            }
+            self?.makingRecordings = false
+            if !missing.isEmpty { self?.syncCloud() }
+        }
+    }
+
     private func runHousekeeping() async {
         await track { await self.pipeline.runPending() }
-        // Encoding an hour of audio takes seconds, so this stays off the main actor.
         let audio = paths.audio, days = deleteRecordings ? max(1, recordingDays) : nil
-        // An old call without its recording gets one by an encode: not while a call records; the next hour will do.
-        let quiet = !isRecording
         await Task.detached(priority: .background) {
-            if quiet { Recording.backfill(audioRoot: audio) }
             Retention.sweep(audioRoot: audio, recordingsAfterDays: days)
         }.value
         runCoach()
@@ -1565,6 +1582,7 @@ final class LiveTranscriptModel: ObservableObject {
     /// Worked out once per update: the echo filter compares every mic line with every call line.
     @Published private(set) var visibleLines: [LiveTranscript.Line] = []
     private var pending = LiveTranscript()
+    private var echoMemo = LiveTranscript.EchoMemo()
     private var scheduled = false
     var fileURL: URL?
     /// One write at a time, in order, so an older copy never replaces a newer one.
@@ -1577,6 +1595,7 @@ final class LiveTranscriptModel: ObservableObject {
     /// A saved transcript, shown as is: for a preview's screenshots.
     func show(_ transcript: LiveTranscript) {
         pending = transcript
+        echoMemo = LiveTranscript.EchoMemo()
         publish()
     }
 
@@ -1597,14 +1616,10 @@ final class LiveTranscriptModel: ObservableObject {
             scheduled = true
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(250))
-                let snapshot = pending
-                // The echo filter compares mic lines with call lines: off the main thread.
-                let visible = await Task.detached(priority: .userInitiated) { snapshot.visibleLines }.value
-                // A reset meanwhile (the call ended) wins.
-                if scheduled {
-                    transcript = snapshot
-                    visibleLines = visible
-                }
+                transcript = pending
+                // The echo filter keeps its answers for the lines that are settled, so a pass costs the same at
+                // the end of a long call as at its start.
+                visibleLines = pending.visibleLines(memo: &echoMemo)
                 scheduled = false
             }
         }
@@ -1630,7 +1645,7 @@ final class LiveTranscriptModel: ObservableObject {
         pending = LiveTranscript()
         transcript = pending
         visibleLines = []
-        scheduled = false
+        echoMemo = LiveTranscript.EchoMemo()
     }
 }
 

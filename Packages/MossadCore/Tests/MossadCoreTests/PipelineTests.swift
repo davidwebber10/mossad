@@ -136,6 +136,34 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
     }
 
+    /// The note of the last call does not wait for the next call to end: only its recording does.
+    func testANoteIsWrittenWhileACallRecordsAndItsRecordingIsMadeLater() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        final class Flag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = false
+            var recording: Bool {
+                get { lock.withLock { value } }
+                set { lock.withLock { value = newValue } }
+            }
+        }
+        let call = Flag()
+        let gate = HeavyWorkGate(pollInterval: .milliseconds(20)) { call.recording }
+        let later = start.addingTimeInterval(3600)
+        // The next call starts when the summary is done.
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         onStep: { if $0.status == .summarized { call.recording = true } }, heavy: gate)
+        await p.process(id)
+        XCTAssertEqual(try CallRecord.load(from: dir).status, .written)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
+        XCTAssertEqual(Recording.missing(audioRoot: paths.audio).map(\.lastPathComponent), [id])
+        Recording.backfill(audioRoot: paths.audio)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
+        XCTAssertEqual(Recording.missing(audioRoot: paths.audio), [])
+    }
+
     func testTheGateIsOpenWhenNothingSaysACallRecords() async {
         let gate = HeavyWorkGate()
         let held = await gate.isHeld

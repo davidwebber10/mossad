@@ -92,6 +92,50 @@ final class LiveTranscriberFailureTests: XCTestCase {
         wait(for: [failed], timeout: 1)
     }
 
+    /// The filter ran over every pair of lines four times a second, on the main thread, for the whole call.
+    func testTheEchoFilterWithItsMemoShowsTheSameLinesAtEveryStep() {
+        func turn(_ order: Int, _ text: String, final: Bool) -> Data {
+            Data(#"{"type":"Turn","turn_order":\#(order),"end_of_turn":\#(final),"transcript":"\#(text)","speaker_label":"A","words":[]}"#.utf8)
+        }
+        var live = LiveTranscript()
+        var memo = LiveTranscript.EchoMemo()
+        var hidden = 0
+        for i in 0..<120 {
+            let t = Double(i) * 5
+            let call = "we should move the shipment to friday number \(i)"
+            // A draft first, then the final text, as the service sends them.
+            live.apply(turn(i, "we should move", final: false), source: .them, at: t)
+            XCTAssertEqual(live.visibleLines(memo: &memo), live.visibleLines)
+            // Every third mic line is the echo of the call line; the others are the owner's own words.
+            let mine = i % 3 == 0 ? call : "I will send the forecast today number \(i)"
+            live.apply(turn(i, mine, final: false), source: .me, at: t + 2)
+            XCTAssertEqual(live.visibleLines(memo: &memo), live.visibleLines)
+            live.apply(turn(i, call, final: true), source: .them, at: t)
+            live.apply(turn(i, mine, final: true), source: .me, at: t + 2)
+            XCTAssertEqual(live.visibleLines(memo: &memo), live.visibleLines)
+            hidden = live.lines.count - live.visibleLines.count
+        }
+        XCTAssertEqual(hidden, 40, "the echo lines are hidden")
+        XCTAssertGreaterThan(memo.shown.count, 110, "nearly every mic line is settled and is not looked at again")
+        XCTAssertLessThan(memo.shown.count, 120, "the last lines can still change")
+    }
+
+    func testAMicLineIsNotSettledWhileACallLineNearItIsStillSpoken() {
+        func turn(_ order: Int, _ text: String, final: Bool) -> Data {
+            Data(#"{"type":"Turn","turn_order":\#(order),"end_of_turn":\#(final),"transcript":"\#(text)","speaker_label":"A","words":[]}"#.utf8)
+        }
+        var live = LiveTranscript()
+        var memo = LiveTranscript.EchoMemo()
+        // A long turn on the call that is still a draft when the mic line is final and old.
+        live.apply(turn(0, "we should", final: false), source: .them, at: 0)
+        live.apply(turn(0, "we should move the shipment to friday", final: true), source: .me, at: 2)
+        live.apply(turn(1, "something else entirely", final: true), source: .them, at: 60)
+        XCTAssertEqual(live.visibleLines(memo: &memo).count, 3, "the draft does not match yet")
+        live.apply(turn(0, "we should move the shipment to friday", final: true), source: .them, at: 0)
+        XCTAssertEqual(live.visibleLines(memo: &memo).count, 2, "the mic line was not settled early, so it is hidden now")
+        XCTAssertEqual(live.visibleLines(memo: &memo), live.visibleLines)
+    }
+
     // MARK: What waits for the network
 
     func testAudioGoesOutOneMessageAtATimeInOrder() {
