@@ -295,6 +295,88 @@ final class TrackWriterTests: XCTestCase {
         XCTAssertEqual(try audioDuration(url), 4, accuracy: 0.01)
     }
 
+    private func fileNumber(_ url: URL) throws -> Int? {
+        try FileManager.default.attributesOfItem(atPath: url.path)[.systemFileNumber] as? Int
+    }
+
+    private func recordedTrack(_ name: String, seconds: Int) throws -> URL {
+        let url = dir.appendingPathComponent(name)
+        var now = t0
+        let writer = try TrackWriter(url: url, startTime: t0, clock: { now })
+        for _ in 0..<seconds {
+            now = now.addingTimeInterval(1)
+            try writer.append(sineBuffer(seconds: 1, sampleRate: 16_000, channels: 1))
+        }
+        writer.close()
+        return url
+    }
+
+    /// The end of a call cut both tracks by copying them: 230 MB read and written for each hour.
+    func testATrackIsTrimmedWhereItLiesAndReadsBackTheSame() throws {
+        let url = try recordedTrack("me.caf", seconds: 10)
+        let before = try AudioSamples.read(url, from: 0, to: 4)
+        let node = try fileNumber(url)
+        try trimAudioFile(url, to: 4)
+        XCTAssertEqual(try fileNumber(url), node, "the same file, not a copy")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["me.caf"])
+        let file = try AVAudioFile(forReading: url)
+        XCTAssertEqual(file.length, 64_000)
+        XCTAssertEqual(try AudioSamples.read(url, from: 0, to: 100), before)
+        let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? 0
+        XCTAssertLessThan(size, 64_000 * 2 + 8_192, "the file is cut, not only marked shorter")
+        // The cut file can be silenced and cut once more, as a held call is.
+        try silenceAudioFile(url, spans: [1...2])
+        try trimAudioFile(url, to: 3)
+        XCTAssertEqual(try audioDuration(url), 3, accuracy: 0.001)
+        XCTAssertEqual(try AudioSamples.read(url, from: 1, to: 2).map(abs).max(), 0)
+        XCTAssertEqual(Array(try AudioSamples.read(url, from: 2, to: 3)), Array(before[32_000..<48_000]))
+    }
+
+    func testATrimLongerThanTheTrackChangesNothing() throws {
+        let url = try recordedTrack("me.caf", seconds: 3)
+        let data = try Data(contentsOf: url)
+        try trimAudioFile(url, to: 30)
+        XCTAssertEqual(try Data(contentsOf: url), data)
+    }
+
+    /// A recording that was never closed has "to the end of the file" as the size of its audio.
+    func testATrackThatWasNeverClosedIsTrimmedWhereItLies() throws {
+        let url = try recordedTrack("me.caf", seconds: 10)
+        var data = try Data(contentsOf: url)
+        let marker = try XCTUnwrap(data.range(of: Data("data".utf8)))
+        data.replaceSubrange(marker.upperBound..<marker.upperBound + 8, with: Data(repeating: 0xFF, count: 8))
+        try data.write(to: url)
+        let before = try AudioSamples.read(url, from: 0, to: 4)
+        let node = try fileNumber(url)
+        try trimAudioFile(url, to: 4)
+        XCTAssertEqual(try fileNumber(url), node)
+        XCTAssertEqual(try AVAudioFile(forReading: url).length, 64_000)
+        XCTAssertEqual(try AudioSamples.read(url, from: 0, to: 100), before)
+    }
+
+    /// With a chunk after the audio the file cannot be cut at the end: it is copied, as before.
+    func testATrackWithAChunkAfterItsAudioIsTrimmedByACopy() throws {
+        let url = try recordedTrack("me.caf", seconds: 10)
+        let before = try AudioSamples.read(url, from: 0, to: 4)
+        var data = try Data(contentsOf: url)
+        data.append(Data("free".utf8))
+        data.append(contentsOf: [0, 0, 0, 0, 0, 0, 0, 16])
+        data.append(Data(repeating: 0, count: 16))
+        try data.write(to: url)
+        XCTAssertFalse(try CAFTrim.inPlace(url, to: 4))
+        XCTAssertEqual(try Data(contentsOf: url), data, "a file that cannot be cut in place is not touched")
+        try trimAudioFile(url, to: 4)
+        XCTAssertEqual(try AVAudioFile(forReading: url).length, 64_000)
+        XCTAssertEqual(try AudioSamples.read(url, from: 0, to: 100), before)
+    }
+
+    func testAFileThatIsNotATrackIsNotCutInPlace() throws {
+        let url = dir.appendingPathComponent("recording.m4a")
+        try writeTestAudio(dir.appendingPathComponent("a.caf"), seconds: 2, frequency: 440)
+        try FileManager.default.moveItem(at: try UploadAudio.compress(dir.appendingPathComponent("a.caf"), into: dir), to: url)
+        XCTAssertFalse(try CAFTrim.inPlace(url, to: 1))
+    }
+
     func testWritesInt16File() throws {
         let url = dir.appendingPathComponent("i.caf")
         let writer = try TrackWriter(url: url, startTime: t0, clock: { self.t0.addingTimeInterval(1) })

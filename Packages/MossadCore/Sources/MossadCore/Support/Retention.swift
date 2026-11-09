@@ -11,7 +11,8 @@ public enum Retention {
         let fm = FileManager.default
         func cutoff(_ days: Int) -> Date { now.addingTimeInterval(-Double(days) * 86_400) }
         for dir in (try? fm.contentsOfDirectory(at: audioRoot, includingPropertiesForKeys: nil)) ?? [] {
-            guard let r = try? CallRecord.load(from: dir), r.status == .written else { continue }
+            // From the cache: this runs each hour, and a decode of every record each time grows with every meeting.
+            guard let r = try? RecordCache.shared.record(in: dir), r.status == .written else { continue }
             let expired = recordingsAfterDays.map { r.end < cutoff($0) } ?? false
             // A recording archived in the cloud counts too: its local copy may be gone already.
             let hasRecording = fm.fileExists(atPath: Recording.url(in: dir).path) || r.cloudKey != nil

@@ -46,6 +46,7 @@ public actor Pipeline {
     private let calendar: CalendarSource
     private let notify: @Sendable (CallRecord) -> Void
     private let now: @Sendable () -> Date
+    private let heavy: HeavyWorkGate
     private nonisolated let settings: Mutex<Configuration>
     /// Called for each meeting a merge removes, so its archived recording and share links go too.
     private let onDiscard: @Sendable (CallRecord) -> Void
@@ -75,7 +76,9 @@ public actor Pipeline {
                 onDetail: @escaping @Sendable (String, String?) -> Void = { _, _ in },
                 onProgress: @escaping @Sendable (String, ProcessingProgress?) -> Void = { _, _ in },
                 titles: @escaping @Sendable ([String]) -> [String] = { _ in [] },
-                onDiscard: @escaping @Sendable (CallRecord) -> Void = { _ in }) {
+                onDiscard: @escaping @Sendable (CallRecord) -> Void = { _ in },
+                heavy: HeavyWorkGate = .shared) {
+        self.heavy = heavy
         self.titles = titles
         self.onStep = onStep
         self.onProgress = onProgress
@@ -176,7 +179,7 @@ public actor Pipeline {
                         try store(r, dir: dir)
                         return
                     }
-                case .summarized: try write(&r)
+                case .summarized: try await write(&r)
                 case .recording, .failed, .written: return
                 }
                 r.attempts = 0
@@ -429,8 +432,11 @@ public actor Pipeline {
         try store(r, dir: dir)
         transcribing.remove(r.id)
         detail(r.id, "Joining the two tracks")
-        // Without the them track (deleted or unreadable) only the word rule removes echo.
-        let themSound = try? SoundTimeline.measure(url: dir.appendingPathComponent(Track.them.fileName))
+        // Without the them track (deleted or unreadable) only the word rule removes echo. A full read of the track,
+        // so off this actor.
+        let them = dir.appendingPathComponent(Track.them.fileName)
+        await waitForQuiet(r.id)
+        let themSound = try? await HeavyWork.run { try SoundTimeline.measure(url: them) }
         r.utterances = TranscriptMerger.merge(me: try meResult.get(), them: try themResult.get(), themSound: themSound)
         r.status = .transcribed
         Log.info("Transcribed \(r.id): \(r.utterances.count) utterances")
@@ -458,10 +464,14 @@ public actor Pipeline {
             Log.info("\(track.rawValue) track is empty; skipping transcription")
             return .success([])
         }
-        // A compressed copy goes up; the raw track stays for speaker identification and the recording.
-        let upload = (try? UploadAudio.compress(url, into: dir)) ?? url
+        // A compressed copy goes up; the raw track stays for speaker identification and the recording. The encode
+        // takes seconds of processor time: it waits out a call and runs off this actor. The upload does not wait.
+        await waitForQuiet(callID)
+        let upload = (try? await HeavyWork.run { try UploadAudio.compress(url, into: dir) }) ?? url
         defer { if upload != url { try? FileManager.default.removeItem(at: upload) } }
         let transcriber = transcriber
+        // A model on this Mac uses all of the processor for minutes.
+        if transcriber.runsOnThisDevice { await waitForQuiet(callID) }
         let job = TranscriptionJobStore(saved: jobs[callID]?[track.rawValue]) { job in await self.saveJob(callID, track, job) }
         do {
             return .success(try await UsageContext.$callID.withValue(callID) {
@@ -546,6 +556,7 @@ public actor Pipeline {
             r.status = .identified
             return
         }
+        await waitForQuiet(r.id)
         let result = try await identifier.identify(utterances: r.utterances, meURL: dir.appendingPathComponent(Track.me.fileName),
                                                    themURL: dir.appendingPathComponent(Track.them.fileName))
         r.speakerNames = result.names
@@ -612,7 +623,14 @@ public actor Pipeline {
 
     private func knownTags() -> [String] { Tags.known(queue.allRecords()) }
 
-    private func write(_ r: inout CallRecord) throws {
+    /// Processor-heavy work waits here while a call records.
+    private func waitForQuiet(_ id: String) async {
+        guard await heavy.isHeld else { return }
+        detail(id, "Waiting for the current call to end")
+        await heavy.waitForQuiet("the work on \(id)")
+    }
+
+    private func write(_ r: inout CallRecord) async throws {
         detail(r.id, "Writing the note")
         let url = MarkdownWriter.noteURL(for: r, in: paths.meetings)
         if let old = r.markdownPath, old != url.path { try? FileManager.default.removeItem(atPath: old) }
@@ -620,8 +638,11 @@ public actor Pipeline {
         r.markdownPath = url.path
         r.status = .written
         Log.info("Wrote \(url.lastPathComponent)")
+        // A mix and an AAC encode of the whole call: after a call that records now, and off this actor.
+        await waitForQuiet(r.id)
         detail(r.id, "Making the recording")
-        Recording.makeIfMissing(in: paths.callDirectory(r.id))
+        let dir = paths.callDirectory(r.id)
+        try? await HeavyWork.run { Recording.makeIfMissing(in: dir) }
         // Without fingerprints a name is never learned, so asking after every call would only nag.
         if voiceFingerprints, !r.unknownSpeakers.isEmpty, quietRuns[r.id] == nil { notify(r) }
     }

@@ -15,6 +15,11 @@ public enum Tags {
 
 /// The meeting search: `#tag` matches a tag exactly; other text matches the title, tags, and transcript.
 public enum MeetingSearch {
+    /// The IDs of the meetings that match, for a filter that runs off the main thread.
+    public static func matchingIDs(_ records: [CallRecord], _ query: String) -> Set<String> {
+        Set(records.filter { matches($0, query) }.map(\.id))
+    }
+
     public static func matches(_ r: CallRecord, _ query: String) -> Bool {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return true }

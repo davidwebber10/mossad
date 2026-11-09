@@ -90,7 +90,14 @@ final class AppController: ObservableObject {
     /// Live loudness of your mic and of the call audio, for the waveform.
     var meters: (me: LevelMeter, them: LevelMeter) { (recorder.meMeter, recorder.themMeter) }
     var offUntilDate: Date? { offUntil == 0 || offUntil == .infinity ? nil : Date(timeIntervalSince1970: offUntil) }
-    @Published private(set) var meetings: [CallRecord] = []
+    @Published private(set) var meetings: [CallRecord] = [] {
+        didSet {
+            upcomingMemo = nil
+            if !meetingQuery.isEmpty { filterMeetings(debounce: false) }
+        }
+    }
+    /// False until the first list is read at launch (off the main thread), so no view says "no meetings" meanwhile.
+    @Published private(set) var meetingsLoaded = false
     @Published private(set) var processing = 0
     /// The window's title is hidden, but it names the page for the Window menu, Mission Control, and the Dock.
     @Published var section: Section = .meetings { didSet { window?.title = section.rawValue } }
@@ -110,13 +117,25 @@ final class AppController: ObservableObject {
     /// Calendar events still to come, for the Upcoming list and the menu bar.
     /// The chosen calendars' events for the next days; `upcoming` filters them against the meetings.
     @Published private(set) var calendarEvents: [CalendarEventInfo] = [] {
-        didSet { noRecordGate.update(events: calendarEvents) }
+        didSet {
+            upcomingMemo = nil
+            noRecordGate.update(events: calendarEvents)
+        }
     }
     /// The upcoming meetings the owner chose not to record.
     @Published private(set) var noRecord = NoRecordBook()
     private let noRecordGate = NoRecordGate()
     /// Calls still to come, without the ones being recorded or already recorded.
-    var upcoming: [UpcomingMeeting] { UpcomingMeeting.from(calendarEvents, recorded: meetings) }
+    /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
+    /// is computed once for each of those and for each minute.
+    var upcoming: [UpcomingMeeting] {
+        let minute = Int(Date().timeIntervalSince1970 / 60)
+        if let memo = upcomingMemo, memo.minute == minute { return memo.list }
+        let list = UpcomingMeeting.from(calendarEvents, recorded: meetings)
+        upcomingMemo = (minute, list)
+        return list
+    }
+    private var upcomingMemo: (minute: Int, list: [UpcomingMeeting])?
     /// The Mac's calendars, for the choice in Settings.
     @Published private(set) var calendars: [CalendarInfo] = []
     /// The calendars Mossad reads; saved once chosen, and defaulted to the owner's own on first use.
@@ -129,7 +148,30 @@ final class AppController: ObservableObject {
     }
     private var upcomingTimer: Timer?
     /// The Meetings search text; a tag click sets it to "#Tag".
-    @Published var meetingQuery = ""
+    @Published var meetingQuery = "" {
+        didSet { if meetingQuery != oldValue { filterMeetings(debounce: true) } }
+    }
+    /// The meetings that match `meetingQuery`; nil while it is empty, when every meeting matches. A text search
+    /// reads every transcript, so it runs off the main thread, a moment after the last key press.
+    @Published private(set) var meetingMatches: Set<String>?
+    private var filterTask: Task<Void, Never>?
+
+    private func filterMeetings(debounce: Bool) {
+        filterTask?.cancel()
+        let query = meetingQuery
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            if meetingMatches != nil { meetingMatches = nil }
+            return
+        }
+        let records = meetings
+        filterTask = Task { [weak self] in
+            if debounce { try? await Task.sleep(for: .milliseconds(180)) }
+            guard !Task.isCancelled else { return }
+            let ids = await Task.detached(priority: .userInitiated) { MeetingSearch.matchingIDs(records, query) }.value
+            guard !Task.isCancelled, let self, self.meetingMatches != ids else { return }
+            self.meetingMatches = ids
+        }
+    }
     /// Set to open the Chat tab on a new chat.
     @Published var newChatRequest = 0
     lazy var chats = ChatStore(directory: paths.chats)
@@ -393,15 +435,9 @@ final class AppController: ObservableObject {
                 self?.noRecordGate.seen(at: Date())
                 CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
             }
-            // Before detection starts: a call that starts during a slow launch must not look like a crashed one.
-            // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
-            if !ProcessingQueue(paths: paths).recoverInterrupted().isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
-            if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
-                offUntil = 0
-                detection.start()
-            } else {
-                scheduleTurnOn()
-            }
+            // Detection starts in `finishLaunch`, after the interrupted calls are recovered.
+            let isRecordingNow: @Sendable () async -> Bool = { [weak self] in await self?.isRecording ?? false }
+            HeavyWorkGate.shared.setCheck(isRecordingNow)
             outputWatcher = OutputDeviceWatcher { @Sendable in
                 CaptureQueue.queue.async { recorder.rebuildThem() }
             }
@@ -409,7 +445,6 @@ final class AppController: ObservableObject {
             _ = updater
             bookmarkKey = GlobalHotKey { [weak self] in self?.bookmarkCurrentCall() }
 
-            Task { await runHousekeeping() }
             refreshUpcoming()
             // Chats and notes from the phone arrive within five minutes.
             iCloudTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
@@ -420,7 +455,7 @@ final class AppController: ObservableObject {
                 Task { @MainActor in self?.refreshUpcoming() }
             }
             housekeeping = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
-                Task { await self?.runHousekeeping() }
+                Task(priority: .utility) { await self?.runHousekeeping() }
                 Task { @MainActor in self?.refreshLatestModels() }
             }
             // A call that failed while the Mac went to sleep (no network) tries again at wake, not up to an hour later.
@@ -432,13 +467,34 @@ final class AppController: ObservableObject {
                 }
             }
         }
-        loadMeetings()
-        if !inert {
-            relinkEmails()
-            Task { await track { await self.pipeline.continueSplitMeetings() } }
+        // The recovery and the first list decode every record: off the main thread, so the menu bar icon and the
+        // window do not wait for them. The order stays: recover, then start detection, then process.
+        let paths = paths
+        Task.detached(priority: .userInitiated) { [weak self] in
+            // Before detection starts: a call that starts during a slow launch must not look like a crashed one.
+            let held = inert ? [] : ProcessingQueue(paths: paths).recoverInterrupted()
+            let records = Self.previewFailures(MeetingIndex(paths: paths).all())
+            await self?.finishLaunch(records, held: held, inert: inert)
         }
         Log.info("Mossad started")
+    }
+
+    /// The rest of the launch, once the records are read: everything that needs the meeting list or the recovery.
+    private func finishLaunch(_ records: [CallRecord], held: [String], inert: Bool) {
+        meetings = records
+        meetingsLoaded = true
         if !inert {
+            // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
+            if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
+            if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
+                offUntil = 0
+                detection.start()
+            } else {
+                scheduleTurnOn()
+            }
+            Task(priority: .utility) { await runHousekeeping() }
+            relinkEmails()
+            Task(priority: .utility) { await track { await self.pipeline.continueSplitMeetings() } }
             announceSetAsideFiles()
             backfillSummaries()
             backfillTitlesAndDecisionTimes()
@@ -480,7 +536,8 @@ final class AppController: ObservableObject {
             let records = Self.previewFailures(MeetingIndex(paths: paths).all())
             await MainActor.run {
                 guard let self else { return }
-                self.meetings = records
+                // Only a changed list is assigned: each assignment draws every view that reads the controller again.
+                if records != self.meetings { self.meetings = records }
                 self.refreshing = false
                 if self.refreshAgain {
                     self.refreshAgain = false
@@ -488,11 +545,6 @@ final class AppController: ObservableObject {
                 }
             }
         }
-    }
-
-    /// The first list at launch, before anything reads `meetings`.
-    private func loadMeetings() {
-        meetings = Self.previewFailures(MeetingIndex(paths: paths).all())
     }
 
     /// Development hook, in a preview only: `MOSSAD_ERROR_PREVIEW=sync,chat,meetingChat,coach,org,processing,failed`
@@ -613,7 +665,11 @@ final class AppController: ObservableObject {
     private func update(_ record: CallRecord) {
         // A list that is being read now may hold this record from before the save; read once more after it.
         if refreshing { refreshAgain = true }
-        if let i = meetings.firstIndex(where: { $0.id == record.id }) { meetings[i] = record } else { refresh() }
+        if let i = meetings.firstIndex(where: { $0.id == record.id }) {
+            if meetings[i] != record { meetings[i] = record }
+        } else {
+            refresh()
+        }
     }
 
     // MARK: Actions
@@ -644,10 +700,9 @@ final class AppController: ObservableObject {
                 Task { @MainActor in self.refresh() }
                 return
             }
-            Task { @MainActor in
-                self.refresh()
-                await self.track { await self.pipeline.process(record.id) }
-            }
+            Task { @MainActor in self.refresh() }
+            // Utility: the next call may start in the same minute, and the call app comes first.
+            Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
         }
         isMuted = false
         status = .idle
@@ -962,7 +1017,8 @@ final class AppController: ObservableObject {
         offUntil = 0
         resumeTimer?.invalidate()
         resumeTimer = nil
-        if !isInert { detection.start() }
+        // Before the launch finished, `finishLaunch` starts detection: the interrupted calls are recovered first.
+        if !isInert, meetingsLoaded { detection.start() }
         objectWillChange.send()
         Log.info("Mossad turned on")
     }
@@ -1156,7 +1212,7 @@ final class AppController: ObservableObject {
         let since = Date().addingTimeInterval(-90 * 86_400)
         let ids = meetings.filter { $0.status == .written && $0.start >= since && ($0.kind == nil || $0.tags.isEmpty || $0.hasOutcomes == nil) }.map(\.id)
         Log.info("Writing new summaries for \(ids.count) recent calls")
-        Task {
+        Task(priority: .background) {
             for id in ids { await track { await self.pipeline.regenerateSummary(id) } }
             refresh()
             runQuestionPass()
@@ -1172,7 +1228,7 @@ final class AppController: ObservableObject {
         let ids = SummaryBackfill.due(meetings).map(\.id)
         guard !ids.isEmpty else { return UserDefaults.standard.set(true, forKey: key) }
         Log.info("Updating \(ids.count) older meetings with titles and decision times")
-        Task(priority: .utility) { [weak self] in
+        Task(priority: .background) { [weak self] in
             let began = Date()
             let done = Set(ids)
             let result = await SummaryBackfill.run(ids: ids) { [weak self] id in
@@ -1199,15 +1255,15 @@ final class AppController: ObservableObject {
     }
 
     func transcribeAgain(_ id: String, speakers: Int?) {
-        Task { await track { await self.pipeline.transcribeAgain(id, speakers: speakers) } }
+        Task(priority: .utility) { await track { await self.pipeline.transcribeAgain(id, speakers: speakers) } }
     }
 
     func restorePreviousTranscript(_ id: String) {
-        Task { await track { await self.pipeline.restorePreviousTranscript(id) } }
+        Task(priority: .utility) { await track { await self.pipeline.restorePreviousTranscript(id) } }
     }
 
     func regenerateSummary(_ id: String) {
-        Task { await track { await self.pipeline.regenerateSummary(id) } }
+        Task(priority: .utility) { await track { await self.pipeline.regenerateSummary(id) } }
     }
 
     /// Joins the meetings into the earliest one and opens it.
@@ -1240,7 +1296,7 @@ final class AppController: ObservableObject {
     }
 
     func retry(_ callID: String) {
-        Task {
+        Task(priority: .utility) {
             await track { await self.pipeline.retry(callID) }
         }
     }
@@ -1279,10 +1335,9 @@ final class AppController: ObservableObject {
                 Task { @MainActor in self.refresh() }
                 return
             }
-            Task { @MainActor in
-                self.refresh()
-                await self.track { await self.pipeline.process(record.id) }
-            }
+            Task { @MainActor in self.refresh() }
+            // Utility: the next call may start in the same minute, and the call app comes first.
+            Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
         }
     }
 
@@ -1347,15 +1402,17 @@ final class AppController: ObservableObject {
     /// Processes calls waiting in the queue, such as a recording that arrived from the iPhone.
     func processPending() {
         guard !isInert else { return }
-        Task { await track { await self.pipeline.runPending() } }
+        Task(priority: .utility) { await track { await self.pipeline.runPending() } }
     }
 
     private func runHousekeeping() async {
         await track { await self.pipeline.runPending() }
         // Encoding an hour of audio takes seconds, so this stays off the main actor.
         let audio = paths.audio, days = deleteRecordings ? max(1, recordingDays) : nil
-        await Task.detached(priority: .utility) {
-            Recording.backfill(audioRoot: audio)
+        // An old call without its recording gets one by an encode: not while a call records; the next hour will do.
+        let quiet = !isRecording
+        await Task.detached(priority: .background) {
+            if quiet { Recording.backfill(audioRoot: audio) }
             Retention.sweep(audioRoot: audio, recordingsAfterDays: days)
         }.value
         runCoach()

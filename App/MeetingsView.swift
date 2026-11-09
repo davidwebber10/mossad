@@ -19,7 +19,8 @@ struct MeetingsView: View {
     @StateObject private var calendarState = CalendarState()
 
     private var results: [CallRecord] {
-        controller.meetings.filter { MeetingSearch.matches($0, controller.meetingQuery) }
+        guard let matches = controller.meetingMatches else { return controller.meetings }
+        return controller.meetings.filter { matches.contains($0.id) }
     }
 
     private var selected: CallRecord? {
@@ -28,7 +29,10 @@ struct MeetingsView: View {
 
     var body: some View {
         Group {
-            if controller.meetings.isEmpty {
+            if !controller.meetingsLoaded {
+                // The first list is being read; an empty page for a moment, not "no meetings yet".
+                DetailColumn { toolbar } content: { Color.clear }
+            } else if controller.meetings.isEmpty {
                 DetailColumn { toolbar } content: { EmptyMeetings() }
             } else {
                 switch mode {

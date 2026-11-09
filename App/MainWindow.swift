@@ -37,14 +37,18 @@ struct MainWindow: View {
         .environment(\.animationsActive, controller.windowVisible)
         .overlay(alignment: .topTrailing) { if Rehearsal.isOn { RehearsalMark().padding(.top, 16).padding(.trailing, 16) } }
         .overlay { SearchOverlay(model: controller.search) }
-        .onAppear {
-            // Only a new install: someone with meetings already set Mossad up. A preview never opens setup unasked,
-            // and Rehearsal opens it at launch instead.
-            if !Rehearsal.isOn, Onboarding.opensAtLaunch(finished: controller.onboardingFinished, hasMeetings: !controller.meetings.isEmpty,
-                                                         preview: CommandLine.arguments.contains("--ui-preview"),
-                                                         forced: CommandLine.arguments.contains("--welcome"), rehearsal: false) {
-                controller.openOnboarding()
-            }
+        // Once the first list is read (off the main thread at launch): an empty list before that is not a new install.
+        .onAppear { if controller.meetingsLoaded { openSetupForANewInstall() } }
+        .onChange(of: controller.meetingsLoaded) { _, loaded in if loaded { openSetupForANewInstall() } }
+    }
+
+    /// Only a new install: someone with meetings already set Mossad up. A preview never opens setup unasked,
+    /// and Rehearsal opens it at launch instead.
+    private func openSetupForANewInstall() {
+        if !Rehearsal.isOn, Onboarding.opensAtLaunch(finished: controller.onboardingFinished, hasMeetings: !controller.meetings.isEmpty,
+                                                     preview: CommandLine.arguments.contains("--ui-preview"),
+                                                     forced: CommandLine.arguments.contains("--welcome"), rehearsal: false) {
+            controller.openOnboarding()
         }
     }
 }

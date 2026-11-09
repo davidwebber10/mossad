@@ -14,6 +14,9 @@ final class RecordCache: @unchecked Sendable {
     private let lock = NSLock()
     private var entries: [String: (stamp: Stamp, record: CallRecord)] = [:]
     private var unreadable: [String: Stamp] = [:]
+    private var decodes = 0
+    /// How many records were decoded from disk so far, for tests of what reads the files.
+    var decodeCount: Int { lock.withLock { decodes } }
 
     /// The record in `dir`, decoded only when the file changed since the last read. Throws when it cannot be read.
     func record(in dir: URL) throws -> CallRecord {
@@ -24,7 +27,7 @@ final class RecordCache: @unchecked Sendable {
         if let hit = lock.withLock({ entries[url.path] }), hit.stamp == stamp { return hit.record }
         do {
             let record = try CallRecord.load(from: dir)
-            lock.withLock { entries[url.path] = (stamp, record); unreadable[url.path] = nil }
+            lock.withLock { decodes += 1; entries[url.path] = (stamp, record); unreadable[url.path] = nil }
             return record
         } catch {
             // The file stays where it is: nothing saves over a record that cannot be read. Said once per version

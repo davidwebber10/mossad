@@ -334,9 +334,69 @@ struct CaptureFormatError: LocalizedError {
     var errorDescription: String? { "audio at \(Int(rate)) Hz cannot be converted" }
 }
 
-/// Cuts an audio file to its first `duration` seconds.
+/// Cuts an audio file to its first `duration` seconds. A PCM track is cut where it lies, with no copy (an hour of
+/// a call is 115 MB for each track); any other file is written again.
 public func trimAudioFile(_ url: URL, to duration: TimeInterval) throws {
+    if (try? CAFTrim.inPlace(url, to: duration)) == true { return }
     try rewriteAudioFile(url, keep: duration, silence: [])
+}
+
+/// Shortens the audio of a PCM CAF file in place: the data chunk gets its new size and the file is cut there.
+enum CAFTrim {
+    /// False when the file is not a PCM CAF whose audio is its last chunk; the caller then copies. Nothing is
+    /// changed in that case.
+    static func inPlace(_ url: URL, to duration: TimeInterval) throws -> Bool {
+        let handle = try FileHandle(forUpdating: url)
+        defer { try? handle.close() }
+        let fileSize = try handle.seekToEnd()
+        try handle.seek(toOffset: 0)
+        guard let header = try handle.read(upToCount: 8), header.count == 8, header.prefix(4) == Data("caff".utf8) else { return false }
+        func integer<T: FixedWidthInteger>(_ data: Data, at index: Int, as: T.Type) -> T {
+            data.withUnsafeBytes { T(bigEndian: $0.loadUnaligned(fromByteOffset: index, as: T.self)) }
+        }
+        var offset: UInt64 = 8
+        var rate: Double?
+        var bytesPerFrame: UInt64?
+        while offset + 12 <= fileSize {
+            try handle.seek(toOffset: offset)
+            guard let chunk = try handle.read(upToCount: 12), chunk.count == 12 else { return false }
+            let type = String(decoding: chunk.prefix(4), as: UTF8.self)
+            let size = integer(chunk, at: 4, as: Int64.self)
+            let payload = offset + 12
+            if type == "desc" {
+                guard let d = try handle.read(upToCount: 32), d.count == 32 else { return false }
+                let bytes = integer(d, at: 16, as: UInt32.self), framesPerPacket = integer(d, at: 20, as: UInt32.self)
+                guard String(decoding: d[d.startIndex + 8..<d.startIndex + 12], as: UTF8.self) == "lpcm", bytes > 0, framesPerPacket == 1 else { return false }
+                rate = Double(bitPattern: integer(d, at: 0, as: UInt64.self))
+                bytesPerFrame = UInt64(bytes)
+            } else if type == "data" {
+                guard let rate, rate > 0, let bytesPerFrame, fileSize >= payload + 4 else { return false }
+                let available = fileSize - payload
+                // A size of -1 means "to the end of the file": a recording that was never closed.
+                if size >= 0, payload + UInt64(size) < fileSize { return false }
+                // The first 4 bytes of the chunk are its edit count, not audio.
+                let frames = (available - 4) / bytesPerFrame
+                let keep = min(frames, UInt64(max(0, duration) * rate))
+                guard keep < frames else { return true }
+                let newSize = 4 + keep * bytesPerFrame
+                // In an order that leaves a good file at every point, should the app stop in between: first "to the
+                // end of the file", then the cut, then the real size.
+                try write(Int64(-1), to: handle, at: offset + 4)
+                try handle.truncate(atOffset: payload + newSize)
+                try write(Int64(newSize), to: handle, at: offset + 4)
+                return true
+            }
+            guard size >= 0 else { return false }
+            offset = payload + UInt64(size)
+        }
+        return false
+    }
+
+    private static func write(_ value: Int64, to handle: FileHandle, at offset: UInt64) throws {
+        try handle.seek(toOffset: offset)
+        try handle.write(contentsOf: withUnsafeBytes(of: value.bigEndian) { Data($0) })
+        try handle.synchronize()
+    }
 }
 
 /// Rewrites a track: keeps its first `keep` seconds (all when nil) and writes silence over each span, in file

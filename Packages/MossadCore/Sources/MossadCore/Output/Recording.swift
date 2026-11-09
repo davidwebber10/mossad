@@ -20,7 +20,9 @@ public enum Recording {
     /// Makes the recording for written calls that have none yet, such as calls from before this feature.
     public static func backfill(audioRoot: URL) {
         for dir in (try? FileManager.default.contentsOfDirectory(at: audioRoot, includingPropertiesForKeys: nil)) ?? [] {
-            guard let r = try? CallRecord.load(from: dir), r.status == .written else { continue }
+            // The file check first: nearly every call has its recording, and then its record is not read at all.
+            guard !FileManager.default.fileExists(atPath: url(in: dir).path),
+                  let r = try? RecordCache.shared.record(in: dir), r.status == .written else { continue }
             makeIfMissing(in: dir)
         }
     }

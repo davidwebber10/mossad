@@ -110,6 +110,7 @@ public struct LocalTranscriber: Transcribing {
     private let speakers: @Sendable (URL) async throws -> Segments
 
     public var serviceName: String { "Mossad" }
+    public var runsOnThisDevice: Bool { true }
 
     public init(model: LocalModel = .parakeetV3) {
         self.init(model: model, words: { try await LocalEngine.shared.words($0, model: model) },

@@ -23,6 +23,25 @@ final class RetentionTests: XCTestCase {
 
     func exists(_ dir: URL, _ f: String) -> Bool { FileManager.default.fileExists(atPath: dir.appendingPathComponent(f).path) }
 
+    /// The hourly sweep and the recording backfill decoded every record each time, twice.
+    func testHousekeepingDecodesARecordOnlyWhenItChanged() throws {
+        let old = try call("old", .written, endedDaysAgo: 5)
+        _ = try call("other", .written, endedDaysAgo: 6)
+        try Data([1]).write(to: old.appendingPathComponent("recording.m4a"))
+        let before = RecordCache.shared.decodeCount
+        Retention.sweep(audioRoot: paths.audio, now: now)
+        XCTAssertEqual(RecordCache.shared.decodeCount, before + 2)
+        Retention.sweep(audioRoot: paths.audio, now: now)
+        Recording.backfill(audioRoot: paths.audio)
+        XCTAssertEqual(RecordCache.shared.decodeCount, before + 2, "unchanged records come from the cache")
+        var r = try CallRecord.load(from: old)
+        r.end = now.addingTimeInterval(-40 * 86_400)
+        try r.save(to: old)
+        Retention.sweep(audioRoot: paths.audio, now: now)
+        XCTAssertEqual(RecordCache.shared.decodeCount, before + 3)
+        XCTAssertFalse(exists(old, "me.caf"), "the changed record is the one the sweep acts on")
+    }
+
     func testKeepsRawTracksUntilTheRecordingExists() throws {
         let dir = try call("old", .written, endedDaysAgo: 31)
         Retention.sweep(audioRoot: paths.audio, now: now)

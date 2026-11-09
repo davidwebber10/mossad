@@ -105,6 +105,44 @@ final class PipelineTests: XCTestCase {
                         onStep: { notifications.steps.append($0) }, onDetail: { _, text in notifications.detail(text) })
     }
 
+    /// Back-to-back meetings: the encodes and the voice fingerprints of the last call wait while the next one records.
+    func testProcessorHeavyStepsWaitWhileACallRecords() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        final class Flag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = true
+            var recording: Bool {
+                get { lock.withLock { value } }
+                set { lock.withLock { value = newValue } }
+            }
+        }
+        let call = Flag()
+        let gate = HeavyWorkGate(pollInterval: .milliseconds(20)) { call.recording }
+        let notifications = notifications
+        let later = start.addingTimeInterval(3600)
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         onDetail: { _, text in notifications.detail(text) }, heavy: gate)
+        let run = Task { await p.process(id) }
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(transcriber.calls, [], "nothing is encoded or sent while the call records")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("upload-me.m4a").path))
+        XCTAssertEqual(try CallRecord.load(from: dir).status, .recorded)
+        XCTAssertTrue(notifications.details.contains("Waiting for the current call to end"))
+        call.recording = false
+        await run.value
+        XCTAssertEqual(try CallRecord.load(from: dir).status, .written)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
+    }
+
+    func testTheGateIsOpenWhenNothingSaysACallRecords() async {
+        let gate = HeavyWorkGate()
+        let held = await gate.isHeld
+        XCTAssertFalse(held)
+        await gate.waitForQuiet("a test")
+    }
+
     /// A call held because its muted parts could not be silenced is tried again by the pipeline's regular run. The
     /// silence is written before anything is sent to transcription.
     func testAHeldCallIsSilencedAndThenProcessed() async throws {
