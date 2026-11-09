@@ -13,7 +13,6 @@ if [ -z "${DRY_RUN:-}" ]; then
   [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || { echo "Release from main only." >&2; exit 1; }
   [ -z "$(git status --porcelain)" ] || { echo "Commit or stash the changes first." >&2; exit 1; }
 fi
-(cd Packages/MossadCore && swift test) || { echo "The tests failed; nothing was released." >&2; exit 1; }
 git fetch --tags --quiet
 git rev-parse "v$VERSION" >/dev/null 2>&1 && { echo "v$VERSION already exists." >&2; exit 1; }
 PREVIOUS=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
@@ -23,7 +22,8 @@ NOTES=${2:-$(git log --pretty='- %s' "$PREVIOUS"..HEAD)}
 BUILD=$(git rev-list --count HEAD)
 STATUS=$(curl -sL -o build/last-appcast.xml -w '%{http_code}' "$FEED" --create-dirs || echo 000)
 case "$STATUS" in
-  200) LAST=$(sed -n 's:.*<sparkle\:version>\([0-9][0-9]*\)</sparkle\:version>.*:\1:p' build/last-appcast.xml | sort -n | tail -1) ;;
+  200) LAST=$(sed -n 's:.*<sparkle\:version>\([0-9][0-9]*\)</sparkle\:version>.*:\1:p' build/last-appcast.xml | sort -n | tail -1)
+       [ -n "$LAST" ] || { echo "The published feed has no build number; the build number cannot be checked." >&2; exit 1; } ;;
   404) LAST=0 ;; # nothing published yet
   *) echo "Could not read the published feed (HTTP $STATUS); the build number cannot be checked." >&2; exit 1 ;;
 esac
@@ -31,6 +31,8 @@ if [ "$BUILD" -le "${LAST:-0}" ]; then
   echo "Build $BUILD is not larger than the published build $LAST." >&2
   [ -n "${DRY_RUN:-}" ] || exit 1
 fi
+# After the cheap checks. Without provider keys in the environment, the tests use no network.
+(cd Packages/MossadCore && swift test) || { echo "The tests failed; nothing was released." >&2; exit 1; }
 
 xcodegen generate --quiet
 xcodebuild -project Mossad.xcodeproj -skipPackagePluginValidation -scheme Mossad -configuration Release -derivedDataPath build -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
