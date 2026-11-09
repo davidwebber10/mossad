@@ -248,14 +248,16 @@ struct AIStep: View {
             ProviderKeyBlock(
                 model: model,
                 label: "Transcription",
-                detail: "Turns each call's audio into the transcript.",
+                detail: "Turns each call's audio into the transcript. " + controller.transcriptionProvider.note,
                 picker: FillPicker(title: "Transcription provider", selection: $controller.transcriptionProvider,
                                    choices: TranscriptionProvider.allCases.map { ($0, $0.displayName) }),
                 service: KeyCheck.Service(controller.transcriptionProvider),
                 apiKey: controller.transcriptionProvider.key,
                 modelRow: controller.transcriptionProvider.models.count > 1 ? AnyView(
                     FillPicker(title: "Transcription model", selection: $controller.transcriptionModel,
-                               choices: controller.transcriptionProvider.models.map { ($0.id, $0.name) })) : nil)
+                               choices: controller.transcriptionProvider.models.map { ($0.id, $0.name) }))
+                    : AnyView(Text(controller.transcriptionProvider.models.first?.name ?? "Default")
+                        .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)))
             .onChange(of: controller.transcriptionProvider) { _, p in
                 controller.transcriptionModel = p.models.first?.id ?? ""
                 controller.rebuildPipeline()
