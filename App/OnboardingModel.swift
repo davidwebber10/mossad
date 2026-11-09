@@ -92,7 +92,7 @@ final class OnboardingModel: ObservableObject {
         OnboardingFacts(ownerName: controller.ownerName,
                         granted: Set(permissions.items.filter { $0.state.isGood }.map(\.kind)),
                         transcriptionKeySet: controller.transcriptionProvider.key.map(controller.hasKey),
-                        aiKeySet: controller.hasKey(controller.aiProvider.key),
+                        aiKeySet: controller.aiProvider.key.map(controller.hasKey) ?? false || !controller.aiProvider.requiresKey,
                         chosenCalendars: controller.chosenCalendars.count,
                         micHeard: micHeard,
                         systemAudioHeard: tone == .heard ? true : tone == .silent ? false : nil)

@@ -64,9 +64,11 @@ public struct FriendlyError: Equatable, Sendable {
         case unauthorized, wrongSecret, missingKey, billing, rejected, tooLarge, refused, unreadable, transcriptionFailed
         case notMossad, notConnected, microphoneBusy, microphoneDenied, recordingFailed, interrupted, resumeFailed, diskFull, fileMissing, notSignedIn, iCloudFull
         case badFile, tooManySteps, other
+        /// Nothing answers at the local AI server's address, or Apple's on-device model cannot run.
+        case localServerDown, onDeviceUnavailable
 
         var isTransient: Bool {
-            [.offline, .unreachable, .timedOut, .serverTrouble, .busy, .rateLimited].contains(self)
+            [.offline, .unreachable, .timedOut, .serverTrouble, .busy, .rateLimited, .localServerDown].contains(self)
         }
     }
 
@@ -182,6 +184,10 @@ public struct FriendlyError: Equatable, Sendable {
             return ("This file isn't an org chart Mossad can read",
                     "It needs the columns Last Name, First Name, Position Title, and Supervisor.", false)
         case .tooManySteps: return ("Mossad couldn't find an answer", "Try a narrower question.", true)
+        case .localServerDown:
+            return ("The local AI server isn't running", auto ? "Start Ollama or LM Studio. Mossad tries again on its own." : "Start Ollama or LM Studio, then try again.", true)
+        case .onDeviceUnavailable:
+            return ("Apple's on-device model can't run", said ?? "Choose another provider in \(aiSettings).", true)
         case .other: return (context.fallbackTitle, auto ? again : said ?? again, true)
         }
     }
@@ -230,6 +236,8 @@ public struct FriendlyError: Equatable, Sendable {
         case MailError.http(let code, let body): return http(code, body, service: "Resend")
         case ChatError.tooManySteps: return .init(kind: .tooManySteps)
         case let e as LocalModelError: return .init(kind: .transcriptionFailed, service: e.model.name, said: e.message)
+        case LocalServerError.notRunning: return .init(kind: .localServerDown)
+        case let e as OnDeviceModelError: return .init(kind: .onDeviceUnavailable, said: e.description)
         case ServerError.notMossad: return .init(kind: .notMossad)
         case ServerError.wrongSecret: return .init(kind: .wrongSecret, service: "your server")
         case ServerError.http(let code, let message):
@@ -356,6 +364,8 @@ public struct FriendlyError: Equatable, Sendable {
             let service = m.service == "Claude" ? "Anthropic" : String(m.service)
             return http(code, m.body.map(String.init) ?? "", service: service)
         }
+        if lower.hasPrefix("local server not running") { return .init(kind: .localServerDown) }
+        if let e = OnDeviceModelError(description: t) { return .init(kind: .onDeviceUnavailable, said: e.description) }
         if let m = t.firstMatch(of: /^(?<service>.+) key missing$/) { return .init(kind: .missingKey, service: String(m.service)) }
         if lower == "invalid api key" { return .init(kind: .unauthorized) }
         if let m = t.firstMatch(of: /NSURLErrorDomain error (?<code>-?\d+)/), let code = Int(m.code) { return url(code) }

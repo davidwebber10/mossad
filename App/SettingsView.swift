@@ -52,7 +52,7 @@ struct SettingsView: View {
     private var attention: Set<SettingsPage> {
         var pages = Set<SettingsPage>()
         if !permissions.allGood { pages.insert(.general) }
-        let keys = [controller.transcriptionProvider.key, controller.aiProvider.key].compactMap { $0 }
+        let keys = [controller.transcriptionProvider.key, controller.aiProvider.requiresKey ? controller.aiProvider.key : nil].compactMap { $0 }
             + (controller.liveTranscriptEnabled && controller.transcriptionProvider != .assemblyai ? [.assemblyai] : [])
         if keys.contains(where: { !controller.hasKey($0) }) { pages.insert(.ai) }
         if controller.syncActivity.error != nil { pages.insert(.sync) }
@@ -235,6 +235,7 @@ extension APIKey {
         case .anthropic: "Anthropic key"
         case .openai: "OpenAI key"
         case .openrouter: "OpenRouter key"
+        case .localServer: "Local server key"
         case .deepgram: "Deepgram key"
         case .elevenlabs: "ElevenLabs key"
         case .resend: "Resend key"

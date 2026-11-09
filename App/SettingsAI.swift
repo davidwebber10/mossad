@@ -16,7 +16,17 @@ struct AISettings: View {
                     keyRow(controller.transcriptionProvider.displayName, "Transcribes your calls after they end", key)
                 }
                 ai
-                keyRow(controller.aiProvider.displayName, "Answers with your chosen model", controller.aiProvider.key)
+                switch controller.aiProvider {
+                case .localServer:
+                    LocalServerSetup()
+                    keyRow("Local server key", "Only when the server asks for one", .localServer, note: "optional")
+                case .apple:
+                    SettingsRow(title: "Apple Intelligence", detail: "The model runs on this Mac. Nothing leaves it.") { AppleModelStatus() }
+                default:
+                    if let key = controller.aiProvider.key {
+                        keyRow(controller.aiProvider.displayName, "Answers with your chosen model", key)
+                    }
+                }
                 if controller.liveTranscriptEnabled, controller.transcriptionProvider != .assemblyai {
                     keyRow("AssemblyAI", "The live transcript while recording uses AssemblyAI", .assemblyai)
                 }
@@ -48,7 +58,7 @@ struct AISettings: View {
     }
 
     private var ai: some View {
-        ProviderRow(title: "AI", detail: "Summaries, the coach, the weekly email, and chat") {
+        ProviderRow(title: "AI", detail: ["Summaries, the coach, the weekly email, and chat.", controller.aiProvider.note].compactMap { $0 }.joined(separator: " ")) {
             FillPicker(title: "AI provider", selection: $controller.aiProvider,
                        choices: AIProvider.allCases.map { ($0, $0.displayName) })
             ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)
@@ -65,8 +75,8 @@ struct AISettings: View {
         .onChange(of: controller.aiModel) { _, _ in controller.rebuildPipeline() }
     }
 
-    private func keyRow(_ title: String, _ detail: String, _ key: APIKey) -> some View {
-        SettingsRow(title: title, detail: detail) {
+    private func keyRow(_ title: String, _ detail: String, _ key: APIKey, note: String? = nil) -> some View {
+        SettingsRow(title: title, detail: detail, titleNote: note) {
             KeyStatus(key: key) { editingKey = $0 }
         }
     }
@@ -163,6 +173,8 @@ struct ModelPicker: View {
                     .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
                     .disabled(models.isEmpty)
                 }
+            } else if provider == .localServer, models.isEmpty, current.isEmpty {
+                Text("Check the server for its models").font(.system(size: 12)).foregroundStyle(Palette.secondary)
             } else {
                 let known = models.contains { $0.id == current } || current.isEmpty || LatestModel.isAlias(current)
                 let list = known ? models : [ModelInfo(id: current, name: current)] + models
@@ -172,9 +184,12 @@ struct ModelPicker: View {
                            leading: LatestModel.aliases(for: provider).map { ($0.id, label($0)) })
             }
         }
-        .task(id: "\(provider.rawValue)-\(controller.hasKey(provider.key))") {
+        .task(id: "\(provider.rawValue)-\(provider.key.map(controller.hasKey) ?? false)-\(provider == .localServer ? "\(controller.localServerURL)-\(controller.localServerChecks)" : "")") {
             defer { if provider == .openrouter { controller.openRouterRating = models.first { $0.id == model }.flatMap { Rating.model($0, provider: .openrouter) } } }
-            let fetched = (try? await ModelCatalog.fetch(provider, apiKey: controller.keychain.get(provider.key))) ?? []
+            let fetched = (try? await ModelCatalog.fetch(provider, apiKey: provider.key.flatMap { controller.keychain.get($0) },
+                                                         serverURL: controller.localServerBase)) ?? []
+            // A local server's models are all its own: the first one serves until the owner picks.
+            if provider == .localServer, model.isEmpty, let first = fetched.first { model = first.id }
             // The list read here is as new as any, so the "Latest" choices follow it at once.
             if LatestModelCache.shared.update(provider, models: fetched), LatestModel.isAlias(model) { controller.rebuildPipeline() }
             models = fetched

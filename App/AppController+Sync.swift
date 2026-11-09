@@ -33,7 +33,8 @@ extension AppController {
     /// Puts the chosen AI provider, model, and key in iCloud Keychain for the iPhone, or removes them.
     func updateSharedAIKey() {
         guard Self.hasICloud else { return }
-        guard shareAIKey, let key = keychain.get(aiProvider.key) else {
+        // A local model is on this Mac, where the iPhone cannot reach it.
+        guard shareAIKey, !aiProvider.isLocal, let apiKey = aiProvider.key, let key = keychain.get(apiKey) else {
             SharedAIKey.delete()
             return
         }

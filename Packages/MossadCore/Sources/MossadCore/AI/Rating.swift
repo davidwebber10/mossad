@@ -47,6 +47,15 @@ public struct Rating: Equatable, Sendable {
     ]
 
     public static func model(_ info: ModelInfo, provider: AIProvider) -> Rating? {
+        switch provider {
+        case .apple:
+            return Rating(stars: ["Quality": 2, "Speed": 2], price: 0,
+                          basis: "An estimate: a small model with a short context. Long meetings go in parts, so they take longer.", free: true)
+        case .localServer:
+            return Rating(stars: [:], price: 0,
+                          basis: "No stars: quality and speed depend on the model and on this Mac.", free: true)
+        default: break
+        }
         let id = info.id.lowercased().replacingOccurrences(of: ".", with: "-")
         let tier = tiers.first { id.contains($0.match.replacingOccurrences(of: ".", with: "-")) }
         var input = info.inputPerMillion, output = info.outputPerMillion
