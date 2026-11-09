@@ -220,6 +220,66 @@ final class NoRecordGateSessionTests: XCTestCase {
         XCTAssertFalse(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(24 * 60)))
     }
 
+    /// An app with no meeting code: the block ends 15 minutes after the planned end, and a blocked call does not
+    /// renew it, so the calls after it are not lost one after the other.
+    func testABlockWithNoMeetingCodeDoesNotChain() {
+        let e = event("Vendor", in: 0, text: "https://acme.zoom.us/j/123456789")
+        let g = gate(blocking: e)
+        XCTAssertTrue(g.blocksStart(platform: .zoom, bundleID: zoomApp, meetingID: nil, at: at(1)))
+        XCTAssertTrue(g.callEnded(at: at(35)))
+        // The meeting ran late and the owner joined again: still blocked, up to the planned end plus 15 minutes.
+        XCTAssertTrue(g.blocksStart(platform: .zoom, bundleID: zoomApp, meetingID: nil, at: at(36)))
+        g.seen(at: at(44))
+        XCTAssertTrue(g.callEnded(at: at(44.5)))
+        XCTAssertFalse(g.blocksStart(platform: .zoom, bundleID: zoomApp, meetingID: nil, at: at(46)), "one minute after the last call, but past the limit")
+        XCTAssertFalse(g.callEnded(at: at(60)))
+    }
+
+    /// The owner left the blocked meeting and joined a different meeting that overlaps it.
+    func testADifferentInviteThatOverlapsRecords() {
+        let blocked = event("Vendor", in: 0, length: 60, text: "https://acme.zoom.us/j/123456789")
+        let other = event("Team sync", in: 30, length: 30, text: "https://acme.zoom.us/j/987654321")
+        let g = gate(blocking: blocked, events: [other, blocked])
+        XCTAssertTrue(g.blocksStart(platform: .zoom, bundleID: zoomApp, meetingID: nil, at: at(1)))
+        XCTAssertTrue(g.callEnded(at: at(25)))
+        XCTAssertFalse(g.blocksStart(platform: .zoom, bundleID: zoomApp, meetingID: nil, at: at(30)))
+        XCTAssertFalse(g.callEnded(at: at(60)))
+    }
+
+    /// The owner's Record on a warning always records.
+    func testTheOwnersRecordWinsOverTheBlock() {
+        let e = event("Vendor", in: 0, text: "https://meet.google.com/abc-defg-hij")
+        let g = gate(blocking: e)
+        XCTAssertTrue(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(1)))
+        XCTAssertTrue(g.callEnded(at: at(10)))
+        XCTAssertFalse(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: nil, at: at(12), forced: true))
+        XCTAssertFalse(g.isBlockingCall)
+        XCTAssertFalse(g.callEnded(at: at(20)), "the forced call records, so its end must stop the recording")
+        // Also during the blocked meeting itself.
+        XCTAssertFalse(gate(blocking: e).blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(1), forced: true))
+    }
+
+    /// A team uses one link for each meeting. Mossad quit during the blocked one; the next one, which the owner
+    /// did not mark, records.
+    func testTheSameLinkInALaterInviteRecords() {
+        let blocked = event("Standup", in: 0, text: "https://meet.google.com/abc-defg-hij")
+        let later = event("Standup", in: 120, text: "https://meet.google.com/abc-defg-hij")
+        let g = gate(blocking: blocked, events: [blocked, later])
+        XCTAssertTrue(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(1)))
+        g.seen(at: at(20))
+        XCTAssertFalse(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(121)))
+    }
+
+    /// The owner changed the choice to Record during the meeting: the next start records.
+    func testAChangedChoiceEndsTheBlock() {
+        let e = event("Vendor", in: 0, text: "https://acme.zoom.us/j/123456789")
+        let g = gate(blocking: e)
+        XCTAssertTrue(g.blocksStart(platform: .zoom, bundleID: zoomApp, meetingID: nil, at: at(1)))
+        XCTAssertTrue(g.callEnded(at: at(5)))
+        g.update(book: NoRecordBook())
+        XCTAssertFalse(g.blocksStart(platform: .zoom, bundleID: zoomApp, meetingID: nil, at: at(6)))
+    }
+
     func testACallWithNoBlockRecords() {
         let g = NoRecordGate()
         XCTAssertFalse(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(0)))

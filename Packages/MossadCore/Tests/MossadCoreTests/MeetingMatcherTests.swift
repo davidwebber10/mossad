@@ -102,12 +102,6 @@ final class MeetingMatcherHelperTests: XCTestCase {
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.vivaldi.Vivaldi"), .unreadableBrowser("com.vivaldi.Vivaldi"))
         XCTAssertEqual(MeetingMatcher.appKind(bundleID: "com.google.chrome.for.testing"), .unreadableBrowser("com.google.chrome.for.testing"))
     }
-
-    func testTeamsTabsOfACall() {
-        XCTAssertTrue(MeetingMatcher.teamsTabIsMeeting(BrowserTab(url: "https://teams.microsoft.com/v2/", title: "Meeting with Dana Lee | Microsoft Teams")))
-        XCTAssertFalse(MeetingMatcher.teamsTabIsMeeting(BrowserTab(url: "https://teams.microsoft.com/v2/", title: "Chat | Dana Lee | Microsoft Teams")))
-        XCTAssertFalse(MeetingMatcher.teamsTabIsMeeting(BrowserTab(url: "https://example.com/", title: "Meeting with Dana Lee | Microsoft Teams")))
-    }
 }
 
 final class BrowserCopiesTests: XCTestCase {

@@ -28,7 +28,6 @@ public enum MeetingMatcher {
         "com.google.chrome.for.testing",
         "org.chromium.Chromium",
         "app.zen-browser.zen",
-        "com.kagi.kagimacOS",
     ]
 
     /// Bundle IDs compare without case: Arc's helpers report a lower-case ID (`company.thebrowser.browser.helper`).
@@ -66,11 +65,6 @@ public enum MeetingMatcher {
 
     public static func zoomWindowIsMeeting(_ title: String) -> Bool {
         title == "Zoom Meeting" || title == "Zoom Webinar"
-    }
-
-    /// A Teams web tab that shows a call: the same title rule as the app's meeting window.
-    public static func teamsTabIsMeeting(_ tab: BrowserTab) -> Bool {
-        platform(forTabURL: tab.url) == .teams && teamsWindowIsMeeting(tab.title)
     }
 
     public static func teamsWindowIsMeeting(_ title: String) -> Bool {

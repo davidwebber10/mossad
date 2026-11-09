@@ -52,8 +52,8 @@ final class DetectionServiceTests: XCTestCase {
     lazy var service = DetectionService(mic: mic, tabs: tabs, windows: windows)
     let now = Date(timeIntervalSince1970: 2_000_000)
 
-    func proc(_ id: AudioObjectID, _ bundle: String, input: Bool) -> AudioProcess {
-        AudioProcess(objectID: id, pid: pid_t(id), bundleID: bundle, isRunningInput: input, isRunningOutput: true)
+    func proc(_ id: AudioObjectID, _ bundle: String, input: Bool, output: Bool = true) -> AudioProcess {
+        AudioProcess(objectID: id, pid: pid_t(id), bundleID: bundle, isRunningInput: input, isRunningOutput: output)
     }
 
     /// An in-person recording owns the mic, so the tick skips the Core Audio scan it would throw away.
@@ -106,7 +106,7 @@ final class DetectionServiceTests: XCTestCase {
         s.onEvent = { events.append($0) }
         s.tick(at: now)
         mic.list = [proc(4, teams, input: false)]
-        for i in 1...10 { s.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        for i in 1...150 { s.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         XCTAssertEqual(events.count, 1)
     }
 
@@ -114,7 +114,7 @@ final class DetectionServiceTests: XCTestCase {
         mic.list = [proc(1, "com.google.Chrome", input: false), proc(2, "com.google.Chrome.helper", input: true)]
         tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
         let s = service.snapshot(at: now)
-        XCTAssertEqual(s.candidates, [MeetingCandidate(platform: .meet, bundleID: "com.google.Chrome", micActive: true, meetingPresent: true)])
+        XCTAssertEqual(s.candidates, [MeetingCandidate(platform: .meet, bundleID: "com.google.Chrome", micActive: true, meetingPresent: true, outputActive: true)])
     }
 
     func testStartedCallKeepsTheMeetingIDOfTheActiveTab() {
@@ -187,6 +187,8 @@ final class DetectionServiceTests: XCTestCase {
     func testMutedThatTurnsUnknownBecomesUnmuted() {
         let mute = FakeMute()
         let (service, changes) = meetCall(mute)
+        var times: [Date?] = []
+        service.onMuteChangeAt = { _, seen in times.append(seen) }
         mute.labels = ["Turn on microphone"]
         service.checkMute(at: now)
         service.checkMute(at: now.addingTimeInterval(1))
@@ -196,6 +198,7 @@ final class DetectionServiceTests: XCTestCase {
         service.checkMute(at: now.addingTimeInterval(12))
         XCTAssertEqual(changes(), [true, false])
         XCTAssertEqual(service.lastMutedSeen, now.addingTimeInterval(1))
+        XCTAssertEqual(times, [now, now.addingTimeInterval(1)], "each change carries the last reading that saw muted")
         // Unknown after unmuted changes nothing.
         for s in 13...40 { service.checkMute(at: now.addingTimeInterval(Double(s))) }
         XCTAssertEqual(changes(), [true, false])
@@ -254,7 +257,7 @@ final class DetectionServiceTests: XCTestCase {
     func testTeamsUnmatchedTitleIsUnknown() {
         mic.list = [proc(4, "com.microsoft.teams2", input: true)]
         windows.titles["com.microsoft.teams2"] = ["Chat | Microsoft Teams"]
-        XCTAssertEqual(service.snapshot(at: now).candidates, [MeetingCandidate(platform: .teams, bundleID: "com.microsoft.teams2", micActive: true, meetingPresent: nil)])
+        XCTAssertEqual(service.snapshot(at: now).candidates, [MeetingCandidate(platform: .teams, bundleID: "com.microsoft.teams2", micActive: true, meetingPresent: nil, outputActive: true)])
     }
 
     func testBrowserTabsNotQueriedWithoutMicOrCall() {
@@ -271,7 +274,7 @@ final class DetectionServiceTests: XCTestCase {
         service.tick(at: now)
         XCTAssertEqual(events.count, 1)
         mic.list = [proc(2, "com.google.Chrome.helper", input: false)]
-        XCTAssertEqual(service.snapshot(at: now).candidates, [MeetingCandidate(platform: .meet, bundleID: "com.google.Chrome", micActive: false, meetingPresent: true)])
+        XCTAssertEqual(service.snapshot(at: now).candidates, [MeetingCandidate(platform: .meet, bundleID: "com.google.Chrome", micActive: false, meetingPresent: true, outputActive: true)])
     }
 
     func testMeetPostCallPageIsGone() {
@@ -435,15 +438,17 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(events.count, 1, "unknown is not gone")
     }
 
-    /// A muted Zoom call releases the mic; the meeting window alone keeps the call, also past 3 minutes.
+    /// A muted Zoom call releases the mic; the meeting window and the sound of the call keep it, also past 3 minutes,
+    /// and start it when the owner joins muted.
     func testAMutedZoomCallGoesOnPastThreeMinutesAndStartsWithoutTheMic() {
         let zoom = "us.zoom.xos"
         windows.running = [zoom]
         windows.titles[zoom] = ["Zoom Workplace", "Zoom Meeting"]
+        mic.list = [proc(3, zoom, input: false, output: true)]
         var events: [DetectorEvent] = []
         service.onEvent = { events.append($0) }
         service.tick(at: now)
-        XCTAssertEqual(events, [.started(platform: .zoom, bundleID: zoom, at: now)], "joined muted: the window is enough")
+        XCTAssertEqual(events, [.started(platform: .zoom, bundleID: zoom, at: now)], "joined muted: the window and the sound are enough")
         for i in 1...150 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         XCTAssertEqual(events.count, 1)
         windows.titles[zoom] = ["Zoom Workplace"]
@@ -452,18 +457,101 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(events.count, 2)
     }
 
-    /// Zoom running with no meeting, and no mic: nothing starts and nothing warns.
-    func testZoomRunningWithoutAMeetingIsQuiet() {
+    /// A waiting room has the meeting window's title, but Zoom plays nothing and holds no mic: no recording.
+    func testAZoomMeetingWindowWithNoSoundAndNoMicDoesNotStartACall() {
         let zoom = "us.zoom.xos"
         windows.running = [zoom]
-        windows.titles[zoom] = ["Zoom Workplace"]
+        windows.titles[zoom] = ["Zoom Meeting"]
+        mic.list = [proc(3, zoom, input: false, output: false)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        for i in 0...100 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    /// A meeting window that stays open after the call does not record the room without an end.
+    func testAZoomWindowLeftOpenEndsTheCallAfterThreeQuietMinutes() {
+        let zoom = "us.zoom.xos"
+        windows.running = [zoom]
+        windows.titles[zoom] = ["Zoom Meeting"]
+        mic.list = [proc(3, zoom, input: true)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        mic.list = [proc(3, zoom, input: false, output: false)]
+        for i in 1...89 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 1)
+        service.tick(at: now.addingTimeInterval(180))
+        XCTAssertEqual(events.last, .ended(at: now.addingTimeInterval(180), trimTo: now))
+        for i in 91...120 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 2, "the window alone starts nothing")
+    }
+
+    /// Zoom runs with no meeting and no audio: its windows are not read at all, nothing starts, and nothing warns.
+    func testZoomRunningWithoutAMeetingIsQuiet() {
+        final class CountingWindows: WindowTitleProbing {
+            var reads = 0
+            func windowTitles(bundleID: String) -> [String]? { reads += 1; return ["Zoom Workplace"] }
+            func isRunning(bundleID: String) -> Bool { true }
+        }
+        let counting = CountingWindows()
+        let s = DetectionService(mic: mic, tabs: tabs, windows: counting)
+        mic.list = [proc(3, "us.zoom.xos", input: false, output: false)]
         var events: [DetectorEvent] = []
         var warnings: [UnconfirmedCall] = []
-        service.onEvent = { events.append($0) }
-        service.onUnconfirmed = { warnings.append($0) }
-        for i in 0...10 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        s.onEvent = { events.append($0) }
+        s.onUnconfirmed = { warnings.append($0) }
+        for i in 0...10 { s.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         XCTAssertTrue(events.isEmpty)
         XCTAssertTrue(warnings.isEmpty)
+        XCTAssertEqual(counting.reads, 0)
+    }
+
+    /// The owner joins a Teams app meeting muted: Teams holds no mic, but its call controls are there and the call
+    /// plays. Without the mic the controls are read at most each 10 s.
+    func testATeamsCallJoinedMutedStartsByItsControlsAndItsSound() {
+        let mute = FakeMute()
+        let s = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        let teams = "com.microsoft.teams2"
+        windows.running = [teams]
+        var events: [DetectorEvent] = []
+        s.onEvent = { events.append($0) }
+        // A notification sound with no call: the controls are not there.
+        mic.list = [proc(4, teams, input: false, output: true)]
+        mute.labels = ["Chat", "Calendar"]
+        for i in 0...4 { s.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertTrue(events.isEmpty)
+        XCTAssertEqual(mute.calls, 1, "one read in 10 s")
+        // No sound: Teams is not asked at all.
+        mic.list = [proc(4, teams, input: false, output: false)]
+        mute.labels = ["Unmute mic"]
+        for i in 5...12 { s.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertTrue(events.isEmpty)
+        XCTAssertEqual(mute.calls, 1)
+        mic.list = [proc(4, teams, input: false, output: true)]
+        s.tick(at: now.addingTimeInterval(26))
+        XCTAssertEqual(events, [.started(platform: .teams, bundleID: teams, at: now.addingTimeInterval(26))])
+    }
+
+    /// During a Teams call the mute check reads the controls each few seconds; the tick uses that reading and does
+    /// not walk the app again.
+    func testTheTickUsesTheMuteChecksFreshReadingOfTheTeamsControls() {
+        let mute = FakeMute()
+        let s = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        let teams = "com.microsoft.teams2"
+        windows.running = [teams]
+        mic.list = [proc(4, teams, input: true)]
+        mute.labels = ["Mute mic"]
+        s.tick(at: now)
+        s.checkMute(at: now.addingTimeInterval(1))
+        mute.calls = 0
+        s.tick(at: now.addingTimeInterval(2))
+        s.tick(at: now.addingTimeInterval(4))
+        XCTAssertEqual(mute.calls, 0)
+        XCTAssertEqual(s.snapshot(at: now.addingTimeInterval(4)).candidates.first?.meetingPresent, true)
+        // An old reading is not used.
+        s.tick(at: now.addingTimeInterval(20))
+        XCTAssertEqual(mute.calls, 1)
     }
 
     /// A screen share (or Zoom in another language) shows no "Zoom Meeting" window while the mic is still on.
@@ -561,20 +649,37 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(events.count, 1)
     }
 
-    /// Every Teams page is a Teams tab, so a finished web call stayed "present". A tab titled as a call, once seen,
-    /// ends the call when it goes.
-    func testATeamsWebCallEndsWhenItsCallTabTitleGoes() {
+    /// Teams web keeps the call when the owner opens Chat in the same tab, and the tab title changes: the call
+    /// must not be cut in two.
+    func testATeamsWebCallGoesOnWhenItsTabMovesToChat() {
         let chrome = "com.google.Chrome"
         mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
         tabs.tabs[chrome] = [BrowserTab(url: "https://teams.microsoft.com/v2/", title: "Meeting with Dana Lee | Microsoft Teams", isActive: true)]
         var events: [DetectorEvent] = []
         service.onEvent = { events.append($0) }
         service.tick(at: now)
-        mic.list = [proc(2, "com.google.Chrome.helper", input: false)]
         tabs.tabs[chrome] = [BrowserTab(url: "https://teams.microsoft.com/v2/", title: "Chat | Microsoft Teams", isActive: true)]
-        service.tick(at: now.addingTimeInterval(10))
-        service.tick(at: now.addingTimeInterval(12))
-        XCTAssertEqual(events.count, 2)
+        for i in 1...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        mic.list = [proc(2, "com.google.Chrome.helper", input: false)]
+        for i in 41...60 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 1)
+    }
+
+    /// The owner's Record on a warning is marked, so the no-record session does not stop it.
+    func testAForcedCallIsMarkedAsForced() {
+        let chrome = "com.google.Chrome"
+        tabs.unreadable = [chrome]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var forced: [Bool] = []
+        service.onEvent = { [unowned service] _ in forced.append(service.callIsForced) }
+        service.forceStartNow(bundleID: chrome, platform: .meet, at: now)
+        mic.list = []
+        service.tick(at: now.addingTimeInterval(40))
+        XCTAssertFalse(service.callIsForced)
+        mic.list = [proc(3, "us.zoom.xos", input: true)]
+        windows.titles["us.zoom.xos"] = ["Zoom Meeting"]
+        service.tick(at: now.addingTimeInterval(42))
+        XCTAssertEqual(forced, [true, false, false])
     }
 
     /// Another WebKit app records through the shared WebKit GPU process; with Safari closed that is not Safari.

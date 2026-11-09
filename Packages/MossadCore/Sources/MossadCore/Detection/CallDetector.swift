@@ -7,19 +7,26 @@ public struct MeetingCandidate: Equatable, Sendable {
     public var micActive: Bool
     /// `true` when a meeting window/tab is open, `false` when it is gone, `nil` when unknown.
     public var meetingPresent: Bool?
-    /// The presence sign alone proves a call (the Zoom app's meeting window, the Teams app's call controls), so the
-    /// call starts and goes on without the mic: these apps release the mic while the owner is muted.
+    /// The presence sign is the app's own sign of a call (the Zoom app's meeting window, the Teams app's call
+    /// controls). With the app's sound it starts and keeps a call without the mic: these apps release the mic
+    /// while the owner is muted.
     public var presenceIsSure: Bool
+    /// The app plays audio now. A meeting sign with no sound and no mic (a waiting room, a window left open) is
+    /// not a call that anyone is in.
+    public var outputActive: Bool
 
-    public init(platform: Platform, bundleID: String, micActive: Bool, meetingPresent: Bool?, presenceIsSure: Bool = false) {
+    public init(platform: Platform, bundleID: String, micActive: Bool, meetingPresent: Bool?, presenceIsSure: Bool = false,
+                outputActive: Bool = false) {
         self.platform = platform
         self.bundleID = bundleID
         self.micActive = micActive
         self.meetingPresent = meetingPresent
         self.presenceIsSure = presenceIsSure
+        self.outputActive = outputActive
     }
 
-    var surelyPresent: Bool { presenceIsSure && meetingPresent == true }
+    /// In a call without the mic: the app's own meeting sign, and the call can be heard.
+    var aliveWithoutMic: Bool { presenceIsSure && meetingPresent == true && outputActive }
 }
 
 public struct DetectionSnapshot: Sendable {
@@ -63,7 +70,7 @@ public struct CallDetector: Sendable {
     private let config: Config
     public private(set) var currentBundleID: String?
     private var currentPlatform: Platform?
-    /// The last time the mic was in use, or a sure presence sign showed the call.
+    /// The last time the mic was in use, or a sure presence sign showed the call while the app played audio.
     private var lastAlive: Date?
     private var goneCount = 0
     private var goneSince: Date?
@@ -87,7 +94,7 @@ public struct CallDetector: Sendable {
 
     public mutating func process(_ snapshot: DetectionSnapshot) -> DetectorEvent? {
         guard let bundleID = currentBundleID else {
-            guard let c = snapshot.candidates.first(where: { ($0.micActive && $0.meetingPresent != false) || $0.surelyPresent })
+            guard let c = snapshot.candidates.first(where: { ($0.micActive && $0.meetingPresent != false) || $0.aliveWithoutMic })
             else { return nil }
             begin(platform: c.platform, bundleID: c.bundleID, at: snapshot.time)
             return .started(platform: c.platform, bundleID: c.bundleID, at: snapshot.time)
@@ -113,9 +120,9 @@ public struct CallDetector: Sendable {
             lastGone = nil
         }  // Unknown (nil) leaves the count as it was.
 
-        // A sure sign keeps the call while the app has released the mic (the owner is muted). Only an unknown or
-        // weak sign lets the mic-idle fallback end it.
-        if candidate?.micActive == true || (!forced && candidate?.surelyPresent == true) {
+        // A sure sign with the call's sound keeps the call while the app has released the mic (the owner is muted).
+        // With no mic and no sound for the fallback time the call ends, also when the meeting window stays open.
+        if candidate?.micActive == true || (!forced && candidate?.aliveWithoutMic == true) {
             lastAlive = snapshot.time
         } else if let last = lastAlive, snapshot.time.timeIntervalSince(last) >= micIdleLimit {
             return end(at: snapshot.time, trimTo: last)

@@ -21,8 +21,6 @@ public final class DetectionService: @unchecked Sendable {
     private var currentPlatform: Platform?
     private var lastProcesses: [AudioProcess] = []
     private var activeMeetingIDs: [String: String] = [:]
-    /// Browsers whose selected tab in this tick is titled as a Teams call.
-    private var startedWithCallSign: Set<String> = []
     /// During a call the tab read is the costly part of a tick (AppleScript on the main thread), and the mic
     /// already shows when the call ends; so the tabs of the call's browser are read at most this often.
     static let tabRefreshDuringCall: TimeInterval = 10
@@ -32,9 +30,16 @@ public final class DetectionService: @unchecked Sendable {
     private var watch = UnconfirmedCallWatch()
     /// Apps in this tick that use the mic like a call while no meeting can be confirmed.
     private var suspects: [UnconfirmedCall] = []
-    /// The current call showed a sign that its app removes when you leave (the Teams app's call controls, a Teams
-    /// web tab titled as a call), so the sign's absence later means the call is over.
+    /// The current call showed the Teams app's call controls, which go when you leave, so their absence later means
+    /// the call is over.
     private var callSignSeen = false
+    /// Apps that showed their call sign in this tick, before the call started.
+    private var signAtStart: Set<String> = []
+    /// Without a call and without the mic, the Teams app's controls are read at most this often.
+    static let idleControlsInterval: TimeInterval = 10
+    private var lastIdleControlsRead = Date.distantPast
+    /// The current call was started by the owner's Record on a warning. Read it on the detection queue, in `onEvent`.
+    public private(set) var callIsForced = false
     /// The current call's meeting ID from its browser tab, for matching the calendar invite.
     public private(set) var meetingID: String?
 
@@ -47,6 +52,10 @@ public final class DetectionService: @unchecked Sendable {
     /// Guards the mute target (written by the tick) and the mute tracker (read and written by the mute check).
     private let muteLock = NSLock()
     private var muteTarget: MuteTarget?
+    /// The labels the mute check read last for the current call, so the tick does not walk the same app again.
+    private var lastLabels: (call: Int, time: Date, labels: [String]?)?
+    static let labelsFreshFor: TimeInterval = 4
+    private var running = false
     private var tracker = MuteTracker()
     private var trackerCall = 0
     /// Read on the mute queue only: readings with labels but no known mute button, before any known state.
@@ -68,6 +77,9 @@ public final class DetectionService: @unchecked Sendable {
     /// cannot be read again for `MuteTracker.unknownLimit` reports unmuted; `lastMutedSeen` then tells when it was
     /// last seen.
     public var onMuteChange: (Bool) -> Void = { _ in }
+    /// The same change, with the last reading that saw "muted" as it was at the change: the end of a mute span
+    /// when "muted" turned unknown. Called just before `onMuteChange`.
+    public var onMuteChangeAt: (_ muted: Bool, _ lastMutedSeen: Date?) -> Void = { _, _ in }
     /// Called once per mic session when an app seems to be in a call that Mossad cannot confirm, so nothing records.
     public var onUnconfirmed: (UnconfirmedCall) -> Void = { _ in }
 
@@ -98,19 +110,31 @@ public final class DetectionService: @unchecked Sendable {
         timer.setEventHandler { [weak self] in self?.tick(at: Date()) }
         timer.resume()
         self.timer = timer
-        let muteTimer = DispatchSource.makeTimerSource(queue: muteQueue)
-        muteTimer.schedule(deadline: .now() + 1, repeating: MuteTracker.mutedCheckInterval, leeway: .milliseconds(100))
-        muteTimer.setEventHandler { [weak self] in self?.checkMute(at: Date()) }
-        muteTimer.resume()
-        self.muteTimer = muteTimer
+        muteLock.withLock { running = true }
+    }
+
+    /// The mute timer runs during a call only. Runs inside the mute lock.
+    private func setMuteTimer(on: Bool) {
+        if on, running, mute != nil, muteTimer == nil {
+            let timer = DispatchSource.makeTimerSource(queue: muteQueue)
+            timer.schedule(deadline: .now() + 0.5, repeating: MuteTracker.mutedCheckInterval, leeway: .milliseconds(100))
+            timer.setEventHandler { [weak self] in self?.checkMute(at: Date()) }
+            timer.resume()
+            muteTimer = timer
+        } else if !on {
+            muteTimer?.cancel()
+            muteTimer = nil
+        }
     }
 
     /// Stops the ticks and forgets the call: a call still open when detection starts again is a new call.
     public func stop() {
         timer?.cancel()
         timer = nil
-        muteTimer?.cancel()
-        muteTimer = nil
+        muteLock.withLock {
+            running = false
+            setMuteTimer(on: false)
+        }
         queue.async { [weak self] in self?.reset() }
     }
 
@@ -122,15 +146,19 @@ public final class DetectionService: @unchecked Sendable {
         meetingID = nil
         lastProcesses = []
         activeMeetingIDs = [:]
-        startedWithCallSign = []
+        signAtStart = []
         tabCache = [:]
         suspects = []
         callSignSeen = false
+        callIsForced = false
+        lastIdleControlsRead = .distantPast
         lastLogged = [:]
         watch.reset()
         muteLock.withLock {
             muteTarget = nil
+            lastLabels = nil
             tracker = MuteTracker()
+            setMuteTimer(on: false)
         }
     }
 
@@ -142,12 +170,18 @@ public final class DetectionService: @unchecked Sendable {
             case .started(let platform, let bundleID, _):
                 currentPlatform = platform
                 meetingID = activeMeetingIDs[bundleID]
-                callSignSeen = startedWithCallSign.contains(bundleID)
+                callSignSeen = signAtStart.contains(bundleID)
+                callIsForced = false
             case .ended:
                 currentPlatform = nil
                 meetingID = nil
                 callSignSeen = false
-                muteLock.withLock { muteTarget = nil }
+                callIsForced = false
+                muteLock.withLock {
+                    muteTarget = nil
+                    lastLabels = nil
+                    setMuteTimer(on: false)
+                }
             }
             onEvent(event)
             // After the event, so a mute change never reaches the recorder before its call does.
@@ -165,7 +199,11 @@ public final class DetectionService: @unchecked Sendable {
     private func watchMute(bundleID: String, platform: Platform) {
         callNumber += 1
         let target = MuteTarget(call: callNumber, bundleID: bundleID, platform: platform, meetingID: meetingID)
-        muteLock.withLock { muteTarget = target }
+        muteLock.withLock {
+            muteTarget = target
+            lastLabels = nil
+            setMuteTimer(on: true)
+        }
     }
 
     /// Starts recording the app now, for the owner's Record on a warning. Runs on the detection queue.
@@ -185,6 +223,7 @@ public final class DetectionService: @unchecked Sendable {
         currentPlatform = platform
         meetingID = nil
         callSignSeen = false
+        callIsForced = true
         onEvent(event)
         watchMute(bundleID: bundleID, platform: platform)
     }
@@ -200,13 +239,15 @@ public final class DetectionService: @unchecked Sendable {
         let processes = mic.processes()
         lastProcesses = processes
         activeMeetingIDs = [:]
-        startedWithCallSign = []
+        signAtStart = []
         var micByApp: [String: Bool] = [:]
+        var outputByApp: [String: Bool] = [:]
         var order: [String] = []
         for p in processes {
             guard let group = Self.groupID(for: p.bundleID) else { continue }
             if micByApp[group] == nil { order.append(group) }
             micByApp[group] = (micByApp[group] ?? false) || p.isRunningInput
+            outputByApp[group] = (outputByApp[group] ?? false) || p.isRunningOutput
         }
 
         let current = detector.currentBundleID
@@ -221,13 +262,16 @@ public final class DetectionService: @unchecked Sendable {
         if let current, !order.contains(current), windows.isRunning(bundleID: current) {
             order.append(current)
         }
-        // The Zoom app's meeting window alone is a call, also while Zoom has released the mic (the owner is muted).
-        let zoom = MeetingMatcher.zoomBundleID
-        if !order.contains(zoom), windows.isRunning(bundleID: zoom) { order.append(zoom) }
         let candidates = order.compactMap { group -> MeetingCandidate? in
             let micActive = micByApp[group] ?? false
-            guard micActive || group == current || group == zoom else { return nil }
-            return candidate(group: group, micActive: micActive, isCurrent: group == current)
+            let output = outputByApp[group] ?? false
+            // The Zoom and Teams apps release the mic while the owner is muted, so their meeting sign with the
+            // call's sound is a call too. An app with no mic and no sound is not asked anything.
+            let canStartWithoutMic = output && (group == MeetingMatcher.zoomBundleID || group == MeetingMatcher.teamsBundleID)
+            guard micActive || group == current || canStartWithoutMic else { return nil }
+            var c = candidate(group: group, micActive: micActive, outputActive: output, isCurrent: group == current)
+            c?.outputActive = output
+            return c
         }
         if current != nil, let c = candidates.first(where: { $0.bundleID == current }) {
             logChange("tick", "tick \(c.bundleID) mic=\(c.micActive) present=\(String(describing: c.meetingPresent))")
@@ -235,7 +279,7 @@ public final class DetectionService: @unchecked Sendable {
         return DetectionSnapshot(time: time, candidates: candidates)
     }
 
-    private func candidate(group: String, micActive: Bool, isCurrent: Bool) -> MeetingCandidate? {
+    private func candidate(group: String, micActive: Bool, outputActive: Bool, isCurrent: Bool) -> MeetingCandidate? {
         switch MeetingMatcher.appKind(bundleID: group) {
         case .zoomApp:
             let titles = windows.windowTitles(bundleID: group)
@@ -260,8 +304,8 @@ public final class DetectionService: @unchecked Sendable {
             // During the call, its mute button ("Mute mic", "Unmute mic") is there for the whole meeting and gone
             // once you leave. Gone counts only after the controls were seen in this call (so a Teams in another
             // language, whose labels never match, stays unknown) and with the mic released too.
-            if isCurrent, let labels = mute?.labels(bundleID: group, platform: .teams, meetingID: nil) {
-                let controls = labels.contains { let l = $0.lowercased(); return l.hasPrefix("mute") || l.hasPrefix("unmute") }
+            if isCurrent, let labels = teamsLabels(group) {
+                let controls = Self.teamsControls(in: labels)
                 if controls {
                     present = true
                     sure = true
@@ -270,6 +314,15 @@ public final class DetectionService: @unchecked Sendable {
                     present = false
                 }
                 logChange("teams-controls", "teams controls: \(controls)")
+            } else if !isCurrent, !micActive, outputActive, tickTime.timeIntervalSince(lastIdleControlsRead) >= Self.idleControlsInterval {
+                // Joined muted: Teams holds no mic, but it plays the call and shows the controls. A slow read, so a
+                // Teams that only plays a sound costs one walk each 10 s.
+                lastIdleControlsRead = tickTime
+                if let labels = mute?.labels(bundleID: group, platform: .teams, meetingID: nil), Self.teamsControls(in: labels) {
+                    present = true
+                    sure = true
+                    signAtStart.insert(group)
+                }
             }
             return MeetingCandidate(platform: .teams, bundleID: group, micActive: micActive, meetingPresent: present, presenceIsSure: sure)
         case .browser:
@@ -310,12 +363,7 @@ public final class DetectionService: @unchecked Sendable {
         }
         if isCurrent { logChange("tabs", "browser tabs: \(list.filter { MeetingMatcher.platform(forTabURL: $0.url) != nil }.map(\.title))") }
         if let platform = isCurrent ? currentPlatform : nil {
-            var present = meetingTabs.contains { $0.0 == platform }
-            // Every Teams page counts as a Teams tab, so the tab alone cannot show that a call ended. Once a tab
-            // titled as a call was seen, its absence ends the call; otherwise the old rule (any Teams tab) holds.
-            if platform == .teams {
-                if list.contains(where: MeetingMatcher.teamsTabIsMeeting) { callSignSeen = true } else if callSignSeen { present = false }
-            }
+            let present = meetingTabs.contains { $0.0 == platform }
             // Only a list that shows the call is used again from the cache: a "gone" answer is read again at once,
             // so one wrong answer cannot count for several ticks.
             if !present { tabCache[group] = nil }
@@ -330,7 +378,6 @@ public final class DetectionService: @unchecked Sendable {
             return nil
         }
         activeMeetingIDs[group] = MeetingMatcher.meetingID(forTabURL: first.1.url)
-        if MeetingMatcher.teamsTabIsMeeting(first.1) { startedWithCallSign.insert(group) }
         return MeetingCandidate(platform: first.0, bundleID: group, micActive: micActive, meetingPresent: true)
     }
 
@@ -352,10 +399,14 @@ public final class DetectionService: @unchecked Sendable {
         guard let target, muteLock.withLock({ tracker.isDue(at: time) }) else { return }
         let labels = mute.labels(bundleID: target.bundleID, platform: target.platform, meetingID: target.meetingID)
         let state = labels.flatMap { MuteState.from(labels: $0, platform: target.platform) }
+        var seen: Date?
         let change: Bool? = muteLock.withLock {
             // The call ended or changed during the read: its answer belongs to no call.
             guard muteTarget?.call == target.call else { return nil }
-            return tracker.record(state, at: time)
+            lastLabels = (target.call, time, labels)
+            let change = tracker.record(state, at: time)
+            seen = tracker.lastMutedSeen
+            return change
         }
         if let labels, state == nil, muteLock.withLock({ tracker.muted == nil }) {
             unknownLabelReads += 1
@@ -367,7 +418,23 @@ public final class DetectionService: @unchecked Sendable {
         }
         guard let change else { return }
         if state == nil { Log.info("The mute state could not be read for \(Int(MuteTracker.unknownLimit)) s; recording the mic as unmuted") }
+        onMuteChangeAt(change, seen)
         onMuteChange(change)
+    }
+
+    /// The Teams app's labels for the current call: the mute check's reading when it is fresh, so the tick does
+    /// not walk the app a second time; a read of its own otherwise.
+    private func teamsLabels(_ group: String) -> [String]? {
+        let recent = muteLock.withLock { () -> (call: Int, time: Date, labels: [String]?)? in
+            guard let last = lastLabels, last.call == muteTarget?.call else { return nil }
+            return last
+        }
+        if let recent, abs(tickTime.timeIntervalSince(recent.time)) < Self.labelsFreshFor { return recent.labels }
+        return mute?.labels(bundleID: group, platform: .teams, meetingID: nil)
+    }
+
+    static func teamsControls(in labels: [String]) -> Bool {
+        labels.contains { let l = $0.lowercased(); return l.hasPrefix("mute") || l.hasPrefix("unmute") }
     }
 
     private func readTabs(_ group: String, isCurrent: Bool) -> [BrowserTab]? {

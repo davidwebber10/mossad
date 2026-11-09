@@ -297,14 +297,15 @@ final class AppController: ObservableObject {
                 // Read the call's audio processes on the detection queue, where they were just computed.
                 let ids = detection.audioProcessIDs
                 let meetingID = detection.meetingID
+                let forced = detection.callIsForced
                 guard let self else { return }
                 // Before anything records or streams: a meeting the owner marked stays off the record, for the whole
-                // call session (a late end, a mic gap, Off then On, a restart). At launch the calendar comes a moment
+                // call session (a late end, a mic gap, Off then On, a restart); the owner's Record wins. At launch the calendar comes a moment
                 // after detection, so the first call waits for it.
                 switch event {
                 case .started(let platform, let bundleID, let at):
                     self.noRecordGate.waitForCalendar(timeout: 3)
-                    if self.noRecordGate.blocksStart(platform: platform, bundleID: bundleID, meetingID: meetingID, at: at) {
+                    if self.noRecordGate.blocksStart(platform: platform, bundleID: bundleID, meetingID: meetingID, at: at, forced: forced) {
                         Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
                         return
                     }
@@ -328,7 +329,11 @@ final class AppController: ObservableObject {
                 // A call that stays off the record has no recorder and no menu state to follow.
                 if self?.noRecordGate.isBlockingCall == true { return }
                 CaptureQueue.queue.async { recorder.setMuted(muted) }
-                Task { @MainActor in self?.isMuted = muted }
+                Task { @MainActor in
+                    // A change that arrives after the end of its call must not leave the menu on "muted".
+                    guard let self, self.isRecording else { return }
+                    self.isMuted = muted
+                }
             }
             detection.onCallProcesses = { @Sendable [weak self] ids in
                 self?.noRecordGate.seen(at: Date())
@@ -1194,6 +1199,7 @@ final class AppController: ObservableObject {
             isMuted = false
             startLive(reset: true)
         case .ended:
+            failedStarts.removeAll()
             updater.callEnded()
             status = .idle
             isPaused = false

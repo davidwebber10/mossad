@@ -69,19 +69,46 @@ final class CallDetectorTests: XCTestCase {
         XCTAssertNil(d.process(snap(0, [zoom(mic: false, present: true)])))
     }
 
-    func sureZoom(mic: Bool, present: Bool?) -> MeetingCandidate {
-        MeetingCandidate(platform: .zoom, bundleID: "us.zoom.xos", micActive: mic, meetingPresent: present, presenceIsSure: true)
+    func sureZoom(mic: Bool, present: Bool?, output: Bool = true) -> MeetingCandidate {
+        MeetingCandidate(platform: .zoom, bundleID: "us.zoom.xos", micActive: mic, meetingPresent: present, presenceIsSure: true,
+                         outputActive: output)
     }
 
-    /// The owner joins a Zoom meeting muted, and Zoom does not open the mic: the meeting window alone starts it.
-    func testASurePresenceStartsACallWithoutTheMic() {
+    /// The owner joins a Zoom meeting muted, and Zoom does not open the mic: the meeting window and the sound of
+    /// the call start it.
+    func testASurePresenceWithSoundStartsACallWithoutTheMic() {
         var d = CallDetector()
         XCTAssertEqual(d.process(snap(0, [sureZoom(mic: false, present: true)])), .started(platform: .zoom, bundleID: "us.zoom.xos", at: t0))
     }
 
+    /// A waiting room, or a window left open, has the title of a meeting but no sound: it must not record the room.
+    func testAWindowAloneDoesNotStartACall() {
+        var d = CallDetector()
+        for s in stride(from: 0.0, through: 600, by: 2) {
+            XCTAssertNil(d.process(snap(s, [sureZoom(mic: false, present: true, output: false)])))
+        }
+        // Sound with no meeting sign (a ringtone) does not start one either.
+        XCTAssertNil(d.process(snap(602, [MeetingCandidate(platform: .zoom, bundleID: "us.zoom.xos", micActive: false, meetingPresent: nil, outputActive: true)])))
+    }
+
+    /// The meeting window stays after the call (a dialog nobody closes): with no mic and no sound for 3 minutes
+    /// the call ends, and the quiet part is trimmed.
+    func testAWindowThatStaysWithNoMicAndNoSoundEndsAfterThreeMinutes() {
+        var d = CallDetector()
+        XCTAssertNotNil(d.process(snap(0, [sureZoom(mic: false, present: true)])))
+        for s in stride(from: 2.0, through: 100, by: 2) { XCTAssertNil(d.process(snap(s, [sureZoom(mic: false, present: true)]))) }
+        for s in stride(from: 102.0, to: 280, by: 2) {
+            XCTAssertNil(d.process(snap(s, [sureZoom(mic: false, present: true, output: false)])), "ended at \(s)")
+        }
+        XCTAssertEqual(d.process(snap(280, [sureZoom(mic: false, present: true, output: false)])),
+                       .ended(at: t0.addingTimeInterval(280), trimTo: t0.addingTimeInterval(100)))
+        // The window is still there, with no sound: no new call.
+        XCTAssertNil(d.process(snap(282, [sureZoom(mic: false, present: true, output: false)])))
+    }
+
     /// Zoom and Teams release the mic while the owner is muted. With the meeting window still open, the call
     /// once ended at 180 s and did not start again until the owner unmuted.
-    func testAMutedZoomCallWithItsWindowOpenNeverEndsByTheMicRule() {
+    func testAMutedZoomCallWithItsWindowOpenAndSoundNeverEndsByTheMicRule() {
         var d = CallDetector()
         XCTAssertNotNil(d.process(snap(0, [sureZoom(mic: true, present: true)])))
         for s in stride(from: 2.0, through: 1200, by: 2) {
@@ -235,7 +262,8 @@ final class CallDetectorForceTests: XCTestCase {
     func testAForcedCallEndsByTheMicEvenWithASureSign() {
         var d = CallDetector()
         _ = d.force(platform: .zoom, bundleID: "us.zoom.xos", at: t0)
-        let sure = MeetingCandidate(platform: .zoom, bundleID: "us.zoom.xos", micActive: false, meetingPresent: true, presenceIsSure: true)
+        let sure = MeetingCandidate(platform: .zoom, bundleID: "us.zoom.xos", micActive: false, meetingPresent: true, presenceIsSure: true,
+                                    outputActive: true)
         XCTAssertNotNil(d.process(DetectionSnapshot(time: t0.addingTimeInterval(180), candidates: [sure])))
     }
 
