@@ -1,45 +1,85 @@
 import AVFoundation
 import MossadCore
 import SwiftUI
+import UIKit
 
-/// Records a meeting in the room through the phone's mic. The file stays on the phone until iCloud has it.
+/// Records a meeting in the room through the phone's mic. The store owns it, so a recording outlives its screen.
+/// `RoomRecording` decides; this class does what it says with AVFoundation. The audio goes to CAF parts that stay
+/// readable if the app stops, and the outbox has the recording from its first second.
+@Observable
 @MainActor
-final class RoomRecorder: ObservableObject {
+final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
     enum State { case idle, recording, paused }
 
-    @Published private(set) var state = State.idle
-    @Published private(set) var elapsed: TimeInterval = 0
+    private(set) var rules = RoomRecording()
     /// The last second of levels, 0 to 1, for the meter.
-    @Published private(set) var levels: [Float] = Array(repeating: 0, count: 24)
-    @Published var error: FriendlyError? = PhoneStore.hook("MOSSAD_ROOM_ERROR").flatMap(ErrorPreview.sample)
+    private(set) var levels: [Float] = Array(repeating: 0, count: 24)
+    var error: FriendlyError? = PhoneStore.hook("MOSSAD_ROOM_ERROR").flatMap(ErrorPreview.sample)
+    /// The meeting's name as the owner types it; here, so it outlives the screen.
+    var title = ""
+    /// The recording now, while there is one.
+    private(set) var id: String?
 
-    private var recorder: AVAudioRecorder?
-    private var started = Date()
-    private var id = ""
-    private var timer: Timer?
-    /// The pause came from the system, not the owner, so its end may resume the recording.
-    private var pausedByInterruption = false
+    var state: State {
+        switch rules.phase {
+        case .recording: .recording
+        case .paused: .paused
+        case .idle, .stopped: .idle
+        }
+    }
 
-    func start(into dir: URL) async {
+    /// The app's own count of recorded seconds, not the recorder's `currentTime`, which reads 0 once it stopped.
+    var elapsed: TimeInterval { rules.elapsed }
+
+    @ObservationIgnored private var recorder: AVAudioRecorder?
+    @ObservationIgnored private var started = Date()
+    @ObservationIgnored private var dir = URL(fileURLWithPath: NSTemporaryDirectory())
+    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    /// The last reason the system gave for a failed start or resume, for the error card.
+    @ObservationIgnored private var lastFailure: Error?
+
+    struct Stopped {
+        let id: String
+        let start: Date
+        /// The clock time of the stop, so pauses count toward the meeting's end.
+        let end: Date
+        let counted: TimeInterval
+        let title: String?
+    }
+
+    /// Starts a recording and returns it, or nil with the reason in `error`.
+    func start(into dir: URL) async -> PhoneRecording? {
+        guard state == .idle, id == nil else { return nil }
         guard await AVAudioApplication.requestRecordPermission() else {
             error = FriendlyError(kind: .microphoneDenied, context: .recording)
-            return
+            return nil
         }
         do {
             try Self.prepareSession()
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            started = Date()
-            id = CallID.make(started)
-            let r = try Self.makeRecorder(url: dir.appendingPathComponent("\(id).m4a"))
-            recorder = r
-            state = .recording
-            NotificationCenter.default.addObserver(self, selector: #selector(interrupted(_:)), name: AVAudioSession.interruptionNotification, object: nil)
-            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
+            let now = Date()
+            let id = CallID.make(now)
+            recorder = try makeRecorder(url: RoomAudio.part(id, 1, in: dir))
+            self.dir = dir
+            self.id = id
+            started = now
+            error = nil
+            rules = RoomRecording()
+            rules.start(at: now)
+            observe()
+            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.tick() }
+            }
+            RecordingAlerts.requestPermission()
+            return PhoneRecording(id: id, start: now, end: now, title: nil)
         } catch {
             Log.error("Room recording could not start: \(error)")
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             // The recorder's own wrapper names the step; the error inside it says what the system refused.
             let inner = (error as? RecorderError)?.underlying ?? error
             self.error = FriendlyError(inner, context: .recording, technical: FriendlyError.clean((error as? LocalizedError)?.errorDescription ?? "\(error)"))
+            return nil
         }
     }
 
@@ -52,128 +92,208 @@ final class RoomRecorder: ObservableObject {
     }
 
     /// The room recording's audio session. A setup the system refuses (OSStatus -50 on one iPhone) falls back to the
-    /// next, so recording starts whenever the microphone can record at all.
+    /// next, so recording starts whenever the microphone can record at all. No Bluetooth: with AirPods connected the
+    /// room would be recorded from the owner's ear, at telephone quality.
     private static func prepareSession() throws {
         let session = AVAudioSession.sharedInstance()
         let setups: [(AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)] = [
-            (.record, .spokenAudio, [.allowBluetoothHFP]),
-            (.record, .default, [.allowBluetoothHFP]),
-            (.playAndRecord, .default, [.allowBluetoothHFP, .defaultToSpeaker]),
+            (.record, .spokenAudio, []),
             (.record, .default, []),
+            (.playAndRecord, .default, [.defaultToSpeaker]),
         ]
         var last: Error?
         for (category, mode, options) in setups {
             do {
                 try session.setCategory(category, mode: mode, options: options)
                 try session.setActive(true)
+                preferBuiltInMic()
                 return
             } catch { last = error }
         }
         throw RecorderError(step: "The audio session", underlying: last)
     }
 
-    /// AAC at 16 kHz first (what the Mac transcribes), then the microphone's own rate; the Mac converts any rate.
-    private static func makeRecorder(url: URL) throws -> AVAudioRecorder {
+    /// The iPhone's own microphone hears the room; a wired or USB headset would hear only its wearer.
+    private static func preferBuiltInMic() {
+        let session = AVAudioSession.sharedInstance()
+        if let mic = session.availableInputs?.first(where: { $0.portType == .builtInMic }), session.preferredInput?.uid != mic.uid {
+            do { try session.setPreferredInput(mic) } catch { Log.error("Room recording could not choose the built-in microphone: \(error)") }
+        }
+        Log.info("Room recording input: \(session.currentRoute.inputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", "))")
+    }
+
+    /// 16-bit PCM at 16 kHz first (what the Mac transcribes), then the microphone's own rate; the join converts.
+    private func makeRecorder(url: URL) throws -> AVAudioRecorder {
         let rate = AVAudioSession.sharedInstance().sampleRate
-        let choices: [[String: Any]] = [
-            PhoneRecording.settings,
-            [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate > 0 ? rate : 44_100, AVNumberOfChannelsKey: 1],
-            [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44_100, AVNumberOfChannelsKey: 1],
-        ]
+        let choices = [RoomAudio.recordingSettings(), RoomAudio.recordingSettings(sampleRate: rate > 0 ? rate : 44_100),
+                       RoomAudio.recordingSettings(sampleRate: 44_100)]
         var last: Error?
         for settings in choices {
             do {
                 let r = try AVAudioRecorder(url: url, settings: settings)
                 r.isMeteringEnabled = true
+                r.delegate = self
                 if r.record() { return r }
+                r.delegate = nil
                 r.deleteRecording()
             } catch { last = error }
         }
         throw RecorderError(step: "The recorder", underlying: last)
     }
 
-    private func tick() {
-        guard let recorder else { return }
-        elapsed = recorder.currentTime
-        recorder.updateMeters()
-        let db = recorder.averagePower(forChannel: 0)
-        levels = Array(levels.dropFirst()) + [state == .recording ? max(0, min(1, (db + 50) / 50)) : 0]
+    private func observe() {
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+                guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+                let options = (note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt).map(AVAudioSession.InterruptionOptions.init) ?? []
+                let began = type == .began, resume = options.contains(.shouldResume)
+                MainActor.assumeIsolated { self?.interruption(began: began, shouldResume: resume) }
+            },
+            // The audio server restarted: every recorder and session setup is gone.
+            center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    Log.error("Room recording: the audio server restarted")
+                    self?.recorderDied()
+                }
+            },
+            center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { Self.preferBuiltInMic() }
+            },
+        ]
     }
 
-    /// A phone call pauses the recording; it does not end it. When the call ends the recording resumes, or the
-    /// owner reads that it is still paused.
-    @objc private func interrupted(_ note: Notification) {
-        guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
-        let options = (note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt).map(AVAudioSession.InterruptionOptions.init) ?? []
-        Task { @MainActor in self.interruption(began: type == .began, shouldResume: options.contains(.shouldResume)) }
+    /// Compares what the recorder does with what the screen says, ten times a second.
+    private func tick() {
+        guard id != nil else { return }
+        run(rules.tick(isRecording: recorder?.isRecording ?? false, at: Date()))
+        var level: Float = 0
+        if state == .recording, let recorder {
+            recorder.updateMeters()
+            level = max(0, min(1, (recorder.averagePower(forChannel: 0) + 50) / 50))
+        }
+        levels = Array(levels.dropFirst()) + [level]
     }
 
     private func interruption(began: Bool, shouldResume: Bool) {
-        switch RoomInterruption.action(began: began, shouldResume: shouldResume, recording: state == .recording,
-                                       pausedByInterruption: pausedByInterruption) {
-        case .pause:
-            pause()
-            pausedByInterruption = true
-        case .resume: resume()
-        case .tellOwner: error = FriendlyError(kind: .interrupted, context: .recording)
-        case .none: break
+        if began { lastFailure = nil }
+        run(rules.interruption(began: began, shouldResume: shouldResume))
+    }
+
+    private func recorderDied() {
+        guard id != nil else { return }
+        recorder?.delegate = nil
+        recorder = nil
+        run(rules.recorderDied())
+    }
+
+    nonisolated func audioRecorderDidFinishRecording(_ r: AVAudioRecorder, successfully flag: Bool) {
+        let finished = ObjectIdentifier(r)
+        Task { @MainActor in
+            // Only a finish of its own: `stop()` lets go of the delegate first.
+            guard let recorder = self.recorder, ObjectIdentifier(recorder) == finished else { return }
+            Log.error("Room recording: the recorder finished by itself (\(flag ? "cleanly" : "with an error"))")
+            self.recorderDied()
         }
     }
 
-    func pause() {
-        guard state == .recording else { return }
-        recorder?.pause()
-        pausedByInterruption = false
-        state = .paused
+    nonisolated func audioRecorderEncodeErrorDidOccur(_ r: AVAudioRecorder, error: Error?) {
+        let failed = ObjectIdentifier(r), text = error.map { "\($0)" } ?? "no detail"
+        Task { @MainActor in
+            guard let recorder = self.recorder, ObjectIdentifier(recorder) == failed else { return }
+            Log.error("Room recording: the encoder failed: \(text)")
+            self.recorderDied()
+        }
     }
 
-    /// Stays paused, with the reason on screen, unless the recorder really records again: a screen that says
-    /// "Recording" while nothing is recorded loses the rest of the meeting.
-    func resume() {
-        guard state == .paused, let recorder else { return }
-        var failure: Error?
-        var recording = false
+    func pause() { run(rules.ownerPause()) }
+
+    func resume() { run(rules.ownerResume()) }
+
+    private func run(_ actions: [RoomRecording.Action]) {
+        for action in actions {
+            switch action {
+            case .pauseRecorder: recorder?.pause()
+            case .resumeRecorder: run(rules.resumed(ok: recordAgain(), newSegment: false))
+            case .newSegment: run(rules.resumed(ok: startNewSegment(), newSegment: true))
+            case .notify(let alert): RecordingAlerts.notify(alert)
+            case .schedule(let alert, let after): RecordingAlerts.schedule(alert, after: after)
+            case .cancelAlerts:
+                RecordingAlerts.cancel()
+                error = nil
+            case .tellOwner(let alert): tellOwner(alert)
+            }
+        }
+    }
+
+    /// Records again into the current part; the session may need its setup again after another app had the mic.
+    private func recordAgain() -> Bool {
+        guard let recorder else { return false }
         do {
             try AVAudioSession.sharedInstance().setActive(true)
-            recording = recorder.record()
-        } catch { failure = error }
-        if !recording {
-            // The session may need its setup again after another app had the microphone.
-            do {
-                try Self.prepareSession()
-                recording = recorder.record()
-            } catch { failure = (error as? RecorderError)?.underlying ?? error }
-        }
-        guard recording else {
-            Log.error("Room recording could not resume: \(failure.map { "\($0)" } ?? "the recorder did not start")")
-            let busy = failure.map { FriendlyError($0, context: .recording).kind == .microphoneBusy } ?? false
-            error = FriendlyError(kind: busy ? .microphoneBusy : .resumeFailed, context: .recording,
-                                  technical: failure.map { FriendlyError.clean("\($0)") } ?? "The recorder did not start.")
-            return
-        }
-        pausedByInterruption = false
-        error = nil
-        state = .recording
+            if recorder.record() { return true }
+        } catch { lastFailure = error }
+        do {
+            try Self.prepareSession()
+            if recorder.record() { return true }
+        } catch { lastFailure = (error as? RecorderError)?.underlying ?? error }
+        return false
     }
 
-    /// Stops and returns the recording to send, or nil when it was too short to keep.
-    func stop(title: String) -> (PhoneRecording, URL)? {
-        guard let recorder else { return nil }
-        let length = recorder.currentTime, url = recorder.url
-        recorder.stop()
-        timer?.invalidate()
-        NotificationCenter.default.removeObserver(self)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        self.recorder = nil
-        state = .idle
-        elapsed = 0
-        guard length >= ProcessingQueue.minimumCallDuration else {
-            try? FileManager.default.removeItem(at: url)
-            return nil
+    /// A new part, with the session set up again: what the old recorder wrote stays in its own part.
+    private func startNewSegment() -> Bool {
+        guard let id else { return false }
+        recorder?.delegate = nil
+        recorder?.stop()
+        recorder = nil
+        do {
+            try Self.prepareSession()
+            recorder = try makeRecorder(url: RoomAudio.part(id, rules.segments + 1, in: dir))
+            Log.info("Room recording continues in part \(rules.segments + 1)")
+            return true
+        } catch {
+            lastFailure = (error as? RecorderError)?.underlying ?? error
+            Log.error("Room recording could not start a new part: \(error)")
+            return false
         }
+    }
+
+    private func tellOwner(_ alert: RoomRecording.Alert) {
+        let failure = lastFailure
+        let kind: FriendlyError.Kind
+        switch alert {
+        case .paused:
+            let busy = failure.map { FriendlyError($0, context: .recording).kind == .microphoneBusy } ?? false
+            kind = busy ? .microphoneBusy : failure == nil ? .interrupted : .resumeFailed
+        case .stopped: kind = .resumeFailed
+        }
+        error = FriendlyError(kind: kind, context: .recording, technical: failure.map { FriendlyError.clean("\($0)") } ?? "")
+        // The pause came from the system, so a VoiceOver user hears it as well as sees it.
+        UIAccessibility.post(notification: .announcement, argument: alert == .stopped ? "Recording stopped" : "Recording is paused")
+    }
+
+    /// Stops the recording and lets go of the microphone. The store decides what to keep, from the files on disk.
+    func stop() -> Stopped? {
+        guard let id else { return nil }
+        recorder?.delegate = nil
+        recorder?.stop()
+        recorder = nil
+        timer?.invalidate()
+        timer = nil
+        for o in observers { NotificationCenter.default.removeObserver(o) }
+        observers = []
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        RecordingAlerts.cancel()
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (PhoneRecording(id: id, start: started, end: started.addingTimeInterval(length), title: t.isEmpty ? nil : t), url)
+        let stopped = Stopped(id: id, start: started, end: Date(), counted: rules.elapsed, title: t.isEmpty ? nil : t)
+        rules.stop()
+        self.id = nil
+        title = ""
+        error = nil
+        lastFailure = nil
+        levels = Array(repeating: 0, count: levels.count)
+        return stopped
     }
 }
 
@@ -182,15 +302,16 @@ final class RoomRecorder: ObservableObject {
 /// stays here until it has it.
 struct RecordingView: View {
     @State private var confirmShortStop = false
-    @EnvironmentObject var store: PhoneStore
-    @StateObject private var recorder = RoomRecorder()
+    @Environment(PhoneStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var title = ""
     @FocusState private var naming: Bool
     @ScaledMetric(relativeTo: .largeTitle) private var timerSize: CGFloat = 52
 
+    private var recorder: RoomRecorder { store.recorder }
+
     var body: some View {
+        @Bindable var bound = store.recorder
         NavigationStack {
             ScrollView {
                 VStack(spacing: Space.l) {
@@ -209,7 +330,7 @@ struct RecordingView: View {
                     controls.padding(.vertical, Space.s)
                     VStack(alignment: .leading, spacing: Space.s) {
                         PhoneLabel("Meeting name")
-                        TextField("What is this meeting? (optional)", text: $title)
+                        TextField("What is this meeting? (optional)", text: $bound.title)
                             .textRole(.body)
                             .focused($naming)
                             .padding(.horizontal, Space.m).padding(.vertical, 11)
@@ -218,7 +339,7 @@ struct RecordingView: View {
                     if let error = recorder.error {
                         ErrorCard(error: error, retryTitle: recorder.state == .paused ? "Resume" : "Try again", retry: !error.canRetry ? nil : recorder.state == .idle ? {
                             recorder.error = nil
-                            Task { await recorder.start(into: store.recordingsFolder) }
+                            Task { await store.startRecording() }
                         } : recorder.state == .paused ? { recorder.resume() } : nil)
                     }
                     Text("Mossad on your Mac writes the notes: the transcript, who said what, and the summary.")
@@ -240,7 +361,7 @@ struct RecordingView: View {
             }
         }
         .interactiveDismissDisabled(recorder.state != .idle)
-        .task { if recorder.state == .idle, PhoneStore.hook("MOSSAD_ROOM") == nil { await recorder.start(into: store.recordingsFolder) } }
+        .task { if recorder.state == .idle, PhoneStore.hook("MOSSAD_ROOM") == nil { await store.startRecording() } }
     }
 
     private var status: some View {
@@ -293,7 +414,7 @@ struct RecordingView: View {
                 if recorder.elapsed < ProcessingQueue.minimumCallDuration, PhoneStore.hook("MOSSAD_ROOM") == nil {
                     confirmShortStop = true
                 } else {
-                    finish()
+                    finish(discard: false)
                 }
             } label: {
                 RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.white)
@@ -312,14 +433,14 @@ struct RecordingView: View {
         }
         .confirmationDialog("This recording is under a minute", isPresented: $confirmShortStop, titleVisibility: .visible) {
             Button("Keep recording", role: .cancel) {}
-            Button("Discard recording", role: .destructive) { finish() }
+            Button("Discard recording", role: .destructive) { finish(discard: true) }
         } message: {
             Text("Mossad writes notes for meetings of a minute or more. Keep recording, or discard this one.")
         }
     }
 
-    private func finish() {
-        if let (rec, url) = recorder.stop(title: title) { store.send(rec, audio: url) }
+    private func finish(discard: Bool) {
+        store.stopRecording(discard: discard)
         dismiss()
     }
 }

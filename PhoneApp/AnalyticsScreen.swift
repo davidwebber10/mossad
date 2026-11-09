@@ -5,7 +5,7 @@ import SwiftUI
 /// The Mac's Analytics story on the phone: how much time, where it went, with whom, how you communicated,
 /// and what came out of it, for a period against the one before. People, the list and the profiles, opens from here.
 struct AnalyticsScreen: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @AppStorage("analyticsPreset") private var presetRaw = PeriodChoice.Preset.last30Days.rawValue
     @AppStorage("analyticsStart") private var startStamp = Date().addingTimeInterval(-13 * 86_400).timeIntervalSince1970
     @AppStorage("analyticsEnd") private var endStamp = Date().timeIntervalSince1970
@@ -20,6 +20,7 @@ struct AnalyticsScreen: View {
     }
 
     var body: some View {
+        @Bindable var store = store
         NavigationStack(path: $store.analyticsPath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -44,9 +45,9 @@ struct AnalyticsScreen: View {
             .sheet(isPresented: $customizing) { CustomRangeSheet(start: choice.start, end: choice.end, apply: applyCustom) }
             .navigationDestination(for: AnalyticsRoute.self) { _ in PeopleScreen(path: $store.analyticsPath) }
             .navigationDestination(for: PersonLink.self) { link in PersonView(name: link.name, stats: stats[link.name] ?? PersonStats()) }
-            .navigationDestination(for: String.self) { id in if let r = store.meeting(id) { MeetingView(record: r) } }
+            .navigationDestination(for: String.self) { id in MeetingPage(id: id) }
             .refreshable { await store.sync() }
-            .task(id: "\(presetRaw)-\(startStamp)-\(endStamp)-\(store.meetings.count)-\(store.coachVersion)") { await load() }
+            .task(id: "\(presetRaw)-\(startStamp)-\(endStamp)-\(store.meetingsVersion)-\(store.coachVersion)") { await load() }
         }
     }
 

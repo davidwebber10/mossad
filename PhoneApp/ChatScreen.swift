@@ -1,9 +1,10 @@
 import MossadCore
 import SwiftUI
+import Synchronization
 
 /// Chat over every meeting, the coach's reviews, and its memory of you. It is the coach on the phone too.
 struct ChatScreen: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @State private var chatID: UUID?
     @State private var draft = Chat(title: "New chat")
     @State private var question = ""
@@ -121,9 +122,9 @@ struct ChatScreen: View {
         let sink = StepSink { step in Task { @MainActor in steps.append(step) } }
         Task {
             do {
-                let answer = try await store.answer(q, history: history, about: chat.callID, onStep: sink.add)
+                let answer = try await store.answer(q, history: history, about: chat.callID, onStep: { sink.add($0) })
                 var latest = store.chats.first { $0.id == chat.id } ?? chat
-                latest.messages.append(ChatMessage(role: .assistant, text: answer, steps: steps))
+                latest.messages.append(ChatMessage(role: .assistant, text: answer, steps: sink.all))
                 latest.updated = Date()
                 store.save(latest)
                 store.finish(latest.id)
@@ -147,14 +148,25 @@ struct ChatScreen: View {
     }
 }
 
+/// Collects an answer's steps as they come, and shows each one. The answer reads the steps from here: the screen's
+/// copy can still miss the last one when the answer returns.
 final class StepSink: Sendable {
-    let add: @Sendable (String) -> Void
-    init(_ add: @escaping @Sendable (String) -> Void) { self.add = add }
+    private let steps = Mutex<[String]>([])
+    private let show: @Sendable (String) -> Void
+
+    init(_ show: @escaping @Sendable (String) -> Void) { self.show = show }
+
+    func add(_ step: String) {
+        steps.withLock { $0.append(step) }
+        show(step)
+    }
+
+    var all: [String] { steps.withLock { $0 } }
 }
 
 /// Earlier chats from both devices, newest first.
 private struct ChatList: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Binding var selected: UUID?
     let onPick: () -> Void

@@ -38,6 +38,7 @@ struct ErrorCard: View {
 
     @State private var details = false
     @ScaledMetric(relativeTo: .headline) private var iconSize: CGFloat = ErrorLook.icon
+    @ScaledMetric(relativeTo: .caption2) private var detailSize: CGFloat = ErrorLook.detailSize
 
     private var tint: Color { error.isAboutRecording ? Palette.recording : Palette.accent }
 
@@ -62,7 +63,7 @@ struct ErrorCard: View {
             }
             if details {
                 Text(error.technical)
-                    .font(.system(size: ErrorLook.detailSize, design: .monospaced))
+                    .font(.system(size: detailSize, design: .monospaced))
                     .foregroundStyle(Palette.secondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)

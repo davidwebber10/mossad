@@ -4,7 +4,7 @@ import SwiftUI
 /// The coach's review of one meeting, as on the Mac: the scorecard, the meeting's value, delivery, the points
 /// with 👍 / 👎, and a conversation with the coach.
 struct CoachSection: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     let record: CallRecord
     let review: CoachReview
     @State private var more = false
@@ -134,7 +134,7 @@ private struct PointsCard: View {
 }
 
 private struct PointView: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     let point: CoachPoint
     let callID: String
     let feedback: CoachFeedback?
@@ -226,7 +226,7 @@ private struct PointView: View {
 
 /// "Talk to the coach" about this review. Its answers can change what it remembers about you.
 private struct CoachThread: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     let callID: String
     let thread: [ChatMessage]
     @State private var message = ""

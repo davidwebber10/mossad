@@ -8,7 +8,7 @@ struct PersonRoute: Hashable { let name: String }
 struct PeopleScreen: View {
     enum Sort: String, CaseIterable { case recent = "Most recent", mostMet = "Most met", name = "A to Z" }
 
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @State private var query = ""
     @AppStorage("peopleSort") private var sort = Sort.recent
     /// The stack it sits in, for the profile hook.
@@ -134,7 +134,7 @@ private struct PersonRow: View {
 /// One person, as the canvas sets the profile: the mark and name, the coach's read first as prose, the numbers as
 /// a row of figures, then the relationship, the meetings, and who they meet with.
 struct PersonView: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     let name: String
     let stats: PersonStats
     @State private var relation: PersonRelation?
@@ -211,7 +211,7 @@ struct PersonView: View {
             store.open(link)
             return .handled
         })
-        .task(id: store.meetings.count) {
+        .task(id: store.meetingsVersion) {
             guard name != store.owner else { return }
             let records = store.meetings, owner = store.owner, name = name, commitments = store.commitments.visible
             let reviews = Dictionary(uniqueKeysWithValues: records.filter { $0.speakerNames.values.contains(name) }.compactMap { r in store.coach(r.id).map { (r.id, $0) } })

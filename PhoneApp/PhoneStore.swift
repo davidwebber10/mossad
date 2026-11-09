@@ -1,6 +1,7 @@
 import Foundation
 import MossadCore
 import SwiftUI
+import UIKit
 
 enum PhoneTab: Hashable { case meetings, commitments, chat, analytics, search }
 
@@ -8,58 +9,70 @@ enum PhoneTab: Hashable { case meetings, commitments, chat, analytics, search }
 enum AnalyticsRoute: Hashable { case people }
 
 /// The phone's copy of the meetings: pulled from iCloud or the owner's server into the app's folder, then read with the same code
-/// the Mac uses. Chats, ratings, replies to the coach, and the coach's memory go back up.
+/// the Mac uses. Chats, ratings, replies to the coach, and the coach's memory go back up. Disk reads run off the main
+/// thread; a view redraws only for the properties it reads.
+@Observable
 @MainActor
-final class PhoneStore: ObservableObject {
-    @Published private(set) var meetings: [CallRecord] = []
-    @Published private(set) var profile = CoachProfile()
-    @Published private(set) var chats: [Chat] = []
-    @Published private(set) var commitments = CommitmentBook()
-    /// Room recordings made here that the Mac has not turned into meetings yet; `sent` once iCloud has them.
-    @Published private(set) var outbox: [Outgoing] = []
-
-    struct Outgoing: Codable, Identifiable, Equatable {
-        var recording: PhoneRecording
-        var sent = false
-        var id: String { recording.id }
-    }
+final class PhoneStore {
+    private(set) var meetings: [CallRecord] = []
+    /// The meetings by day for the list, as small rows made off the main thread when the meetings change.
+    private(set) var days: [MeetingDay] = []
+    /// The owner: the name most often on the mic track, which is the Mac owner's own.
+    private(set) var owner = ""
+    /// False until the first read of the folder, so an empty list does not say "No meetings yet" too soon.
+    private(set) var loaded = false
+    private(set) var profile = CoachProfile()
+    private(set) var chats: [Chat] = []
+    private(set) var commitments = CommitmentBook()
+    /// Room recordings made here that the Mac has not turned into meetings yet, from their first second.
+    private(set) var outbox = Outbox()
+    /// Recordings uploading now: one upload per recording at a time.
+    private(set) var uploading: Set<String> = []
     /// The coach's score per meeting, for the lists.
-    @Published private(set) var scores: [String: Int] = [:]
-    @Published private(set) var syncing = false
-    @Published private(set) var lastSync: Date?
+    private(set) var scores: [String: Int] = [:]
+    private(set) var syncing = false
+    private(set) var lastSync: Date?
     /// The sync problem to show, and why each room recording waits. A single dropped connection is retried
     /// quietly and shows only when it repeats.
-    @Published private(set) var syncStatus: SyncStatus = {
+    private(set) var syncStatus: SyncStatus = {
         var s = SyncStatus()
         s.show(PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample))
         return s
     }()
     var error: FriendlyError? { syncStatus.shown }
     /// Bumped when a coach review changes here, so open reviews read it again.
-    @Published private(set) var coachVersion = 0
-    @Published var tab = PhoneTab.meetings
-    /// The Search tab's text. The tab bar owns the field, so iOS draws Search apart from the tabs and opens it on selection.
-    @Published var searchQuery = PhoneStore.searchHook
+    private(set) var coachVersion = 0
+    /// Bumped when a read of the folder finds the meetings changed, so pages that compute from them run again.
+    private(set) var meetingsVersion = 0
+    var tab = PhoneTab.meetings
     /// The meetings open in the Meetings tab, for `mossad://call/<id>` links.
-    @Published var path: [String] = []
+    var path: [String] = []
     /// A moment to open a meeting at: the meeting page reads it once and opens the transcript there.
-    @Published var moment: Moment?
+    var moment: Moment?
+    /// A short message for a link that cannot open, such as to a meeting that is not on this iPhone yet.
+    var notice: String?
 
     /// The pages open in the Analytics tab; People lives there.
-    @Published var analyticsPath = NavigationPath()
+    var analyticsPath = NavigationPath()
     /// A task or a chat that Search asked its tab to open; the tab reads it once.
-    @Published var openTask: UUID?
-    @Published var openChat: UUID?
+    var openTask: UUID?
+    var openChat: UUID?
 
     /// Universal search over everything here, rebuilt off the main thread when the data changes.
-    @Published private(set) var searchIndex = SearchIndex()
-    @Published private(set) var searchSuggestions = SearchSuggestions.empty
+    private(set) var searchIndex = SearchIndex()
+    private(set) var searchSuggestions = SearchSuggestions.empty
     /// Bumped when the index changes, so an open search runs again.
-    @Published private(set) var searchVersion = 0
+    private(set) var searchVersion = 0
     /// Who the owner meets with, for People and the profiles Search opens.
-    @Published private(set) var personStats: [String: PersonStats] = [:]
-    private var indexed: (meetings: [CallRecord], chats: [Chat])?
-    private var indexing: Task<Void, Never>?
+    private(set) var personStats: [String: PersonStats] = [:]
+    @ObservationIgnored private var indexed: (meetings: Int, chats: [Chat])?
+    @ObservationIgnored private var indexing: Task<Void, Never>?
+
+    /// The room recorder. The store owns it, so a recording outlives its screen.
+    let recorder = RoomRecorder()
+
+    /// Questions about one meeting that are running or failed, by call id, so they outlive the meeting's sections.
+    @ObservationIgnored private var meetingChats: [String: ChatRun] = [:]
 
     struct Moment: Equatable {
         let callID: String
@@ -69,12 +82,20 @@ final class PhoneStore: ObservableObject {
 
     let paths = Paths.live
     /// Where this iPhone syncs: iCloud (the default), the owner's own server, or nowhere.
-    @Published private(set) var syncWith = SyncChoice(rawValue: UserDefaults.standard.string(forKey: "syncWith") ?? "") ?? .icloud
-    private var engine: (key: String, sync: CloudSync)?
-    private let keychain = Keychain.app
+    private(set) var syncWith = SyncChoice(rawValue: UserDefaults.standard.string(forKey: "syncWith") ?? "") ?? .icloud
+    @ObservationIgnored private var engine: (key: String, sync: CloudSync)?
+    @ObservationIgnored private let keychain = Keychain.app
     private var chatStore: ChatStore { ChatStore(directory: paths.chats) }
     /// `MOSSAD_ROOT` points the simulator at a sample folder; nothing syncs then.
     private let offline = ProcessInfo.processInfo.environment["MOSSAD_ROOT"] != nil
+    /// Every write to a file that a pull also writes (commitments, the coach's memory, chats, reviews), and the
+    /// pull itself, run one at a time, so neither saves over what the other merged.
+    @ObservationIgnored private let writes = SerialQueue()
+    @ObservationIgnored private var syncTask: (key: String, task: Task<Void, Never>)?
+    /// The first read of the outbox and the meetings; a sync and a new recording wait for it.
+    @ObservationIgnored private var launch: Task<Void, Never>?
+    @ObservationIgnored private var outboxRead: Task<Void, Never>?
+    @ObservationIgnored private var loading: Task<Void, Never>?
 
     /// A development hook for screenshots, read only with a sample folder so a real install never sees one.
     static func hook(_ name: String) -> String? {
@@ -92,7 +113,6 @@ final class PhoneStore: ObservableObject {
     }
 
     init() {
-        reload()
         // Development hooks for screenshots: `MOSSAD_OPEN=<call id>` opens a meeting, `MOSSAD_TAB` picks a tab.
         if let id = ProcessInfo.processInfo.environment["MOSSAD_OPEN"], !id.isEmpty { path = [id] }
         // `MOSSAD_MOMENT=<call id>@<seconds>` opens a meeting at a moment, as a commitment does.
@@ -110,19 +130,116 @@ final class PhoneStore: ObservableObject {
         case "search": tab = .search
         default: break
         }
-    }
-
-    /// The owner: the name most often on the mic track, which is the Mac owner's own.
-    var owner: String {
-        var counts: [String: Int] = [:]
-        for r in meetings { for (key, name) in r.speakerNames where key.hasPrefix("me:") { counts[name, default: 0] += 1 } }
-        return counts.max { $0.value < $1.value }?.key ?? ""
+        // The first frame does not wait for the disk.
+        let outboxRead = Task { await readOutbox() }
+        self.outboxRead = outboxRead
+        launch = Task {
+            await outboxRead.value
+            await load(meetings: true)
+            // Joining a long recording takes a while; a sync does not wait for it.
+            Task {
+                await recoverRecordings()
+                await sendOutbox()
+            }
+        }
     }
 
     /// The AI the Mac shares through iCloud Keychain, when the owner turned that on.
     var languageModel: (any LanguageModel)? {
         guard let shared = SharedAIKey.load(), let provider = AIProvider(rawValue: shared.provider) else { return nil }
         return provider.model(shared.model, apiKey: shared.key, usage: nil)
+    }
+
+    // MARK: Loading
+
+    private struct Snapshot: Sendable {
+        var meetings: [CallRecord]?
+        /// False when the meetings read the same as the ones on screen; compared here, off the main thread.
+        var changed = true
+        var days: [MeetingDay] = []
+        var owner = ""
+        var scores: [String: Int] = [:]
+        var profile: CoachProfile
+        var chats: [Chat]
+        var commitments: CommitmentBook
+
+        static func read(_ paths: Paths, meetings readMeetings: Bool, shown: [CallRecord]) -> Snapshot {
+            var s = Snapshot(profile: (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile(),
+                             chats: ChatStore(directory: paths.chats).all(),
+                             commitments: (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook())
+            guard readMeetings else { return s }
+            let meetings = MeetingIndex(paths: paths).all()
+            s.meetings = meetings
+            s.changed = meetings != shown
+            s.days = MeetingGroups.byDay(meetings).map { MeetingDay(date: $0.date, title: $0.title, rows: $0.records.map(MeetingRow.init)) }
+            var counts: [String: Int] = [:]
+            for r in meetings { for (key, name) in r.speakerNames where key.hasPrefix("me:") { counts[name, default: 0] += 1 } }
+            s.owner = counts.max { $0.value < $1.value }?.key ?? ""
+            s.scores = Dictionary(uniqueKeysWithValues: meetings.compactMap { r in
+                CoachReview.load(in: paths.callDirectory(r.id))?.scorecard.map { (r.id, $0.score) }
+            })
+            return s
+        }
+    }
+
+    /// Reads the folder off the main thread and shows the result. The meetings (each `call.json` with its full
+    /// transcript) are read only when asked: an edit to a task or a chat does not read them again.
+    func load(meetings readMeetings: Bool) async {
+        let previous = loading
+        let paths = paths
+        let task = Task {
+            await previous?.value
+            let shown = meetings
+            let s = await Task.detached(priority: .userInitiated) { Snapshot.read(paths, meetings: readMeetings, shown: shown) }.value
+            apply(s)
+        }
+        loading = task
+        await task.value
+    }
+
+    private func apply(_ s: Snapshot) {
+        if let m = s.meetings {
+            if s.changed {
+                meetings = m
+                meetingsVersion += 1
+            }
+            // The day titles ("Today") move with the clock, also when no meeting changed.
+            if days != s.days { days = s.days }
+            if owner != s.owner { owner = s.owner }
+            if scores != s.scores { scores = s.scores }
+            if !loaded { loaded = true }
+            settleOutbox()
+        }
+        if profile != s.profile { profile = s.profile }
+        if chats != s.chats { chats = s.chats }
+        if commitments != s.commitments { commitments = s.commitments }
+        coachVersion += 1
+        refreshSearch()
+    }
+
+    /// Builds the search index again when meetings or chats changed, and only swaps the tasks when only they did.
+    private func refreshSearch() {
+        let meetings = meetings, chats = chats, tasks = commitments.items
+        if let indexed, indexed.meetings == meetingsVersion, indexed.chats == chats {
+            searchIndex.setTasks(tasks)
+            searchVersion += 1
+            return
+        }
+        indexed = (meetingsVersion, chats)
+        let voices = paths.voices
+        indexing?.cancel()
+        indexing = Task {
+            let people = await Task.detached { VoiceLibrary(directory: voices).profiles }.value
+            let index = await SearchIndex.build(records: meetings, people: people, tasks: tasks, chats: chats)
+            let stats = await Task.detached(priority: .userInitiated) { PersonStatistics.compute(meetings) }.value
+            guard !Task.isCancelled else { return }
+            var latest = index
+            latest.setTasks(commitments.items)
+            searchIndex = latest
+            searchSuggestions = latest.suggestions()
+            personStats = stats
+            searchVersion += 1
+        }
     }
 
     // MARK: Sync
@@ -139,7 +256,8 @@ final class PhoneStore: ObservableObject {
     /// "iCloud" or "your server", for messages.
     var place: String { syncWith == .server ? "your server" : "iCloud" }
 
-    private var cloud: CloudSync? {
+    /// The store in use and its name, which the outbox keeps for each upload.
+    private var cloud: (key: String, sync: CloudSync)? {
         guard !offline else { return nil }
         let key: String
         let store: any RecordStore
@@ -151,29 +269,35 @@ final class PhoneStore: ObservableObject {
             store = ServerStore(c)
         case .off: return nil
         }
-        if let engine, engine.key == key { return engine.sync }
+        if let engine, engine.key == key { return engine }
         let sync = CloudSync(paths: paths, store: store)
         engine = (key, sync)
-        return sync
+        return engine
     }
 
     func choose(_ choice: SyncChoice) {
         guard choice != syncWith else { return }
+        use(choice)
+    }
+
+    /// Moves to a store (also to another server): the sync for the old one stops, and one for the new one starts now.
+    private func use(_ choice: SyncChoice) {
         syncWith = choice
         UserDefaults.standard.set(choice.rawValue, forKey: "syncWith")
         engine = nil
         syncStatus.show(nil)
         lastSync = nil
+        syncTask?.task.cancel()
+        syncTask = nil
+        syncing = false
         Task { await sync() }
     }
 
     /// Keeps a checked server on this iPhone and syncs with it.
     func connect(_ c: ServerConnection) {
-        try? keychain.set(c.secret, for: .serverSecret)
+        do { try keychain.set(c.secret, for: .serverSecret) } catch { Log.error("Saving the server secret failed: \(error)") }
         UserDefaults.standard.set(c.address.absoluteString, forKey: "serverAddress")
-        engine = nil
-        syncWith = .icloud
-        choose(.server)
+        use(.server)
     }
 
     func disconnectServer() {
@@ -182,70 +306,61 @@ final class PhoneStore: ObservableObject {
         choose(.icloud)
     }
 
+    /// Syncs, or waits for the sync already running for the same store, so a pull to refresh ends when it does.
     func sync() async {
-        guard !syncing else { return }
+        await launch?.value
+        let key = cloud?.key ?? "none:\(syncWith.rawValue)"
+        if let running = syncTask, running.key == key {
+            await running.task.value
+            return
+        }
+        syncTask?.task.cancel()
+        let task = Task { await runSync(key: key) }
+        syncTask = (key, task)
         syncing = true
-        defer { syncing = false }
-        if let cloud {
+        await task.value
+        if syncTask?.key == key {
+            syncTask = nil
+            syncing = false
+        }
+    }
+
+    /// One sync with one store. A result for a store that is no longer the choice is dropped.
+    private func runSync(key: String) async {
+        func current() -> Bool { !Task.isCancelled && (cloud?.key ?? "none:\(syncWith.rawValue)") == key }
+        if let cloud = cloud?.sync {
             do {
                 // One quiet second try: a phone that just woke the app often has no route for a moment.
-                try await TransientRetry.run {
-                    try await cloud.pull(includeMeetings: true)
-                    try await cloud.pushShared()
+                try await writes.run {
+                    try await TransientRetry.run {
+                        try await cloud.pull(includeMeetings: true)
+                        try await cloud.pushShared()
+                    }
                 }
-                syncStatus.succeeded()
-                lastSync = Date()
+                if current() {
+                    syncStatus.succeeded()
+                    lastSync = Date()
+                }
             } catch is CancellationError {
-                // The app stopped its own request (a refresh let go, a view closed): not a failure to show.
+                // The app stopped its own request (a refresh let go, a view closed, another store chosen).
             } catch let e as URLError where e.code == .cancelled {
             } catch {
                 Log.error("Sync with \(place) failed: \(error)")
-                // A request the app stopped itself (a refresh let go, a view closed) is not a failure.
-                syncStatus.failed(FriendlyError(error, context: .syncing, service: place))
+                if current() { syncStatus.failed(FriendlyError(error, context: .syncing, service: place)) }
             }
+            guard current() else { return }
+            await load(meetings: true)
             // Also after a failed pull, so each waiting recording gets its own reason. Upload problems stay on
             // their recordings; a good pull does not clear them.
             await sendOutbox()
-        } else if syncWith == .server, !offline {
-            syncStatus.show(FriendlyError(kind: .notConnected, context: .syncing))
+        } else {
+            if syncWith == .server, !offline { syncStatus.show(FriendlyError(kind: .notConnected, context: .syncing)) }
+            await load(meetings: true)
         }
-        reload()
     }
 
-    func reload() {
-        meetings = MeetingIndex(paths: paths).all()
-        profile = (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile()
-        chats = chatStore.all()
-        commitments = (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook()
-        loadOutbox()
-        scores = Dictionary(uniqueKeysWithValues: meetings.compactMap { r in coach(r.id)?.scorecard.map { (r.id, $0.score) } })
-        coachVersion += 1
-        refreshSearch()
-    }
-
-    /// Builds the search index again when meetings or chats changed, and only swaps the tasks when only they did.
-    private func refreshSearch() {
-        let meetings = meetings, chats = chats, tasks = commitments.items
-        if let indexed, indexed.meetings == meetings, indexed.chats == chats {
-            searchIndex.setTasks(tasks)
-            searchVersion += 1
-            return
-        }
-        indexed = (meetings, chats)
-        let people = VoiceLibrary(directory: paths.voices).profiles
-        indexing?.cancel()
-        indexing = Task {
-            let index = await SearchIndex.build(records: meetings, people: people, tasks: tasks, chats: chats)
-            let stats = await Task.detached(priority: .userInitiated) { PersonStatistics.compute(meetings) }.value
-            guard !Task.isCancelled else { return }
-            var latest = index
-            latest.setTasks(commitments.items)
-            searchIndex = latest
-            searchSuggestions = latest.suggestions()
-            personStats = stats
-            searchVersion += 1
-        }
-    }
+    /// While a room recording waits for its meeting, the app checks now and then without a pull to refresh.
+    var waitsForTheMac: Bool { !outbox.entries.isEmpty && !offline && syncWith != .off }
 
     // MARK: Opening from Search
 
@@ -264,7 +379,7 @@ final class PhoneStore: ObservableObject {
 
     // MARK: Recent searches
 
-    @Published private(set) var recentSearches = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+    private(set) var recentSearches = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
 
     func remember(search: String) {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -280,18 +395,26 @@ final class PhoneStore: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "recentSearches")
     }
 
-    /// Sends what changed here to the sync store, in the background.
-    private func share() {
-        reload()
-        guard let cloud else { return }
-        Task { try? await cloud.pushShared() }
+    /// Reads back what changed here (not the meetings) and sends it to the sync store, in the background.
+    private func share() async {
+        await load(meetings: false)
+        guard let cloud = cloud?.sync else { return }
+        do { _ = try await writes.run { try await cloud.pushShared() } } catch { Log.error("Sending changes to \(place) failed: \(error)") }
+    }
+
+    /// Runs a write to shared files in turn with the pull, then shares it.
+    private func write(_ what: String, _ work: @escaping @Sendable () throws -> Void) {
+        Task {
+            do { try await writes.run(work) } catch { Log.error("Saving \(what) failed: \(error)") }
+            await share()
+        }
     }
 
     func coach(_ id: String) -> CoachReview? { CoachReview.load(in: paths.callDirectory(id)) }
     func meeting(_ id: String) -> CallRecord? { meetings.first { $0.id == id } }
 
     func openMeeting(_ id: String) {
-        guard meeting(id) != nil else { return }
+        guard meeting(id) != nil else { return notOnThisPhone() }
         tab = .meetings
         path = [id]
     }
@@ -302,22 +425,30 @@ final class PhoneStore: ObservableObject {
 
     /// Opens a meeting, at a moment when there is one, as the Mac does for a commitment or a chat link.
     func showMoment(_ id: String, at: TimeInterval?) {
-        guard meeting(id) != nil else { return }
+        guard meeting(id) != nil else { return notOnThisPhone() }
         tab = .meetings
         path = [id]
         moment = at.map { Moment(callID: id, at: $0) }
     }
 
+    private func notOnThisPhone() {
+        notice = loaded ? "That meeting isn't on this iPhone yet. It arrives after your Mac syncs it." : nil
+    }
+
     // MARK: Chat
 
     func save(_ chat: Chat) {
-        try? chatStore.save(chat)
-        chats = chatStore.all()
+        if let i = chats.firstIndex(where: { $0.id == chat.id }) { chats[i] = chat } else { chats.insert(chat, at: 0) }
+        let store = chatStore
+        Task {
+            do { try await writes.run { try store.save(chat) } } catch { Log.error("Saving the chat failed: \(error)") }
+        }
     }
 
     func delete(_ chat: Chat) {
-        chatStore.delete(chat.id)
-        share()
+        chats.removeAll { $0.id == chat.id }
+        let store = chatStore, id = chat.id
+        write("the chat deletion") { store.delete(id) }
     }
 
     func answer(_ question: String, history: [ChatMessage], about callID: String? = nil,
@@ -329,71 +460,187 @@ final class PhoneStore: ObservableObject {
 
     /// Writes the chat's short summary for later chats to recall, then syncs it.
     func finish(_ id: UUID) {
-        share()
-        guard let llm = languageModel, let chat = chats.first(where: { $0.id == id }) else { return }
-        let owner = owner, store = chatStore
+        let llm = languageModel, owner = owner, store = chatStore, writes = writes
         Task {
-            guard let summary = try? await ChatAgent(llm: llm, ownerName: owner).summarize(chat),
-                  var latest = store.all().first(where: { $0.id == id }) else { return }
-            latest.summary = summary
-            try? store.save(latest)
-            share()
+            // The answer is saved before the summary reads it.
+            _ = try? await writes.run {}
+            await share()
+            guard let llm, let chat = chats.first(where: { $0.id == id }),
+                  let summary = try? await ChatAgent(llm: llm, ownerName: owner).summarize(chat) else { return }
+            do {
+                try await writes.run {
+                    guard var latest = store.all().first(where: { $0.id == id }) else { return }
+                    latest.summary = summary
+                    try store.save(latest)
+                }
+            } catch { Log.error("Saving the chat summary failed: \(error)") }
+            await share()
         }
+    }
+
+    /// The run of questions about one meeting, kept here so it outlives the meeting's sections.
+    func chatRun(_ callID: String) -> ChatRun {
+        if let run = meetingChats[callID] { return run }
+        let run = ChatRun()
+        meetingChats[callID] = run
+        return run
     }
 
     // MARK: Room recordings
 
     var recordingsFolder: URL { paths.root.appendingPathComponent("Recordings") }
-    private var outboxFile: URL { recordingsFolder.appendingPathComponent("outbox.json") }
+    private var outboxFile: URL { recordingsFolder.appendingPathComponent(Outbox.fileName) }
 
-    private func loadOutbox() {
-        var list = (try? JSONDecoder().decode([Outgoing].self, from: Data(contentsOf: outboxFile))) ?? []
-        // Done once the Mac's meeting for it has arrived.
-        let arrived = Set(meetings.map(\.id))
-        let done = list.filter { $0.sent && arrived.contains($0.id) }
-        for d in done { try? FileManager.default.removeItem(at: recordingsFolder.appendingPathComponent("\(d.id).m4a")) }
-        list.removeAll { d in done.contains { $0.id == d.id } }
-        if !done.isEmpty { saveOutbox(list) }
-        outbox = list
-        syncStatus.keepUploads(for: Set(list.filter { !$0.sent }.map(\.id)))
+    private func saveOutbox() {
+        // The entry exists from the start of the recording, so a lost write is repaired by the next launch's scan.
+        do { try outbox.save(to: outboxFile) } catch { Log.error("Saving the outbox failed: \(error)") }
+        syncStatus.keepUploads(for: Set(outbox.entries.filter { !$0.isSent }.map(\.id)))
     }
 
-    private func saveOutbox(_ list: [Outgoing]) {
-        try? FileManager.default.createDirectory(at: recordingsFolder, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(list).write(to: outboxFile, options: .atomic)
-        outbox = list
+    /// Removes recordings whose meeting has arrived from the Mac, with their audio.
+    private func settleOutbox() {
+        let done = outbox.settle(arrived: Set(meetings.map(\.id)))
+        guard !done.isEmpty else { return }
+        let dir = recordingsFolder
+        for id in done { RoomAudio.delete(id, in: dir) }
+        saveOutbox()
     }
 
-    func send(_ recording: PhoneRecording, audio: URL) {
-        saveOutbox(outbox + [Outgoing(recording: recording)])
+    /// At launch, before anything else touches the outbox: a file that cannot be read is set aside, and the scan
+    /// below fills the outbox again from the audio on disk.
+    private func readOutbox() async {
+        let file = outboxFile
+        let (box, aside) = await Task.detached { Outbox.loadOrSetAside(from: file) }.value
+        if let aside { Log.error("The outbox could not be read; it is kept as \(aside.lastPathComponent)") }
+        outbox = box
+    }
+
+    /// At launch: finishes each recording that the app never finished, and each audio file with no entry, as the
+    /// Mac does for its own calls after a crash.
+    private func recoverRecordings() async {
+        let dir = recordingsFolder
+        let audio = await Task.detached { RoomAudio.ids(in: dir) }.value
+        for id in outbox.withoutAudio(audioIDs: audio, active: recorder.id) {
+            Log.error("The room recording \(id) has no audio on this iPhone; its entry is removed")
+            outbox.remove(id)
+            saveOutbox()
+        }
+        for id in outbox.needsRecovery(audioIDs: audio, active: recorder.id) {
+            let entry = outbox[id]
+            let found = await Task.detached { () -> (length: TimeInterval?, end: Date?) in
+                (RoomAudio.length(of: id, in: dir), RoomAudio.lastWrite(of: id, in: dir))
+            }.value
+            guard let length = found.length else {
+                // Nothing readable: the file stays for a later look, and nothing is sent.
+                Log.error("The room recording \(id) could not be read; its files stay on this iPhone")
+                continue
+            }
+            guard RoomRecording.keep(measured: length, counted: 0, discard: false) else {
+                RoomAudio.delete(id, in: dir)
+                outbox.remove(id)
+                saveOutbox()
+                continue
+            }
+            let start = entry?.recording.start ?? RoomAudio.start(of: id) ?? found.end ?? Date()
+            if entry == nil { outbox.begin(PhoneRecording(id: id, start: start, end: start, title: nil)) }
+            do {
+                _ = try await Task.detached { try RoomAudio.finish(id, in: dir) }.value
+                outbox.finish(id, end: found.end ?? start.addingTimeInterval(length), title: nil)
+                Log.info("Recovered the room recording \(id) (\(Int(length)) s)")
+            } catch {
+                Log.error("Finishing the room recording \(id) failed: \(error)")
+            }
+            saveOutbox()
+        }
+    }
+
+    func startRecording() async {
+        // The outbox is read first, so the read never replaces this recording's entry.
+        await outboxRead?.value
+        guard let rec = await recorder.start(into: recordingsFolder) else { return }
+        outbox.begin(rec)
+        saveOutbox()
+    }
+
+    /// Stops the recording, keeps it unless it is short (or the owner discarded a short one), joins its parts into
+    /// one file, and sends it. The phone may be locked right after Stop, so this asks for background time.
+    func stopRecording(discard: Bool) {
+        guard let stopped = recorder.stop() else { return }
+        let dir = recordingsFolder
+        Task {
+            let time = BackgroundTime("Finish the room recording")
+            defer { time.end() }
+            let result = await Task.detached { () -> (keep: Bool, error: Error?) in
+                let measured = RoomAudio.length(of: stopped.id, in: dir)
+                guard RoomRecording.keep(measured: measured, counted: stopped.counted, discard: discard) else {
+                    RoomAudio.delete(stopped.id, in: dir)
+                    return (false, nil)
+                }
+                do {
+                    try RoomAudio.finish(stopped.id, in: dir)
+                    return (true, nil)
+                } catch { return (true, error) }
+            }.value
+            guard result.keep else {
+                outbox.remove(stopped.id)
+                saveOutbox()
+                return
+            }
+            if let error = result.error {
+                // The parts stay, and the entry stays `recording`: the next launch tries again.
+                Log.error("Finishing the room recording failed: \(error)")
+                return
+            }
+            outbox.finish(stopped.id, end: stopped.end, title: stopped.title)
+            saveOutbox()
+            await sendOutbox()
+        }
+    }
+
+    /// The owner's "Send again" on a recording whose meeting has not come back.
+    func sendAgain(_ id: String) {
+        outbox.sendAgain(id)
+        saveOutbox()
         Task { await sendOutbox() }
     }
 
-    /// Uploads what iCloud does not have yet. The audio stays here until the meeting comes back from the Mac.
+    /// Uploads what the store does not have yet, and again what it took long ago with no meeting back, or what
+    /// another store took. The audio stays here until the meeting comes back from the Mac.
     func sendOutbox() async {
-        guard let cloud else { return }
-        for item in outbox where !item.sent {
-            let audio = recordingsFolder.appendingPathComponent("\(item.id).m4a")
+        guard let engine = cloud else { return }
+        let key = engine.key, cloud = engine.sync
+        let dir = recordingsFolder
+        for listed in outbox.due(store: key, now: Date()) {
+            // Looked at again here: another pass may have sent it while this one uploaded the one before.
+            guard !uploading.contains(listed.id),
+                  let entry = outbox.due(store: key, now: Date()).first(where: { $0.id == listed.id }) else { continue }
+            uploading.insert(entry.id)
+            let time = BackgroundTime("Upload the room recording")
             do {
-                try await cloud.upload(item.recording, audio: audio)
-                var list = outbox
-                if let i = list.firstIndex(where: { $0.id == item.id }) { list[i].sent = true }
-                saveOutbox(list)
-                syncStatus.uploaded(item.id)
+                try await cloud.upload(entry.recording, audio: RoomAudio.finished(entry.id, in: dir))
+                outbox.markSent(entry.id, store: key, at: Date())
+                saveOutbox()
+                syncStatus.uploaded(entry.id)
             } catch {
                 Log.error("Uploading the room recording failed: \(error)")
-                syncStatus.uploadFailed(item.id, FriendlyError(error, context: .uploadingAudio, service: place))
+                syncStatus.uploadFailed(entry.id, FriendlyError(error, context: .uploadingAudio, service: place))
             }
+            time.end()
+            uploading.remove(entry.id)
         }
     }
 
     // MARK: Commitments
 
-    func changeCommitments(_ change: (inout CommitmentBook) -> Void) {
-        var book = (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook()
-        change(&book)
-        try? book.save(to: paths.commitments)
-        share()
+    /// Shows the change at once, and writes it to the file as it is on disk then, in turn with the pull.
+    func changeCommitments(_ change: @escaping @Sendable (inout CommitmentBook) -> Void) {
+        change(&commitments)
+        let file = paths.commitments
+        write("the tasks") {
+            var book = (try? CommitmentBook.load(from: file)) ?? CommitmentBook()
+            change(&book)
+            try book.save(to: file)
+        }
     }
 
     func saveCommitment(_ c: Commitment) {
@@ -402,22 +649,41 @@ final class PhoneStore: ObservableObject {
         }
     }
 
-    func toggleDone(_ id: UUID) { changeCommitments { $0.update(id) { $0.done = $0.done == nil ? Date() : nil } } }
+    func toggleDone(_ id: UUID) {
+        // The same moment on both copies, so the screen and the file agree.
+        let now = Date()
+        changeCommitments { $0.update(id) { $0.done = $0.done == nil ? now : nil } }
+    }
+
     func deleteCommitment(_ id: UUID) { changeCommitments { $0.delete(id) } }
 
     // MARK: Coach
 
+    /// Changes the coach's memory as it is on disk at the time of the write, not the copy on screen.
+    private func changeProfile(_ change: @escaping @Sendable (inout CoachProfile) -> Void) {
+        change(&profile)
+        let file = paths.coach
+        write("the coach's memory") {
+            var p = (try? CoachProfile.load(from: file)) ?? CoachProfile()
+            change(&p)
+            try p.save(to: file)
+        }
+    }
+
     /// Saves a 👍 or 👎 on one point. A note goes to the coach as a reply, so it can learn from it.
     func rate(callID: String, point: CoachPoint, agree: Bool, note: String?) async throws {
-        let dir = paths.callDirectory(callID)
-        guard var review = CoachReview.load(in: dir), let record = meeting(callID) else { return }
-        let feedback = CoachFeedback(agree: agree, note: note)
-        review.feedback[point.title] = feedback
-        try review.save(in: dir)
-        var profile = profile
-        profile.remember(feedback, on: point, callID: callID, title: record.title)
-        try profile.save(to: paths.coach)
-        share()
+        let dir = paths.callDirectory(callID), coachFile = paths.coach
+        guard let record = meeting(callID) else { return }
+        let feedback = CoachFeedback(agree: agree, note: note), title = record.title
+        try await writes.run {
+            guard var review = CoachReview.load(in: dir) else { return }
+            review.feedback[point.title] = feedback
+            try review.save(in: dir)
+            var profile = (try? CoachProfile.load(from: coachFile)) ?? CoachProfile()
+            profile.remember(feedback, on: point, callID: callID, title: title)
+            try profile.save(to: coachFile)
+        }
+        await share()
         if let note { try await reply(callID: callID, message: "About your point “\(point.title)”: \(note)") }
     }
 
@@ -425,59 +691,74 @@ final class PhoneStore: ObservableObject {
     /// guidance joins the coach's memory.
     func reply(callID: String, message: String) async throws {
         guard let llm = languageModel else { throw NoSharedKey() }
-        let dir = paths.callDirectory(callID)
+        let dir = paths.callDirectory(callID), coachFile = paths.coach
         guard let review = CoachReview.load(in: dir), let record = meeting(callID) else { return }
         let answer = try await CoachResponder(llm: llm, ownerName: owner).respond(to: message, review: review, record: record, profile: profile)
-        var latest = CoachReview.load(in: dir) ?? review
-        latest.thread += [ChatMessage(role: .user, text: message), ChatMessage(role: .assistant, text: answer.reply)]
-        try latest.save(in: dir)
-        var profile = (try? CoachProfile.load(from: paths.coach)) ?? profile
-        profile.updateGuidance(add: answer.add, remove: answer.remove, at: Date())
-        profile.updateFacts(add: answer.addFacts, remove: answer.removeFacts)
-        try profile.save(to: paths.coach)
-        share()
+        try await writes.run {
+            var latest = CoachReview.load(in: dir) ?? review
+            latest.thread += [ChatMessage(role: .user, text: message), ChatMessage(role: .assistant, text: answer.reply)]
+            try latest.save(in: dir)
+            var profile = (try? CoachProfile.load(from: coachFile)) ?? CoachProfile()
+            profile.updateGuidance(add: answer.add, remove: answer.remove, at: Date())
+            profile.updateFacts(add: answer.addFacts, remove: answer.removeFacts)
+            try profile.save(to: coachFile)
+        }
+        await share()
     }
 
     func acceptFocus(_ id: UUID, plan: String?) {
-        var profile = profile
-        profile.acceptFocus(id, plan: plan, at: Date())
-        try? profile.save(to: paths.coach)
-        share()
+        let now = Date()
+        changeProfile { $0.acceptFocus(id, plan: plan, at: now) }
     }
 
     func answerQuestion(_ id: UUID, _ status: CoachQuestion.Status, note: String?) {
-        var profile = profile
-        profile.answer(id, status, note: note, at: Date())
-        try? profile.save(to: paths.coach)
-        share()
+        let now = Date()
+        changeProfile { $0.answer(id, status, note: note, at: now) }
     }
 
     func dismissFocus(_ id: UUID) {
-        var profile = profile
-        profile.dismissFocus(id, at: Date())
-        try? profile.save(to: paths.coach)
-        share()
+        let now = Date()
+        changeProfile { $0.dismissFocus(id, at: now) }
     }
 
     func addFact(_ kind: CoachFact.Kind, _ text: String) {
-        var profile = profile
-        profile.updateFacts(add: [CoachFact(kind: kind, text: text)], remove: [])
-        try? profile.save(to: paths.coach)
-        share()
+        changeProfile { $0.updateFacts(add: [CoachFact(kind: kind, text: text)], remove: []) }
     }
 
     func removeFact(_ text: String) {
-        var profile = profile
-        profile.updateFacts(add: [], remove: [text])
-        try? profile.save(to: paths.coach)
-        share()
+        changeProfile { $0.updateFacts(add: [], remove: [text]) }
     }
 
     func removeGuidance(_ text: String) {
-        var profile = profile
-        profile.updateGuidance(add: [], remove: [text], at: Date())
-        try? profile.save(to: paths.coach)
-        share()
+        let now = Date()
+        changeProfile { $0.updateGuidance(add: [], remove: [text], at: now) }
+    }
+}
+
+/// A question about a meeting while it runs, and its error, kept by the store.
+@Observable
+@MainActor
+final class ChatRun {
+    var running = false
+    var steps: [String] = []
+    var error: FriendlyError? = PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample)
+}
+
+/// Time to finish a step after the owner locks the phone, such as an upload after Stop.
+@MainActor
+final class BackgroundTime {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    init(_ name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }
 
