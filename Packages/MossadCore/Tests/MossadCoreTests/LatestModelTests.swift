@@ -56,7 +56,7 @@ final class LatestModelTests: XCTestCase {
     func testFallbacksBeforeTheListIsKnown() {
         let cache = LatestModelCache(defaults: freshDefaults())
         XCTAssertEqual(AIProvider.anthropic.resolvedModel("latest:opus", cache: cache), "claude-opus-5-5")
-        XCTAssertEqual(AIProvider.anthropic.resolvedModel("latest:fable", cache: cache), "claude-fable-5-1")
+        XCTAssertEqual(AIProvider.anthropic.resolvedModel("latest:fable", cache: cache), "claude-fable-5-2")
         XCTAssertEqual(AIProvider.anthropic.resolvedModel("latest:sonnet", cache: cache), "claude-sonnet-5-5")
         XCTAssertEqual(AIProvider.anthropic.resolvedModel("latest:haiku", cache: cache), "claude-haiku-5-5")
         XCTAssertEqual(AIProvider.openai.resolvedModel("latest:gpt", cache: cache), AIProvider.openai.defaultModel)
