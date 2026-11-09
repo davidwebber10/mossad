@@ -65,6 +65,9 @@ final class AppController: ObservableObject {
     /// a message arrives, not the whole window.
     let live = LiveTranscriptModel()
     @AppStorage("liveTranscript") var liveTranscriptEnabled = true
+    /// Keeps frames of the meeting window while a call records. Off until the owner turns it on.
+    @AppStorage(AppController.captureScreensKey) var captureScreens = false
+    nonisolated static let captureScreensKey = "captureScreens"
     /// "local", "r2", or "s3". The secret lives in the Keychain; the rest is not secret.
     @AppStorage("storage") var storage = "local"
     @AppStorage("cloudEndpoint") var cloudEndpoint = ""
@@ -272,7 +275,22 @@ final class AppController: ObservableObject {
         CallRecorder(paths: paths, makeThem: { ProcessTap(processObjectIDs: $0) }, makeMe: { MicCapture(voiceProcessing: false) },
                      systemAudioAllowed: { TCC.preflight("kTCCServiceAudioCapture").map { $0 == 0 } ?? true },
                      // Not asked yet is not a refusal: only a known "no" is told to the owner.
-                     micAllowed: { ![.denied, .restricted].contains(AVCaptureDevice.authorizationStatus(for: .audio)) })
+                     micAllowed: { ![.denied, .restricted].contains(AVCaptureDevice.authorizationStatus(for: .audio)) },
+                     makeScreens: Self.makeScreens)
+    }
+
+    /// The shared-screen capture for one call: only with the setting on and the permission given. The check shows
+    /// no prompt, so a call never asks for anything.
+    nonisolated private static func makeScreens(_ call: ScreenCall) -> ScreenCapturing? {
+        guard !Rehearsal.isOn, UserDefaults.standard.bool(forKey: captureScreensKey) else { return nil }
+        guard CGPreflightScreenCaptureAccess() else {
+            Log.info("Shared screens are not captured: Screen & System Audio Recording is not allowed")
+            return nil
+        }
+        let probe = PresenterProbe()
+        let source = WindowFrameSource(platform: call.platform, bundleID: call.bundleID, meetingID: call.meetingID)
+        return ScreenRecorder(dir: call.directory, source: source, offset: call.offset, addMarker: call.addMarker,
+                              presenter: { probe.presenter(bundleID: call.bundleID, platform: call.platform, meetingID: call.meetingID) })
     }
 
     init() {
@@ -601,7 +619,9 @@ final class AppController: ObservableObject {
                             titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) },
                             onDiscard: { [weak self] record in
                                 Task { @MainActor in self?.forget(record) }
-                            })
+                            },
+                            // The text on kept frames is read on this Mac, and waits while a call records.
+                            screenStep: ScreenStep(reader: VisionScreenReader(), isRecording: { [recorder] in recorder.isRecordingNow }))
     }
 
     /// A meeting that is gone (deleted, or merged into another) leaves nothing behind outside this Mac: its

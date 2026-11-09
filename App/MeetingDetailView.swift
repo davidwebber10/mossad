@@ -6,7 +6,7 @@ import SwiftUI
 /// all share the player. Clicking a time plays from there.
 struct MeetingDetailView: View {
     enum Style { case split, fullPage }
-    enum Tab: String, CaseIterable { case summary = "Summary", transcript = "Transcript", coach = "Coach", chat = "Chat" }
+    enum Tab: String, CaseIterable { case summary = "Summary", transcript = "Transcript", screens = "Screens", coach = "Coach", chat = "Chat" }
 
     @EnvironmentObject var controller: AppController
     let record: CallRecord
@@ -19,7 +19,15 @@ struct MeetingDetailView: View {
     @State private var highlight: TimeInterval?
     @State private var cache = DetailCache()
 
-    private var tab: Tab { previewTab ?? savedTab }
+    /// The frame open in the Screens tab; nil shows its grid.
+    @State private var openScreen: String?
+
+    /// The Screens tab exists only for a meeting that has screens.
+    private var tab: Tab {
+        let t = previewTab ?? savedTab
+        return t == .screens && !record.hasScreens ? .summary : t
+    }
+    private var tabs: [Tab] { Tab.allCases.filter { $0 != .screens || record.hasScreens } }
     private var tabBinding: Binding<Tab> { Binding(get: { tab }, set: { previewTab = nil; savedTab = $0 }) }
 
     init(record: CallRecord, style: Style, deleting: Binding<CallRecord?>) {
@@ -55,6 +63,10 @@ struct MeetingDetailView: View {
                 .clipped()
         }
             .background(Palette.window)
+            .environment(\.openScreen) { screen in
+                openScreen = screen.file
+                tabBinding.wrappedValue = .screens
+            }
             .task(id: controller.seekRequest) {
                 guard let seek = controller.seekRequest, seek.callID == record.id else { return }
                 controller.seekRequest = nil
@@ -84,7 +96,7 @@ struct MeetingDetailView: View {
                           retentionDays: controller.deleteRecordings ? controller.recordingDays : nil,
                           maxLanes: maxLanes)
                 .overlay(alignment: .bottom) {
-                    if record.status != .recording, !processingFirstTime { DetailTabs(tab: tabBinding).offset(y: Self.underTabs) }
+                    if record.status != .recording, !processingFirstTime { DetailTabs(tab: tabBinding, tabs: tabs).offset(y: Self.underTabs) }
                 }
                 .zIndex(1)
             if record.status == .recording {
@@ -125,6 +137,8 @@ struct MeetingDetailView: View {
             }
         case .transcript:
             TranscriptTab(record: record, people: people, player: player, top: Self.underTabs + 28, highlight: highlight)
+        case .screens:
+            ScreensTab(record: record, player: player, top: Self.underTabs + 28, selected: $openScreen)
         case .coach:
             ScrollView {
                 CoachTab(record: record, people: people, player: player)
@@ -138,7 +152,7 @@ struct MeetingDetailView: View {
     private func applyPreviewHooks() {
         guard CommandLine.arguments.contains("--ui-preview") else { return }
         let env = ProcessInfo.processInfo.environment
-        // Development hook for screenshots: MOSSAD_TAB=summary|transcript|coach|chat picks the tab.
+        // Development hook for screenshots: MOSSAD_TAB=summary|transcript|screens|coach|chat picks the tab.
         if let t = env["MOSSAD_TAB"].flatMap({ Tab(rawValue: $0.capitalized) }) { previewTab = t }
         // Development hook for screenshots: MOSSAD_SEEK=<seconds> puts the playhead there, without playing.
         if let at = env["MOSSAD_SEEK"].flatMap(TimeInterval.init) {
@@ -179,11 +193,12 @@ extension View {
 /// Summary, Transcript, Coach, Chat: a glass segmented control centered on the band's lower edge.
 private struct DetailTabs: View {
     @Binding var tab: MeetingDetailView.Tab
+    var tabs = MeetingDetailView.Tab.allCases
     @Namespace private var selection
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(MeetingDetailView.Tab.allCases, id: \.self) { t in
+            ForEach(tabs, id: \.self) { t in
                 let on = t == tab
                 Button { withAnimation(.snappy(duration: 0.2)) { tab = t } } label: {
                     Text(t.rawValue)

@@ -5,6 +5,7 @@ import SwiftUI
 /// Settings › Recording: the live transcript, how long audio stays, voices, calendars, storage, and folders.
 struct RecordingSettings: View {
     @EnvironmentObject var controller: AppController
+    @EnvironmentObject var permissions: PermissionsMonitor
     @State private var confirmDeleteVoices = false
 
     var body: some View {
@@ -21,6 +22,24 @@ struct RecordingSettings: View {
                 if controller.deleteRecordings {
                     SettingsRow(title: "Keep audio for") {
                         DaysField(title: "Days to keep audio", value: $controller.recordingDays, range: 1...3650)
+                    }
+                }
+            }
+            if !Rehearsal.isOn {
+                SettingsGroup(label: "Shared screens", footer: "Mossad keeps frames of the meeting window only, when its picture changes, and reads their text on this Mac. The frames stay on this Mac. Get consent before you capture what other people share. macOS shows its screen recording mark during a call.") {
+                    SettingsSwitchRow(title: "Capture shared screens", isOn: $controller.captureScreens)
+                        .help("Keeps pictures of slides and documents that people share in a call, next to the transcript.")
+                        .onChange(of: controller.captureScreens) { _, on in
+                            if on { permissions.requestScreenCaptureOnce() }
+                        }
+                    if controller.captureScreens {
+                        SettingsRow(title: "Screen & System Audio Recording",
+                                    detail: permissions.screenCapture.isGood ? "Allowed" : "Not allowed. Turn Mossad on in System Settings, then open Mossad again if this line does not change.") {
+                            if !permissions.screenCapture.isGood {
+                                Button("Open System Settings") { permissions.openScreenCaptureSettings() }
+                                    .buttonStyle(SettingsButtonStyle(accent: true))
+                            }
+                        }
                     }
                 }
             }

@@ -240,6 +240,7 @@ private struct PlayerRuler: View {
     let time: TimeInterval
     let enabled: Bool
     let seek: (TimeInterval) -> Void
+    @Environment(\.openScreen) private var openScreen
 
     var body: some View {
         HStack(spacing: Detail.labelGap) {
@@ -264,6 +265,15 @@ private struct PlayerRuler: View {
                                     .frame(width: 7, height: 7)
                             }
                         }
+                    }
+                    ForEach(record.screens ?? []) { s in
+                        Button { openScreen?(s) } label: {
+                            ScreenMark().frame(width: 12, height: 12).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Shared screen · \(clock(s.offset))")
+                        .accessibilityLabel("Shared screen at \(clock(s.offset))")
+                        .position(x: w * s.offset / duration, y: 3.5)
                     }
                     ForEach(Array(bookmarks.enumerated()), id: \.offset) { _, b in
                         let note = b.note?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty

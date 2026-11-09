@@ -24,7 +24,7 @@ struct TranscriptTab: View {
 
     /// Rebuilt only when the words or the names change, not on every tick of the player.
     private var blocksKey: String {
-        "\(record.utterances.count)|\(record.markers.count)|" + record.speakerNames.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+        "\(record.utterances.count)|\(record.markers.count)|\(record.screens?.count ?? 0)|" + record.speakerNames.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
     }
 
     var body: some View {
@@ -144,13 +144,17 @@ struct TranscriptTab: View {
     // MARK: Turns
 
     private func turns(matches: [LineID], current: Int?, marked: Int?) -> some View {
-        let breaks = record.transcriptMarkers
+        let breaks = record.recordingMarkers
+        let screens = record.screens ?? []
         let active = matches.indices.contains(matchIndex) ? matches[matchIndex] : nil
         return LazyVStack(alignment: .leading, spacing: 2) {
             ForEach(blocks, id: \.id) { block in
                 let previousEnd = block.id > 0 ? blocks[safe: block.id - 1]?.end ?? -1 : -1
                 ForEach(Array(breaks.filter { $0.offset > previousEnd && $0.offset <= block.start }.enumerated()), id: \.offset) { _, m in
                     MarkerLine(marker: m)
+                }
+                ForEach(screens.filter { $0.offset > previousEnd && $0.offset <= block.start }) { s in
+                    ScreenLine(record: record, screen: s)
                 }
                 TurnRow(block: block, speaker: people.speaker(forKey: block.speakerKey), callID: record.id,
                         editable: record.status == .written, player: player,
@@ -160,6 +164,9 @@ struct TranscriptTab: View {
             }
             ForEach(Array(breaks.filter { $0.offset > (blocks.last?.end ?? -1) }.enumerated()), id: \.offset) { _, m in
                 MarkerLine(marker: m)
+            }
+            ForEach(screens.filter { $0.offset > (blocks.last?.end ?? -1) }) { s in
+                ScreenLine(record: record, screen: s)
             }
         }
         .textSelection(.enabled)

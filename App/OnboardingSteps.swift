@@ -233,6 +233,7 @@ private struct PermissionStepRow: View {
         case .accessibility: "Reads call window titles, to notice when a Zoom or Teams call starts."
         case .notifications: "Tells you when a new voice needs a name. Nothing during calls."
         case .automation: "Reads the meeting link in the browser tab, to notice Google Meet calls."
+        case .screenCapture: "Keeps frames of screens that people share in a call."
         }
     }
 }

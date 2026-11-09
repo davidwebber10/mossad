@@ -134,6 +134,12 @@ final class SharedScreenTests: XCTestCase {
         XCTAssertEqual(PresenterLabel.resolve("Dana", known: known), "Dana")
     }
 
+    func testScreenRecordingIsAnOptionalPermission() {
+        XCTAssertFalse(OnboardingPermissions.isRequired(.screenCapture))
+        XCTAssertFalse(OnboardingPermissions.required.contains(.screenCapture))
+        XCTAssertTrue(PermissionKind.screenCapture.settingsURL.absoluteString.hasSuffix("Privacy_ScreenCapture"))
+    }
+
     // MARK: Merge, retention, search, sync
 
     func testMergeMovesScreensWithTheirPart() {

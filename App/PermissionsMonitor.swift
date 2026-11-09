@@ -17,6 +17,9 @@ final class PermissionsMonitor: ObservableObject {
     }
 
     @Published private(set) var items: [Item] = []
+    /// Screen & System Audio Recording, for "Capture shared screens". Apart from `items`: it is optional, so it is
+    /// never part of setup and never counts as a problem while that setting is off.
+    @Published private(set) var screenCapture: PermissionState = .notAsked
     /// Permissions whose prompt this run already showed.
     private var asked: Set<PermissionKind> = []
     private var timer: Timer?
@@ -47,8 +50,10 @@ final class PermissionsMonitor: ObservableObject {
         Task.detached(priority: .utility) {
             var states: [PermissionKind: PermissionState] = [:]
             for kind in kinds { states[kind] = await Self.check(kind) }
+            let screen = await Self.check(.screenCapture)
             await MainActor.run { [weak self] in
                 guard let self else { return }
+                if screen != self.screenCapture { self.screenCapture = screen }
                 var next = self.items
                 for i in next.indices {
                     let kind = next[i].kind
@@ -84,6 +89,24 @@ final class PermissionsMonitor: ObservableObject {
         guard Permissions.tccState(preflight: TCC.preflight("kTCCServiceAudioCapture")) == .notAsked else { return }
         TCC.request("kTCCServiceAudioCapture") { Task { @MainActor in self.refresh() } }
     }
+
+    /// Asks macOS for Screen & System Audio Recording, one time only and only when the owner turns on "Capture
+    /// shared screens". macOS shows its alert, which opens System Settings. Never called at launch or in a call.
+    func requestScreenCaptureOnce() {
+        guard !CGPreflightScreenCaptureAccess(), !UserDefaults.standard.bool(forKey: Self.screenAskedKey) else { return refresh() }
+        UserDefaults.standard.set(true, forKey: Self.screenAskedKey)
+        // The request can wait for the alert, so it stays off the main thread.
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = CGRequestScreenCaptureAccess()
+            Task { @MainActor in self.refresh() }
+        }
+    }
+
+    func openScreenCaptureSettings() {
+        NSWorkspace.shared.open(PermissionKind.screenCapture.settingsURL)
+    }
+
+    nonisolated private static let screenAskedKey = "screenCaptureAsked"
 
     /// Shows a browser's Automation prompt when macOS has not asked yet. Off the main thread: the prompt waits for an answer.
     func askAutomationIfNeeded(_ bundleID: String) {
@@ -140,6 +163,10 @@ final class PermissionsMonitor: ObservableObject {
             }
         case .automation(let bundleID):
             return Permissions.automationState(osStatus: automationStatus(bundleID, ask: false))
+        case .screenCapture:
+            // The check shows no prompt. macOS does not tell "not asked" from "denied"; Mossad remembers that it asked.
+            if CGPreflightScreenCaptureAccess() { return .granted }
+            return UserDefaults.standard.bool(forKey: screenAskedKey) ? .denied : .notAsked
         }
     }
 

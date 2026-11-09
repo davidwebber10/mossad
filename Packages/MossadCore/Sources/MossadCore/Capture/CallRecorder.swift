@@ -545,7 +545,7 @@ public final class CallRecorder: @unchecked Sendable {
         screens = makeScreens(ScreenCall(directory: dir, platform: r.platform, bundleID: r.bundleID, meetingID: r.meetingID,
                                          offset: { [weak self] in self?.recordedLength ?? 0 },
                                          addMarker: { [weak self] offset, text in
-            CaptureQueue.queue.async {
+            CaptureQueue.queue.async { [weak self] in
                 guard let self, self.record?.id == id else { return }
                 self.addMarker(at: offset, text)
             }

@@ -98,7 +98,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     }
 
     private func search() {
-        guard !searching, shared.withLock({ sharedState.active }) else { return }
+        // Without the permission the window list would ask for it; a call never asks.
+        guard !searching, shared.withLock({ sharedState.active }), CGPreflightScreenCaptureAccess() else { return }
         searching = true
         lastSearch = Date()
         let generation = generation

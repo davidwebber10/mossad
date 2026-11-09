@@ -191,6 +191,7 @@ public enum OnboardingPermissions {
             case .accessibility: "Without Accessibility, Mossad cannot read call window titles, so some calls are not detected."
             case .notifications: "Without Notifications, Mossad cannot tell you when new voices need names."
             case .automation: "Without Automation, Google Meet calls in the browser are not detected."
+            case .screenCapture: "Without Screen Recording, shared screens are not captured."
             }
             if !lines.contains(line) { lines.append(line) }
         }

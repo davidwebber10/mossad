@@ -15,13 +15,15 @@ public enum PermissionState: Equatable, Sendable {
 
 public enum PermissionKind: Hashable, Sendable {
     case microphone, systemAudio, accessibility, calendars, notifications
+    /// Screen & System Audio Recording, for "Capture shared screens" only. Optional: never asked for in setup.
+    case screenCapture
     case automation(String)
 
 
     /// Privacy lists with a "+" button also take an app dropped from Finder.
     public var acceptsDraggedApp: Bool {
         switch self {
-        case .systemAudio, .accessibility: true
+        case .systemAudio, .accessibility, .screenCapture: true
         default: false
         }
     }
@@ -33,7 +35,7 @@ public enum PermissionKind: Hashable, Sendable {
         let security = "x-apple.systempreferences:com.apple.preference.security?"
         let s = switch self {
         case .microphone: security + "Privacy_Microphone"
-        case .systemAudio: security + "Privacy_ScreenCapture"
+        case .systemAudio, .screenCapture: security + "Privacy_ScreenCapture"
         case .accessibility: security + "Privacy_Accessibility"
         case .calendars: security + "Privacy_Calendars"
         case .automation: security + "Privacy_Automation"
