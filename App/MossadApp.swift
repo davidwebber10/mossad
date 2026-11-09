@@ -153,7 +153,20 @@ final class SecondsClock: ObservableObject {
 /// by hand does too. A start at login stays quiet in the menu bar.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// `kill` and `pkill` (an install) quit like Quit does, so a live call ends cleanly.
+    private var terminateSignal: DispatchSourceSignal?
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // A key stored by another process (`--import-keys`) shows when the owner comes back.
+        AppController.current?.keysChanged()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler { MainActor.assumeIsolated { NSApp.terminate(nil) } }
+        source.resume()
+        terminateSignal = source
         let event = NSAppleEventManager.shared().currentAppleEvent
         let atLogin = event?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil
             // Login items started by the system do not always say so; a start in the first minutes after

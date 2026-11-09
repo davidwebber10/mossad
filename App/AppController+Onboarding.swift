@@ -82,6 +82,7 @@ extension AppController {
     }
 
     func openOnboarding() {
+        keysChanged()
         OnboardingWindow.shared.show(controller: self)
     }
 

@@ -152,6 +152,8 @@ final class AppController: ObservableObject {
     /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
     /// and syncs nothing.
     private(set) var isInert = false
+    /// Another copy held the folder's lock at launch (+SecondCopy). The menu says so, and nothing is processed.
+    @Published private(set) var isSecondCopy = false
     let library: VoiceLibrary
     let keychain = Keychain.app
     /// What views show from the Keychain and the coach's files, read again only when it changes (+Display).
@@ -286,10 +288,18 @@ final class AppController: ObservableObject {
         // Rehearsal only walks through setup: like a preview, it starts no detection, recording, processing, or sync.
         // A second copy on the same folder would delete or cut the first copy's live recording at launch.
         if !preview, !Rehearsal.isOn {
-            instanceLock = InstanceLock(root: paths.root)
-            if instanceLock == nil { Log.error("Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings") }
+            switch InstanceLock.acquire(root: paths.root) {
+            case .held(let lock): instanceLock = lock
+            case .taken:
+                isSecondCopy = true
+                Log.error("Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings")
+                waitForInstanceLock()
+            case .failed(let code):
+                // Not a sign of another copy, so this copy works as before the lock existed.
+                Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
+            }
         }
-        let inert = preview || Rehearsal.isOn || instanceLock == nil
+        let inert = preview || Rehearsal.isOn || isSecondCopy
         isInert = inert
         // Reading the calendar records nothing, so the preview shows the real upcoming meetings too.
         if inert { refreshUpcoming() }
@@ -886,6 +896,8 @@ final class AppController: ObservableObject {
     func chatAnswer(_ question: String, history: [ChatMessage], about callID: String? = nil,
                     onStep: @escaping @Sendable (String) -> Void) async throws -> String {
         guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
+        // The chat's `remember` tool writes the coach's profile.
+        defer { coachVersion += 1 }
         return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths,
                                                                           about: callID, onStep: onStep)
     }
@@ -917,6 +929,7 @@ final class AppController: ObservableObject {
     }
 
     func deleteMeeting(_ callID: String) {
+        guard !isSecondCopy else { return }
         let archived = meetings.first { $0.id == callID }
         let archive = cloudArchive
         Task {
@@ -1145,6 +1158,7 @@ final class AppController: ObservableObject {
     }
 
     private func track(_ work: @escaping () async -> Void) async {
+        guard !isSecondCopy else { return }
         processing += 1
         refresh()
         await work()

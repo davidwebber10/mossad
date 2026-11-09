@@ -13,30 +13,41 @@ final class InstanceLockTests: XCTestCase {
         try? FileManager.default.removeItem(at: dir)
     }
 
+    private func held(_ root: URL) -> InstanceLock? {
+        if case .held(let lock) = InstanceLock.acquire(root: root) { return lock }
+        return nil
+    }
+
     func testTheFirstCopyGetsTheLock() {
-        XCTAssertNotNil(InstanceLock(root: dir))
+        XCTAssertNotNil(held(dir))
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent(".lock").path))
     }
 
-    func testASecondCopyDoesNotGetTheLockWhileTheFirstHoldsIt() {
-        let first = InstanceLock(root: dir)
+    func testASecondCopyIsToldThatTheLockIsTaken() {
+        let first = held(dir)
         XCTAssertNotNil(first)
-        XCTAssertNil(InstanceLock(root: dir))
+        guard case .taken = InstanceLock.acquire(root: dir) else { return XCTFail("expected taken") }
         withExtendedLifetime(first) {}
     }
 
     func testTheLockIsFreeAgainWhenItsHolderEnds() {
-        var first = InstanceLock(root: dir)
+        var first = held(dir)
         XCTAssertNotNil(first)
         first = nil
-        XCTAssertNotNil(InstanceLock(root: dir))
+        XCTAssertNotNil(held(dir))
     }
 
     func testAnotherFolderHasItsOwnLock() throws {
         let other = dir.appendingPathComponent("Rehearsal")
         try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
-        let first = InstanceLock(root: dir)
-        XCTAssertNotNil(InstanceLock(root: other))
+        let first = held(dir)
+        XCTAssertNotNil(held(other))
         withExtendedLifetime(first) {}
+    }
+
+    func testAFolderThatCannotBeLockedIsNotAnotherCopy() {
+        let missing = dir.appendingPathComponent("missing")
+        guard case .failed(let code) = InstanceLock.acquire(root: missing) else { return XCTFail("expected failed") }
+        XCTAssertEqual(code, ENOENT)
     }
 }

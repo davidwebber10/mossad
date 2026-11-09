@@ -119,6 +119,12 @@ struct MenuContent: View {
     @ViewBuilder
     private var statusSection: some View {
         switch controller.status {
+        case .idle where controller.isSecondCopy:
+            StatusRow(title: "Another copy of Mossad is running", detail: "This copy does not record. It takes over when the other copy quits.") {
+                Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 8, height: 8)
+            } action: {
+                EmptyView()
+            }
         case .idle where !controller.isOn:
             StatusRow(title: "Mossad is off",
                       detail: controller.offUntilDate.map { "Until \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Until you turn it on") {
