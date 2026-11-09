@@ -108,8 +108,17 @@ public struct LocalServerModel: LanguageModel {
         if let u = reply["usage"] as? [String: Any] {
             usage?.record(service: .local, purpose: purpose, model: reply["model"] as? String ?? model,
                           inputTokens: u["prompt_tokens"] as? Int, outputTokens: u["completion_tokens"] as? Int)
+            if let read = u["prompt_tokens"] as? Int, Self.wasCut(sent: request.httpBody?.count ?? 0, read: read) {
+                Log.error("The local server read \(read) tokens of a longer prompt; its context is likely too small for this meeting. In Ollama, raise OLLAMA_CONTEXT_LENGTH.")
+            }
         }
         return reply
+    }
+
+    /// Ollama cuts a prompt longer than its context without a word; far fewer tokens read than the bytes sent
+    /// (about 4 to a token) shows it.
+    static func wasCut(sent bytes: Int, read tokens: Int) -> Bool {
+        bytes > 16_000 && tokens < bytes / 4 / 2
     }
 
     /// Loads a request with redirects to another address refused, and a closed port reported as a stopped server.

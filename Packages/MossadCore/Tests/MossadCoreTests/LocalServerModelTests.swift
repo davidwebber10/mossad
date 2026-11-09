@@ -162,6 +162,12 @@ final class LocalServerModelTests: XCTestCase {
         XCTAssertEqual(StubURLProtocol.requests[0].url.absoluteString, "http://localhost:11434/v1/models")
     }
 
+    func testAPromptTheServerCutIsNoticed() {
+        XCTAssertTrue(LocalServerModel.wasCut(sent: 60_000, read: 4096), "about 15k tokens sent, 4k read")
+        XCTAssertFalse(LocalServerModel.wasCut(sent: 60_000, read: 14_000))
+        XCTAssertFalse(LocalServerModel.wasCut(sent: 8_000, read: 500), "a short prompt is not judged")
+    }
+
     func testOnlyThisMacCountsAsLocal() {
         XCTAssertTrue(LocalServer.isOnThisMac(URL(string: "http://localhost:11434/v1")!))
         XCTAssertTrue(LocalServer.isOnThisMac(URL(string: "http://127.0.0.1:1234/v1")!))
