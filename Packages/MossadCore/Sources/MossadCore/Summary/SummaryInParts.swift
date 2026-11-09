@@ -101,11 +101,17 @@ extension LLMSummarizer {
         }
     }
 
-    /// The combined notes, with every part's action items and decisions kept: a small model combining them can drop some.
+    /// The combined notes. The combine step merges the parts' action items and decisions, repeats included; when
+    /// it drops all of them, the parts' own lists come back, once each.
     static func merged(_ combined: Output, parts: [Output]) -> Output {
         var seenItems = Set<String>(), seenDecisions = Set<String>(), seenTags = Set<String>()
-        let items = parts.flatMap(\.action_items).filter { seenItems.insert($0.task.lowercased().trimmingCharacters(in: .whitespaces)).inserted }
-        let decisions = parts.flatMap(\.decisions).filter { seenDecisions.insert($0.text.lowercased().trimmingCharacters(in: .whitespaces)).inserted }
+        var items = combined.action_items, decisions = combined.decisions
+        if items.isEmpty {
+            items = parts.flatMap(\.action_items).filter { seenItems.insert($0.task.lowercased().trimmingCharacters(in: .whitespaces)).inserted }
+        }
+        if decisions.isEmpty {
+            decisions = parts.flatMap(\.decisions).filter { seenDecisions.insert($0.text.lowercased().trimmingCharacters(in: .whitespaces)).inserted }
+        }
         var tags = combined.tags ?? []
         if tags.isEmpty { tags = Array(parts.flatMap { $0.tags ?? [] }.filter { seenTags.insert($0.lowercased()).inserted }.prefix(5)) }
         return Output(summary: combined.summary, topics: combined.topics, action_items: items, decisions: decisions,

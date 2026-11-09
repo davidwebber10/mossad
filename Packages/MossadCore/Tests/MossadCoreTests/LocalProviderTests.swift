@@ -124,6 +124,16 @@ final class MapReduceSummaryTests: XCTestCase {
         XCTAssertEqual(summary.decisions.map(\.text), ["Ship it"])
         XCTAssertEqual(summary.hasOutcomes, true)
     }
+
+    func testTheCombinedListsWinWhenTheCombineStepKeepsThem() {
+        let part = LLMSummarizer.Output(summary: "p", topics: [], action_items: [ActionItem(owner: "Sam", task: "Model rail")],
+                                        decisions: [], headline: "", kind: "", has_outcomes: true, tags: ["Freight"], title: nil)
+        let combined = LLMSummarizer.Output(summary: "c", topics: [], action_items: [ActionItem(owner: "Sam", task: "Model the rail option")],
+                                            decisions: [], headline: "", kind: "", has_outcomes: true, tags: nil, title: "T")
+        let merged = LLMSummarizer.merged(combined, parts: [part, part])
+        XCTAssertEqual(merged.action_items.map(\.task), ["Model the rail option"])
+        XCTAssertEqual(merged.tags, ["Freight"])
+    }
 }
 
 /// A model with a small context that counts a token per word and answers with fixed JSON.
