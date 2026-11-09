@@ -15,9 +15,11 @@ public enum Log {
 
     public static var fileURL: URL? { directory?.appendingPathComponent("mossad.log") }
 
-    public static func info(_ message: String) { write("INFO", message); logger.info("\(message, privacy: .public)") }
-    public static func error(_ message: String) { write("ERROR", message); logger.error("\(message, privacy: .public)") }
-    public static func debug(_ message: String) { write("DEBUG", message); logger.debug("\(message, privacy: .public)") }
+    // The owner's own file gets the full line. The unified log is readable by other tools and by a sysdiagnose, and
+    // lines carry meeting titles, people's names, and provider replies, so there the text is private.
+    public static func info(_ message: String) { write("INFO", message); logger.info("\(message, privacy: .private)") }
+    public static func error(_ message: String) { write("ERROR", message); logger.error("\(message, privacy: .private)") }
+    public static func debug(_ message: String) { write("DEBUG", message); logger.debug("\(message, privacy: .private)") }
 
     private static func write(_ level: String, _ message: String) {
         let line = "\(ISO8601DateFormatter().string(from: Date())) \(level) \(message)\n"

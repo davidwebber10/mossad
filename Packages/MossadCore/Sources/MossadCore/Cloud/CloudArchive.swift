@@ -17,27 +17,50 @@ public final class CloudArchive: @unchecked Sendable {
 
     /// Uploads every finished recording that is not archived yet, then deletes local copies of archived
     /// recordings older than `keepLocalDays` (nil keeps them). Returns the number uploaded.
+    ///
+    /// A local recording counts as archived only when its size is the size that was uploaded: a merge makes a new,
+    /// longer recording, and that one must go up before any local audio is removed. The key is saved through the
+    /// pipeline, which is the one writer of `call.json`.
     @discardableResult
-    public func sync(keepLocalDays: Int?, now: Date = Date()) async -> Int {
+    public func sync(keepLocalDays: Int?, now: Date = Date(), pipeline: Pipeline) async -> Int {
         var uploaded = 0
-        for var r in ProcessingQueue(paths: paths).allRecords() where r.status == .written {
+        for r in ProcessingQueue(paths: paths).allRecords() where r.status == .written {
             let dir = paths.callDirectory(r.id)
             let local = Recording.url(in: dir)
-            let hasLocal = FileManager.default.fileExists(atPath: local.path)
-            if r.cloudKey == nil, hasLocal {
+            guard let size = Self.size(local) else { continue }
+            var archived = r.cloudKey != nil && r.cloudSize == size
+            if !archived, let key = r.cloudKey, r.cloudSize == nil, await remoteSize(key) == size {
+                // Uploaded before sizes were kept, and the bucket has this very file.
+                archived = await pipeline.setCloudKey(callID: r.id, key: key, size: size)
+            }
+            if !archived {
                 let key = Self.key(for: r.id)
                 guard await put(local, key: key) else { continue }
-                r.cloudKey = key
-                do { try r.save(to: dir) } catch { Log.error("Saving \(r.id) failed: \(error)"); continue }
+                // The record may have changed during the upload (a merge, a new summary): only this size is archived.
+                guard Self.size(local) == size, await pipeline.setCloudKey(callID: r.id, key: key, size: size) else { continue }
+                archived = true
                 uploaded += 1
                 Log.info("Archived \(r.id) to the cloud")
             }
-            if let days = keepLocalDays, r.cloudKey != nil, hasLocal, r.end < now.addingTimeInterval(-Double(days) * 86_400) {
+            if let days = keepLocalDays, archived, r.end < now.addingTimeInterval(-Double(days) * 86_400), Self.size(local) == size {
                 try? FileManager.default.removeItem(at: local)
                 Log.info("Removed the local recording of \(r.id); it stays in the cloud")
             }
         }
         return uploaded
+    }
+
+    static func size(_ file: URL) -> Int64? {
+        ((try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? NSNumber)?.int64Value
+    }
+
+    /// The size of an object in the bucket, or nil when it is not there or the bucket did not answer.
+    private func remoteSize(_ key: String) async -> Int64? {
+        var request = URLRequest(url: S3Presigner.url(config, method: "HEAD", key: key))
+        request.httpMethod = "HEAD"
+        guard let (_, response) = try? await session.data(for: request), let http = response as? HTTPURLResponse,
+              http.statusCode == 200 else { return nil }
+        return http.value(forHTTPHeaderField: "Content-Length").flatMap(Int64.init)
     }
 
     /// A signed link the player can stream for a few hours, without the secret.

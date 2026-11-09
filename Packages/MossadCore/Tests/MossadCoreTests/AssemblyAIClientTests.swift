@@ -200,3 +200,80 @@ final class AssemblyAISplitTests: XCTestCase {
         XCTAssertEqual(e.model, "universal-2")
     }
 }
+
+extension AssemblyAIClientTests {
+    // MARK: Paid jobs
+
+    private func completed(_ id: String) -> Data { json(["id": id, "status": "completed", "utterances": [["speaker": "A", "start": 0, "end": 1000, "text": "Hi."]]]) }
+
+    /// The Mac sleeps after a call and one status check fails. The job is paid for; it must not start again.
+    func testAFailedStatusCheckDoesNotStartASecondJob() async throws {
+        var polls = 0
+        StubURLProtocol.handler = { r in
+            switch (r.method, r.url.path) {
+            case ("POST", "/v2/upload"): return (200, json(["upload_url": "u"]))
+            case ("POST", "/v2/transcript"): return (200, json(["id": "t1", "status": "queued"]))
+            default:
+                polls += 1
+                return polls == 1 ? (503, Data()) : (200, self.completed("t1"))
+            }
+        }
+        let utterances = try await client().transcribe(file: file, track: .them)
+        XCTAssertEqual(utterances.count, 1)
+        XCTAssertEqual(StubURLProtocol.requests.filter { $0.method == "POST" && $0.url.path == "/v2/transcript" }.count, 1)
+    }
+
+    func testAJobThatNeverEndsFailsAfterTheLongestWait() async {
+        StubURLProtocol.handler = { r in
+            switch (r.method, r.url.path) {
+            case ("POST", "/v2/upload"): return (200, json(["upload_url": "u"]))
+            default: return (200, json(["id": "t1", "status": "processing"]))
+            }
+        }
+        let client = AssemblyAIClient(apiKey: "k", session: StubURLProtocol.session(), pollInterval: .milliseconds(5), retryPause: .zero, maxWait: 0.05)
+        do {
+            _ = try await client.transcribe(file: file, track: .them)
+            XCTFail("a job that never ends must not hold the call for good")
+        } catch {}
+    }
+
+    /// The job id is handed out as soon as the service gives it, and a later run polls it: no upload, no new job.
+    func testASavedJobIsPolledInsteadOfPaidForAgain() async throws {
+        final class Saved: @unchecked Sendable { var ids: [String?] = [] }
+        let saved = Saved()
+        StubURLProtocol.handler = { r in
+            switch (r.method, r.url.path) {
+            case ("POST", "/v2/upload"): return (200, json(["upload_url": "u"]))
+            case ("POST", "/v2/transcript"): return (200, json(["id": "t7", "status": "queued"]))
+            default: return (200, self.completed("t7"))
+            }
+        }
+        _ = try await TranscriptionJob.$store.withValue(TranscriptionJobStore(saved: nil) { saved.ids.append($0) }) {
+            try await client().transcribe(file: file, track: .them)
+        }
+        XCTAssertEqual(saved.ids, ["t7"])
+
+        let again = client()
+        let utterances = try await TranscriptionJob.$store.withValue(TranscriptionJobStore(saved: "t7") { saved.ids.append($0) }) {
+            try await again.transcribe(file: file, track: .them)
+        }
+        XCTAssertEqual(utterances.count, 1)
+        XCTAssertEqual(StubURLProtocol.requests.map { "\($0.method) \($0.url.path)" }, ["GET /v2/transcript/t7"])
+    }
+
+    /// AssemblyAI no longer knows the saved job: a new one starts.
+    func testASavedJobThatIsGoneStartsANewOne() async throws {
+        StubURLProtocol.handler = { r in
+            switch (r.method, r.url.path) {
+            case ("GET", "/v2/transcript/old"): return (404, Data())
+            case ("POST", "/v2/upload"): return (200, json(["upload_url": "u"]))
+            case ("POST", "/v2/transcript"): return (200, json(["id": "t8", "status": "queued"]))
+            default: return (200, self.completed("t8"))
+            }
+        }
+        let utterances = try await TranscriptionJob.$store.withValue(TranscriptionJobStore(saved: "old") { _ in }) {
+            try await client().transcribe(file: file, track: .them)
+        }
+        XCTAssertEqual(utterances.count, 1)
+    }
+}

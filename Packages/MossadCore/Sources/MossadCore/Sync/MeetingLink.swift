@@ -32,6 +32,8 @@ public struct MeetingLink: Codable, Equatable, Identifiable, Sendable {
     public var options: ShareOptions
     public var created: Date
     public var expires: Date?
+    /// The meeting is gone and the link must stop; set until the server confirms.
+    public var stopping: Bool?
 
     public var id: String { Self.serverID(token) }
 
@@ -112,7 +114,12 @@ public struct ShareBook: Codable, Equatable, Sendable {
 
     public init(links: [MeetingLink] = []) { self.links = links }
 
-    public func link(for callID: String) -> MeetingLink? { links.first { $0.callID == callID && !$0.isExpired() } }
+    public func link(for callID: String) -> MeetingLink? { links.first { $0.callID == callID && !$0.isExpired() && $0.stopping != true } }
+
+    /// Marks every link of a meeting that is gone, so each is stopped on the server, now or on a later try.
+    public mutating func markStopping(callID: String) {
+        for i in links.indices where links[i].callID == callID { links[i].stopping = true }
+    }
 
     public mutating func put(_ link: MeetingLink) {
         links.removeAll { $0.token == link.token }
@@ -121,9 +128,13 @@ public struct ShareBook: Codable, Equatable, Sendable {
 
     public mutating func remove(_ token: String) { links.removeAll { $0.token == token } }
 
+    /// An unreadable file is moved aside (see `StoredFile`), so the links in it are kept for the owner.
     public static func load(from dir: URL) -> ShareBook {
-        guard let data = try? Data(contentsOf: dir.appendingPathComponent(fileName)) else { return ShareBook() }
-        return (try? JSONDecoder.callRecord.decode(ShareBook.self, from: data)) ?? ShareBook()
+        (try? loadChecked(from: dir)) ?? ShareBook()
+    }
+
+    public static func loadChecked(from dir: URL) throws -> ShareBook {
+        try StoredFile.load(ShareBook.self, from: dir.appendingPathComponent(fileName), decoder: .callRecord) ?? ShareBook()
     }
 
     public func save(to dir: URL) throws {

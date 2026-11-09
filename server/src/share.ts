@@ -127,7 +127,8 @@ async function chat(request: Request, env: Env, id: string, share: Share): Promi
   const model = share.model?.startsWith('claude-') ? share.model : (env.SHARE_MODEL || defaultModel);
   try {
     const message = await client.messages.create({
-      model, max_tokens: 1500,
+      // The model thinks before it answers, and thinking counts: a small limit could leave no room for the answer.
+      model, max_tokens: 6000,
       system: [{ type: 'text', text: chatSystem(share), cache_control: { type: 'ephemeral' } }],
       messages: [...history, { role: 'user', content: question }],
     });

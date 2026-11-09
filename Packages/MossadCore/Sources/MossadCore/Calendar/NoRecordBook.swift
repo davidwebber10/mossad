@@ -22,6 +22,11 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
     }
 
     var rules: [Rule] = []
+    /// The file was there and did not decode. The rules are unknown, so every call that matches an invite is
+    /// blocked for this session: the owner's "do not record" wins over a recording.
+    public private(set) var unreadable = false
+
+    private enum CodingKeys: String, CodingKey { case rules }
 
     public init() {}
 
@@ -67,18 +72,35 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
     }
 
     func blocks(_ invite: (event: CalendarEventInfo, key: String)) -> Bool {
-        rules.contains { $0.key == invite.key && $0.covers(invite.event.start) }
+        unreadable || rules.contains { $0.key == invite.key && $0.covers(invite.event.start) }
     }
 
     func blockingInvite(platform: Platform, meetingID: String?, at time: Date, events: [CalendarEventInfo]) -> (event: CalendarEventInfo, key: String)? {
         guard let invite = Self.invite(platform: platform, meetingID: meetingID, at: time, events: events),
-              rules.contains(where: { $0.key == invite.key && $0.covers(invite.event.start) }) else { return nil }
+              blocks(invite) else { return nil }
         return invite
     }
 
+    /// Fails closed: a file that is there but cannot be read gives a book that blocks every call with an invite.
+    /// The file is moved aside, so the book stays closed on later launches too, until the owner sets a choice
+    /// again and a new file is saved.
     public static func load(from dir: URL) -> NoRecordBook {
-        guard let data = try? Data(contentsOf: dir.appendingPathComponent(fileName)) else { return NoRecordBook() }
-        return (try? JSONDecoder.callRecord.decode(NoRecordBook.self, from: data)) ?? NoRecordBook()
+        var book = NoRecordBook()
+        do {
+            book = try loadChecked(from: dir)
+            let file = dir.appendingPathComponent(fileName)
+            guard !FileManager.default.fileExists(atPath: file.path),
+                  ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []).contains(where: StoredFile.isQuarantined) else { return book }
+        } catch {
+            Log.error("The do-not-record list could not be read; calls with an invite are not recorded until it is set again: \(error)")
+        }
+        book.unreadable = true
+        return book
+    }
+
+    /// Nil-free: a missing file is an empty book. A file that does not decode is moved aside and throws.
+    public static func loadChecked(from dir: URL) throws -> NoRecordBook {
+        try StoredFile.load(NoRecordBook.self, from: dir.appendingPathComponent(fileName), decoder: .callRecord) ?? NoRecordBook()
     }
 
     public func save(to dir: URL) throws {

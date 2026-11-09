@@ -178,6 +178,10 @@ final class AppController: ObservableObject {
     /// The menu bar panel shown in a window, for a preview's screenshots.
     var panelPreviewWindow: NSWindow?
     private var housekeeping: Timer?
+    private var wakeObserver: NSObjectProtocol?
+    var stoppingShares = false
+    private var refreshing = false
+    private var refreshAgain = false
     private var outputWatcher: OutputDeviceWatcher?
     private var browserLaunchObserver: NSObjectProtocol?
 
@@ -394,9 +398,17 @@ final class AppController: ObservableObject {
                 Task { await self?.runHousekeeping() }
                 Task { @MainActor in self?.refreshLatestModels() }
             }
+            // A call that failed while the Mac went to sleep (no network) tries again at wake, not up to an hour later.
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(20))
+                    self?.processPending()
+                }
+            }
             ProcessingQueue(paths: paths).recoverInterrupted()
         }
-        refresh()
+        loadMeetings()
         if !inert {
             relinkEmails()
             Task { await track { await self.pipeline.continueSplitMeetings() } }
@@ -433,7 +445,28 @@ final class AppController: ObservableObject {
         meetings.filter { $0.status == .written && !$0.unknownSpeakers.isEmpty }
     }
 
+    /// Reads the meeting list off the main thread. Only records whose file changed are decoded again (see
+    /// `RecordCache`), and a refresh asked for during one runs once more after it, so the list ends up current.
     func refresh() {
+        if refreshing { refreshAgain = true; return }
+        refreshing = true
+        let paths = paths
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let records = Self.previewFailures(MeetingIndex(paths: paths).all())
+            await MainActor.run {
+                guard let self else { return }
+                self.meetings = records
+                self.refreshing = false
+                if self.refreshAgain {
+                    self.refreshAgain = false
+                    self.refresh()
+                }
+            }
+        }
+    }
+
+    /// The first list at launch, before anything reads `meetings`.
+    private func loadMeetings() {
         meetings = Self.previewFailures(MeetingIndex(paths: paths).all())
     }
 
@@ -448,7 +481,7 @@ final class AppController: ObservableObject {
 
     /// `processing` puts the newest meeting back in its summary step after two busy replies; `failed` marks it
     /// failed with a raw gateway page as its reason. Only in memory.
-    private static func previewFailures(_ records: [CallRecord]) -> [CallRecord] {
+    nonisolated private static func previewFailures(_ records: [CallRecord]) -> [CallRecord] {
         guard CommandLine.arguments.contains("--ui-preview"),
               let list = ProcessInfo.processInfo.environment["MOSSAD_ERROR_PREVIEW"]?.split(separator: ","),
               let i = records.indices.filter({ records[$0].status == .written }).max(by: { records[$0].start < records[$1].start })
@@ -504,7 +537,8 @@ final class AppController: ObservableObject {
                      region: mailRegion, accessKeyID: mailAccessKeyID)
     }
 
-    /// Recreates the pipeline with the current keys and settings.
+    /// Gives the pipeline the current keys and settings. The pipeline itself lives as long as the app, so a call in
+    /// flight stays known to it; a second pipeline would process that call again.
     func rebuildPipeline() {
         refreshLatestModels()
         updateSharedAIKey()
@@ -519,6 +553,11 @@ final class AppController: ObservableObject {
         }
         let summarizer: Summarizing? = languageModel.map { LLMSummarizer(llm: $0, ownerName: owner, organization: organization) }
         let notifier = notifier
+        if let pipeline {
+            pipeline.configure(Pipeline.Configuration(transcriber: transcriber, summarizer: summarizer, ownerName: owner,
+                                                      voiceFingerprints: voiceFingerprints))
+            return
+        }
         pipeline = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: embeddings,
                             calendar: calendar, summarizer: summarizer, notify: { record in
                                 Task { @MainActor in notifier.postNewVoices(record) }
@@ -532,11 +571,23 @@ final class AppController: ObservableObject {
                             onProgress: { [weak self] id, p in
                                 Task { @MainActor in self?.progress[id] = p }
                             },
-                            titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) })
+                            titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) },
+                            onDiscard: { [weak self] record in
+                                Task { @MainActor in self?.forget(record) }
+                            })
+    }
+
+    /// A meeting that is gone (deleted, or merged into another) leaves nothing behind outside this Mac: its
+    /// archived recording and its public share links go too.
+    private func forget(_ record: CallRecord) {
+        if let archive = cloudArchive, record.cloudKey != nil { Task { await archive.delete(record) } }
+        stopSharing(callID: record.id)
     }
 
     /// Puts a record saved by the pipeline into the list, so the step shows while the call is processed.
     private func update(_ record: CallRecord) {
+        // A list that is being read now may hold this record from before the save; read once more after it.
+        if refreshing { refreshAgain = true }
         if let i = meetings.firstIndex(where: { $0.id == record.id }) { meetings[i] = record } else { refresh() }
     }
 
@@ -802,6 +853,8 @@ final class AppController: ObservableObject {
 
     private func stopLive() {
         live.save()
+        // No later save: the pipeline removes `live.json`, and a save two seconds after the last words put it back.
+        live.fileURL = nil
         liveNaming?.cancel()
         liveNaming = nil
         liveTitling?.cancel()
@@ -957,10 +1010,10 @@ final class AppController: ObservableObject {
     func deleteMeeting(_ callID: String) {
         guard !isSecondCopy else { return }
         let archived = meetings.first { $0.id == callID }
-        let archive = cloudArchive
         Task {
-            if let archived, let archive { await archive.delete(archived) }
+            // The pipeline first: it refuses a call that is still processing, and then the cloud copy must stay.
             if await pipeline.delete(callID: callID) {
+                if let archived { forget(archived) } else { stopSharing(callID: callID) }
                 if selectedMeetingID == callID { selectedMeetingID = nil }
                 refresh()
             }
@@ -994,11 +1047,12 @@ final class AppController: ObservableObject {
 
     /// Uploads finished recordings and removes old local copies, off the main actor.
     func syncCloud() {
-        guard !isInert, let archive = cloudArchive else { return }
+        // One loop at a time: two would upload the same recording together.
+        guard !isInert, !cloudSyncing, let archive = cloudArchive, let pipeline else { return }
         let days = cloudKeepLocalDays
         cloudSyncing = true
         Task.detached(priority: .utility) {
-            let uploaded = await archive.sync(keepLocalDays: days)
+            let uploaded = await archive.sync(keepLocalDays: days, pipeline: pipeline)
             await MainActor.run {
                 self.cloudSyncing = false
                 if uploaded > 0 { self.refresh() }

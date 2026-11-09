@@ -16,7 +16,13 @@ public enum AudioJoin {
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: chunk)!
         for (input, duration) in zip(inputs, durations) {
             var remaining = AVAudioFramePosition(duration * TrackWriter.sampleRate)
-            if let input, let file = try? AVAudioFile(forReading: input), file.processingFormat == format {
+            let file = input.flatMap { try? AVAudioFile(forReading: $0) }
+            if let input, file?.processingFormat != format {
+                // Silence in place of audio that exists is a loss; say so, so a merged meeting can be checked.
+                Log.error("Joining \(input.lastPathComponent) from \(input.deletingLastPathComponent().lastPathComponent): "
+                          + (file == nil ? "it could not be read" : "its format differs") + "; that part is silent")
+            }
+            if let file, file.processingFormat == format {
                 while file.framePosition < file.length, remaining > 0 {
                     try file.read(into: buffer, frameCount: AVAudioFrameCount(min(AVAudioFramePosition(chunk), remaining)))
                     guard buffer.frameLength > 0 else { break }

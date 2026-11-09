@@ -27,7 +27,7 @@ struct SpokenWord: Equatable {
         var letters: [String: String] = [:]
         func letter(_ s: String) -> String {
             if let l = letters[s] { return l }
-            let l = String(Character(UnicodeScalar(UInt8(65 + letters.count % 26))))
+            let l = SpeakerLetter.at(letters.count)
             letters[s] = l
             return l
         }
@@ -48,7 +48,9 @@ struct SpokenWord: Equatable {
 
 /// Encodes a track to mono AAC: an hour is about 14 MB at 32 kbps instead of about 230 MB of raw samples.
 enum TrackEncoder {
+    /// The pipeline already sends a compressed copy; it goes as it is, unless a size limit asks for a lower rate.
     static func m4a(_ source: URL, bitRate: Int = 32_000) throws -> URL {
+        if source.pathExtension == "m4a", bitRate >= 32_000 { return source }
         let input = try AVAudioFile(forReading: source)
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("mossad-\(UUID().uuidString).m4a")
         let settings: [String: Any] = [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: input.processingFormat.sampleRate,
@@ -118,7 +120,7 @@ public struct DeepgramTranscriber: Transcribing {
     public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
         progress(.uploading(nil))
         let audio = try TrackEncoder.m4a(file)
-        defer { try? FileManager.default.removeItem(at: audio) }
+        defer { if audio != file { try? FileManager.default.removeItem(at: audio) } }
         var url = URLComponents(string: "https://api.deepgram.com/v1/listen")!
         // diarize_model replaces the old diarize flag; sending both is rejected.
         url.queryItems = [("model", model), ("diarize_model", "latest"), ("punctuate", "true"), ("smart_format", "true"),
@@ -162,7 +164,7 @@ public struct ElevenLabsTranscriber: Transcribing {
     public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
         progress(.uploading(nil))
         let audio = try TrackEncoder.m4a(file)
-        defer { try? FileManager.default.removeItem(at: audio) }
+        defer { if audio != file { try? FileManager.default.removeItem(at: audio) } }
         var form = Multipart()
         form.field("model_id", model)
         form.field("diarize", "true")
@@ -211,7 +213,7 @@ public struct OpenAITranscriber: Transcribing {
         progress(.uploading(nil))
         // 24 kbps keeps about 2 hours and 20 minutes under the 25 MB limit.
         let audio = try TrackEncoder.m4a(file, bitRate: 24_000)
-        defer { try? FileManager.default.removeItem(at: audio) }
+        defer { if audio != file { try? FileManager.default.removeItem(at: audio) } }
         let data = try Data(contentsOf: audio)
         guard data.count <= Self.maxBytes else { throw ProviderError.failed("OpenAI", "the track is over OpenAI's 25 MB limit") }
         var form = Multipart()
@@ -235,7 +237,7 @@ public struct OpenAITranscriber: Transcribing {
             guard let start = s["start"] as? Double, let end = s["end"] as? Double, let text = s["text"] as? String,
                   !text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
             let speaker = s["speaker"] as? String ?? "A"
-            let label = letters[speaker] ?? String(Character(UnicodeScalar(UInt8(65 + letters.count % 26))))
+            let label = letters[speaker] ?? SpeakerLetter.at(letters.count)
             letters[speaker] = label
             return Utterance(track: track, speakerLabel: label, start: start, end: end, text: text.trimmingCharacters(in: .whitespaces))
         }

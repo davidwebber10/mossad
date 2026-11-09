@@ -25,7 +25,8 @@ public struct AnthropicModel: LanguageModel {
         var body = body
         body["model"] = model
         body["max_tokens"] = 16_000
-        body["fallbacks"] = "default"
+        // Haiku has no server-side fallback, so the field is left out for it.
+        if !model.hasPrefix("claude-haiku") { body["fallbacks"] = "default" }
         let reply = try await postJSON(Self.endpoint, headers: headers, body: body, session: session)
         if let u = reply["usage"] as? [String: Any] {
             usage?.record(service: .claude, purpose: purpose, model: reply["model"] as? String ?? model,
@@ -49,6 +50,7 @@ public struct AnthropicModel: LanguageModel {
                 "output_config": ["effort": effort.rawValue, "format": ["type": "json_schema", "schema": schema]],
                 "messages": [["role": "user", "content": user]],
             ], purpose: purpose)
+            try Self.checkComplete(reply)
             return try decodeOutput(Self.text(reply), as: Output.self)
         } catch SummaryError.http(400, let body) where body.contains("grammar is too large") {
             // Claude can refuse a large strict schema; the same schema in the instructions still gets valid JSON.
@@ -60,8 +62,14 @@ public struct AnthropicModel: LanguageModel {
                 "output_config": ["effort": effort.rawValue],
                 "messages": [["role": "user", "content": user]],
             ], purpose: purpose)
+            try Self.checkComplete(reply)
             return try decodeOutput(Self.jsonObject(in: Self.text(reply)), as: Output.self)
         }
+    }
+
+    /// A reply cut at the token limit is not JSON. Say what happened, so it does not read as a random bad reply.
+    static func checkComplete(_ reply: [String: Any]) throws {
+        if reply["stop_reason"] as? String == "max_tokens" { throw SummaryError.cutOff }
     }
 
     /// The JSON object in a reply, without a code fence or words around it.

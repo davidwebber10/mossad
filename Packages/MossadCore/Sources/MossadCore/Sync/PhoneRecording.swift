@@ -26,7 +26,14 @@ public struct PhoneRecording: Codable, Equatable, Sendable {
 
     public static func recordName(_ id: String) -> String { "rec-\(id)" }
 
+    /// What marks a call as a phone recording.
+    public static let bundleID = "iphone"
+
     struct Exists: Error {}
+    struct ConversionFailed: Error, CustomStringConvertible {
+        var reason: String
+        var description: String { "The recording could not be converted: \(reason)" }
+    }
 
     /// Writes the call folder: the audio as the mic track, an empty second track, and the record ready to process.
     /// Throws rather than overwrite a call that is already there.
@@ -43,14 +50,19 @@ public struct PhoneRecording: Codable, Equatable, Sendable {
             let chunk: AVAudioFrameCount = 16_384
             let source = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: chunk)!
             var finished = false
+            // A read error is not the end of the file: a cut-off upload must fail, so the store keeps its copy.
+            var readError: Error?
             while !finished {
                 let out = AVAudioPCMBuffer(pcmFormat: TrackWriter.outputFormat,
                                            frameCapacity: AVAudioFrameCount(Double(chunk) * TrackWriter.sampleRate / input.processingFormat.sampleRate) + 1024)!
                 var error: NSError?
                 let status = converter.convert(to: out, error: &error) { _, state in
+                    // At the end a read throws on some formats; that is the end, not a failure.
+                    if input.framePosition >= input.length { state.pointee = .endOfStream; return nil }
                     do {
                         try input.read(into: source, frameCount: chunk)
                     } catch {
+                        readError = error
                         state.pointee = .endOfStream
                         return nil
                     }
@@ -59,12 +71,19 @@ public struct PhoneRecording: Codable, Equatable, Sendable {
                     return source
                 }
                 if let error { throw error }
+                if let readError { throw readError }
+                if status == .error { throw ConversionFailed(reason: "the converter stopped") }
                 if out.frameLength > 0 { try output.write(from: out) }
-                finished = status == .endOfStream || status == .error
+                finished = status == .endOfStream
+            }
+            let inSeconds = Double(input.length) / input.processingFormat.sampleRate
+            let outSeconds = Double(output.length) / TrackWriter.sampleRate
+            if outSeconds < inSeconds - max(1, inSeconds * 0.01) {
+                throw ConversionFailed(reason: "only \(Int(outSeconds)) of \(Int(inSeconds)) s converted")
             }
             _ = try AVAudioFile(forWriting: dir.appendingPathComponent(Track.them.fileName), settings: TrackWriter.fileSettings,
                                 commonFormat: .pcmFormatFloat32, interleaved: false)
-            var r = CallRecord(id: p.id, platform: .inPerson, bundleID: "iphone", start: p.start, end: p.end, status: .recorded)
+            var r = CallRecord(id: p.id, platform: .inPerson, bundleID: bundleID, start: p.start, end: p.end, status: .recorded)
             r.calendarTitle = p.title?.nonBlank
             try r.save(to: dir)
             return r

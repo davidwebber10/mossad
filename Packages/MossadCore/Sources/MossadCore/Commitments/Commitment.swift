@@ -119,9 +119,8 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
     }
 
     public static func load(from dir: URL) throws -> CommitmentBook {
-        let url = dir.appendingPathComponent(fileName)
-        guard FileManager.default.fileExists(atPath: url.path) else { return CommitmentBook() }
-        return try JSONDecoder.coach.decode(CommitmentBook.self, from: Data(contentsOf: url))
+        // A file that does not decode is moved aside and throws, so a save after it cannot replace the book.
+        try StoredFile.load(CommitmentBook.self, from: dir.appendingPathComponent(fileName), decoder: .coach) ?? CommitmentBook()
     }
 
     public func save(to dir: URL) throws {
@@ -211,8 +210,10 @@ public actor CommitmentRunner {
     private let paths: Paths
     private let finder: CommitmentFinder
     private let since: Date
+    private let now: @Sendable () -> Date
 
-    public init(paths: Paths, finder: CommitmentFinder, since: Date) {
+    public init(paths: Paths, finder: CommitmentFinder, since: Date, now: @escaping @Sendable () -> Date = Date.init) {
+        self.now = now
         self.paths = paths
         self.finder = finder
         self.since = since
@@ -223,7 +224,8 @@ public actor CommitmentRunner {
             .sorted { $0.start < $1.start }
     }
 
-    /// Returns how many calls were read, plus one when the cleanup changed something. Stops at the first failure; the next run retries it.
+    /// Returns how many calls were read, plus one when the cleanup changed something. A call that fails waits and
+    /// the run stops there; after `RetryLedger.maxAttempts` billed failures it is left out and the later calls go on.
     @discardableResult
     public func run() async -> Int {
         let records = ProcessingQueue(paths: paths).allRecords()
@@ -236,18 +238,36 @@ public actor CommitmentRunner {
             try? book.save(to: paths.commitments)
             Log.info("Commitments: removed \(before - book.visible.count) made by other people")
         }
+        var ledger = RetryLedger.load(from: paths.commitments)
         var done = cleaned ? 1 : 0
         for r in Self.pending(records, since: since, checked: book.checked) {
+            switch ledger.state(r.id, now: now()) {
+            case .gaveUp: continue
+            case .waiting: return done
+            case .ready: break
+            }
             do {
                 let found = try await UsageContext.$callID.withValue(r.id) { try await finder.find(in: r) }
-                // Read again: the owner may have edited a commitment while this one ran.
-                var fresh = (try? CommitmentBook.load(from: paths.commitments)) ?? book
+                // Read again: the owner may have edited a commitment while this one ran. A book that cannot be
+                // read now stops the run; the older copy must not be saved over the owner's edits.
+                var fresh = try CommitmentBook.load(from: paths.commitments)
                 fresh.add(found: found, callID: r.id, at: Date())
                 try fresh.save(to: paths.commitments)
                 done += 1
+                if ledger.entries[r.id] != nil { ledger.clear(r.id); ledger.save(to: paths.commitments) }
             } catch {
-                Log.error("Finding commitments in \(r.id) failed: \(error)")
-                break
+                guard !RetryLedger.isUnbilled(error), !(error is UnreadableFile) else {
+                    Log.error("Finding commitments in \(r.id) waits: \(error)")
+                    return done
+                }
+                ledger.fail(r.id, reason: Pipeline.failureReason(error), now: now())
+                ledger.save(to: paths.commitments)
+                if ledger.state(r.id, now: now()) == .gaveUp {
+                    Log.error("Finding commitments in \(r.id) failed \(RetryLedger.maxAttempts) times; it is left out: \(error)")
+                    continue
+                }
+                Log.error("Finding commitments in \(r.id) failed; it waits before the next try: \(error)")
+                return done
             }
         }
         return done
