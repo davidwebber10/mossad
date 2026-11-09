@@ -23,7 +23,8 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
 
     var rules: [Rule] = []
     /// The file was there and did not decode. The rules are unknown, so every call that matches an invite is
-    /// blocked for this session: the owner's "do not record" wins over a recording.
+    /// blocked (the owner's "do not record" wins over a recording) until the owner sets a choice or resets the list.
+    /// The app says so at each blocked call; see `NoRecordGate.currentBlock`.
     public private(set) var unreadable = false
 
     private enum CodingKeys: String, CodingKey { case rules }
@@ -42,7 +43,9 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
         return rules.contains { $0.key == key && $0.covers(meeting.start) } ? .skipThisMeeting : .record
     }
 
+    /// A choice made now starts a list the app can read, so the block for the damaged one ends at once.
     public mutating func set(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
+        unreadable = false
         guard let key = Self.key(title: meeting.title, link: meeting.link) else { return }
         rules.removeAll { $0.key == key && $0.covers(meeting.start) }
         switch choice {
@@ -50,6 +53,12 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
         case .skipThisMeeting: rules.append(Rule(key: key, start: meeting.start, end: meeting.end))
         case .skipSeries: rules.append(Rule(key: key))
         }
+    }
+
+    /// "Reset do-not-record list": an empty list that records every call again.
+    public mutating func reset() {
+        rules = []
+        unreadable = false
     }
 
     public mutating func removeExpired(now: Date) {
@@ -72,7 +81,11 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
     }
 
     func blocks(_ invite: (event: CalendarEventInfo, key: String)) -> Bool {
-        unreadable || rules.contains { $0.key == invite.key && $0.covers(invite.event.start) }
+        unreadable || blocksByChoice(invite)
+    }
+
+    func blocksByChoice(_ invite: (event: CalendarEventInfo, key: String)) -> Bool {
+        rules.contains { $0.key == invite.key && $0.covers(invite.event.start) }
     }
 
     func blockingInvite(platform: Platform, meetingID: String?, at time: Date, events: [CalendarEventInfo]) -> (event: CalendarEventInfo, key: String)? {
@@ -132,6 +145,25 @@ public final class NoRecordGate: @unchecked Sendable {
         var plannedEnd: Date
         var lastSeen: Date
         var ended: Bool
+        /// The invite's title, for the notice of a call that was not recorded.
+        var title: String?
+        /// True when no choice of the owner blocked this call: the list could not be read.
+        var listUnreadable: Bool?
+    }
+
+    /// The call that is kept off the record now.
+    public struct Block: Equatable, Sendable {
+        public var title: String
+        /// The owner did not choose this: the do-not-record list could not be read. The app must say so.
+        public var listUnreadable: Bool
+    }
+
+    /// The block of the call that is going on, or nil when that call records.
+    public var currentBlock: Block? {
+        lock.withLock {
+            guard let s = session, !s.ended else { return nil }
+            return Block(title: s.title ?? "", listUnreadable: s.listUnreadable == true)
+        }
     }
 
     private let lock = NSCondition()
@@ -229,12 +261,15 @@ public final class NoRecordGate: @unchecked Sendable {
         guard let invite = given ?? NoRecordBook.invite(platform: platform, meetingID: meetingID, at: time, events: events),
               book.blocks(invite) else { return record(at: time) }
         save(BlockedCall(bundleID: bundleID, meetingID: meetingID, key: invite.key, plannedStart: invite.event.start,
-                         plannedEnd: invite.event.end, lastSeen: time, ended: false), at: time)
+                         plannedEnd: invite.event.end, lastSeen: time, ended: false, title: invite.event.title,
+                         listUnreadable: !book.blocksByChoice(invite)), at: time)
         return true
     }
 
     /// The same blocked meeting goes on. Runs inside the lock.
     private func hold(_ s: BlockedCall, at time: Date) -> Bool {
+        // Blocked only because the list could not be read, and the owner has a list again: that block is over.
+        if s.listUnreadable == true, !book.unreadable { return record(at: time) }
         var s = s
         s.lastSeen = time
         s.ended = false

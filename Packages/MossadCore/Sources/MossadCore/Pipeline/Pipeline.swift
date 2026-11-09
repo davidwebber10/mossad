@@ -110,7 +110,14 @@ public actor Pipeline {
             && (r.nextAttempt ?? .distantPast) <= now() && !inFlight.contains(r.id) {
             let next = now().addingTimeInterval(Self.missingSummaryRetry)
             // Saved first, so a failure or a crash waits a day too. Quiet: the calendar match and the names are done.
-            guard let latest = edit(r.id, { $0.nextAttempt = next; return true }) else { continue }
+            // The due check is made again on the record as it is now: a second run with an older list (the timer, a
+            // wake, and a sync can each start one) must not try the same meeting a second time today.
+            let time = now()
+            guard let latest = edit(r.id, { r in
+                guard r.status == .written, r.summaryMissing == true, (r.nextAttempt ?? .distantPast) <= time else { return false }
+                r.nextAttempt = next
+                return true
+            }) else { continue }
             do { try store(latest, dir: paths.callDirectory(r.id)) } catch { continue }
             Log.info("Trying the summary of \(r.id) again")
             await regenerateSummary(r.id, quiet: true)
@@ -255,6 +262,8 @@ public actor Pipeline {
             return false
         }
         r.speakersExpected = speakers
+        // A job left by a failed run was made with the old settings; this run must start its own.
+        r.transcriptionJobs = nil
         r.meUtterances = nil
         r.themUtterances = nil
         r.utterances = []
@@ -359,16 +368,20 @@ public actor Pipeline {
 
     /// Deletes a finished or failed call: its note, audio, and record. A call that is still recording or
     /// processing is refused, so the pipeline never writes into a folder that is gone.
-    public func delete(callID: String) -> Bool {
+    public func delete(callID: String) -> Bool { remove(callID: callID) != nil }
+
+    /// Deletes like `delete` and returns the record as it was on disk, so the caller can remove what the meeting
+    /// has outside this Mac (its archived recording) from the record's own values, not from a list in memory.
+    public func remove(callID: String) -> CallRecord? {
         let dir = paths.callDirectory(callID)
-        guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed else { return false }
+        guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed else { return nil }
         if let note = r.markdownPath { try? FileManager.default.removeItem(atPath: note) }
         do { try FileManager.default.removeItem(at: dir) } catch {
             Log.error("Deleting \(callID) failed: \(error)")
-            return false
+            return nil
         }
         Log.info("Deleted call \(callID)")
-        return true
+        return r
     }
 
     private func transcribe(_ r: inout CallRecord, dir: URL) async throws {

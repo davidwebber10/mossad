@@ -276,4 +276,22 @@ extension AssemblyAIClientTests {
         }
         XCTAssertEqual(utterances.count, 1)
     }
+
+    /// "Too many requests" on the status check of a saved job is not "no such job": no second paid job.
+    func testABusyAnswerForASavedJobDoesNotStartANewOne() async {
+        StubURLProtocol.handler = { r in
+            switch (r.method, r.url.path) {
+            case ("GET", "/v2/transcript/t7"): return (429, Data())
+            case ("POST", "/v2/upload"): return (200, json(["upload_url": "u"]))
+            default: return (200, json(["id": "t9", "status": "queued"]))
+            }
+        }
+        do {
+            _ = try await TranscriptionJob.$store.withValue(TranscriptionJobStore(saved: "t7") { _ in }) {
+                try await client().transcribe(file: file, track: .them)
+            }
+            XCTFail("the attempt fails and the saved job is kept for the next one")
+        } catch {}
+        XCTAssertTrue(StubURLProtocol.requests.allSatisfy { $0.method == "GET" })
+    }
 }

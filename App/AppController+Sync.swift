@@ -138,7 +138,10 @@ extension AppController {
     func syncNow() {
         guard !isInert else { return }
         let mirror = mirrorSync
-        guard let cloud = currentSync ?? mirror else { return }
+        let main = currentSync
+        // No store to pull from: a file that was set aside has no other copy to wait for.
+        if main == nil { CloudSync.nothingToMerge(paths: paths) }
+        guard let cloud = main ?? mirror else { return }
         if syncRunning { syncAgain = true; return }
         if !serverConfigSent, let c = serverConnection {
             serverConfigSent = true
@@ -151,6 +154,7 @@ extension AppController {
         Task.detached(priority: .utility) {
             var received = 0
             var failure: FriendlyError?
+            var waiting: [PendingRecording] = []
             if cloud !== mirror {
                 do {
                     let changed = try await cloud.push()
@@ -162,6 +166,7 @@ extension AppController {
                     failure = FriendlyError(error, context: .syncing, service: place)
                     Log.error("Sync with \(place) failed: \(error)")
                 }
+                waiting = (try? await cloud.recordingNotices()) ?? []
             }
             if let mirror {
                 do {
@@ -183,6 +188,14 @@ extension AppController {
                 // A sync the app stopped itself is neither a success nor a failure.
                 var status = self.syncActivity.status
                 if let failure { status.failed(failure) } else { status.succeeded() }
+                // A phone recording that has not arrived for a day: said one time, here and as a notification.
+                for p in waiting {
+                    let text = Notifier.recordingText(p)
+                    Log.error(text.title + ". " + text.body)
+                    status.show(FriendlyError(reason: text.title + ". " + text.body, context: .syncing))
+                    self.announceWaitingRecording(p)
+                }
+                self.announceSetAsideFiles()
                 self.syncActivity = SyncActivity(running: false, last: failure == nil ? Date() : self.syncActivity.last, status: status)
                 self.retryShareStops()
                 if self.syncAgain {
@@ -230,7 +243,9 @@ extension AppController {
 
     func retryShareStops() {
         let links = shareBook.links.filter { $0.stopping == true }
-        guard !links.isEmpty, !stoppingShares else { return }
+        // Without a server connection the link cannot be stopped; it stays marked until there is one. Dropping it
+        // here would leave the public page with no trace of it on this Mac.
+        guard !links.isEmpty, !stoppingShares, serverConnection != nil else { return }
         stoppingShares = true
         Task {
             for link in links {

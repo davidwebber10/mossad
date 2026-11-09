@@ -37,7 +37,14 @@ public final class CloudArchive: @unchecked Sendable {
                 let key = Self.key(for: r.id)
                 guard await put(local, key: key) else { continue }
                 // The record may have changed during the upload (a merge, a new summary): only this size is archived.
-                guard Self.size(local) == size, await pipeline.setCloudKey(callID: r.id, key: key, size: size) else { continue }
+                guard Self.size(local) == size, await pipeline.setCloudKey(callID: r.id, key: key, size: size) else {
+                    // Deleted or merged away during the upload: a meeting that is gone leaves nothing in the bucket.
+                    if !FileManager.default.fileExists(atPath: dir.path) {
+                        await delete(key: key)
+                        Log.info("Removed the upload of \(r.id), which was deleted during it")
+                    }
+                    continue
+                }
                 archived = true
                 uploaded += 1
                 Log.info("Archived \(r.id) to the cloud")
@@ -71,6 +78,10 @@ public final class CloudArchive: @unchecked Sendable {
     /// Removes the archived recording, for a deleted meeting.
     public func delete(_ r: CallRecord) async {
         guard let key = r.cloudKey else { return }
+        await delete(key: key)
+    }
+
+    private func delete(key: String) async {
         var request = URLRequest(url: S3Presigner.url(config, method: "DELETE", key: key))
         request.httpMethod = "DELETE"
         _ = try? await session.data(for: request)

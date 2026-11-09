@@ -156,6 +156,15 @@ final class CloudArchiveTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: Recording.url(in: longer).path))
     }
 
+    /// The owner deletes a meeting while its recording goes up: nothing of it stays in the bucket.
+    func testAMeetingDeletedDuringItsUploadLeavesNothingInTheBucket() async throws {
+        let dir = try call("one", endedDaysAgo: 0)
+        FakeS3.onPut = { try! FileManager.default.removeItem(at: dir) }
+        let uploaded = await archive.sync(keepLocalDays: nil, now: now, pipeline: pipeline)
+        XCTAssertEqual(uploaded, 0)
+        XCTAssertNil(FakeS3.objects["/mossad/calls/one/recording.m4a"])
+    }
+
     func testPlaybackLinkForAnArchivedRecording() throws {
         var r = CallRecord(id: "one", platform: .meet, bundleID: "x", start: now, end: now, status: .written)
         r.cloudKey = "calls/one/recording.m4a"

@@ -134,7 +134,7 @@ public struct ShareBook: Codable, Equatable, Sendable {
     }
 
     public static func loadChecked(from dir: URL) throws -> ShareBook {
-        try StoredFile.load(ShareBook.self, from: dir.appendingPathComponent(fileName), decoder: .callRecord) ?? ShareBook()
+        try StoredFile.load(ShareBook.self, from: dir.appendingPathComponent(fileName), decoder: .callRecord, recovery: .local) ?? ShareBook()
     }
 
     public func save(to dir: URL) throws {

@@ -24,7 +24,7 @@ public final class VoiceLibrary: @unchecked Sendable {
     public init(directory: URL) {
         url = directory.appendingPathComponent("voices.json")
         do {
-            storage = try StoredFile.load([VoiceProfile].self, from: url) ?? []
+            storage = try StoredFile.load([VoiceProfile].self, from: url, recovery: .local) ?? []
             loadError = nil
         } catch {
             // Unreadable is not empty: a read error keeps the file, and saves are refused until a restart reads it.

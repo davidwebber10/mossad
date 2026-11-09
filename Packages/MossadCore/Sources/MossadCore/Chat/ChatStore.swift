@@ -72,14 +72,14 @@ public struct ChatStore: Sendable {
 
     /// One chat, or nil when there is none. Throws when its file cannot be read.
     public func load(_ id: UUID) throws -> Chat? {
-        try StoredFile.load(Chat.self, from: url(id), decoder: .coach)
+        try StoredFile.load(Chat.self, from: url(id), decoder: .coach, recovery: .local)
     }
 
     /// A chat file that does not decode is moved aside (see `StoredFile`) and left out.
     public func all() -> [Chat] {
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         return files.filter { $0.pathExtension == "json" && $0.lastPathComponent != Self.deletedFileName && !StoredFile.isQuarantined($0) }
-            .compactMap { try? StoredFile.load(Chat.self, from: $0, decoder: .coach) }
+            .compactMap { try? StoredFile.load(Chat.self, from: $0, decoder: .coach, recovery: .local) }
             .sorted { $0.updated > $1.updated }
     }
 

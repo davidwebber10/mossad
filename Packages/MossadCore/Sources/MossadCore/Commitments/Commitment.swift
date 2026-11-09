@@ -120,7 +120,7 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
 
     public static func load(from dir: URL) throws -> CommitmentBook {
         // A file that does not decode is moved aside and throws, so a save after it cannot replace the book.
-        try StoredFile.load(CommitmentBook.self, from: dir.appendingPathComponent(fileName), decoder: .coach) ?? CommitmentBook()
+        try StoredFile.load(CommitmentBook.self, from: dir.appendingPathComponent(fileName), decoder: .coach, recovery: .synced) ?? CommitmentBook()
     }
 
     public func save(to dir: URL) throws {
@@ -228,6 +228,9 @@ public actor CommitmentRunner {
     /// the run stops there; after `RetryLedger.maxAttempts` billed failures it is left out and the later calls go on.
     @discardableResult
     public func run() async -> Int {
+        // A book that was set aside starts empty, with no list of the calls already read. Reading them all again is
+        // paid work, so it waits until the other device's copy is merged in.
+        guard !StoredFile.awaitsMerge(paths.commitments.appendingPathComponent(CommitmentBook.fileName)) else { return 0 }
         let records = ProcessingQueue(paths: paths).allRecords()
         guard var book = try? CommitmentBook.load(from: paths.commitments) else { return 0 }
         // Promises other people made never count as the owner's, including ones found before this check existed.

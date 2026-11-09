@@ -318,6 +318,10 @@ final class AppController: ObservableObject {
                 guard let self, case .idle = self.status else { return }
                 self.detection.forceStart(bundleID: bundleID, platform: platform)
             }
+            notifier.onRecordBlocked = { [weak self] bundleID, platform in
+                guard let self, case .idle = self.status else { return }
+                self.detection.recordBlockedCall(bundleID: bundleID, platform: platform)
+            }
             notifier.onNotACall = { [weak self] call in self?.quietUnconfirmed(call) }
             for answer in UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall")).active(at: Date()) {
                 detection.dismissUnconfirmed(answer.call, until: answer.until)
@@ -338,7 +342,13 @@ final class AppController: ObservableObject {
                 case .started(let platform, let bundleID, let at):
                     self.noRecordGate.waitForCalendar(timeout: 3)
                     if self.noRecordGate.blocksStart(platform: platform, bundleID: bundleID, meetingID: meetingID, at: at, forced: forced) {
-                        Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
+                        if let block = self.noRecordGate.currentBlock, block.listUnreadable {
+                            // Not the owner's choice, so never silent: say it at each call, with a way to record.
+                            Log.error("Not recording \(block.title): the do-not-record list could not be read")
+                            Task { @MainActor in self.notifier.postNotRecorded(title: block.title, bundleID: bundleID, platform: platform) }
+                        } else {
+                            Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
+                        }
                         return
                     }
                 case .ended(let at, _):
@@ -415,6 +425,7 @@ final class AppController: ObservableObject {
         }
         Log.info("Mossad started")
         if !inert {
+            announceSetAsideFiles()
             backfillSummaries()
             backfillTitlesAndDecisionTimes()
             // The coach's reads on people: a minute after launch, so a call being processed goes first.
@@ -882,6 +893,24 @@ final class AppController: ObservableObject {
         Log.info("Mossad turned off" + (date.map { " until \($0.formatted())" } ?? ""))
     }
 
+    /// Settings › Recording: an empty do-not-record list. Also ends the block that a damaged list causes, at once.
+    func resetNoRecordList() {
+        noRecord.reset()
+        noRecordGate.update(book: noRecord)
+        do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the do-not-record list failed: \(error)") }
+        Log.info("The do-not-record list was reset")
+    }
+
+    func announceWaitingRecording(_ p: PendingRecording) { notifier.postRecordingWaiting(p) }
+
+    /// Tells the owner, one time for each file, that a damaged file was set aside and what starts empty.
+    func announceSetAsideFiles() {
+        for r in StoredFile.takeUntold(in: [paths.voices, paths.coach, paths.commitments, paths.shares, paths.chats]) {
+            Log.error("\(r.file) could not be read and was set aside as \(r.kept)")
+            notifier.postSetAside(r)
+        }
+    }
+
     func setRecording(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
         noRecord.set(choice, for: meeting)
         noRecord.removeExpired(now: Date())
@@ -1009,11 +1038,11 @@ final class AppController: ObservableObject {
 
     func deleteMeeting(_ callID: String) {
         guard !isSecondCopy else { return }
-        let archived = meetings.first { $0.id == callID }
         Task {
             // The pipeline first: it refuses a call that is still processing, and then the cloud copy must stay.
-            if await pipeline.delete(callID: callID) {
-                if let archived { forget(archived) } else { stopSharing(callID: callID) }
+            // It gives back the record from disk, which has the archive key even when the list here is older.
+            if let removed = await pipeline.remove(callID: callID) {
+                forget(removed)
                 if selectedMeetingID == callID { selectedMeetingID = nil }
                 refresh()
             }
@@ -1048,7 +1077,9 @@ final class AppController: ObservableObject {
     /// Uploads finished recordings and removes old local copies, off the main actor.
     func syncCloud() {
         // One loop at a time: two would upload the same recording together.
-        guard !isInert, !cloudSyncing, let archive = cloudArchive, let pipeline else { return }
+        guard !isInert, let archive = cloudArchive, let pipeline else { return }
+        // A request during a loop runs one more loop after it, so a recording finished meanwhile is not left out.
+        if cloudSyncing { cloudSyncAgain = true; return }
         let days = cloudKeepLocalDays
         cloudSyncing = true
         Task.detached(priority: .utility) {
@@ -1056,11 +1087,16 @@ final class AppController: ObservableObject {
             await MainActor.run {
                 self.cloudSyncing = false
                 if uploaded > 0 { self.refresh() }
+                if self.cloudSyncAgain {
+                    self.cloudSyncAgain = false
+                    self.syncCloud()
+                }
             }
         }
     }
 
     @Published private(set) var cloudSyncing = false
+    private var cloudSyncAgain = false
 
     /// The text for a call in progress: the live sub-step, or the step name.
     func progressText(_ r: CallRecord) -> String? {

@@ -33,15 +33,19 @@ actor MemoryStore: RecordStore {
         let since = token.flatMap { Int(String(decoding: $0, as: UTF8.self)) } ?? 0
         let after = entries.values.filter { $0.seq > since }.sorted { $0.seq < $1.seq }
         return StoreChanges(
-            modified: after.filter { !$0.deleted }.map { ChangedRecord(name: $0.record.name, type: $0.record.type, fields: $0.record.fields, assetKeys: Array($0.data.keys)) },
+            modified: after.filter { !$0.deleted && unsendable[$0.record.name] == nil }.map { ChangedRecord(name: $0.record.name, type: $0.record.type, fields: $0.record.fields, assetKeys: Array($0.data.keys)) },
             deleted: after.filter(\.deleted).map { (name: $0.record.name, type: $0.record.type) },
-            token: Data(String(after.last?.seq ?? since).utf8), more: false)
+            token: Data(String(after.last?.seq ?? since).utf8), more: false,
+            failed: after.filter { !$0.deleted }.compactMap { e in unsendable[e.record.name].map { (name: e.record.name, error: $0) } })
     }
 
     /// Record names whose assets fail to download, with the error.
     private var failing: [String: Error] = [:]
     func fail(_ name: String, with error: Error?) { failing[name] = error }
     private(set) var deletes: [String] = []
+    /// Records the store itself cannot send, as iCloud reports one record of a page.
+    private var unsendable: [String: Error] = [:]
+    func cannotSend(_ name: String, _ error: Error?) { unsendable[name] = error }
 
     func data(_ record: ChangedRecord, _ key: String) async throws -> Data? {
         if let error = failing[record.name] { throw error }

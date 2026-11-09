@@ -38,6 +38,8 @@ public enum MarkdownWriter {
     public static func noteURL(for r: CallRecord, in folder: URL) -> URL {
         let url = folder.appendingPathComponent(fileName(for: r))
         guard url.path != r.markdownPath, FileManager.default.fileExists(atPath: url.path) else { return url }
+        // A note of this very call, written before its path was saved (the app stopped in between): use it.
+        if isNote(url, of: r.id) { return url }
         return folder.appendingPathComponent(String(fileName(for: r).dropLast(3)) + " (\(r.id)).md")
     }
 
@@ -50,6 +52,14 @@ public enum MarkdownWriter {
             next += 1
         }
         return names
+    }
+
+    /// Whether the note names this call in its `audio:` line.
+    static func isNote(_ url: URL, of id: String) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        let head = String(decoding: (try? handle.read(upToCount: 4096)) ?? Data(), as: UTF8.self)
+        return head.components(separatedBy: "\n").contains { $0 == "audio: ~/Mossad/Audio/\(id)" }
     }
 
     public static func transcript(_ r: CallRecord) -> String {

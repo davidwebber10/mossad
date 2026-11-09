@@ -10,6 +10,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
     var onRecord: @MainActor (String, Platform) -> Void = { _, _ in }
     /// The owner answered "Not a call": no more warnings for this app and reason today.
     var onNotACall: @MainActor (UnconfirmedCall) -> Void = { _ in }
+    /// The owner pressed Record on a call that was kept off the record because the do-not-record list is damaged.
+    var onRecordBlocked: @MainActor (String, Platform) -> Void = { _, _ in }
 
     private static let unconfirmedCategory = "unconfirmed-call"
     private static let recordAction = "record"
@@ -17,6 +19,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
     /// One warning per app, so a second app's warning does not replace the first.
     static func unconfirmedID(_ bundleID: String) -> String { "unconfirmed-call-\(bundleID)" }
     private static let cannotRecordID = "cannot-record"
+    private static let notRecordedCategory = "not-recorded"
 
     override init() {
         super.init()
@@ -24,8 +27,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
         center.delegate = self
         let record = UNNotificationAction(identifier: Self.recordAction, title: "Record", options: [])
         let notACall = UNNotificationAction(identifier: Self.notACallAction, title: "Not a call", options: [])
-        center.setNotificationCategories([UNNotificationCategory(identifier: Self.unconfirmedCategory, actions: [record, notACall],
-                                                                 intentIdentifiers: [])])
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: Self.unconfirmedCategory, actions: [record, notACall], intentIdentifiers: []),
+            UNNotificationCategory(identifier: Self.notRecordedCategory, actions: [record], intentIdentifiers: []),
+        ])
     }
 
     func requestAuthorization() {
@@ -69,6 +74,54 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
             let ids = delivered.map(\.request).filter { $0.content.categoryIdentifier == Self.unconfirmedCategory }.map(\.identifier)
             if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
         }
+    }
+
+    /// A call with an invite was kept off the record, and not by the owner's choice: the do-not-record list is
+    /// damaged, so Mossad cannot know the choice. Said at each such call; Record starts the recording.
+    func postNotRecorded(title: String, bundleID: String, platform: Platform) {
+        let content = UNMutableNotificationContent()
+        content.title = "Mossad did not record \(title.isEmpty ? "this call" : title)"
+        content.body = "The do-not-record list could not be read. Press Record to record this call. To end this, set a choice for any upcoming meeting, or reset the list in Settings, Recording."
+        content.sound = .default
+        content.categoryIdentifier = Self.notRecordedCategory
+        content.userInfo = ["bundleID": bundleID, "platform": platform.rawValue]
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "not-recorded-\(bundleID)", content: content, trigger: nil))
+    }
+
+    /// A damaged file was set aside; said one time for each file.
+    func postSetAside(_ r: StoredFile.Recovery) {
+        let what: String = switch r.file {
+        case "voices.json": "Mossad starts with no saved voices and asks for names again."
+        case CoachProfile.fileName: "The coach's memory starts empty here. Mossad takes the copy from your other device at the next sync, before it sends anything."
+        case CommitmentBook.fileName: "Your commitments start empty here. Mossad takes the copy from your other device at the next sync, before it sends anything."
+        case ShareBook.fileName: "The list of share links starts empty. Links you made before still work."
+        default: "That item is left out."
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "Mossad set aside a damaged file"
+        content.body = "\(r.file) could not be read. It is kept as \(r.kept). \(what)"
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "set-aside-\(r.kept)", content: content, trigger: nil))
+    }
+
+    static func recordingText(_ p: PendingRecording) -> (title: String, body: String) {
+        let name = p.title?.nonEmpty.map { "\"\($0)\"" } ?? "A recording"
+        let day = p.start.map { " from \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""
+        if p.gaveUp == true {
+            return ("Mossad stopped trying an iPhone recording",
+                    "\(name)\(day) could not be imported for 7 days. It is still on your iPhone; send it again from there.")
+        }
+        return ("An iPhone recording has not arrived on this Mac",
+                "\(name)\(day) could not be imported for a day. Mossad keeps trying. It is still on your iPhone.")
+    }
+
+    /// A room recording from the iPhone has failed to import for a day, or Mossad stopped trying it. One time each.
+    func postRecordingWaiting(_ p: PendingRecording) {
+        let text = Self.recordingText(p)
+        let content = UNMutableNotificationContent()
+        content.title = text.title
+        content.body = text.body
+        content.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "recording-waiting-\(p.name)", content: content, trigger: nil))
     }
 
     /// A call was found, but the recording did not start.
@@ -115,6 +168,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
             default:
                 break
             }
+            return
+        }
+        if response.notification.request.content.categoryIdentifier == Self.notRecordedCategory {
+            // Only the Record button records, as for the other warnings.
+            guard response.actionIdentifier == Self.recordAction, let bundleID = info["bundleID"] as? String,
+                  let platform = (info["platform"] as? String).flatMap(Platform.init(rawValue:)) else { return }
+            await onRecordBlocked(bundleID, platform)
             return
         }
         guard let callID = response.notification.request.content.userInfo["callID"] as? String else { return }

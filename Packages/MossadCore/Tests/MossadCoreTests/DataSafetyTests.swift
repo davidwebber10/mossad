@@ -373,4 +373,105 @@ final class DataSafetyTests: XCTestCase {
         XCTAssertThrowsError(try PhoneRecording.importAudio(cut, recording: rec, into: paths))
         XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory(rec.id).path), "no half call is left")
     }
+
+    // MARK: Review fixes
+
+    /// The block for a list that cannot be read ends when the owner makes a choice or resets the list, at once.
+    func testAChoiceOrAResetEndsTheBlockOfADamagedList() throws {
+        let dir = tempDirectory()
+        try Data("{ damaged".utf8).write(to: dir.appendingPathComponent(NoRecordBook.fileName))
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = CalendarEventInfo(title: "Budget review", start: now, end: now.addingTimeInterval(1800), attendees: [],
+                                      text: "https://meet.google.com/abc-defg-hij", isAllDay: false)
+        let other = CalendarEventInfo(title: "Hiring", start: now.addingTimeInterval(7200), end: now.addingTimeInterval(9000), attendees: [],
+                                      text: "https://meet.google.com/xyz-wxyz-xyz", isAllDay: false)
+        var book = NoRecordBook.load(from: dir)
+        let chrome = "com.google.Chrome"
+        let gate = NoRecordGate()
+        gate.update(book: book)
+        gate.update(events: [event, other])
+
+        XCTAssertTrue(gate.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: now.addingTimeInterval(60)))
+        XCTAssertEqual(gate.currentBlock, NoRecordGate.Block(title: "Budget review", listUnreadable: true), "the app can say why")
+        // The owner's Record on the notice always wins.
+        XCTAssertFalse(gate.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: now.addingTimeInterval(90), forced: true))
+        XCTAssertNil(gate.currentBlock)
+
+        // A choice for any meeting starts a readable list: no restart needed.
+        book.set(.skipThisMeeting, for: UpcomingMeeting.from([other], now: now, days: 30)[0])
+        XCTAssertFalse(book.unreadable)
+        gate.update(book: book)
+        XCTAssertFalse(gate.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: now.addingTimeInterval(120)))
+        XCTAssertTrue(gate.blocksStart(platform: .meet, bundleID: chrome, meetingID: "xyz-wxyz-xyz", at: now.addingTimeInterval(7260)))
+        XCTAssertEqual(gate.currentBlock?.listUnreadable, false, "this one is the owner's choice")
+
+        var damaged = NoRecordBook.load(from: dir)
+        XCTAssertTrue(damaged.unreadable)
+        damaged.reset()
+        XCTAssertFalse(damaged.unreadable)
+        try damaged.save(to: dir)
+        XCTAssertFalse(NoRecordBook.load(from: dir).unreadable)
+    }
+
+    /// A call that was blocked only by the damaged list, and that starts again after the reset, records.
+    func testACallBlockedByTheDamagedListRecordsWhenItStartsAgainAfterAReset() throws {
+        let dir = tempDirectory()
+        try Data("{ damaged".utf8).write(to: dir.appendingPathComponent(NoRecordBook.fileName))
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = CalendarEventInfo(title: "Budget review", start: now, end: now.addingTimeInterval(600), attendees: [],
+                                      text: "https://meet.google.com/abc-defg-hij", isAllDay: false)
+        var book = NoRecordBook.load(from: dir)
+        let gate = NoRecordGate()
+        gate.update(book: book)
+        gate.update(events: [event])
+        XCTAssertTrue(gate.blocksStart(platform: .meet, bundleID: "com.google.Chrome", meetingID: "abc-defg-hij", at: now.addingTimeInterval(60)))
+        _ = gate.callEnded(at: now.addingTimeInterval(700))
+        book.reset()
+        gate.update(book: book)
+        // Past the planned end: before, the session held the block for the same meeting code.
+        XCTAssertFalse(gate.blocksStart(platform: .meet, bundleID: "com.google.Chrome", meetingID: "abc-defg-hij", at: now.addingTimeInterval(760)))
+    }
+
+    func testRememberDoesNotSaveOverACoachMemoryThatCannotBeRead() throws {
+        let paths = try tempPaths()
+        try FileManager.default.createDirectory(at: paths.coach, withIntermediateDirectories: true)
+        try Data("{ damaged".utf8).write(to: paths.coach.appendingPathComponent(CoachProfile.fileName))
+        let tools = ChatTools(records: [], owner: "Sam Carter", paths: paths)
+        let answer = tools.runCoachTool("remember", input: ["kind": "preference", "text": "Short answers"], from: nil, to: nil, people: [], limit: 10)
+        XCTAssertEqual(answer, "Could not save: the coach's memory cannot be read.")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.coach.appendingPathComponent(CoachProfile.fileName).path))
+        XCTAssertEqual(kept(in: paths.coach).count, 1)
+    }
+
+    func testThePaidJobsWaitWhileARecoveredFileAwaitsTheOtherCopy() async throws {
+        let paths = try tempPaths([record("a", start: 100)])
+        for (dir, name) in [(paths.coach, CoachProfile.fileName), (paths.commitments, CommitmentBook.fileName)] {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try Data("{".utf8).write(to: dir.appendingPathComponent(name))
+        }
+        _ = try? CoachProfile.load(from: paths.coach)
+        _ = try? CommitmentBook.load(from: paths.commitments)
+        let coach = FakeCoach(), calls = Counter()
+        let reviewed = await CoachRunner(paths: paths, coach: coach, owner: "Sam Carter", since: .distantPast).run()
+        let read = await CommitmentRunner(paths: paths, finder: CommitmentFinder(llm: BadReplies(calls: calls), ownerName: "Sam Carter"), since: .distantPast).run()
+        XCTAssertEqual(reviewed + read, 0)
+        XCTAssertTrue(coach.seen.isEmpty)
+        XCTAssertEqual(calls.count, 0)
+        CloudSync.nothingToMerge(paths: paths)
+        let after = await CoachRunner(paths: paths, coach: coach, owner: "Sam Carter", since: .distantPast).run()
+        XCTAssertEqual(after, 1)
+    }
+
+    /// The app stopped after the note was written and before its path was saved: the next run uses that note.
+    func testANoteOfTheSameCallIsUsedAgainNotWrittenASecondTime() throws {
+        let folder = tempDirectory()
+        var r = record("20261020-143000", start: 1_800_000_000)
+        r.customTitle = "Standup"
+        let first = MarkdownWriter.noteURL(for: r, in: folder)
+        try MarkdownWriter.render(r).write(to: first, atomically: true, encoding: .utf8)
+        XCTAssertEqual(MarkdownWriter.noteURL(for: r, in: folder), first)
+        var other = record("20261020-143030", start: 1_800_000_030)
+        other.customTitle = "Standup"
+        XCTAssertNotEqual(MarkdownWriter.noteURL(for: other, in: folder), first)
+    }
 }

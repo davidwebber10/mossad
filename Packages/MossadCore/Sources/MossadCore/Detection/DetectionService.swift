@@ -211,6 +211,24 @@ public final class DetectionService: @unchecked Sendable {
         queue.async { [weak self] in self?.forceStartNow(bundleID: bundleID, platform: platform, at: Date()) }
     }
 
+    /// Records a call that Mossad sees and keeps off the record, for the owner's Record on that notice: the owner's
+    /// Record always wins. The call is already the detector's call, so its start goes out again, marked as the
+    /// owner's choice. A call that ended meanwhile starts like any other forced call.
+    public func recordBlockedCall(bundleID: String, platform: Platform) {
+        queue.async { [weak self] in self?.recordBlockedCallNow(bundleID: bundleID, platform: platform, at: Date()) }
+    }
+
+    func recordBlockedCallNow(bundleID: String, platform: Platform, at time: Date) {
+        guard !isSuspended else { return }
+        guard detector.currentBundleID == bundleID, let current = currentPlatform else {
+            forceStartNow(bundleID: bundleID, platform: platform, at: time)
+            return
+        }
+        Log.info("The owner chose to record \(bundleID), which was kept off the record")
+        callIsForced = true
+        onEvent(.started(platform: current, bundleID: bundleID, at: time))
+    }
+
     func forceStartNow(bundleID: String, platform: Platform, at time: Date) {
         guard !isSuspended else { return }
         // A warning can be answered long after it came; an app that no longer uses the mic is not in a call.

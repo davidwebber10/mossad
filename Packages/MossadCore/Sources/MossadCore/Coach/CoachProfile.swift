@@ -294,7 +294,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
 
     public static func load(from dir: URL) throws -> CoachProfile {
         // A file that does not decode is moved aside and throws, so a save after it cannot replace the memory.
-        try StoredFile.load(CoachProfile.self, from: dir.appendingPathComponent(fileName), decoder: .coach) ?? CoachProfile()
+        try StoredFile.load(CoachProfile.self, from: dir.appendingPathComponent(fileName), decoder: .coach, recovery: .synced) ?? CoachProfile()
     }
 
     public func save(to dir: URL) throws {
