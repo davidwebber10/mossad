@@ -229,10 +229,16 @@ public struct SearchIndex: Sendable {
         return t
     }
 
+    static let screenLabel = "screen"
+
     private mutating func insert(_ r: CallRecord) {
         if let old = slotOf[r.id] { kill(old) }
         let slot = Int32(slots.count)
-        let names = MarkdownWriter.displayNames(r)
+        var names = MarkdownWriter.displayNames(r)
+        // The text on shared screens is searched as turns of a speaker named "Screen", after the spoken ones.
+        let screenTurns = (r.screens ?? []).map { Utterance(track: .them, speakerLabel: SearchIndex.screenLabel, start: $0.offset, end: $0.offset, text: $0.text) }
+        if !screenTurns.isEmpty { names[screenTurns[0].speakerKey] = "Screen" }
+        let turns = r.utterances + screenTurns
         let speakers = Set(r.speakerNames.values.filter { !$0.hasPrefix("Speaker ") })
         var people: [String] = []
         for p in speakers.sorted() + r.attendees where !people.contains(p) { people.append(p) }
@@ -241,7 +247,7 @@ public struct SearchIndex: Sendable {
         var entry = MeetingEntry(
             id: r.id, start: r.start, end: r.end, platform: r.platform, kind: r.kind, tags: r.tags,
             title: field(r.title, names: true), otherTitles: [], kindField: nil, tagFields: [], tagKeys: r.tags.map(SearchTokenizer.key),
-            personFields: [], emails: [], speakers: speakers, outcomes: [], utterances: r.utterances, displayNames: names,
+            personFields: [], emails: [], speakers: speakers, outcomes: [], utterances: turns, displayNames: names,
             turnBase: Int32(turnSlot.count))
         var titles = [r.title]
         for t in [r.calendarTitle, r.generatedTitle] {
@@ -254,11 +260,11 @@ public struct SearchIndex: Sendable {
         entry.personFields = people.map { personField($0, names: true) }
         entry.emails = people.compactMap(SearchIndex.normalizedEmail)
         entry.outcomes = (decisions + actions).map { OutcomeEntry(kind: $0.0, position: $0.1, time: $0.2, field: field($0.3)) }
-        for u in r.utterances {
+        for u in turns {
             for t in SearchTokenizer.tokens(u.text) { termStore.append(vocab.intern(t.term)) }
             appendTurn(slot: slot)
         }
-        liveTurns += r.utterances.count
+        liveTurns += turns.count
         slots.append(entry)
         slotOf[r.id] = slot
     }

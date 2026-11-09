@@ -24,5 +24,6 @@ public enum MeetingSearch {
         }
         return r.title.localizedCaseInsensitiveContains(q) || r.tags.contains { $0.localizedCaseInsensitiveContains(q) }
             || r.utterances.contains { $0.text.localizedCaseInsensitiveContains(q) }
+            || (r.screens ?? []).contains { $0.text.localizedCaseInsensitiveContains(q) }
     }
 }

@@ -23,6 +23,7 @@ public enum MeetingMerge {
         merged.cloudSize = nil
         merged.transcriptionJobs = nil
         merged.summaryMissing = nil
+        var screens: [SharedScreen] = []
         var me: [Utterance]? = [], them: [Utterance]? = []
         var offset: TimeInterval = 0
         for r in sorted {
@@ -51,12 +52,20 @@ public enum MeetingMerge {
             let own = r.parts.isEmpty ? [CallPart(start: r.start, end: r.end, offset: 0)] : r.parts
             merged.parts += own.map { CallPart(start: $0.start, end: $0.end, offset: $0.offset + offset) }
             merged.markers += r.markers.map { TranscriptMarker(offset: $0.offset + offset, text: $0.text, isBookmark: $0.isBookmark, note: $0.note) }
+            // The same move as `FrameIndex.moved`, so each screen still names its picture.
+            screens += (r.screens ?? []).map { s in
+                var s = s
+                s.offset += offset
+                if offset != 0 { s.file = FrameIndex.fileName(offset: s.offset) }
+                return s
+            }
             if merged.meetingID == nil { merged.meetingID = r.meetingID }
             if merged.calendarTitle == nil { merged.calendarTitle = r.calendarTitle }
             for a in r.attendees where !merged.attendees.contains(a) { merged.attendees.append(a) }
             offset += durations[r.id] ?? r.end.timeIntervalSince(r.start)
         }
         merged.utterances.sort { $0.start < $1.start }
+        merged.screens = records.contains { $0.screens != nil } ? screens : nil
         merged.meUtterances = me
         merged.themUtterances = them
         merged.end = sorted.map(\.end).max() ?? merged.end

@@ -259,6 +259,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// True while the mic track still holds what was said in a mute span. Nothing may transcribe, upload, or play the
     /// track until `MutedAudio.apply` wrote the silence and cleared this.
     public var mutedAudioPending = false
+    /// The kept frames of screens shared in the call, with their text. Nil for a call with no screen capture.
+    public var screens: [SharedScreen]?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -277,6 +279,11 @@ public struct CallRecord: Codable, Equatable, Sendable {
 
     /// Every marker line of the transcript in time order: pauses, stops, and where a merged part begins.
     public var transcriptMarkers: [TranscriptMarker] {
+        (recordingMarkers + screenMarkers).sorted { $0.offset < $1.offset }
+    }
+
+    /// The marker lines without the shared screens, for views that show a screen as more than a line.
+    public var recordingMarkers: [TranscriptMarker] {
         (markers + MeetingMerge.partBreaks(self).map { TranscriptMarker(offset: $0.offset, text: $0.text) }).sorted { $0.offset < $1.offset }
     }
 
@@ -340,6 +347,7 @@ extension CallRecord {
         speakersExpected = try c.decodeIfPresent(Int.self, forKey: .speakersExpected)
         muteSpans = try c.decodeIfPresent([MuteSpan].self, forKey: .muteSpans) ?? []
         mutedAudioPending = try c.decodeIfPresent(Bool.self, forKey: .mutedAudioPending) ?? false
+        screens = try c.decodeIfPresent([SharedScreen].self, forKey: .screens)
     }
 }
 

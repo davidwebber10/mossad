@@ -20,6 +20,8 @@ public enum Retention {
             where file.pathExtension == "caf" || (expired && file.lastPathComponent == Recording.fileName) {
                 try? fm.removeItem(at: file)
             }
+            // The pictures of shared screens go with the raw tracks; their text stays in the record.
+            FrameStore.remove(in: dir)
         }
     }
 }
