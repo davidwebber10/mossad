@@ -4,14 +4,17 @@ import SwiftUI
 /// The meetings by day, newest first, as the Mac's list groups them: Today, Yesterday, then the weekday and the
 /// date. Settings is a glass button at the top; Record room floats over the list, on this tab only.
 struct MeetingsListView: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var recording = PhoneStore.hook("MOSSAD_ROOM") != nil
     @State private var settings = PhoneStore.hook("MOSSAD_SETTINGS") != nil
+    /// The room recording the owner asked to remove, until the dialog answers.
+    @State private var removing: String?
     /// A meeting opens out of its row.
     @Namespace private var zoom
 
     var body: some View {
+        @Bindable var store = store
         NavigationStack(path: $store.path) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -20,12 +23,12 @@ struct MeetingsListView: View {
                                   note: error.context == .uploadingAudio ? "The recording is saved on this iPhone." : nil)
                             .padding(.vertical, Space.s)
                     }
-                    if !store.outbox.isEmpty { outbox }
-                    ForEach(MeetingGroups.byDay(store.meetings), id: \.date) { day in
+                    if !store.outbox.entries.isEmpty { outbox }
+                    ForEach(store.days, id: \.date) { day in
                         PhoneLabel(day.title).padding(.top, Space.l).padding(.bottom, 2)
-                        ForEach(Array(day.records.enumerated()), id: \.element.id) { i, r in
+                        ForEach(Array(day.rows.enumerated()), id: \.element.id) { i, r in
                             NavigationLink(value: r.id) {
-                                PhoneMeetingRow(record: r, divided: i < day.records.count - 1)
+                                PhoneMeetingRow(row: r, divided: i < day.rows.count - 1)
                             }
                             .buttonStyle(.plain)
                             .matchedTransitionSource(id: r.id, in: zoom)
@@ -36,7 +39,7 @@ struct MeetingsListView: View {
                 .padding(.bottom, 96)
             }
             .overlay {
-                if store.meetings.isEmpty, store.outbox.isEmpty {
+                if store.loaded, store.days.isEmpty, store.outbox.entries.isEmpty {
                     EmptyState(symbol: store.syncWith == .server ? "server.rack" : "icloud",
                                title: store.syncing ? "Syncing…" : "No meetings yet",
                                message: "Meetings appear here after Mossad on your Mac writes their notes.")
@@ -54,8 +57,10 @@ struct MeetingsListView: View {
             .sheet(isPresented: $settings) { PhoneSettingsView() }
             .refreshable { await store.sync() }
             .navigationDestination(for: String.self) { id in
-                if let r = store.meeting(id) { MeetingView(record: r).navigationTransition(.zoom(sourceID: id, in: zoom)) }
+                MeetingPage(id: id).navigationTransition(.zoom(sourceID: id, in: zoom))
             }
+            // A recording that runs without its screen (the app came back, or the screen closed) shows it again.
+            .onAppear { if store.recorder.state != .idle { recording = true } }
         }
     }
 
@@ -63,45 +68,86 @@ struct MeetingsListView: View {
     @ViewBuilder
     private var outbox: some View {
         PhoneLabel("On this iPhone").padding(.top, Space.l).padding(.bottom, 2)
-        ForEach(Array(store.outbox.enumerated()), id: \.element.id) { i, item in
-            HairlineRow(divided: i < store.outbox.count - 1) {
+        let entries = store.outbox.entries, now = Date()
+        ForEach(Array(entries.enumerated()), id: \.element.id) { i, item in
+            HairlineRow(divided: i < entries.count - 1) {
                 HStack(alignment: .top, spacing: Space.m) {
                     Circle().fill(Palette.recording).frame(width: 8, height: 8).padding(.top, 6).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.recording.title ?? "In-person meeting").textRole(.headline).foregroundStyle(Palette.ink)
                         HStack(spacing: 6) {
-                            Text("\(item.recording.start.formatted(date: .omitted, time: .shortened)) · "
-                                 + (item.sent ? "Your Mac is writing the notes" : "Waiting to send"))
-                            if !item.sent { PhoneProcessingMark() }
+                            Text("\(item.recording.start.formatted(date: .omitted, time: .shortened)) · " + status(item))
+                            if !item.isSent { PhoneProcessingMark() }
                         }
                         .textRole(.secondary)
                         .foregroundStyle(Palette.secondary)
                         // Why it still waits; it stays until this recording uploads.
-                        if !item.sent, let reason = store.syncStatus.uploads[item.id] {
+                        if !item.isSent, let reason = store.syncStatus.uploads[item.id] {
                             InlineError(error: reason).padding(.top, 2)
+                        }
+                        if let trouble = item.trouble {
+                            Text(trouble == .notSaved
+                                 ? "This recording could not be saved yet. The audio is on this iPhone, and Mossad tries again."
+                                 : "A part of this recording could not be read. It is kept on this iPhone; the rest was sent.")
+                                .textRole(.secondary).foregroundStyle(Palette.recording)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        // The Mac had time and no meeting came back: the owner can send it once more.
+                        if item.canSendAgain(now: now), !store.uploading.contains(item.id) {
+                            Button("Send again") { store.sendAgain(item.id) }
+                                .textRole(.secondary).fontWeight(.semibold)
+                                .tint(Palette.accent)
+                                .frame(minHeight: 44, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(shortLength(item.recording.end.timeIntervalSince(item.recording.start)))
-                        .textRole(.secondary).foregroundStyle(Palette.secondary)
+                    if item.state != .recording {
+                        Text(shortLength(item.recording.end.timeIntervalSince(item.recording.start)))
+                            .textRole(.secondary).foregroundStyle(Palette.secondary)
+                    }
                 }
             }
             .accessibilityElement(children: .combine)
+            // A press and hold, as the rows are not in a List and have no swipe. VoiceOver gets it as an action.
+            .contextMenu {
+                if store.canRemoveRecording(item.id) {
+                    Button("Remove", systemImage: "trash", role: .destructive) { removing = item.id }
+                }
+            }
+        }
+        .confirmationDialog("Delete this recording from the iPhone? It is not on your Mac.",
+                            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                            titleVisibility: .visible) {
+            Button("Delete recording", role: .destructive) {
+                if let id = removing { store.removeRecording(id) }
+                removing = nil
+            }
+            Button("Keep", role: .cancel) { removing = nil }
+        }
+    }
+
+    private func status(_ item: Outbox.Entry) -> String {
+        switch item.state {
+        case .recording: item.id == store.recorder.id ? "Recording now" : "Saving the recording"
+        case .waiting: store.uploading.contains(item.id) ? "Sending to your Mac" : "Waiting to send"
+        case .sent: store.uploading.contains(item.id) ? "Sending again" : "Your Mac is writing the notes"
         }
     }
 
     private var recordButton: some View {
         Button { recording = true } label: {
             // Shorter at the largest text sizes, so the button does not cover most of a row.
-            Label(typeSize.isAccessibilitySize ? "Record" : "Record room", systemImage: "circle.fill")
+            Label(store.recorder.state != .idle ? "Recording" : typeSize.isAccessibilitySize ? "Record" : "Record room",
+                  systemImage: "circle.fill")
                 .labelStyle(RecordLabelStyle())
         }
         .buttonStyle(.phoneFill(Palette.recording))
         .shadow(color: Palette.recording.opacity(0.3), radius: 12, y: 6)
         .padding(.trailing, Space.l)
         .padding(.bottom, Space.m)
-        .accessibilityLabel("Record room")
-        .accessibilityHint("Records a meeting in this room with the iPhone's microphone")
+        .accessibilityLabel(store.recorder.state != .idle ? "Show the recording" : "Record room")
+        .accessibilityHint(store.recorder.state != .idle ? "" : "Records a meeting in this room with the iPhone's microphone")
     }
 }
 
@@ -124,8 +170,13 @@ func shortLength(_ seconds: TimeInterval) -> String {
 /// the length on the right, and "2 voices need names" when the Mac is waiting on the owner.
 struct PhoneMeetingRow: View {
     @Environment(\.dynamicTypeSize) private var typeSize
-    let record: CallRecord
+    let record: MeetingRow
     var divided = true
+
+    init(row: MeetingRow, divided: Bool = true) {
+        record = row
+        self.divided = divided
+    }
 
     var body: some View {
         HairlineRow(divided: divided) {
@@ -140,8 +191,8 @@ struct PhoneMeetingRow: View {
                         .multilineTextAlignment(.leading)
                     Text(detail).textRole(.secondary).foregroundStyle(Palette.secondary)
                         .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
-                    if !record.unknownSpeakers.isEmpty, record.status == .written {
-                        let n = record.unknownSpeakers.count
+                    if record.unnamed > 0 {
+                        let n = record.unnamed
                         NeedsYouChip(text: n == 1 ? "1 voice needs a name" : "\(n) voices need names").padding(.top, 4)
                     }
                 }
@@ -159,8 +210,57 @@ struct PhoneMeetingRow: View {
     private var detail: String {
         let time = record.start.formatted(date: .omitted, time: .shortened)
         var parts = [time, record.platform.shortName]
-        let speakers = Set(record.utterances.map(\.speakerKey)).count
+        let speakers = record.speakers
         if speakers >= 3 { parts.append("\(speakers) speakers") }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// What a list row needs from a meeting, made off the main thread, so the list never compares or redraws from
+/// whole records with their transcripts.
+struct MeetingRow: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let platform: Platform
+    let start: Date
+    let end: Date
+    let speakers: Int
+    /// Voices the Mac waits on the owner to name, once the notes are written.
+    let unnamed: Int
+
+    init(_ r: CallRecord) {
+        id = r.id
+        title = r.title
+        platform = r.platform
+        start = r.start
+        end = r.end
+        speakers = Set(r.utterances.map(\.speakerKey)).count
+        unnamed = r.status == .written ? r.unknownSpeakers.count : 0
+    }
+}
+
+struct MeetingDay: Equatable, Sendable {
+    let date: Date
+    let title: String
+    let rows: [MeetingRow]
+}
+
+/// A meeting's page by id. A meeting that the Mac deleted while its page was open says so instead of going blank.
+struct MeetingPage: View {
+    @Environment(PhoneStore.self) private var store
+    let id: String
+    var find = ""
+    var at: TimeInterval?
+
+    var body: some View {
+        if let r = store.meeting(id) {
+            MeetingView(record: r, find: find, at: at)
+        } else if store.loaded {
+            EmptyState(symbol: "tray", title: "This meeting is no longer here",
+                       message: "It was deleted on your Mac, or it has not synced to this iPhone yet.")
+                .phonePage()
+        } else {
+            PhoneProcessingMark().frame(maxWidth: .infinity, maxHeight: .infinity).phonePage()
+        }
     }
 }

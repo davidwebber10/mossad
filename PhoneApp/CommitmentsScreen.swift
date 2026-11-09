@@ -6,7 +6,7 @@ import SwiftUI
 struct CommitmentsScreen: View {
     enum Mode: String, CaseIterable { case open = "Open", done = "Done" }
 
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @State private var mode = Mode.open
     @State private var editing: Commitment?
     @State private var adding: Commitment?

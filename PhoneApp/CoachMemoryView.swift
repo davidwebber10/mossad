@@ -3,7 +3,7 @@ import SwiftUI
 
 /// What the coach and Chat remember about you. Swipe to make them forget; add what they should know.
 struct CoachMemoryView: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var newFact = ""
     @State private var kind = CoachFact.Kind.allCases[0]

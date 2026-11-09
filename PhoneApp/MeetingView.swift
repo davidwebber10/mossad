@@ -4,7 +4,7 @@ import SwiftUI
 /// One meeting as the canvas draws it on the phone: where and when, the title, the lanes, then Summary,
 /// Transcript, Coach, and Chat under one glass control. A time anywhere opens the transcript at that moment.
 struct MeetingView: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     let record: CallRecord
     /// Words to find in the transcript, from Search.
     var find = ""
@@ -16,6 +16,10 @@ struct MeetingView: View {
     // Development hook for screenshots: `MOSSAD_SECTION=coach`.
     @State private var tab = Section(rawValue: ProcessInfo.processInfo.environment["MOSSAD_SECTION"]?.capitalized ?? "") ?? .summary
     @State private var review: CoachReview?
+    /// Counts each request to read a moment, so the same moment tapped twice scrolls twice.
+    @State private var jumps = 0
+    /// The search words open the transcript once, not each time the page comes back.
+    @State private var opened = false
 
     enum Section: String, CaseIterable { case summary = "Summary", transcript = "Transcript", coach = "Coach", chat = "Chat" }
 
@@ -58,7 +62,7 @@ struct MeetingView: View {
                 .padding(.bottom, Space.xxl)
             }
             .scrollDismissesKeyboard(.interactively)
-            .task(id: tab == .transcript ? moment : nil) {
+            .task(id: tab == .transcript ? "\(moment ?? -1) \(jumps)" : "") {
                 guard tab == .transcript, let moment,
                       let block = TranscriptBlock.blocks(record).last(where: { $0.start <= moment + 0.5 }) else { return }
                 try? await Task.sleep(for: .milliseconds(200))
@@ -80,6 +84,8 @@ struct MeetingView: View {
             read(at: m.at)
         }
         .onAppear {
+            guard !opened else { return }
+            opened = true
             if let at, moment == nil {
                 read(at: at)
                 return
@@ -97,6 +103,7 @@ struct MeetingView: View {
     /// Opens the transcript at a moment, with the playhead there.
     private func read(at t: TimeInterval?) {
         moment = t
+        jumps += 1
         query = ""
         withAnimation(.snappy) { tab = .transcript }
     }
@@ -427,7 +434,7 @@ private extension String {
 
 /// What you promised in this call: tap the ring to finish one, tap the text to read where you said it.
 private struct MeetingCommitments: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     let callID: String
     let show: (TimeInterval?) -> Void
     @State private var editing: Commitment?

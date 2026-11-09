@@ -4,7 +4,7 @@ import SwiftUI
 /// The empty chat as the canvas draws it: the accent sparkle, what Chat can answer, and four questions built from
 /// your own meetings, one per row.
 struct ChatWelcome: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     let ask: (String) -> Void
 
     var body: some View {

@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Every action item, newest meeting first; "Mine" shows only the owner's.
 struct ActionItemsView: View {
-    @EnvironmentObject var store: PhoneStore
+    @Environment(PhoneStore.self) private var store
     @State private var mine = true
 
     var body: some View {
