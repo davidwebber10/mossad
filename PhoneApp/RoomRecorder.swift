@@ -11,7 +11,12 @@ import UIKit
 final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
     enum State { case idle, recording, paused }
 
-    private(set) var rules = RoomRecording()
+    /// Not observed: it changes ten times a second. The screens read `state` and `elapsed`, which change rarely.
+    @ObservationIgnored private var rules = RoomRecording() { didSet { publish() } }
+    private(set) var state = State.idle
+    /// The app's own count of recorded seconds, in whole seconds, not the recorder's `currentTime`, which reads 0
+    /// once it stopped.
+    private(set) var elapsed: TimeInterval = 0
     /// The last second of levels, 0 to 1, for the meter.
     private(set) var levels: [Float] = Array(repeating: 0, count: 24)
     var error: FriendlyError? = PhoneStore.hook("MOSSAD_ROOM_ERROR").flatMap(ErrorPreview.sample)
@@ -20,17 +25,19 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
     /// The recording now, while there is one.
     private(set) var id: String?
 
-    var state: State {
-        switch rules.phase {
+    private func publish() {
+        let now: State = switch rules.phase {
         case .recording: .recording
         case .paused: .paused
         case .idle, .stopped: .idle
         }
+        if now != state { state = now }
+        let seconds = rules.elapsed.rounded(.down)
+        if seconds != elapsed { elapsed = seconds }
     }
 
-    /// The app's own count of recorded seconds, not the recorder's `currentTime`, which reads 0 once it stopped.
-    var elapsed: TimeInterval { rules.elapsed }
-
+    /// A start waits for the microphone permission; a second call in that time must not replace the first.
+    @ObservationIgnored private var starting = false
     @ObservationIgnored private var recorder: AVAudioRecorder?
     @ObservationIgnored private var started = Date()
     @ObservationIgnored private var dir = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -50,7 +57,9 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
 
     /// Starts a recording and returns it, or nil with the reason in `error`.
     func start(into dir: URL) async -> PhoneRecording? {
-        guard state == .idle, id == nil else { return nil }
+        guard state == .idle, id == nil, !starting else { return nil }
+        starting = true
+        defer { starting = false }
         guard await AVAudioApplication.requestRecordPermission() else {
             error = FriendlyError(kind: .microphoneDenied, context: .recording)
             return nil
@@ -68,9 +77,12 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
             rules = RoomRecording()
             rules.start(at: now)
             observe()
-            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.tick() }
             }
+            // Common modes, so the watchdog and the count also run while a list scrolls.
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
             RecordingAlerts.requestPermission()
             return PhoneRecording(id: id, start: now, end: now, title: nil)
         } catch {
@@ -185,7 +197,7 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
         guard id != nil else { return }
         recorder?.delegate = nil
         recorder = nil
-        run(rules.recorderDied())
+        run(rules.recorderDied(at: Date()))
     }
 
     nonisolated func audioRecorderDidFinishRecording(_ r: AVAudioRecorder, successfully flag: Bool) {
@@ -362,6 +374,11 @@ struct RecordingView: View {
         }
         .interactiveDismissDisabled(recorder.state != .idle)
         .task { if recorder.state == .idle, PhoneStore.hook("MOSSAD_ROOM") == nil { await store.startRecording() } }
+        // The name is kept a moment after the owner stops typing, for a recording that the app never finishes.
+        .task(id: recorder.title) {
+            try? await Task.sleep(for: .seconds(1))
+            if !Task.isCancelled { store.keepRecordingTitle() }
+        }
     }
 
     private var status: some View {

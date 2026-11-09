@@ -95,6 +95,9 @@ final class PhoneStore {
     /// The first read of the outbox and the meetings; a sync and a new recording wait for it.
     @ObservationIgnored private var launch: Task<Void, Never>?
     @ObservationIgnored private var outboxRead: Task<Void, Never>?
+    /// Recordings whose parts are being joined now, and whether the recovery pass runs: one of each at a time.
+    @ObservationIgnored private var joining: Set<String> = []
+    @ObservationIgnored private var recovering = false
     @ObservationIgnored private var loading: Task<Void, Never>?
 
     /// A development hook for screenshots, read only with a sample folder so a real install never sees one.
@@ -319,7 +322,8 @@ final class PhoneStore {
         syncTask = (key, task)
         syncing = true
         await task.value
-        if syncTask?.key == key {
+        // By task, not by key: an older sync for the same store that ends late must not clear a newer one.
+        if syncTask?.task == task {
             syncTask = nil
             syncing = false
         }
@@ -353,6 +357,7 @@ final class PhoneStore {
             // Also after a failed pull, so each waiting recording gets its own reason. Upload problems stay on
             // their recordings; a good pull does not clear them.
             await sendOutbox()
+            retryUnfinishedRecordings()
         } else {
             if syncWith == .server, !offline { syncStatus.show(FriendlyError(kind: .notConnected, context: .syncing)) }
             await load(meetings: true)
@@ -360,7 +365,11 @@ final class PhoneStore {
     }
 
     /// While a room recording waits for its meeting, the app checks now and then without a pull to refresh.
-    var waitsForTheMac: Bool { !outbox.entries.isEmpty && !offline && syncWith != .off }
+    var waitsForTheMac: Bool {
+        // Not for the recording in progress: a sync each minute of a meeting would read every meeting each time.
+        let active = recorder.id
+        return outbox.entries.contains { $0.id != active } && !offline && syncWith != .off
+    }
 
     // MARK: Opening from Search
 
@@ -497,9 +506,10 @@ final class PhoneStore {
         syncStatus.keepUploads(for: Set(outbox.entries.filter { !$0.isSent }.map(\.id)))
     }
 
-    /// Removes recordings whose meeting has arrived from the Mac, with their audio.
+    /// Removes recordings whose meeting has arrived from the Mac, with their audio. Only an in-person meeting
+    /// counts: ids are start times, and a call on the Mac can start in the same second as a room recording.
     private func settleOutbox() {
-        let done = outbox.settle(arrived: Set(meetings.map(\.id)))
+        let done = outbox.settle(arrived: Set(meetings.lazy.filter { $0.platform == .inPerson }.map(\.id)))
         guard !done.isEmpty else { return }
         let dir = recordingsFolder
         for id in done { RoomAudio.delete(id, in: dir) }
@@ -515,43 +525,91 @@ final class PhoneStore {
         outbox = box
     }
 
-    /// At launch: finishes each recording that the app never finished, and each audio file with no entry, as the
-    /// Mac does for its own calls after a crash.
+    /// Finishes each recording that the app never finished, and each audio file with no entry, as the Mac does for
+    /// its own calls after a crash. It runs at launch, and again after a sync while a recording is not saved.
     private func recoverRecordings() async {
+        guard !recovering else { return }
+        recovering = true
+        defer { recovering = false }
         let dir = recordingsFolder
-        let audio = await Task.detached { RoomAudio.ids(in: dir) }.value
-        for id in outbox.withoutAudio(audioIDs: audio, active: recorder.id) {
+        guard let audio = await Task.detached(operation: { RoomAudio.ids(in: dir) }).value else {
+            // Unknown is not empty: no entry is removed because the folder would not list.
+            Log.error("The recordings folder could not be listed; recovery waits")
+            return
+        }
+        for id in outbox.withoutAudio(audioIDs: audio, active: recorder.id) where !joining.contains(id) {
             Log.error("The room recording \(id) has no audio on this iPhone; its entry is removed")
             outbox.remove(id)
             saveOutbox()
         }
         for id in outbox.needsRecovery(audioIDs: audio, active: recorder.id) {
-            let entry = outbox[id]
-            let found = await Task.detached { () -> (length: TimeInterval?, end: Date?) in
-                (RoomAudio.length(of: id, in: dir), RoomAudio.lastWrite(of: id, in: dir))
+            // Looked at again: the Stop path may have finished it while this pass joined another one.
+            guard id != recorder.id, !joining.contains(id), outbox[id].map({ $0.state == .recording }) ?? true else { continue }
+            joining.insert(id)
+            let found = await Task.detached { () -> (short: Bool, end: Date?) in
+                // Once the parts are joined, the file's date is the join's, not the meeting's end.
+                (RoomAudio.isSurelyShort(id, in: dir, minimum: ProcessingQueue.minimumCallDuration),
+                 RoomAudio.parts(of: id, in: dir).isEmpty ? nil : RoomAudio.lastWrite(of: id, in: dir))
             }.value
-            guard let length = found.length else {
-                // Nothing readable: the file stays for a later look, and nothing is sent.
-                Log.error("The room recording \(id) could not be read; its files stay on this iPhone")
-                continue
-            }
-            guard RoomRecording.keep(measured: length, counted: 0, discard: false) else {
+            if found.short {
+                // Short by every measure: each part opened, and its bytes agree.
                 RoomAudio.delete(id, in: dir)
                 outbox.remove(id)
                 saveOutbox()
+                joining.remove(id)
                 continue
             }
-            let start = entry?.recording.start ?? RoomAudio.start(of: id) ?? found.end ?? Date()
-            if entry == nil { outbox.begin(PhoneRecording(id: id, start: start, end: start, title: nil)) }
-            do {
-                _ = try await Task.detached { try RoomAudio.finish(id, in: dir) }.value
-                outbox.finish(id, end: found.end ?? start.addingTimeInterval(length), title: nil)
-                Log.info("Recovered the room recording \(id) (\(Int(length)) s)")
-            } catch {
-                Log.error("Finishing the room recording \(id) failed: \(error)")
+            if outbox[id] == nil {
+                let start = RoomAudio.start(of: id) ?? found.end ?? Date()
+                outbox.begin(PhoneRecording(id: id, start: start, end: start, title: nil))
             }
-            saveOutbox()
+            await join(id, end: found.end, title: nil)
         }
+    }
+
+    /// Tries again for recordings that could not be saved, without waiting for the next launch.
+    private func retryUnfinishedRecordings() {
+        let active = recorder.id
+        guard !recovering, outbox.entries.contains(where: { $0.state == .recording && $0.id != active && !joining.contains($0.id) })
+        else { return }
+        Task {
+            await recoverRecordings()
+            await sendOutbox()
+        }
+    }
+
+    /// Joins a stopped recording's parts into the file to send, and puts it in line. The caller has put the id in
+    /// `joining`. A part that cannot be read does not hold back the rest: what reads is joined and sent, the bad
+    /// part stays on the iPhone under its own name, and the row says so. Any other failure (a full disk) keeps
+    /// every part, and the next sync tries again.
+    private func join(_ id: String, end: Date?, title: String?) async {
+        defer { joining.remove(id) }
+        let dir = recordingsFolder
+        let result = await Task.detached { () -> Result<RoomAudio.Joined, any Error> in
+            do {
+                return .success(try RoomAudio.finish(id, in: dir))
+            } catch is RoomAudio.Unreadable {
+                return Result { try RoomAudio.finish(id, in: dir, salvage: true) }
+            } catch {
+                return .failure(error)
+            }
+        }.value
+        switch result {
+        case .success(let joined):
+            let start = outbox[id]?.recording.start ?? Date()
+            outbox.finish(id, end: end ?? start.addingTimeInterval(joined.length), title: title)
+            if joined.setAside.isEmpty {
+                Log.info("Saved the room recording \(id) (\(Int(joined.length)) s)")
+            } else {
+                Log.error("The room recording \(id) was saved without parts that could not be read; they stay as \(joined.setAside.joined(separator: ", "))")
+                outbox.setTrouble(id, .partUnreadable)
+            }
+        case .failure(let error):
+            // The parts stay, and the entry stays `recording`. Logged once, not at each try.
+            if outbox[id]?.trouble != .notSaved { Log.error("Saving the room recording \(id) failed: \(error)") }
+            outbox.setTrouble(id, .notSaved)
+        }
+        saveOutbox()
     }
 
     func startRecording() async {
@@ -562,37 +620,42 @@ final class PhoneStore {
         saveOutbox()
     }
 
+    /// Keeps the name the owner types in the entry, so a recording that the app never finishes still has it.
+    func keepRecordingTitle() {
+        guard let id = recorder.id, let entry = outbox[id] else { return }
+        let t = recorder.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = t.isEmpty ? nil : t
+        guard entry.recording.title != title else { return }
+        outbox.retitle(id, title)
+        saveOutbox()
+    }
+
     /// Stops the recording, keeps it unless it is short (or the owner discarded a short one), joins its parts into
     /// one file, and sends it. The phone may be locked right after Stop, so this asks for background time.
     func stopRecording(discard: Bool) {
         guard let stopped = recorder.stop() else { return }
-        let dir = recordingsFolder
+        let dir = recordingsFolder, id = stopped.id
+        outbox.retitle(id, stopped.title)
+        joining.insert(id)
         Task {
             let time = BackgroundTime("Finish the room recording")
             defer { time.end() }
-            let result = await Task.detached { () -> (keep: Bool, error: Error?) in
-                let measured = RoomAudio.length(of: stopped.id, in: dir)
-                guard RoomRecording.keep(measured: measured, counted: stopped.counted, discard: discard) else {
-                    RoomAudio.delete(stopped.id, in: dir)
-                    return (false, nil)
-                }
-                do {
-                    try RoomAudio.finish(stopped.id, in: dir)
-                    return (true, nil)
-                } catch { return (true, error) }
+            let deleted = await Task.detached { () -> Bool in
+                let measured = RoomAudio.length(of: id, in: dir)
+                if RoomRecording.keep(measured: measured, counted: stopped.counted, discard: discard) { return false }
+                // The owner's own "Discard" is enough. Without it, a part that did not open may hold more than the
+                // count says, so the files must also be short by every measure.
+                guard discard || RoomAudio.isSurelyShort(id, in: dir, minimum: ProcessingQueue.minimumCallDuration) else { return false }
+                RoomAudio.delete(id, in: dir)
+                return true
             }.value
-            guard result.keep else {
-                outbox.remove(stopped.id)
+            if deleted {
+                joining.remove(id)
+                outbox.remove(id)
                 saveOutbox()
                 return
             }
-            if let error = result.error {
-                // The parts stay, and the entry stays `recording`: the next launch tries again.
-                Log.error("Finishing the room recording failed: \(error)")
-                return
-            }
-            outbox.finish(stopped.id, end: stopped.end, title: stopped.title)
-            saveOutbox()
+            await join(id, end: stopped.end, title: nil)
             await sendOutbox()
         }
     }

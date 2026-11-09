@@ -83,6 +83,13 @@ struct MeetingsListView: View {
                         if !item.isSent, let reason = store.syncStatus.uploads[item.id] {
                             InlineError(error: reason).padding(.top, 2)
                         }
+                        if let trouble = item.trouble {
+                            Text(trouble == .notSaved
+                                 ? "This recording could not be saved yet. The audio is on this iPhone, and Mossad tries again."
+                                 : "A part of this recording could not be read. It is kept on this iPhone; the rest was sent.")
+                                .textRole(.secondary).foregroundStyle(Palette.recording)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         // The Mac had time and no meeting came back: the owner can send it once more.
                         if item.canSendAgain(now: now), !store.uploading.contains(item.id) {
                             Button("Send again") { store.sendAgain(item.id) }
