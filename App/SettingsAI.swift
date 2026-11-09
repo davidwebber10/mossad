@@ -30,7 +30,7 @@ struct AISettings: View {
     }
 
     private var transcription: some View {
-        ProviderRow(title: "Transcription", detail: controller.transcriptionProvider.note) {
+        ProviderRow(title: "Transcription", detail: controller.transcriptionProvider.note(model: controller.transcriptionModel)) {
             FillPicker(title: "Transcription provider", selection: $controller.transcriptionProvider,
                        choices: TranscriptionProvider.allCases.map { ($0, $0.displayName) })
             if controller.transcriptionProvider.models.count > 1 {
@@ -44,6 +44,7 @@ struct AISettings: View {
             controller.transcriptionModel = p.models.first?.id ?? ""
             controller.rebuildPipeline()
         }
+        .onChange(of: controller.transcriptionModel) { _, _ in controller.rebuildPipeline() }
     }
 
     private var ai: some View {

@@ -1,20 +1,75 @@
+import AVFoundation
 import FluidAudio
 import Foundation
 
-/// Loads the on-device models once and keeps them: Parakeet for words, FluidAudio's diarizer for speakers.
+/// Loads the on-device models once and keeps them: the chosen model for words, FluidAudio's diarizer for speakers.
 actor LocalEngine {
     static let shared = LocalEngine()
-    private var asr: AsrManager?
+    private var parakeet: [LocalModel: AsrManager] = [:]
     private var diarizer: DiarizerManager?
+    #if os(macOS)
+    private var whisper: WhisperEngine?
+    private var qwen: QwenEngine?
+    #endif
 
-    func transcribe(_ file: URL) async throws -> ASRResult {
-        if asr == nil {
+    func words(_ file: URL, model: LocalModel) async throws -> [TimedWord] {
+        switch model {
+        case .parakeetV3: try await parakeetWords(file, model: model, version: .v3)
+        case .parakeetV2: try await parakeetWords(file, model: model, version: .v2)
+        case .appleSpeech:
+            #if os(macOS)
+            try await AppleSpeechEngine.words(file)
+            #else
+            throw LocalModelError.notSupported(model)
+            #endif
+        case .whisperTurbo:
+            #if os(macOS)
+            try await whisperEngine().words(file)
+            #else
+            throw LocalModelError.notSupported(model)
+            #endif
+        case .qwen3:
+            #if os(macOS)
+            try await qwenEngine().words(file)
+            #else
+            throw LocalModelError.notSupported(model)
+            #endif
+        }
+    }
+
+    #if os(macOS)
+    private func qwenEngine() async throws -> QwenEngine {
+        if let qwen { return qwen }
+        let engine = try await QwenEngine.load()
+        qwen = engine
+        return engine
+    }
+    #endif
+
+    #if os(macOS)
+    private func whisperEngine() async throws -> WhisperEngine {
+        if let whisper { return whisper }
+        let engine = try await WhisperEngine.load()
+        whisper = engine
+        return engine
+    }
+    #endif
+
+    private func parakeetWords(_ file: URL, model: LocalModel, version: AsrModelVersion) async throws -> [TimedWord] {
+        if parakeet[model] == nil {
             let manager = AsrManager()
-            try await manager.loadModels(try await AsrModels.downloadAndLoad(version: .v3))
-            asr = manager
+            let models: AsrModels
+            do {
+                models = try await AsrModels.downloadAndLoad(version: version, progressHandler: Self.logProgress(model))
+            } catch is AsrModelsError {
+                throw LocalModelError.modelMissing(model)
+            }
+            try await manager.loadModels(models)
+            parakeet[model] = manager
         }
         var state = try TdtDecoderState()
-        return try await asr!.transcribe(file, decoderState: &state)
+        let result = try await parakeet[model]!.transcribe(file, decoderState: &state)
+        return buildWordTimings(from: result.tokenTimings ?? []).map { TimedWord(text: $0.word, start: $0.startTime, end: $0.endTime) }
     }
 
     func speakers(_ file: URL) async throws -> [(start: Double, end: Double, speaker: String)] {
@@ -28,21 +83,54 @@ actor LocalEngine {
             (start: Double($0.startTimeSeconds), end: Double($0.endTimeSeconds), speaker: $0.speakerId)
         }
     }
+
+    /// Logs a first download at each tenth. Loading models already on disk reports no download fractions worth noting.
+    static func logProgress(_ model: LocalModel) -> @Sendable (DownloadProgress) -> Void {
+        let steps = Steps()
+        return { progress in
+            guard case .downloading = progress.phase, let percent = steps.next(progress.fractionCompleted) else { return }
+            Log.info("Downloading \(model.name): \(percent)%")
+        }
+    }
+
+    /// The steps behind a lock: FluidAudio calls the handler on any queue.
+    final class Steps: @unchecked Sendable {
+        private let lock = NSLock()
+        private var steps = DownloadSteps()
+        func next(_ fraction: Double) -> Int? { lock.withLock { steps.next(fraction) } }
+    }
 }
 
-/// Transcription on this Mac: free and private, faster than real time by about 300 times, but weaker on
-/// product names than the cloud providers. The models download once, on first use.
+/// Transcription on this Mac: free and private. The chosen model gives words with times; FluidAudio's diarizer
+/// splits the track by voice, and Mossad names the voices later, as it does for the cloud providers.
 public struct LocalTranscriber: Transcribing {
+    public typealias Segments = [(start: Double, end: Double, speaker: String)]
+    public let model: LocalModel
+    private let words: @Sendable (URL) async throws -> [TimedWord]
+    private let speakers: @Sendable (URL) async throws -> Segments
+
     public var serviceName: String { "Mossad" }
-    public init() {}
+
+    public init(model: LocalModel = .parakeetV3) {
+        self.init(model: model, words: { try await LocalEngine.shared.words($0, model: model) },
+                  speakers: { try await LocalEngine.shared.speakers($0) })
+    }
+
+    init(model: LocalModel, words: @escaping @Sendable (URL) async throws -> [TimedWord],
+         speakers: @escaping @Sendable (URL) async throws -> Segments) {
+        self.model = model
+        self.words = words
+        self.speakers = speakers
+    }
 
     public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        // An empty track has nothing to say, and some models fail on it, so no model loads.
+        if let audio = try? AVAudioFile(forReading: file), audio.length == 0 { return [] }
         progress(.transcribing)
-        let result = try await LocalEngine.shared.transcribe(file)
-        let words = buildWordTimings(from: result.tokenTimings ?? []).map { (text: $0.word, start: $0.startTime, end: $0.endTime) }
+        let words = try await words(file)
         guard !words.isEmpty else { return [] }
-        let segments = try await LocalEngine.shared.speakers(file)
-        return SpokenWord.utterances(Self.assign(words, to: segments), track: track)
+        let segments = try await speakers(file)
+        return SpokenWord.utterances(Self.assign(words.map { ($0.text, $0.start, $0.end) }, to: segments), track: track)
     }
 
     /// Gives each word the speaker whose segment holds the word's middle, or the nearest segment.

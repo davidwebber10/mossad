@@ -248,7 +248,7 @@ struct AIStep: View {
             ProviderKeyBlock(
                 model: model,
                 label: "Transcription",
-                detail: "Turns each call's audio into the transcript. " + controller.transcriptionProvider.note,
+                detail: "Turns each call's audio into the transcript. " + controller.transcriptionProvider.note(model: controller.transcriptionModel),
                 picker: FillPicker(title: "Transcription provider", selection: $controller.transcriptionProvider,
                                    choices: TranscriptionProvider.allCases.map { ($0, $0.displayName) }),
                 service: KeyCheck.Service(controller.transcriptionProvider),
@@ -262,6 +262,7 @@ struct AIStep: View {
                 controller.transcriptionModel = p.models.first?.id ?? ""
                 controller.rebuildPipeline()
             }
+            .onChange(of: controller.transcriptionModel) { _, _ in controller.rebuildPipeline() }
             ProviderKeyBlock(
                 model: model,
                 label: "Notes",
@@ -378,7 +379,7 @@ private struct ProviderKeyBlock<Picker: View>: View {
         } else {
             HStack(spacing: Space.s) {
                 PassLine(text: "No key needed")
-                Text("It runs on this Mac. The models download once, about 1 GB.").font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                Text("It runs on this Mac. The model downloads once, on first use.").font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
             }
         }
     }
