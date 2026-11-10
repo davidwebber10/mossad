@@ -7,6 +7,11 @@ struct RecordingSettings: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
     @State private var confirmDeleteVoices = false
+    /// True after this page read the calendars while access was allowed. Until then, an empty list is not known
+    /// to be empty.
+    @State private var calendarsRead = false
+
+    private var calendarItem: PermissionsMonitor.Item? { permissions.items.first { $0.kind == .calendars } }
 
     var body: some View {
         LabelColumnStack {
@@ -53,13 +58,18 @@ struct RecordingSettings: View {
                 }
             }
             SettingsGroup(label: "Calendars", footer: "Mossad reads only the checked calendars, to name calls from their invites and to list upcoming calls.") {
-                if let item = permissions.items.first(where: { $0.kind == .calendars }), !item.state.isGood {
-                    PermissionRow(item: item) { permissions.fix(item) }
-                } else if controller.calendars.isEmpty {
+                switch CalendarListState(allowed: calendarItem?.state.isGood ?? false, read: calendarsRead, count: controller.calendars.count) {
+                case .needsAccess:
+                    if let item = calendarItem { PermissionRow(item: item) { permissions.fix(item) } }
+                case .notRead:
+                    Text("Reading your calendars…").font(.system(size: 12.5)).foregroundStyle(Palette.secondary).padding(.vertical, 9)
+                case .none:
                     Text("No calendars on this Mac yet. Add your work account in System Settings › Internet Accounts.")
                         .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, 9)
+                case .listed:
+                    EmptyView()
                 }
                 ForEach(Array(Dictionary(grouping: controller.calendars, by: \.account).sorted { $0.key < $1.key }), id: \.key) { account, list in
                     VStack(alignment: .leading, spacing: 0) {
@@ -96,11 +106,21 @@ struct RecordingSettings: View {
                 folderRow("Voices", controller.paths.voices)
             }
         }
+        // The list is read at launch and each few minutes. Access that the owner gives on this page must show its
+        // calendars at once, as setup does.
+        .onAppear(perform: readCalendars)
+        .onChange(of: calendarItem?.state) { _, _ in readCalendars() }
         .confirmationDialog("Delete every saved voice?", isPresented: $confirmDeleteVoices) {
             Button("Delete all voices", role: .destructive) { controller.deleteAllVoices() }
         } message: {
             Text("Mossad forgets every voice it learned, including yours. Meeting notes keep their names.")
         }
+    }
+
+    private func readCalendars() {
+        guard calendarItem?.state.isGood == true else { return }
+        controller.refreshUpcoming()
+        calendarsRead = true
     }
 
     /// "12 people, on this Mac only."

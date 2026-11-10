@@ -20,23 +20,41 @@ struct PermissionRow: View {
         HStack(spacing: Space.m) {
             mark.frame(width: 20, height: 20).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: style == .setup ? 3 : 2) {
-                HStack(spacing: Space.s) {
-                    Text(item.title).font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
-                    if style == .setup {
-                        if isRequired { NeedsYouChip(text: "Required") } else { TagChip(text: "Recommended") }
-                    } else if isRequired, !good {
-                        NeedsYouChip(text: "Required")
+                // In a narrow column the chip goes under the name, so the name stays on one line.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Space.s) {
+                        name.fixedSize()
+                        chip
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        name
+                        chip
                     }
                 }
                 Text(detail).font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: Space.m)
+            // The text takes all the width that the action leaves, so a line does not wrap while the row has room.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
             action
         }
         .padding(.vertical, style.padding)
         .accessibilityElement(children: .combine)
         .accessibilityValue(good ? "Allowed" : "Not allowed")
+    }
+
+    private var name: some View {
+        Text(item.title).font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
+    }
+
+    @ViewBuilder
+    private var chip: some View {
+        if style == .setup {
+            if isRequired { NeedsYouChip(text: "Required") } else { TagChip(text: "Recommended") }
+        } else if isRequired, !good {
+            NeedsYouChip(text: "Required")
+        }
     }
 
     private var detail: String {
@@ -63,11 +81,28 @@ struct PermissionRow: View {
         if let label = OnboardingPermissions.action(item.kind, item.state) {
             Button(label, action: fix)
                 .rowButton(accent: isRequired)
-                .help(item.state == .denied ? "macOS asks only once. Turn Mossad on in this list in System Settings." : "")
+                .modifier(DeniedHelp(denied: item.state == .denied))
+                .fixedSize()
                 .accessibilityLabel(label == "Allow…" ? "Allow \(item.title)" : "\(label.replacingOccurrences(of: "…", with: "")), to allow \(item.title)")
         } else {
+            // The row's value says "Allowed" to VoiceOver: this text would say it a second time.
             Text("Allowed").font(.system(size: style.detailSize, weight: style == .setup ? .medium : .regular))
                 .foregroundStyle(style == .setup ? Palette.okText : Palette.secondary)
+                .fixedSize()
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// The tooltip of a denied permission only. An empty tooltip on the other states is still a tooltip to AppKit.
+private struct DeniedHelp: ViewModifier {
+    let denied: Bool
+
+    func body(content: Content) -> some View {
+        if denied {
+            content.help("macOS asks only once. Turn Mossad on in this list in System Settings.")
+        } else {
+            content
         }
     }
 }

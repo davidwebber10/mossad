@@ -9,6 +9,8 @@ public struct FriendlyError: Equatable, Sendable {
         case importingOrgChart, checkingUpdates, connectingServer, sharing, general
         /// Setup's Check button, which tries a pasted key with one free request.
         case checkingKey
+        /// Check in Settings, which tries the saved key. The key changes in a sheet, not in the row.
+        case checkingSavedKey
 
         /// Steps Mossad runs again by itself: the pipeline, sync, and the iPhone's outbox.
         public var retriesItself: Bool {
@@ -25,7 +27,7 @@ public struct FriendlyError: Equatable, Sendable {
             case .sendingEmail: "the mail service"
             case .checkingUpdates: "the update server"
             case .syncing, .uploadingAudio, .connectingServer, .sharing: "your server"
-            case .recording, .importingOrgChart, .general, .checkingKey: "the service"
+            case .recording, .importingOrgChart, .general, .checkingKey, .checkingSavedKey: "the service"
             }
         }
 
@@ -46,7 +48,7 @@ public struct FriendlyError: Equatable, Sendable {
             case .connectingServer: "Mossad couldn't connect to your server"
             case .sharing: "The share link didn't update"
             case .general: "That didn't work"
-            case .checkingKey: "Mossad couldn't check the key"
+            case .checkingKey, .checkingSavedKey: "Mossad couldn't check the key"
             }
         }
     }
@@ -66,6 +68,9 @@ public struct FriendlyError: Equatable, Sendable {
         case badFile, tooManySteps, other
         /// Nothing answers at the local AI server's address, or Apple's on-device model cannot run.
         case localServerDown, onDeviceUnavailable
+        /// A key check that the provider forbade. The key can still be good for the job: a restricted key often
+        /// has no permission for the free request that the check makes.
+        case keyNotPermitted
 
         var isTransient: Bool {
             [.offline, .unreachable, .timedOut, .serverTrouble, .busy, .rateLimited, .localServerDown].contains(self)
@@ -155,7 +160,13 @@ public struct FriendlyError: Equatable, Sendable {
                     context == .connectingServer ? "Copy the secret again from your Mac, then try again." : "Connect the server again in \(syncSettings).", false)
         case .unauthorized where context == .checkingKey:
             return ("\(S) didn't accept the API key", "Copy the key again from your \(named ? s : "provider's") account, then paste it here.", false)
+        case .unauthorized where context == .checkingSavedKey:
+            return ("\(S) didn't accept the API key", "Copy the key again from your \(named ? s : "provider's") account. Then click Change and paste it.", false)
         case .unauthorized: return ("\(S) didn't accept the API key", "Check the \(key) in \(keySettings(context)).", false)
+        case .keyNotPermitted:
+            return ("\(S) did not let Mossad check the key",
+                    context == .checkingSavedKey ? "The key has no permission for this check. It can still work for your calls."
+                        : "The key has no permission for this check. Use a key with full access, then check it again.", false)
         case .missingKey: return ("Mossad needs your \(key)", "Add the key in \(keySettings(context)), then retry.", false)
         case .billing:
             return (named ? "Your \(s) account needs attention" : "Your AI account needs attention",
@@ -228,6 +239,7 @@ public struct FriendlyError: Equatable, Sendable {
         case let e as MissingAPIKey: return .init(kind: .missingKey, service: e.service)
         case TranscriptionError.http(let code, let body): return http(code, body, service: "AssemblyAI")
         case TranscriptionError.failed(let message): return .init(kind: .transcriptionFailed, service: "AssemblyAI", said: humane(message))
+        case let e as KeyCheck.Failure: return e.status == 403 ? .init(kind: .keyNotPermitted, service: e.service) : http(e.status, "", service: e.service)
         case ProviderError.http(let p, let code, let body): return http(code, body, service: p)
         case ProviderError.failed(let p, let message): return failed(message, service: p)
         case SummaryError.http(let code, let body): return http(code, body, service: "Anthropic")

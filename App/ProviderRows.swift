@@ -15,39 +15,73 @@ final class KeyChecker: ObservableObject {
     }
 
     @Published private var states: [APIKey: State] = [:]
+    private var tickets = KeyCheck.Tickets()
 
     func state(_ key: APIKey) -> State { states[key] ?? .idle }
 
-    /// A result says nothing about the next key.
-    func forget(_ key: APIKey) { states[key] = nil }
-    func reset() { states = [:] }
+    /// A result says nothing about the next key: the check that still runs loses its ticket.
+    func forget(_ key: APIKey) {
+        tickets.cancel(key)
+        states[key] = nil
+    }
+
+    func reset() {
+        tickets.cancelAll()
+        states = [:]
+    }
 
     /// A typed key that works is saved to the Keychain. Without one, the saved key is tried and nothing is written.
     func check(_ service: KeyCheck.Service, typed: String? = nil, key apiKey: APIKey, controller: AppController) {
+        // Return in the field can ask again while a check runs: one request for each key at a time.
+        guard state(apiKey) != .checking else { return }
         let key = (typed ?? controller.keychain.get(apiKey) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
+        let ticket = tickets.start(apiKey)
         states[apiKey] = .checking
         Task {
-            do {
-                try await KeyCheck.run(service, key: key)
-                guard typed != nil else {
-                    states[apiKey] = .passed
-                    return
-                }
-                do {
-                    try controller.keychain.set(key, for: apiKey)
-                    controller.rebuildPipeline()
-                    states[apiKey] = .passed
-                    controller.keysChanged()
-                } catch {
-                    Log.error("Saving the \(apiKey.rawValue) key failed")
-                    states[apiKey] = .failed(FriendlyError(error, context: .checkingKey, service: "the Keychain"))
-                }
-            } catch {
-                Log.error("Checking the \(service.displayName) key failed: \(FriendlyError(error, context: .checkingKey).technical)")
-                states[apiKey] = .failed(FriendlyError(error, context: .checkingKey, service: service.displayName))
+            let result = await Self.run(service, key: key, saveAs: typed == nil ? nil : apiKey, controller: controller) { [weak self] in
+                self?.tickets.isCurrent(ticket, for: apiKey) ?? false
             }
+            guard tickets.isCurrent(ticket, for: apiKey), let result else { return }
+            states[apiKey] = result
+            // The result only appears in the row: VoiceOver says it.
+            let spoken = if case .failed(let error) = result { error.title } else { "The \(apiKey.displayName) works" }
+            AccessibilityNotification.Announcement(spoken).post()
         }
+    }
+
+    /// Nil when the check lost its ticket before the key could be saved.
+    private static func run(_ service: KeyCheck.Service, key: String, saveAs apiKey: APIKey?, controller: AppController,
+                            current: () -> Bool) async -> State? {
+        do {
+            try await KeyCheck.run(service, key: key)
+        } catch {
+            let friendly = FriendlyError(error, context: apiKey == nil ? .checkingSavedKey : .checkingKey, service: service.displayName)
+            // `technical` holds a status and a fixed reason, or a connection error. Never the provider's reply.
+            Log.error("Checking the \(service.displayName) key failed: \(friendly.technical)")
+            return .failed(friendly)
+        }
+        guard let apiKey else { return .passed }
+        guard current() else { return nil }
+        do {
+            try controller.keychain.set(key, for: apiKey)
+            controller.rebuildPipeline()
+            controller.keysChanged()
+            return .passed
+        } catch {
+            Log.error("Saving the \(apiKey.rawValue) key failed")
+            return .failed(FriendlyError(error, context: .checkingKey, service: "the Keychain"))
+        }
+    }
+}
+
+extension AppController {
+    /// What an hour of meetings costs with every billed part that is on now. Setup and Settings show this one.
+    var hourCost: HourCost {
+        Pricing.hourCost(transcription: transcriptionProvider, ai: aiProvider, model: aiModel,
+                         // The live transcript opens its sessions only with an AssemblyAI key.
+                         liveTranscript: liveTranscriptEnabled && hasKey(.assemblyai),
+                         coach: coachEnabled, coachEmail: coachEmailEnabled || coachMonthlyEmail)
     }
 }
 
@@ -183,20 +217,17 @@ struct KeyRow: View {
         let state = keys.state(key)
         let saved = controller.hasKey(key)
         VStack(alignment: .leading, spacing: style == .setup ? 10 : 6) {
-            HStack(spacing: Space.m) {
-                VStack(alignment: .leading, spacing: 2) {
-                    SettingsRowText(title: key.displayName, titleNote: optional ? "optional" : nil).fixedSize()
-                    // What the key is for and where to get one, on one line when there is room for both.
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 6) { about(saved: saved) }
-                        VStack(alignment: .leading, spacing: 2) { about(saved: saved) }
-                    }
+            // One line when the name, the status, and the buttons fit; in a narrow column the controls go under
+            // the name, so no label is cut and the line about the key can wrap.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Space.m) {
+                    names(saved: saved, wraps: false)
+                    Spacer(minLength: Space.m)
+                    controls(state, saved: saved)
                 }
-                Spacer(minLength: Space.m)
-                if edit == nil, !saved || replacing {
-                    field(state)
-                } else {
-                    status(state, saved: saved)
+                VStack(alignment: .leading, spacing: 8) {
+                    names(saved: saved, wraps: true)
+                    HStack(spacing: Space.m) { controls(state, saved: saved) }
                 }
             }
             if case .failed(let error) = state { InlineError(error: error) }
@@ -205,26 +236,50 @@ struct KeyRow: View {
         .onChange(of: state) { _, s in if s == .passed { replacing = false; typed = "" } }
     }
 
+    /// The key's name, what it is for, and where to get one.
+    private func names(saved: Bool, wraps: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            SettingsRowText(title: key.displayName, titleNote: optional ? "optional" : nil)
+                .fixedSize(horizontal: !wraps, vertical: true)
+            if wraps {
+                about(saved: saved, wraps: true)
+            } else {
+                HStack(spacing: 6) { about(saved: saved, wraps: false) }
+            }
+        }
+    }
+
     @ViewBuilder
-    private func about(saved: Bool) -> some View {
+    private func about(saved: Bool, wraps: Bool) -> some View {
         if let detail {
-            Text(detail).font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary).fixedSize()
+            Text(detail).font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
+                .fixedSize(horizontal: !wraps, vertical: true)
         }
         if let page {
             RowLink(text: "Get a key", destination: page, quiet: edit != nil && saved,
-                    spoken: "Get a \(key.displayName) on its website")
+                    spoken: "Get the \(key.displayName) on its website")
                 .fixedSize()
         }
     }
 
     @ViewBuilder
+    private func controls(_ state: KeyChecker.State, saved: Bool) -> some View {
+        if edit == nil, !saved || replacing { field(state) } else { status(state, saved: saved) }
+    }
+
+    @ViewBuilder
     private func status(_ state: KeyChecker.State, saved: Bool) -> some View {
         let status = KeyCheck.Status(saved: saved, passed: state == .passed)
-        switch status {
-        case .works: PassLine(text: status.label)
-        case .saved: Text(status.label).font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
-        case .missing: Text(status.label).font(.system(size: style.detailSize)).foregroundStyle(optional ? Palette.secondary : Palette.accent)
+        Group {
+            switch status {
+            case .works: PassLine(text: status.label)
+            case .saved: Text(status.label).foregroundStyle(Palette.secondary)
+            case .missing: Text(status.label).foregroundStyle(optional ? Palette.secondary : Palette.accent)
+            }
         }
+        .font(.system(size: style.detailSize))
+        .lineLimit(1)
+        .fixedSize()
         if let service, status == .saved {
             Button { keys.check(service, key: key, controller: controller) } label: {
                 if state == .checking { ProgressView().controlSize(.small).frame(width: 36) } else { Text("Check") }
@@ -232,13 +287,15 @@ struct KeyRow: View {
             .rowButton()
             .disabled(state == .checking)
             .help("Tries the saved key with one free request.")
-            .accessibilityLabel("Check the \(key.displayName)")
+            .accessibilityLabel(state == .checking ? "Checking the \(key.displayName)" : "Check the \(key.displayName)")
+            .fixedSize()
         }
         Button(saved ? "Change" : "Set key…") {
             if let edit { edit(key) } else { replacing = true; typed = "" }
         }
         .rowButton(accent: !saved && !optional)
         .accessibilityLabel(saved ? "Change the \(key.displayName)" : "Set the \(key.displayName)")
+        .fixedSize()
     }
 
     @ViewBuilder
@@ -264,33 +321,53 @@ struct KeyRow: View {
 
 // MARK: Ratings
 
-/// Stars for each aspect and the price level; the tooltip says what they rest on.
+/// Stars for each aspect and the price level; the tooltip says what they rest on. On one line, or two when the
+/// column is narrow.
 struct RatingView: View {
     let rating: Rating
     let aspects: [String]
 
+    private var shown: [String] { aspects.filter { rating.stars[$0] != nil } }
+
     var body: some View {
-        HStack(spacing: 14) {
-            ForEach(aspects.filter { rating.stars[$0] != nil }, id: \.self) { aspect in
-                let stars = rating.stars[aspect] ?? 0
-                HStack(spacing: 5) {
-                    Text(aspect)
-                    Text("\(Text(String(repeating: "★", count: stars)))\(Text(String(repeating: "★", count: max(0, 5 - stars))).foregroundStyle(Palette.ring))")
-                        .tracking(1)
-                }
-                .fixedSize()
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(aspect): \(stars) of 5")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                ForEach(shown, id: \.self, content: stars)
+                price
             }
-            if rating.free {
-                Text("Free").fontWeight(.semibold).foregroundStyle(Palette.okText)
-            } else if rating.price > 0 {
-                Text("\(Text(rating.dollars))\(Text(String(repeating: "$", count: 4 - rating.price)).foregroundStyle(Palette.ring))")
-                    .accessibilityLabel("Price level \(rating.price) of 4")
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 14) { ForEach(shown.prefix(2), id: \.self, content: stars) }
+                HStack(spacing: 14) {
+                    ForEach(shown.dropFirst(2), id: \.self, content: stars)
+                    price
+                }
             }
         }
         .font(.system(size: 11.5))
         .foregroundStyle(Palette.secondary)
         .help(rating.basis)
+    }
+
+    private func stars(_ aspect: String) -> some View {
+        let stars = rating.stars[aspect] ?? 0
+        return HStack(spacing: 5) {
+            Text(aspect)
+            Text("\(Text(String(repeating: "★", count: stars)))\(Text(String(repeating: "★", count: max(0, 5 - stars))).foregroundStyle(Palette.ring))")
+                .tracking(1)
+        }
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(aspect): \(stars) of 5")
+    }
+
+    @ViewBuilder
+    private var price: some View {
+        if rating.free {
+            Text("Free").fontWeight(.semibold).foregroundStyle(Palette.okText).fixedSize()
+        } else if rating.price > 0 {
+            Text("\(Text(rating.dollars))\(Text(String(repeating: "$", count: 4 - rating.price)).foregroundStyle(Palette.ring))")
+                .fixedSize()
+                .accessibilityLabel("Price level \(rating.price) of 4")
+        }
     }
 }

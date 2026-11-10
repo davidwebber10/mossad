@@ -99,3 +99,12 @@ public enum PermissionCheckRate {
         pageOpen && windowShows ? 1 : background
     }
 }
+
+/// What Settings shows for the calendars. An empty list that nobody read with access is not "no calendars".
+public enum CalendarListState: Equatable, Sendable {
+    case needsAccess, notRead, none, listed
+
+    public init(allowed: Bool, read: Bool, count: Int) {
+        self = !allowed ? .needsAccess : count > 0 ? .listed : read ? .none : .notRead
+    }
+}

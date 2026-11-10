@@ -159,10 +159,13 @@ public enum Onboarding {
         return !finished && !hasMeetings && !preview
     }
 
-    /// "About $0.57 for each hour of meetings, billed by your providers."
-    public static func costLine(perHour: Double) -> String {
-        let amount = perHour.formatted(.currency(code: "USD").precision(.fractionLength(2)))
-        return "About \(amount) for each hour of meetings, billed to your own accounts."
+    /// "About $0.93 for each hour of meetings, billed to your own accounts." The amount is the one Settings shows.
+    public static func costLine(_ cost: HourCost) -> String {
+        switch cost.headline {
+        case "Free": "Free: these choices bill nothing."
+        case "Not known": "The cost is not known: the notes model has no list price."
+        case let amount: "\(amount) for each hour of meetings, billed to your own accounts."
+        }
     }
 }
 

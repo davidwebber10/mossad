@@ -22,10 +22,15 @@ struct AISettings: View {
             SettingsGroup(label: ProviderJob.notes.title, footer: "Mossad keeps each key in the macOS Keychain and never shows it again.") {
                 NotesRows(keys: keys, ratings: true, edit: edit)
             }
-            SettingsGroup(label: "Cost", footer: "An estimate from list prices. Each provider bills your own account.") {
-                let cost = Pricing.hourCost(transcription: controller.transcriptionProvider, ai: controller.aiProvider, model: controller.aiModel)
-                SettingsRow(title: "An hour of meetings", detail: cost.parts) {
+            // Every part that a provider bills with the choices as they are now: the live transcript and the coach
+            // are in it while they are on.
+            SettingsGroup(label: "Cost", footer: "An estimate from list prices, for one call of an hour. Each provider bills your own account. Chat, and the coach’s questions and briefs, are not in it.") {
+                let cost = controller.hourCost
+                ChoiceRow(title: "An hour of meetings", detail: [cost.detail, cost.emailDetail].compactMap { $0 }.joined(separator: " ")) {
+                    // As tall as a control, so the line under it sits where it does in the other rows.
                     Text(cost.headline).font(.system(size: 13, weight: .medium)).monospacedDigit().foregroundStyle(Palette.ink)
+                        .fixedSize()
+                        .frame(height: 24)
                 }
                 .accessibilityElement(children: .combine)
             }

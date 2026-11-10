@@ -83,7 +83,7 @@ struct CoachSettings: View {
         SettingsRow(title: "Provider", detail: "Sends the emails with your own account.") {
             FillPicker(title: "Email provider", selection: $controller.mailProvider, choices: MailProvider.allCases.map { ($0, $0.displayName) })
         }
-        SettingsRow(title: "Send from", detail: "Verified with \(controller.mailProvider.displayName).") {
+        SettingsRow(title: "Send from", detail: "Use a sender that you verified with \(controller.mailProvider.displayName).") {
             TextField("Send from", text: $controller.coachEmailFrom, prompt: Text("Mossad <coach@yourdomain.com>")).textFieldStyle(SettingsFieldStyle(width: 260))
         }
         if controller.mailProvider == .mailgun {

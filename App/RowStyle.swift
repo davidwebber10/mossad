@@ -64,10 +64,17 @@ struct ChoiceRow<Control: View, Below: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: Space.m) {
-                Text(title).font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
-                Spacer(minLength: Space.m)
-                control
+            // In a narrow column a wide control goes under its name.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Space.m) {
+                    name.fixedSize()
+                    Spacer(minLength: Space.m)
+                    control
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    name
+                    control
+                }
             }
             if let detail {
                 Text(detail).font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
@@ -79,6 +86,10 @@ struct ChoiceRow<Control: View, Below: View>: View {
             below.padding(.top, 2)
         }
         .padding(.vertical, style.padding)
+    }
+
+    private var name: some View {
+        Text(title).font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
     }
 }
 

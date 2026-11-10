@@ -13,23 +13,17 @@ struct LocalServerSetup: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Server").font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
-                    RowLink(text: "Get Ollama", destination: LocalServer.getOllama, spoken: "Get Ollama on its website")
+            // In a narrow column the address and its buttons go under the name, and the address takes the width.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    name
+                    Spacer(minLength: Space.m)
+                    address(width: 200)
                 }
-                Spacer(minLength: Space.m)
-                TextField("Server address", text: $controller.localServerURL, prompt: Text(LocalServer.ollama.absoluteString))
-                    .textFieldStyle(SettingsFieldStyle(width: 200, monospaced: true))
-                    .onSubmit(check)
-                Menu {
-                    Button("Ollama") { use(LocalServer.ollama) }
-                    Button("LM Studio") { use(LocalServer.lmStudio) }
-                } label: {
-                    FillMenuLabel(text: "Presets")
+                VStack(alignment: .leading, spacing: 8) {
+                    name
+                    HStack(spacing: 6) { address(width: nil) }
                 }
-                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-                checkButton
             }
             switch state {
             case .found(let count):
@@ -50,6 +44,29 @@ struct LocalServerSetup: View {
         }
         .padding(.vertical, style.padding)
         .onChange(of: controller.localServerURL) { _, _ in state = .idle }
+    }
+
+    private var name: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Server").font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
+            RowLink(text: "Get Ollama", destination: LocalServer.getOllama, spoken: "Get Ollama on its website")
+        }
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private func address(width: CGFloat?) -> some View {
+        TextField("Server address", text: $controller.localServerURL, prompt: Text(LocalServer.ollama.absoluteString))
+            .textFieldStyle(SettingsFieldStyle(width: width, monospaced: true))
+            .onSubmit(check)
+        Menu {
+            Button("Ollama") { use(LocalServer.ollama) }
+            Button("LM Studio") { use(LocalServer.lmStudio) }
+        } label: {
+            FillMenuLabel(text: "Presets")
+        }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+        checkButton.fixedSize()
     }
 
     private var checkButton: some View {

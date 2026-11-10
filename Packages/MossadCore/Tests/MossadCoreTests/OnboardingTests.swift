@@ -178,12 +178,13 @@ final class OnboardingTests: XCTestCase {
 
     // MARK: Cost
 
-    func testAnHourOfMeetingsCostsBothTracksAndOneSummary() {
+    func testAnHourOfMeetingsCostsBothTracksAndTheNotes() {
         let cost = Pricing.hourEstimate(transcription: .assemblyai, ai: .anthropic, model: "")
-        // Two tracks at $0.23 an hour, and a summary of about 15,000 tokens in and 2,500 out on the default model.
-        XCTAssertEqual(cost, 0.46 + 0.06 + 0.05, accuracy: 0.005)
-        XCTAssertEqual(Pricing.hourEstimate(transcription: .local, ai: .anthropic, model: "claude-haiku-5-5"), 0.0028, accuracy: 0.0005)
-        XCTAssertTrue(Onboarding.costLine(perHour: 0.57).contains("$0.57"))
+        // Two tracks at $0.23 an hour; a summary of about 15,000 tokens in and 2,500 out on the default model; and
+        // the read for what the owner promised, about 14,100 tokens in and 300 out.
+        XCTAssertEqual(cost, 0.46 + 0.06 + 0.05 + 0.0624, accuracy: 0.005)
+        XCTAssertEqual(Pricing.hourEstimate(transcription: .local, ai: .anthropic, model: "claude-haiku-5-5"), 0.0044, accuracy: 0.0005)
+        XCTAssertTrue(Onboarding.costLine(Pricing.hourCost(transcription: .assemblyai, ai: .anthropic, model: "")).contains("$0.63"))
     }
 }
 

@@ -77,19 +77,60 @@ public enum KeyCheck {
         case .anthropic: ("https://api.anthropic.com/v1/models?limit=1", "x-api-key", key)
         case .openrouter: ("https://openrouter.ai/api/v1/key", "Authorization", "Bearer \(key)")
         }
-        var request = URLRequest(url: URL(string: url)!, timeoutInterval: 20)
+        // A cached 200 must never answer for a key that the provider has revoked.
+        var request = URLRequest(url: URL(string: url)!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.httpMethod = "GET"
         request.setValue(value, forHTTPHeaderField: header)
         if service == .anthropic { request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version") }
         return request
     }
 
-    /// Throws `ProviderError.http` when the provider does not accept the key; FriendlyError words it.
-    public static func run(_ service: Service, key: String, session: URLSession = .shared) async throws {
-        let (data, response) = try await session.data(for: request(service, key: key))
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
-            throw ProviderError.http(service.displayName, status, String(decoding: data.prefix(400), as: UTF8.self))
+    /// Which check of each key is the current one. A check takes a ticket when it starts; a change of the key
+    /// cancels it. A result is shown only while its ticket is current, so a slow request cannot put its answer
+    /// on a key that it did not try.
+    public struct Tickets: Sendable {
+        private var numbers: [APIKey: Int] = [:]
+
+        public init() {}
+
+        public mutating func start(_ key: APIKey) -> Int {
+            numbers[key, default: 0] += 1
+            return numbers[key, default: 0]
         }
+
+        public mutating func cancel(_ key: APIKey) { numbers[key, default: 0] += 1 }
+
+        public mutating func cancelAll() {
+            for key in numbers.keys { numbers[key, default: 0] += 1 }
+        }
+
+        public func isCurrent(_ ticket: Int, for key: APIKey) -> Bool { numbers[key] == ticket }
+    }
+
+    /// A check that the provider did not pass: its status and a fixed reason. Never the provider's reply, which
+    /// can repeat the key (OpenAI's 401 shows its first characters and its last four). The Log and the error's
+    /// tooltip get this text, so no part of a key can reach them.
+    public struct Failure: Error, Equatable, Sendable, CustomStringConvertible {
+        public let service: String
+        public let status: Int
+
+        public var reason: String {
+            switch status {
+            case 401: "the key was not accepted"
+            case 403: "the key has no permission for this request"
+            case 429: "too many requests"
+            case 500...599: "the provider had an error"
+            default: "the provider refused the request"
+            }
+        }
+
+        public var description: String { "\(service) HTTP \(status): \(reason)" }
+    }
+
+    /// Throws `Failure` when the provider does not pass the check; FriendlyError words it.
+    public static func run(_ service: Service, key: String, session: URLSession = .shared) async throws {
+        let (_, response) = try await session.data(for: request(service, key: key))
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw Failure(service: service.displayName, status: status) }
     }
 }

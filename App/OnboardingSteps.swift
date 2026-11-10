@@ -185,9 +185,10 @@ struct AIStep: View {
             HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 IconImage(.analytics, size: 13).foregroundStyle(Palette.tertiaryMark)
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
-                Text(Onboarding.costLine(perHour: Pricing.hourEstimate(transcription: controller.transcriptionProvider,
-                                                                       ai: controller.aiProvider, model: controller.aiModel)))
+                // The amount that Settings › AI shows, with the live transcript and the coach while they are on.
+                Text(Onboarding.costLine(controller.hourCost))
                     .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
         }
