@@ -60,3 +60,12 @@ public enum PresenterLabel {
         return fits.count == 1 ? fits[0] : name
     }
 }
+
+/// What a read of the presenter from the call app gave.
+public enum PresenterRead: Equatable, Sendable {
+    case name(String)
+    /// The whole share UI was read and it names nobody.
+    case none
+    /// The read was cut short or not possible. This says nothing; it is not "no name".
+    case unknown
+}

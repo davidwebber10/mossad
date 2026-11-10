@@ -1,7 +1,16 @@
 import Foundation
 
 extension ChatTools {
-    static var screenDefinitions: [ToolSpec] { [
+    /// Screens exist only where calls are recorded. The iPhone gets no frames, so its chat does not list the tools.
+    static var screenDefinitions: [ToolSpec] {
+        #if os(macOS)
+        screenToolSpecs
+        #else
+        []
+        #endif
+    }
+
+    static var screenToolSpecs: [ToolSpec] { [
         ToolSpec(name: "list_screens",
                  description: "Lists the screens that were shared in one meeting: each time someone shared (start, end, who shared when the call app showed it), and each kept frame with its index, its time in seconds, and the text that was on it. Only meetings recorded on this Mac with \"Capture shared screens\" on have screens.",
                  schema: ["type": "object", "properties": ["meeting_id": ["type": "string", "description": "The meeting's call_id."]],

@@ -179,6 +179,16 @@ public enum FrameStore {
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(FrameIndex.fileName))
     }
 
+    /// Removes one frame: its picture and its entry. False when the call has no such frame on disk.
+    @discardableResult
+    public static func removeFrame(_ file: String, in dir: URL) -> Bool {
+        guard var index = FrameIndex.load(from: dir), index.frames.contains(where: { $0.file == file }) else { return false }
+        index.frames.removeAll { $0.file == file }
+        do { try index.save(to: dir) } catch { return false }
+        try? FileManager.default.removeItem(at: FrameIndex.folder(in: dir).appendingPathComponent(file))
+        return true
+    }
+
     public static func hasFrames(in dir: URL) -> Bool {
         FileManager.default.fileExists(atPath: dir.appendingPathComponent(FrameIndex.fileName).path)
     }

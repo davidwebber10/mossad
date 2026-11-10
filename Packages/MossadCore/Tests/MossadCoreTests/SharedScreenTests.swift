@@ -114,6 +114,19 @@ final class SharedScreenTests: XCTestCase {
         XCTAssertEqual(FilmstripLayout.pictured([], open: 0, duration: 1800, span: 900, spacing: 70), [])
     }
 
+    func testAClickOnTheTimelineOpensTheNearestScreen() {
+        let offsets: [TimeInterval] = [60, 600, 610, 3000]
+        // A line of 900 pt for one hour: 4 s for each point.
+        XCTAssertEqual(FilmstripLayout.nearest(offsets, atX: 15, duration: 3600, span: 900), 0)
+        XCTAssertEqual(FilmstripLayout.nearest(offsets, atX: 152, duration: 3600, span: 900), 2)
+        XCTAssertEqual(FilmstripLayout.nearest(offsets, atX: 900, duration: 3600, span: 900), 3)
+        // With a reach, a click far from every mark opens nothing.
+        XCTAssertNil(FilmstripLayout.nearest(offsets, atX: 400, duration: 3600, span: 900, reach: 8))
+        XCTAssertEqual(FilmstripLayout.nearest(offsets, atX: 20, duration: 3600, span: 900, reach: 8), 0)
+        XCTAssertNil(FilmstripLayout.nearest([], atX: 20, duration: 3600, span: 900))
+        XCTAssertNil(FilmstripLayout.nearest(offsets, atX: 20, duration: 0, span: 900))
+    }
+
     // MARK: Times of day
 
     func testTheTimeOfDayAfterAPauseComesFromTheFrame() {

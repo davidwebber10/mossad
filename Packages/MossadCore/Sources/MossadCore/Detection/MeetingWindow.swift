@@ -190,28 +190,45 @@ public enum MeetingWindow {
 
     // MARK: What part of the window is kept
 
-    /// A browser's own bars above the page: tabs, the address, bookmarks. Cut when the page's place is not known.
-    static let browserTopBand: Double = 125
+    /// A second page this large (as a part of the window) means the window shows two pages side by side.
+    static let secondPageLimit = 0.2
+    /// The page's frame and the window's size may differ by this many points between two reads.
+    static let frameTolerance: Double = 2
 
     /// The part of the window that a frame keeps, in parts of the window (0 to 1, from the top left), or nil when
-    /// the window must not be captured. A browser window shows the owner's other tabs, the address, and bookmarks
-    /// around the page, so only the page is kept: `webArea` is the page's frame inside the window, in points, as
-    /// Accessibility gives it. Without it the top band is cut. A browser with its tabs at the side needs the page's frame.
-    public static func keptPart(of w: WindowCandidate, bundleID: String, webArea: CGRect?) -> CGRect? {
+    /// the window must not be captured. A browser window shows the owner's other tabs, the address, bookmarks, and
+    /// panels around the page, so only the page is kept: `webAreas` are the frames of the window's web areas inside
+    /// the window, in points, as Accessibility gives them. Without a page frame nothing is captured, for every
+    /// browser: where the tabs are (top or side) is not known. With two pages side by side nothing is captured
+    /// either: which one is the meeting is not known.
+    public static func keptPart(of w: WindowCandidate, bundleID: String, webAreas: [CGRect]?) -> CGRect? {
         let whole = CGRect(x: 0, y: 0, width: 1, height: 1)
         guard case .browser(let browser)? = MeetingMatcher.appKind(bundleID: bundleID) else { return whole }
         // A site installed as an app and a picture-in-picture window have no tabs of other pages.
         if w.layer != 0 || w.bundleID.lowercased() != browser.lowercased() { return whole }
-        guard w.width > 0, w.height > 0 else { return nil }
-        if let webArea, webArea.minX >= -2, webArea.minY >= -2, webArea.maxX <= w.width + 2, webArea.maxY <= w.height + 2,
-           webArea.width >= w.width * 0.4, webArea.height >= w.height * 0.4 {
-            return CGRect(x: max(0, webArea.minX) / w.width, y: max(0, webArea.minY) / w.height,
-                          width: min(webArea.width, w.width) / w.width, height: min(webArea.height, w.height) / w.height)
-                .intersection(whole)
-        }
-        guard browser != "company.thebrowser.Browser", w.height >= browserTopBand * 2.5 else { return nil }
-        let top = browserTopBand / w.height
-        return CGRect(x: 0, y: top, width: 1, height: 1 - top)
+        guard w.width > 0, w.height > 0, let areas = webAreas?.sorted(by: { $0.width * $0.height > $1.width * $1.height }),
+              let page = areas.first else { return nil }
+        if areas.dropFirst().contains(where: { $0.width * $0.height > secondPageLimit * w.width * w.height }) { return nil }
+        let t = frameTolerance
+        guard page.minX >= -t, page.minY >= -t, page.maxX <= w.width + t, page.maxY <= w.height + t,
+              page.width >= w.width * 0.4, page.height >= w.height * 0.4 else { return nil }
+        return CGRect(x: max(0, page.minX) / w.width, y: max(0, page.minY) / w.height,
+                      width: min(page.width, w.width) / w.width, height: min(page.height, w.height) / w.height)
+            .intersection(whole)
+    }
+
+    /// True when the page is no longer where it was when the stream began: a bar or a panel came or went. Nil
+    /// (the frame could not be read) counts as moved.
+    public static func pageMoved(from was: CGRect, to now: CGRect?) -> Bool {
+        guard let now else { return true }
+        let t = frameTolerance
+        return abs(now.minX - was.minX) > t || abs(now.minY - was.minY) > t || abs(now.maxX - was.maxX) > t || abs(now.maxY - was.maxY) > t
+    }
+
+    /// True when the window has another size than the stream was made for. Both edges count: a change of only
+    /// the short one also moves the content in the frame.
+    public static func sizeChanged(from was: CGSize, to now: CGSize) -> Bool {
+        abs(now.width - was.width) > frameTolerance || abs(now.height - was.height) > frameTolerance
     }
 }
 

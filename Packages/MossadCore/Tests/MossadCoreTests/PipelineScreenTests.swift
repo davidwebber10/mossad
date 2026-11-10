@@ -200,7 +200,39 @@ final class PipelineScreenTests: XCTestCase {
         try makeCall("a", at: start, frames: [(12, slide, nil)])
         let p = pipeline()
         await Task(priority: .userInitiated) { await p.process("a") }.value
-        XCTAssertEqual(reader.classes, [QOS_CLASS_BACKGROUND])
+        // With no call, a low priority, so the note does not wait long; never the waiting task's own.
+        XCTAssertEqual(reader.classes, [QOS_CLASS_UTILITY])
+    }
+
+    func testDeletingAScreenRemovesItsPictureItsEntryAndItsLine() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (600, slide + " zebra", nil)])
+        let dir = paths.callDirectory("a")
+        var index = try XCTUnwrap(FrameIndex.load(from: dir))
+        index.frames[0].session = 0
+        index.frames[1].session = 1
+        index.gaps = [ScreenGap(offset: 620, paused: true)]
+        try index.save(to: dir)
+        let p = pipeline()
+        await p.process("a")
+        XCTAssertEqual(try CallRecord.load(from: dir).screenGaps?.count, 1)
+        let summaries = summarizer.calls
+        let deleted = await p.deleteScreen(callID: "a", file: "600000.heic")
+        XCTAssertTrue(deleted)
+        let r = try CallRecord.load(from: dir)
+        XCTAssertEqual(r.screens?.map(\.file), ["12000.heic"])
+        // The pause was next to the deleted screen's session only.
+        XCTAssertNil(r.screenGaps)
+        XCTAssertEqual(files("a"), ["12000.heic"])
+        XCTAssertEqual(FrameIndex.load(from: dir)?.frames.map(\.file), ["12000.heic"])
+        let note = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertFalse(note.contains("zebra"))
+        XCTAssertTrue(note.contains("[00:00:12] (Screen:"))
+        // No new summary is asked for, and a second run of the text step does not bring the screen back.
+        XCTAssertEqual(summarizer.calls, summaries)
+        await p.regenerateSummary("a")
+        XCTAssertEqual(try CallRecord.load(from: dir).screens?.map(\.file), ["12000.heic"])
+        let again = await p.deleteScreen(callID: "a", file: "600000.heic")
+        XCTAssertFalse(again)
     }
 
     func testAFrameThatCouldNotBeReadIsKeptForAnotherTry() async throws {

@@ -266,14 +266,10 @@ private struct PlayerRuler: View {
                             }
                         }
                     }
-                    ForEach(record.screens ?? []) { s in
-                        Button { openScreen?(s) } label: {
-                            ScreenMark().frame(width: 12, height: 12).contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help("Shared screen · \(clock(s.offset))")
-                        .accessibilityLabel("Shared screen at \(clock(s.offset))")
-                        .position(x: w * s.offset / duration, y: 3.5)
+                    if let screens = record.screens, !screens.isEmpty {
+                        // One drawing and one click target for all screens. It does not take the play position.
+                        RulerScreenMarks(screens: screens, duration: duration, width: w) { openScreen?($0) }
+                            .equatable()
                     }
                     ForEach(Array(bookmarks.enumerated()), id: \.offset) { _, b in
                         let note = b.note?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty

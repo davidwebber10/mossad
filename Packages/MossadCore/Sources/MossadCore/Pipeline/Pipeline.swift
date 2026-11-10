@@ -972,6 +972,25 @@ public actor Pipeline {
         return true
     }
 
+    /// Deletes one shared screen of a finished meeting: its picture, its entry in `frames.json`, and its line in the
+    /// transcript. The note is written again. The summary stays as it is; "Write the summary again" makes a new one
+    /// without that screen's text. Returns false when the meeting has no such screen.
+    @discardableResult
+    public func deleteScreen(callID: String, file: String) -> Bool {
+        let dir = paths.callDirectory(callID)
+        guard var r = edit(callID, { r in
+            guard let screens = r.screens, screens.contains(where: { $0.file == file }) else { return false }
+            r.screens = screens.filter { $0.file != file }
+            // A pause is shown next to a share session; with the screen gone, its session may be gone too.
+            r.screenGaps = r.screenGaps.map { ScreenGap.shown($0, screens: r.screens ?? []) }.flatMap { $0.isEmpty ? nil : $0 }
+            return true
+        }) else { return false }
+        // The picture first: if the record's save fails, the screen is still listed, with no picture, and can be deleted again.
+        FrameStore.removeFrame(file, in: dir)
+        save(&r, dir: dir)
+        return true
+    }
+
     /// Skipped voices stay in the transcript as letters, but the call stops asking for them.
     public func dismissSpeakers(callID: String, keys: [String]) {
         guard var r = edit(callID, { $0.unknownSpeakers.removeAll { keys.contains($0) }; return true }) else { return }

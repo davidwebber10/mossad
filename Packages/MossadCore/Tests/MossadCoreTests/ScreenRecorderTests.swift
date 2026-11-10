@@ -21,7 +21,12 @@ final class FakeFrames: FrameSource, @unchecked Sendable {
     private(set) var handler: ((FrameEvent) -> Void)?
     private(set) var starts = 0
     private(set) var stops = 0
-    var windowOnScreen: Bool? = true
+    var windowSight: WindowSight? = .visible
+    /// The old two-way switch of the tests: off is a hidden window.
+    var windowOnScreen: Bool? {
+        get { windowSight.map { $0 == .visible } }
+        set { windowSight = newValue.map { $0 ? .visible : .hidden } }
+    }
     var window = "us.zoom.xos#1"
 
     func start(_ handler: @escaping (FrameEvent) -> Void) {
@@ -70,6 +75,8 @@ final class ScreenRecorderTests: XCTestCase {
     final class Presenter: @unchecked Sendable {
         var reads = 0
         var name: String? = "Sam Carter"
+        /// The read gives no answer, as when the app is busy.
+        var unknown = false
     }
     let shown = Presenter()
     var presenterReads: Int { shown.reads }
@@ -87,7 +94,11 @@ final class ScreenRecorderTests: XCTestCase {
 
     func make(presenter: Bool = false) -> ScreenRecorder {
         let clock = clock, shown = shown, setting = setting, t0 = t0
-        let reader: @Sendable () -> String? = { shown.reads += 1; return shown.name }
+        let reader: @Sendable () -> PresenterRead = {
+            shown.reads += 1
+            if shown.unknown { return .unknown }
+            return shown.name.map { .name($0) } ?? .none
+        }
         let read = presenter ? reader : nil
         nonisolated(unsafe) let test = self
         return ScreenRecorder(dir: dir, source: source, offset: { clock.now }, now: { t0.addingTimeInterval(clock.now + test.pausedSeconds) },
@@ -208,7 +219,7 @@ final class ScreenRecorderTests: XCTestCase {
         screen.start()
         clock.now = 5
         source.show(40)
-        source.windowOnScreen = false
+        source.windowSight = .covered
         for t in stride(from: 8.0, through: 30, by: 3) {
             clock.now = t
             source.idle()
@@ -216,10 +227,98 @@ final class ScreenRecorderTests: XCTestCase {
         }
         XCTAssertEqual(index?.gaps, [ScreenGap(offset: 5, paused: true)])
         // Uncovered again: the next check says so, with no new picture.
-        source.windowOnScreen = true
+        source.windowSight = .visible
         clock.now = 33
         screen.tick()
         XCTAssertEqual(index?.gaps?.last, ScreenGap(offset: 33, paused: false))
+    }
+
+    /// Runs the 3 s timer and, at each 90 s, a new slide that stays.
+    func slides(_ screen: ScreenRecorder, from: TimeInterval, count: Int) {
+        for n in 0..<count {
+            let at = from + Double(n) * 90
+            for t in stride(from: at - 87, to: at, by: 3) where t > 0 {
+                clock.now = t
+                source.idle()
+                screen.tick()
+            }
+            clock.now = at
+            source.show(UInt8(40 + (n % 4) * 60))
+        }
+    }
+
+    func testACoveredWindowThatStillDrawsIsOneSessionWithNoPauses() {
+        // The owner's notes are in front of the Zoom window for the whole share. Zoom draws on.
+        let screen = make(presenter: true)
+        screen.start()
+        clock.now = 3
+        source.windowSight = .covered
+        screen.tick()
+        // The first picture while covered proves that the app draws.
+        slides(screen, from: 5, count: 6)
+        clock.now = 470
+        screen.tick()
+        XCTAssertNil(index?.gaps)
+        XCTAssertEqual(index?.frames.count, 6)
+        XCTAssertEqual(Set(index?.frames.compactMap(\.session) ?? []), [0])
+    }
+
+    func testCoverThatBeginsDuringAShareDoesNotEndTheSession() {
+        let screen = make()
+        screen.start()
+        keep(250, at: 10)
+        // Now the notes window goes in front. The next slide comes 90 s later.
+        source.windowSight = .covered
+        slides(screen, from: 100, count: 4)
+        clock.now = 380
+        screen.tick()
+        // One pause, until the first slide showed that the app draws; then none. All one session.
+        XCTAssertEqual(index?.gaps, [ScreenGap(offset: 13, paused: true), ScreenGap(offset: 100, paused: false)])
+        XCTAssertEqual(index?.frames.map(\.session), [0, 0, 0, 0, 0])
+    }
+
+    func testACoveredWindowWithNoPictureForFiveMinutesEndsTheSession() {
+        let screen = make()
+        screen.start()
+        keep(40, at: 10)
+        source.windowSight = .covered
+        for t in stride(from: 16.0, through: 400, by: 3) {
+            clock.now = t
+            screen.tick()
+        }
+        keep(200, at: 420)
+        XCTAssertEqual(index?.frames.map(\.session), [0, 1])
+    }
+
+    func testAPresenterReadWithNoAnswerChangesNothing() {
+        let screen = make(presenter: true)
+        screen.start()
+        keep(40, at: 10)
+        keep(120, at: 30)
+        // The app is busy: the walk was cut short. That is not "no name".
+        shown.unknown = true
+        keep(220, at: 75)
+        keep(40, at: 90)
+        XCTAssertEqual(index?.frames.map(\.presenter), ["Sam Carter", "Sam Carter", "Sam Carter", "Sam Carter"])
+        XCTAssertEqual(index?.frames.map(\.session), [0, 0, 0, 0])
+        // It asks again at the next kept frame, not a minute later.
+        XCTAssertEqual(presenterReads, 3)
+        shown.unknown = false
+        keep(120, at: 105)
+        XCTAssertEqual(presenterReads, 4)
+        XCTAssertEqual(index?.frames.map(\.session), [0, 0, 0, 0, 0])
+    }
+
+    func testAFirstReadWithNoAnswerIsStillTheSessionsOwnWhenItComes() {
+        let screen = make(presenter: true)
+        screen.start()
+        shown.unknown = true
+        keep(40, at: 10)
+        shown.unknown = false
+        keep(120, at: 30)
+        // The name is the session's from its first frame; the late answer does not split it.
+        XCTAssertEqual(index?.frames.map(\.presenter), ["Sam Carter", "Sam Carter"])
+        XCTAssertEqual(index?.frames.map(\.session), [0, 0])
     }
 
     func testAQuietWindowOnScreenLeavesNoPause() {
@@ -239,7 +338,8 @@ final class ScreenRecorderTests: XCTestCase {
         clock.now = 30
         source.show(200)
         setting.isOn = false
-        // The next frame or tick sees it: the stream stops, and the waiting picture is kept (it came before).
+        // The next frame or tick sees it: the stream stops, and the waiting picture goes too. It is the one the
+        // owner wanted to stop.
         clock.now = 33
         screen.tick()
         XCTAssertEqual(source.stops, 1)
@@ -248,7 +348,8 @@ final class ScreenRecorderTests: XCTestCase {
         setting.isOn = true
         screen.start()
         XCTAssertEqual(source.starts, 1)
-        XCTAssertEqual(index?.frames.map(\.offset), [10, 30])
+        XCTAssertEqual(index?.frames.map(\.offset), [10])
+        XCTAssertEqual(files, ["10000.heic"])
     }
 
     func testNoCaptureStartsWithTheSettingOff() {
@@ -346,6 +447,25 @@ final class ScreenRecorderTests: XCTestCase {
         source.show(200)
         source.lose()
         clock.now = 40
+        screen.tick()
+        XCTAssertEqual(index?.frames.map(\.offset), [10])
+    }
+
+    func testTheCheckOfTheWindowComesBeforeAWaitingPictureIsKept() {
+        let screen = make()
+        screen.start()
+        keep(40, at: 10)
+        // A new picture, and then the 3 s check finds that the window is not the meeting's any more (or that the
+        // page moved in it): the picture must not be kept by that same check.
+        clock.now = 30
+        source.show(200)
+        source.windowSight = nil
+        clock.now = 36
+        screen.tick()
+        XCTAssertEqual(index?.frames.map(\.offset), [10])
+        source.lose()
+        clock.now = 60
+        source.windowSight = .visible
         screen.tick()
         XCTAssertEqual(index?.frames.map(\.offset), [10])
     }

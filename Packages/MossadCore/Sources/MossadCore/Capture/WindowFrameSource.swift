@@ -22,6 +22,7 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     static let reviewInterval: TimeInterval = 30
     /// A Teams title that Accessibility did not prove is asked about again after this long.
     static let proofRetry: TimeInterval = 60
+    static let proofRetryMax: TimeInterval = 480
 
     private let platform: Platform
     private let bundleID: String
@@ -35,6 +36,17 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         var size: CGSize
         var crop: CGRect
         var title: String
+        /// A browser window's page: its Accessibility element and its frame inside the window when the stream
+        /// began. Read again at each check; when it moved, the crop is no longer the page.
+        var page: (element: AXUIElement, frame: CGRect)?
+    }
+
+    /// A browser window whose page could not be found, so the walk is not made again at each search.
+    private struct Refusal {
+        var id: CGWindowID
+        var size: CGSize
+        var title: String
+        var at: Date
     }
 
     /// What other threads read.
@@ -56,7 +68,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     private var lastSearch = Date.distantPast
     private var timer: DispatchSourceTimer?
     private var proven: Set<String> = []
-    private var refused: [String: Date] = [:]
+    private var refused: [String: (at: Date, wait: TimeInterval)] = [:]
+    private var refusedPage: Refusal?
 
     public init(platform: Platform, bundleID: String, meetingID: String?) {
         self.platform = platform
@@ -93,16 +106,25 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         }
     }
 
-    /// False for a window that is hidden, on another desktop, or covered by other windows (an app can stop drawing
-    /// then). One request for this window and one for the windows above it; the recorder asks each 3 s.
-    public var windowOnScreen: Bool? {
+    /// How the window can be seen, and the check that it still is the meeting with its page in the same place.
+    /// One request for the window, one for the windows above it, and for a browser two for the page's frame; the
+    /// recorder asks each 3 s.
+    public var windowSight: WindowSight? {
         guard let chosen else { return nil }
-        guard let now = Self.describe(chosen.id), stillMeeting(chosen, now) else {
+        guard let now = Self.describe(chosen.id), stillMeeting(chosen, now), !pageMoved(chosen, window: now.frame) else {
             queue.async { [weak self] in self?.windowChanged(chosen.id) }
             return nil
         }
-        guard now.onScreen else { return false }
-        return !WindowCover.isCovered(now.frame, by: Self.framesAbove(chosen.id))
+        guard now.onScreen else { return .hidden }
+        return WindowCover.isCovered(now.frame, by: Self.framesAbove(chosen.id)) ? .covered : .visible
+    }
+
+    /// True when a browser's page is no longer where the stream's crop expects it (a bookmarks bar, a side panel,
+    /// a toolbar that slid in), or when its frame cannot be read.
+    private func pageMoved(_ chosen: Chosen, window: CGRect) -> Bool {
+        guard let page = chosen.page else { return false }
+        let now = AXWalk.frame(page.element)?.offsetBy(dx: -window.minX, dy: -window.minY)
+        return MeetingWindow.pageMoved(from: page.frame, to: now)
     }
 
     // MARK: Finding the window
@@ -146,11 +168,17 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
             let now = Date()
             let open = MeetingWindow.teamsTitlesToProve(windows.map(\.title))
             proven.formIntersection(open)
-            let ask = open.filter { !proven.contains($0) && now.timeIntervalSince(refused[$0] ?? .distantPast) >= Self.proofRetry }
+            let ask = open.filter { title in
+                guard !proven.contains(title) else { return false }
+                return refused[title].map { now.timeIntervalSince($0.at) >= $0.wait } ?? true
+            }
             if !ask.isEmpty {
                 let found = CallWindowProbe.callTitles(bundleID: appID, among: Set(ask))
                 proven.formUnion(found)
-                for title in ask where !found.contains(title) { refused[title] = now }
+                // A page that is not a call is asked about less and less often.
+                for title in ask where !found.contains(title) {
+                    refused[title] = (now, min((refused[title]?.wait ?? Self.proofRetry / 2) * 2, Self.proofRetryMax))
+                }
             }
             confirmed = proven
         }
@@ -163,15 +191,26 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         shared.withLock { sharedState.teamsNames = names }
         if chosen?.id == best.id, stream != nil { return }
         if let old = chosen { windowChanged(old.id, searchNow: false) }
-        // Of a browser window only the page is kept. Its place is read one time for each stream.
-        var webArea: CGRect?
-        if case .browser? = MeetingMatcher.appKind(bundleID: bundleID), best.layer == 0 {
-            webArea = WebAreaProbe.frame(bundleID: best.bundleID, windowTitle: best.title)
+        // Of a browser window only the page is kept. Without the page's frame, or with two pages in the window,
+        // nothing is captured; the read is tried again later, not at each search.
+        var page: (element: AXUIElement, frame: CGRect)?
+        var areas: [CGRect]?
+        let size = CGSize(width: best.width, height: best.height)
+        if case .browser? = MeetingMatcher.appKind(bundleID: bundleID), best.layer == 0, best.bundleID.lowercased() == appID.lowercased() {
+            if let r = refusedPage, r.id == best.id, r.size == size, r.title == best.title, Date().timeIntervalSince(r.at) < Self.proofRetry { return }
+            if let origin = Self.describe(best.id)?.frame.origin {
+                let found = WebAreaProbe.areas(bundleID: best.bundleID, windowTitle: best.title)
+                    .map { ($0.element, $0.frame.offsetBy(dx: -origin.x, dy: -origin.y)) }
+                areas = found.map(\.1)
+                page = found.max { $0.1.width * $0.1.height < $1.1.width * $1.1.height }.map { (element: $0.0, frame: $0.1) }
+            }
         }
-        guard let crop = MeetingWindow.keptPart(of: best, bundleID: bundleID, webArea: webArea) else {
-            Log.info("The meeting window is not captured: the page's place in the browser window is not known")
+        guard let crop = MeetingWindow.keptPart(of: best, bundleID: bundleID, webAreas: areas) else {
+            Log.info("The meeting window is not captured: the page's place in the browser window is not sure")
+            refusedPage = Refusal(id: best.id, size: size, title: best.title, at: Date())
             return
         }
+        refusedPage = nil
         searching = true
         let generation = generation, queue = queue
         Task.detached(priority: .utility) { [weak self] in
@@ -181,7 +220,7 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
             queue.async { [weak self] in
                 guard let self else { return }
                 self.searching = false
-                if generation == self.generation, let window { self.begin(window, candidate: best, kind: kind, crop: crop) }
+                if generation == self.generation, let window { self.begin(window, candidate: best, kind: kind, crop: crop, page: page) }
                 if self.searchAgain {
                     self.searchAgain = false
                     self.search()
@@ -190,7 +229,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         }
     }
 
-    private func begin(_ window: SCWindow, candidate: WindowCandidate, kind: MeetingWindow.Kind, crop: CGRect) {
+    private func begin(_ window: SCWindow, candidate: WindowCandidate, kind: MeetingWindow.Kind, crop: CGRect,
+                       page: (element: AXUIElement, frame: CGRect)?) {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let scale = max(1, Double(filter.pointPixelScale))
         // The kept part, not the whole window, is at most `longEdge` wide or high.
@@ -214,7 +254,7 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
             return
         }
         self.stream = stream
-        let chosen = Chosen(id: candidate.id, owner: candidate.bundleID, kind: kind, size: window.frame.size, crop: crop, title: candidate.title)
+        let chosen = Chosen(id: candidate.id, owner: candidate.bundleID, kind: kind, size: window.frame.size, crop: crop, title: candidate.title, page: page)
         shared.withLock { sharedState.chosen = chosen }
         Log.info("Capturing the meeting window (\(candidate.bundleID), \(Int(window.frame.width)) x \(Int(window.frame.height)))")
         stream.startCapture { [weak self] error in
@@ -289,9 +329,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
                                      height: now.frame.height, onScreen: now.onScreen, layer: now.layer)
         let names = shared.withLock { sharedState.teamsNames }
         guard MeetingWindow.stillMeeting(window, platform: platform, bundleID: bundleID, meetingNames: names) else { return false }
-        // A window that changed its size gets a new stream, with the page's place read again.
-        let was = max(chosen.size.width, chosen.size.height), nowLong = max(now.frame.width, now.frame.height)
-        return was > 0 && abs(nowLong - was) / was <= 0.02
+        // A window that changed its size, on either edge, gets a new stream, with the page's place read again.
+        return !MeetingWindow.sizeChanged(from: chosen.size, to: now.frame.size)
     }
 
     // MARK: Frames
@@ -301,13 +340,16 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
               let handler, let chosen else { return }
         switch Self.status(of: sampleBuffer) {
         case .complete:
-            // Checked for each frame: one click on another tab makes the same window show something else.
-            guard let now = Self.describe(chosen.id), stillMeeting(chosen, now) else {
+            // Checked for each frame: one click on another tab makes the same window show something else, and a
+            // bar or a panel of the browser moves the page out of the kept part.
+            guard let now = Self.describe(chosen.id), stillMeeting(chosen, now), !pageMoved(chosen, window: now.frame) else {
                 windowChanged(chosen.id)
                 return
             }
             guard let buffer = sampleBuffer.imageBuffer else { return }
-            handler(.picture(PixelPicture(buffer: buffer, crop: chosen.crop), window: "\(chosen.owner)#\(chosen.id)"))
+            // The window's picture can be a part of the frame only; the kept part is counted inside that part.
+            handler(.picture(PixelPicture(buffer: buffer, crop: chosen.crop, content: Self.content(of: sampleBuffer)),
+                             window: "\(chosen.owner)#\(chosen.id)"))
         case .idle:
             handler(.idle)
         default:
@@ -323,6 +365,15 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
             self.shared.withLock { self.sharedState.chosen = nil }
             self.handler?(.lost)
         }
+    }
+
+    /// Where the window's picture is in the frame, in pixels: the content rectangle times the scale factor.
+    private static func content(of sampleBuffer: CMSampleBuffer) -> CGRect? {
+        guard let list = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
+              let info = list.first, let dictionary = info[.contentRect] as? NSDictionary,
+              let rect = CGRect(dictionaryRepresentation: dictionary as CFDictionary) else { return nil }
+        let scale = (info[.scaleFactor] as? Double) ?? (info[.scaleFactor] as? NSNumber)?.doubleValue ?? 1
+        return CGRect(x: rect.minX * scale, y: rect.minY * scale, width: rect.width * scale, height: rect.height * scale)
     }
 
     private static func status(of sampleBuffer: CMSampleBuffer) -> SCFrameStatus? {
@@ -346,6 +397,8 @@ struct PixelPicture: FramePicture {
     let buffer: CVPixelBuffer
     /// The part of the frame that is kept, in parts of it from the top left. The rest is never read or copied.
     var crop = CGRect(x: 0, y: 0, width: 1, height: 1)
+    /// Where the window's picture is in the frame, in pixels; nil when the stream did not say (then the whole frame).
+    var content: CGRect?
 
     /// The kept part as a place in the frame's memory: its first byte, its size in pixels, and the row length.
     private func withBytes<T>(_ body: (UnsafeRawPointer, Int, Int, Int) -> T?) -> T? {
@@ -354,7 +407,7 @@ struct PixelPicture: FramePicture {
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(buffer) else { return nil }
         let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
-        let part = PixelCrop.pixels(crop, width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+        let part = PixelCrop.pixels(crop, in: content, width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
         guard part.width > 0, part.height > 0 else { return nil }
         return body(UnsafeRawPointer(base) + part.y * bytesPerRow + part.x * 4, part.width, part.height, bytesPerRow)
     }
@@ -374,11 +427,16 @@ struct PixelPicture: FramePicture {
 
 /// A kept part in whole pixels, inside the frame.
 enum PixelCrop {
-    static func pixels(_ crop: CGRect, width: Int, height: Int) -> (x: Int, y: Int, width: Int, height: Int) {
-        let x = min(max(0, Int((crop.minX * Double(width)).rounded(.up))), width)
-        let y = min(max(0, Int((crop.minY * Double(height)).rounded(.up))), height)
-        let right = min(width, max(x, Int((crop.maxX * Double(width)).rounded(.down))))
-        let bottom = min(height, max(y, Int((crop.maxY * Double(height)).rounded(.down))))
+    /// `content` is the part of the frame that holds the window's picture, in pixels; the kept part is a part of
+    /// that, not of the whole frame. Nil, or a rectangle that makes no sense, means the whole frame.
+    static func pixels(_ crop: CGRect, in content: CGRect? = nil, width: Int, height: Int) -> (x: Int, y: Int, width: Int, height: Int) {
+        let frame = CGRect(x: 0, y: 0, width: Double(width), height: Double(height))
+        var area = content.map { $0.intersection(frame) } ?? frame
+        if area.isNull || area.width < 2 || area.height < 2 { area = frame }
+        let x = min(max(0, Int((area.minX + crop.minX * area.width).rounded(.up))), width)
+        let y = min(max(0, Int((area.minY + crop.minY * area.height).rounded(.up))), height)
+        let right = min(width, max(x, Int((area.minX + crop.maxX * area.width).rounded(.down))))
+        let bottom = min(height, max(y, Int((area.minY + crop.maxY * area.height).rounded(.down))))
         return (x, y, right - x, bottom - y)
     }
 }

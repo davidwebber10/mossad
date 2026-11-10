@@ -35,30 +35,30 @@ enum CallWindowProbe {
     }
 }
 
-/// The place of the page inside a browser window, so a frame keeps the page and not the tabs around it.
+/// The pages inside a browser window, so a frame keeps the page and not the tabs and panels around it.
 enum WebAreaProbe {
     static let elementLimit = 3_000
     static let budget: TimeInterval = 0.5
 
-    /// The largest web area of the window with this title, in points from the window's top left. Nil when
-    /// Accessibility is not allowed, the window is not found, or the walk did not reach a web area.
-    static func frame(bundleID: String, windowTitle: String) -> CGRect? {
-        guard AXIsProcessTrusted() else { return nil }
+    /// Every web area of the window with this title, with its frame in screen points from the top left. Empty
+    /// when Accessibility is not allowed, the window is not found, or the walk was cut short: a walk that did not
+    /// finish cannot say that there is only one page.
+    static func areas(bundleID: String, windowTitle: String) -> [(element: AXUIElement, frame: CGRect)] {
+        guard AXIsProcessTrusted() else { return [] }
         AccessibilityTimeout.apply()
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
             for (window, title) in AXWalk.windows(of: app.processIdentifier) where title == windowTitle {
-                guard let outer = AXWalk.frame(window) else { continue }
-                var best: CGRect?
-                AXWalk.walk(window, limit: elementLimit, budget: budget) { element, role in
+                var found: [(element: AXUIElement, frame: CGRect)] = []
+                let complete = AXWalk.walk(window, limit: elementLimit, budget: budget) { element, role in
                     guard role == "AXWebArea" else { return true }
-                    if let f = AXWalk.frame(element), f.width * f.height > (best.map { $0.width * $0.height } ?? 0) { best = f }
+                    if let f = AXWalk.frame(element) { found.append((element, f)) }
                     // The page's own content is not walked.
                     return false
                 }
-                if let best { return best.offsetBy(dx: -outer.minX, dy: -outer.minY) }
+                if complete, !found.isEmpty { return found }
             }
         }
-        return nil
+        return []
     }
 }
 

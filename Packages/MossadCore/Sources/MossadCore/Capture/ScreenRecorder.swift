@@ -39,9 +39,8 @@ public protocol FrameSource: AnyObject {
     func start(_ handler: @escaping (FrameEvent) -> Void)
     /// Returns at once; after it, the handler is not called for this start.
     func stop()
-    /// Whether the meeting window can be seen now: false when it is hidden or fully covered, nil when no meeting
-    /// window is found.
-    var windowOnScreen: Bool? { get }
+    /// How the meeting window can be seen now; nil when no meeting window is found.
+    var windowSight: WindowSight? { get }
 }
 
 /// Keeps the frames worth keeping of one call: `frames/<offset in ms>.heic` and `frames.json` in the call's folder.
@@ -62,7 +61,7 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
     private let isEnabled: @Sendable () -> Bool
     /// Reads who shares from the call app's share indicator. Slow, so it runs off every capture path, at the start
     /// of a share session and then once a minute while frames are kept.
-    private let presenter: (@Sendable () -> String?)?
+    private let presenter: (@Sendable () -> PresenterRead)?
     private let runPresenter: (@escaping @Sendable () -> Void) -> Void
     private let usesTimer: Bool
 
@@ -76,13 +75,19 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
     /// Set by a pause of the capture: the next kept frame starts a new share session.
     private var sessionEnded = true
     private var presenterAsked: TimeInterval = -.infinity
+    /// The session's first read gave no answer: the next read is still the session's own, not a change of presenter.
+    private var presenterOpen = false
+    /// A covered window with no new picture is a pause, but it ends the share session only after this long.
+    static let coverEndsSession: TimeInterval = 300
+    private var coverPaused = false
+    private var lastPicture: (at: TimeInterval, window: String)?
     private var running = false
     private var closed = false
     private var timer: DispatchSourceTimer?
 
     public init(dir: URL, source: FrameSource, offset: @escaping @Sendable () -> TimeInterval,
                 now: @escaping @Sendable () -> Date = Date.init, isEnabled: @escaping @Sendable () -> Bool = { true },
-                presenter: (@Sendable () -> String?)? = nil, rules: FrameRules = FrameRules(), usesTimer: Bool = true,
+                presenter: (@Sendable () -> PresenterRead)? = nil, rules: FrameRules = FrameRules(), usesTimer: Bool = true,
                 runPresenter: @escaping (@escaping @Sendable () -> Void) -> Void = { DispatchQueue.global(qos: .utility).async(execute: $0) }) {
         self.dir = dir
         self.source = source
@@ -127,14 +132,16 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
         lock.withLock { haltLocked(forGood: forGood) }
     }
 
-    private func haltLocked(forGood: Bool) -> Bool {
+    private func haltLocked(forGood: Bool, keepWaiting: Bool = true) -> Bool {
         if forGood { closed = true }
         guard running else { return false }
         running = false
         timer?.cancel()
         timer = nil
-        // Nothing comes after the waiting picture, so it stayed.
-        keep(selector.finish(at: offset()))
+        // Nothing comes after the waiting picture, so it stayed. Not when the owner turned the capture off: the
+        // newest picture is the one the owner wanted to stop.
+        let last = selector.finish(at: offset())
+        if keepWaiting { keep(last) } else if last.keepHeldAt != nil { selector.keepFailed() }
         held = nil
         // The owner's pause ends the share session too.
         sessionEnded = true
@@ -156,7 +163,7 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
     private func endIfTurnedOff() -> Bool {
         guard !isEnabled() else { return false }
         Log.info("Capture shared screens was turned off; the screen capture of this call ends")
-        return haltLocked(forGood: true)
+        return haltLocked(forGood: true, keepWaiting: false)
     }
 
     /// On the source's queue.
@@ -173,10 +180,16 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
             case .lost:
                 if selector.dropUnconfirmed() { held = nil }
             case .picture(let picture, let window):
+                // What one window proved about drawing while covered does not hold for another.
+                if let last = lastPicture, last.window != window { liveness?.newWindow() }
                 mark(liveness?.frame(at: at))
                 guard let thumb = picture.thumb else { return }
                 let step = selector.frame(thumb, at: at)
                 ask = keep(step)
+                // A pause from cover ends the session only when no picture came for minutes.
+                if coverPaused, let last = lastPicture, at - last.at >= Self.coverEndsSession { sessionEnded = true }
+                coverPaused = false
+                lastPicture = (at, window)
                 if step.hold {
                     held = picture.held().map { ($0, window, at, now()) }
                     // A picture that could not be copied is no candidate.
@@ -196,8 +209,11 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
             guard running, !closed else { return }
             if endIfTurnedOff() { stopSource = true; return }
             let at = offset()
-            ask = keep(selector.quiet(at: at))
-            mark(liveness?.check(at: at, windowOnScreen: source.windowOnScreen))
+            // The window first: when it is no longer the meeting's (or its page moved), the source sends `.lost`
+            // next, and a picture that waits must not be kept by this check.
+            let sight = source.windowSight
+            if sight != nil { ask = keep(selector.quiet(at: at)) }
+            mark(liveness?.check(at: at, sight: sight))
         }
         if stopSource { source.stop() }
         if let ask { readPresenter(for: ask.file, start: ask.start) }
@@ -207,9 +223,10 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
     private func mark(_ change: ScreenLiveness.Change?) {
         let gap: ScreenGap
         switch change {
-        case .paused(let at):
+        case .paused(let at, let covered):
             gap = ScreenGap(offset: at, paused: true)
-            sessionEnded = true
+            // A window that is gone ends the share session. A covered one may only be behind the owner's notes.
+            if covered { coverPaused = true } else { sessionEnded = true }
         case .resumed(let at): gap = ScreenGap(offset: at, paused: false)
         case nil: return
         }
@@ -246,29 +263,44 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
         }
         index.insert(frame)
         do { try index.save(to: dir) } catch { Log.error("Saving the frames list failed: \(error)") }
-        guard presenter != nil, isNew || at - presenterAsked >= Self.presenterInterval else { return nil }
+        if isNew { presenterOpen = true }
+        guard presenter != nil, presenterOpen || at - presenterAsked >= Self.presenterInterval else { return nil }
         presenterAsked = at
-        return (frame.file, isNew)
+        return (frame.file, presenterOpen)
     }
 
-    /// The name the app shows now belongs to the frames from `file` on. At the start of a session it is that
-    /// session's name. Later, a different name (or none) means another person shares now: those frames become a
-    /// session of their own, so no frame carries a name that was read for someone else.
+    /// The name the app shows now belongs to the frames from `file` on. The first answer of a session is that
+    /// session's name, for all of its frames. Later, a different name (or a complete read with none) means another
+    /// person shares now: those frames become a session of their own, so no frame carries a name that was read for
+    /// someone else. A read with no answer (the app was busy) changes nothing; the next kept frame asks again.
     private func readPresenter(for file: String, start: Bool) {
         guard let presenter else { return }
         runPresenter { [weak self] in
-            let name = presenter()
+            let read = presenter()
             guard let self else { return }
             self.lock.withLock {
+                let name: String?
+                switch read {
+                case .unknown:
+                    self.presenterAsked = -.infinity
+                    return
+                case .name(let found): name = found
+                case .none: name = nil
+                }
                 guard !self.closed, let at = self.index.frames.firstIndex(where: { $0.file == file }),
                       let number = self.index.frames[at].session else { return }
-                let current = self.index.frames[at].presenter
-                guard start || name != current else { return }
-                for i in at..<self.index.frames.count where (self.index.frames[i].session ?? -1) >= number {
-                    if self.index.frames[i].session == number { self.index.frames[i].presenter = name }
-                    if !start { self.index.frames[i].session = (self.index.frames[i].session ?? number) + 1 }
+                if start {
+                    // Only while this is still the session's first answer.
+                    if number == self.session { self.presenterOpen = false }
+                    for i in self.index.frames.indices where self.index.frames[i].session == number { self.index.frames[i].presenter = name }
+                } else {
+                    guard name != self.index.frames[at].presenter else { return }
+                    for i in at..<self.index.frames.count where (self.index.frames[i].session ?? -1) >= number {
+                        if self.index.frames[i].session == number { self.index.frames[i].presenter = name }
+                        self.index.frames[i].session = (self.index.frames[i].session ?? number) + 1
+                    }
+                    self.session += 1
                 }
-                if !start { self.session += 1 }
                 try? self.index.save(to: self.dir)
             }
         }

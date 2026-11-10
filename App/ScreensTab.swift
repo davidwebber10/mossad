@@ -15,15 +15,22 @@ extension EnvironmentValues {
 }
 
 /// Small copies of the frames, decoded off the main thread at the size a view needs and kept in memory. The grid
-/// never decodes a frame at full size. A picture is decoded one time, also when two views ask for it at once, and
-/// the decodes run on one queue of low priority, a few at a time, so a page of frames does not fill the Mac's cores.
+/// never decodes a frame at full size. A picture is decoded one time, also when two views ask for it at once. The
+/// decodes wait in one queue of low priority that runs three at a time, so a fast scroll through a page of frames
+/// holds no threads, and the large picture of the viewer goes before the small ones.
 @MainActor
 final class FrameThumbnails {
     static let shared = FrameThumbnails()
     private let cache = NSCache<NSString, NSImage>()
     private var loading: [String: Task<NSImage?, Never>] = [:]
-    private nonisolated static let queue = DispatchQueue(label: "com.dwebber.mossad.thumbnails", qos: .utility, attributes: .concurrent)
-    private nonisolated static let slots = DispatchSemaphore(value: 3)
+    private nonisolated static let decodes: OperationQueue = {
+        let q = OperationQueue()
+        q.name = "com.dwebber.mossad.thumbnails"
+        q.maxConcurrentOperationCount = 3
+        q.qualityOfService = .utility
+        return q
+    }()
+    static let sizes = [160, 480, 1600]
 
     private init() {
         cache.countLimit = 600
@@ -34,6 +41,11 @@ final class FrameThumbnails {
         cache.object(forKey: "\(url.path)#\(longEdge)" as NSString)
     }
 
+    /// A deleted frame leaves no copy in memory.
+    func forget(_ url: URL) {
+        for size in Self.sizes { cache.removeObject(forKey: "\(url.path)#\(size)" as NSString) }
+    }
+
     func image(_ url: URL, longEdge: Int) async -> NSImage? {
         let key = "\(url.path)#\(longEdge)"
         if let hit = cache.object(forKey: key as NSString) { return hit }
@@ -41,11 +53,9 @@ final class FrameThumbnails {
         let task = Task { () -> NSImage? in
             // Through a continuation, so the view that waits does not raise the decode's priority.
             let decoded: CGImage? = await withCheckedContinuation { done in
-                Self.queue.async {
-                    Self.slots.wait()
-                    defer { Self.slots.signal() }
-                    done.resume(returning: FrameImage.thumbnail(at: url, longEdge: longEdge))
-                }
+                let work = BlockOperation { done.resume(returning: FrameImage.thumbnail(at: url, longEdge: longEdge)) }
+                work.queuePriority = longEdge >= 1000 ? .veryHigh : .normal
+                Self.decodes.addOperation(work)
             }
             return decoded.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
         }
@@ -93,6 +103,20 @@ extension CallRecord {
         session.heading { offset in session.screens.first { $0.offset == offset }.map(timeOfDay) ?? "" }
     }
 
+    /// Changes when the screens, their text or presenter, or the speakers' names do: what the Screens tab shows.
+    var screensStamp: Int {
+        var h = Hasher()
+        h.combine(id)
+        h.combine(title)
+        h.combine(speakerNames)
+        for s in screens ?? [] {
+            h.combine(s.file)
+            h.combine(s.text.utf8.count)
+            h.combine(s.presenter)
+        }
+        return h.finalize()
+    }
+
     /// The row in the transcript and the title in the viewer.
     func screenTitle(_ screen: SharedScreen) -> String {
         screen.rowTitle(time: timeOfDay(screen), speaker: screen.presenter == nil ? mainSpeaker(around: screen.offset) : nil)
@@ -120,6 +144,8 @@ struct ScreensTab: View {
     /// True when the pictures were removed with the recording; the text stays.
     @State private var picturesGone = false
     @State private var sessions: [ShareSession] = []
+    /// The screen the owner asked to delete, until the answer.
+    @State private var deleting: SharedScreen?
 
     private var screens: [SharedScreen] { (record.screens ?? []).sorted { $0.offset < $1.offset } }
     private var ownQuery: String { find.trimmingCharacters(in: .whitespaces) }
@@ -129,15 +155,15 @@ struct ScreensTab: View {
         ownQuery.isEmpty ? controller.search.query.trimmingCharacters(in: .whitespaces) : ownQuery
     }
 
-    /// Changes when the screens do, also after the text was read again.
-    private var screensKey: String { "\(record.id)|\(record.screens?.count ?? 0)|\(record.screens?.last?.file ?? "")" }
+    /// Changes when the screens do, also after the text was read again or a speaker got a name.
+    private var screensKey: Int { record.screensStamp }
 
     var body: some View {
         let screens = screens
         Group {
             if !picturesGone, let file = selected, let index = screens.firstIndex(where: { $0.file == file }) {
                 ScreenViewer(record: record, screens: screens, index: index, player: player, query: markQuery,
-                             words: words[file] ?? [], top: top, find: $find, selected: $selected)
+                             words: words[file] ?? [], top: top, stamp: screensKey, find: $find, selected: $selected) { deleting = $0 }
             } else {
                 overview(screens)
             }
@@ -149,6 +175,21 @@ struct ScreensTab: View {
             words = Dictionary((loaded?.frames ?? []).map { ($0.file, $0.words ?? []) }, uniquingKeysWith: { a, _ in a })
             picturesGone = loaded == nil
         }
+        .confirmationDialog("Delete this screen?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { screen in
+            Button("Delete screen", role: .destructive) { delete(screen) }
+        } message: { _ in
+            Text("Mossad removes the picture and its line in the transcript, and writes the note again. The summary is not changed.")
+        }
+    }
+
+    /// Moves on to the next screen (or back to the grid), then deletes.
+    private func delete(_ screen: SharedScreen) {
+        let all = screens
+        if selected == screen.file, let i = all.firstIndex(where: { $0.file == screen.file }) {
+            selected = (all[safe: i + 1] ?? all[safe: i - 1])?.file
+        }
+        FrameThumbnails.shared.forget(record.frameURL(screen))
+        controller.deleteScreen(callID: record.id, file: screen.file)
     }
 
     private func overview(_ screens: [SharedScreen]) -> some View {
@@ -180,6 +221,8 @@ struct ScreensTab: View {
                                 ForEach(session.screens) { screen in
                                     ScreenTile(url: record.frameURL(screen), time: record.timeOfDay(screen), text: screen.text,
                                                matches: !q.isEmpty, enabled: !picturesGone) { selected = screen.file }
+                                        // Also when the pictures are gone: the text of a screen can still be deleted.
+                                        .contextMenu { Button("Delete screen…", role: .destructive) { deleting = screen } }
                                 }
                             }
                         }
@@ -198,9 +241,7 @@ struct ScreensTab: View {
 /// the open frame, or its place change.
 extension ScreensTab: Equatable {
     nonisolated static func == (a: ScreensTab, b: ScreensTab) -> Bool {
-        a.record.id == b.record.id && a.record.screens?.count == b.record.screens?.count
-            && a.record.screens?.last?.file == b.record.screens?.last?.file && a.record.title == b.record.title
-            && a.selected == b.selected && a.top == b.top && a.player === b.player
+        a.record.screensStamp == b.record.screensStamp && a.selected == b.selected && a.top == b.top && a.player === b.player
     }
 }
 
@@ -261,8 +302,11 @@ private struct ScreenViewer: View {
     let query: String
     let words: [ScreenWord]
     let top: CGFloat
+    /// Changes when the names or the text do, so the lines around the frame are worked out again.
+    let stamp: Int
     @Binding var find: String
     @Binding var selected: String?
+    let delete: (SharedScreen) -> Void
     @FocusState private var focused: Bool
     /// What was said around the open frame and its title: worked out when the frame changes, not on each draw.
     @State private var context = Context()
@@ -310,7 +354,7 @@ private struct ScreenViewer: View {
         .onKeyPress(.rightArrow) { move(1) }
         .onKeyPress(.escape) { selected = nil; return .handled }
         .onAppear { focused = true }
-        .task(id: screen.file) {
+        .task(id: "\(screen.file)|\(stamp)") {
             context = Context(file: screen.file, title: record.screenTitle(screen), lines: record.lines(around: screen.offset))
         }
     }
@@ -355,6 +399,10 @@ private struct ScreenViewer: View {
                 action("Save image…") { ScreenActions.save(url, name: "\(record.title) \(longClock(screen.offset).replacingOccurrences(of: ":", with: "."))") }
                 action("Open in Preview") { ScreenActions.openInPreview(url) }
             }
+            Button("Delete screen…") { delete(screen) }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.recording)
+                .help("Removes this picture and its line in the transcript")
             Hairline()
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.s) {
@@ -548,12 +596,41 @@ struct ScreenLine: View {
     }
 }
 
-/// The small mark of a shared screen on the player's ruler.
-struct ScreenMark: View {
+/// The shared screens on the player's ruler: every mark in one drawing, and one click target that opens the
+/// nearest screen. It takes no play position, and it is equal to itself while the screens are the same, so the
+/// playback (four draws of the ruler each second) does not make it again.
+struct RulerScreenMarks: View, Equatable {
+    let screens: [SharedScreen]
+    let duration: TimeInterval
+    let width: CGFloat
+    let open: (SharedScreen) -> Void
+
+    private static let reach: Double = 8
+
+    nonisolated static func == (a: RulerScreenMarks, b: RulerScreenMarks) -> Bool {
+        a.duration == b.duration && a.width == b.width && a.screens.count == b.screens.count
+            && a.screens.first?.file == b.screens.first?.file && a.screens.last?.file == b.screens.last?.file
+    }
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-            .strokeBorder(Palette.secondary, lineWidth: 1.2)
-            .frame(width: 9, height: 7)
+        Canvas { context, _ in
+            guard duration > 0 else { return }
+            for s in screens {
+                let x = width * min(1, s.offset / duration)
+                let mark = CGRect(x: x - 4.5, y: 0, width: 9, height: 7).insetBy(dx: 0.6, dy: 0.6)
+                context.stroke(Path(roundedRect: mark, cornerRadius: 1.5), with: .color(Palette.secondary), lineWidth: 1.2)
+            }
+        }
+        .frame(width: width, height: 12)
+        .contentShape(Rectangle())
+        .gesture(SpatialTapGesture().onEnded { tap in
+            let offsets = screens.map(\.offset)
+            if let i = FilmstripLayout.nearest(offsets, atX: tap.location.x, duration: duration, span: width, reach: Self.reach) { open(screens[i]) }
+        })
+        .help(screens.count == 1 ? "A shared screen. Click it to open it." : "Shared screens. Click one to open it.")
+        .accessibilityElement()
+        .accessibilityLabel(screens.count == 1 ? "1 shared screen" : "\(screens.count) shared screens")
+        .accessibilityHint("Open the Screens tab for each one")
     }
 }
 

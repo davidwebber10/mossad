@@ -58,8 +58,10 @@ public struct ScreenStep: Sendable {
     static let maxAttempts = 3
     /// `frames.json` is saved after this many frames, and at the end.
     static let saveEvery = 10
-    /// The one queue for the text recognition. A task that waits for it does not raise its priority.
-    static let queue = DispatchQueue(label: "com.dwebber.mossad.screen-text", qos: .background)
+    /// The queues for the text recognition, one frame at a time. A task that waits for one does not raise its
+    /// priority. While a call records, the lowest priority; with no call, a low one, so the note does not wait long.
+    static let quietQueue = DispatchQueue(label: "com.dwebber.mossad.screen-text", qos: .utility)
+    static let callQueue = DispatchQueue(label: "com.dwebber.mossad.screen-text.call", qos: .background)
 
     let reader: ScreenTextReading
     let isRecording: @Sendable () async -> Bool
@@ -80,10 +82,10 @@ public struct ScreenStep: Sendable {
         return ScreenStep(reader: reader, isRecording: { if await own() { return true }; return await gate.isHeld }, rest: rest)
     }
 
-    private func read(_ url: URL) async -> (text: String, words: [ScreenWord])? {
+    private func read(_ url: URL, duringCall: Bool) async -> (text: String, words: [ScreenWord])? {
         let reader = reader
         return await withCheckedContinuation { done in
-            Self.queue.async { done.resume(returning: reader.read(url)) }
+            (duringCall ? Self.callQueue : Self.quietQueue).async { done.resume(returning: reader.read(url)) }
         }
     }
 
@@ -95,9 +97,10 @@ public struct ScreenStep: Sendable {
         FrameStore.removeUnlisted(in: dir)
         var unsaved = 0
         for frame in index.frames where frame.text == nil {
-            if await isRecording() { await rest() }
+            let duringCall = await isRecording()
+            if duringCall { await rest() }
             let url = index.url(of: frame, in: dir)
-            let read = await read(url)
+            let read = await read(url, duringCall: duringCall)
             guard let at = index.frames.firstIndex(where: { $0.file == frame.file }) else { continue }
             if let read {
                 if ScreenText.hasEnough(read.text) {

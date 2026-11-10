@@ -58,6 +58,15 @@ extension SharedScreen {
 public enum FilmstripLayout {
     /// The open frame, and others whose place is at least `spacing` from each one already chosen, in time order.
     /// `span` is the line's length; a frame's place is its offset's part of `duration`.
+    /// The frame whose mark is nearest to a click at `x` on a line of `span` points, or nil when no mark is within
+    /// `reach` points of it.
+    public static func nearest(_ offsets: [TimeInterval], atX x: Double, duration: TimeInterval, span: Double, reach: Double = .infinity) -> Int? {
+        guard duration > 0, span > 0 else { return nil }
+        func place(_ i: Int) -> Double { span * min(1, offsets[i] / duration) }
+        guard let i = offsets.indices.min(by: { abs(place($0) - x) < abs(place($1) - x) }), abs(place(i) - x) <= reach else { return nil }
+        return i
+    }
+
     public static func pictured(_ offsets: [TimeInterval], open: Int, duration: TimeInterval, span: Double, spacing: Double) -> [Int] {
         guard duration > 0, offsets.indices.contains(open) else { return [] }
         func x(_ i: Int) -> Double { span * min(1, offsets[i] / duration) }

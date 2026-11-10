@@ -1147,6 +1147,16 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Deletes one shared screen of a meeting: its picture, its entry in the frames list, and its line in the
+    /// transcript. The note is written again.
+    func deleteScreen(callID: String, file: String) {
+        guard !isSecondCopy else { return }
+        Task {
+            await pipeline.deleteScreen(callID: callID, file: file)
+            refresh()
+        }
+    }
+
     /// Opens a meeting and plays it from a time.
     func openMeeting(_ callID: String, at time: TimeInterval) {
         seekRequest = SeekRequest(callID: callID, at: time)

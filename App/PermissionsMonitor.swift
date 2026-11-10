@@ -78,10 +78,12 @@ final class PermissionsMonitor: ObservableObject {
         Task.detached(priority: .utility) {
             var states: [PermissionKind: PermissionState] = [:]
             for kind in kinds { states[kind] = await Self.check(kind) }
-            let screen = await Self.check(.screenCapture)
+            // Asked only while "Capture shared screens" is on: with it off, nothing about the screen is read.
+            let wanted = UserDefaults.standard.bool(forKey: AppController.captureScreensKey)
+            let screen = wanted ? await Self.check(.screenCapture) : nil
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                if screen != self.screenCapture { self.screenCapture = screen }
+                if let screen, screen != self.screenCapture { self.screenCapture = screen }
                 var next = self.items
                 for i in next.indices {
                     let kind = next[i].kind

@@ -142,35 +142,71 @@ final class MeetingWindowTests: XCTestCase {
     func testABrowserFrameKeepsOnlyThePage() throws {
         let window = w(1, chrome, "Meet - abc-defg-hij - Google Chrome", 1200, 800)
         // The page's frame from Accessibility: under 120 pt of tabs, address, and bookmarks.
-        let part = try XCTUnwrap(MeetingWindow.keptPart(of: window, bundleID: chrome, webArea: CGRect(x: 0, y: 120, width: 1200, height: 680)))
+        let part = try XCTUnwrap(MeetingWindow.keptPart(of: window, bundleID: chrome, webAreas: [CGRect(x: 0, y: 120, width: 1200, height: 680)]))
         XCTAssertEqual(part.minY, 0.15, accuracy: 0.001)
         XCTAssertEqual(part.maxY, 1, accuracy: 0.001)
         XCTAssertEqual(part.width, 1, accuracy: 0.001)
-        // A side panel next to the page is cut too.
-        let narrow = try XCTUnwrap(MeetingWindow.keptPart(of: window, bundleID: chrome, webArea: CGRect(x: 0, y: 120, width: 900, height: 680)))
-        XCTAssertEqual(narrow.maxX, 0.75, accuracy: 0.001)
+        // A side panel, or tabs at the side, next to the page are cut too.
+        let narrow = try XCTUnwrap(MeetingWindow.keptPart(of: window, bundleID: chrome, webAreas: [CGRect(x: 300, y: 120, width: 900, height: 680)]))
+        XCTAssertEqual(narrow.minX, 0.25, accuracy: 0.001)
+        XCTAssertEqual(narrow.maxX, 1, accuracy: 0.001)
+        // A small second web area (a panel of the browser's own) does not stop the capture; the page is the large one.
+        let withPanel = try XCTUnwrap(MeetingWindow.keptPart(of: window, bundleID: chrome,
+                                                             webAreas: [CGRect(x: 1000, y: 120, width: 200, height: 300), CGRect(x: 0, y: 120, width: 1000, height: 680)]))
+        XCTAssertEqual(withPanel.maxX, 1000.0 / 1200, accuracy: 0.001)
     }
 
-    func testWithoutThePagesFrameTheTopBandIsCut() throws {
-        let window = w(1, chrome, "Meet - abc-defg-hij - Google Chrome", 1200, 1000)
-        for area in [nil, CGRect(x: 0, y: 0, width: 80, height: 40), CGRect(x: 0, y: 500, width: 2000, height: 900)] {
-            let part = try XCTUnwrap(MeetingWindow.keptPart(of: window, bundleID: chrome, webArea: area))
-            XCTAssertEqual(part.minY, 0.125, accuracy: 0.001)
-            XCTAssertEqual(part.height, 0.875, accuracy: 0.001)
+    func testWithoutThePagesFrameNothingIsCapturedInAnyBrowser() {
+        // No top band is guessed: where a browser has its tabs (top or side) is not known without the frame.
+        for browser in [chrome, "com.microsoft.edgemac", "com.brave.Browser", "com.apple.Safari", "company.thebrowser.Browser"] {
+            let window = w(1, browser, "Meet - abc-defg-hij", 1200, 1000)
+            XCTAssertNil(MeetingWindow.keptPart(of: window, bundleID: browser, webAreas: nil), browser)
+            XCTAssertNil(MeetingWindow.keptPart(of: window, bundleID: browser, webAreas: []), browser)
+            // A frame that cannot be the page (too small, or outside the window) is no frame.
+            XCTAssertNil(MeetingWindow.keptPart(of: window, bundleID: browser, webAreas: [CGRect(x: 0, y: 0, width: 80, height: 40)]), browser)
+            XCTAssertNil(MeetingWindow.keptPart(of: window, bundleID: browser, webAreas: [CGRect(x: 0, y: 500, width: 2000, height: 900)]), browser)
+            XCTAssertNotNil(MeetingWindow.keptPart(of: window, bundleID: browser, webAreas: [CGRect(x: 240, y: 10, width: 950, height: 980)]), browser)
         }
-        // A window too low for the band, and a browser with its tabs at the side, are not captured without the frame.
-        XCTAssertNil(MeetingWindow.keptPart(of: w(1, chrome, "Meet - abc-defg-hij", 600, 200), bundleID: chrome, webArea: nil))
-        let arc = "company.thebrowser.Browser"
-        XCTAssertNil(MeetingWindow.keptPart(of: w(1, arc, "Meet - abc-defg-hij", 1200, 1000), bundleID: arc, webArea: nil))
-        XCTAssertNotNil(MeetingWindow.keptPart(of: w(1, arc, "Meet - abc-defg-hij", 1200, 1000), bundleID: arc, webArea: CGRect(x: 240, y: 10, width: 950, height: 980)))
+    }
+
+    func testTwoPagesSideBySideAreNotCaptured() {
+        let window = w(1, chrome, "Meet - abc-defg-hij - Google Chrome", 1600, 1000)
+        // A split view: the meeting and the owner's mail. Which one the large area is, nobody can say.
+        let split = [CGRect(x: 0, y: 90, width: 800, height: 910), CGRect(x: 800, y: 90, width: 800, height: 910)]
+        XCTAssertNil(MeetingWindow.keptPart(of: window, bundleID: chrome, webAreas: split))
+        XCTAssertNil(MeetingWindow.keptPart(of: window, bundleID: chrome, webAreas: split.reversed()))
+        // Also when the second page is the smaller one, from about a fifth of the window.
+        let uneven = [CGRect(x: 0, y: 90, width: 1200, height: 910), CGRect(x: 1200, y: 90, width: 400, height: 910)]
+        XCTAssertNil(MeetingWindow.keptPart(of: window, bundleID: chrome, webAreas: uneven))
+    }
+
+    func testThePageThatMovedOrCannotBeReadEndsTheStream() {
+        let page = CGRect(x: 0, y: 90, width: 1200, height: 710)
+        XCTAssertFalse(MeetingWindow.pageMoved(from: page, to: page))
+        XCTAssertFalse(MeetingWindow.pageMoved(from: page, to: page.offsetBy(dx: 1, dy: -2)))
+        // The bookmarks bar came: the page begins 30 pt lower.
+        XCTAssertTrue(MeetingWindow.pageMoved(from: page, to: CGRect(x: 0, y: 120, width: 1200, height: 680)))
+        // A side panel came: the page is narrower.
+        XCTAssertTrue(MeetingWindow.pageMoved(from: page, to: CGRect(x: 0, y: 90, width: 900, height: 710)))
+        // Full screen with the toolbar over the page.
+        XCTAssertTrue(MeetingWindow.pageMoved(from: page, to: CGRect(x: 0, y: 0, width: 1200, height: 800)))
+        XCTAssertTrue(MeetingWindow.pageMoved(from: page, to: nil))
+    }
+
+    func testAChangeOfEitherEdgeOfTheWindowEndsTheStream() {
+        let size = CGSize(width: 1600, height: 900)
+        XCTAssertFalse(MeetingWindow.sizeChanged(from: size, to: CGSize(width: 1601, height: 899)))
+        // Only the short edge: the long one is the same.
+        XCTAssertTrue(MeetingWindow.sizeChanged(from: size, to: CGSize(width: 1600, height: 700)))
+        XCTAssertTrue(MeetingWindow.sizeChanged(from: size, to: CGSize(width: 1500, height: 900)))
     }
 
     func testAppWindowsAndWindowsWithoutTabsAreKeptWhole() {
         let whole = CGRect(x: 0, y: 0, width: 1, height: 1)
-        XCTAssertEqual(MeetingWindow.keptPart(of: w(1, zoom, "Zoom Meeting"), bundleID: zoom, webArea: nil), whole)
-        XCTAssertEqual(MeetingWindow.keptPart(of: w(1, teams, "Weekly sync | Microsoft Teams"), bundleID: teams, webArea: nil), whole)
-        XCTAssertEqual(MeetingWindow.keptPart(of: w(9, chrome, "Meet - abc-defg-hij", 480, 270, layer: 3), bundleID: chrome, webArea: nil), whole)
-        XCTAssertEqual(MeetingWindow.keptPart(of: w(1, "com.google.Chrome.app.abcdef", "Meet - abc-defg-hij"), bundleID: chrome, webArea: nil), whole)
+        XCTAssertEqual(MeetingWindow.keptPart(of: w(1, zoom, "Zoom Meeting"), bundleID: zoom, webAreas: nil), whole)
+        XCTAssertEqual(MeetingWindow.keptPart(of: w(1, teams, "Weekly sync | Microsoft Teams"), bundleID: teams, webAreas: nil), whole)
+        XCTAssertEqual(MeetingWindow.keptPart(of: w(9, chrome, "Meet - abc-defg-hij", 480, 270, layer: 3), bundleID: chrome, webAreas: nil), whole)
+        XCTAssertEqual(MeetingWindow.keptPart(of: w(1, "com.google.Chrome.app.abcdef", "Meet - abc-defg-hij"), bundleID: chrome, webAreas: nil), whole)
     }
 
     func testTheKeptPartInWholePixelsStaysInsideTheFrame() {
@@ -180,6 +216,18 @@ final class MeetingWindowTests: XCTestCase {
         XCTAssertEqual([all.x, all.y, all.width, all.height], [0, 0, 1600, 1000])
         let odd = PixelCrop.pixels(CGRect(x: 0.3333, y: 0.3333, width: 0.9, height: 0.9), width: 10, height: 10)
         XCTAssertEqual([odd.x, odd.y, odd.width, odd.height], [4, 4, 6, 6])
+    }
+
+    func testTheKeptPartIsCountedInsideTheWindowsPictureInTheFrame() {
+        // The window's picture is 1600 x 800 in the middle of a 1600 x 1000 frame (the window got lower).
+        let content = CGRect(x: 0, y: 100, width: 1600, height: 800)
+        let p = PixelCrop.pixels(CGRect(x: 0, y: 0.15, width: 1, height: 0.85), in: content, width: 1600, height: 1000)
+        XCTAssertEqual([p.x, p.y, p.width, p.height], [0, 220, 1600, 680])
+        // A content rectangle that makes no sense means the whole frame.
+        let none = PixelCrop.pixels(CGRect(x: 0, y: 0.5, width: 1, height: 0.5), in: .zero, width: 100, height: 100)
+        XCTAssertEqual([none.x, none.y, none.width, none.height], [0, 50, 100, 50])
+        let outside = PixelCrop.pixels(CGRect(x: 0, y: 0, width: 1, height: 1), in: CGRect(x: -50, y: 0, width: 400, height: 400), width: 100, height: 100)
+        XCTAssertEqual([outside.x, outside.y, outside.width, outside.height], [0, 0, 100, 100])
     }
 
     // MARK: Covered windows
