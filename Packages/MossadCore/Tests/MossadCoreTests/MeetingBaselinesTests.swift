@@ -499,6 +499,36 @@ final class MeetingBaselinesTests: XCTestCase {
         XCTAssertEqual(MeetingAnalytics.Baselines.onePerCause(list).map(\.id), ["me:A.longestTurn", "with.them:B", "them:A.averageTurn"])
     }
 
+    /// The words of turn lines: a longest turn above the usual reads as a ceiling, one below it as a range, and the
+    /// typical turn does not say "usually" two times.
+    func testTurnLinesSayWhatIsUnusual() {
+        let history: [Double] = [20, 40, 60, 80, 90]
+        let ctx = MeetingAnalytics.Context(kind: .series, meetings: 5, label: "in Weekly sync")
+        let above = MeetingAnalytics.Reading(value: 300, history: history, margin: 20)
+        XCTAssertTrue(MeetingFindings.sentence(.longestTurn, above, you: true, context: ctx).contains("usually up to"))
+        let below = MeetingAnalytics.Reading(value: 5, history: history, margin: 20)
+        let low = MeetingFindings.sentence(.longestTurn, below, you: true, context: ctx)
+        XCTAssertFalse(low.contains("up to"), low)
+        XCTAssertTrue(low.contains("usually 20 s to 1 min 30 s") || low.contains("usually 20 to"), low)
+        let typical = MeetingFindings.sentence(.averageTurn, above, you: true, context: ctx)
+        XCTAssertEqual(typical.components(separatedBy: "usually").count - 1, 1, typical)
+    }
+
+    /// A median turn of a few seconds can stand out, also below the usual.
+    func testATypicalTurnMarginFitsShortTurns() {
+        let u = MeetingAnalytics.Usual([4, 5, 5, 6, 6, 7])!
+        XCTAssertLessThanOrEqual(PersonMetric.averageTurn.margin(u), 3)
+    }
+
+    /// The topic label names every topic that put a meeting in the context, or says how many more there are.
+    func testATopicLabelNamesAllSharedTopics() {
+        typealias B = MeetingAnalytics.Baselines
+        XCTAssertEqual(B.topics(["Budget"]), "about Budget")
+        XCTAssertEqual(B.topics(["Budget", "Roadmap"]), "about Budget or Roadmap")
+        XCTAssertEqual(B.topics(["Budget", "Roadmap", "Hiring"]), "about Budget, Roadmap, or Hiring")
+        XCTAssertEqual(B.topics(["Budget", "Roadmap", "Hiring", "Pricing", "Legal"]), "about Budget, Roadmap, Hiring, or 2 more of its topics")
+    }
+
     func testAnOrdinaryCallHasNothingToSay() {
         let b = analytics(oneOnOne(dana: 62), oneOnOnes()).baselines
         XCTAssertEqual(b.standouts, [])

@@ -244,7 +244,8 @@ extension PersonMetric {
         case .wordsPerMinute: 20
         case .fillersPerMinute: 1
         case .questionsPerHour: 3
-        case .averageTurn: max(8, u.median * 0.25)
+        // The typical turn is a median of a few seconds: a fixed 8 s could never be reached below the usual.
+        case .averageTurn: max(2, u.median * 0.4)
         case .longestTurn: max(20, u.median * 0.25)
         case .cutInsPerHour, .cutOffsPerHour: 2
         case .responseGap: 0.7
@@ -346,8 +347,7 @@ extension MeetingAnalytics {
                 if Self.enough(same) {
                     // Name the topics the earlier meetings share with this one, as this call writes them.
                     let shared = this.tags.filter { tag in same.contains { $0.tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } } }
-                    let named = shared.prefix(2).joined(separator: " or ")
-                    return (same, "in meetings of \(this.size.words) about \(named)")
+                    return (same, "in meetings of \(this.size.words) \(MeetingAnalytics.Baselines.topics(shared))")
                 }
             }
             return Self.enough(sized) ? (sized, "in meetings of \(this.size.words)") : nil
@@ -561,6 +561,17 @@ extension MeetingAnalytics.Baselines {
             if out.count == maximumStandouts { break }
         }
         return out
+    }
+
+    /// "about Budget or Roadmap": every topic that put a meeting in the context, so the label holds for each one.
+    static func topics(_ shared: [String]) -> String {
+        switch shared.count {
+        case 0: return "on the same topics"
+        case 1: return "about \(shared[0])"
+        case 2: return "about \(shared[0]) or \(shared[1])"
+        case 3: return "about \(shared[0]), \(shared[1]), or \(shared[2])"
+        default: return "about \(shared.prefix(3).joined(separator: ", ")), or \(shared.count - 3) more of its topics"
+        }
     }
 
     /// One line for each cause: a person's typical and longest turn tell of the same turns, and the owner's talk

@@ -173,7 +173,7 @@ public enum MeetingFindings {
         case .wordsPerMinute: return "spoke at \(Int(v.rounded())) words a minute"
         case .fillersPerMinute: return "used \(tenth(v)) filler words a minute"
         case .questionsPerHour: return times == 0 ? "asked no questions" : "asked \(count(times, "question", "questions")) (\(rate))"
-        case .averageTurn: return "usually spoke \(span(v)) at a time"
+        case .averageTurn: return "spoke \(span(v)) at a time (typical turn)"
         case .longestTurn: return "held one turn for \(span(v))"
         case .cutInsPerHour:
             let whom = you ? "" : " on you"
@@ -189,9 +189,10 @@ public enum MeetingFindings {
 
     /// "usually 30 to 40% in 1:1s with you": the range and where it comes from. Counts say that they are per hour.
     /// A range from fewer than five meetings is not called usual: "30 to 40% in 1:1s with you, in 3 meetings so far".
-    public static func usually(_ metric: PersonMetric, _ u: MeetingAnalytics.Usual, context: MeetingAnalytics.Context) -> String {
-        // A longest turn is a ceiling: "up to 2 min 36 s" reads better than a wide range from short to long.
-        let range = metric == .longestTurn ? "up to \(span(u.high))" : range(metric, u)
+    public static func usually(_ metric: PersonMetric, _ u: MeetingAnalytics.Usual, context: MeetingAnalytics.Context,
+                               value: Double? = nil) -> String {
+        // A longest turn above the usual is measured against a ceiling: "up to 2 min 36 s". Below it, the range.
+        let range = metric == .longestTurn && (value ?? .infinity) > u.high ? "up to \(span(u.high))" : range(metric, u)
         return tell("\(range)\(perHour.contains(metric) ? " an hour" : "")", u, context)
     }
 
@@ -225,7 +226,7 @@ public enum MeetingFindings {
     /// What follows the person's name in "What stood out": "talked 60% of the time; usually 30 to 40% in 1:1s with you".
     static func sentence(_ metric: PersonMetric, _ r: MeetingAnalytics.Reading, count: Int? = nil, you: Bool, context: MeetingAnalytics.Context) -> String {
         guard let usual = r.usual else { return did(metric, r.value, count: count, you: you) }
-        return "\(did(metric, r.value, count: count, you: you)); \(usually(metric, usual, context: context))"
+        return "\(did(metric, r.value, count: count, you: you)); \(usually(metric, usual, context: context, value: r.value))"
     }
 
     /// A whole sentence about the meeting: "The meeting ran 52 min; usually 25 to 35 min in Weekly sync".
