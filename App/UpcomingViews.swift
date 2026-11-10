@@ -35,7 +35,9 @@ struct UpcomingRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(meeting.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.secondary).lineLimit(1)
                     HStack(spacing: 0) {
+                        // The time stays whole in a narrow list; the platform and the length give way.
                         Text(upcomingWhen(meeting, now: context.date)).foregroundStyle(soon ? Palette.accent : Palette.secondary)
+                            .fixedSize().layoutPriority(1)
                         Text(detail).foregroundStyle(Palette.secondary)
                     }
                     .font(.system(size: 12))
@@ -59,7 +61,6 @@ struct UpcomingRow: View {
     private var detail: String {
         guard let p = meeting.platform else { return " · No call link" }
         return " · \(p.shortName) · \(durationLabel(meeting.end.timeIntervalSince(meeting.start)))"
-        return " · \(p.shortName) · " + (controller.noRecord.choice(for: meeting) == .record ? "Will record" : "Won't record")
     }
 }
 
@@ -72,14 +73,26 @@ struct RecordChoiceControl: View {
     let size: Size
     @State private var hovering = false
 
+    /// Off when this meeting starts: off with no end, or until a time after its start. A meeting of tomorrow
+    /// records when Mossad is only off until this afternoon.
+    private var offThen: Bool {
+        guard !controller.isOn else { return false }
+        return controller.offUntilDate.map { $0 > meeting.start } ?? true
+    }
+
     var body: some View {
         let choice = controller.noRecord.choice(for: meeting)
         let damaged = controller.noRecord.unreadable
-        let records = choice == .record && !damaged && controller.isOn
+        let records = choice == .record && !damaged && !offThen
         Menu {
-            pick(.record, "Record", "Mossad records this call when it starts.", choice)
-            pick(.skipThisMeeting, "Don't record this meeting", "Only this one; the next one records.", choice)
-            pick(.skipSeries, "Don't record this series", "Every meeting with this title and link.", choice)
+            if damaged {
+                // The list is unknown, so no choice has a check mark, and the first choice starts a new list.
+                Section("The do-not-record list could not be read. A choice here starts a new list: every other meeting records again.") {
+                    picks(nil)
+                }
+            } else {
+                picks(choice)
+            }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: records ? "record.circle" : "pause.circle")
@@ -96,25 +109,40 @@ struct RecordChoiceControl: View {
         }
         .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
         .onHover { hovering = $0 }
-        .help(damaged ? "The do-not-record list could not be read; reset it in Settings, Recording." : "Choose whether Mossad records this call")
-        .accessibilityLabel("Recording: \(label(choice, damaged: damaged))")
+        .help(help(choice, damaged: damaged))
+        .accessibilityLabel("Recording: \(label(choice, damaged: damaged)). \(help(choice, damaged: damaged))")
     }
 
+    /// The choice stays in the pill while Mossad is off: "off" is said only when no recording follows from it.
     private func label(_ choice: RecordingChoice, damaged: Bool) -> String {
-        if damaged { return "Not recorded" }
-        if !controller.isOn { return "Mossad is off" }
+        if damaged { return "List damaged" }
         switch choice {
-        case .record: return "Will record"
+        case .record: return offThen ? "Mossad is off" : "Will record"
         case .skipThisMeeting: return "Won't record"
         case .skipSeries: return "Series off"
         }
     }
 
+    private func help(_ choice: RecordingChoice, damaged: Bool) -> String {
+        if damaged { return "The do-not-record list could not be read, so this call is not recorded. Set a choice, or reset the list in Settings, Recording." }
+        if choice == .record, offThen { return "Mossad is off when this call starts, so it does not record it." }
+        return "Choose whether Mossad records this call"
+    }
+
     @ViewBuilder
-    private func pick(_ value: RecordingChoice, _ title: String, _ detail: String, _ current: RecordingChoice) -> some View {
+    private func picks(_ current: RecordingChoice?) -> some View {
+        pick(.record, "Record", "Mossad records this call when it starts.", current)
+        pick(.skipThisMeeting, "Don't record this meeting", "Only this one; the next one records.", current)
+        pick(.skipSeries, "Don't record this series", "Every meeting with this title and link.", current)
+    }
+
+    @ViewBuilder
+    private func pick(_ value: RecordingChoice, _ title: String, _ detail: String, _ current: RecordingChoice?) -> some View {
         Button { controller.setRecording(value, for: meeting) } label: {
             if value == current { Label(title, systemImage: "checkmark") } else { Text(title) }
             Text(detail)
         }
+        // The check mark is a picture: VoiceOver needs the state in words.
+        .accessibilityAddTraits(value == current ? .isSelected : [])
     }
 }

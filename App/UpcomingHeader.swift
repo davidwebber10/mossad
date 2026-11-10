@@ -65,7 +65,7 @@ struct UpcomingHeader: View {
             .frame(minHeight: 20)
             if let kind = prep?.kind { TagChip(text: kind) }
             if let n = prep?.series?.meetings {
-                TagChip(text: "Met \(n) times").help("Mossad recorded \(n) earlier meetings with this title")
+                TagChip(text: "Recorded \(n) times").help("Mossad recorded \(n) earlier meetings of this series")
             }
         }
     }
@@ -88,16 +88,28 @@ struct UpcomingHeader: View {
 
     // MARK: The people
 
+    /// The first people that fit; "and N more invited" shows them all. The band does not scroll, so the whole
+    /// list scrolls inside the room the first ones had, and the controls under it stay in the window.
     private var people: some View {
-        let rows = showAll ? invited : Array(invited.prefix(invited.count > maxRows ? maxRows - 1 : maxRows))
+        let fits = invited.count > maxRows ? maxRows - 1 : maxRows
         let known = Dictionary((prep?.people ?? []).map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
-        return VStack(alignment: .leading, spacing: 6) {
-            ForEach(rows) { entry in
-                InvitedRow(entry: entry, person: entry.person.flatMap { known[$0] }, loaded: prep != nil, wide: wide)
+        func rows(_ entries: [MeetingPrep.Invited]) -> some View {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(entries) { entry in
+                    InvitedRow(entry: entry, person: entry.person.flatMap { known[$0] }, loaded: prep != nil, wide: wide)
+                }
             }
-            if rows.count < invited.count {
-                Button { withAnimation(.snappy(duration: 0.2)) { showAll = true } } label: {
-                    Text("and \(invited.count - rows.count) more invited")
+        }
+        return VStack(alignment: .leading, spacing: 6) {
+            if showAll, invited.count > fits {
+                ScrollView(.vertical) { rows(invited) }
+                    .frame(height: CGFloat(maxRows) * UpcomingDetailView.personRow)
+            } else {
+                rows(Array(invited.prefix(fits)))
+            }
+            if invited.count > fits {
+                Button { withAnimation(.snappy(duration: 0.2)) { showAll.toggle() } } label: {
+                    Text(showAll ? "Show fewer" : "and \(invited.count - fits) more invited")
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.secondary)
                         .contentShape(Rectangle())
                 }
@@ -142,8 +154,10 @@ struct UpcomingHeader: View {
 }
 
 /// One invited person as a lane of the band: the name in the label column (a link on a sure match), then when
-/// the owner last met them, how often in the last 90 days, and one fact about the two.
+/// the two were last recorded together, how often in the last 90 days, and one fact about the two. It says
+/// "recorded": a meeting where the person was silent or their voice has no name is not in these numbers.
 private struct InvitedRow: View {
+    @EnvironmentObject var controller: AppController
     let entry: MeetingPrep.Invited
     let person: MeetingPrep.Person?
     let loaded: Bool
@@ -169,7 +183,8 @@ private struct InvitedRow: View {
             .help(entry.person == nil ? entry.written : "")
     }
 
-    /// One text, so it wraps at any width: when they last met (a link to that meeting), how often, and the fact.
+    /// One text, so it wraps at any width: when they were last recorded together (a link to that meeting), how
+    /// often, and the fact.
     @ViewBuilder
     private var facts: some View {
         Group {
@@ -178,7 +193,10 @@ private struct InvitedRow: View {
                     Text(Self.line(person, last))
                         .tint(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
-                        .help(person.fact.map { "\(last.title), \(dayWord(last.start)). The last number comes \($0.basis)." } ?? "\(last.title), \(dayWord(last.start))")
+                        .help("\(last.title), \(dayWord(last.start)). Mossad counts the recorded meetings in which this person\u{2019}s voice has their name."
+                              + (person.fact.map { " The last number comes \($0.basis)." } ?? ""))
+                        // The link is inside the text, where the keyboard and VoiceOver do not reach it.
+                        .accessibilityAction(named: "Open \(last.title)") { controller.openMeeting(last.id) }
                 } else {
                     Text("No recorded meeting together yet")
                 }
@@ -193,15 +211,19 @@ private struct InvitedRow: View {
     }
 
     private static func line(_ person: MeetingPrep.Person, _ last: MeetingPrep.Earlier) -> AttributedString {
-        var met = AttributedString("Last met \(day(last.start))")
+        var met = AttributedString("Last recorded together \(day(last.start))")
         met.foregroundColor = Palette.ink
         met.link = URL(string: "mossad://call/\(last.id)")
-        var rest = "  ·  " + (person.recent == 0 ? "none in the last 90 days" : "\(person.recent) \(person.recent == 1 ? "meeting" : "meetings") in 90 days")
-        if let fact = person.fact { rest += "  ·  \(fact.text)" }
+        // The quiet dotted line of a name that is a link.
+        met.underlineStyle = Text.LineStyle(pattern: .dot, color: Palette.tertiaryMark)
+        // The dot stays with the words after it, so a line that wraps never ends in one.
+        let dot = "  ·\u{00A0}\u{00A0}"
+        var rest = dot + (person.recent == 0 ? "not in the last 90 days" : "\(person.recent) \(person.recent == 1 ? "time" : "times") in 90 days")
+        if let fact = person.fact { rest += dot + fact.text }
         return met + AttributedString(rest)
     }
 
-    /// "today", "yesterday", "Mon", "Oct 9": after "Last met".
+    /// "today", "yesterday", "Mon", "Oct 9": after "Last recorded together".
     private static func day(_ date: Date) -> String {
         let cal = Calendar.current
         if cal.isDateInToday(date) { return "today" }

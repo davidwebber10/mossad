@@ -57,15 +57,4 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: start)).day ?? 0
         return days <= 1 ? "Tomorrow" : "in \(days) days"
     }
-
-    /// Earlier meetings with the same title, newest first: the series this event belongs to. Only a title from the
-    /// calendar or from the owner makes a series, as in `MeetingFacts.series`: two unrelated calls can get the same
-    /// title from the model.
-    public func earlier(in records: [CallRecord]) -> [CallRecord] {
-        let key = PeopleDuplicates.normalized(title)
-        return records.filter { r in
-            r.status == .written && r.start < start && (r.titleSource == .calendar || r.titleSource == .custom) && PeopleDuplicates.normalized(r.title) == key
-        }
-        .sorted { $0.start > $1.start }
-    }
 }

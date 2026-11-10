@@ -1,11 +1,13 @@
 import Foundation
 
-/// What the owner needs before an upcoming meeting: who is invited and what Mossad knows about them, what was
-/// left open the last time, what the owner still owes these people, and the series in numbers. Pure: the page
+/// What the owner needs before an upcoming meeting: who is invited and what Mossad knows about them, the action
+/// items of the last time, what the owner still owes these people, and the series in numbers. Pure: the page
 /// only shows it.
 ///
-/// A person is known only on a sure match (`PersonDirectory.link`): a wrong person's history before a meeting
-/// is worse than none. A number that the history cannot give is nil, never 0.
+/// The page says nothing that Mossad does not know. A person is known only on a sure match
+/// (`PersonDirectory.link`): a wrong person's history before a meeting is worse than none. An action item has
+/// no state of its own, so only the owner's own tasks say "open" or "done"; another person's item has no state.
+/// A number that the history cannot give is nil, never 0.
 public struct MeetingPrep: Sendable, Equatable {
     /// One entry of the invite, without the owner.
     public struct Invited: Sendable, Equatable, Identifiable {
@@ -38,21 +40,24 @@ public struct MeetingPrep: Sendable, Equatable {
         public var basis: String
     }
 
-    /// An invited person Mossad knows.
+    /// An invited person Mossad knows. The meetings are the recorded ones in which their voice has their name:
+    /// a meeting where they were silent, or a voice with no name, is not counted.
     public struct Person: Sendable, Equatable, Identifiable {
         public var id: String { name }
         public var name: String
         /// Nil for a saved person who never spoke in a recorded meeting.
         public var lastMet: Earlier?
-        /// Meetings together in the last `recentDays` days.
+        /// Such meetings in the last `recentDays` days.
         public var recent: Int
-        /// Meetings together in all.
+        /// Such meetings in all.
         public var meetings: Int
         public var fact: Fact?
     }
 
-    /// An action item of the last meeting that is not known to be closed.
+    /// An action item of the last meeting.
     public struct Item: Sendable, Equatable, Identifiable {
+        public enum State: Sendable, Equatable { case open, done }
+
         public var id: String
         public var task: String
         /// The owner as the meeting wrote it; nil for an item with no owner.
@@ -61,11 +66,16 @@ public struct MeetingPrep: Sendable, Equatable {
         public var person: String?
         /// True for an item of the note's owner.
         public var isOwners: Bool
+        /// Known only for an item that is one of the owner's tasks from the same call. Nil says "not known",
+        /// which is every other person's item.
+        public var state: State?
         public var callID: String
-        /// The second of the call to play from: the task's own moment, or the line that says the item. Nil when
-        /// no line does.
+        /// The second of the call to play from. Nil when the task has no moment and no line says the item.
         public var at: TimeInterval?
-        /// The owner's open task that is this item, which the page can mark done.
+        /// True for the moment of the owner's task. False for a line that holds the item's words, which the page
+        /// calls "about".
+        public var atIsExact: Bool
+        /// The owner's task that is this item, which the page can mark done.
         public var commitment: Commitment?
     }
 
@@ -75,19 +85,31 @@ public struct MeetingPrep: Sendable, Equatable {
         public var commitment: Commitment
         /// The saved person it was promised to, when the written name is surely theirs.
         public var person: String?
+        /// True when the task's meeting is still there and the task has a moment in it to play.
+        public var playable: Bool
     }
 
     public struct LastTime: Sendable, Equatable {
         public var meeting: Earlier
         /// False when the invite has no series and this is the last meeting with its people.
         public var inSeries: Bool
+        /// With no series: the invited people who spoke in it.
+        public var with: [String]
+        /// False for a meeting with no summary: its decisions and action items are not known, not none.
+        public var hasSummary: Bool
         public var headline: String?
         public var decisions: [Decision]
         public var moreDecisions: Int
         public var items: [Item]
         public var moreItems: Int
-        /// How many of all the open items are the note owner's.
+        /// The items on the page and behind "and N more".
+        public var total: Int { items.count + moreItems }
+        /// Of all of them: the note owner's, the ones known to be open, and the ones known to be done.
+        public var owners: Int
         public var ownersOpen: Int
+        public var ownersDone: Int
+        /// Items left off because their owner is surely not invited. The page says how many.
+        public var absent: Int
     }
 
     /// An earlier meeting of the series in one line.
@@ -125,6 +147,12 @@ public struct MeetingPrep: Sendable, Equatable {
     /// The owner's open tasks for these people from any meeting, oldest first.
     public var promises: [Promise]
     public var morePromises: Int
+    /// False when the tasks could not be read: then no item has a state and there are no promises, and the page
+    /// says so instead of "no tasks".
+    public var tasksKnown: Bool
+    /// False for the page's first step, made before the history of talk was read: no person has a fact and the
+    /// series has no usual numbers yet.
+    public var hasFacts: Bool
     public var series: Series?
     /// The kind of the series, such as "Weekly sync": its last meeting's.
     public var kind: String?
@@ -136,17 +164,24 @@ public struct MeetingPrep: Sendable, Equatable {
     /// One earlier meeting is a last time, not yet a series.
     static let seriesMinimum = 2
     static let trendPoints = 12
+    /// An interval between meetings is said in the present only while the last meeting is this many intervals old
+    /// at most.
+    static let staleIntervals = 3.0
 
     /// `records` and `facts` may hold every meeting: only the written ones that began before this one count.
-    public init(meeting: UpcomingMeeting, owner: String, records: [CallRecord], facts: [MeetingFacts], commitments: [Commitment],
-                people directory: PersonDirectory, coach: [String: CoachPerson] = [:], now: Date = Date()) {
-        let invited = Self.invited(meeting.attendees, owner: owner, directory: directory)
+    /// `facts` is nil before the history of talk is read, and `commitments` is nil when the tasks cannot be read.
+    /// `keep` are tasks that were marked done on the page, which stay on it. `ownerEmails` are the owner's own
+    /// addresses, when known.
+    public init(meeting: UpcomingMeeting, owner: String, records: [CallRecord], facts: [MeetingFacts]?, commitments: [Commitment]?,
+                people directory: PersonDirectory, coach: [String: CoachPerson] = [:], ownerEmails: [String] = [], keep: Set<UUID> = [],
+                now: Date = Date()) {
+        let invited = Self.invited(meeting.attendees, owner: owner, directory: directory, ownerEmails: ownerEmails)
         self.invited = invited
+        tasksKnown = commitments != nil
+        hasFacts = facts != nil
         let known = invited.compactMap(\.person)
-        // Everyone of the meeting who has a name, for reading a short name in an item or a promise.
-        let names = invited.compactMap { $0.person ?? ($0.written.contains("@") ? nil : $0.written) }
         let past = records.filter { $0.status == .written && $0.start < meeting.start }.sorted { $0.start > $1.start }
-        let history = facts.filter { $0.start < meeting.start }.sorted { $0.start > $1.start }
+        let history = facts?.filter { $0.start < meeting.start }.sorted { $0.start > $1.start }
 
         let size = MeetingFacts.Size(voices: invited.count + 1)
         let since = now.addingTimeInterval(-Self.recentDays * 86_400)
@@ -154,70 +189,97 @@ public struct MeetingPrep: Sendable, Equatable {
         people = known.map { name in
             let shared = past.filter { $0.speakerNames.values.contains(name) }
             return Person(name: name, lastMet: shared.first.map(Earlier.init), recent: shared.filter { $0.start >= since }.count, meetings: shared.count,
-                          fact: Self.fact(about: name, in: history, series: key, size: size, met: shared.map(\.start)))
+                          fact: history.flatMap { Self.fact(about: name, in: $0, series: key, size: size, met: shared.map(\.start), now: now) })
         }
 
-        let series = meeting.earlier(in: past)
-        self.series = Self.series(series, facts: history.filter { $0.series == key })
+        let series = Self.series(of: meeting, invited: invited, in: past, owner: owner, directory: directory)
+        let seriesIDs = Set(series.map(\.id))
+        self.series = Self.series(series, facts: history?.filter { seriesIDs.contains($0.id) } ?? [])
         kind = series.first?.kind?.nonBlank
 
-        let last = series.first ?? Self.lastMeeting(with: known, in: past)
-        var items: [Item] = []
-        if let last {
-            let open = Self.openItems(of: last, owner: owner, names: names, directory: directory, commitments: commitments)
-            items = Self.withMoments(Array(open.prefix(Self.shown)), in: last)
-            lastTime = LastTime(meeting: Earlier(last), inSeries: !series.isEmpty, headline: last.headline?.nonBlank,
-                                decisions: Array(last.decisions.prefix(Self.shown)), moreDecisions: max(0, last.decisions.count - Self.shown),
-                                items: items, moreItems: max(0, open.count - Self.shown), ownersOpen: open.filter(\.isOwners).count)
+        let people = Invite(invited)
+        let last = series.first.map { ($0, [String]()) } ?? Self.lastMeeting(with: known, of: invited.count, in: past)
+        var used: Set<UUID> = []
+        if let (record, with) = last {
+            let all = Self.items(of: record, owner: owner, invite: people, directory: directory, commitments: commitments ?? [])
+            used = Set(all.items.compactMap(\.commitment?.id))
+            lastTime = LastTime(meeting: Earlier(record), inSeries: !series.isEmpty, with: with, hasSummary: record.summary != nil,
+                                headline: record.headline?.nonBlank,
+                                decisions: Array(record.decisions.prefix(Self.shown)), moreDecisions: max(0, record.decisions.count - Self.shown),
+                                items: Self.withMoments(Array(all.items.prefix(Self.shown)), in: record), moreItems: max(0, all.items.count - Self.shown),
+                                owners: all.items.filter(\.isOwners).count, ownersOpen: all.items.filter { $0.state == .open }.count,
+                                ownersDone: all.items.filter { $0.state == .done }.count, absent: all.absent)
         } else {
             lastTime = nil
         }
 
-        let promises = Self.promises(commitments, names: names, series: Set(series.map(\.id)), shown: Set(items.compactMap(\.commitment?.id)))
-        self.promises = promises.prefix(Self.shown).map { c in Promise(commitment: c, person: c.to.flatMap { directory.link(for: $0, in: names) }) }
+        let byID = Dictionary(past.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let promises = Self.promises(commitments ?? [], invite: people, calls: byID, series: seriesIDs, used: used, keep: keep, owner: owner, directory: directory)
+        self.promises = promises.prefix(Self.shown).map { c in
+            Promise(commitment: c, person: c.to.flatMap { directory.link(for: $0) }, playable: c.at != nil && c.callID.map { byID[$0] != nil } == true)
+        }
         morePromises = max(0, promises.count - Self.shown)
         self.coach = PrepCoach(people: known, coach: coach)
     }
 
     // MARK: In one line
 
-    /// What is open before this meeting, in one or two sentences. Nil with no earlier meeting and nothing owed.
+    /// What is known before this meeting, in one or two sentences: how many action items the last time had and
+    /// which of the owner's are open, and the owner's open tasks for these people. Another person's item is
+    /// counted and never called open. Nil with no earlier meeting and nothing owed.
     public var inOneLine: String? {
         let one = invited.count == 1 ? invited[0].name : nil
         let who = one.map { $0.contains("@") ? "this person" : String($0.split(separator: " ").first ?? Substring($0)) } ?? "these people"
         let owed = promises.count + morePromises
         let tasks = owed == 0 ? nil : "You have \(owed) open \(owed == 1 ? "task" : "tasks") for \(who)."
         guard let last = lastTime else { return tasks }
-        let from = last.inSeries ? "last time" : "your last meeting with \(who)"
-        let open = last.items.count + last.moreItems, mine = last.ownersOpen
-        guard open > 0 else {
-            return tasks.map { "Nothing is open from \(from). \($0)" } ?? "Nothing is open from \(from), and you have no open tasks for \(who)."
+        let from = last.inSeries ? "Last time" : "Your last meeting with \(who)"
+        func joined(_ sentence: String) -> String { tasks.map { "\(sentence) \($0)" } ?? sentence }
+        guard last.hasSummary else { return joined("\(from) has no summary.") }
+        let n = last.total
+        guard n > 0 else { return joined("\(from) had no action items.") }
+        var yours = ""
+        if last.owners > 0 {
+            // The state is said only when every one of the owner's items has the same known state.
+            let state = last.ownersOpen == last.owners ? " and still open" : last.ownersDone == last.owners ? " and done" : ""
+            let mixed = state.isEmpty && last.ownersOpen > 0 ? ", \(last.ownersOpen) still open" : ""
+            yours = last.owners == n ? (n == 1 ? ", yours\(state)" : ", all yours\(state)\(mixed)") : ", \(last.owners) of them yours\(state)\(mixed)"
         }
-        let yours = mine == 0 ? "" : mine == open ? (open == 1 ? "; it is yours" : "; all are yours") : ", \(mine) of them yours"
-        let items = "\(open) \(open == 1 ? "item is" : "items are") open from \(from)\(yours)."
-        return tasks.map { "\(items) \($0)" } ?? items
+        return joined("\(from): \(n) action \(n == 1 ? "item" : "items")\(yours).")
     }
 
     // MARK: Invited
 
     /// The invite's entries without the owner, one per person: a person invited by name and by email is one entry.
-    public static func invited(_ attendees: [String], owner: String, directory: PersonDirectory) -> [Invited] {
+    ///
+    /// The owner's own entry is their saved profile, their name, or one of their addresses. With no address of
+    /// theirs known, an address of nobody saved that fits their whole name is theirs; a first name alone is not
+    /// enough, and an address that fits is never theirs when it is a saved person's.
+    public static func invited(_ attendees: [String], owner: String, directory: PersonDirectory, ownerEmails: [String] = []) -> [Invited] {
         let names = attendees.filter { !$0.contains("@") }
+        let same = { (name: String) in PeopleDuplicates.normalized(name) == PeopleDuplicates.normalized(owner) }
+        let own = Set((ownerEmails + directory.people.filter { same($0.name) }.compactMap(\.email)).map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty })
         var seen: Set<String> = []
         var out: [Invited] = []
         for a in attendees {
             let written = a.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !written.isEmpty else { continue }
             let person = directory.link(for: written, in: names)
-            let isEmail = written.contains("@")
-            let same = { (name: String) in PeopleDuplicates.normalized(name) == PeopleDuplicates.normalized(owner) }
-            // The owner's own entry: their saved profile, their name, or an address that fits their name.
-            if person.map(same) == true || same(written) || (isEmail && CalendarInfo.isOwnersAddress(written, ownerName: owner)) { continue }
+            if person.map(same) == true || same(written) { continue }
+            if written.contains("@"), person == nil, own.isEmpty ? fitsWholeName(written, of: owner) : own.contains(written.lowercased()) { continue }
             let name = person ?? written
             guard seen.insert(PeopleDuplicates.normalized(name)).inserted else { continue }
             out.append(Invited(written: written, name: name, person: person))
         }
         return out
+    }
+
+    /// `CalendarInfo.isOwnersAddress` without the form that is the first name alone: "dana@" is many people.
+    static func fitsWholeName(_ address: String, of owner: String) -> Bool {
+        let first = owner.lowercased().split(separator: " ").first.map(String.init) ?? ""
+        let local = address.lowercased().split(separator: "@").first.map { $0.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: "_", with: "") } ?? ""
+        return local != first && CalendarInfo.isOwnersAddress(address, ownerName: owner)
     }
 
     // MARK: The people
@@ -226,8 +288,9 @@ public struct MeetingPrep: Sendable, Equatable {
     ///
     /// Before a 1:1: the owner's usual part of the talk in their 1:1s. Before a group: the person's usual part in
     /// this series, then in meetings of this size, then the 1:1s. A talk share follows the size of a meeting, so
-    /// meetings of other sizes say nothing about it. With too few of each: how often the two meet.
-    static func fact(about name: String, in history: [MeetingFacts], series: String, size: MeetingFacts.Size, met: [Date]) -> Fact? {
+    /// meetings of other sizes say nothing about it. With too few of each: how often the two meet, while they
+    /// still do (the last meeting is not older than `staleIntervals` of their usual interval).
+    static func fact(about name: String, in history: [MeetingFacts], series: String, size: MeetingFacts.Size, met: [Date], now: Date) -> Fact? {
         typealias A = MeetingAnalytics
         func usual(_ values: [Double]) -> A.Usual? { A.Usual(Array(values.prefix(A.History.limit))) }
         /// "Usually talks 30 to 40% of the time in this series", or, from fewer than five meetings, "Talked 30
@@ -254,7 +317,9 @@ public struct MeetingPrep: Sendable, Equatable {
         // The same number as a person's profile: the average time from one meeting to the next.
         let dates = met.sorted()
         guard dates.count >= A.Usual.minimumSamples, let first = dates.first, let last = dates.last else { return nil }
-        let days = max(1, Int((last.timeIntervalSince(first) / 86_400 / Double(dates.count - 1)).rounded()))
+        let interval = last.timeIntervalSince(first) / Double(dates.count - 1)
+        guard now.timeIntervalSince(last) <= max(interval, 86_400) * staleIntervals else { return nil }
+        let days = max(1, Int((interval / 86_400).rounded()))
         return Fact(text: days == 1 ? "You meet about every day" : "You meet about every \(days) days",
                     basis: "from \(dates.count) meetings")
     }
@@ -278,14 +343,40 @@ public struct MeetingPrep: Sendable, Equatable {
                       moreEarlier: max(0, records.count - 1 - shown))
     }
 
-    /// With no series: the last meeting in which the known invited people spoke. All of them when they are one
-    /// or two; of more, two in three, so one person who was away does not hide the meeting.
-    static func lastMeeting(with known: [String], in past: [CallRecord]) -> CallRecord? {
-        guard !known.isEmpty else { return nil }
-        let needed = known.count <= 2 ? known.count : Int((Double(known.count) * 2 / 3).rounded(.up))
-        return past.first { r in
-            let spoke = Set(r.speakerNames.values)
-            return known.filter(spoke.contains).count >= needed
+    /// The earlier meetings of this invite's series, newest first.
+    ///
+    /// A title alone is not a series: two invites named "1:1" are two series. A meeting belongs when it has this
+    /// title (from the calendar or the owner, as in `MeetingFacts.series`) and its people are this invite's: at
+    /// least half of the invited people were invited to it or spoke in it, or it ran on this invite's link and at
+    /// least one of them did. With no people to compare on one side, the title decides.
+    static func series(of meeting: UpcomingMeeting, invited: [Invited], in past: [CallRecord], owner: String, directory: PersonDirectory) -> [CallRecord] {
+        let key = PeopleDuplicates.normalized(meeting.title)
+        let link = meeting.link.map { ($0.absoluteString.removingPercentEncoding ?? $0.absoluteString).lowercased() }
+        return past.filter { r in
+            guard r.titleSource == .calendar || r.titleSource == .custom, PeopleDuplicates.normalized(r.title) == key else { return false }
+            let theirs = Self.invited(r.attendees, owner: owner, directory: directory).map { PeopleDuplicates.normalized($0.name) }
+            let voices = r.speakerNames.values.filter { !$0.hasPrefix("Speaker ") && PeopleDuplicates.normalized($0) != PeopleDuplicates.normalized(owner) }
+            let there = Set(theirs + voices.map(PeopleDuplicates.normalized))
+            // An address of nobody saved can only be found among the addresses of the other invite.
+            let ours = Set(invited.filter { $0.person != nil || !$0.written.contains("@") || !r.attendees.isEmpty }.map { PeopleDuplicates.normalized($0.name) })
+            guard !ours.isEmpty, !there.isEmpty else { return true }
+            let shared = ours.intersection(there).count
+            let sameLink = r.meetingID.flatMap { id in link.map { $0.contains(id.lowercased()) } } == true
+            return shared * 2 >= ours.count || (sameLink && shared > 0)
         }
+    }
+
+    /// With no series: the last meeting in which the known invited people spoke, and who of them did. They must
+    /// be at least half of the invite, and all of them when they are one or two: a meeting with one of five
+    /// invited people is not "your last meeting with these people".
+    static func lastMeeting(with known: [String], of invited: Int, in past: [CallRecord]) -> (CallRecord, [String])? {
+        guard !known.isEmpty else { return nil }
+        let needed = max((invited + 1) / 2, known.count <= 2 ? known.count : 0)
+        for r in past {
+            let spoke = Set(r.speakerNames.values)
+            let with = known.filter(spoke.contains)
+            if with.count >= needed { return (r, with) }
+        }
+        return nil
     }
 }

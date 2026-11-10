@@ -43,10 +43,11 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
         return rules.contains { $0.key == key && $0.covers(meeting.start) } ? .skipThisMeeting : .record
     }
 
-    /// A choice made now starts a list the app can read, so the block for the damaged one ends at once.
+    /// A choice made now starts a list the app can read, so the block for the damaged one ends at once. A choice
+    /// for a meeting with no link to know it by cannot be kept: it changes nothing and ends no block.
     public mutating func set(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
-        unreadable = false
         guard let key = Self.key(title: meeting.title, link: meeting.link) else { return }
+        unreadable = false
         rules.removeAll { $0.key == key && $0.covers(meeting.start) }
         switch choice {
         case .record: break

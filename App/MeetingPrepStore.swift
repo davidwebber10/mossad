@@ -3,9 +3,15 @@ import MossadCore
 
 /// What an upcoming meeting's page shows (`MeetingPrep`), worked out off the main thread and kept.
 ///
-/// A page's numbers are kept under a `Key` of cheap stamps and counters. One task makes the numbers of a meeting,
-/// and a second asker waits for it. The facts of the earlier meetings come from the cache that the meeting page's
-/// Analytics tab fills, so a meeting is read for its talk time one time for both.
+/// A page is made in two steps. The first has everything that the records and the tasks say (last time, the
+/// action items, the promises): it needs no history of talk and comes at once. The second adds each person's
+/// fact and the series' usual numbers, from the facts of every earlier meeting. Those come from the cache that
+/// the meeting page's Analytics tab fills, so a meeting is read for its talk time one time for both; the first
+/// read after a launch takes the longest.
+///
+/// The finished page is kept under a `Key` of cheap stamps and counters. One task makes the page of a meeting,
+/// and a second asker waits for it. A page made while the tasks could not be read is never kept: the next ask
+/// reads them again.
 @MainActor
 final class MeetingPrepStore {
     static let shared = MeetingPrepStore()
@@ -23,13 +29,16 @@ final class MeetingPrepStore {
         var meetings: Int
         /// "The last 90 days" moves with the day.
         var day: Int
+        /// Tasks marked done on the page, which stay on it.
+        var keep: Set<UUID>
 
         @MainActor
-        init(_ meeting: UpcomingMeeting, controller: AppController) {
+        init(_ meeting: UpcomingMeeting, keep: Set<UUID> = [], controller: AppController) {
             var invite = Hasher()
             invite.combine(meeting.id)
             invite.combine(meeting.end)
             invite.combine(meeting.attendees)
+            invite.combine(meeting.link)
             var people = Hasher()
             for p in controller.library.profiles { people.combine(p.name); people.combine(p.email) }
             self.meeting = invite.finalize()
@@ -39,37 +48,72 @@ final class MeetingPrepStore {
             commitments = controller.commitmentsVersion
             meetings = controller.meetingsVersion
             day = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)
+            self.keep = keep
         }
     }
 
     private static let limit = 12
-    private var entries: [String: (key: Key, value: MeetingPrep)] = [:]
+    private var entries: [String: (key: Key, value: MeetingPrep, asked: Int)] = [:]
     /// Meeting ids, the one used last at the end.
     private var order: [String] = []
     private var running: [String: (key: Key, task: Task<MeetingPrep, Never>)] = [:]
+    /// Counts the asks, so a page that was asked for earlier never replaces one asked for later.
+    private var asks = 0
 
     func cached(_ id: String, key: Key) -> MeetingPrep? {
         entries[id].flatMap { $0.key == key ? $0.value : nil }
     }
 
-    /// The page for `meeting`: from the cache, from the task that is making it, or made now on another thread.
+    /// Everything a page is made from, taken on the main actor.
+    private struct Inputs: Sendable {
+        let meeting: UpcomingMeeting
+        let owner: String
+        let records: [CallRecord]
+        let profiles: [VoiceProfile]
+        let coach: [String: CoachPerson]
+        let ownerEmails: [String]
+        let commitments: URL
+        let keep: Set<UUID>
+
+        func prep(facts: [MeetingFacts]?) -> MeetingPrep {
+            // Nil when the file is there and cannot be read: the page then says so, not "no tasks".
+            MeetingPrep(meeting: meeting, owner: owner, records: records, facts: facts, commitments: CommitmentBook.peek(in: commitments)?.items,
+                        people: PersonDirectory(profiles: profiles), coach: coach, ownerEmails: ownerEmails, keep: keep)
+        }
+    }
+
+    private func inputs(_ meeting: UpcomingMeeting, key: Key, controller: AppController) -> Inputs {
+        // The coach's memory as the other pages show it: read one time for each change of it.
+        Inputs(meeting: meeting, owner: key.owner, records: controller.meetings, profiles: controller.library.profiles,
+               coach: controller.shownCoachProfile.people, ownerEmails: [UserDefaults.standard.string(forKey: "ownerEmail") ?? ""],
+               commitments: controller.paths.commitments, keep: key.keep)
+    }
+
+    /// The page's first step: what the records and the tasks say, with no history of talk. Never kept.
+    func first(for meeting: UpcomingMeeting, key: Key, controller: AppController) async -> MeetingPrep {
+        if let hit = cached(meeting.id, key: key) { return hit }
+        let inputs = inputs(meeting, key: key, controller: controller)
+        return await Task.detached(priority: .userInitiated) { inputs.prep(facts: nil) }.value
+    }
+
+    /// The whole page for `meeting`: from the cache, from the task that is making it, or made now on another thread.
     func prep(for meeting: UpcomingMeeting, key: Key, controller: AppController) async -> MeetingPrep {
         if let hit = cached(meeting.id, key: key) { return hit }
         if let now = running[meeting.id], now.key == key { return await now.task.value }
-        let records = controller.meetings, paths = controller.paths, profiles = controller.library.profiles
-        // The coach's memory as the other pages show it: read one time for each change of it.
-        let facts = MeetingAnalyticsStore.shared.facts, coach = controller.shownCoachProfile.people
-        let task = Task.detached(priority: .userInitiated) { () -> MeetingPrep in
-            let book = (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook()
-            return MeetingPrep(meeting: meeting, owner: key.owner, records: records, facts: facts.facts(for: records, owner: key.owner),
-                               commitments: book.items, people: PersonDirectory(profiles: profiles), coach: coach)
+        asks += 1
+        let asked = asks
+        let inputs = inputs(meeting, key: key, controller: controller), facts = MeetingAnalyticsStore.shared.facts
+        let task = Task.detached(priority: .userInitiated) {
+            inputs.prep(facts: facts.facts(for: inputs.records, owner: inputs.owner))
         }
         running[meeting.id] = (key, task)
         let made = await task.value
         if running[meeting.id]?.key == key { running[meeting.id] = nil }
-        // A later ask can have finished first; its page is newer.
-        if let newer = entries[meeting.id], newer.key.meetings > key.meetings { return made }
-        entries[meeting.id] = (key, made)
+        // A later ask can have finished first; its page is newer. A page with no tasks to read is not the truth
+        // for long.
+        if let newer = entries[meeting.id], newer.asked > asked { return made }
+        guard made.tasksKnown else { return made }
+        entries[meeting.id] = (key, made, asked)
         order.removeAll { $0 == meeting.id }
         order.append(meeting.id)
         while order.count > Self.limit { entries[order.removeFirst()] = nil }

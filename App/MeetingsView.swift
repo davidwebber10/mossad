@@ -18,6 +18,7 @@ struct MeetingsView: View {
     /// The upcoming invite opened full-pane from Calendar mode.
     @State private var openedUpcoming: UpcomingMeeting?
     @State private var openedFrom = ""
+    @State private var lastInvite = InviteHolder()
     @StateObject private var calendarState = CalendarState()
 
     private var results: [CallRecord] {
@@ -127,6 +128,19 @@ struct MeetingsView: View {
 
     // MARK: List
 
+    /// The invite whose page is open in the list view. An invite leaves the list when its call starts to record.
+    /// Its page stays open until the recording or the invite ends: the first minutes of the call are when the
+    /// open items and the promises are needed. The live call is one click away in the list.
+    private var openInvite: UpcomingMeeting? {
+        guard let id = controller.selectedMeetingID else { return nil }
+        if let m = controller.upcoming.first(where: { $0.id == id }) {
+            lastInvite.meeting = m
+            return m
+        }
+        guard let m = lastInvite.meeting, m.id == id, m.end > Date(), controller.meetings.contains(where: { $0.status == .recording }) else { return nil }
+        return m
+    }
+
     private var splitBody: some View {
         HStack(spacing: 0) {
             ListColumn("Meetings", widthKey: "meetings") {
@@ -136,7 +150,7 @@ struct MeetingsView: View {
                             selection: $controller.selectedMeetingID, deleting: $deleting)
             }
             DetailColumn { toolbar } content: {
-                if let id = controller.selectedMeetingID, let m = controller.upcoming.first(where: { $0.id == id }) {
+                if let m = openInvite {
                     UpcomingDetailView(meeting: m)
                 } else if let r = selected {
                     MeetingDetailView(record: r, style: .split, deleting: $deleting)
@@ -264,6 +278,12 @@ extension CallRecord: @retroactive Identifiable {
 }
 
 /// "59 min", "1 h 45 min", at least "1 min".
+/// The invite that was open last, kept between body passes. A class, so setting it during a body pass does not
+/// count as a state change.
+private final class InviteHolder {
+    var meeting: UpcomingMeeting?
+}
+
 func durationLabel(_ seconds: TimeInterval) -> String {
     let minutes = max(1, Int(seconds / 60))
     return minutes < 60 ? "\(minutes) min" : minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes / 60) h \(minutes % 60) min"

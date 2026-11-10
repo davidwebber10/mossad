@@ -118,6 +118,16 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
         return out
     }
 
+    /// The book for a page that only shows it: a missing file is an empty book, and a file that cannot be read is
+    /// nil, not empty. So is a book that was set aside and still waits for the other device's copy. Unlike
+    /// `load`, it never moves a damaged file aside; that is for the code that owns the book.
+    public static func peek(in dir: URL) -> CommitmentBook? {
+        let file = dir.appendingPathComponent(fileName)
+        guard !StoredFile.awaitsMerge(file) else { return nil }
+        guard FileManager.default.fileExists(atPath: file.path) else { return CommitmentBook() }
+        return (try? Data(contentsOf: file)).flatMap { try? JSONDecoder.coach.decode(CommitmentBook.self, from: $0) }
+    }
+
     public static func load(from dir: URL) throws -> CommitmentBook {
         // A file that does not decode is moved aside and throws, so a save after it cannot replace the book.
         try StoredFile.load(CommitmentBook.self, from: dir.appendingPathComponent(fileName), decoder: .coach, recovery: .synced) ?? CommitmentBook()

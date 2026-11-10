@@ -407,6 +407,10 @@ final class DataSafetyTests: XCTestCase {
 
         var damaged = NoRecordBook.load(from: dir)
         XCTAssertTrue(damaged.unreadable)
+        // A choice that cannot be kept (the meeting has no link to know it by) changes nothing, so it does not end
+        // the block either.
+        damaged.set(.record, for: UpcomingMeeting(title: "No link", start: now, end: now.addingTimeInterval(1800), attendees: [], platform: .meet, link: nil))
+        XCTAssertTrue(damaged.unreadable)
         damaged.reset()
         XCTAssertFalse(damaged.unreadable)
         try damaged.save(to: dir)

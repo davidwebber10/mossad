@@ -235,7 +235,7 @@ private struct DetailTabs: View {
         // their own control and nothing shows through them.
         .background(Palette.raised, in: Capsule())
         .chromeGlass(in: Capsule(), fill: .clear, shadow: .floating)
-        .overlay(Capsule().strokeBorder(Palette.bar, lineWidth: 1))
+        .overlay(Capsule().strokeBorder(Palette.bar, lineWidth: 1).allowsHitTesting(false))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Meeting tabs")
     }

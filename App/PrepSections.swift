@@ -4,16 +4,20 @@ import SwiftUI
 // MARK: Shared parts
 
 /// A moment of an earlier meeting: it opens that meeting and plays from there, as the Analytics tab's moments do.
+/// A moment that is only the line with the item's words reads "about", and its tooltip says why.
 private struct PrepMoment: View {
     @EnvironmentObject var controller: AppController
     let callID: String
     let at: TimeInterval
+    /// What plays, for VoiceOver: several moments on one page must not sound the same.
+    let subject: String
+    var exact = true
 
     var body: some View {
         Button { controller.openMeeting(callID, at: at) } label: {
             HStack(spacing: 5) {
                 IconImage(.play, size: 8)
-                Text(clock(at)).monospacedDigit()
+                Text(exact ? clock(at) : "about \(clock(at))").monospacedDigit()
             }
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(Palette.accent)
@@ -21,8 +25,9 @@ private struct PrepMoment: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
-        .help("Open the meeting and play from \(clock(at))")
-        .accessibilityLabel("Play from \(clock(at))")
+        .help(exact ? "Open the meeting and play from \(clock(at))"
+              : "Open the meeting and play the line that has these words, at \(clock(at)). It can be another moment than the one that made the item.")
+        .accessibilityLabel("Play \(subject) from \(exact ? "" : "about ")\(clock(at))")
     }
 }
 
@@ -49,18 +54,20 @@ private struct PrepMore: View {
     }
 }
 
-/// One open item or task: a mark, what it is with who it is for or whose it is, where it comes from, when it is
-/// due, and its moment. A task of the owner's has the ring that marks it done; an action item has no state to
-/// change, so its mark is a quiet dot.
+/// One action item or task: a mark, what it is with who it is for or whose it is, where it comes from, when it is
+/// due, and its moment. A task of the owner's has the ring that marks it done, and shows as done once it is. An
+/// action item with no task has no state, so its mark is a quiet dot.
 private struct PrepRow<Who: View>: View {
-    @EnvironmentObject var controller: AppController
     let text: String
     var commitment: Commitment?
     /// Under the text: "Dana / Sam, Oct 13".
     var source: String?
-    var moment: (callID: String, at: TimeInterval)?
+    var moment: (callID: String, at: TimeInterval, exact: Bool)?
+    var toggle: (Commitment) -> Void = { _ in }
     /// After the text: "· Sam C.", "· for Jo". On a line of its own, when both do not fit, it has no dot.
     @ViewBuilder var who: (_ dot: Bool) -> Who
+
+    private var done: Bool { commitment?.done != nil }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -68,11 +75,11 @@ private struct PrepRow<Who: View>: View {
             VStack(alignment: .leading, spacing: 1) {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text(text).lineLimit(1).textSelection(.enabled)
+                        words.lineLimit(1)
                         who(true).foregroundStyle(Palette.secondary).fixedSize()
                     }
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(text).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        words.fixedSize(horizontal: false, vertical: true)
                         who(false).font(.system(size: 12)).foregroundStyle(Palette.secondary)
                     }
                 }
@@ -81,20 +88,26 @@ private struct PrepRow<Who: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                 if let commitment { CommitmentDue(commitment: commitment) }
-                if let moment { PrepMoment(callID: moment.callID, at: moment.at).padding(.top, 1) }
+                if let moment { PrepMoment(callID: moment.callID, at: moment.at, subject: text, exact: moment.exact).padding(.top, 1) }
             }
         }
+    }
+
+    private var words: some View {
+        Text(text)
+            .strikethrough(done, color: Palette.secondary)
+            .foregroundStyle(done ? Palette.secondary : Palette.ink)
+            .textSelection(.enabled)
     }
 
     @ViewBuilder
     private var mark: some View {
         if let commitment {
-            CommitmentRing(commitment: commitment) { controller.toggleDone(commitment.id) }
-                .help("Mark this task done")
+            CommitmentRing(commitment: commitment) { toggle(commitment) }
+                .help(done ? "Mark this task not done" : "Mark this task done")
         } else {
             Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 8, height: 8)
                 .frame(width: 16, height: 16).padding(.top, 1)
-                .help("An action item has no state of its own: Mossad cannot know whether this one is done.")
                 .accessibilityHidden(true)
         }
     }
@@ -102,21 +115,24 @@ private struct PrepRow<Who: View>: View {
 
 // MARK: Last time
 
-/// The last meeting of the series (or, with no series, with these people): its one line, its decisions, and the
-/// action items that are still open, each with its owner and its moment.
+/// The last meeting of the series (or, with no series, with these people): its one line, its decisions, and its
+/// action items. Only the owner's own tasks have a state; the page says so in words under the list.
 struct PrepLastTime: View {
     @EnvironmentObject var controller: AppController
     let last: MeetingPrep.LastTime
+    let toggle: (Commitment) -> Void
 
     var body: some View {
         MeetingAnalyticsGroup("Last time") {
             VStack(alignment: .leading, spacing: 5) {
                 if let headline = last.headline {
                     Text(headline).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                } else if !last.hasSummary {
+                    Text("Last time has no summary, so its decisions and action items are not known.")
+                        .foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 FlowLayout(spacing: 6) {
-                    Text(last.inSeries ? dayWord(last.meeting.start) : "\(last.meeting.title) · \(dayWord(last.meeting.start))")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Text(source).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
                     PrepMore(text: "Open the meeting", help: "Open \(last.meeting.title)") { controller.openMeeting(last.meeting.id) }
                 }
             }
@@ -129,12 +145,13 @@ struct PrepLastTime: View {
                         HStack(alignment: .firstTextBaseline, spacing: timed ? 10 : 0) {
                             Group {
                                 if let at = d.at {
+                                    // The same quiet time as the summary's decisions.
                                     Button { controller.openMeeting(last.meeting.id, at: at) } label: {
                                         Text(clock(at)).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.tertiary).contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
                                     .help("Open the meeting and play from \(clock(at))")
-                                    .accessibilityLabel("Play from \(clock(at))")
+                                    .accessibilityLabel("Play \(d.text) from \(clock(at))")
                                 }
                             }
                             .frame(width: timed ? 44 : 0, alignment: .leading)
@@ -149,11 +166,11 @@ struct PrepLastTime: View {
                 .textSelection(.enabled)
             }
         }
-        if !last.items.isEmpty {
-            MeetingAnalyticsGroup("Open items") {
+        if !last.items.isEmpty || last.absent > 0 {
+            MeetingAnalyticsGroup("Action items from last time") {
                 VStack(alignment: .leading, spacing: 7) {
                     ForEach(last.items) { item in
-                        PrepRow(text: item.task, commitment: item.commitment, moment: item.at.map { (item.callID, $0) }) { dot in
+                        PrepRow(text: item.task, commitment: item.commitment, moment: item.at.map { (item.callID, $0, item.atIsExact) }, toggle: toggle) { dot in
                             if item.isOwners {
                                 Text(dot ? "· You" : "You")
                             } else if let owner = item.owner {
@@ -168,9 +185,27 @@ struct PrepLastTime: View {
                         PrepMore(text: "and \(last.moreItems) more", help: "Open \(last.meeting.title)") { controller.openMeeting(last.meeting.id) }
                             .padding(.leading, 26)
                     }
+                    if last.absent > 0 {
+                        Text("\(last.absent) more \(last.absent == 1 ? "belongs to a person who is" : "belong to people who are") not invited to this meeting.")
+                            .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.leading, 26)
+                    }
+                    // In words, one time, and for VoiceOver too: a dot's tooltip is no place for it.
+                    if last.items.contains(where: { $0.state == nil }) {
+                        Text("Mossad knows the state of your own tasks only. An item with a dot can be done.")
+                            .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary).padding(.leading, 26).padding(.top, 1)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
+    }
+
+    /// "Yesterday" in a series. With no series the meeting and who of the invited people spoke in it, so "your
+    /// last meeting with these people" says which people: "Budget review · Oct 28 · with Sam Carter and Jo Park".
+    private var source: String {
+        let day = dayWord(last.meeting.start)
+        guard !last.inSeries else { return day }
+        return "\(last.meeting.title) · \(day) · with \(ListFormatter.localizedString(byJoining: last.with))"
     }
 }
 
@@ -181,12 +216,15 @@ struct PrepPromises: View {
     @EnvironmentObject var controller: AppController
     let promises: [MeetingPrep.Promise]
     let more: Int
+    let toggle: (Commitment) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ForEach(promises) { p in
                 let c = p.commitment
-                PrepRow(text: c.text, commitment: c, source: c.sourceText, moment: c.callID.flatMap { id in c.at.map { (id, $0) } }) { dot in
+                // Only a moment of a meeting that is still there: a link to a deleted one opens nothing.
+                PrepRow(text: c.text, commitment: c, source: c.sourceText,
+                        moment: p.playable ? c.callID.flatMap { id in c.at.map { (id, $0, true) } } : nil, toggle: toggle) { dot in
                     if let to = c.to {
                         HStack(spacing: 5) {
                             Text(dot ? "· for" : "For")
@@ -216,7 +254,7 @@ struct PrepSeries: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Finding("Met \(series.meetings) times since \(series.since.formatted(.dateTime.month(.abbreviated).day())); this one is planned for \(durationLabel(planned)).")
+            Finding("Recorded \(series.meetings) times since \(since); this one is planned for \(durationLabel(planned)).")
             let tiles = self.tiles
             if !tiles.isEmpty {
                 Grid(alignment: .topLeading, horizontalSpacing: 24, verticalSpacing: 18) {
@@ -255,19 +293,25 @@ struct PrepSeries: View {
         .hairline(.top)
     }
 
+    /// "Sep 7", with the year for a series that began in another one.
+    private var since: String {
+        Calendar.current.isDate(series.since, equalTo: Date(), toGranularity: .year) ? series.since.formatted(.dateTime.month(.abbreviated).day())
+            : series.since.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
     private var tiles: [SeriesTile] {
         var out: [SeriesTile] = []
         if let u = series.length {
-            out.append(SeriesTile(title: "Usual length", value: hours(u.median), detail: usual(MeetingFindings.range(.length, u), u),
+            out.append(SeriesTile(title: u.isFirm ? "Usual length" : "Length", value: hours(u.median), detail: usual(MeetingFindings.range(.length, u), u),
                                   line: series.lengths, span: nil))
         }
         if let u = series.ownerShare {
             out.append(SeriesTile(title: "Your talk share", value: percentText(u.median), detail: usual(MeetingFindings.range(.talkShare, u), u), line: series.shares, span: 0.2))
         }
         if series.planned > 0 {
-            // The recording begins when the owner joins and ends when the owner leaves.
-            out.append(SeriesTile(title: "Ran past the plan", value: "\(series.ranOver) of \(series.planned)", detail: "by 5 min or more", line: [], span: nil))
-            out.append(SeriesTile(title: "You joined late", value: "\(series.joinedLate) of \(series.planned)", detail: "by 5 min or more", line: [], span: nil))
+            // What is known is when the recording began and ended. It begins when Mossad sees the owner in the call.
+            out.append(SeriesTile(title: "Recording ended late", value: "\(series.ranOver) of \(series.planned)", detail: "by 5 min or more", line: [], span: nil))
+            out.append(SeriesTile(title: "Recording began late", value: "\(series.joinedLate) of \(series.planned)", detail: "by 5 min or more", line: [], span: nil))
         }
         return out
     }

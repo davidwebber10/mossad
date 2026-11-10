@@ -422,6 +422,16 @@ private struct MonthGrid: View {
                 }
             }
         }
+        // A popover whose "+N more" is gone (another month, a day with fewer meetings) must not come back by
+        // itself, and it must not stay over the delete dialog.
+        .onChange(of: state.anchor) { _, _ in expanded = nil }
+        .onChange(of: records.count + upcoming.count) { _, _ in
+            guard let day = expanded else { return }
+            let cal = state.calendar
+            let entries = records.filter { cal.isDate($0.start, inSameDayAs: day) }.count + upcoming.filter { cal.isDate($0.start, inSameDayAs: day) }.count
+            if entries <= 3 { expanded = nil }
+        }
+        .onChange(of: deleting?.id) { _, id in if id != nil { expanded = nil } }
     }
 
     private func cell(_ day: Date) -> some View {
@@ -452,7 +462,8 @@ private struct MonthGrid: View {
                 // Shows the whole day over the grid; the calendar stays in Month.
                 Button("+\(items.count + coming.count - 3) more") { expanded = day }
                     .buttonStyle(.plain).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary).padding(.leading, 5)
-                    .popover(isPresented: Binding(get: { expanded == day }, set: { if !$0 { expanded = nil } }), arrowEdge: .bottom) {
+                    // Each day closes only its own popover: the close of one must not undo the click on another day.
+                    .popover(isPresented: Binding(get: { expanded == day }, set: { if !$0, expanded == day { expanded = nil } }), arrowEdge: .bottom) {
                         DayShelf(day: day, records: items, upcoming: coming, matches: matches, deleting: $deleting,
                                  open: { r in expanded = nil; open(r, state.title) },
                                  openUpcoming: { m in expanded = nil; openUpcoming(m) })
@@ -504,7 +515,7 @@ private struct MonthItem: View {
 // MARK: Upcoming
 
 /// An upcoming invite in the Day or Week grid: a dashed outline and a hollow dot, because it has not happened.
-/// It shows Join on hover, and opens the invite's page.
+/// It opens the invite's page, and shows Join on hover within a minute of the start, as the list and the page do.
 private struct UpcomingBlock: View {
     let meeting: UpcomingMeeting
     let compact: Bool
@@ -542,7 +553,7 @@ private struct UpcomingBlock: View {
                     .foregroundStyle(Palette.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                if hovering, !compact, let link = meeting.link {
+                if hovering, !compact, let link = meeting.link, meeting.start.timeIntervalSinceNow <= 60 {
                     Button("Join") { NSWorkspace.shared.open(link) }.controlSize(.small)
                 }
             }

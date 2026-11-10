@@ -54,18 +54,6 @@ final class UpcomingTests: XCTestCase {
         XCTAssertTrue(UpcomingMeeting.from([event("Lunch", in: 5, text: "Cafe")], now: now).isEmpty)
     }
 
-    func testEarlierMeetingsOfTheSameSeriesNewestFirst() {
-        func record(_ id: String, _ title: String, daysAgo: Double) -> CallRecord {
-            var r = CallRecord(id: id, platform: .meet, bundleID: "", start: now.addingTimeInterval(-daysAgo * 86_400),
-                               end: now.addingTimeInterval(-daysAgo * 86_400 + 1800), status: .written)
-            r.calendarTitle = title
-            return r
-        }
-        let records = [record("a", "Weekly Sync", daysAgo: 14), record("b", "weekly sync", daysAgo: 7), record("c", "Other", daysAgo: 1)]
-        let m = UpcomingMeeting.from([event("Weekly Sync", in: 30, text: "https://zoom.us/j/123456789")], now: now)[0]
-        XCTAssertEqual(m.earlier(in: records).map(\.id), ["b", "a"])
-    }
-
     func testAnEventBeingRecordedOrAlreadyRecordedIsNotUpcoming() {
         let link = "https://meet.google.com/abc-defg-hij"
         var live = CallRecord(id: "live", platform: .meet, bundleID: "", start: now.addingTimeInterval(-300), end: now, status: .recording)
