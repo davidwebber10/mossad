@@ -36,14 +36,15 @@ public enum Recording {
 
     /// The folders of the written calls that have no recording yet: calls from before this feature, and calls
     /// written while another call recorded.
-    public static func missing(audioRoot: URL) -> [URL] {
+    /// `hasBackup` says whether a record's recording is in a backup that this Mac can read; see `Retention.sweep`.
+    public static func missing(audioRoot: URL, hasBackup: (CallRecord) -> Bool = { $0.cloudKey != nil }) -> [URL] {
         ((try? FileManager.default.contentsOfDirectory(at: audioRoot, includingPropertiesForKeys: nil)) ?? []).filter { dir in
             // The file check first: nearly every call has its recording, and then its record is not read at all.
             guard !FileManager.default.fileExists(atPath: url(in: dir).path),
                   let r = try? RecordCache.shared.record(in: dir), r.status == .written else { return false }
             // A recording that lives in the archive, or whose tracks are gone (the 30 day rule), cannot be made
             // again here. Listing it gave one false error line for each such meeting at each pass.
-            guard r.cloudKey == nil else { return false }
+            guard !hasBackup(r) else { return false }
             return [Track.me, .them].contains { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0.fileName).path) }
         }
     }

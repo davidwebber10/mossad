@@ -42,6 +42,26 @@ final class RetentionTests: XCTestCase {
         XCTAssertFalse(exists(old, "me.caf"), "the changed record is the one the sweep acts on")
     }
 
+    func testTheOwnersNumberOfDaysForRawTracksIsUsed() throws {
+        let old = try call("old", .written, endedDaysAgo: 8), recent = try call("recent", .written, endedDaysAgo: 6)
+        for dir in [old, recent] { try Data([1]).write(to: dir.appendingPathComponent("recording.m4a")) }
+        Retention.sweep(audioRoot: paths.audio, rawTracksAfterDays: 7, now: now)
+        XCTAssertFalse(exists(old, "me.caf") || exists(old, "them.caf"))
+        XCTAssertTrue(exists(old, "recording.m4a"), "the recording stays")
+        XCTAssertTrue(exists(recent, "me.caf") && exists(recent, "them.caf"))
+    }
+
+    /// The copy on the owner's server is trusted like the copy in a bucket: the local recording may be gone.
+    func testARecordingOnTheOwnersServerCountsAsTheRecording() throws {
+        let dir = try call("old", .written, endedDaysAgo: 31)
+        var r = try CallRecord.load(from: dir)
+        r.cloudKey = "recordings/old/recording.m4a"
+        r.cloudBackend = "server"
+        try r.save(to: dir)
+        Retention.sweep(audioRoot: paths.audio, now: now)
+        XCTAssertFalse(exists(dir, "me.caf") || exists(dir, "them.caf"))
+    }
+
     func testKeepsRawTracksUntilTheRecordingExists() throws {
         let dir = try call("old", .written, endedDaysAgo: 31)
         Retention.sweep(audioRoot: paths.audio, now: now)

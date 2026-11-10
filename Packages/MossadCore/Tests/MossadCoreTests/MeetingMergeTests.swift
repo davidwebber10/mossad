@@ -74,6 +74,13 @@ final class MeetingMergeTests: XCTestCase {
         XCTAssertNil(merged.cloudKey)
         XCTAssertNil(merged.cloudSize)
         XCTAssertNil(merged.summaryMissing)
+        XCTAssertEqual(merged.cloudLeftovers, [ArchivedObject(key: "calls/one/recording.m4a", kind: .bucket)], "the old upload goes once the joined recording is safe")
+        // On the owner's server too, and the place's name does not stay on a record with no archived copy.
+        first.cloudKey = "recordings/one/recording.m4a"
+        first.cloudBackend = "server"
+        let onServer = MeetingMerge.combine([first, record("two", start: 203, end: 500, [])], durations: ["one": 200, "two": 297])
+        XCTAssertNil(onServer.cloudBackend)
+        XCTAssertEqual(onServer.cloudLeftovers, [ArchivedObject(key: "recordings/one/recording.m4a", kind: .server)])
     }
 
     func testBookmarkNotesMoveWithTheirPart() {

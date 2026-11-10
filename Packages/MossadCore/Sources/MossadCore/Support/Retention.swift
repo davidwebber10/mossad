@@ -6,8 +6,10 @@ import Foundation
 public enum Retention {
     public static let rawTracksDays = 30
 
+    /// `hasBackup` says whether a record's recording is in a backup that this Mac can read. The app answers yes
+    /// only for a place that is set up: a mark for another server is not a recording.
     public static func sweep(audioRoot: URL, rawTracksAfterDays: Int = rawTracksDays, recordingsAfterDays: Int? = nil,
-                             now: Date = Date()) {
+                             now: Date = Date(), hasBackup: (CallRecord) -> Bool = { $0.cloudKey != nil }) {
         let fm = FileManager.default
         func cutoff(_ days: Int) -> Date { now.addingTimeInterval(-Double(days) * 86_400) }
         for dir in (try? fm.contentsOfDirectory(at: audioRoot, includingPropertiesForKeys: nil)) ?? [] {
@@ -15,7 +17,7 @@ public enum Retention {
             guard let r = try? RecordCache.shared.record(in: dir), r.status == .written else { continue }
             let expired = recordingsAfterDays.map { r.end < cutoff($0) } ?? false
             // A recording archived in the cloud counts too: its local copy may be gone already.
-            let hasRecording = fm.fileExists(atPath: Recording.url(in: dir).path) || r.cloudKey != nil
+            let hasRecording = fm.fileExists(atPath: Recording.url(in: dir).path) || hasBackup(r)
             guard expired || (hasRecording && r.end < cutoff(rawTracksAfterDays)) else { continue }
             for file in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
             where file.pathExtension == "caf" || (expired && file.lastPathComponent == Recording.fileName) {

@@ -1,3 +1,4 @@
+import { checkLink, handleRecording, maxRecordingBytes, readRecording, serverID } from './recordings';
 import { deleteShare } from './share';
 import type { Env, MeetingView, Share } from './types';
 import { bearer, json, sameSecret } from './util';
@@ -13,9 +14,9 @@ export async function isOwner(request: Request, env: Env): Promise<boolean> {
   return sameSecret(bearer(request), env.OWNER_SECRET);
 }
 
-/** Wrong secrets from one address: 20 an hour, then a pause. */
-export async function tooManyFailures(env: Env, request: Request, failed: boolean): Promise<boolean> {
-  const key = `fail:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}:${Math.floor(Date.now() / 3_600_000)}`;
+/** Wrong secrets from one address: 20 an hour, then a pause. `count` names what is counted, each on its own. */
+export async function tooManyFailures(env: Env, request: Request, failed: boolean, count = 'fail'): Promise<boolean> {
+  const key = `${count}:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}:${Math.floor(Date.now() / 3_600_000)}`;
   const n = Number((await env.OAUTH_KV.get(key)) ?? 0);
   if (failed) await env.OAUTH_KV.put(key, String(n + 1), { expirationTtl: 3600 });
   return n >= 20;
@@ -27,10 +28,28 @@ export async function handleAPI(request: Request, env: Env): Promise<Response> {
   // A path such as "/api/%E0" does not decode; that is a bad request, not a server failure.
   try { parts = url.pathname.split('/').slice(2).map(decodeURIComponent); } catch { return json({ error: 'Not found.' }, 404); }
   const owner = await isOwner(request, env);
+  // A link to one recording that the owner's app signed plays without the secret in a header. It only reads.
+  const signed = !owner && parts[0] === 'recordings' && parts.length === 2 && name.test(parts[1]) && url.searchParams.has('signature')
+    && (request.method === 'GET' || request.method === 'HEAD');
+  if (signed) {
+    const link = await checkLink(env, parts[1], url);
+    // Counted apart from wrong secrets: an old link in a player must not pause the owner's own sync.
+    if (await tooManyFailures(env, request, link === 'wrong', 'fail-link')) return json({ error: 'Too many wrong links. Try again in an hour.' }, 429);
+    if (link === 'expired') return json({ error: 'This link has expired.' }, 401);
+    if (link === 'wrong') return json({ error: 'The link is wrong.' }, 401);
+    try { return await readRecording(request, env, parts[1]); } catch (error) {
+      console.error('recording link failed', error instanceof Error ? error.message : error);
+      return json({ error: 'The server failed.' }, 500);
+    }
+  }
   if (await tooManyFailures(env, request, !owner && !!bearer(request))) return json({ error: 'Too many wrong secrets. Try again in an hour.' }, 429);
   if (parts[0] === 'hello' && request.method === 'GET') {
     const scheme = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(env.MCP_HOST) ? 'http' : 'https';
-    return json({ mossad: true, version, authorized: owner, mcp: `${scheme}://${env.MCP_HOST}${(env.MCP_PATH || '/mossad').replace(/\/$/, '')}`, chat: !!env.ANTHROPIC_API_KEY });
+    return json({
+      mossad: true, version, authorized: owner, mcp: `${scheme}://${env.MCP_HOST}${(env.MCP_PATH || '/mossad').replace(/\/$/, '')}`, chat: !!env.ANTHROPIC_API_KEY,
+      // Present on a server that keeps recordings: the Mac offers the backup only then. The id is for the owner.
+      recordings: { maxBytes: maxRecordingBytes(env), ...(owner ? { id: await serverID(env).catch(() => undefined) } : {}) },
+    });
   }
   if (!owner) return json({ error: 'The secret is wrong or missing.' }, 401);
 
@@ -45,6 +64,10 @@ export async function handleAPI(request: Request, env: Env): Promise<Response> {
         const object = await env.FILES.get(key);
         return object ? new Response(object.body, { headers: { 'Content-Type': 'application/octet-stream' } }) : json({ error: 'No such asset.' }, 404);
       }
+    }
+    if (kind === 'recordings' && a && !b && parts.length === 2 && name.test(a)) {
+      const answer = await handleRecording(request, env, a);
+      if (answer) return answer;
     }
     if (kind === 'records' && a && name.test(a)) {
       if (m === 'PUT') return putRecord(request, env, a);

@@ -251,6 +251,17 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// The size in bytes of the recording that was uploaded to `cloudKey`. A local recording of another size is
     /// not in the cloud (a merge made a new one), so it is uploaded again and kept until then.
     public var cloudSize: Int64?
+    /// The place `cloudKey` is in, as an `ArchiveKind`. Nil is the bucket (Cloudflare R2 or Amazon S3), as before
+    /// places had names; "server" is the owner's own server.
+    public var cloudBackend: String?
+    /// For a recording on a server: the id of that server. A recording on another server than the connected one
+    /// does not count as backed up.
+    public var cloudServer: String?
+    /// The SHA-256 of the recording that was uploaded, when the place checked it.
+    public var cloudHash: String?
+    /// Older copies of the recording in a backup. They go once the recording as it is now is safe: after a move to
+    /// another place is checked, or after a merge made a new recording.
+    public var cloudLeftovers: [ArchivedObject]?
     /// The transcription service's job per track ("me", "them") while it runs, so a restart polls that job
     /// instead of paying for a new one.
     public var transcriptionJobs: [String: String]?
@@ -371,6 +382,10 @@ extension CallRecord {
         markers = try c.decodeIfPresent([TranscriptMarker].self, forKey: .markers) ?? []
         cloudKey = try c.decodeIfPresent(String.self, forKey: .cloudKey)
         cloudSize = try c.decodeIfPresent(Int64.self, forKey: .cloudSize)
+        cloudBackend = try c.decodeIfPresent(String.self, forKey: .cloudBackend)
+        cloudServer = try c.decodeIfPresent(String.self, forKey: .cloudServer)
+        cloudHash = try c.decodeIfPresent(String.self, forKey: .cloudHash)
+        cloudLeftovers = try c.decodeIfPresent([ArchivedObject].self, forKey: .cloudLeftovers)
         transcriptionJobs = try c.decodeIfPresent([String: String].self, forKey: .transcriptionJobs)
         summaryMissing = try c.decodeIfPresent(Bool.self, forKey: .summaryMissing)
         speakersExpected = try c.decodeIfPresent(Int.self, forKey: .speakersExpected)
