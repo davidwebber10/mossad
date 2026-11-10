@@ -187,7 +187,15 @@ private struct HeadlineFigures: View {
     }
 }
 
-private struct Figure: View {
+/// One of the large numbers across the top of an Analytics page, with what it is measured against.
+struct Figure: View {
+    /// A short mark beside the number in place of a change: "↑ more than usual".
+    struct Mark {
+        let text: String
+        let help: String
+        let spoken: String
+    }
+
     enum Change {
         case percent(Double, Double)
         /// Percentage points, for shares; nil when either side is unknown.
@@ -205,6 +213,7 @@ private struct Figure: View {
     let value: String
     let detail: String
     let change: Change?
+    var mark: Mark?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -215,6 +224,14 @@ private struct Figure: View {
                     .contentTransition(.numericText())
                     .lineLimit(1).minimumScaleFactor(0.7)
                 if let c = change?.value { changeText(c.0, c.1) }
+                if let mark {
+                    Text(mark.text)
+                        .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                        .foregroundStyle(Palette.accent)
+                        .lineLimit(1)
+                        .help(mark.help)
+                        .accessibilityLabel(mark.spoken)
+                }
             }
             Text(detail.isEmpty ? " " : detail).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
         }

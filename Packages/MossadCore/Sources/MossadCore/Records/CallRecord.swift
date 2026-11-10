@@ -202,6 +202,10 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var generatedTitle: String?
     /// Set by the owner; wins over every other source and no summary replaces it.
     public var customTitle: String?
+    /// When the calendar invite planned the meeting; nil for a call with no invite, and in records from before
+    /// this was saved. The meeting's Analytics tab reads a late start and an overrun from them.
+    public var plannedStart: Date?
+    public var plannedEnd: Date?
     public var attendees: [String] = []
     public var utterances: [Utterance] = []
     /// Per-track results, kept so a failed track does not force the other one to be transcribed again.
@@ -282,6 +286,14 @@ public struct CallRecord: Codable, Equatable, Sendable {
 
     public var title: String { customTitle ?? calendarTitle ?? generatedTitle ?? "\(platform.displayName) call" }
 
+    /// Takes the invite's title, people, and planned times. An all-day event plans no time of day.
+    public mutating func setInvite(_ event: CalendarEventInfo) {
+        calendarTitle = event.title
+        attendees = event.attendees
+        plannedStart = event.isAllDay ? nil : event.start
+        plannedEnd = event.isAllDay ? nil : event.end
+    }
+
     /// Every marker line of the transcript in time order: pauses, stops, and where a merged part begins.
     public var transcriptMarkers: [TranscriptMarker] {
         (recordingMarkers + screenMarkers).sorted { $0.offset < $1.offset }
@@ -324,6 +336,8 @@ extension CallRecord {
         calendarTitle = try c.decodeIfPresent(String.self, forKey: .calendarTitle)
         generatedTitle = try c.decodeIfPresent(String.self, forKey: .generatedTitle)
         customTitle = try c.decodeIfPresent(String.self, forKey: .customTitle)
+        plannedStart = try c.decodeIfPresent(Date.self, forKey: .plannedStart)
+        plannedEnd = try c.decodeIfPresent(Date.self, forKey: .plannedEnd)
         attendees = try c.decodeIfPresent([String].self, forKey: .attendees) ?? []
         utterances = try c.decodeIfPresent([Utterance].self, forKey: .utterances) ?? []
         meUtterances = try c.decodeIfPresent([Utterance].self, forKey: .meUtterances)

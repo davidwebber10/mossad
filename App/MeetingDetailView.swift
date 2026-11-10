@@ -2,11 +2,13 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// One meeting: the header band with the lanes player, then the Summary, Transcript, Coach, and Chat tabs, which
-/// all share the player. Clicking a time plays from there.
+/// One meeting: the header band with the lanes player, then the Summary, Transcript, Screens, Coach, Analytics, and
+/// Chat tabs, which all share the player. Clicking a time plays from there.
 struct MeetingDetailView: View {
     enum Style { case split, fullPage }
-    enum Tab: String, CaseIterable { case summary = "Summary", transcript = "Transcript", screens = "Screens", coach = "Coach", chat = "Chat" }
+    enum Tab: String, CaseIterable {
+        case summary = "Summary", transcript = "Transcript", screens = "Screens", coach = "Coach", analytics = "Analytics", chat = "Chat"
+    }
 
     @EnvironmentObject var controller: AppController
     let record: CallRecord
@@ -49,12 +51,14 @@ struct MeetingDetailView: View {
         "\(record.utterances.count)|\(controller.ownerName)|\(profilesKey)|"
             + record.speakerNames.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
             + "|" + record.attendees.joined(separator: ",")
+            + "|" + record.actionItems.compactMap(\.owner).joined(separator: ",") + "|\(record.screens?.count ?? 0)"
     }
 
     var body: some View {
-        let (lanes, people) = cache.get(cacheKey) {
+        let key = cacheKey
+        let (lanes, people) = cache.get(key) {
             (SpeakerLanes.make(record, names: MarkdownWriter.displayNames(record), ownerName: controller.ownerName),
-             MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library))
+             MeetingPeople(record: record, ownerName: controller.ownerName, library: controller.library, stamp: key))
         }
         // The window's height, not the content's: the detail takes what it is given and the lanes fit it.
         GeometryReader { g in
@@ -63,6 +67,7 @@ struct MeetingDetailView: View {
                 .clipped()
         }
             .background(Palette.window)
+            .environment(\.personLinks, people.links)
             .environment(\.openScreen) { screen in
                 openScreen = screen.file
                 tabBinding.wrappedValue = .screens
@@ -145,6 +150,11 @@ struct MeetingDetailView: View {
                 CoachTab(record: record, people: people, player: player)
                     .detailColumn(top: Self.underTabs + 32)
             }
+        case .analytics:
+            // Equatable, so the playback's ticks do not draw it again; its numbers are made off the main thread.
+            MeetingAnalyticsTab(record: record, people: people, player: player, stamp: MeetingAnalytics.stamp(record),
+                                top: Self.underTabs + 32, openCoach: { tabBinding.wrappedValue = .coach })
+                .equatable()
         case .chat:
             MeetingChatView(record: record, top: Self.underTabs + 14) { at in Task { await play(from: at) } }
         }
@@ -153,7 +163,7 @@ struct MeetingDetailView: View {
     private func applyPreviewHooks() {
         guard CommandLine.arguments.contains("--ui-preview") else { return }
         let env = ProcessInfo.processInfo.environment
-        // Development hook for screenshots: MOSSAD_TAB=summary|transcript|screens|coach|chat picks the tab.
+        // Development hook for screenshots: MOSSAD_TAB=summary|transcript|screens|coach|analytics|chat picks the tab.
         if let t = env["MOSSAD_TAB"].flatMap({ Tab(rawValue: $0.capitalized) }) { previewTab = t }
         // Development hook for screenshots: MOSSAD_SEEK=<seconds> puts the playhead there, without playing.
         if let at = env["MOSSAD_SEEK"].flatMap(TimeInterval.init) {
@@ -275,26 +285,36 @@ struct MeetingPeople {
         let isOwner: Bool
         let isUnknown: Bool
         let seconds: TimeInterval
+        /// The saved person this speaker is, whose profile the name opens; nil for a voice Mossad has not saved.
+        var person: String?
     }
 
     let speakers: [Speaker]
     private let byKey: [String: Speaker]
     private let names: [String: String]
     let attendees: [(name: String, email: String?)]
+    /// Which saved person each name of the meeting stands for.
+    let links: PersonLinks
+    /// What these people were made from: the same stamp means the same names, colors, and links.
+    let stamp: String
 
-    init(record: CallRecord, ownerName: String, library: VoiceLibrary) {
+    init(record: CallRecord, ownerName: String, library: VoiceLibrary, stamp: String = "") {
+        self.stamp = stamp
         let names = MarkdownWriter.displayNames(record)
         let lanes = SpeakerLanes.make(record, names: names, ownerName: ownerName)
         var allKeys: [String] = []
         for u in record.utterances where !allKeys.contains(u.speakerKey) { allKeys.append(u.speakerKey) }
         let profiles = library.profiles
+        let directory = PersonDirectory(profiles: profiles)
+        let knownNames = lanes.filter { record.speakerNames[$0.key] != nil }.map(\.name)
         var byKey: [String: Speaker] = [:]
         let list = lanes.enumerated().map { i, lane in
             let known = record.speakerNames[lane.key] != nil
             // A named person has every key with their name; each unnamed voice is its own speaker.
             let keys = known ? allKeys.filter { record.speakerNames[$0] != nil && names[$0] == lane.name } : [lane.key]
             let s = Speaker(key: lane.key, keys: keys, name: lane.name, email: profiles.first { $0.name == lane.name }?.email,
-                            color: Palette.speaker(i), isOwner: lane.name == ownerName, isUnknown: !known, seconds: lane.seconds)
+                            color: Palette.speaker(i), isOwner: lane.name == ownerName, isUnknown: !known, seconds: lane.seconds,
+                            person: known ? directory.person(for: lane.name, among: knownNames) : nil)
             for k in keys { byKey[k] = s }
             return s
         }
@@ -305,6 +325,11 @@ struct MeetingPeople {
             guard a.contains("@") else { return (a, nil) }
             return (library.name(forEmail: a) ?? a, library.name(forEmail: a) == nil ? nil : a)
         }
+        // A first name alone ("Sam") stands for a person only when the meeting has one Sam: among its speakers
+        // and the people invited to it.
+        links = PersonLinks(stamp: stamp, directory: directory, context: knownNames + attendees.map(\.name),
+                            names: list.map(\.name) + record.attendees + attendees.map(\.name) + record.actionItems.compactMap(\.owner)
+                                + (record.screens ?? []).compactMap(\.presenter))
     }
 
     func speaker(forKey key: String) -> Speaker? { byKey[key] }

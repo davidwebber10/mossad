@@ -37,10 +37,16 @@ public struct ShareSession: Equatable, Sendable, Identifiable {
 
     /// "Sam Carter shared 12:04–12:19 · 9 screens", or "Screen shared · 12:04–12:19 · 9 screens" with no presenter.
     public func heading(time: (TimeInterval) -> String) -> String {
+        presenter.map { "\($0) \(headingTail(time: time))" } ?? "Screen \(headingTail(time: time))"
+    }
+
+    /// What follows the presenter's name in the heading, so a page can make the name a link: "shared 12:04–12:19 ·
+    /// 9 screens". With no presenter it follows "Screen": "shared · 12:04–12:19 · 9 screens".
+    public func headingTail(time: (TimeInterval) -> String) -> String {
         let from = time(start), to = time(end)
         let span = from == to ? from : "\(from)–\(to)"
         let amount = count == 1 ? "1 screen" : "\(count) screens"
-        return presenter.map { "\($0) shared \(span) · \(amount)" } ?? "Screen shared · \(span) · \(amount)"
+        return presenter == nil ? "shared · \(span) · \(amount)" : "shared \(span) · \(amount)"
     }
 }
 

@@ -26,12 +26,19 @@ public struct DeliveryStats: Codable, Equatable, Sendable, Hashable {
     static let overlapGrace: TimeInterval = 1
     static let fillerWords: Set<String> = ["um", "uh", "uhm", "umm", "er", "erm", "hmm", "mm"]
 
+    /// The words of a line, as every count here takes them.
+    static func tokens(_ text: String) -> [String] { text.split(whereSeparator: \.isWhitespace).map(String.init) }
+
+    static func isFiller(_ token: String) -> Bool {
+        fillerWords.contains(token.lowercased().trimmingCharacters(in: .punctuationCharacters))
+    }
+
     public init(record r: CallRecord, owner: String) {
         let ownerKeys = Set(r.speakerNames.filter { $0.value == owner }.keys)
         let mine = r.utterances.filter { ownerKeys.contains($0.speakerKey) }
         let others = r.utterances.filter { !ownerKeys.contains($0.speakerKey) }
         func duration(_ u: Utterance) -> TimeInterval { max(0, u.end - u.start) }
-        func tokens(_ u: Utterance) -> [String] { u.text.split(whereSeparator: \.isWhitespace).map(String.init) }
+        func tokens(_ u: Utterance) -> [String] { Self.tokens(u.text) }
 
         talkSeconds = mine.map(duration).reduce(0, +)
         let all = r.utterances.map(duration).reduce(0, +)
@@ -43,9 +50,7 @@ public struct DeliveryStats: Codable, Equatable, Sendable, Hashable {
             let n = tokens(u).count
             return n >= Self.minimumTurnWords && duration(u) > 0 ? Double(n) / duration(u) * 60 : nil
         }.max() ?? 0
-        fillers = mine.flatMap(tokens).filter {
-            Self.fillerWords.contains($0.lowercased().trimmingCharacters(in: .punctuationCharacters))
-        }.count
+        fillers = mine.flatMap(tokens).filter(Self.isFiller).count
         fillersPerMinute = minutes > 0 ? Double(fillers) / minutes : 0
         longestTurnSeconds = mine.map(duration).max() ?? 0
         questions = mine.filter { $0.text.contains("?") }.count

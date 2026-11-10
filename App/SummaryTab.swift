@@ -114,16 +114,11 @@ struct SummaryTab: View {
                 ForEach(record.actionItems, id: \.self) { item in
                     HStack(alignment: .top, spacing: 10) {
                         Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 15, height: 15).padding(.top, 1)
-                        actionText(item).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        ActionItemLine(item: item)
                     }
                 }
             }
         }
-    }
-
-    private func actionText(_ item: ActionItem) -> Text {
-        guard let owner = item.owner else { return Text(item.task) }
-        return Text("\(item.task) \(Text("· \(shortName(owner))").foregroundStyle(Palette.secondary))")
     }
 
     // MARK: Overview
@@ -175,12 +170,44 @@ struct SummaryTab: View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(Array(people.attendees.enumerated()), id: \.offset) { _, a in
                 HStack(spacing: Space.s) {
-                    Text(a.name).lineLimit(1)
+                    PersonName(a.email ?? a.name, shown: a.name).lineLimit(1)
                     if let email = a.email { Text(email).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1) }
                 }
             }
         }
         .textSelection(.enabled)
+    }
+}
+
+/// An action item with its owner after it. The owner is a link of its own when it stands for a saved person, on
+/// the task's line when both fit and under the task when they do not.
+private struct ActionItemLine: View {
+    let item: ActionItem
+
+    var body: some View {
+        if let owner = item.owner {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(item.task).lineLimit(1).textSelection(.enabled)
+                    name(owner)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.task).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    name(owner, dot: false).font(.system(size: 12))
+                }
+            }
+        } else {
+            Text(item.task).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+        }
+    }
+
+    private func name(_ owner: String, dot: Bool = true) -> some View {
+        HStack(spacing: 5) {
+            if dot { Text("·").accessibilityHidden(true) }
+            PersonName(owner, shown: shortName(owner)).lineLimit(1)
+        }
+        .foregroundStyle(Palette.secondary)
+        .fixedSize()
     }
 }
 
@@ -253,23 +280,28 @@ struct TalkShare: View {
             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             .frame(maxWidth: 520)
             .accessibilityHidden(true)
-            Text(caption(talkers, total: total)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+            caption(talkers, total: total).font(.system(size: 12)).foregroundStyle(Palette.secondary)
         }
     }
 
-    /// "You 36% · Sam 16% · Dana 13% · nine others share the rest".
-    private func caption(_ talkers: [MeetingPeople.Speaker], total: TimeInterval) -> String {
+    /// "You 36% · Sam 16% · Dana 13% · nine others share the rest". Each name opens its person.
+    private func caption(_ talkers: [MeetingPeople.Speaker], total: TimeInterval) -> some View {
         func percent(_ s: MeetingPeople.Speaker) -> String { "\(Int((s.seconds / total * 100).rounded()))%" }
         let owner = talkers.first(where: \.isOwner)
         let others = talkers.filter { !$0.isOwner }.sorted { $0.seconds > $1.seconds }
-        let named = others.prefix(owner == nil ? 3 : 2)
-        var parts = (owner.map { ["You \(percent($0))"] } ?? []) + named.map { "\(firstName($0.name)) \(percent($0))" }
-        let rest = others.count - named.count
-        if rest > 0 {
-            let word = rest <= 12 ? (NumberFormatter.localizedString(from: rest as NSNumber, number: .spellOut)) : "\(rest)"
-            parts.append(rest == 1 ? "one other has the rest" : "\(word) others share the rest")
+        let named = (owner.map { [$0] } ?? []) + others.prefix(owner == nil ? 3 : 2)
+        let rest = others.count - (named.count - (owner == nil ? 0 : 1))
+        let word = rest <= 12 ? (NumberFormatter.localizedString(from: rest as NSNumber, number: .spellOut)) : "\(rest)"
+        return FlowLayout(spacing: 4) {
+            ForEach(Array(named.enumerated()), id: \.element.key) { i, s in
+                HStack(spacing: 4) {
+                    if i > 0 { Text("·").accessibilityHidden(true) }
+                    PersonName(s.name, shown: s.isOwner ? "You" : firstName(s.name))
+                    Text(percent(s)).monospacedDigit()
+                }
+            }
+            if rest > 0 { Text(rest == 1 ? "· one other has the rest" : "· \(word) others share the rest") }
         }
-        return parts.joined(separator: " · ")
     }
 }
 

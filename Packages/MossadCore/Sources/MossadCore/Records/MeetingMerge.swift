@@ -64,7 +64,11 @@ public enum MeetingMerge {
             }
             gaps += (r.screenGaps ?? []).map { ScreenGap(offset: $0.offset + offset, paused: $0.paused) }
             if merged.meetingID == nil { merged.meetingID = r.meetingID }
-            if merged.calendarTitle == nil { merged.calendarTitle = r.calendarTitle }
+            if merged.calendarTitle == nil {
+                merged.calendarTitle = r.calendarTitle
+                merged.plannedStart = r.plannedStart
+                merged.plannedEnd = r.plannedEnd
+            }
             for a in r.attendees where !merged.attendees.contains(a) { merged.attendees.append(a) }
             offset += durations[r.id] ?? r.end.timeIntervalSince(r.start)
         }

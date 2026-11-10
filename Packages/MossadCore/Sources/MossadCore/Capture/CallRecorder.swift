@@ -591,12 +591,9 @@ public final class CallRecorder: @unchecked Sendable {
 
     /// The invite found while the call runs, so the live call already shows its real title.
     /// Ignored when that call has ended meanwhile; the pipeline matches the calendar again anyway.
-    public func setCalendar(title: String, attendees: [String], forCall id: String) {
+    public func setCalendar(_ event: CalendarEventInfo, forCall id: String) {
         guard record?.id == id else { return }
-        edit {
-            $0.calendarTitle = title
-            $0.attendees = attendees
-        }
+        edit { $0.setInvite(event) }
     }
 
     /// A provisional title from the live transcript. Ignored when that call has ended or already has a generated one.

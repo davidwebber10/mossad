@@ -103,6 +103,11 @@ extension CallRecord {
         session.heading { offset in session.screens.first { $0.offset == offset }.map(timeOfDay) ?? "" }
     }
 
+    /// The heading without the presenter's name, which the page shows as a link.
+    func headingTail(_ session: ShareSession) -> String {
+        session.headingTail { offset in session.screens.first { $0.offset == offset }.map(timeOfDay) ?? "" }
+    }
+
     /// Changes when the screens, their text or presenter, or the speakers' names do: what the Screens tab shows.
     var screensStamp: Int {
         var h = Hasher()
@@ -213,9 +218,19 @@ struct ScreensTab: View {
                     }
                     ForEach(shown) { session in
                         VStack(alignment: .leading, spacing: Space.m) {
-                            Text(record.heading(session))
-                                .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
-                                .accessibilityAddTraits(.isHeader)
+                            Group {
+                                if let presenter = session.presenter {
+                                    // The presenter's name opens their profile.
+                                    HStack(spacing: 4) {
+                                        PersonName(presenter)
+                                        Text(record.headingTail(session))
+                                    }
+                                } else {
+                                    Text(record.heading(session))
+                                }
+                            }
+                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
+                            .accessibilityAddTraits(.isHeader)
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 260), spacing: Space.m)], alignment: .leading, spacing: Space.m) {
                                 ForEach(session.screens) { screen in
                                     ScreenTile(url: record.frameURL(screen), time: record.timeOfDay(screen), text: screen.text,
@@ -312,7 +327,9 @@ private struct ScreenViewer: View {
 
     private struct Context {
         var file = ""
-        var title = ""
+        var time = ""
+        /// Who talked most around the frame, for a frame with no presenter.
+        var speaker: String?
         var lines: [(start: TimeInterval, speaker: String, text: String)] = []
     }
 
@@ -354,7 +371,9 @@ private struct ScreenViewer: View {
         .onKeyPress(.escape) { selected = nil; return .handled }
         .onAppear { focused = true }
         .task(id: "\(screen.file)|\(stamp)") {
-            context = Context(file: screen.file, title: record.screenTitle(screen), lines: record.lines(around: screen.offset))
+            context = Context(file: screen.file, time: record.timeOfDay(screen),
+                              speaker: screen.presenter == nil ? record.mainSpeaker(around: screen.offset) : nil,
+                              lines: record.lines(around: screen.offset))
         }
     }
 
@@ -382,14 +401,36 @@ private struct ScreenViewer: View {
             .accessibilityLabel("Shared screen at \(record.timeOfDay(screen))")
     }
 
+    /// The words of `SharedScreen.rowTitle`, with the person's name as a link: "Screen shared by Sam Carter · 12:04",
+    /// or "Screen shared · while Dana Lee was speaking".
+    @ViewBuilder
+    private var title: some View {
+        if context.file != screen.file {
+            Text(" ")
+        } else if let presenter = screen.presenter {
+            FlowLayout(spacing: 4) {
+                Text("Screen shared by")
+                PersonName(presenter)
+                Text("· \(context.time)")
+            }
+        } else if let speaker = context.speaker {
+            FlowLayout(spacing: 4) {
+                Text("Screen shared · while")
+                PersonName(speaker)
+                Text("was speaking")
+            }
+        } else {
+            Text("Screen shared · \(context.time)")
+        }
+    }
+
     private var side: some View {
         // Until the task ran for this frame, the lines of the frame before are not shown.
         let lines = context.file == screen.file ? context.lines : []
         return VStack(alignment: .leading, spacing: Space.m) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(context.file == screen.file ? context.title : " ")
+                title
                     .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
-                    .fixedSize(horizontal: false, vertical: true)
                 Text(longClock(screen.offset)).font(.system(size: 11.5)).monospacedDigit().foregroundStyle(Palette.tertiary)
             }
             PlayFromHere(player: player, at: max(0, screen.offset - 5))
@@ -412,7 +453,7 @@ private struct ScreenViewer: View {
                     ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
-                                Text(line.speaker).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                                PersonName(line.speaker).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                                 Button(longClock(line.start)) { player.play(from: line.start) }
                                     .buttonStyle(.plain)
                                     .font(.system(size: 11)).monospacedDigit().foregroundStyle(Palette.tertiary)

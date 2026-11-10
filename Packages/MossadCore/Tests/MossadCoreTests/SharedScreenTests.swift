@@ -201,6 +201,7 @@ final class SharedScreenTests: XCTestCase {
         XCTAssertEqual(named.heading(time: time), "Sam Carter shared 12:04–12:18 · 9 screens")
         let plain = ShareSession(screens: [SharedScreen(offset: 240, file: "x", text: "")], presenter: nil)
         XCTAssertEqual(plain.heading(time: time), "Screen shared · 12:04 · 1 screen")
+        XCTAssertEqual(named.headingTail(time: time), "shared 12:04–12:18 · 9 screens", "what follows the name, which the page links")
     }
 
     func testTheRowNamesThePresenterOrTheSpeakerOfThatMinute() {

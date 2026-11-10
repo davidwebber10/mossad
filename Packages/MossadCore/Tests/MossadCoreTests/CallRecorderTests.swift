@@ -204,15 +204,19 @@ final class CallRecorderTests: XCTestCase {
 
     func testCalendarDetailsDuringTheCallAreSaved() throws {
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], meetingID: "abc-defg-hij", at: t0)
-        recorder.setCalendar(title: "Tech Team Monthly Sync", attendees: ["a@example.com"], forCall: id)
+        let event = CalendarEventInfo(title: "Tech Team Monthly Sync", start: t0.addingTimeInterval(-300), end: t0.addingTimeInterval(1500),
+                                      attendees: ["a@example.com"], text: "", isAllDay: false)
+        recorder.setCalendar(event, forCall: id)
         let r = try CallRecord.load(from: paths.callDirectory(id))
         XCTAssertEqual(r.calendarTitle, "Tech Team Monthly Sync")
         XCTAssertEqual(r.attendees, ["a@example.com"])
+        XCTAssertEqual(r.plannedStart, event.start, "the planned times say later whether the call began late or ran over")
+        XCTAssertEqual(r.plannedEnd, event.end)
         XCTAssertEqual(recorder.currentRecord?.calendarTitle, "Tech Team Monthly Sync")
     }
 
     func testCalendarDetailsForAnEndedCallAreIgnored() throws {
-        recorder.setCalendar(title: "Old", attendees: [], forCall: "20000101-000000")
+        recorder.setCalendar(CalendarEventInfo(title: "Old", start: t0, end: t0, attendees: [], text: "", isAllDay: false), forCall: "20000101-000000")
         XCTAssertNil(recorder.currentRecord)
     }
 

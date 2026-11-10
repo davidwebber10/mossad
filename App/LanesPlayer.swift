@@ -12,6 +12,7 @@ extension Palette {
 /// bookmarks on the ruler, and the transport row. Lanes draw in a Canvas each, so a meeting with a hundred voices
 /// and a thousand turns stays fast.
 struct LanesPlayer: View {
+    @EnvironmentObject private var controller: AppController
     @ObservedObject var player: AudioPlayer
     let record: CallRecord
     let people: MeetingPeople
@@ -82,7 +83,13 @@ struct LanesPlayer: View {
             if scrolls, !scrolledToEnd { moreVoices(lanes.count - maxLanes) }
         }
         .accessibilityRepresentation {
+            // VoiceOver reads the lanes as one position slider, so each person's profile is an action of it.
             Slider(value: Binding(get: { player.time }, set: { player.seek(to: $0) }), in: 0...duration) { Text("Position") }
+                .accessibilityActions {
+                    ForEach(people.speakers.prefix(12).compactMap(\.person), id: \.self) { person in
+                        Button("Open \(person)\u{2019}s profile") { controller.openPerson(person) }
+                    }
+                }
         }
     }
 
@@ -173,24 +180,16 @@ private struct LaneRow: View, @MainActor Equatable {
         a.lane == b.lane && a.current == b.current && a.duration == b.duration && a.enabled == b.enabled
             && a.editable == b.editable && a.callID == b.callID && a.speaker?.name == b.speaker?.name
             && a.speaker?.isUnknown == b.speaker?.isUnknown && a.speaker?.keys == b.speaker?.keys
-            && a.speaker?.color == b.speaker?.color && a.speaker?.email == b.speaker?.email
+            && a.speaker?.color == b.speaker?.color && a.speaker?.email == b.speaker?.email && a.speaker?.person == b.speaker?.person
     }
 
     var body: some View {
         HStack(spacing: Space.m) {
             HStack(spacing: 7) {
-                Button { naming = true } label: {
-                    Text(lane.name)
-                        .fontWeight(unknown || current ? .semibold : .regular)
-                        .foregroundStyle(unknown ? Palette.accent : Palette.ink)
-                        .lineLimit(1).truncationMode(.tail)
-                }
-                .buttonStyle(.plain)
-                .disabled(!editable || speaker == nil)
-                .help(unknown ? "Name this voice" : "Change who this is")
-                .popover(isPresented: $naming, arrowEdge: .bottom) {
-                    if let speaker { SpeakerNamingPopover(speaker: speaker, callID: callID, isPresented: $naming) }
-                }
+                name
+                    .popover(isPresented: $naming, arrowEdge: .bottom) {
+                        if let speaker { SpeakerNamingPopover(speaker: speaker, callID: callID, isPresented: $naming) }
+                    }
                 Text(minutes).foregroundStyle(Palette.tertiary).frame(width: 30, alignment: .trailing)
             }
             .font(.system(size: 12)).monospacedDigit()
@@ -222,6 +221,31 @@ private struct LaneRow: View, @MainActor Equatable {
         .frame(height: LanesPlayer.laneHeight)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(lane.name), \(minutes)")
+    }
+
+    /// A saved person's name opens their profile, and "Change who this is" moves to the menu of a right click.
+    /// Any other name names the voice, as before.
+    @ViewBuilder
+    private var name: some View {
+        if let speaker, speaker.person != nil {
+            PersonName(speaker.name)
+                .fontWeight(current ? .semibold : .regular)
+                .foregroundStyle(Palette.ink)
+                .lineLimit(1).truncationMode(.tail)
+                .contextMenu {
+                    if editable { Button("Change who this is…", systemImage: "person.crop.circle.badge.questionmark") { naming = true } }
+                }
+        } else {
+            Button { naming = true } label: {
+                Text(lane.name)
+                    .fontWeight(unknown || current ? .semibold : .regular)
+                    .foregroundStyle(unknown ? Palette.accent : Palette.ink)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            .buttonStyle(.plain)
+            .disabled(!editable || speaker == nil)
+            .help(unknown ? "Name this voice" : "Change who this is")
+        }
     }
 
     private var minutes: String {

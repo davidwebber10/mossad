@@ -595,8 +595,7 @@ public actor Pipeline {
             detail(r.id, "Finding the calendar invite")
             let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
             if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
-                r.calendarTitle = event.title
-                r.attendees = event.attendees
+                r.setInvite(event)
             }
         }
         // After the calendar, so a presenter's name can be matched to the invited people.

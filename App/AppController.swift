@@ -95,10 +95,13 @@ final class AppController: ObservableObject {
     var offUntilDate: Date? { offUntil == 0 || offUntil == .infinity ? nil : Date(timeIntervalSince1970: offUntil) }
     @Published private(set) var meetings: [CallRecord] = [] {
         didSet {
+            meetingsVersion += 1
             upcomingMemo = nil
             if !meetingQuery.isEmpty { filterMeetings(debounce: false) }
         }
     }
+    /// Counts the changes of `meetings`, so a view can ask "did any meeting change" without comparing the records.
+    private(set) var meetingsVersion = 0
     /// False until the first list is read at launch (off the main thread), so no view says "no meetings" meanwhile.
     @Published private(set) var meetingsLoaded = false
     @Published private(set) var processing = 0
@@ -1427,7 +1430,7 @@ final class AppController: ObservableObject {
         guard let event = CalendarMatcher.bestEvent(for: platform, meetingID: meetingID, start: start,
                                                     end: start.addingTimeInterval(1800), in: events) else { return }
         CaptureQueue.queue.async {
-            recorder.setCalendar(title: event.title, attendees: event.attendees, forCall: callID)
+            recorder.setCalendar(event, forCall: callID)
             Task { @MainActor in self.refresh() }
         }
     }
