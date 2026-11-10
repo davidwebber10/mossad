@@ -75,6 +75,20 @@ public enum Pricing {
         }
     }
 
+    /// What AssemblyAI bills for each hour of a call with the live transcript on: one streaming session for each
+    /// track. A room recording has one session, and costs half.
+    public static var liveHourCost: Double { 2 * streamingPerHour }
+
+    /// The line under the live transcript's switch.
+    public static var liveTranscriptNote: String {
+        "Shows what is said during the call. AssemblyAI bills about \(dollars(liveHourCost)) for each hour of a call, for its two tracks. The note does not change."
+    }
+
+    /// "$0.46": list prices are in US dollars, so the amount reads the same in every region.
+    static func dollars(_ value: Double) -> String {
+        value.formatted(.currency(code: "USD").precision(.fractionLength(2)).locale(Locale(identifier: "en_US")))
+    }
+
     /// Typical reply sizes, for the estimates.
     static let summaryOutputTokens = 2_500
     static let promptTokens = 1_500
@@ -91,32 +105,6 @@ public enum Pricing {
 
     /// About 9,000 words are spoken in an hour of meetings, about 4 characters to a token.
     static let hourTranscriptTokens = 13_500
-
-    /// What an hour of meetings costs: both tracks transcribed, and one summary of the hour's transcript.
-    public static func hourEstimate(transcription: TranscriptionProvider, ai: AIProvider, model: String) -> Double {
-        let hour: Double = 3600
-        let audio: UsageEvent.Service? = switch transcription {
-        case .assemblyai: .assemblyai
-        case .deepgram: .deepgram
-        case .elevenlabs: .elevenlabs
-        case .openai: .openai
-        case .local: nil
-        }
-        let service: UsageEvent.Service = switch ai {
-        case .anthropic: .claude
-        case .openai: .openai
-        case .openrouter: .openrouter
-        case .localServer, .apple: .local
-        }
-        let name = ai.resolvedModel(model)
-        let transcript = audio.map {
-            cost(UsageEvent(date: Date(), callID: nil, service: $0, purpose: .transcription,
-                            model: $0 == .assemblyai ? defaultBatchModel : nil, audioSeconds: hour * 2, estimated: true))
-        } ?? 0
-        let summary = cost(UsageEvent(date: Date(), callID: nil, service: service, purpose: .summary, model: name,
-                                      inputTokens: hourTranscriptTokens + promptTokens, outputTokens: summaryOutputTokens, estimated: true))
-        return transcript + summary
-    }
 
     /// Usage for calls processed before the log existed: both tracks transcribed for the whole call, and one
     /// summary with the transcript as input (about 4 characters per token).

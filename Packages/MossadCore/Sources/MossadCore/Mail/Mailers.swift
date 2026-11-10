@@ -25,6 +25,19 @@ public enum MailProvider: String, CaseIterable, Sendable, Identifiable {
         case .ses: .sesSecret
         }
     }
+
+    /// Where to make a key.
+    public var keysPage: URL {
+        let page = switch self {
+        case .resend: "https://resend.com/api-keys"
+        case .postmark: "https://account.postmarkapp.com/servers"
+        case .sendgrid: "https://app.sendgrid.com/settings/api_keys"
+        case .mailgun: "https://app.mailgun.com/settings/api_security"
+        case .brevo: "https://app.brevo.com/settings/keys/api"
+        case .ses: "https://console.aws.amazon.com/iam/home#/security_credentials"
+        }
+        return URL(string: page)!
+    }
 }
 
 /// The settings a mailer needs besides its key. Every mailer sends to exactly one address.

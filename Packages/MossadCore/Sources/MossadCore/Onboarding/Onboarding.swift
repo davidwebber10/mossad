@@ -159,10 +159,13 @@ public enum Onboarding {
         return !finished && !hasMeetings && !preview
     }
 
-    /// "About $0.57 for each hour of meetings, billed by your providers."
-    public static func costLine(perHour: Double) -> String {
-        let amount = perHour.formatted(.currency(code: "USD").precision(.fractionLength(2)))
-        return "About \(amount) for each hour of meetings, billed to your own accounts."
+    /// "About $0.93 for each hour of meetings, billed to your own accounts." The amount is the one Settings shows.
+    public static func costLine(_ cost: HourCost) -> String {
+        switch cost.headline {
+        case "Free": "Free: these choices bill nothing."
+        case "Not known": "The cost is not known: the notes model has no list price."
+        case let amount: "\(amount) for each hour of meetings, billed to your own accounts."
+        }
     }
 }
 
@@ -183,18 +186,44 @@ public enum OnboardingPermissions {
     /// One line for each missing permission, saying what will not work. Browsers share one line.
     public static func whatWillNotWork(missing: [PermissionKind]) -> [String] {
         var lines: [String] = []
-        for kind in ordered(missing) {
-            let line = switch kind {
-            case .microphone: "Without Microphone, your own side of the call is not recorded."
-            case .systemAudio: "Without System audio recording, Mossad cannot hear the other people on the call."
-            case .calendars: "Without Calendars, calls are not named from their invite and attendees are not listed."
-            case .accessibility: "Without Accessibility, Mossad cannot read call window titles, so some calls are not detected."
-            case .notifications: "Without Notifications, Mossad cannot tell you when new voices need names."
-            case .automation: "Without Automation, Google Meet calls in the browser are not detected."
-            case .screenCapture: "Without Screen Recording, shared screens are not captured."
-            }
-            if !lines.contains(line) { lines.append(line) }
-        }
+        for line in ordered(missing).map(consequence) where !lines.contains(line) { lines.append(line) }
         return lines
+    }
+
+    /// What does not work while one permission is missing.
+    public static func consequence(_ kind: PermissionKind) -> String {
+        switch kind {
+        case .microphone: "Without Microphone, your own side of the call is not recorded."
+        case .systemAudio: "Without System audio recording, Mossad cannot hear the other people on the call."
+        case .calendars: "Without Calendars, calls are not named from their invite and attendees are not listed."
+        case .accessibility: "Without Accessibility, Mossad cannot read call window titles, so some calls are not detected."
+        case .notifications: "Without Notifications, Mossad cannot tell you when new voices need names."
+        case .automation: "Without Automation, Google Meet calls in the browser are not detected."
+        case .screenCapture: "Without Screen Recording, shared screens are not captured."
+        }
+    }
+
+    /// One line on what each permission is for. Setup and Settings both show it.
+    public static func purpose(_ kind: PermissionKind) -> String {
+        switch kind {
+        case .microphone: "Records your side of the call."
+        case .systemAudio: "Records the other people, from the call app's audio. Nothing else on your Mac."
+        case .calendars: "Names each call from its invite and lists who was there."
+        case .accessibility: "Reads call window titles, to notice when a Zoom or Teams call starts."
+        case .notifications: "Tells you when a new voice needs a name. Nothing during calls."
+        case .automation: "Reads the meeting link in the browser tab, to notice Google Meet calls."
+        case .screenCapture: "Keeps frames of screens that people share in a call."
+        }
+    }
+
+    /// The words on the one control that gets a permission; nil when it is allowed. macOS asks once, and for
+    /// Accessibility and Screen Recording it never asks: those need its Settings list.
+    public static func action(_ kind: PermissionKind, _ state: PermissionState) -> String? {
+        switch state {
+        case .granted: nil
+        case .notAsked: kind == .accessibility || kind == .screenCapture ? "Open Settings…" : "Allow…"
+        case .needsApp: "Open the browser"
+        case .denied: "Open Settings…"
+        }
     }
 }

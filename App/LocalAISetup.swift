@@ -6,38 +6,24 @@ import SwiftUI
 /// since the meeting text would go to that computer.
 struct LocalServerSetup: View {
     @EnvironmentObject var controller: AppController
-    /// Setup's sheet buttons in place of the Settings ones.
-    var onboarding = false
+    @Environment(\.rowStyle) private var style
     @State private var state: CheckState = .idle
 
     enum CheckState: Equatable { case idle, checking, found(Int), failed(FriendlyError) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Server").font(.system(size: onboarding ? 13.5 : 13, weight: .medium)).foregroundStyle(Palette.ink)
-                    Link(destination: LocalServer.getOllama) {
-                        HStack(spacing: 3) {
-                            Text("Get Ollama")
-                            IconImage(.arrowUp, size: 10).rotationEffect(.degrees(45))
-                        }
-                    }
-                    .font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.accent)
-                    .accessibilityLabel("Get Ollama on its website")
+            // In a narrow column the address and its buttons go under the name, and the address takes the width.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    name
+                    Spacer(minLength: Space.m)
+                    address(width: 200)
                 }
-                Spacer(minLength: Space.m)
-                TextField("Server address", text: $controller.localServerURL, prompt: Text(LocalServer.ollama.absoluteString))
-                    .textFieldStyle(SettingsFieldStyle(width: 200, monospaced: true))
-                    .onSubmit(check)
-                Menu {
-                    Button("Ollama") { use(LocalServer.ollama) }
-                    Button("LM Studio") { use(LocalServer.lmStudio) }
-                } label: {
-                    FillMenuLabel(text: "Presets")
+                VStack(alignment: .leading, spacing: 8) {
+                    name
+                    HStack(spacing: 6) { address(width: nil) }
                 }
-                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-                checkButton
             }
             switch state {
             case .found(let count):
@@ -56,20 +42,39 @@ struct LocalServerSetup: View {
                 .accessibilityElement(children: .combine)
             }
         }
-        .padding(.vertical, onboarding ? Onboard.rowPadding : 9)
+        .padding(.vertical, style.padding)
         .onChange(of: controller.localServerURL) { _, _ in state = .idle }
     }
 
+    private var name: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Server").font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
+            RowLink(text: "Get Ollama", destination: LocalServer.getOllama, spoken: "Get Ollama on its website")
+        }
+        .fixedSize()
+    }
+
     @ViewBuilder
+    private func address(width: CGFloat?) -> some View {
+        TextField("Server address", text: $controller.localServerURL, prompt: Text(LocalServer.ollama.absoluteString))
+            .textFieldStyle(SettingsFieldStyle(width: width, monospaced: true))
+            .onSubmit(check)
+        Menu {
+            Button("Ollama") { use(LocalServer.ollama) }
+            Button("LM Studio") { use(LocalServer.lmStudio) }
+        } label: {
+            FillMenuLabel(text: "Presets")
+        }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+        checkButton.fixedSize()
+    }
+
     private var checkButton: some View {
-        let label = Group {
+        Button(action: check) {
             if state == .checking { ProgressView().controlSize(.small).frame(width: 40) } else { Text("Check") }
         }
-        if onboarding {
-            Button(action: check) { label }.buttonStyle(SheetButtonStyle(kind: .secondary, compact: true)).disabled(state == .checking)
-        } else {
-            Button(action: check) { label }.buttonStyle(SettingsButtonStyle()).disabled(state == .checking)
-        }
+        .rowButton()
+        .disabled(state == .checking)
     }
 
     private func use(_ url: URL) {
@@ -93,17 +98,6 @@ struct LocalServerSetup: View {
                 Log.error("Checking the local AI server failed: \(FriendlyError(error, context: .checkingKey).technical)")
                 state = .failed(FriendlyError(error, context: .checkingKey, service: "the local server"))
             }
-        }
-    }
-}
-
-/// Whether Apple's on-device model can run here, and why not when it cannot.
-struct AppleModelStatus: View {
-    var body: some View {
-        if let reason = AppleModelInfo.unavailableReason() {
-            InlineError(error: FriendlyError(reason, context: .general))
-        } else {
-            PassLine(text: "Ready on this Mac")
         }
     }
 }

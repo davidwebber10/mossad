@@ -6,18 +6,12 @@ import SwiftUI
 /// The steps' settings are the real ones, the same that Settings shows.
 @MainActor
 final class OnboardingModel: ObservableObject {
-    enum KeyCheckState: Equatable {
-        case idle, checking, passed
-        case failed(FriendlyError)
-    }
-
     enum ToneState: Equatable {
         case idle, playing, heard, silent
         case failed(String)
     }
 
     @Published private(set) var progress: OnboardingProgress
-    @Published var keyChecks: [KeyCheck.Service: KeyCheckState] = [:]
     @Published private(set) var micHeard: Bool?
     @Published private(set) var tone: ToneState = .idle
     @Published private(set) var micRunning = false
@@ -26,6 +20,8 @@ final class OnboardingModel: ObservableObject {
     @Published private(set) var stepToken = 0
 
     let micCheck = MicLevelCheck()
+    /// The AI step's key checks, the same ones Settings › AI runs.
+    let keys = KeyChecker()
     private let saves: Bool
     private static let progressKey = "onboardingProgress"
     private static let micKey = "onboardingMicHeard"
@@ -60,7 +56,7 @@ final class OnboardingModel: ObservableObject {
     /// Back to the first step; the settings already made stay.
     func restart() {
         stopMic()
-        keyChecks = [:]
+        keys.reset()
         micHeard = nil
         tone = .idle
         if saves {
@@ -96,32 +92,6 @@ final class OnboardingModel: ObservableObject {
                         chosenCalendars: controller.chosenCalendars.count,
                         micHeard: micHeard,
                         systemAudioHeard: tone == .heard ? true : tone == .silent ? false : nil)
-    }
-
-    // MARK: Keys
-
-    /// Tries the key with one free request; a key that works is saved to the Keychain.
-    func check(_ service: KeyCheck.Service, key typed: String, as apiKey: APIKey, controller: AppController) {
-        let key = typed.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
-        keyChecks[service] = .checking
-        Task {
-            do {
-                try await KeyCheck.run(service, key: key)
-                do {
-                    try controller.keychain.set(key, for: apiKey)
-                    controller.rebuildPipeline()
-                    keyChecks[service] = .passed
-                    controller.keysChanged()
-                } catch {
-                    Log.error("Saving the \(apiKey.rawValue) key failed")
-                    keyChecks[service] = .failed(FriendlyError(error, context: .checkingKey, service: "the Keychain"))
-                }
-            } catch {
-                Log.error("Checking the \(service.displayName) key failed: \(FriendlyError(error, context: .checkingKey).technical)")
-                keyChecks[service] = .failed(FriendlyError(error, context: .checkingKey, service: service.displayName))
-            }
-        }
     }
 
     // MARK: The audio check

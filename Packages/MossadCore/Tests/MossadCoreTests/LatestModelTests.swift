@@ -82,6 +82,7 @@ final class LatestModelTests: XCTestCase {
         XCTAssertFalse(cache.needsRefresh(.anthropic))
         XCTAssertTrue(cache.needsRefresh(.openrouter))
 
+        cache.waitForSaves()
         let restarted = LatestModelCache(defaults: defaults)
         XCTAssertEqual(AIProvider.anthropic.resolvedModel("latest:opus", cache: restarted), "claude-opus-5-5-20261015")
         XCTAssertEqual(AIProvider.openai.resolvedModel("latest:gpt-mini", cache: restarted), "gpt-5.4-mini")
@@ -117,6 +118,44 @@ final class LatestModelTests: XCTestCase {
         let body = try JSONSerialization.jsonObject(with: StubURLProtocol.requests[0].body) as! [String: Any]
         XCTAssertEqual(body["model"] as? String, "claude-sonnet-5-5")
         XCTAssertEqual(log.all().last?.model, "claude-sonnet-5-5")
+    }
+
+    /// A write to the defaults tells its observers at once, on the writing thread. SwiftUI is one of them, and it
+    /// waits for the main thread, which can be waiting for an id: Settings › AI then never draws.
+    func testAnObserverOfTheDefaultsCanReadAnIdWhileTheCacheSaves() {
+        let defaults = freshDefaults()
+        let cache = LatestModelCache(defaults: defaults)
+        let answered = expectation(description: "the cache answers while it saves")
+        answered.assertForOverFulfill = false
+        let observer = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: defaults, queue: nil) { _ in
+            let done = DispatchSemaphore(value: 0)
+            DispatchQueue.global().async {
+                _ = cache.id("latest:opus", provider: .anthropic)
+                done.signal()
+            }
+            if done.wait(timeout: .now() + 1) == .success { answered.fulfill() }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        cache.update(.anthropic, models: [ModelInfo(id: "claude-opus-5-5", name: "Claude Opus 5.5")])
+        wait(for: [answered], timeout: 5)
+        cache.waitForSaves()
+        XCTAssertEqual(LatestModelCache(defaults: defaults).id("latest:opus", provider: .anthropic), "claude-opus-5-5")
+    }
+
+    /// No caller waits for a save: an observer of the defaults can be slow, or can wait for the caller's thread.
+    func testAnUpdateDoesNotWaitForTheObserversOfTheDefaults() {
+        let defaults = freshDefaults()
+        let cache = LatestModelCache(defaults: defaults)
+        let observer = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: defaults, queue: nil) { _ in
+            Thread.sleep(forTimeInterval: 0.4)
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        let start = Date()
+        cache.update(.anthropic, models: [ModelInfo(id: "claude-opus-5-5", name: "Claude Opus 5.5")])
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.2)
+        XCTAssertEqual(cache.id("latest:opus", provider: .anthropic), "claude-opus-5-5")
+        cache.waitForSaves()
+        XCTAssertEqual(LatestModelCache(defaults: defaults).id("latest:opus", provider: .anthropic), "claude-opus-5-5")
     }
 
     func testPricesUseTheResolvedModel() {

@@ -38,7 +38,9 @@ struct SettingsFootnote: View {
     }
 }
 
-/// A title, an optional line under it, and the control on the right.
+/// A title, an optional line under it, and the control on the right. The text gets all the width that the control
+/// leaves, so a line does not wrap while the row has room. When the control leaves the text less than
+/// `textMinimum`, the control goes under the text.
 struct SettingsRow<Trailing: View>: View {
     let title: String
     var detail: String?
@@ -46,15 +48,33 @@ struct SettingsRow<Trailing: View>: View {
     var titleNote: String?
     var alignment: VerticalAlignment = .center
     @ViewBuilder var trailing: Trailing
+    @Environment(\.rowStyle) private var style
 
     var body: some View {
-        HStack(alignment: alignment, spacing: Space.m) {
-            SettingsRowText(title: title, detail: detail, titleNote: titleNote)
-            Spacer(minLength: Space.m)
-            trailing
+        ViewThatFits(in: .horizontal) {
+            // All of it on one line.
+            HStack(alignment: alignment, spacing: Space.m) {
+                text.fixedSize()
+                Spacer(minLength: Space.m)
+                trailing
+            }
+            // The text wraps beside the control. Its ideal width is the least it may get, so this shape is
+            // chosen by the room the control leaves, not by the length of the line.
+            HStack(alignment: alignment, spacing: Space.m) {
+                text.frame(minWidth: Self.textMinimum, idealWidth: Self.textMinimum, maxWidth: .infinity, alignment: .leading)
+                trailing
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                text
+                trailing
+            }
         }
-        .padding(.vertical, 9)
+        .padding(.vertical, style.padding)
     }
+
+    private var text: some View { SettingsRowText(title: title, detail: detail, titleNote: titleNote) }
+
+    private static var textMinimum: CGFloat { 150 }
 }
 
 extension SettingsRow where Trailing == EmptyView {
@@ -67,6 +87,7 @@ struct SettingsRowText: View {
     let title: String
     var detail: String?
     var titleNote: String?
+    @Environment(\.rowStyle) private var style
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -77,11 +98,11 @@ struct SettingsRowText: View {
                     Text(title)
                 }
             }
-            .font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
-            .cssLineHeight(size: 13)
+            .font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
+            .cssLineHeight(size: style.titleSize)
             if let detail {
-                Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                    .cssLineHeight(size: 12)
+                Text(detail).font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
+                    .cssLineHeight(size: style.detailSize)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -93,11 +114,12 @@ struct SettingsSwitchRow: View {
     let title: String
     var detail: String?
     @Binding var isOn: Bool
+    @Environment(\.rowStyle) private var style
 
     var body: some View {
         Toggle(isOn: $isOn) { SettingsRowText(title: title, detail: detail) }
             .toggleStyle(SheetSwitchStyle())
-            .padding(.vertical, 9)
+            .padding(.vertical, style.padding)
     }
 }
 

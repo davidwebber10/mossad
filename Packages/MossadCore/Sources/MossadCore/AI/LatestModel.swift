@@ -71,6 +71,7 @@ public final class LatestModelCache: @unchecked Sendable {
 
     private let defaults: UserDefaults
     private let lock = NSLock()
+    private let saves = DispatchQueue(label: "com.dwebber.mossad.latest-models", qos: .utility)
     private var ids: [String: [String: String]]
     private var refreshed: [String: Date]
 
@@ -95,15 +96,30 @@ public final class LatestModelCache: @unchecked Sendable {
         for alias in LatestModel.aliases(for: provider) {
             if let id = LatestModel.resolve(alias.id, in: models) { found[alias.id] = id }
         }
-        return lock.withLock {
+        let changed = lock.withLock {
             let changed = ids[provider.rawValue] ?? [:] != found
             ids[provider.rawValue] = found
             refreshed[provider.rawValue] = now
-            defaults.set(ids, forKey: Self.idsKey)
-            defaults.set(refreshed, forKey: Self.refreshedKey)
             return changed
         }
+        save()
+        return changed
     }
+
+    /// Never under `lock`, and never on the caller's thread: a write tells every observer of the defaults at once,
+    /// on the thread that writes. SwiftUI is one of them and waits for the main thread, which can be waiting on
+    /// `lock` for an id in a view's body, or can be the caller. On its own queue, no thread waits for a save.
+    private func save() {
+        saves.async { [self] in
+            // Read inside the save, so two updates cannot leave the older one in the defaults.
+            let (ids, refreshed) = lock.withLock { (self.ids, self.refreshed) }
+            defaults.set(ids, forKey: Self.idsKey)
+            defaults.set(refreshed, forKey: Self.refreshedKey)
+        }
+    }
+
+    /// Returns when every save so far is in the defaults. For tests that read them back.
+    func waitForSaves() { saves.sync {} }
 
     /// True when the provider's list has not been read in the last day.
     public func needsRefresh(_ provider: AIProvider, now: Date = Date()) -> Bool {

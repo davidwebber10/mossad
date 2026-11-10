@@ -140,6 +140,28 @@ final class OnboardingTests: XCTestCase {
         XCTAssertEqual(OnboardingPermissions.whatWillNotWork(missing: [.automation("a"), .automation("b")]).count, 1)
     }
 
+    func testEachPermissionSaysWhatItIsFor() {
+        XCTAssertEqual(OnboardingPermissions.purpose(.microphone), "Records your side of the call.")
+        XCTAssertTrue(OnboardingPermissions.purpose(.systemAudio).contains("other people"))
+        XCTAssertTrue(OnboardingPermissions.purpose(.automation("com.apple.Safari")).contains("Google Meet"))
+        XCTAssertTrue(OnboardingPermissions.purpose(.screenCapture).contains("screens"))
+    }
+
+    func testAMissingPermissionSaysWhatDoesNotWork() {
+        XCTAssertEqual(OnboardingPermissions.consequence(.microphone), "Without Microphone, your own side of the call is not recorded.")
+        XCTAssertEqual(OnboardingPermissions.whatWillNotWork(missing: [.calendars]), [OnboardingPermissions.consequence(.calendars)])
+    }
+
+    func testThePermissionActionFollowsWhatMacOSCanStillDo() {
+        XCTAssertNil(OnboardingPermissions.action(.microphone, .granted))
+        XCTAssertEqual(OnboardingPermissions.action(.microphone, .notAsked), "Allow…")
+        XCTAssertEqual(OnboardingPermissions.action(.microphone, .denied), "Open Settings…")
+        // macOS has no prompt for these two: only its Settings list.
+        XCTAssertEqual(OnboardingPermissions.action(.accessibility, .notAsked), "Open Settings…")
+        XCTAssertEqual(OnboardingPermissions.action(.screenCapture, .notAsked), "Open Settings…")
+        XCTAssertEqual(OnboardingPermissions.action(.automation("com.apple.Safari"), .needsApp), "Open the browser")
+    }
+
     // MARK: When it opens
 
     func testOnlyANewInstallSeesItInTheRealApp() {
@@ -156,12 +178,13 @@ final class OnboardingTests: XCTestCase {
 
     // MARK: Cost
 
-    func testAnHourOfMeetingsCostsBothTracksAndOneSummary() {
+    func testAnHourOfMeetingsCostsBothTracksAndTheNotes() {
         let cost = Pricing.hourEstimate(transcription: .assemblyai, ai: .anthropic, model: "")
-        // Two tracks at $0.23 an hour, and a summary of about 15,000 tokens in and 2,500 out on the default model.
-        XCTAssertEqual(cost, 0.46 + 0.06 + 0.05, accuracy: 0.005)
-        XCTAssertEqual(Pricing.hourEstimate(transcription: .local, ai: .anthropic, model: "claude-haiku-5-5"), 0.0028, accuracy: 0.0005)
-        XCTAssertTrue(Onboarding.costLine(perHour: 0.57).contains("$0.57"))
+        // Two tracks at $0.23 an hour; a summary of about 15,000 tokens in and 2,500 out on the default model; and
+        // the read for what the owner promised, about 14,100 tokens in and 300 out.
+        XCTAssertEqual(cost, 0.46 + 0.06 + 0.05 + 0.0624, accuracy: 0.005)
+        XCTAssertEqual(Pricing.hourEstimate(transcription: .local, ai: .anthropic, model: "claude-haiku-5-5"), 0.0044, accuracy: 0.0005)
+        XCTAssertTrue(Onboarding.costLine(Pricing.hourCost(transcription: .assemblyai, ai: .anthropic, model: "")).contains("$0.63"))
     }
 }
 

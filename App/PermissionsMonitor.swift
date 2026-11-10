@@ -8,10 +8,10 @@ import UserNotifications
 /// Reads the state of every permission Mossad needs, and fixes one on a click.
 @MainActor
 final class PermissionsMonitor: ObservableObject {
+    /// What each one is for is in `OnboardingPermissions.purpose`, for setup and Settings alike.
     struct Item: Identifiable {
         let kind: PermissionKind
         let title: String
-        let reason: String
         var state: PermissionState
         var id: PermissionKind { kind }
     }
@@ -151,17 +151,16 @@ final class PermissionsMonitor: ObservableObject {
 
     private static func baseItems() -> [Item] {
         var items = [
-            Item(kind: .microphone, title: "Microphone", reason: "Records your side of the call", state: .notAsked),
-            Item(kind: .systemAudio, title: "System audio recording", reason: "Needed to hear the other people on the call", state: .notAsked),
-            Item(kind: .accessibility, title: "Accessibility", reason: "Reads the window title to detect a call", state: .notAsked),
-            Item(kind: .calendars, title: "Calendars", reason: "Matches calls to invites by meeting link", state: .notAsked),
-            Item(kind: .notifications, title: "Notifications", reason: "Tells you when voices need names", state: .notAsked),
+            Item(kind: .microphone, title: "Microphone", state: .notAsked),
+            Item(kind: .systemAudio, title: "System audio recording", state: .notAsked),
+            Item(kind: .accessibility, title: "Accessibility", state: .notAsked),
+            Item(kind: .calendars, title: "Calendars", state: .notAsked),
+            Item(kind: .notifications, title: "Notifications", state: .notAsked),
         ]
         for id in MeetingMatcher.browserBundleIDs {
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { continue }
             let name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
-            items.append(Item(kind: .automation(id), title: "Automation · \(name)",
-                              reason: "Reads the meeting link from the tab", state: .notAsked))
+            items.append(Item(kind: .automation(id), title: "Automation · \(name)", state: .notAsked))
         }
         return items
     }
