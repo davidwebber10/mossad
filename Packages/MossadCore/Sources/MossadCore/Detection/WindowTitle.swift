@@ -37,14 +37,16 @@ public enum WindowTitle {
     }
 
     /// Which of `titles` (as Accessibility gives them) is the window that the window server calls `title`, or nil
-    /// when none or more than one can be it. One candidate is picked by its title. With two or more, the title
+    /// when none or more than one can be it. With no frame, one candidate is picked by its title. With a frame, the title
     /// decides nothing, also when one of them is equal: the browser's window that is in a call has the longer title,
     /// and a second window with the same page has the equal one. Then only the frame decides (2 pt), and when it
     /// cannot (no frame, none that agrees, two that agree), the answer is nil and nothing is captured.
     public static func pick(title: String, frame: CGRect?, among titles: [String], frameOf: (Int) -> CGRect?) -> Int? {
         let candidates = titles.indices.filter { same(title, titles[$0]) }
-        if candidates.count <= 1 { return candidates.first }
-        guard let frame else { return nil }
+        // With no frame to compare (a label read, not a crop), a single candidate is picked by its title.
+        guard let frame else { return candidates.count == 1 ? candidates[0] : nil }
+        // With a frame, every pick must agree with it, also a single candidate: the captured window can be missing
+        // from the Accessibility list, and then the one title that matches belongs to another window.
         let there = candidates.filter { i in
             guard let f = frameOf(i) else { return false }
             return abs(f.minX - frame.minX) <= 2 && abs(f.minY - frame.minY) <= 2 && abs(f.width - frame.width) <= 2 && abs(f.height - frame.height) <= 2

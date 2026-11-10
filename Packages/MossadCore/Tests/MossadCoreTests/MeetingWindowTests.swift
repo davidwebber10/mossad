@@ -270,6 +270,16 @@ final class MeetingWindowTests: XCTestCase {
         XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: a, among: [meet, meet], frameOf: none))
     }
 
+    /// The captured window may be missing from the Accessibility list; then the one window whose title matches is
+    /// a different window, and its page place would crop the wrong picture. With the frame known, it must agree.
+    func testASingleCandidateMustAgreeWithAKnownFrame() {
+        let meet = "Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)"
+        let here = CGRect(x: 0, y: 30, width: 1200, height: 800), elsewhere = CGRect(x: 300, y: 60, width: 900, height: 600)
+        XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: here, among: [meet], frameOf: { _ in here }), 0)
+        XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: here, among: [meet], frameOf: { _ in elsewhere }))
+        XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: here, among: [meet], frameOf: { _ in nil }))
+    }
+
     func testAnEqualTitleDoesNotWinOverAnotherCandidate() {
         // Chrome's two forms of a Meet window's title for Accessibility. The window in the call has the recording
         // state in it; a second window with the same link has not, so its title is equal to the window server's.
