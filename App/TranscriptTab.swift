@@ -13,6 +13,9 @@ struct TranscriptTab: View {
     var highlight: TimeInterval?
     @State private var blocks: [TranscriptBlock] = []
     @State private var stats = ""
+    /// The title of each screen's row, by file name, worked out with the blocks.
+    @State private var screenTitles: [String: String] = [:]
+    @Environment(\.openScreen) private var openScreen
     @State private var find = ""
     @State private var matchIndex = 0
     @State private var follow = true
@@ -24,7 +27,7 @@ struct TranscriptTab: View {
 
     /// Rebuilt only when the words or the names change, not on every tick of the player.
     private var blocksKey: String {
-        "\(record.utterances.count)|\(record.markers.count)|\(record.screens?.count ?? 0)|" + record.speakerNames.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+        "\(record.utterances.count)|\(record.markers.count)|\(record.screens?.count ?? 0)|\(record.screenGaps?.count ?? 0)|" + record.speakerNames.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
     }
 
     var body: some View {
@@ -70,6 +73,7 @@ struct TranscriptTab: View {
         }
         .task(id: blocksKey) {
             blocks = TranscriptBlock.blocks(record)
+            screenTitles = Dictionary((record.screens ?? []).map { ($0.file, record.screenTitle($0)) }, uniquingKeysWith: { a, _ in a })
             let words = record.utterances.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
             stats = "\(blocks.count.formatted()) \(blocks.count == 1 ? "turn" : "turns") · \(words.formatted()) words"
         }
@@ -144,7 +148,9 @@ struct TranscriptTab: View {
     // MARK: Turns
 
     private func turns(matches: [LineID], current: Int?, marked: Int?) -> some View {
-        let breaks = record.recordingMarkers
+        // The pauses of the screen capture are lines like the other markers; the screens are rows of their own.
+        let breaks = (record.recordingMarkers + (record.screenGaps ?? []).map { TranscriptMarker(offset: $0.offset, text: $0.text) })
+            .sorted { $0.offset < $1.offset }
         let screens = record.screens ?? []
         let active = matches.indices.contains(matchIndex) ? matches[matchIndex] : nil
         return LazyVStack(alignment: .leading, spacing: 2) {
@@ -154,7 +160,7 @@ struct TranscriptTab: View {
                     MarkerLine(marker: m)
                 }
                 ForEach(screens.filter { $0.offset > previousEnd && $0.offset <= block.start }) { s in
-                    ScreenLine(record: record, screen: s)
+                    screenLine(s)
                 }
                 TurnRow(block: block, speaker: people.speaker(forKey: block.speakerKey), callID: record.id,
                         editable: record.status == .written, player: player,
@@ -166,10 +172,14 @@ struct TranscriptTab: View {
                 MarkerLine(marker: m)
             }
             ForEach(screens.filter { $0.offset > (blocks.last?.end ?? -1) }) { s in
-                ScreenLine(record: record, screen: s)
+                screenLine(s)
             }
         }
         .textSelection(.enabled)
+    }
+
+    private func screenLine(_ s: SharedScreen) -> some View {
+        ScreenLine(url: record.frameURL(s), title: screenTitles[s.file] ?? "Screen shared") { openScreen?(s) }
     }
 
     /// One entry per line that contains the term, in reading order.

@@ -99,6 +99,21 @@ final class SharedScreenTests: XCTestCase {
         XCTAssertEqual(ShareSession.group(screens).map(\.count), [2, 1, 1])
     }
 
+    func testTheFilmstripDrawsFewPicturesHoweverManyFrames() {
+        // Three hours with a frame each 15 s: 720 frames on a line of 900 pt.
+        let offsets = (0..<720).map { Double($0) * 15 }
+        let pictured = FilmstripLayout.pictured(offsets, open: 400, duration: 10_800, span: 900, spacing: 70)
+        XCTAssertLessThanOrEqual(pictured.count, 14)
+        XCTAssertTrue(pictured.contains(400))
+        XCTAssertEqual(pictured, pictured.sorted())
+        // No two pictures nearer than the spacing.
+        let places = pictured.map { 900 * offsets[$0] / 10_800 }
+        XCTAssertTrue(zip(places, places.dropFirst()).allSatisfy { $1 - $0 >= 70 })
+        // A few frames far apart all get one.
+        XCTAssertEqual(FilmstripLayout.pictured([0, 600, 1200], open: 1, duration: 1800, span: 900, spacing: 70), [0, 1, 2])
+        XCTAssertEqual(FilmstripLayout.pictured([], open: 0, duration: 1800, span: 900, spacing: 70), [])
+    }
+
     // MARK: Times of day
 
     func testTheTimeOfDayAfterAPauseComesFromTheFrame() {

@@ -52,3 +52,17 @@ extension SharedScreen {
         return "Screen shared · \(time)"
     }
 }
+
+/// Which frames of the viewer's filmstrip get a picture. Every frame has a mark on the line; a picture is drawn
+/// (and decoded) only where there is room for one.
+public enum FilmstripLayout {
+    /// The open frame, and others whose place is at least `spacing` from each one already chosen, in time order.
+    /// `span` is the line's length; a frame's place is its offset's part of `duration`.
+    public static func pictured(_ offsets: [TimeInterval], open: Int, duration: TimeInterval, span: Double, spacing: Double) -> [Int] {
+        guard duration > 0, offsets.indices.contains(open) else { return [] }
+        func x(_ i: Int) -> Double { span * min(1, offsets[i] / duration) }
+        var chosen = [open]
+        for i in offsets.indices where chosen.allSatisfy({ abs(x($0) - x(i)) >= spacing }) { chosen.append(i) }
+        return chosen.sorted()
+    }
+}

@@ -139,6 +139,7 @@ struct MeetingDetailView: View {
             TranscriptTab(record: record, people: people, player: player, top: Self.underTabs + 28, highlight: highlight)
         case .screens:
             ScreensTab(record: record, player: player, top: Self.underTabs + 28, selected: $openScreen)
+                .equatable()
         case .coach:
             ScrollView {
                 CoachTab(record: record, people: people, player: player)
