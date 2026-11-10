@@ -173,7 +173,7 @@ public enum MeetingFindings {
         case .wordsPerMinute: return "spoke at \(Int(v.rounded())) words a minute"
         case .fillersPerMinute: return "used \(tenth(v)) filler words a minute"
         case .questionsPerHour: return times == 0 ? "asked no questions" : "asked \(count(times, "question", "questions")) (\(rate))"
-        case .averageTurn: return "took turns of \(span(v)) on average"
+        case .averageTurn: return "usually spoke \(span(v)) at a time"
         case .longestTurn: return "held one turn for \(span(v))"
         case .cutInsPerHour:
             let whom = you ? "" : " on you"
@@ -190,7 +190,9 @@ public enum MeetingFindings {
     /// "usually 30 to 40% in 1:1s with you": the range and where it comes from. Counts say that they are per hour.
     /// A range from fewer than five meetings is not called usual: "30 to 40% in 1:1s with you, in 3 meetings so far".
     public static func usually(_ metric: PersonMetric, _ u: MeetingAnalytics.Usual, context: MeetingAnalytics.Context) -> String {
-        tell("\(range(metric, u))\(perHour.contains(metric) ? " an hour" : "")", u, context)
+        // A longest turn is a ceiling: "up to 2 min 36 s" reads better than a wide range from short to long.
+        let range = metric == .longestTurn ? "up to \(span(u.high))" : range(metric, u)
+        return tell("\(range)\(perHour.contains(metric) ? " an hour" : "")", u, context)
     }
 
     public static func usually(_ metric: MeetingMetric, _ u: MeetingAnalytics.Usual, context: MeetingAnalytics.Context) -> String {

@@ -278,7 +278,10 @@ extension MeetingAnalytics {
             let mine = turns.filter { $0.speaker == i }
             guard !mine.isEmpty else { continue }
             speakers[i].turns = mine.count
-            speakers[i].averageTurn = mine.reduce(0) { $0 + $1.seconds } / Double(mine.count)
+            // The typical turn is the median: one long turn must not make every turn look long.
+            let lengths = mine.map(\.seconds).sorted()
+            let mid = lengths.count / 2
+            speakers[i].averageTurn = lengths.count % 2 == 1 ? lengths[mid] : (lengths[mid - 1] + lengths[mid]) / 2
             // The first of equal turns, as `CallMetrics` picks it.
             speakers[i].longestTurn = mine.max { $0.seconds < $1.seconds }.map { Moment(start: $0.start, seconds: $0.seconds) }
         }

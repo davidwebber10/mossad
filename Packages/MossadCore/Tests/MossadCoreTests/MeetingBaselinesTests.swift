@@ -237,7 +237,7 @@ final class MeetingBaselinesTests: XCTestCase {
         var b = analytics(r, sameKind + sameTopic + sameSize + large).baselines
         XCTAssertEqual(b.person("them:A")?.context, .init(kind: .setting, meetings: 3, label: "in monthly update meetings of 3 to 4 people"))
         b = analytics(r, sameTopic + sameSize + large).baselines
-        XCTAssertEqual(b.person("them:A")?.context, .init(kind: .setting, meetings: 3, label: "in meetings of 3 to 4 people on these topics"))
+        XCTAssertEqual(b.person("them:A")?.context, .init(kind: .setting, meetings: 3, label: "in meetings of 3 to 4 people about Budget"))
         b = analytics(r, sameSize + large).baselines
         XCTAssertEqual(b.person("them:A")?.context, .init(kind: .setting, meetings: 3, label: "in meetings of 3 to 4 people"))
         XCTAssertEqual(b.meeting.context?.label, "in meetings of 3 to 4 people")
@@ -279,10 +279,12 @@ final class MeetingBaselinesTests: XCTestCase {
         XCTAssertEqual(w.context, .init(kind: .setting, meetings: 6, label: "in meetings of 3 to 4 people with Sam"))
         XCTAssertEqual(w.reading.value, 0.7)
         XCTAssertEqual(w.reading.standing, .above)
-        let said = a.baselines.standouts.first { $0.id == "with.them:A" }
-        XCTAssertEqual(said?.subject, "me:A")
-        XCTAssertEqual(said?.text, "talked 70% of the time; usually 41 to 46% in meetings of 3 to 4 people with Sam")
-        XCTAssertEqual(said?.evidence, .person("them:A"))
+        // The owner's share stood out overall and with Sam: one cause, so one line about it.
+        let shareLines = a.baselines.standouts.filter { $0.id == "with.them:A" || $0.id == "me:A.talkShare" }
+        XCTAssertEqual(shareLines.count, 1, "\(shareLines.map(\.id))")
+        XCTAssertEqual(shareLines.first?.subject, "me:A")
+        let text = MeetingFindings.did(.talkShare, w.reading.value, you: true) + "; usually 41 to 46% in meetings of 3 to 4 people with Sam"
+        XCTAssertEqual(text, "talked 70% of the time; usually 41 to 46% in meetings of 3 to 4 people with Sam")
     }
 
     // MARK: The meeting
@@ -459,7 +461,42 @@ final class MeetingBaselinesTests: XCTestCase {
         ])
         let byID = Dictionary(uniqueKeysWithValues: analytics(r, oneOnOnes(person: [.longestTurn: 60], onlyFor: owner)).baselines.standouts.map { ($0.id, $0) })
         XCTAssertEqual(byID["me:A.longestTurn"]?.evidence, .moment(100))
-        XCTAssertEqual(byID["me:A.longestTurn"]?.text, "held one turn for 5 min; usually 1 min in your 1:1s with Sam")
+        XCTAssertEqual(byID["me:A.longestTurn"]?.text, "held one turn for 5 min; usually up to 1 min in your 1:1s with Sam")
+    }
+
+    /// One long turn made the average turn stand out too, so "What stood out" said one thing twice, at the same
+    /// moment. The typical turn is the median, which one long turn does not move, and a person's turn numbers
+    /// give at most one line.
+    func testOneLongTurnIsOneLineAndDoesNotMoveTheTypicalTurn() {
+        var turns: [Line] = []
+        var t = 0.0
+        for i in 0..<12 {
+            turns.append(("me:A", t, t + 8, "Point \(i)."))
+            turns.append(("them:A", t + 9, t + 17, "Reply \(i)."))
+            t += 18
+        }
+        turns.append(("me:A", t, t + 300, "Then a very long turn."))
+        turns.append(("them:A", t + 301, t + 309, "Why?"))
+        let r = call(minutes: 60, title: "Dana / Sam", turns)
+        let a = analytics(r, oneOnOnes(person: [.longestTurn: 30, .averageTurn: 8], onlyFor: owner))
+        let me = a.speakers.first(where: \.isOwner)!
+        XCTAssertEqual(me.averageTurn, 8, accuracy: 0.5, "the typical turn is the median")
+        let mine = a.baselines.standouts.filter { $0.subject == "me:A" }.map(\.id)
+        XCTAssertTrue(mine.contains("me:A.longestTurn"), "\(mine)")
+        XCTAssertFalse(mine.contains("me:A.averageTurn"), "\(mine)")
+    }
+
+    /// Two lines from one cause: the owner's talk share and the owner's share with one person keep the stronger.
+    func testOneLinePerCauseKeepsTheStrongerOfRelatedLines() {
+        typealias S = MeetingAnalytics.Standout
+        let list = [
+            S(id: "me:A.averageTurn", subject: "me:A", text: "a", evidence: nil, score: 3),
+            S(id: "me:A.longestTurn", subject: "me:A", text: "b", evidence: nil, score: 5),
+            S(id: "me:A.talkShare", subject: "me:A", text: "c", evidence: nil, score: 4),
+            S(id: "with.them:B", subject: "me:A", text: "d", evidence: nil, score: 6),
+            S(id: "them:A.averageTurn", subject: "them:A", text: "e", evidence: nil, score: 3),
+        ]
+        XCTAssertEqual(MeetingAnalytics.Baselines.onePerCause(list).map(\.id), ["me:A.longestTurn", "with.them:B", "them:A.averageTurn"])
     }
 
     func testAnOrdinaryCallHasNothingToSay() {

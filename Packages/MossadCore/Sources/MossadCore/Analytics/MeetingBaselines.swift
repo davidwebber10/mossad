@@ -343,7 +343,12 @@ extension MeetingAnalytics {
             let topics = Set(this.tags.map { $0.lowercased() })
             if !topics.isEmpty {
                 let same = sized.filter { !topics.isDisjoint(with: $0.tags.map { $0.lowercased() }) }
-                if Self.enough(same) { return (same, "in meetings of \(this.size.words) on these topics") }
+                if Self.enough(same) {
+                    // Name the topics the earlier meetings share with this one, as this call writes them.
+                    let shared = this.tags.filter { tag in same.contains { $0.tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } } }
+                    let named = shared.prefix(2).joined(separator: " or ")
+                    return (same, "in meetings of \(this.size.words) about \(named)")
+                }
             }
             return Self.enough(sized) ? (sized, "in meetings of \(this.size.words)") : nil
         }
@@ -548,7 +553,7 @@ extension MeetingAnalytics.Baselines {
         }
         var perSubject: [String: Int] = [:]
         var out: [A.Standout] = []
-        for s in all.sorted(by: { ($0.score, $1.id) > ($1.score, $0.id) }) {
+        for s in onePerCause(all).sorted(by: { ($0.score, $1.id) > ($1.score, $0.id) }) {
             let subject = s.subject ?? ""
             guard perSubject[subject, default: 0] < (oneOnOne ? standoutsPerSubjectOfTwo : standoutsPerSubject) || s.subject == nil else { continue }
             perSubject[subject, default: 0] += 1
@@ -556,6 +561,20 @@ extension MeetingAnalytics.Baselines {
             if out.count == maximumStandouts { break }
         }
         return out
+    }
+
+    /// One line for each cause: a person's typical and longest turn tell of the same turns, and the owner's talk
+    /// share tells of their share with each person. Of related lines the strongest stays, in the order given.
+    static func onePerCause(_ list: [A.Standout]) -> [A.Standout] {
+        func cause(_ s: A.Standout) -> String {
+            let subject = s.subject ?? ""
+            if s.id.hasSuffix(".averageTurn") || s.id.hasSuffix(".longestTurn") { return "\(subject).turns" }
+            if s.id.hasSuffix(".talkShare") || s.id.hasPrefix("with.") { return "\(subject).share" }
+            return s.id
+        }
+        var best: [String: A.Standout] = [:]
+        for s in list where best[cause(s)].map({ s.score > $0.score }) ?? true { best[cause(s)] = s }
+        return list.filter { best[cause($0)]?.id == $0.id }
     }
 
     /// The count in this call behind a number that the history holds per hour.

@@ -234,7 +234,7 @@ struct FlowSection: View {
         var out: [SpeakerTable.Column] = []
         if full {
             out.append(SpeakerTable.Column("Turns", width: 44) { s in Text("\(s.turns)").foregroundStyle(Palette.secondary) })
-            out.append(SpeakerTable.Column("Average turn", width: 84) { s in
+            out.append(SpeakerTable.Column("Typical turn", width: 84) { s in
                 let u = a.usual(s, .averageTurn)
                 Marked(text: MeetingFindings.span(s.averageTurn), reading: u?.reading, tip: u?.tip)
             })

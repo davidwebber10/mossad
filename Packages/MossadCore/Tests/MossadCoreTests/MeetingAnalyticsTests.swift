@@ -104,7 +104,7 @@ final class MeetingAnalyticsTests: XCTestCase {
         let dana = a.speakers[0], sam = a.speakers[1]
         XCTAssertEqual(dana.turns, 3)
         XCTAssertEqual(dana.longestTurn, .init(start: 0, seconds: 100))
-        XCTAssertEqual(dana.averageTurn, (100 + 9 + 5) / 3.0, accuracy: 0.0001)
+        XCTAssertEqual(dana.averageTurn, 9, accuracy: 0.0001, "the typical turn is the median of 100, 9, and 5")
         XCTAssertEqual(sam.turns, 2)
         XCTAssertEqual(sam.longestTurn, .init(start: 131, seconds: 20))
         XCTAssertEqual(a.flow?.turns, 5)
