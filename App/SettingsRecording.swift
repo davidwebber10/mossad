@@ -2,8 +2,7 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// Settings › Recording: the live transcript, how long audio stays, shared screens, voices, calendars, storage,
-/// and folders. Each switch says what it does in a line under it, and a missing permission has its fix in the row.
+/// Settings › Recording: the live transcript, how long audio stays, voices, calendars, storage, and folders.
 struct RecordingSettings: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
@@ -13,6 +12,7 @@ struct RecordingSettings: View {
         LabelColumnStack {
             SettingsGroup(label: "Recording") {
                 SettingsSwitchRow(title: "Live transcript while recording", detail: Pricing.liveTranscriptNote, isOn: $controller.liveTranscriptEnabled)
+                    .help("Shows what is said as the call runs, with AssemblyAI streaming. AssemblyAI bills the time a call records with this on. The note still uses the full transcription after the call.")
                 Toggle(isOn: $controller.deleteRecordings) {
                     SettingsRowText(title: "Delete recordings after a period of time",
                                     detail: "Notes and transcripts are always kept. A recording uses about 14 MB an hour.")
