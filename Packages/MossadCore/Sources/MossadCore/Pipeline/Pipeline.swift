@@ -363,16 +363,48 @@ public actor Pipeline {
         return r
     }
 
-    /// Marks a recording as archived in the bucket. Through this actor, so a run or an edit in flight keeps the key
-    /// and the key never brings back an old copy of the record. False when the record cannot be read.
+    /// Marks a recording as archived in a backup. Through this actor, so a run or an edit in flight keeps the mark
+    /// and the mark never brings back an old copy of the record. A copy the record had in another key or place
+    /// becomes a leftover, for the archive to remove once this one is safe. With `ifCurrent`, nothing changes
+    /// unless the record still names that copy. False when the record cannot be read or was not changed.
     @discardableResult
-    public func setCloudKey(callID: String, key: String, size: Int64) -> Bool {
-        guard let r = edit(callID, { $0.cloudKey = key; $0.cloudSize = size; return true }) else { return false }
+    public func setArchived(callID: String, _ object: ArchivedObject, size: Int64, ifCurrent: ArchivedObject? = nil) -> Bool {
+        let changed = edit(callID) { r in
+            let current = r.archived
+            if let ifCurrent, current != ifCurrent, current != object { return false }
+            if let current, current != object, r.cloudLeftovers?.contains(current) != true { r.cloudLeftovers = (r.cloudLeftovers ?? []) + [current] }
+            r.cloudKey = object.key
+            r.cloudSize = size
+            // The bucket has no name in the record, as before places had names, so an older build reads it the same.
+            r.cloudBackend = object.kind == .bucket ? nil : object.backend
+            return true
+        }
+        guard let r = changed else { return false }
         do { try store(r, dir: paths.callDirectory(callID)) } catch {
             Log.error("Saving the archive key of \(callID) failed: \(error)")
             return false
         }
         return true
+    }
+
+    /// Marks a recording as archived in the bucket.
+    @discardableResult
+    public func setCloudKey(callID: String, key: String, size: Int64) -> Bool {
+        setArchived(callID: callID, ArchivedObject(key: key, kind: .bucket), size: size)
+    }
+
+    /// Forgets older copies that the archive removed.
+    public func dropLeftovers(callID: String, _ gone: [ArchivedObject]) {
+        guard !gone.isEmpty else { return }
+        let changed = edit(callID) { r in
+            guard let list = r.cloudLeftovers else { return false }
+            let rest = list.filter { !gone.contains($0) }
+            guard rest.count != list.count else { return false }
+            r.cloudLeftovers = rest.isEmpty ? nil : rest
+            return true
+        }
+        guard let r = changed else { return }
+        do { try store(r, dir: paths.callDirectory(callID)) } catch { Log.error("Saving the archive mark of \(callID) failed: \(error)") }
     }
 
     /// Saves a transcription job id as soon as the service gives it, so a restart polls the same job.

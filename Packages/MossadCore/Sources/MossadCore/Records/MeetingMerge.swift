@@ -19,8 +19,11 @@ public enum MeetingMerge {
         merged.speakerEmbeddings = [:]
         merged.parts = []
         merged.markers = []
+        // The archived copy of the first part is of the old audio. It goes once the joined recording is safe.
+        if let old = merged.archived, merged.cloudLeftovers?.contains(old) != true { merged.cloudLeftovers = (merged.cloudLeftovers ?? []) + [old] }
         merged.cloudKey = nil
         merged.cloudSize = nil
+        merged.cloudBackend = nil
         merged.transcriptionJobs = nil
         merged.summaryMissing = nil
         var screens: [SharedScreen] = []

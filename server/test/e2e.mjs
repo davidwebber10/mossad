@@ -41,6 +41,22 @@ ok((await call('tools/list', {})).result.tools.length === 6, 'tools/list');
 const found = await call('tools/call', { name: 'find_meetings', arguments: { people: ['Jen'] } }); ok(found.result.content[0].text.includes('call_id: m1'), 'find_meetings ' + found.result.content[0].text);
 const read = await call('tools/call', { name: 'read_meeting', arguments: { call_id: 'm1' } }); ok(read.result.content[0].text.includes('[00:01:05] Jennifer Lee'), 'read_meeting');
 const s = await call('tools/call', { name: 'search', arguments: { query: 'friday' } }); ok(s.result.structuredContent.results[0].id === 'm1', 'search');
+// Recording backup
+const rec = crypto.randomBytes(300_000), recHash = crypto.createHash('sha256').update(rec).digest('hex');
+r = await fetch(`${share}/api/hello`); ok((await r.json()).recordings?.maxBytes > 0, 'hello names the recording limit');
+r = await fetch(`${share}/api/recordings/m1`, { method: 'PUT', headers: { ...auth, 'Content-Type': 'audio/mp4', 'X-Recording-SHA256': recHash }, body: rec }); const put = await r.json(); ok(r.ok && put.size === rec.length && put.sha256 === recHash, 'recording put ' + r.status);
+r = await fetch(`${share}/api/recordings/m1`, { method: 'PUT', headers: { ...auth, 'X-Recording-SHA256': 'a'.repeat(64) }, body: rec.subarray(0, 100) }); ok(r.status === 422, 'recording with a wrong hash refused ' + r.status);
+r = await fetch(`${share}/api/recordings/m1`, { method: 'HEAD', headers: auth }); ok(r.ok && r.headers.get('x-recording-size') === String(rec.length) && r.headers.get('x-recording-sha256') === recHash, 'recording head, still the first upload');
+r = await fetch(`${share}/api/recordings/m1`, { headers: { ...auth, Range: 'bytes=1000-1999' } }); const slice = Buffer.from(await r.arrayBuffer()); ok(r.status === 206 && slice.equals(rec.subarray(1000, 2000)) && r.headers.get('content-range') === `bytes 1000-1999/${rec.length}`, 'recording range');
+r = await fetch(`${share}/api/recordings/m1`); ok(r.status === 401, 'recording needs the secret');
+const expires = Math.floor(Date.now() / 1000) + 600, sig = crypto.createHmac('sha256', 'dev-secret').update(`mossad-recording\nm1\n${expires}`).digest('hex');
+r = await fetch(`${share}/api/recordings/m1?expires=${expires}&signature=${sig}`); ok(r.ok && Buffer.from(await r.arrayBuffer()).equals(rec), 'signed link plays');
+r = await fetch(`${share}/api/recordings/m2?expires=${expires}&signature=${sig}`); ok(r.status === 401, 'signed link is for one recording');
+r = await fetch(`${share}/api/recordings/m1`, { method: 'DELETE', headers: auth }); r = await fetch(`${share}/api/recordings/m1`, { method: 'HEAD', headers: auth }); ok(r.status === 404, 'recording deleted');
+// Share audio keeps its own copy
+r = await fetch(`${share}/api/shares/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ title: 'Budget review', start: view.start, end: view.end, people: view.people, owner: 'Dana', audio: true, chat: false, expires: null }) });
+r = await fetch(`${share}/api/shares/${id}/audio`, { method: 'PUT', headers: auth, body: rec }); ok(r.ok, 'share audio put');
+r = await fetch(`${share}/${token}/audio`, { headers: { Range: 'bytes=0-99' } }); ok(r.status === 206 && Buffer.from(await r.arrayBuffer()).equals(rec.subarray(0, 100)), 'share audio range');
 // Delete
 r = await fetch(`${share}/api/shares/${id}`, { method: 'DELETE', headers: auth }); r = await fetch(`${share}/${token}`); ok(r.status === 404, 'stopped share 404');
 r = await fetch(`${share}/api/records/m1`, { method: 'DELETE', headers: auth }); const ch2 = await (await fetch(`${share}/api/changes?since=${ch.token}`, { headers: auth })).json(); ok(ch2.changes[0]?.deleted, 'tombstone');

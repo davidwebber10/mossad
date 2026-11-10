@@ -24,6 +24,7 @@ public enum TransientRetry {
                     .cannotFindHost, .dnsLookupFailed, .secureConnectionFailed].contains(e.code)
         }
         if case .http(let code, _) = error as? ServerError { return code >= 500 }
+        if case .http(let code) = error as? ArchiveError { return code >= 500 }
         if let e = error as? CKError {
             return [.networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy].contains(e.code)
         }

@@ -11,11 +11,14 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     nonisolated(unsafe) static var handler: ((Recorded) -> (Int, Data))?
     nonisolated(unsafe) static var requests: [Recorded] = []
+    /// Extra response headers for a request, for answers that carry their facts in headers (a HEAD).
+    nonisolated(unsafe) static var responseHeaders: ((Recorded) -> [String: String])?
 
     static func session() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubURLProtocol.self]
         requests = []
+        responseHeaders = nil
         return URLSession(configuration: config)
     }
 
@@ -37,7 +40,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         let recorded = Recorded(method: request.httpMethod ?? "GET", url: request.url!, headers: request.allHTTPHeaderFields ?? [:], body: body)
         Self.requests.append(recorded)
         let (status, data) = Self.handler?(recorded) ?? (404, Data())
-        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"].merging(Self.responseHeaders?(recorded) ?? [:]) { $1 })!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)
         client?.urlProtocolDidFinishLoading(self)

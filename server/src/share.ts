@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { homePage, notFoundPage, sharePage, shareContext } from './pages';
+import { audioResponse } from './recordings';
 import type { Env, Share } from './types';
 import { isToken, json, privateHeaders, sha256Hex } from './util';
 
@@ -72,20 +73,7 @@ export async function handleShareHost(request: Request, env: Env, ctx: Execution
 
 /** The recording, with byte ranges so the player can seek. */
 async function audio(request: Request, env: Env, id: string): Promise<Response> {
-  const key = `shares/${id}/audio.m4a`;
-  const range = request.headers.get('Range');
-  const object = await env.FILES.get(key, range ? { range: request.headers } : {});
-  if (!object) return notFound();
-  const headers = privateHeaders({ 'Content-Type': 'audio/mp4', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
-  const r = (object as R2ObjectBody).range as { offset?: number; length?: number } | undefined;
-  if (range && r && r.offset !== undefined) {
-    const length = r.length ?? object.size - r.offset;
-    headers.set('Content-Range', `bytes ${r.offset}-${r.offset + length - 1}/${object.size}`);
-    headers.set('Content-Length', String(length));
-    return new Response(request.method === 'HEAD' ? null : (object as R2ObjectBody).body, { status: 206, headers });
-  }
-  headers.set('Content-Length', String(object.size));
-  return new Response(request.method === 'HEAD' ? null : (object as R2ObjectBody).body, { headers });
+  return (await audioResponse(request, env, `shares/${id}/audio.m4a`)) ?? notFound();
 }
 
 interface Turn { role: 'user' | 'assistant'; content: string }

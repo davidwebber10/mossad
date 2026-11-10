@@ -78,6 +78,8 @@ public struct ServerClient: Sendable {
         public var mcp: URL?
         /// Whether share pages can have an AI chat (the server has an Anthropic key).
         public var chat: Bool
+        /// The largest recording the server keeps as a backup, in bytes. Nil on a server from before it kept any.
+        public var recordingLimit: Int64?
     }
 
     /// Whether the address is a Mossad server, and whether it takes the secret. The first call goes without the
@@ -94,7 +96,9 @@ public struct ServerClient: Sendable {
         let (data, response) = try await session.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200,
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any], body["mossad"] as? Bool == true else { throw ServerError.notMossad }
-        return Hello(authorized: body["authorized"] as? Bool == true, mcp: (body["mcp"] as? String).flatMap(URL.init(string:)), chat: body["chat"] as? Bool == true)
+        let limit = ((body["recordings"] as? [String: Any])?["maxBytes"] as? NSNumber)?.int64Value
+        return Hello(authorized: body["authorized"] as? Bool == true, mcp: (body["mcp"] as? String).flatMap(URL.init(string:)), chat: body["chat"] as? Bool == true,
+                     recordingLimit: limit.flatMap { $0 > 0 ? $0 : nil })
     }
 
     @discardableResult

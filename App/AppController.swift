@@ -1273,10 +1273,10 @@ final class AppController: ObservableObject {
         let days = cloudKeepLocalDays
         cloudSyncing = true
         Task.detached(priority: .utility) {
-            let uploaded = await archive.sync(keepLocalDays: days, pipeline: pipeline)
+            let report = await archive.sync(keepLocalDays: days, pipeline: pipeline)
             await MainActor.run {
                 self.cloudSyncing = false
-                if uploaded > 0 { self.refresh() }
+                if report.uploaded > 0 { self.refresh() }
                 if self.cloudSyncAgain {
                     self.cloudSyncAgain = false
                     self.syncCloud()

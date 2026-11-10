@@ -1,3 +1,4 @@
+import { handleRecording, maxRecordingBytes, readRecording, validLink } from './recordings';
 import { deleteShare } from './share';
 import type { Env, MeetingView, Share } from './types';
 import { bearer, json, sameSecret } from './util';
@@ -27,11 +28,20 @@ export async function handleAPI(request: Request, env: Env): Promise<Response> {
   // A path such as "/api/%E0" does not decode; that is a bad request, not a server failure.
   try { parts = url.pathname.split('/').slice(2).map(decodeURIComponent); } catch { return json({ error: 'Not found.' }, 404); }
   const owner = await isOwner(request, env);
-  if (await tooManyFailures(env, request, !owner && !!bearer(request))) return json({ error: 'Too many wrong secrets. Try again in an hour.' }, 429);
+  // A link to one recording that the owner's app signed plays without the secret in a header. It only reads.
+  const signed = !owner && parts[0] === 'recordings' && parts.length === 2 && name.test(parts[1]) && url.searchParams.has('signature')
+    && (request.method === 'GET' || request.method === 'HEAD');
+  const linked = signed && await validLink(env, parts[1], url);
+  if (await tooManyFailures(env, request, (!owner && !!bearer(request)) || (signed && !linked))) return json({ error: 'Too many wrong secrets. Try again in an hour.' }, 429);
   if (parts[0] === 'hello' && request.method === 'GET') {
     const scheme = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(env.MCP_HOST) ? 'http' : 'https';
-    return json({ mossad: true, version, authorized: owner, mcp: `${scheme}://${env.MCP_HOST}${(env.MCP_PATH || '/mossad').replace(/\/$/, '')}`, chat: !!env.ANTHROPIC_API_KEY });
+    return json({
+      mossad: true, version, authorized: owner, mcp: `${scheme}://${env.MCP_HOST}${(env.MCP_PATH || '/mossad').replace(/\/$/, '')}`, chat: !!env.ANTHROPIC_API_KEY,
+      // Present on a server that keeps recordings: the Mac offers the backup only then.
+      recordings: { maxBytes: maxRecordingBytes(env) },
+    });
   }
+  if (linked) return readRecording(request, env, parts[1]);
   if (!owner) return json({ error: 'The secret is wrong or missing.' }, 401);
 
   const [kind, a, b] = parts;
@@ -45,6 +55,10 @@ export async function handleAPI(request: Request, env: Env): Promise<Response> {
         const object = await env.FILES.get(key);
         return object ? new Response(object.body, { headers: { 'Content-Type': 'application/octet-stream' } }) : json({ error: 'No such asset.' }, 404);
       }
+    }
+    if (kind === 'recordings' && a && !b && parts.length === 2 && name.test(a)) {
+      const answer = await handleRecording(request, env, a);
+      if (answer) return answer;
     }
     if (kind === 'records' && a && name.test(a)) {
       if (m === 'PUT') return putRecord(request, env, a);

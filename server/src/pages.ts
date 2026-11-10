@@ -148,7 +148,7 @@ ${d.redirectIsLoopback ? '<p><b>This sends access to an app on your computer.</b
 <div class="card"><p class="mt0">${name} will be able to search and read your meetings: titles, summaries, action items, and transcripts. It cannot change anything.</p>
 <form method="post" class="chat">
 <input type="hidden" name="handle" value="${e(handle)}">
-<label for="secret" class="meta">Your server secret (Mossad &gt; Settings &gt; Sync &amp; Server &gt; Copy secret)</label>
+<label for="secret" class="meta">Your server secret (Mossad &gt; Settings &gt; Storage &amp; Sync &gt; Copy secret)</label>
 <input id="secret" class="find" name="secret" type="password" autocomplete="current-password" required autofocus>
 ${error ? `<p class="err">${e(error)}</p>` : ''}
 <div class="ask"><button name="decision" value="approve">Allow</button>

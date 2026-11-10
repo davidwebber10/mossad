@@ -8,6 +8,9 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
     /// Runs during each upload, to change things while the archive waits.
     nonisolated(unsafe) static var onPut: (() -> Void)?
     nonisolated(unsafe) static var puts = 0
+    /// The bucket does not answer: every call fails.
+    nonisolated(unsafe) static var down = false
+    nonisolated(unsafe) static var deletes: [String] = []
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -22,11 +25,12 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
             Self.puts += 1
             Self.onPut?()
             if Self.failPuts { status = 500 } else { Self.objects[key] = Self.body(of: request) }
-        case "DELETE": Self.objects[key] = nil; status = 204
+        case "DELETE": Self.objects[key] = nil; Self.deletes.append(key); status = 204
         case "HEAD": status = Self.objects[key] == nil ? 404 : 200
         default: if let data = Self.objects[key] { body = data } else { status = 404 }
         }
-        let headers = request.httpMethod == "HEAD" ? Self.objects[key].map { ["Content-Length": "\($0.count)"] } : nil
+        if Self.down { status = 503; body = Data() }
+        let headers = request.httpMethod == "HEAD" && !Self.down ? Self.objects[key].map { ["Content-Length": "\($0.count)"] } : nil
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: headers)!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
@@ -61,13 +65,15 @@ final class CloudArchiveTests: XCTestCase {
         FakeS3.failPuts = false
         FakeS3.onPut = nil
         FakeS3.puts = 0
+        FakeS3.down = false
+        FakeS3.deletes = []
         paths = Paths(root: tempDirectory())
         try! paths.ensureDirectories()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [FakeS3.self]
         let config = S3Config(endpoint: URL(string: "https://abc.r2.cloudflarestorage.com")!, bucket: "mossad", region: "auto",
                               accessKeyID: "id", secret: "secret", pathStyle: true)
-        archive = CloudArchive(config: config, paths: paths, session: URLSession(configuration: configuration))
+        archive = CloudArchive(config: config, paths: paths, session: URLSession(configuration: configuration), retryPause: .zero)
         pipeline = Pipeline(paths: paths, transcriber: FakeTranscriber(), library: VoiceLibrary(directory: paths.voices),
                             embeddings: ToneEmbeddingProvider(), calendar: FakeCalendar(), summarizer: nil, notify: { _ in })
     }
@@ -85,7 +91,7 @@ final class CloudArchiveTests: XCTestCase {
         let dir = try call("one", endedDaysAgo: 0)
         _ = try call("live", endedDaysAgo: 0, status: .recording)
         let uploaded = await archive.sync(keepLocalDays: nil, now: now, pipeline: pipeline)
-        XCTAssertEqual(uploaded, 1)
+        XCTAssertEqual(uploaded.uploaded, 1)
         XCTAssertEqual(FakeS3.objects["/mossad/calls/one/recording.m4a"], Data("audio-one".utf8))
         XCTAssertEqual(try CallRecord.load(from: dir).cloudKey, "calls/one/recording.m4a")
         XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path), "the local copy stays")
@@ -103,7 +109,8 @@ final class CloudArchiveTests: XCTestCase {
         FakeS3.failPuts = true
         let old = try call("old", endedDaysAgo: 10)
         let uploaded = await archive.sync(keepLocalDays: 7, now: now, pipeline: pipeline)
-        XCTAssertEqual(uploaded, 0)
+        XCTAssertEqual(uploaded.uploaded, 0)
+        XCTAssertEqual(uploaded.failed, ["old"])
         XCTAssertNil(try CallRecord.load(from: old).cloudKey)
         XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: old).path))
     }
@@ -149,7 +156,7 @@ final class CloudArchiveTests: XCTestCase {
         FakeS3.objects["/mossad/calls/same/recording.m4a"] = Data("audio-same".utf8)
         FakeS3.objects["/mossad/calls/longer/recording.m4a"] = Data("part-one".utf8)
         let uploaded = await archive.sync(keepLocalDays: 7, now: now, pipeline: pipeline)
-        XCTAssertEqual(uploaded, 1)
+        XCTAssertEqual(uploaded.uploaded, 1)
         XCTAssertEqual(FakeS3.objects["/mossad/calls/longer/recording.m4a"], Data("audio-longer".utf8))
         XCTAssertEqual(try CallRecord.load(from: same).cloudSize, 10)
         XCTAssertFalse(FileManager.default.fileExists(atPath: Recording.url(in: same).path))
@@ -161,7 +168,7 @@ final class CloudArchiveTests: XCTestCase {
         let dir = try call("one", endedDaysAgo: 0)
         FakeS3.onPut = { try! FileManager.default.removeItem(at: dir) }
         let uploaded = await archive.sync(keepLocalDays: nil, now: now, pipeline: pipeline)
-        XCTAssertEqual(uploaded, 0)
+        XCTAssertEqual(uploaded.uploaded, 0)
         XCTAssertNil(FakeS3.objects["/mossad/calls/one/recording.m4a"])
     }
 

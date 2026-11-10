@@ -14,6 +14,8 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   /** The model for share-page chats when a share does not name one. */
   SHARE_MODEL?: string;
+  /** The largest recording the backup takes, in MB. Without it, 95: under Cloudflare's 100 MB request limit. */
+  RECORDING_MAX_MB?: string;
 }
 
 /** One transcript line, as the Mac's notes show it. `at` is seconds from the start of the meeting. */
