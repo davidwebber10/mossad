@@ -58,20 +58,17 @@ public struct PersonDirectory: Sendable, Equatable {
     // MARK: Links
 
     /// The saved person whose profile `text` may open: the person with that email, or the one saved person with
-    /// exactly that name. A first name, a short form, or an initial opens nothing. A name of one word ("Sam",
-    /// for a person saved as "Sam") opens nothing when `meeting` (its speakers and invited people, saved or not)
-    /// has someone else that the word could mean.
+    /// exactly that name of two words or more. A first name, a short form, an initial, or a person saved under
+    /// one word ("Sam") opens nothing.
     public func link(for text: String, in meeting: [String] = []) -> String? {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
         if text.contains("@") { return byEmail[Self.emailKey(text)] }
         // "Speaker C" is a label, not a name.
         guard !text.hasPrefix("Speaker "), let person = exact(text) else { return nil }
-        let words = Self.words(text)
-        guard words.count == 1 else { return person }
-        let key = PeopleDuplicates.normalized(person)
-        let others = meeting.filter { PeopleDuplicates.normalized($0) != key && Self.fits(words, Self.words($0)) }
-        return others.isEmpty ? person : nil
+        // A name of one word is never sure: another person with that first name can be invited by email only, or
+        // be a voice with no name, and neither shows in the meeting's names.
+        return Self.words(text).count > 1 ? person : nil
     }
 
     // MARK: Matching

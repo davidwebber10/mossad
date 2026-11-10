@@ -20,7 +20,7 @@ final class PersonDirectoryTests: XCTestCase {
 
     func testALinkTakesTheWholeNameInAnyCaseAndSpacing() {
         XCTAssertEqual(people.link(for: "dana  lee"), "Dana Lee")
-        XCTAssertEqual(people.link(for: " Jo "), "Jo")
+        XCTAssertNil(people.link(for: " Jo "), "a name of one word never opens a profile by itself")
         XCTAssertNil(people.link(for: "Riley Chen"))
         XCTAssertNil(people.link(for: "Speaker A"))
         XCTAssertNil(people.link(for: ""))
@@ -41,7 +41,7 @@ final class PersonDirectoryTests: XCTestCase {
         let both = PersonDirectory([.init(name: "Sam", email: nil), .init(name: "Sam Carter", email: nil)])
         XCTAssertNil(both.link(for: "Sam", in: ["Sam Carter", "Dana Lee"]))
         XCTAssertEqual(both.link(for: "Sam Carter", in: ["Sam Carter", "Dana Lee"]), "Sam Carter")
-        XCTAssertEqual(both.link(for: "Sam", in: ["Sam", "Dana Lee"]), "Sam", "the person saved as Sam, in a meeting with no other Sam")
+        XCTAssertNil(both.link(for: "Sam", in: ["Sam", "Dana Lee"]), "the other Sam can be invited by email only, or be an unnamed voice")
         // Also a person who is not saved makes the one word unsure.
         XCTAssertNil(people.link(for: "Jo", in: ["Jo Park", "Dana Lee"]))
     }
@@ -91,5 +91,15 @@ final class PersonDirectoryTests: XCTestCase {
         let d = PersonDirectory(profiles: [VoiceProfile(name: "Dana Lee", isOwner: true, embeddings: [], email: "dana@example.com")])
         XCTAssertEqual(d.link(for: "DANA@example.com"), "Dana Lee")
         XCTAssertEqual(d.people, [.init(name: "Dana Lee", email: "dana@example.com")])
+    }
+
+    /// The other Sam of the meeting was invited by email only, so the meeting's names did not show them, and the
+    /// person saved as "Sam" got the link. A word alone is never sure enough.
+    func testANameOfOneWordNeverLinksAlsoWhenTheOtherSamIsAnEmail() {
+        let people = PersonDirectory([.init(name: "Sam", email: nil), .init(name: "Dana Lee", email: "dana@example.com")])
+        XCTAssertNil(people.link(for: "Sam", in: ["sam.lee@example.com", "Dana Lee"]))
+        XCTAssertNil(people.link(for: "Sam"))
+        XCTAssertEqual(people.link(for: "dana@example.com"), "Dana Lee")
+        XCTAssertEqual(people.link(for: "Dana Lee"), "Dana Lee")
     }
 }
