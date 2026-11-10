@@ -59,9 +59,9 @@ final class MeetingPrepTests: XCTestCase {
     }
 
     private func prep(_ meeting: UpcomingMeeting? = nil, records: [CallRecord] = [], facts: [MeetingFacts]? = [], commitments: [Commitment]? = [],
-                      coach: [String: CoachPerson] = [:], people: PersonDirectory? = nil, keep: Set<UUID> = []) -> MeetingPrep {
+                      coach: [String: CoachPerson] = [:], people: PersonDirectory? = nil, keep: Set<UUID> = [], ownerEmails: [String] = []) -> MeetingPrep {
         MeetingPrep(meeting: meeting ?? upcoming(), owner: owner, records: records, facts: facts, commitments: commitments, people: people ?? directory,
-                    coach: coach, keep: keep, now: now)
+                    coach: coach, ownerEmails: ownerEmails, keep: keep, now: now)
     }
 
     // MARK: Invited
@@ -141,8 +141,14 @@ final class MeetingPrepTests: XCTestCase {
         history += [0.20, 0.22, 0.24].enumerated().map { i, share in
             facts("s\(i)", daysAgo: Double(i + 1) * 5, title: "All hands", shares: [(owner, 0.1), (sam, share), (jo, 0.2), ("A B", 0.1), ("C D", 0.1), ("E F", 0.1)])
         }
-        let series = prep(upcoming("All hands", attendees: invited), facts: history)
+        let hands = (["big"] + (0..<3).map { "s\($0)" }).enumerated().map { i, id in call(id, daysAgo: Double(i + 1) * 5, title: "All hands", attendees: invited) }
+        let series = prep(upcoming("All hands", attendees: invited), records: hands, facts: history)
         XCTAssertEqual(series.people[0].fact?.text, "Talked 10 to 24% of the time in this series, 4 meetings so far")
+        // Another series with this title, of other people, is not "this series": its numbers stay out.
+        let others = (0..<5).map { i in facts("z\(i)", daysAgo: Double(i + 1) * 3, title: "All hands", shares: [(owner, 0.1), (sam, 0.9), (jo, 0.0), ("A B", 0.0), ("C D", 0.0), ("E F", 0.0)]) }
+        let strangers = (0..<5).map { i in call("z\(i)", daysAgo: Double(i + 1) * 3, title: "All hands", attendees: ["Sam Carter", "A B", "C D", "E F", "G H", "I J"]) }
+        let mixed = prep(upcoming("All hands", attendees: invited), records: hands + strangers, facts: history + others)
+        XCTAssertEqual(mixed.people[0].fact?.text, "Talked 10 to 24% of the time in this series, 4 meetings so far")
         // With no meetings of this size or series: the 1:1s, then how often the two meet.
         let records = (1...4).map { call("m\($0)", daysAgo: Double($0) * 14, title: "Other \($0)", speakers: [owner, sam]) }
         let rare = prep(upcoming("A new meeting", attendees: invited), records: records, facts: Array(history.suffix(4).prefix(1)))
@@ -224,16 +230,48 @@ final class MeetingPrepTests: XCTestCase {
     }
 
     func testTheSameLinkKeepsAMeetingThatFewOfTheInvitedPeopleSpokeIn() {
-        // Five invited, and only Sam spoke: under half. The invite's own link says it is this series.
+        // Five invited, and only Sam spoke: far from the same people. The invite's own link says it is this series.
         let invited = ["Sam Carter", "Jo Park", "Riley Chen", "Casey Brooks", "Pat Ruiz"]
         let linked = call("linked", daysAgo: 7, speakers: [owner, sam], meetingID: "abc-defg-hij")
+        let before = call("before", daysAgo: 35, speakers: [owner, sam, jo], meetingID: "abc-defg-hij")
         let other = call("other", daysAgo: 14, speakers: [owner, sam], meetingID: "zzz-zzzz-zzz")
         let noLink = call("nolink", daysAgo: 21, speakers: [owner, sam])
         // The same room and title with none of these people (a personal room) is another meeting.
         let room = call("room", daysAgo: 3, speakers: [owner, "Morgan Diaz"], meetingID: "abc-defg-hij")
-        let p = prep(upcoming(attendees: invited), records: [linked, other, noLink, room, call("second", daysAgo: 28, speakers: [owner, sam, jo, "Riley Chen"])])
+        // Three of the five, with no link: not nearly the same people.
+        let some = call("some", daysAgo: 28, speakers: [owner, sam, jo, "Riley Chen"])
+        let p = prep(upcoming(attendees: invited), records: [linked, before, other, noLink, room, some])
         XCTAssertEqual(p.lastTime?.meeting.id, "linked")
         XCTAssertEqual(p.series?.meetings, 2)
+        XCTAssertEqual(p.series?.earlier.map(\.id), ["before"])
+    }
+
+    func testATitleAloneNeedsNearlyTheSamePeopleOnBothSides() {
+        // An interview with a colleague and a new candidate each time: the last one is not "Last time".
+        let earlier = (1...3).map { call("i\($0)", daysAgo: Double($0) * 7, title: "Interview", speakers: [owner, sam, "Kim Ito"], attendees: ["Sam Carter", "Kim Ito"]) }
+        let interview = prep(upcoming("Interview", attendees: ["dana@example.com", "Sam Carter", "Pat Ruiz"]), records: earlier)
+        XCTAssertNil(interview.series)
+        XCTAssertEqual(interview.lastTime?.inSeries, false)
+        // A large meeting with this title is not the series of a small invite, though all of the small one were in it.
+        let large = (1...2).map { call("l\($0)", daysAgo: Double($0) * 7, title: "Sync", attendees: ["Sam Carter", "Jo Park", "Riley Chen", "Casey Brooks"]) }
+        XCTAssertNil(prep(upcoming("Sync", attendees: ["Sam Carter"]), records: large).series)
+        // Five of six are nearly the same people.
+        let five = ["Sam Carter", "Jo Park", "Riley Chen", "Casey Brooks", "Pat Ruiz"]
+        let near = (1...2).map { call("n\($0)", daysAgo: Double($0) * 7, title: "Sync", attendees: five + ["Kim Ito"]) }
+        XCTAssertEqual(prep(upcoming("Sync", attendees: five), records: near).series?.meetings, 2)
+    }
+
+    func testTheOwnersOwnAddressIsNotAPersonOfAnEarlierMeeting() {
+        // The owner's address does not look like their name. Without it, the owner counts as a second person.
+        let people = PersonDirectory([.init(name: owner, email: nil), .init(name: sam, email: nil)])
+        let invite = ["dee@example.com", "Sam Carter"]
+        let records = (1...2).map { call("c\($0)", daysAgo: Double($0) * 7, speakers: [owner, sam], attendees: invite) }
+        XCTAssertEqual(prep(upcoming(attendees: invite), records: records, people: people, ownerEmails: ["dee@example.com"]).series?.meetings, 2)
+    }
+
+    func testWithNoPeopleToCompareAnotherLinkIsAnotherSeries() {
+        let records = [call("c1", daysAgo: 7, speakers: [owner], meetingID: "zzz-zzzz-zzz"), call("c2", daysAgo: 14, speakers: [owner], meetingID: "zzz-zzzz-zzz")]
+        XCTAssertNil(prep(upcoming(attendees: []), records: records).lastTime)
     }
 
     func testAnInviteOfAddressesFindsItsSeriesByTheAddresses() {
@@ -282,20 +320,45 @@ final class MeetingPrepTests: XCTestCase {
         let items = [ActionItem(owner: "Pat Ruiz", task: "Send the contract"), ActionItem(owner: "Sam and Jo", task: "Agree on the date"),
                      ActionItem(owner: "Speaker B", task: "Check the numbers"), ActionItem(owner: "Kim", task: "Book the room"),
                      ActionItem(owner: nil, task: "Find a room for the planning day")]
-        let last = prep(upcoming(attendees: addresses), records: [call("c1", daysAgo: 7, speakers: [owner, sam, "Pat Ruiz", "Kim Ito"], items: items)]).lastTime
+        let last = prep(upcoming(attendees: addresses), records: [call("c1", daysAgo: 7, speakers: [owner, sam, "Pat Ruiz", "Kim Ito"], items: items, attendees: addresses)]).lastTime
         XCTAssertEqual(last?.items.map(\.owner), ["Pat Ruiz", "Sam and Jo", "Speaker B", "Kim", nil])
         XCTAssertEqual(last?.items.map(\.state), [nil, nil, nil, nil, nil])
         XCTAssertEqual(last?.absent, 0)
     }
 
     func testOnlyAnOwnerWhoIsSurelyNotInvitedIsLeftOffAndCounted() {
-        // Every entry of this invite is a person with a name, and Morgan, who spoke last time, is none of them.
+        // Every entry of this invite is a person with a name, and Morgan, who spoke last time as a guest, is none
+        // of them.
+        let guests = ["dana@example.com", "Sam Carter", "Jo Park"]
         let items = [ActionItem(owner: "Morgan Diaz", task: "Check the freeze dates"), ActionItem(owner: "Morgan", task: "Call support"),
                      ActionItem(owner: "Team", task: "Clean the backlog"), ActionItem(owner: "Jo Park", task: "Move the review")]
-        let last = prep(records: [call("c1", daysAgo: 7, speakers: [owner, sam, jo, "Morgan Diaz"], items: items)]).lastTime
-        XCTAssertEqual(last?.items.map(\.task), ["Clean the backlog", "Move the review"])
-        XCTAssertEqual(last?.absent, 2)
-        XCTAssertEqual(last?.total, 2)
+        let p = prep(records: [call("c1", daysAgo: 7, speakers: [owner, sam, jo, "Morgan Diaz"], items: items, attendees: guests)])
+        XCTAssertEqual(p.lastTime?.items.map(\.task), ["Clean the backlog", "Move the review"])
+        XCTAssertEqual(p.lastTime?.absent, 2)
+        XCTAssertEqual(p.lastTime?.total, 2)
+        // The first line counts every item of the meeting, and says how many are not on the page.
+        XCTAssertEqual(p.inOneLine, "Last time: 4 action items, 2 not for this meeting.")
+        // All of them left off is not "no action items".
+        let none = prep(records: [call("c1", daysAgo: 7, speakers: [owner, sam, jo, "Morgan Diaz"], items: Array(items.prefix(2)), attendees: guests)])
+        XCTAssertEqual(none.lastTime?.total, 0)
+        XCTAssertEqual(none.inOneLine, "Last time: 2 action items, 2 not for this meeting.")
+        let mine = promise("Write the hiring plan", to: nil, daysAgo: 7)
+        let withMine = prep(records: [call("c1", daysAgo: 7, speakers: [owner, sam, jo, "Morgan Diaz"], items: items + [ActionItem(owner: "Dana Lee", task: "Write the hiring plan")], attendees: guests)],
+                            commitments: [mine])
+        XCTAssertEqual(withMine.inOneLine, "Last time: 5 action items, 1 of them yours and still open, 2 not for this meeting.")
+    }
+
+    func testAnOwnerOfSeveralNamesOrAGroupAlwaysShows() {
+        // The same invite of names only. None of these owners is one person whom the meeting names.
+        let guests = ["dana@example.com", "Sam Carter", "Jo Park"]
+        let owners = ["Sam and Jo", "Dana and Sam", "Dana Lee and Sam Carter", "Sam, Jo", "The team", "Product team", "Everyone", "Joe Park"]
+        let items = owners.enumerated().map { ActionItem(owner: $0.element, task: "Task number \($0.offset)") }
+        let last = prep(records: [call("c1", daysAgo: 7, speakers: [owner, sam, jo, "Morgan Diaz"], items: items, attendees: guests)]).lastTime
+        XCTAssertEqual(last?.absent, 0)
+        XCTAssertEqual(last?.total, 8)
+        XCTAssertEqual(last?.items.map(\.owner), owners.prefix(5).map { Optional($0) })
+        // Half of "Dana and Sam" is the owner's, but it is not known to be the owner's item.
+        XCTAssertEqual(last?.items.map(\.isOwners), [false, false, false, false, false])
     }
 
     func testAFirstNameIsReadAmongThePeopleOfItsOwnMeeting() {
@@ -498,6 +561,11 @@ final class MeetingPrepTests: XCTestCase {
                    // The meeting is gone: "Jo" is the one saved Jo. Two saved people named Sam would be nobody.
                    promise("Send Jo the notes", to: "Jo", daysAgo: 30, call: "gone")]
         XCTAssertEqual(prep(records: records, commitments: all).promises.map(\.commitment.text), ["Send Jo the notes", "Send Sam the plan"])
+        // A promise to a group, or to a name that the meeting cannot name, is for these people when it was made
+        // in a meeting of this series.
+        let groups = [promise("Send the team the plan", to: "the team", daysAgo: 7, call: "c1"), promise("Send the team the deck", to: "the team", daysAgo: 10, call: "x"),
+                      promise("Send both the dates", to: "Sam and Jo", daysAgo: 7, call: "c1")]
+        XCTAssertEqual(prep(records: records, commitments: groups).promises.map(\.commitment.text), ["Send both the dates", "Send the team the plan"])
         let twoSams = PersonDirectory([.init(name: owner, email: nil), .init(name: sam, email: nil), .init(name: "Sam Reed", email: nil)])
         XCTAssertTrue(prep(commitments: [promise("Send Sam the deck", to: "Sam", daysAgo: 30, call: "gone")], people: twoSams).promises.isEmpty)
     }
@@ -506,6 +574,10 @@ final class MeetingPrepTests: XCTestCase {
         let done = promise("Send Sam the forecast", to: "Sam Carter", daysAgo: 30, call: "older", done: true)
         XCTAssertTrue(prep(commitments: [done]).promises.isEmpty)
         XCTAssertEqual(prep(commitments: [done], keep: [done.id]).promises.map(\.commitment.id), [done.id])
+        // It stays as a row, and it is no longer counted as open.
+        let open = promise("Send Sam the plan", to: "Sam Carter", daysAgo: 20, call: "older")
+        XCTAssertEqual(prep(commitments: [done, open], keep: [done.id]).inOneLine, "You have 1 open task for these people.")
+        XCTAssertNil(prep(commitments: [done], keep: [done.id]).inOneLine)
     }
 
     // MARK: The series

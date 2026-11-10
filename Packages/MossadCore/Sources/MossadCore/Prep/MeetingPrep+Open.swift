@@ -29,17 +29,26 @@ extension MeetingPrep {
         return (voices + invited + [owner]).filter { seen.insert(PeopleDuplicates.normalized($0)).inserted }
     }
 
+    /// Who a name as written stands for.
+    struct Resolved {
+        var name: String
+        /// True when the meeting itself names this one person: exactly one of its people fits the written name.
+        /// False for a guess from outside the meeting, which is no proof of who it is.
+        var named: Bool
+    }
+
     /// The full name that a name as written ("Sam") stands for. It is read among the people of its own meeting
     /// first: "Sam" in a meeting with Sam Reed is Sam Reed, whoever is invited now. With two who fit, nobody.
     /// When the meeting gives no answer (it is gone, or nobody in it fits): a name of two words or more is
-    /// itself, and a first name is the one saved person who has it.
-    static func resolve(_ written: String, among call: [String], directory: PersonDirectory) -> String? {
+    /// itself, and a first name is the one saved person who has it. Such a name is not `named`: "Sam and Jo" and
+    /// "The team" are two words or more too.
+    static func resolve(_ written: String, among call: [String], directory: PersonDirectory) -> Resolved? {
         let fits = call.filter { PersonDirectory.isForm(written, of: $0) }
-        if fits.count == 1 { return fits[0] }
+        if fits.count == 1 { return Resolved(name: fits[0], named: true) }
         guard fits.isEmpty, !written.contains("@"), !written.hasPrefix("Speaker ") else { return nil }
-        if written.split(whereSeparator: \.isWhitespace).count > 1 { return written }
+        if written.split(whereSeparator: \.isWhitespace).count > 1 { return Resolved(name: written, named: false) }
         let saved = directory.people.map(\.name).filter { PersonDirectory.isForm(written, of: $0) }
-        return saved.count == 1 ? saved[0] : nil
+        return saved.count == 1 ? Resolved(name: saved[0], named: false) : nil
     }
 
     // MARK: Action items
@@ -47,8 +56,9 @@ extension MeetingPrep {
     /// The action items of `r` for the page, and how many were left off.
     ///
     /// Every item shows, with its owner as the meeting wrote it. Only one kind is left off, and counted: an item
-    /// of a person who is surely someone else than the invited people, which needs an invite of names only and
-    /// an owner the meeting can name. "Sam and Jo", "Team", or an owner on an invite of addresses stays.
+    /// of one person, whom the meeting itself names, who is surely not invited. That needs an invite of names
+    /// only. An owner of several names ("Sam and Jo"), a group ("The team"), a name the meeting does not have, or
+    /// any owner on an invite of addresses stays.
     ///
     /// An action item has no state of its own. The owner's tasks from this call give one: each task says the
     /// state of the one item that is most like it. A deleted task says nothing.
@@ -63,8 +73,8 @@ extension MeetingPrep {
         for (i, item) in r.actionItems.enumerated() {
             let written = item.owner?.nonBlank
             let full = written.flatMap { resolve($0, among: call, directory: directory) }
-            let mine = full.map { PeopleDuplicates.normalized($0) == ownerKey } ?? false
-            if let full, !mine, invite.complete, !invite.has(full) {
+            let mine = full.map { PeopleDuplicates.normalized($0.name) == ownerKey } ?? false
+            if let full, full.named, !mine, invite.complete, !invite.has(full.name) {
                 absent += 1
                 continue
             }
@@ -169,16 +179,19 @@ extension MeetingPrep {
     // MARK: Promises
 
     /// The owner's open tasks for the people of this meeting, oldest first: the ones promised to one of them, and
-    /// the ones promised to nobody by name in a meeting of this series. The name is read in the task's own
-    /// meeting (`resolve`), so "Sam" from a meeting with another Sam is not the invited one. `used` are on the
+    /// the ones from a meeting of this series that were promised to nobody by name, to a group ("the team"), or
+    /// to a name that its meeting cannot name. The name is read in the task's own meeting (`resolve`), so "Sam"
+    /// from a meeting with another Sam is not the invited one. `used` are on the
     /// page as action items, and `keep` were marked done on the page and stay.
     static func promises(_ commitments: [Commitment], invite: Invite, calls: [String: CallRecord], series: Set<String>, used: Set<UUID>, keep: Set<UUID>,
                          owner: String, directory: PersonDirectory) -> [Commitment] {
         commitments.filter { c in
             guard !c.deleted, c.done == nil || keep.contains(c.id), !used.contains(c.id) else { return false }
-            guard let to = c.to?.nonBlank else { return c.callID.map(series.contains) ?? false }
+            let inSeries = c.callID.map(series.contains) ?? false
+            guard let to = c.to?.nonBlank else { return inSeries }
             let call = c.callID.flatMap { calls[$0] }.map { names(in: $0, owner: owner, directory: directory) } ?? []
-            return resolve(to, among: call, directory: directory).map(invite.has) ?? false
+            guard let who = resolve(to, among: call, directory: directory) else { return inSeries }
+            return invite.has(who.name) || (!who.named && inSeries)
         }
         .sorted { ($0.madeAt, $0.text) < ($1.madeAt, $1.text) }
     }

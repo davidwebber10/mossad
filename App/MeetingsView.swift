@@ -277,13 +277,13 @@ extension CallRecord: @retroactive Identifiable {
     var lengthText: String { durationLabel(end.timeIntervalSince(start)) }
 }
 
-/// "59 min", "1 h 45 min", at least "1 min".
 /// The invite that was open last, kept between body passes. A class, so setting it during a body pass does not
 /// count as a state change.
 private final class InviteHolder {
     var meeting: UpcomingMeeting?
 }
 
+/// "59 min", "1 h 45 min", at least "1 min".
 func durationLabel(_ seconds: TimeInterval) -> String {
     let minutes = max(1, Int(seconds / 60))
     return minutes < 60 ? "\(minutes) min" : minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes / 60) h \(minutes % 60) min"

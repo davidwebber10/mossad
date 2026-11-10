@@ -186,8 +186,11 @@ struct PrepLastTime: View {
                             .padding(.leading, 26)
                     }
                     if last.absent > 0 {
-                        Text("\(last.absent) more \(last.absent == 1 ? "belongs to a person who is" : "belong to people who are") not invited to this meeting.")
+                        // Counted in the page's first line as "not for this meeting". No "more": the list above
+                        // can be empty.
+                        Text("Not shown: \(last.absent) \(last.absent == 1 ? "item of a person who is" : "items of people who are") not invited to this meeting.")
                             .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.leading, 26)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     // In words, one time, and for VoiceOver too: a dot's tooltip is no place for it.
                     if last.items.contains(where: { $0.state == nil }) {
