@@ -86,6 +86,8 @@ final class AppController: ObservableObject {
     /// The id that the server gave itself. Each recording on the server is saved with it, so a recording on
     /// another server than this one is not taken for a backup.
     @AppStorage("serverID") var serverID = ""
+    /// The server a running move copies to; nil when no run is going on.
+    var backupRunServerID: String?
     /// The owner asked for the move, and the server has not said yet that it keeps recordings. Until it does, the
     /// backup choice stays as it is.
     @AppStorage("backupMoveRequested") var backupMoveRequested = false
@@ -1309,6 +1311,8 @@ final class AppController: ObservableObject {
         // (a call records, or the server is not ready).
         let pending = backupMovePending && canMoveBackups
         let moving = pending && serverKeepsRecordings && backupMoveMayRun
+        // The run belongs to this server: a change of server or a disconnect during it stops it.
+        if moving { backupRunServerID = serverID }
         if pending, !serverKeepsRecordings { backupMoveWaitsForServer() }
         cloudSyncing = true
         Task.detached(priority: .utility) {

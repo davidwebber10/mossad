@@ -107,7 +107,10 @@ extension AppController {
 
     /// Whether a run of the move may go on, asked before each copy and each delete. The owner ends a move with
     /// another choice in the picker; a call that records gets the network and the disk for itself.
-    var backupMoveMayRun: Bool { backupMovePending && backupChoice == .server && canMoveBackups && !isRecording }
+    var backupMoveMayRun: Bool {
+        CloudArchive.moveMayGoOn(pending: backupMovePending, choiceIsServer: backupChoice == .server, canMove: canMoveBackups,
+                                 recording: isRecording, serverID: serverID, runServerID: backupRunServerID)
+    }
 
     /// Asks for the move of every backup from the bucket to the server. Nothing changes yet: the backup choice
     /// stays as it is until the server says that it keeps recordings, so new recordings keep their place.
@@ -170,7 +173,7 @@ extension AppController {
         return "Your server needs an update before it can keep recordings. The move starts after the update."
     }
 
-    private func noteBackupMove(_ line: String) {
+    func noteBackupMove(_ line: String) {
         guard backupMoveResult != line else { return }
         backupMoveResult = line
         backupMoveDate = Date().timeIntervalSince1970
@@ -215,7 +218,11 @@ extension AppController {
         let missing = backupMoveMissing + report.missing.count
         // Asked at this moment: the run's own answer is some seconds old, and the owner may have ended the move
         // during it. A run that is not asked for any more changes no setting and removes no secret.
-        let end = CloudArchive.moveEnd(report, stillAsked: backupMovePending && backupChoice == .server && canMoveBackups,
+        let runServer = backupRunServerID
+        backupRunServerID = nil
+        let stillAsked = CloudArchive.moveMayGoOn(pending: backupMovePending, choiceIsServer: backupChoice == .server, canMove: canMoveBackups,
+                                                  recording: false, serverID: serverID, runServerID: runServer)
+        let end = CloudArchive.moveEnd(report, stillAsked: stillAsked,
                                        nothingLeftNow: CloudArchive.nothingLeft(in: paths, from: .bucket), missing: missing)
         guard end != .ignored else {
             Log.info("Backup move: a run ended after the move was stopped. Nothing more was changed")

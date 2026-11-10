@@ -58,7 +58,11 @@ extension AppController {
         serverHasChat = hello.chat
         serverRecordingLimit = Double(hello.recordingLimit ?? 0)
         // Another server has another id: the recordings on the old one are then not "in the backup" any more.
+        let previous = serverID
         serverID = hello.id ?? ""
+        if backupMovePending, !previous.isEmpty, previous != serverID {
+            noteBackupMove("The move paused, because you connected another server. It goes on with the new server.")
+        }
         do { try keychain.set(c.secret, for: .serverSecret) } catch { Log.error("Saving the server secret failed") }
         keysChanged()
         serverAddress = c.address.absoluteString
@@ -74,6 +78,7 @@ extension AppController {
 
     /// Goes back to iCloud; the server and its data stay as they are.
     func disconnectServer() {
+        if backupMovePending { noteBackupMove("The move paused, because no server is connected.") }
         keychain.delete(.serverSecret)
         keysChanged()
         serverAddress = ""

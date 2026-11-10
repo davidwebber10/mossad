@@ -89,6 +89,14 @@ extension CloudArchive {
     /// The rule for the end of a run. `stillAsked`: the move is still wanted and the new place is still the chosen
     /// backup, at this moment. `nothingLeftNow`: no record names the old place, read at this moment. `missing`:
     /// recordings that the move, over all its runs, did not find anywhere.
+    /// Whether a run of the move may go on, asked before each copy and each delete, and once more at its end. A run
+    /// belongs to the server it started with (`runServerID`): after "Change server" or "Disconnect" it must stop, or
+    /// it copies to the old server and then removes the bucket copies and the bucket settings.
+    public static func moveMayGoOn(pending: Bool, choiceIsServer: Bool, canMove: Bool, recording: Bool,
+                                   serverID: String, runServerID: String?) -> Bool {
+        pending && choiceIsServer && canMove && !recording && !serverID.isEmpty && (runServerID.map { $0 == serverID } ?? true)
+    }
+
     public static func moveEnd(_ report: MoveReport, stillAsked: Bool, nothingLeftNow: @autoclosure () -> Bool, missing: Int) -> MoveEnd {
         guard stillAsked else { return .ignored }
         if report.stopped { return .paused }
