@@ -540,5 +540,8 @@ final class BackupSettingsTests: XCTestCase {
         XCTAssertEqual(counts.onServer, 2)
         XCTAssertEqual(counts.notBackedUp, 1)
         XCTAssertEqual(counts.leftovers, 1)
+        // A meeting whose recording is gone (deleted after its keep time) is not one that waits for a backup.
+        let known = BackupCounts([record("c"), record("gone")]) { $0 == "c" }
+        XCTAssertEqual(known.notBackedUp, 1)
     }
 }

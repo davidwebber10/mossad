@@ -127,7 +127,9 @@ extension AppController {
     /// launch and each hour, and used once. Nothing sets it by itself.
     func consumeBackupMoveRequest() {
         let key = "moveBackupsToServer"
-        guard canMoveBackups, UserDefaults.standard.bool(forKey: key) else { return }
+        // Once a launch too: as a launch argument (`-moveBackupsToServer YES`) the flag cannot be removed.
+        guard canMoveBackups, !backupMoveRequestSeen, UserDefaults.standard.bool(forKey: key) else { return }
+        backupMoveRequestSeen = true
         UserDefaults.standard.removeObject(forKey: key)
         guard serverConnection != nil else {
             Log.error("Backup move: asked for with the \(key) flag, but no server is connected. Nothing was changed")

@@ -84,12 +84,13 @@ public struct BackupCounts: Equatable, Sendable {
     /// Old copies that a move has not removed yet.
     public var leftovers = 0
 
-    public init(_ records: [CallRecord]) {
+    /// `hasRecording` says whether a call has its recording on this Mac: only such a call can wait for a backup.
+    public init(_ records: [CallRecord], hasRecording: (String) -> Bool = { _ in true }) {
         for r in records {
             switch r.archived?.kind {
             case .server: onServer += 1
             case .bucket: inBucket += 1
-            case nil: if r.status == .written, r.cloudKey == nil { notBackedUp += 1 }
+            case nil: if r.status == .written, r.cloudKey == nil, hasRecording(r.id) { notBackedUp += 1 }
             }
             leftovers += r.cloudLeftovers?.count ?? 0
         }

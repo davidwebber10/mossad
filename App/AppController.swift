@@ -94,6 +94,7 @@ final class AppController: ObservableObject {
     /// What the last upload pass could not do, for Settings.
     @Published var backupReport = CloudArchive.Report()
     var serverFactsChecked = false
+    var backupMoveRequestSeen = false
     /// Whether the server answered the last time it was asked, for the status in Settings.
     @Published var serverCheck = SettingsCheck.idle
     private var liveSessions: [LiveTranscriber] = []

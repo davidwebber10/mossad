@@ -179,7 +179,10 @@ private struct BackupGroup: View {
 
     private static let updateGuide = URL(string: "https://github.com/davidwebber10/mossad/tree/main/server#update-your-server")!
 
-    private var counts: BackupCounts { BackupSample.counts ?? BackupCounts(controller.meetings) }
+    /// Counted off the main thread: it looks at each meeting's folder.
+    @State private var counted = BackupCounts([])
+
+    private var counts: BackupCounts { BackupSample.counts ?? counted }
     private var choice: BackupChoice { controller.backupChoice }
     private var connected: Bool { controller.hasServer }
     /// Recordings, or old copies of them, that a move would still take out of the bucket.
@@ -205,6 +208,12 @@ private struct BackupGroup: View {
                 if controller.serverKeepsRecordings { moveRows }
             }
             if !controller.backupMoveResult.isEmpty, !moving { moveResult }
+        }
+        .task(id: CountKey(meetings: controller.meetings.count, busy: controller.cloudSyncing, choice: choice)) {
+            let records = controller.meetings, paths = controller.paths
+            counted = await Task.detached(priority: .utility) {
+                BackupCounts(records) { FileManager.default.fileExists(atPath: Recording.url(in: paths.callDirectory($0)).path) }
+            }.value
         }
         .confirmationDialog("Move every backup to your server?", isPresented: $confirmMove) {
             Button("Move to your server") { controller.moveBackupsToServer() }
@@ -240,7 +249,8 @@ private struct BackupGroup: View {
         if counts.onServer > 0, counts.inBucket > 0 { parts = ["\(counts.onServer) on your server", "\(counts.inBucket) in \(controller.bucketName)"] }
         if waiting > 0 { parts.append("\(waiting) waiting") }
         let large = controller.backupReport.tooLarge.count
-        var detail = waiting > 0 ? "Mossad sends the waiting ones after each meeting and every hour." : "Every finished recording has its second copy."
+        var detail = waiting > 0 ? "Mossad sends the waiting ones after each meeting and every hour."
+            : total > 0 ? "Every finished recording has its second copy." : "Mossad sends each recording after its note is written."
         if choice == .server, let limitText { detail += " One recording can be up to \(limitText), about \(Int((controller.serverRecordingLimit / 1_048_576 / 14).rounded())) hours." }
         return VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: parts.joined(separator: " · "), detail: detail) {
@@ -337,6 +347,13 @@ private struct BackupGroup: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 9)
     }
+}
+
+/// When to count again: a new meeting, the end of an upload pass, or another choice.
+private struct CountKey: Equatable {
+    let meetings: Int
+    let busy: Bool
+    let choice: BackupChoice
 }
 
 /// How far the move is: the accent on the fill, like the app's other bars.

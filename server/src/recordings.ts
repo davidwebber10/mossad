@@ -31,14 +31,19 @@ export async function linkSignature(secret: string, name: string, expires: numbe
   return [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Whether the address carries the owner's signature for this recording, and has not expired. */
-export async function validLink(env: Env, name: string, url: URL): Promise<boolean> {
+/**
+ * What a signed address is: 'valid'; 'expired' when the owner's signature is right and its time is over; 'wrong'
+ * for anything else. Only 'wrong' is a failed try at the secret: an old link in a player proves the secret was known.
+ */
+export async function checkLink(env: Env, name: string, url: URL): Promise<'valid' | 'expired' | 'wrong'> {
   const expires = Number(url.searchParams.get('expires'));
   const signature = url.searchParams.get('signature') ?? '';
   const now = Math.floor(Date.now() / 1000);
-  if (!env.OWNER_SECRET || !Number.isInteger(expires) || expires < now || expires > now + maxLinkSeconds + 300 || !sha.test(signature)) return false;
+  if (!env.OWNER_SECRET || !Number.isInteger(expires) || expires > now + maxLinkSeconds + 300 || !sha.test(signature)) return 'wrong';
   const bytes = new Uint8Array(signature.match(/../g)!.map((h) => parseInt(h, 16)));
-  return crypto.subtle.verify('HMAC', await hmacKey(env.OWNER_SECRET, 'verify'), bytes, linkText(name, expires));
+  const signed = await crypto.subtle.verify('HMAC', await hmacKey(env.OWNER_SECRET, 'verify'), bytes, linkText(name, expires));
+  if (!signed) return 'wrong';
+  return expires < now ? 'expired' : 'valid';
 }
 
 /** An audio file from FILES, with byte ranges so a player can seek. Null when it is not there. */

@@ -1,4 +1,4 @@
-import { handleRecording, maxRecordingBytes, readRecording, validLink } from './recordings';
+import { checkLink, handleRecording, maxRecordingBytes, readRecording } from './recordings';
 import { deleteShare } from './share';
 import type { Env, MeetingView, Share } from './types';
 import { bearer, json, sameSecret } from './util';
@@ -31,8 +31,9 @@ export async function handleAPI(request: Request, env: Env): Promise<Response> {
   // A link to one recording that the owner's app signed plays without the secret in a header. It only reads.
   const signed = !owner && parts[0] === 'recordings' && parts.length === 2 && name.test(parts[1]) && url.searchParams.has('signature')
     && (request.method === 'GET' || request.method === 'HEAD');
-  const linked = signed && await validLink(env, parts[1], url);
-  if (await tooManyFailures(env, request, (!owner && !!bearer(request)) || (signed && !linked))) return json({ error: 'Too many wrong secrets. Try again in an hour.' }, 429);
+  const link = signed ? await checkLink(env, parts[1], url) : null;
+  const linked = link === 'valid';
+  if (await tooManyFailures(env, request, (!owner && !!bearer(request)) || link === 'wrong')) return json({ error: 'Too many wrong secrets. Try again in an hour.' }, 429);
   if (parts[0] === 'hello' && request.method === 'GET') {
     const scheme = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(env.MCP_HOST) ? 'http' : 'https';
     return json({
@@ -42,6 +43,7 @@ export async function handleAPI(request: Request, env: Env): Promise<Response> {
     });
   }
   if (linked) return readRecording(request, env, parts[1]);
+  if (link === 'expired') return json({ error: 'This link has expired.' }, 401);
   if (!owner) return json({ error: 'The secret is wrong or missing.' }, 401);
 
   const [kind, a, b] = parts;

@@ -181,6 +181,15 @@ describe('recording backup', () => {
     expect((await handleAPI(new Request(`${base}/m1?expires=${soon}&signature=zz`), e.env)).status).toBe(401);
   });
 
+  it('does not count a link that only expired as a wrong secret', async () => {
+    // A player that still holds yesterday's link must not lock the owner's own sync out.
+    const old = Math.floor(Date.now() / 1000) - 10, signature = await linkSignature('owner-secret', 'm1', old);
+    let last = 0;
+    for (let i = 0; i < 25; i++) last = (await handleAPI(new Request(`${base}/m1?expires=${old}&signature=${signature}`), e.env)).status;
+    expect(last).toBe(401);
+    expect((await handleAPI(new Request(`${base}/m1`, { method: 'HEAD', headers: auth }), e.env)).status).toBe(404);
+  });
+
   it('counts wrong links like wrong secrets, and pauses after too many', async () => {
     const soon = Math.floor(Date.now() / 1000) + 60;
     let last = 0;
