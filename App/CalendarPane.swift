@@ -399,6 +399,8 @@ private struct MonthGrid: View {
     let upcoming: [UpcomingMeeting]
     let openUpcoming: (UpcomingMeeting) -> Void
     let open: (CallRecord, String) -> Void
+    /// The day whose "+N more" shows all of its meetings over the grid; a click outside closes it.
+    @State private var expanded: Date?
 
     var body: some View {
         let cells = CalendarLayout.monthCells(month: state.anchor, calendar: state.calendar)
@@ -447,11 +449,14 @@ private struct MonthGrid: View {
                 MonthUpcomingItem(meeting: m) { openUpcoming(m) }
             }
             if items.count + coming.count > 3 {
-                Button("+\(items.count + coming.count - 3) more") {
-                    state.anchor = day
-                    state.scope = .day
-                }
-                .buttonStyle(.plain).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary).padding(.leading, 5)
+                // Shows the whole day over the grid; the calendar stays in Month.
+                Button("+\(items.count + coming.count - 3) more") { expanded = day }
+                    .buttonStyle(.plain).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary).padding(.leading, 5)
+                    .popover(isPresented: Binding(get: { expanded == day }, set: { if !$0 { expanded = nil } }), arrowEdge: .bottom) {
+                        DayShelf(day: day, records: items, upcoming: coming, matches: matches, deleting: $deleting,
+                                 open: { r in expanded = nil; open(r, state.title) },
+                                 openUpcoming: { m in expanded = nil; openUpcoming(m) })
+                    }
             }
             Spacer(minLength: 0)
         }
@@ -592,4 +597,37 @@ private func monthTime(_ date: Date) -> String {
     let h = (c.hour ?? 0) % 12 == 0 ? 12 : (c.hour ?? 0) % 12
     let suffix = (c.hour ?? 0) < 12 ? "am" : "pm"
     return c.minute == 0 ? "\(h)\(suffix)" : String(format: "%d:%02d%@", h, c.minute ?? 0, suffix)
+}
+
+/// Every meeting of one day in the Month view, over the grid: the "+N more" of a full day. A click outside closes it.
+private struct DayShelf: View {
+    let day: Date
+    let records: [CallRecord]
+    let upcoming: [UpcomingMeeting]
+    let matches: Set<String>
+    @Binding var deleting: CallRecord?
+    let open: (CallRecord) -> Void
+    let openUpcoming: (UpcomingMeeting) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(day.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
+                .padding(.horizontal, 5).padding(.bottom, 4)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(records, id: \.id) { r in
+                        MonthItem(record: r) { open(r) }
+                            .opacity(matches.contains(r.id) ? 1 : 0.3)
+                            .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
+                    }
+                    ForEach(upcoming) { m in MonthUpcomingItem(meeting: m) { openUpcoming(m) } }
+                }
+            }
+            .frame(maxHeight: 360)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(width: 280, alignment: .leading)
+    }
 }

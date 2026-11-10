@@ -68,6 +68,8 @@ enum Palette {
     static let glassRing = Color(light: 0xFFFFFF, lightAlpha: 0.9, dark: 0xFFFFFF, darkAlpha: 0.1)
     /// The selected segment of a segmented control.
     static let segmentOn = Color(light: 0xFFFFFF, dark: 0xFFFFFF, darkAlpha: 0.14)
+    /// A solid control that sits on the header band and must read as raised from it, such as the meeting tabs.
+    static let raised = Color(light: 0xFFFFFF, dark: 0x363431)
 
     static let meet = Color(light: 0x1E8E5A, dark: 0x3FCB84)
     static let zoom = Color(light: 0x2563EB, dark: 0x6AA6FF)

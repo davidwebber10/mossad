@@ -231,9 +231,11 @@ private struct DetailTabs: View {
             }
         }
         .padding(3)
-        // Solid under the glass: the band's edge and the page must not show through the tabs.
-        .background(Palette.surface, in: Capsule())
-        .chromeGlass(in: Capsule())
+        // Solid and raised: lighter than the header band, with an edge and a floating shadow, so the tabs read as
+        // their own control and nothing shows through them.
+        .background(Palette.raised, in: Capsule())
+        .chromeGlass(in: Capsule(), fill: .clear, shadow: .floating)
+        .overlay(Capsule().strokeBorder(Palette.bar, lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Meeting tabs")
     }
