@@ -170,8 +170,18 @@ public enum MeetingFindings {
 
     /// The sentence over the meeting's own numbers: "Compared with 8 earlier meetings in Weekly sync".
     public static func compared(_ context: MeetingAnalytics.Context) -> String {
-        if context.kind == .recent { return "Compared with your last \(context.meetings) meetings" }
-        return "Compared with \(count(context.meetings, "earlier meeting", "earlier meetings")) \(context.label)"
+        let n = context.meetings
+        switch context.kind {
+        case .recent:
+            return "Compared with your last \(n) meetings"
+        // "in meetings of 3 to 4 people" already says "meetings"; "in your 1:1s with Sam" says whose.
+        case .setting where context.label.hasPrefix("in "):
+            return "Compared with \(n) earlier \(context.label.dropFirst(3))"
+        case .oneOnOne where context.label.hasPrefix("in your "):
+            return "Compared with your \(n) earlier \(context.label.dropFirst(8))"
+        default:
+            return "Compared with \(count(n, "earlier meeting", "earlier meetings")) \(context.label)"
+        }
     }
 
     public static func usually(_ metric: MeetingMetric, _ u: MeetingAnalytics.Usual, context: MeetingAnalytics.Context) -> String {

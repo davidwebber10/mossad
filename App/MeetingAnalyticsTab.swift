@@ -94,7 +94,10 @@ private struct MeetingAnalyticsPage: View {
                 .hairline(.top)
                 .hairline()
             VStack(alignment: .leading, spacing: 36) {
-                MeetingAnalyticsGroup("Against the usual") { UsualSection(analytics: a, record: record) }
+                // With no history at all, "What stood out" already says so; the group shows only when it has more.
+                if a.baselines.hasHistory || a.baselines.schedule != nil || a.baselines.trends != nil {
+                    MeetingAnalyticsGroup("Against the usual") { UsualSection(analytics: a, record: record) }
+                }
                 if !a.speakers.isEmpty {
                     MeetingAnalyticsGroup("Talk time") { TalkTimeSection(analytics: a, people: people, callID: record.id) }
                     MeetingAnalyticsGroup("Conversation flow") { FlowSection(analytics: a, people: people, callID: record.id, long: record.isLong) }
@@ -272,9 +275,8 @@ private struct UsualSection: View {
             if let context = b.meeting.context {
                 Finding(MeetingFindings.compared(context))
                 table(b.meeting, context)
-            } else {
-                Finding("Not enough history yet")
-                Text("This call has fewer than 3 earlier meetings of its series or its setting. Its numbers get a usual range after a few more.")
+            } else if b.hasHistory {
+                Text("The meeting has fewer than 3 earlier meetings of its series or its setting, so only its people have a usual range.")
                     .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

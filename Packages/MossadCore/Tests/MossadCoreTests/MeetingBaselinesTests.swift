@@ -430,7 +430,11 @@ final class MeetingBaselinesTests: XCTestCase {
         XCTAssertEqual(MeetingFindings.sentence(.talkShare, reading, you: false, context: context),
                        "talked 60% of the time; usually 30 to 40% in 1:1s with you")
         XCTAssertEqual(MeetingFindings.usually(.questionsPerHour, usual([3, 3, 6, 6]), context: context), "usually 3 to 6 an hour in 1:1s with you")
-        XCTAssertEqual(MeetingFindings.compared(context), "Compared with 8 earlier meetings in 1:1s with you")
+        XCTAssertEqual(MeetingFindings.compared(A.Context(kind: .oneOnOne, meetings: 8, label: "in your 1:1s with Sam")), "Compared with your 8 earlier 1:1s with Sam")
+        XCTAssertEqual(MeetingFindings.compared(A.Context(kind: .setting, meetings: 8, label: "in meetings of 3 to 4 people")),
+                       "Compared with 8 earlier meetings of 3 to 4 people")
+        XCTAssertEqual(MeetingFindings.compared(A.Context(kind: .setting, meetings: 4, label: "in monthly update meetings of 3 to 4 people")),
+                       "Compared with 4 earlier monthly update meetings of 3 to 4 people")
         XCTAssertEqual(MeetingFindings.compared(A.Context(kind: .series, meetings: 1, label: "in Weekly sync")), "Compared with 1 earlier meeting in Weekly sync")
         XCTAssertEqual(MeetingFindings.compared(A.Context(kind: .recent, meetings: 20, label: "in your last 20 meetings")), "Compared with your last 20 meetings")
     }
