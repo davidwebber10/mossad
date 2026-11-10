@@ -140,6 +140,28 @@ final class OnboardingTests: XCTestCase {
         XCTAssertEqual(OnboardingPermissions.whatWillNotWork(missing: [.automation("a"), .automation("b")]).count, 1)
     }
 
+    func testEachPermissionSaysWhatItIsFor() {
+        XCTAssertEqual(OnboardingPermissions.purpose(.microphone), "Records your side of the call.")
+        XCTAssertTrue(OnboardingPermissions.purpose(.systemAudio).contains("other people"))
+        XCTAssertTrue(OnboardingPermissions.purpose(.automation("com.apple.Safari")).contains("Google Meet"))
+        XCTAssertTrue(OnboardingPermissions.purpose(.screenCapture).contains("screens"))
+    }
+
+    func testAMissingPermissionSaysWhatDoesNotWork() {
+        XCTAssertEqual(OnboardingPermissions.consequence(.microphone), "Without Microphone, your own side of the call is not recorded.")
+        XCTAssertEqual(OnboardingPermissions.whatWillNotWork(missing: [.calendars]), [OnboardingPermissions.consequence(.calendars)])
+    }
+
+    func testThePermissionActionFollowsWhatMacOSCanStillDo() {
+        XCTAssertNil(OnboardingPermissions.action(.microphone, .granted))
+        XCTAssertEqual(OnboardingPermissions.action(.microphone, .notAsked), "Allow…")
+        XCTAssertEqual(OnboardingPermissions.action(.microphone, .denied), "Open Settings…")
+        // macOS has no prompt for these two: only its Settings list.
+        XCTAssertEqual(OnboardingPermissions.action(.accessibility, .notAsked), "Open Settings…")
+        XCTAssertEqual(OnboardingPermissions.action(.screenCapture, .notAsked), "Open Settings…")
+        XCTAssertEqual(OnboardingPermissions.action(.automation("com.apple.Safari"), .needsApp), "Open the browser")
+    }
+
     // MARK: When it opens
 
     func testOnlyANewInstallSeesItInTheRealApp() {

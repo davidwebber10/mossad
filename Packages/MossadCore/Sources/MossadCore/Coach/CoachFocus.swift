@@ -70,6 +70,15 @@ public enum CoachVoice: String, Codable, Sendable, CaseIterable, Identifiable {
         case .data: "Data only"
         }
     }
+
+    /// How the reviews sound in this voice, for the menu's row.
+    public var detail: String {
+        switch self {
+        case .direct: "Plain, short, and specific, like a candid peer."
+        case .warm: "Encouraging and specific, like a mentor with high standards."
+        case .data: "Facts and numbers only, with no encouragement."
+        }
+    }
 }
 
 extension CoachProfile {

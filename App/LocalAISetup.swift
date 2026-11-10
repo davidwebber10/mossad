@@ -6,8 +6,7 @@ import SwiftUI
 /// since the meeting text would go to that computer.
 struct LocalServerSetup: View {
     @EnvironmentObject var controller: AppController
-    /// Setup's sheet buttons in place of the Settings ones.
-    var onboarding = false
+    @Environment(\.rowStyle) private var style
     @State private var state: CheckState = .idle
 
     enum CheckState: Equatable { case idle, checking, found(Int), failed(FriendlyError) }
@@ -16,15 +15,8 @@ struct LocalServerSetup: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Server").font(.system(size: onboarding ? 13.5 : 13, weight: .medium)).foregroundStyle(Palette.ink)
-                    Link(destination: LocalServer.getOllama) {
-                        HStack(spacing: 3) {
-                            Text("Get Ollama")
-                            IconImage(.arrowUp, size: 10).rotationEffect(.degrees(45))
-                        }
-                    }
-                    .font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.accent)
-                    .accessibilityLabel("Get Ollama on its website")
+                    Text("Server").font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
+                    RowLink(text: "Get Ollama", destination: LocalServer.getOllama, spoken: "Get Ollama on its website")
                 }
                 Spacer(minLength: Space.m)
                 TextField("Server address", text: $controller.localServerURL, prompt: Text(LocalServer.ollama.absoluteString))
@@ -56,20 +48,16 @@ struct LocalServerSetup: View {
                 .accessibilityElement(children: .combine)
             }
         }
-        .padding(.vertical, onboarding ? Onboard.rowPadding : 9)
+        .padding(.vertical, style.padding)
         .onChange(of: controller.localServerURL) { _, _ in state = .idle }
     }
 
-    @ViewBuilder
     private var checkButton: some View {
-        let label = Group {
+        Button(action: check) {
             if state == .checking { ProgressView().controlSize(.small).frame(width: 40) } else { Text("Check") }
         }
-        if onboarding {
-            Button(action: check) { label }.buttonStyle(SheetButtonStyle(kind: .secondary, compact: true)).disabled(state == .checking)
-        } else {
-            Button(action: check) { label }.buttonStyle(SettingsButtonStyle()).disabled(state == .checking)
-        }
+        .rowButton()
+        .disabled(state == .checking)
     }
 
     private func use(_ url: URL) {
@@ -93,17 +81,6 @@ struct LocalServerSetup: View {
                 Log.error("Checking the local AI server failed: \(FriendlyError(error, context: .checkingKey).technical)")
                 state = .failed(FriendlyError(error, context: .checkingKey, service: "the local server"))
             }
-        }
-    }
-}
-
-/// Whether Apple's on-device model can run here, and why not when it cannot.
-struct AppleModelStatus: View {
-    var body: some View {
-        if let reason = AppleModelInfo.unavailableReason() {
-            InlineError(error: FriendlyError(reason, context: .general))
-        } else {
-            PassLine(text: "Ready on this Mac")
         }
     }
 }

@@ -3,32 +3,25 @@ import MossadCore
 import ServiceManagement
 import SwiftUI
 
-/// Settings › General: on or off, the owner, permissions, the org chart, and updates.
+/// Settings › General: on or off and login, the owner, permissions, setup, the org chart, and updates.
 struct GeneralSettings: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @AppStorage("ownerEmail") private var ownerEmail = ""
 
+    /// Setup's order: the two that recording needs, then the ones that make the notes better.
+    private var permissionItems: [PermissionsMonitor.Item] {
+        OnboardingPermissions.ordered(permissions.items.map(\.kind)).compactMap { kind in permissions.items.first { $0.kind == kind } }
+    }
+
     var body: some View {
         LabelColumnStack {
-            LabelColumn(label: "Mossad", labelTopPadding: 10) { power }
-            SettingsGroup(label: "You", footer: "Mossad uses your name for your lines in each note, and the company to tell your colleagues from other people.") {
-                SettingsRow(title: "Your name") {
-                    TextField("Your name", text: $controller.ownerName)
-                        .textFieldStyle(SettingsFieldStyle(width: 160))
-                        .onSubmit { controller.rebuildPipeline() }
-                }
-                SettingsRow(title: "Work email", detail: "Finds you in meeting invites.") {
-                    TextField("Work email", text: $ownerEmail, prompt: Text("you@example.com"))
-                        .textFieldStyle(SettingsFieldStyle(width: 160))
-                }
-                SettingsRow(title: "Company", titleNote: "optional") {
-                    TextField("Company", text: $controller.organization, prompt: Text("Example Inc."))
-                        .textFieldStyle(SettingsFieldStyle(width: 160))
-                        .onSubmit { controller.rebuildPipeline() }
-                }
-                SettingsSwitchRow(title: "Open Mossad at login", detail: Rehearsal.isOn ? "Rehearsal never opens at login." : nil, isOn: $launchAtLogin)
+            SettingsGroup(label: "Mossad") {
+                power
+                SettingsSwitchRow(title: "Open Mossad at login",
+                                  detail: Rehearsal.isOn ? "Rehearsal never opens at login." : "So it is ready for your first call each day.",
+                                  isOn: $launchAtLogin)
                     .disabled(Rehearsal.isOn)
                     .onChange(of: launchAtLogin) { _, on in
                         guard !Rehearsal.isOn else { return }
@@ -39,10 +32,26 @@ struct GeneralSettings: View {
                         }
                     }
             }
+            SettingsGroup(label: "You") {
+                SettingsRow(title: "Your name", detail: "Your lines in each note carry it.") {
+                    TextField("Your name", text: $controller.ownerName, prompt: Text("First and last name"))
+                        .textFieldStyle(SettingsFieldStyle(width: Self.fieldWidth))
+                        .onSubmit { controller.rebuildPipeline() }
+                }
+                SettingsRow(title: "Work email", detail: "Finds you in invites and picks your calendars.") {
+                    TextField("Work email", text: $ownerEmail, prompt: Text("you@example.com"))
+                        .textFieldStyle(SettingsFieldStyle(width: Self.fieldWidth))
+                }
+                SettingsRow(title: "Company", detail: "Tells colleagues from other people.", titleNote: "optional") {
+                    TextField("Company", text: $controller.organization, prompt: Text("Example Inc."))
+                        .textFieldStyle(SettingsFieldStyle(width: Self.fieldWidth))
+                        .onSubmit { controller.rebuildPipeline() }
+                }
+            }
             LabelColumn(label: "Permissions", note: permissions.allGood ? nil : "\(permissions.problemCount) need\(permissions.problemCount == 1 ? "s" : "") attention",
                         labelTopPadding: 10) {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(permissions.items) { item in
+                    ForEach(permissionItems) { item in
                         PermissionRow(item: item) { permissions.fix(item) }.hairline(.bottom)
                     }
                     Text("\(Text("Recording consent.").fontWeight(.semibold).foregroundStyle(Palette.ink)) Mossad does not announce itself on calls. Tell the people you meet with that the call is recorded. Some places require the consent of every person on the call. This is not legal advice.")
@@ -52,9 +61,9 @@ struct GeneralSettings: View {
                         .padding(.top, Space.s)
                 }
             }
-            SettingsGroup(label: "Setup", footer: "Walks through the same steps as the first launch: you, permissions, AI keys, calendars, the recording check, and sync. What you set already stays.") {
-                SettingsRow(title: "Run setup again", detail: "Opens the setup window from the first step.") {
-                    Button("Run setup again…") { controller.runSetupAgain() }.buttonStyle(.settings)
+            SettingsGroup(label: "Setup") {
+                SettingsRow(title: "Run setup again", detail: "The same steps as the first launch, from the first one. What you set already stays.") {
+                    Button("Open setup…") { controller.runSetupAgain() }.buttonStyle(.settings)
                 }
             }
             OrgChartSettings()
@@ -63,6 +72,8 @@ struct GeneralSettings: View {
             }
         }
     }
+
+    private static let fieldWidth: CGFloat = 180
 
     private var power: some View {
         HStack(spacing: Space.m) {
@@ -87,51 +98,12 @@ struct GeneralSettings: View {
             }
         }
         .padding(.top, 6).padding(.bottom, 12)
-        .hairline(.bottom)
     }
 
     private var powerDetail: String {
         if controller.isOn { return "Records Zoom, Google Meet, and Microsoft Teams calls on its own." }
         if let date = controller.offUntilDate { return "No calls are detected or recorded until \(date.formatted(date: .abbreviated, time: .shortened))." }
         return "No calls are detected or recorded until you turn it on."
-    }
-}
-
-/// A permission: a check and "Granted" when it is, or the accent dot and the one button that fixes it.
-private struct PermissionRow: View {
-    let item: PermissionsMonitor.Item
-    let fix: () -> Void
-
-    var body: some View {
-        HStack(spacing: Space.m) {
-            Group {
-                if item.state.isGood {
-                    IconImage(.check, size: 14).foregroundStyle(Palette.secondary)
-                } else {
-                    Circle().fill(Palette.accentFill).frame(width: 8, height: 8)
-                }
-            }
-            .frame(width: 18, height: 18)
-            .accessibilityHidden(true)
-            SettingsRowText(title: item.title, detail: item.reason)
-            Spacer(minLength: Space.m)
-            if item.state.isGood {
-                Text("Granted").font(.system(size: 12)).foregroundStyle(Palette.secondary)
-            } else {
-                Button(fixLabel, action: fix).buttonStyle(.settingsAccent)
-            }
-        }
-        .padding(.vertical, 9)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(item.state.isGood ? "Granted" : "Not granted")
-    }
-
-    private var fixLabel: String {
-        switch item.state {
-        case .notAsked: "Grant…"
-        case .needsApp: "Open browser"
-        default: "Open Settings…"
-        }
     }
 }
 

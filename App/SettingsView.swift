@@ -157,21 +157,21 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     /// The one line in the list.
     var contents: String {
         switch self {
-        case .general: "On/off, you, permissions, org chart"
+        case .general: "On or off, you, permissions, updates"
         case .recording: "Recording, voices, calendars, storage"
-        case .ai: "Providers and other AI apps"
+        case .ai: "Transcription, notes, cost, other AI apps"
         case .sync: "Where meetings sync, iPhone, share links"
-        case .coach: "Reviews, focus, what it knows, email"
+        case .coach: "Reviews, focus, what it knows, emails"
         }
     }
 
     var detail: String {
         switch self {
-        case .general: "Turn Mossad on or off, and what it needs from you and from macOS."
-        case .recording: "How Mossad records, names voices, and keeps audio."
-        case .ai: "The services that transcribe and summarize your calls, and other apps that read them."
+        case .general: "Turn Mossad on or off, and give it what it needs from you and from macOS."
+        case .recording: "What Mossad captures in a call, whose voices it names, and how long it keeps the audio."
+        case .ai: "The services that write your notes, what they cost, and the other AI apps that can read your meetings."
         case .sync: "Where your meetings sync, and your own server for share links and ChatGPT."
-        case .coach: "Reviews of how you communicate, and the coach’s emails."
+        case .coach: "Reviews of how you communicate, what the coach knows about you, and its emails."
         }
     }
 

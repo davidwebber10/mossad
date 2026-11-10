@@ -2,137 +2,44 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// Settings › AI: the transcription and AI providers with their ratings and keys, and the commands that let
-/// other AI apps read the meetings.
+/// Settings › AI: a group for each job, Transcription and Notes, with its provider, model, ratings, and key; what
+/// an hour of meetings costs; and the commands that let other AI apps read the meetings. The provider rows are
+/// the ones setup shows (`ProviderRows.swift`).
 struct AISettings: View {
     @EnvironmentObject var controller: AppController
+    @StateObject private var keys = KeyChecker()
     @State private var editingKey: APIKey?
 
     var body: some View {
         LabelColumnStack {
-            SettingsGroup(label: "Providers", footer: "Keys are stored in the Keychain. Each provider bills your own account.") {
-                transcription
-                if let key = controller.transcriptionProvider.key {
-                    keyRow(controller.transcriptionProvider.displayName, "Transcribes your calls after they end", key)
-                }
-                ai
-                switch controller.aiProvider {
-                case .localServer:
-                    LocalServerSetup()
-                    keyRow("Local server key", "Only when the server asks for one", .localServer, note: "optional")
-                case .apple:
-                    SettingsRow(title: "Apple Intelligence", detail: "The model runs on this Mac. Nothing leaves it.") { AppleModelStatus() }
-                default:
-                    if let key = controller.aiProvider.key {
-                        keyRow(controller.aiProvider.displayName, "Answers with your chosen model", key)
-                    }
-                }
+            SettingsGroup(label: ProviderJob.transcription.title) {
+                TranscriptionRows(keys: keys, ratings: true, edit: edit)
                 if controller.liveTranscriptEnabled, controller.transcriptionProvider != .assemblyai {
-                    keyRow("AssemblyAI", "The live transcript while recording uses AssemblyAI", .assemblyai)
+                    KeyRow(keys: keys, key: .assemblyai, service: .assemblyai, detail: "For the live transcript.",
+                           page: KeyCheck.Service.assemblyai.keysPage, edit: edit)
                 }
             }
-            SettingsGroup(label: "Use your meetings in other AI apps",
+            SettingsGroup(label: ProviderJob.notes.title, footer: "Mossad keeps each key in the macOS Keychain and never shows it again.") {
+                NotesRows(keys: keys, ratings: true, edit: edit)
+            }
+            SettingsGroup(label: "Cost", footer: "An estimate from list prices. Each provider bills your own account.") {
+                let cost = Pricing.hourCost(transcription: controller.transcriptionProvider, ai: controller.aiProvider, model: controller.aiModel)
+                SettingsRow(title: "An hour of meetings", detail: cost.parts) {
+                    Text(cost.headline).font(.system(size: 13, weight: .medium)).monospacedDigit().foregroundStyle(Palette.ink)
+                }
+                .accessibilityElement(children: .combine)
+            }
+            SettingsGroup(label: "Other AI apps",
                           footer: "Read-only. Claude Code, Claude Desktop, and other MCP apps can search and read your meetings, the same way the Chat tab does. Mossad does not need to be open.") {
                 MCPSetup()
             }
         }
         .sheet(item: $editingKey) { key in KeySheet(key: key) }
+        // A check's result is for the key it tried, not for the one the sheet saved.
+        .onChange(of: editingKey) { old, new in if new == nil, let old { keys.forget(old) } }
     }
 
-    private var transcription: some View {
-        ProviderRow(title: "Transcription", detail: controller.transcriptionProvider.note(model: controller.transcriptionModel)) {
-            FillPicker(title: "Transcription provider", selection: $controller.transcriptionProvider,
-                       choices: TranscriptionProvider.allCases.map { ($0, $0.displayName) })
-            if controller.transcriptionProvider.models.count > 1 {
-                FillPicker(title: "Transcription model", selection: $controller.transcriptionModel,
-                           choices: controller.transcriptionProvider.models.map { ($0.id, $0.name) })
-            }
-        } rating: {
-            RatingView(rating: controller.transcriptionProvider.rating, aspects: Rating.transcriptionAspects)
-        }
-        .onChange(of: controller.transcriptionProvider) { _, p in
-            controller.transcriptionModel = p.models.first?.id ?? ""
-            controller.rebuildPipeline()
-        }
-        .onChange(of: controller.transcriptionModel) { _, _ in controller.rebuildPipeline() }
-    }
-
-    private var ai: some View {
-        ProviderRow(title: "AI", detail: ["Summaries, the coach, the weekly email, and chat.", controller.aiProvider.note].compactMap { $0 }.joined(separator: " ")) {
-            FillPicker(title: "AI provider", selection: $controller.aiProvider,
-                       choices: AIProvider.allCases.map { ($0, $0.displayName) })
-            ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)
-        } rating: {
-            if let rating = Rating.model(controller.aiProvider.resolvedModel(controller.aiModel), provider: controller.aiProvider)
-                ?? (controller.aiProvider == .openrouter ? controller.openRouterRating : nil) {
-                RatingView(rating: rating, aspects: Rating.modelAspects)
-            }
-        }
-        .onChange(of: controller.aiProvider) { _, _ in
-            controller.aiModel = ""
-            controller.rebuildPipeline()
-        }
-        .onChange(of: controller.aiModel) { _, _ in controller.rebuildPipeline() }
-    }
-
-    private func keyRow(_ title: String, _ detail: String, _ key: APIKey, note: String? = nil) -> some View {
-        SettingsRow(title: title, detail: detail, titleNote: note) {
-            KeyStatus(key: key) { editingKey = $0 }
-        }
-    }
-}
-
-/// A provider: its name with the menus beside it, what it does, and its ratings across the full width.
-private struct ProviderRow<Pickers: View, Ratings: View>: View {
-    let title: String
-    let detail: String
-    @ViewBuilder var pickers: Pickers
-    @ViewBuilder var rating: Ratings
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .top, spacing: Space.m) {
-                Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink).padding(.top, 3)
-                Spacer(minLength: Space.m)
-                HStack(spacing: 6) { pickers }
-            }
-            Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-                .padding(.top, -6)
-            rating.padding(.top, 4)
-        }
-        .padding(.vertical, 9)
-    }
-}
-
-/// Stars for each aspect and the price level; the tooltip says what they rest on.
-private struct RatingView: View {
-    let rating: Rating
-    let aspects: [String]
-
-    var body: some View {
-        HStack(spacing: 14) {
-            ForEach(aspects.filter { rating.stars[$0] != nil }, id: \.self) { aspect in
-                let stars = rating.stars[aspect] ?? 0
-                HStack(spacing: 5) {
-                    Text(aspect)
-                    Text("\(Text(String(repeating: "★", count: stars)))\(Text(String(repeating: "★", count: max(0, 5 - stars))).foregroundStyle(Palette.ring))")
-                        .tracking(1)
-                }
-                .fixedSize()
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(aspect): \(stars) of 5")
-            }
-            if rating.free {
-                Text("Free").fontWeight(.semibold).foregroundStyle(Palette.okText)
-            } else if rating.price > 0 {
-                Text("\(Text(rating.dollars))\(Text(String(repeating: "$", count: 4 - rating.price)).foregroundStyle(Palette.ring))")
-                    .accessibilityLabel("Price level \(rating.price) of 4")
-            }
-        }
-        .font(.system(size: 11.5))
-        .foregroundStyle(Palette.secondary)
-        .help(rating.basis)
-    }
+    private func edit(_ key: APIKey) { editingKey = key }
 }
 
 /// The model menu for the AI provider, filled from the provider's own list. OpenRouter has hundreds of

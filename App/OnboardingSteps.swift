@@ -22,6 +22,7 @@ struct StepGroup<Content: View>: View {
                 }
             }
             .hairline(.top)
+            .environment(\.rowStyle, .setup)
             if let footer { SettingsFootnote(text: footer) }
         }
     }
@@ -147,7 +148,7 @@ struct PermissionsStep: View {
         let lines = OnboardingPermissions.whatWillNotWork(missing: missing)
         VStack(alignment: .leading, spacing: Space.xl) {
             StepGroup(label: "Permissions") {
-                ForEach(items) { PermissionStepRow(item: $0) { permissions.fix($0) } }
+                ForEach(items) { item in PermissionRow(item: item) { permissions.fix(item) } }
             }
             if !lines.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -171,73 +172,6 @@ struct PermissionsStep: View {
     }
 }
 
-/// A permission: its mark, what it is for, Required or Recommended, and the one action that gets it.
-private struct PermissionStepRow: View {
-    let item: PermissionsMonitor.Item
-    let fix: (PermissionsMonitor.Item) -> Void
-
-    var body: some View {
-        let required = OnboardingPermissions.isRequired(item.kind)
-        HStack(spacing: Space.m) {
-            Group {
-                if item.state.isGood {
-                    Circle().fill(Palette.ok.opacity(0.16)).overlay { IconImage(.checkSmall, size: 11).foregroundStyle(Palette.okText) }
-                } else if required {
-                    WarningMark(size: 15).foregroundStyle(Palette.accent)
-                } else {
-                    Circle().strokeBorder(Palette.ring, lineWidth: 1.5).padding(2)
-                }
-            }
-            .frame(width: 20, height: 20)
-            .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: Space.s) {
-                    Text(item.title).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Palette.ink)
-                    if required { NeedsYouChip(text: "Required") } else { TagChip(text: "Recommended") }
-                }
-                Text(Self.reason(item.kind, fallback: item.reason)).font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: Space.m)
-            action
-        }
-        .padding(.vertical, Onboard.rowPadding)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(item.state.isGood ? "Allowed" : "Not allowed")
-    }
-
-    @ViewBuilder
-    private var action: some View {
-        switch item.state {
-        case .granted:
-            Text("Allowed").font(.system(size: 12.5, weight: .medium)).foregroundStyle(Palette.okText)
-        case .notAsked:
-            Button(item.kind == .accessibility ? "Open Settings…" : "Allow…") { fix(item) }
-                .buttonStyle(SheetButtonStyle(kind: OnboardingPermissions.isRequired(item.kind) ? .primary : .secondary, compact: true))
-                .accessibilityLabel("Allow \(item.title)")
-        case .needsApp:
-            Button("Open the browser") { fix(item) }.buttonStyle(SheetButtonStyle(kind: .secondary, compact: true))
-        case .denied:
-            Button("Open Settings…") { fix(item) }
-                .buttonStyle(SheetButtonStyle(kind: OnboardingPermissions.isRequired(item.kind) ? .primary : .secondary, compact: true))
-                .help("macOS asks only once. Turn Mossad on in this list in System Settings.")
-        }
-    }
-
-    /// One line on what each permission is for.
-    static func reason(_ kind: PermissionKind, fallback: String) -> String {
-        switch kind {
-        case .microphone: "Records your side of the call."
-        case .systemAudio: "Records the other people, from the call app's audio. Nothing else on your Mac."
-        case .calendars: "Names each call from its invite and lists who was there."
-        case .accessibility: "Reads call window titles, to notice when a Zoom or Teams call starts."
-        case .notifications: "Tells you when a new voice needs a name. Nothing during calls."
-        case .automation: "Reads the meeting link in the browser tab, to notice Google Meet calls."
-        case .screenCapture: "Keeps frames of screens that people share in a call."
-        }
-    }
-}
-
 // MARK: 4. AI
 
 struct AIStep: View {
@@ -246,43 +180,8 @@ struct AIStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.xl) {
-            ProviderKeyBlock(
-                model: model,
-                label: "Transcription",
-                detail: "Turns each call's audio into the transcript. " + controller.transcriptionProvider.note(model: controller.transcriptionModel),
-                picker: FillPicker(title: "Transcription provider", selection: $controller.transcriptionProvider,
-                                   choices: TranscriptionProvider.allCases.map { ($0, $0.displayName) }),
-                service: KeyCheck.Service(controller.transcriptionProvider),
-                apiKey: controller.transcriptionProvider.key,
-                modelRow: controller.transcriptionProvider.models.count > 1 ? AnyView(
-                    FillPicker(title: "Transcription model", selection: $controller.transcriptionModel,
-                               choices: controller.transcriptionProvider.models.map { ($0.id, $0.name) }))
-                    : AnyView(Text(controller.transcriptionProvider.models.first?.name ?? "Default")
-                        .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)))
-            .onChange(of: controller.transcriptionProvider) { _, p in
-                controller.transcriptionModel = p.models.first?.id ?? ""
-                controller.rebuildPipeline()
-            }
-            .onChange(of: controller.transcriptionModel) { _, _ in controller.rebuildPipeline() }
-            ProviderKeyBlock(
-                model: model,
-                label: "Notes",
-                detail: ["Writes the summary, the action items, and the coach's notes, and answers in Chat.", controller.aiProvider.note]
-                    .compactMap { $0 }.joined(separator: " "),
-                picker: FillPicker(title: "Notes provider", selection: $controller.aiProvider,
-                                   choices: AIProvider.allCases.map { ($0, $0.displayName) }),
-                service: KeyCheck.Service(controller.aiProvider),
-                apiKey: controller.aiProvider.key,
-                // The same menu as Settings: the provider's own list once its key is saved, with the price.
-                modelRow: AnyView(ModelPicker(provider: controller.aiProvider, model: $controller.aiModel)),
-                keyless: controller.aiProvider == .localServer ? AnyView(LocalServerSetup(onboarding: true))
-                    : controller.aiProvider == .apple ? AnyView(HStack(spacing: Space.s) { PassLine(text: "No key needed"); Spacer(); AppleModelStatus() })
-                    : nil)
-            .onChange(of: controller.aiModel) { _, _ in controller.rebuildPipeline() }
-            .onChange(of: controller.aiProvider) { _, _ in
-                controller.aiModel = ""
-                controller.rebuildPipeline()
-            }
+            StepGroup(label: ProviderJob.transcription.title) { TranscriptionRows(keys: model.keys) }
+            StepGroup(label: ProviderJob.notes.title) { NotesRows(keys: model.keys) }
             HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 IconImage(.analytics, size: 13).foregroundStyle(Palette.tertiaryMark)
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
@@ -292,107 +191,5 @@ struct AIStep: View {
             }
             .accessibilityElement(children: .combine)
         }
-    }
-}
-
-/// A provider with its key: the menu, the key field with Paste, "Get a key", and Check with its result.
-private struct ProviderKeyBlock<Picker: View>: View {
-    @ObservedObject var model: OnboardingModel
-    @EnvironmentObject var controller: AppController
-    let label: String
-    let detail: String
-    let picker: Picker
-    let service: KeyCheck.Service?
-    let apiKey: APIKey?
-    /// The model menu, under the provider.
-    var modelRow: AnyView? = nil
-    /// What shows in place of the key for a provider that needs none, such as the local server's address.
-    var keyless: AnyView? = nil
-    @State private var typed = ""
-    @State private var replacing = false
-
-    var body: some View {
-        StepGroup(label: label) {
-            HStack(spacing: Space.m) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Provider").font(.system(size: 13.5, weight: .medium))
-                    Text(detail).font(.system(size: 12.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: Space.m)
-                picker
-            }
-            .padding(.vertical, Onboard.rowPadding)
-            if let modelRow {
-                HStack(spacing: Space.m) {
-                    Text("Model").font(.system(size: 13.5, weight: .medium))
-                    Spacer(minLength: Space.m)
-                    modelRow
-                }
-                .padding(.vertical, Onboard.rowPadding)
-            }
-            if let keyless, service == nil { keyless } else { keyRow.padding(.vertical, Onboard.rowPadding) }
-        }
-        .onChange(of: service) { _, _ in typed = ""; replacing = false }
-    }
-
-    @ViewBuilder
-    private var keyRow: some View {
-        if let service, let apiKey {
-            let state = model.keyChecks[service] ?? .idle
-            let saved = controller.hasKey(apiKey)
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: Space.m) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(service.displayName) key").font(.system(size: 13.5, weight: .medium))
-                        Link(destination: service.keysPage) {
-                            HStack(spacing: 3) {
-                                Text("Get a key")
-                                IconImage(.arrowUp, size: 10).rotationEffect(.degrees(45))
-                            }
-                        }
-                        .font(.system(size: 12.5, weight: .medium)).foregroundStyle(Palette.accent)
-                        .accessibilityLabel("Get a \(service.displayName) key on its website")
-                    }
-                    Spacer(minLength: Space.m)
-                    if saved, !replacing, state != .checking {
-                        if state == .passed { PassLine(text: "Key works") } else {
-                            Text("Key saved").font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
-                        }
-                        if state != .passed {
-                            Button("Check") { model.check(service, key: controller.keychain.get(apiKey) ?? "", as: apiKey, controller: controller) }
-                                .buttonStyle(SheetButtonStyle(kind: .secondary, compact: true))
-                                .help("Tries the saved key with one free request.")
-                        }
-                        Button("Change") { replacing = true; typed = "" }.buttonStyle(SheetButtonStyle(kind: .secondary, compact: true))
-                    } else {
-                        SecureField("\(service.displayName) key", text: $typed, prompt: Text("Paste the key"))
-                            .textFieldStyle(SheetFieldStyle(monospaced: true))
-                            .frame(width: 250)
-                            .onSubmit(check)
-                        Button("Paste") { typed = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? typed }
-                            .buttonStyle(SheetButtonStyle(kind: .secondary, compact: true))
-                        Button(action: check) {
-                            if state == .checking { ProgressView().controlSize(.small).frame(width: 40) } else { Text("Check") }
-                        }
-                        .buttonStyle(SheetButtonStyle(kind: .primary, compact: true))
-                        .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty || state == .checking)
-                    }
-                }
-                if case .failed(let error) = state {
-                    InlineError(error: error)
-                }
-            }
-            .onChange(of: state) { _, s in if s == .passed { replacing = false; typed = "" } }
-        } else {
-            HStack(spacing: Space.s) {
-                PassLine(text: "No key needed")
-                Text("It runs on this Mac. The model downloads once, on first use.").font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
-            }
-        }
-    }
-
-    private func check() {
-        guard let service, let apiKey else { return }
-        model.check(service, key: typed, as: apiKey, controller: controller)
     }
 }

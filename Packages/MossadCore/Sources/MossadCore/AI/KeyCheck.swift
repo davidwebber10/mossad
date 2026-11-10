@@ -51,6 +51,23 @@ public enum KeyCheck {
         }
     }
 
+    /// What a key row says: no key, a key that is saved, or a saved key that a check just proved.
+    public enum Status: Equatable, Sendable {
+        case missing, saved, works
+
+        public init(saved: Bool, passed: Bool) {
+            self = !saved ? .missing : passed ? .works : .saved
+        }
+
+        public var label: String {
+            switch self {
+            case .missing: "No key"
+            case .saved: "Key saved"
+            case .works: "Key works"
+            }
+        }
+    }
+
     public static func request(_ service: Service, key: String) -> URLRequest {
         let (url, header, value): (String, String, String) = switch service {
         case .assemblyai: ("https://api.assemblyai.com/v2/transcript?limit=1", "Authorization", key)

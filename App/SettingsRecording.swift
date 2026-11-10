@@ -2,7 +2,8 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// Settings › Recording: the live transcript, how long audio stays, voices, calendars, storage, and folders.
+/// Settings › Recording: the live transcript, how long audio stays, shared screens, voices, calendars, storage,
+/// and folders. Each switch says what it does in a line under it, and a missing permission has its fix in the row.
 struct RecordingSettings: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
@@ -11,8 +12,7 @@ struct RecordingSettings: View {
     var body: some View {
         LabelColumnStack {
             SettingsGroup(label: "Recording") {
-                SettingsSwitchRow(title: "Live transcript while recording", isOn: $controller.liveTranscriptEnabled)
-                    .help("Shows what is said as the call runs, with AssemblyAI streaming. AssemblyAI bills the time a call records with this on. The note still uses the full transcription after the call.")
+                SettingsSwitchRow(title: "Live transcript while recording", detail: Pricing.liveTranscriptNote, isOn: $controller.liveTranscriptEnabled)
                 Toggle(isOn: $controller.deleteRecordings) {
                     SettingsRowText(title: "Delete recordings after a period of time",
                                     detail: "Notes and transcripts are always kept. A recording uses about 14 MB an hour.")
@@ -27,35 +27,38 @@ struct RecordingSettings: View {
             }
             if !Rehearsal.isOn {
                 SettingsGroup(label: "Shared screens", footer: "Mossad keeps frames of the meeting window only, when its picture changes, and reads their text on this Mac. The frames stay on this Mac. Get consent before you capture what other people share. macOS shows its screen recording mark during a call.") {
-                    SettingsSwitchRow(title: "Capture shared screens", isOn: $controller.captureScreens)
-                        .help("Keeps pictures of slides and documents that people share in a call, next to the transcript.")
+                    SettingsSwitchRow(title: "Capture shared screens",
+                                      detail: "Keeps pictures of the slides and documents that people share in a call, next to the transcript.",
+                                      isOn: $controller.captureScreens)
                         .onChange(of: controller.captureScreens) { _, on in
                             if on { permissions.requestScreenCaptureOnce() }
                         }
                     if controller.captureScreens {
-                        SettingsRow(title: "Screen & System Audio Recording",
-                                    detail: permissions.screenCapture.isGood ? "Allowed" : "Not allowed. Turn Mossad on in System Settings, then open Mossad again if this line does not change.") {
-                            if !permissions.screenCapture.isGood {
-                                Button("Open System Settings") { permissions.openScreenCaptureSettings() }
-                                    .buttonStyle(SettingsButtonStyle(accent: true))
-                            }
+                        PermissionRow(item: .init(kind: .screenCapture, title: "Screen & System Audio Recording", state: permissions.screenCapture),
+                                      required: true,
+                                      missingDetail: "Not allowed yet. Turn Mossad on in System Settings, then open Mossad again if this line does not change.") {
+                            permissions.openScreenCaptureSettings()
                         }
                     }
                 }
             }
             SettingsGroup(label: "Voices", footer: "Some laws treat voice fingerprints as biometric data. Turn off recognition to keep no fingerprints; speakers are then labeled Speaker A, Speaker B.") {
-                SettingsSwitchRow(title: "Recognize voices", isOn: $controller.voiceFingerprints)
-                    .help("Mossad saves a voice fingerprint for each person it hears so it can name them in later calls.")
+                SettingsSwitchRow(title: "Recognize voices",
+                                  detail: "Saves a voice fingerprint for each person Mossad hears, so it can name them in later calls.",
+                                  isOn: $controller.voiceFingerprints)
                     .onChange(of: controller.voiceFingerprints) { _, _ in controller.rebuildPipeline() }
-                Button("Delete all saved voices…") { confirmDeleteVoices = true }
-                    .buttonStyle(SettingsTextButtonStyle(color: Palette.recording, weight: .medium))
-                    .font(.system(size: 13))
-                    .padding(.vertical, 9)
+                SettingsRow(title: "Saved voices", detail: savedVoices) {
+                    Button("Delete all saved voices…") { confirmDeleteVoices = true }
+                        .buttonStyle(SettingsTextButtonStyle(color: Palette.recording, weight: .medium))
+                }
             }
             SettingsGroup(label: "Calendars", footer: "Mossad reads only the checked calendars, to name calls from their invites and to list upcoming calls.") {
-                if controller.calendars.isEmpty {
-                    Text("Allow Calendars in General to choose them.")
+                if let item = permissions.items.first(where: { $0.kind == .calendars }), !item.state.isGood {
+                    PermissionRow(item: item) { permissions.fix(item) }
+                } else if controller.calendars.isEmpty {
+                    Text("No calendars on this Mac yet. Add your work account in System Settings › Internet Accounts.")
                         .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, 9)
                 }
                 ForEach(Array(Dictionary(grouping: controller.calendars, by: \.account).sorted { $0.key < $1.key }), id: \.key) { account, list in
@@ -98,6 +101,12 @@ struct RecordingSettings: View {
         } message: {
             Text("Mossad forgets every voice it learned, including yours. Meeting notes keep their names.")
         }
+    }
+
+    /// "12 people, on this Mac only."
+    private var savedVoices: String {
+        let n = controller.library.profiles.count
+        return n == 0 ? "None yet." : "\(n.formatted()) \(n == 1 ? "person" : "people"), on this Mac only."
     }
 
     private func folderRow(_ title: String, _ url: URL) -> some View {

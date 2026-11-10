@@ -75,6 +75,15 @@ public enum Pricing {
         }
     }
 
+    /// What AssemblyAI bills for each hour a call records with the live transcript on.
+    public static var liveHourCost: Double { streamingPerHour }
+
+    /// The line under the live transcript's switch.
+    public static var liveTranscriptNote: String {
+        let amount = liveHourCost.formatted(.currency(code: "USD").precision(.fractionLength(2)).locale(Locale(identifier: "en_US")))
+        return "Shows what is said during the call. AssemblyAI bills about \(amount) an hour for it. The note does not change."
+    }
+
     /// Typical reply sizes, for the estimates.
     static let summaryOutputTokens = 2_500
     static let promptTokens = 1_500
@@ -94,6 +103,11 @@ public enum Pricing {
 
     /// What an hour of meetings costs: both tracks transcribed, and one summary of the hour's transcript.
     public static func hourEstimate(transcription: TranscriptionProvider, ai: AIProvider, model: String) -> Double {
+        hourCost(transcription: transcription, ai: ai, model: model).total
+    }
+
+    /// The same hour by job. The notes part is nil when the model has no list price here.
+    public static func hourCost(transcription: TranscriptionProvider, ai: AIProvider, model: String) -> HourCost {
         let hour: Double = 3600
         let audio: UsageEvent.Service? = switch transcription {
         case .assemblyai: .assemblyai
@@ -113,9 +127,14 @@ public enum Pricing {
             cost(UsageEvent(date: Date(), callID: nil, service: $0, purpose: .transcription,
                             model: $0 == .assemblyai ? defaultBatchModel : nil, audioSeconds: hour * 2, estimated: true))
         } ?? 0
+        let priced = switch ai {
+        case .anthropic, .localServer, .apple: true
+        case .openai: openAI.contains { name.hasPrefix($0.prefix) }
+        case .openrouter: false
+        }
         let summary = cost(UsageEvent(date: Date(), callID: nil, service: service, purpose: .summary, model: name,
                                       inputTokens: hourTranscriptTokens + promptTokens, outputTokens: summaryOutputTokens, estimated: true))
-        return transcript + summary
+        return HourCost(transcription: transcript, notes: priced ? summary : nil)
     }
 
     /// Usage for calls processed before the log existed: both tracks transcribed for the whole call, and one
@@ -132,5 +151,40 @@ public enum Pricing {
                            inputTokens: characters / 4 + promptTokens, outputTokens: summaryOutputTokens, estimated: true),
             ]
         }
+    }
+}
+
+/// What an hour of meetings costs, by job, with the words Settings shows for it.
+public struct HourCost: Equatable, Sendable {
+    public var transcription: Double
+    /// Nil when the model has no list price here. Unknown is not free.
+    public var notes: Double?
+
+    public init(transcription: Double, notes: Double?) {
+        self.transcription = transcription
+        self.notes = notes
+    }
+
+    /// An unknown notes price adds nothing, as in setup's line.
+    public var total: Double { transcription + (notes ?? 0) }
+
+    /// "About $0.57", "Free", or "At least $0.46" when the notes price is not known.
+    public var headline: String {
+        guard notes != nil else { return transcription > 0 ? "At least \(Self.dollars(transcription))" : "Not known" }
+        if total == 0 { return "Free" }
+        return total < 0.005 ? "Less than $0.01" : "About \(Self.dollars(total))"
+    }
+
+    /// "Transcription: $0.46 for both tracks. Notes: $0.11."
+    public var parts: String {
+        let audio = transcription > 0 ? "\(Self.amount(transcription)) for both tracks" : "free on this Mac"
+        let text = notes.map { $0 > 0 ? Self.amount($0) : "free" } ?? "no list price for this model"
+        return "Transcription: \(audio). Notes: \(text)."
+    }
+
+    private static func amount(_ value: Double) -> String { value < 0.005 ? "less than $0.01" : dollars(value) }
+
+    private static func dollars(_ value: Double) -> String {
+        value.formatted(.currency(code: "USD").precision(.fractionLength(2)).locale(Locale(identifier: "en_US")))
     }
 }

@@ -2,21 +2,24 @@ import MossadCore
 import SwiftUI
 
 /// Settings › Coach: reviews on or off and their voice, the focus, the coach's questions, what it knows about
-/// the owner, and its emails.
+/// the owner, which emails it sends, and the provider that sends them.
 struct CoachSettings: View {
     @EnvironmentObject var controller: AppController
+    @StateObject private var keys = KeyChecker()
     @State private var editingKey: APIKey?
     @State private var sending = false
 
     var body: some View {
         let profile = controller.shownCoachProfile
         LabelColumnStack {
-            SettingsGroup(label: "Communication coach") {
-                SettingsSwitchRow(title: "Review each call", isOn: $controller.coachEnabled)
-                    .help("After each note, the coach reviews how you communicated and gives advice tied to moments in the call. It keeps notes over time, so it tracks your progress and your history with each person.")
+            SettingsGroup(label: "Communication coach",
+                          footer: "Reviews use the Notes provider in Settings › AI, now \(controller.aiProvider.displayName). The coach’s notes stay on this Mac, in the Coach folder.") {
+                SettingsSwitchRow(title: "Review each call",
+                                  detail: "After each note, the coach reviews how you communicated, with advice tied to moments in the call.",
+                                  isOn: $controller.coachEnabled)
                     .onChange(of: controller.coachEnabled) { _, on in if on { controller.turnOnCoach() } }
                 if controller.coachEnabled {
-                    SettingsRow(title: "Voice") {
+                    SettingsRow(title: "Voice", detail: profile.voice.detail) {
                         FillPicker(title: "Voice", selection: Binding(get: { profile.voice }, set: { controller.setCoachVoice($0) }),
                                    choices: CoachVoice.allCases.map { ($0, $0.title) })
                     }
@@ -44,64 +47,74 @@ struct CoachSettings: View {
                 }
                 CoachKnowledge(profile: profile)
             }
-            SettingsGroup(label: "Email", footer: "Mossad only ever emails you, at one address.") { email }
+            SettingsGroup(label: "Emails", footer: "Mossad only ever emails you, at one address.") { emails }
+            if controller.coachEnabled, controller.coachEmailEnabled || controller.coachMonthlyEmail {
+                SettingsGroup(label: "Email provider") { emailProvider }
+            }
         }
         .sheet(item: $editingKey) { key in KeySheet(key: key) }
     }
 
+    /// Which emails the coach sends, and where.
     @ViewBuilder
-    private var email: some View {
+    private var emails: some View {
         if !controller.coachEnabled {
             SettingsRow(title: "Weekly and monthly emails", detail: "The coach writes these emails. Turn on the coach to send them.") {
                 Button("Turn on the coach") { controller.coachEnabled = true; controller.turnOnCoach() }.buttonStyle(.settings)
             }
         } else {
-            SettingsSwitchRow(title: "Weekly email on Monday", isOn: $controller.coachEmailEnabled)
-            SettingsSwitchRow(title: "Month in review on the 1st", isOn: $controller.coachMonthlyEmail)
+            SettingsSwitchRow(title: "Weekly email on Monday", detail: "What improved in the week, what to work on, and your focus.",
+                              isOn: $controller.coachEmailEnabled)
+            SettingsSwitchRow(title: "Month in review on the 1st", detail: "The same for the whole month: the change across its weeks.",
+                              isOn: $controller.coachMonthlyEmail)
             if controller.coachEmailEnabled || controller.coachMonthlyEmail {
                 SettingsRow(title: "Send to",
                             detail: !controller.coachEmailTo.isEmpty && !WeeklyEmail.isSingleAddress(controller.coachEmailTo)
                                 ? "Enter one address, your own. Mossad only ever emails you." : nil) {
                     TextField("Send to", text: $controller.coachEmailTo, prompt: Text("you@example.com")).textFieldStyle(SettingsFieldStyle(width: 260))
                 }
-                SettingsRow(title: "Send from", titleNote: "a sender verified with your email provider") {
-                    TextField("Send from", text: $controller.coachEmailFrom, prompt: Text("Mossad <coach@yourdomain.com>")).textFieldStyle(SettingsFieldStyle(width: 260))
-                }
-                SettingsRow(title: "Email provider") {
-                    FillPicker(title: "Email provider", selection: $controller.mailProvider, choices: MailProvider.allCases.map { ($0, $0.displayName) })
-                }
-                if controller.mailProvider == .mailgun {
-                    SettingsRow(title: "Sending domain") {
-                        TextField("Sending domain", text: $controller.mailDomain, prompt: Text("mg.yourdomain.com")).textFieldStyle(SettingsFieldStyle(width: 260))
-                    }
-                }
-                if controller.mailProvider == .mailgun || controller.mailProvider == .sendgrid {
-                    SettingsSwitchRow(title: "Use the EU region", isOn: $controller.mailEurope)
-                }
-                if controller.mailProvider == .ses {
-                    SettingsRow(title: "Region") {
-                        TextField("Region", text: $controller.mailRegion, prompt: Text("us-east-1")).textFieldStyle(SettingsFieldStyle(width: 260))
-                    }
-                    SettingsRow(title: "Access key ID") {
-                        TextField("Access key ID", text: $controller.mailAccessKeyID, prompt: Text("AKIA…")).textFieldStyle(SettingsFieldStyle(width: 260, monospaced: true))
-                    }
-                }
-                SettingsRow(title: controller.mailProvider.displayName,
-                            detail: controller.mailProvider == .ses ? "The secret access key" : "Sends the email with your own account") {
-                    KeyStatus(key: controller.mailProvider.key) { editingKey = $0 }
-                }
-                SettingsRow(title: "Send one now", detail: "To check the address and the provider.") {
-                    Menu {
-                        Button("Last week’s email") { send(.weekly) }
-                        Button("Last month’s review") { send(.monthly) }
-                    } label: {
-                        FillMenuLabel(text: sending ? "Sending…" : "Send now")
-                    }
-                    .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-                    .disabled(sending || !WeeklyEmail.isSingleAddress(controller.coachEmailTo) || controller.coachEmailFrom.isEmpty
-                              || !controller.hasKey(controller.mailProvider.key))
-                }
             }
+        }
+    }
+
+    /// The service that sends them: the provider, its sender and settings, its key, and a test.
+    @ViewBuilder
+    private var emailProvider: some View {
+        SettingsRow(title: "Provider", detail: "Sends the emails with your own account.") {
+            FillPicker(title: "Email provider", selection: $controller.mailProvider, choices: MailProvider.allCases.map { ($0, $0.displayName) })
+        }
+        SettingsRow(title: "Send from", detail: "Verified with \(controller.mailProvider.displayName).") {
+            TextField("Send from", text: $controller.coachEmailFrom, prompt: Text("Mossad <coach@yourdomain.com>")).textFieldStyle(SettingsFieldStyle(width: 260))
+        }
+        if controller.mailProvider == .mailgun {
+            SettingsRow(title: "Sending domain") {
+                TextField("Sending domain", text: $controller.mailDomain, prompt: Text("mg.yourdomain.com")).textFieldStyle(SettingsFieldStyle(width: 260))
+            }
+        }
+        if controller.mailProvider == .mailgun || controller.mailProvider == .sendgrid {
+            SettingsSwitchRow(title: "Use the EU region", isOn: $controller.mailEurope)
+        }
+        if controller.mailProvider == .ses {
+            SettingsRow(title: "Region") {
+                TextField("Region", text: $controller.mailRegion, prompt: Text("us-east-1")).textFieldStyle(SettingsFieldStyle(width: 260))
+            }
+            SettingsRow(title: "Access key ID") {
+                TextField("Access key ID", text: $controller.mailAccessKeyID, prompt: Text("AKIA…")).textFieldStyle(SettingsFieldStyle(width: 260, monospaced: true))
+            }
+        }
+        // No free request tries a mail key: "Send one now" is its check.
+        KeyRow(keys: keys, key: controller.mailProvider.key, page: controller.mailProvider.keysPage) { editingKey = $0 }
+            .id(controller.mailProvider)
+        SettingsRow(title: "Send one now", detail: "To check the address, the sender, and the key.") {
+            Menu {
+                Button("Last week’s email") { send(.weekly) }
+                Button("Last month’s review") { send(.monthly) }
+            } label: {
+                FillMenuLabel(text: sending ? "Sending…" : "Send now")
+            }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+            .disabled(sending || !WeeklyEmail.isSingleAddress(controller.coachEmailTo) || controller.coachEmailFrom.isEmpty
+                      || !controller.hasKey(controller.mailProvider.key))
         }
     }
 
@@ -264,8 +277,7 @@ private struct CoachKnowledge: View {
     }
 
     var body: some View {
-        SettingsGroup(label: "What the coach knows about you",
-                      footer: "Reviews use the AI provider. The coach’s notes stay on this Mac in the Coach folder.") {
+        SettingsGroup(label: "What the coach knows about you") {
             Text("The coach judges each call against this. It also adds to it when you tell it something in a reply.")
                 .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)

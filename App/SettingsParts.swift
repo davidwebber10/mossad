@@ -46,6 +46,7 @@ struct SettingsRow<Trailing: View>: View {
     var titleNote: String?
     var alignment: VerticalAlignment = .center
     @ViewBuilder var trailing: Trailing
+    @Environment(\.rowStyle) private var style
 
     var body: some View {
         HStack(alignment: alignment, spacing: Space.m) {
@@ -53,7 +54,7 @@ struct SettingsRow<Trailing: View>: View {
             Spacer(minLength: Space.m)
             trailing
         }
-        .padding(.vertical, 9)
+        .padding(.vertical, style.padding)
     }
 }
 
@@ -67,6 +68,7 @@ struct SettingsRowText: View {
     let title: String
     var detail: String?
     var titleNote: String?
+    @Environment(\.rowStyle) private var style
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -77,11 +79,11 @@ struct SettingsRowText: View {
                     Text(title)
                 }
             }
-            .font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
-            .cssLineHeight(size: 13)
+            .font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
+            .cssLineHeight(size: style.titleSize)
             if let detail {
-                Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                    .cssLineHeight(size: 12)
+                Text(detail).font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
+                    .cssLineHeight(size: style.detailSize)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -93,11 +95,12 @@ struct SettingsSwitchRow: View {
     let title: String
     var detail: String?
     @Binding var isOn: Bool
+    @Environment(\.rowStyle) private var style
 
     var body: some View {
         Toggle(isOn: $isOn) { SettingsRowText(title: title, detail: detail) }
             .toggleStyle(SheetSwitchStyle())
-            .padding(.vertical, 9)
+            .padding(.vertical, style.padding)
     }
 }
 
