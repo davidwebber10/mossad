@@ -58,6 +58,27 @@ enum DevHooks {
         }
     }
 
+    private static let launch = Date()
+
+    /// `MOSSAD_UPCOMING=<file>` in a preview: a JSON list of made-up invites (`title`, `inMinutes` from the launch,
+    /// `minutes`, `attendees`, `link`) to show in place of the calendar's, so a picture never holds a real invite.
+    static func sampleInvites() -> [CalendarEventInfo]? {
+        struct Invite: Decodable {
+            let title: String
+            let inMinutes: Double
+            let minutes: Double
+            let attendees: [String]
+            let link: String
+        }
+        guard preview, let path = env["MOSSAD_UPCOMING"], let data = FileManager.default.contents(atPath: path),
+              let invites = try? JSONDecoder().decode([Invite].self, from: data) else { return nil }
+        return invites.map { i in
+            let start = launch.addingTimeInterval(i.inMinutes * 60)
+            return CalendarEventInfo(title: i.title, start: start, end: start.addingTimeInterval(i.minutes * 60), attendees: i.attendees,
+                                     text: i.link, isAllDay: false)
+        }
+    }
+
     private static func previewOnly(_ c: AppController) {
         c.applyLivePreview()
         if let failure = AppController.errorPreview("sync") {

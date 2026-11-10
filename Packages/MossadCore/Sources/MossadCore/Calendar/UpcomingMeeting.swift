@@ -47,9 +47,25 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
         return (nil, nil)
     }
 
-    /// Earlier meetings with the same title, newest first: the series this event belongs to.
+    /// The time until the start, as the meeting's page shows it large: "Now", "in 25 min", "in 3 h 20 min" on the
+    /// same day or within 12 hours, "Tomorrow", "in 3 days".
+    public func startsIn(now: Date = Date(), calendar: Calendar = .current) -> String {
+        let seconds = start.timeIntervalSince(now)
+        if seconds <= 0 { return "Now" }
+        if seconds < 3600 { return "in \(max(1, Int(seconds / 60))) min" }
+        if calendar.isDate(start, inSameDayAs: now) || seconds < 12 * 3600 { return "in \(AnalyticsFindings.duration(seconds))" }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: start)).day ?? 0
+        return days <= 1 ? "Tomorrow" : "in \(days) days"
+    }
+
+    /// Earlier meetings with the same title, newest first: the series this event belongs to. Only a title from the
+    /// calendar or from the owner makes a series, as in `MeetingFacts.series`: two unrelated calls can get the same
+    /// title from the model.
     public func earlier(in records: [CallRecord]) -> [CallRecord] {
-        records.filter { $0.status == .written && $0.start < start && $0.title.caseInsensitiveCompare(title) == .orderedSame }
-            .sorted { $0.start > $1.start }
+        let key = PeopleDuplicates.normalized(title)
+        return records.filter { r in
+            r.status == .written && r.start < start && (r.titleSource == .calendar || r.titleSource == .custom) && PeopleDuplicates.normalized(r.title) == key
+        }
+        .sorted { $0.start > $1.start }
     }
 }

@@ -49,7 +49,8 @@ final class MeetingAnalyticsStore {
     /// Call ids, the one used last at the end.
     private var order: [String] = []
     private var running: [String: (key: Key, task: Task<(Inputs, MeetingAnalytics), Never>)] = [:]
-    private let facts = MeetingFactsCache()
+    /// Shared with an upcoming meeting's page (`MeetingPrepStore`), which compares against the same history.
+    let facts = MeetingFactsCache()
 
     func cached(_ callID: String, key: Key) -> MeetingAnalytics? {
         entries[callID].flatMap { $0.key == key ? $0.value : nil }

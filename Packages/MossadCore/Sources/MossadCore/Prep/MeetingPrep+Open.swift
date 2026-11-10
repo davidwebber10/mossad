@@ -28,7 +28,7 @@ extension MeetingPrep {
             }
             groups[mine ? 0 : written == nil ? 2 : 1].append(
                 Item(id: "\(r.id).\(i)", task: item.task, owner: written, person: mine ? nil : written.flatMap { directory.link(for: $0, in: names) },
-                     isOwners: mine, callID: r.id, at: task?.at, commitment: task?.id))
+                     isOwners: mine, callID: r.id, at: task?.at, commitment: task))
         }
         return groups.flatMap { $0 }
     }
@@ -36,11 +36,11 @@ extension MeetingPrep {
     /// Gives each item with no moment the line of the call that says it, when one does.
     static func withMoments(_ items: [Item], in r: CallRecord) -> [Item] {
         guard items.contains(where: { $0.at == nil }) else { return items }
-        let lines = r.utterances.map { (start: $0.start, words: keywords($0.text)) }
+        let lines = r.utterances.map { keywords($0.text) }
         return items.map { item in
             guard item.at == nil else { return item }
             var item = item
-            item.at = moment(of: item.task, in: lines)
+            item.at = moment(of: item.task, in: r.utterances, words: lines)
             return item
         }
     }
@@ -48,19 +48,24 @@ extension MeetingPrep {
     /// A task needs this many words that count, and this part of them in one line, before the line is its moment.
     static let momentWords = 3
     static let momentCover = 0.7
+    /// A long turn plays from this long before the first of the task's words, so the sentence is heard whole.
+    static let momentLead: TimeInterval = 2
 
-    /// The start of the line that holds most of the task's words; the first of equal lines. Nil when no line
-    /// holds enough of them: no moment is better than a wrong one.
-    static func moment(of task: String, in lines: [(start: TimeInterval, words: Set<String>)]) -> TimeInterval? {
+    /// Where the line that holds most of the task's words begins; the first of equal lines. With word times, where
+    /// the task's words begin inside that line. Nil when no line holds enough of them: no moment is better than a
+    /// wrong one. `words` are the lines' `keywords`.
+    static func moment(of task: String, in lines: [Utterance], words: [Set<String>]) -> TimeInterval? {
         let wanted = keywords(task)
         guard wanted.count >= momentWords else { return nil }
-        var best: (start: TimeInterval, shared: Int)?
-        for line in lines {
-            let shared = wanted.intersection(line.words).count
+        var best: (line: Utterance, shared: Int)?
+        for (line, has) in zip(lines, words) {
+            let shared = wanted.intersection(has).count
             guard shared >= momentWords, Double(shared) / Double(wanted.count) >= momentCover, shared > (best?.shared ?? 0) else { continue }
-            best = (line.start, shared)
+            best = (line, shared)
         }
-        return best?.start
+        guard let line = best?.line else { return nil }
+        guard let first = line.words?.first(where: { !wanted.isDisjoint(with: keywords($0.text)) }) else { return line.start }
+        return max(line.start, first.start - momentLead)
     }
 
     // MARK: Promises

@@ -108,21 +108,33 @@ final class MeetingPrepTests: XCTestCase {
         XCTAssertEqual(p.people[0].fact?.basis, "from 6 meetings")
         // Three meetings give a range, but not "usually".
         let few = prep(upcoming("Dana / Sam", attendees: ["Sam Carter"]), facts: Array(history.prefix(3)))
-        XCTAssertEqual(few.people[0].fact?.text, "You talked 64 to 67% of the time in your 3 1:1s so far")
+        XCTAssertEqual(few.people[0].fact?.text, "You talked 64 to 67% of the time in your 1:1s, 3 meetings so far")
         XCTAssertNil(prep(upcoming("Dana / Sam", attendees: ["Sam Carter"]), facts: Array(history.prefix(2))).people[0].fact)
     }
 
-    func testTheFactOfAGroupIsTheirShareInMeetingsOfThisSize() {
+    func testTheFactOfAGroupIsTheirShareInTheSeriesThenInMeetingsOfThisSize() {
         // Three invited people and the owner: meetings of 3 to 4 people. A 1:1 and a large meeting say nothing about it.
         var history = [0.42, 0.45, 0.48, 0.44, 0.46].enumerated().map { i, share in
-            facts("g\(i)", daysAgo: Double(i + 1) * 7, shares: [(owner, 0.3), (sam, share), (jo, 0.7 - share)])
+            facts("g\(i)", daysAgo: Double(i + 1) * 7, title: "Planning", shares: [(owner, 0.3), (sam, share), (jo, 0.7 - share)])
         }
         history.append(facts("one", daysAgo: 3, title: "Dana / Sam", shares: [(owner, 0.2), (sam, 0.8)]))
         history.append(facts("big", daysAgo: 4, title: "All hands", shares: [(owner, 0.1), (sam, 0.1), (jo, 0.1), ("A B", 0.1), ("C D", 0.1), ("E F", 0.1), ("G H", 0.4)]))
-        let p = prep(upcoming(attendees: ["Sam Carter", "Jo Park", "Riley Chen"]), facts: history)
-        XCTAssertEqual(p.people[0].fact?.text, "Usually talks 42 to 48% of the time in meetings of 3 to 4 people with you")
+        let invited = ["Sam Carter", "Jo Park", "Riley Chen"]
+        let p = prep(upcoming("A new meeting", attendees: invited), facts: history)
+        XCTAssertEqual(p.people[0].fact?.text, "Usually talks 42 to 48% of the time in meetings of 3 to 4 people")
         // Riley never spoke in a meeting: no fact.
         XCTAssertNil(p.people[2].fact)
+        // The series itself says more than the size: its meetings can have fewer voices than the invite has people.
+        history += [0.20, 0.22, 0.24].enumerated().map { i, share in
+            facts("s\(i)", daysAgo: Double(i + 1) * 5, title: "All hands", shares: [(owner, 0.1), (sam, share), (jo, 0.2), ("A B", 0.1), ("C D", 0.1), ("E F", 0.1)])
+        }
+        let series = prep(upcoming("All hands", attendees: invited), facts: history)
+        XCTAssertEqual(series.people[0].fact?.text, "Talked 10 to 24% of the time in this series, 4 meetings so far")
+        // With no meetings of this size or series: the 1:1s, then how often the two meet.
+        let records = (1...4).map { call("m\($0)", daysAgo: Double($0) * 14, title: "Other \($0)", speakers: [owner, sam]) }
+        let rare = prep(upcoming("A new meeting", attendees: invited), records: records, facts: Array(history.suffix(4).prefix(1)))
+        XCTAssertEqual(rare.people[0].fact?.text, "You meet about every 14 days")
+        XCTAssertEqual(rare.people[0].fact?.basis, "from 4 meetings")
     }
 
     // MARK: Last time
@@ -177,6 +189,7 @@ final class MeetingPrepTests: XCTestCase {
         // "Sam" is one of the people, but a first name is not a link.
         XCTAssertEqual(last?.items.map(\.owner), ["Dana Lee", "Sam", "Jo Park", nil])
         XCTAssertEqual(last?.items.map(\.person), [nil, nil, "Jo Park", nil])
+        XCTAssertEqual(last?.ownersOpen, 1)
     }
 
     func testAnItemWithAnOpenTaskCarriesTheTasksMomentAndIsNotAPromiseAsWell() {
@@ -185,8 +198,10 @@ final class MeetingPrepTests: XCTestCase {
         let p = prep(records: [call("c1", daysAgo: 7, items: [ActionItem(owner: "Dana", task: "Write the hiring plan for the migration")])],
                      commitments: [task, other])
         XCTAssertEqual(p.lastTime?.items.map(\.at), [2415])
-        XCTAssertEqual(p.lastTime?.items.map(\.commitment), [task.id])
-        XCTAssertEqual(p.promises.map(\.text), ["Send Sam the forecast"])
+        XCTAssertEqual(p.lastTime?.items.map(\.commitment?.id), [task.id])
+        XCTAssertEqual(p.promises.map(\.commitment.text), ["Send Sam the forecast"])
+        // A whole name is a link; the item's task was promised to "Sam", which is not one.
+        XCTAssertEqual(p.promises.map(\.person), ["Sam Carter"])
     }
 
     func testAnItemsMomentIsTheLineThatSaysIt() {
@@ -199,6 +214,18 @@ final class MeetingPrepTests: XCTestCase {
         let last = prep(records: [call("c1", daysAgo: 7, items: items, lines: lines)]).lastTime
         // The second item's words are in no line: no moment, rather than a guess.
         XCTAssertEqual(last?.items.map(\.at), [120, nil])
+    }
+
+    func testInALongTurnTheMomentIsWhereTheItemsWordsBegin() {
+        // Two minutes of one turn; the item is said 90 s into it.
+        var r = call("c1", daysAgo: 7, items: [ActionItem(owner: "Sam Carter", task: "Send the revised budget to finance")])
+        let opening = (0..<30).map { Word(text: "so", start: 100 + Double($0) * 3, end: 101 + Double($0) * 3) }
+        let said = ["I", "will", "send", "the", "revised", "budget", "to", "finance."].enumerated().map { i, w in
+            Word(text: w, start: 190 + Double(i), end: 190.5 + Double(i))
+        }
+        r.utterances = [Utterance(track: .them, speakerLabel: "1", start: 100, end: 220, text: (opening + said).map(\.text).joined(separator: " "), words: opening + said)]
+        // A little before the first of its words, so the sentence is heard from its start.
+        XCTAssertEqual(prep(records: [r]).lastTime?.items.map(\.at), [190])
     }
 
     func testAtMostFiveOfEachAndTheNumberOfTheRest() {
@@ -214,6 +241,52 @@ final class MeetingPrepTests: XCTestCase {
         XCTAssertEqual(p.morePromises, 1)
     }
 
+    // MARK: In one line
+
+    func testThePageOpensWithWhatIsOpenInOneLine() {
+        let items = [ActionItem(owner: "Dana Lee", task: "Write the hiring plan"), ActionItem(owner: "Sam Carter", task: "Update the roadmap"),
+                     ActionItem(owner: "Jo Park", task: "Check the numbers"), ActionItem(owner: nil, task: "Find a room")]
+        let promises = (1...3).map { promise("Promise \($0)", to: "Jo Park", daysAgo: Double($0), call: "p\($0)") }
+        XCTAssertEqual(prep(records: [call("c1", daysAgo: 7, items: items)], commitments: promises).inOneLine,
+                       "4 items are open from last time, 1 of them yours. You have 3 open tasks for these people.")
+        // With no series, and one person: say which meeting, and for whom.
+        let one = prep(upcoming("A new meeting", attendees: ["Sam Carter"]),
+                       records: [call("c1", daysAgo: 7, title: "Dana / Sam", speakers: [owner, sam], items: [ActionItem(owner: "Dana", task: "Write the hiring plan")])],
+                       commitments: [promise("Send the forecast", to: "Sam", daysAgo: 9, call: "old")])
+        XCTAssertEqual(one.inOneLine, "1 item is open from your last meeting with Sam; it is yours. You have 1 open task for Sam.")
+        XCTAssertEqual(prep(records: [call("c1", daysAgo: 7)]).inOneLine, "Nothing is open from last time, and you have no open tasks for these people.")
+        XCTAssertEqual(prep(commitments: promises).inOneLine, "You have 3 open tasks for these people.")
+        // No earlier meeting and nothing owed: the page has no line to open with.
+        XCTAssertNil(prep().inOneLine)
+    }
+
+    func testTheKindOfTheSeriesIsItsLastMeetings() {
+        var last = call("c2", daysAgo: 7)
+        last.kind = "Weekly sync"
+        XCTAssertEqual(prep(records: [call("c1", daysAgo: 14), last]).kind, "Weekly sync")
+        XCTAssertNil(prep(upcoming("A new meeting"), records: [last]).kind)
+    }
+
+    func testTheTimeUntilTheStartInWords() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        // 1_800_000_000 is a Friday at 08:00 UTC.
+        func words(_ minutes: Double) -> String {
+            var m = upcoming()
+            m.start = now.addingTimeInterval(minutes * 60)
+            m.end = m.start.addingTimeInterval(1800)
+            return m.startsIn(now: now, calendar: calendar)
+        }
+        XCTAssertEqual(words(-5), "Now")
+        XCTAssertEqual(words(0.5), "in 1 min")
+        XCTAssertEqual(words(25), "in 25 min")
+        XCTAssertEqual(words(200), "in 3 h 20 min")
+        // Late tonight is still a number of hours; tomorrow afternoon is tomorrow.
+        XCTAssertEqual(words(14 * 60), "in 14 h")
+        XCTAssertEqual(words(30 * 60), "Tomorrow")
+        XCTAssertEqual(words(3 * 24 * 60), "in 3 days")
+    }
+
     // MARK: Promises
 
     func testThePromisesAreTheOpenOnesToThesePeopleOldestFirst() {
@@ -227,7 +300,8 @@ final class MeetingPrepTests: XCTestCase {
             promise("To nobody, in this series", to: nil, daysAgo: 7, call: "c1"),
         ]
         let p = prep(records: [call("c1", daysAgo: 7), call("e", daysAgo: 20, title: "Budget review")], commitments: all)
-        XCTAssertEqual(p.promises.map(\.text), ["Oldest, to Sam", "To nobody, in this series", "Newer, to Jo"])
+        XCTAssertEqual(p.promises.map(\.commitment.text), ["Oldest, to Sam", "To nobody, in this series", "Newer, to Jo"])
+        XCTAssertEqual(p.promises.map(\.person), ["Sam Carter", nil, nil])
     }
 
     // MARK: The series
@@ -251,6 +325,15 @@ final class MeetingPrepTests: XCTestCase {
         XCTAssertEqual(s?.ownerShare?.high, 0.36)
         // Oldest first, as a line reads.
         XCTAssertEqual(s?.shares, [0.33, 0.31, 0.36, 0.32, 0.34, 0.30])
+    }
+
+    func testTheSeriesListsTheMeetingsBeforeTheLastOne() {
+        let records = (1...8).map { call("c\($0)", daysAgo: Double($0) * 7, headline: $0 == 3 ? nil : "Headline \($0).") }
+        let s = prep(records: records).series
+        // "Last time" is c1. The next five follow, newest first; one with no headline shows its title.
+        XCTAssertEqual(s?.earlier.map(\.id), ["c2", "c3", "c4", "c5", "c6"])
+        XCTAssertEqual(s?.earlier.map(\.line), ["Headline 2.", "Weekly sync", "Headline 4.", "Headline 5.", "Headline 6."])
+        XCTAssertEqual(s?.moreEarlier, 2)
     }
 
     func testOneEarlierMeetingIsNotASeriesYet() {

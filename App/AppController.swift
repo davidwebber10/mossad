@@ -1590,7 +1590,14 @@ final class AppController: ObservableObject {
                            CalendarEventInfo(title: "Tech Team Monthly Sync", start: now.addingTimeInterval(86_400), end: now.addingTimeInterval(90_000),
                                              attendees: ["Jordan Lee", "Casey Brooks", "Riley Chen"], text: "", isAllDay: false)]
             }
+            // Development hook for screenshots: MOSSAD_UPCOMING=<file> shows only the made-up invites of that file.
+            if let sample = DevHooks.sampleInvites() { events = sample }
             calendarEvents = events
+            // Development hook for screenshots: MOSSAD_UPCOMING_OPEN=<title> opens that invite's page.
+            if DevHooks.preview, let title = ProcessInfo.processInfo.environment["MOSSAD_UPCOMING_OPEN"],
+               let invite = upcoming.first(where: { $0.title == title }) {
+                selectedMeetingID = invite.id
+            }
         }
     }
 
