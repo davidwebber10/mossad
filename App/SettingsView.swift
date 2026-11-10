@@ -16,11 +16,19 @@ struct SettingsView: View {
             DetailColumn {
                 PageToolbar(title: page.title, subtitle: page.detail) { EmptyView() }
             } content: {
-                ScrollView {
-                    content
-                        .padding(EdgeInsets(top: 10, leading: 36, bottom: 40, trailing: 36))
-                        .frame(maxWidth: 760 + 72, alignment: .leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        content
+                            .padding(EdgeInsets(top: 10, leading: 36, bottom: 40, trailing: 36))
+                            .frame(maxWidth: 760 + 72, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    // Development hook for screenshots: MOSSAD_SCROLL_TO names a group's label, such as "Your server".
+                    .task {
+                        guard let target = ProcessInfo.processInfo.environment["MOSSAD_SCROLL_TO"] else { return }
+                        try? await Task.sleep(for: .milliseconds(600))
+                        proxy.scrollTo(target, anchor: .top)
+                    }
                 }
                 .id(page)
             }
@@ -44,7 +52,7 @@ struct SettingsView: View {
         case .general: GeneralSettings()
         case .recording: RecordingSettings()
         case .ai: AISettings()
-        case .sync: SyncSettings()
+        case .sync: StorageSyncSettings()
         case .coach: CoachSettings()
         }
     }
@@ -57,6 +65,8 @@ struct SettingsView: View {
             + (controller.liveTranscriptEnabled && controller.transcriptionProvider != .assemblyai ? [.assemblyai] : [])
         if keys.contains(where: { !controller.hasKey($0) }) { pages.insert(.ai) }
         if controller.syncActivity.error != nil { pages.insert(.sync) }
+        // The backup is chosen and cannot run: the server is gone, or is from before it kept recordings.
+        if controller.backupChoice == .server, !controller.serverKeepsRecordings { pages.insert(.sync) }
         let coach = controller.shownCoachProfile
         if controller.coachEnabled, coach.proposedFocus != nil || !coach.openQuestions.isEmpty {
             pages.insert(.coach)
@@ -149,7 +159,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: "General"
         case .recording: "Recording"
         case .ai: "AI"
-        case .sync: "Sync & Server"
+        case .sync: "Storage & Sync"
         case .coach: "Coach"
         }
     }
@@ -158,9 +168,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var contents: String {
         switch self {
         case .general: "On/off, you, permissions, org chart"
-        case .recording: "Recording, voices, calendars, storage"
+        case .recording: "Recording, voices, calendars, folders"
         case .ai: "Providers and other AI apps"
-        case .sync: "Where meetings sync, iPhone, share links"
+        case .sync: "This Mac, iPhone, backup, your server"
         case .coach: "Reviews, focus, what it knows, email"
         }
     }
@@ -168,9 +178,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .general: "Turn Mossad on or off, and what it needs from you and from macOS."
-        case .recording: "How Mossad records, names voices, and keeps audio."
+        case .recording: "How Mossad records, names voices, and reads your calendars."
         case .ai: "The services that transcribe and summarize your calls, and other apps that read them."
-        case .sync: "Where your meetings sync, and your own server for share links and ChatGPT."
+        case .sync: "Where your meetings live: on this Mac, on your iPhone, in a backup of the recordings, and on your own server."
         case .coach: "Reviews of how you communicate, and the coach’s emails."
         }
     }

@@ -23,9 +23,11 @@ extension AppController {
         (!aiProvider.requiresKey || aiProvider.key.map(hasKey) == true) && !(aiModel.isEmpty && aiProvider.defaultModel.isEmpty)
     }
 
-    /// Whether the cloud archive is set up, without reading its secret.
-    var hasCloudArchive: Bool {
-        storage != "local" && URL(string: cloudEndpoint)?.host != nil && !cloudBucket.isEmpty && !cloudAccessKeyID.isEmpty
-            && hasKey(.cloudSecret)
+    /// Whether a server is connected, without reading its secret.
+    var hasServer: Bool {
+        ServerSample.isOn || (hasKey(.serverSecret) && ServerConnection.address(from: serverAddress) != nil)
     }
+
+    /// Whether the bucket is set up, without reading its secret.
+    var hasBucket: Bool { backupSettings.hasBucket && hasKey(.cloudSecret) }
 }

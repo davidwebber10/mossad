@@ -3,7 +3,7 @@ import Foundation
 import MossadCore
 import Security
 
-/// What the Sync & Server page shows about the last sync.
+/// What the Storage & Sync page shows about the last sync.
 struct SyncActivity: Equatable {
     var running = false
     var last: Date?
@@ -47,6 +47,7 @@ extension AppController {
 
     /// The owner's server, when an address and a secret are both set.
     var serverConnection: ServerConnection? {
+        if ServerSample.isOn { return ServerSample.connection }
         guard let address = ServerConnection.address(from: serverAddress), let secret = keychain.get(.serverSecret) else { return nil }
         return ServerConnection(address: address, secret: secret)
     }
@@ -55,6 +56,7 @@ extension AppController {
     func connectServer(_ c: ServerConnection, hello: ServerClient.Hello, syncThere: Bool) {
         serverMCP = hello.mcp?.absoluteString ?? ""
         serverHasChat = hello.chat
+        serverRecordingLimit = Double(hello.recordingLimit ?? 0)
         do { try keychain.set(c.secret, for: .serverSecret) } catch { Log.error("Saving the server secret failed") }
         keysChanged()
         serverAddress = c.address.absoluteString
@@ -74,6 +76,7 @@ extension AppController {
         keysChanged()
         serverAddress = ""
         serverMCP = ""
+        serverRecordingLimit = 0
         if syncWith == .server { syncWith = Self.hasICloud ? .icloud : .off }
         syncEngine = nil
         mirrorEngine = nil
@@ -147,6 +150,9 @@ extension AppController {
             serverConfigSent = true
             let owner = ownerName
             Task { try? await ServerClient(c).putConfig(owner: owner) }
+            // Once a launch: a server that was updated may keep recordings now.
+            let kept = serverKeepsRecordings
+            refreshServerFacts { if self.serverKeepsRecordings != kept { self.syncCloud() } }
         }
         syncRunning = true
         syncActivity.running = true

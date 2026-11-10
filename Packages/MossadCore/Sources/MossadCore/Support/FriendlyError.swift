@@ -201,7 +201,7 @@ public struct FriendlyError: Equatable, Sendable {
     }
 
     private static var aiSettings: String { isPhone ? "Mossad on your Mac, in Settings › AI" : "Settings › AI" }
-    private static var syncSettings: String { isPhone ? "Settings" : "Settings › Sync & Server" }
+    private static var syncSettings: String { isPhone ? "Settings" : "Settings › Storage & Sync" }
     private static var micSettings: String { isPhone ? "Settings › Privacy & Security › Microphone" : "System Settings › Privacy & Security › Microphone" }
     private static func keySettings(_ context: Context) -> String {
         context == .sendingEmail ? (isPhone ? "Mossad on your Mac, in Settings › Coach" : "Settings › Coach") : aiSettings

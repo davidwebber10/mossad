@@ -447,6 +447,27 @@ final class ArchiveMoveTests: XCTestCase {
         XCTAssertTrue(FakeS3.objects.isEmpty)
     }
 
+    /// A record that cannot be read may name a copy in the bucket. Nothing is removed and the move is not done.
+    func testARecordThatCannotBeReadHoldsTheOldCopiesInPlace() async throws {
+        try call("fine", inBucket: true)
+        let damaged = try call("damaged", inBucket: true, local: false)
+        try Data("{ not json".utf8).write(to: damaged.appendingPathComponent(CallRecord.fileName))
+        // A folder with no record at all is not a meeting, and holds nothing up.
+        try FileManager.default.createDirectory(at: paths.callDirectory("empty"), withIntermediateDirectories: true)
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertEqual(report.moved, 1)
+        XCTAssertEqual(report.unreadable, ["damaged"])
+        XCTAssertFalse(report.complete)
+        XCTAssertEqual(report.removed, 0)
+        XCTAssertEqual(FakeS3.objects.count, 2, "also the copy of the one that was moved stays until the end")
+        XCTAssertEqual(report.summary(old: "Cloudflare R2", new: "your server"),
+                       "Moved 1 of 1 recording to your server. 1 meeting on this Mac could not be read, so its backup is not known. Nothing was removed from Cloudflare R2.")
+        try FileManager.default.removeItem(at: damaged)
+        let again = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertTrue(again.complete)
+        XCTAssertEqual(again.removed, 1)
+    }
+
     func testAMoveWithNothingInTheBucketIsDoneAtOnce() async throws {
         try call("one")
         let report = await make(target: .server, bucket: false).move(from: .bucket, to: .server, pipeline: pipeline)

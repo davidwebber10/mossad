@@ -13,6 +13,8 @@ extension CloudArchive {
         public var tooLarge: [String] = []
         /// Not in the old place and not on this Mac: there was nothing to copy.
         public var missing: [String] = []
+        /// Meetings whose record could not be read. One of them may name a copy in the old place, so nothing is removed.
+        public var unreadable: [String] = []
         /// Old copies removed in this run, after every recording was checked in the new place.
         public var removed = 0
         /// Nothing is left in the old place.
@@ -31,6 +33,7 @@ extension CloudArchive {
                 parts.append("Moved \(moved) of \(recordings(total)) to \(new).")
                 if !waiting.isEmpty { parts.append("\(waiting.count) could not be copied yet.") }
                 if !tooLarge.isEmpty { parts.append("\(tooLarge.count == 1 ? "1 is" : "\(tooLarge.count) are") larger than \(new) takes.") }
+                if !unreadable.isEmpty { parts.append("\(unreadable.count == 1 ? "1 meeting" : "\(unreadable.count) meetings") on this Mac could not be read, so \(unreadable.count == 1 ? "its backup is" : "their backups are") not known.") }
                 parts.append("Nothing was removed from \(old).")
             }
             if !missing.isEmpty { parts.append("\(missing.count == 1 ? "1 was" : "\(missing.count) were") not in \(old) and had no copy to move.") }
@@ -55,7 +58,15 @@ extension CloudArchive {
                      progress: (@Sendable (_ done: Int, _ total: Int) -> Void)? = nil) async -> MoveReport {
         var report = MoveReport()
         let queue = ProcessingQueue(paths: paths)
-        let waiting = queue.allRecords().filter { $0.archived?.kind == old }
+        // The whole list, or nothing: a move that removes copies must know about every meeting.
+        guard let scan = try? queue.scan() else {
+            Log.error("Backup move: the meetings on this Mac could not be listed, so nothing was moved")
+            report.unreadable = ["*"]
+            return report
+        }
+        // A folder with no record is not a meeting. A record that is there and cannot be read may name a copy.
+        report.unreadable = damaged(scan)
+        let waiting = scan.records.filter { $0.archived?.kind == old }
         report.total = waiting.count
         guard let destination = places[new] else {
             report.waiting = waiting.map(\.id)
@@ -80,7 +91,7 @@ extension CloudArchive {
             }
             progress?(waiting.count, waiting.count)
         }
-        guard report.waiting.isEmpty, report.tooLarge.isEmpty else { return report }
+        guard report.waiting.isEmpty, report.tooLarge.isEmpty, report.unreadable.isEmpty else { return report }
         // Every recording is in the new place and was checked there. Now, and only now, the old copies go.
         var blocked = false
         for r in queue.allRecords() {
@@ -91,9 +102,18 @@ extension CloudArchive {
             report.removed += before - after
             if after > 0 { blocked = true }
         }
+        // Read once more: the answer "nothing is left" lets the owner's app forget the old place.
+        guard let after = try? queue.scan() else { return report }
         let missing = Set(report.missing)
-        report.complete = !blocked && !queue.allRecords().contains { $0.archived?.kind == old && !missing.contains($0.id) }
+        report.complete = !blocked && damaged(after).isEmpty && !after.records.contains {
+            ($0.archived?.kind == old && !missing.contains($0.id)) || $0.cloudLeftovers?.contains { $0.kind == old } == true
+        }
         return report
+    }
+
+    /// The folders whose record is there and cannot be read.
+    private func damaged(_ scan: RecordScan) -> [String] {
+        scan.unreadable.filter { FileManager.default.fileExists(atPath: paths.callDirectory($0).appendingPathComponent(CallRecord.fileName).path) }
     }
 
     private func copy(_ r: CallRecord, from source: (any ArchiveBackend)?, to destination: any ArchiveBackend, pipeline: Pipeline) async -> Copy {

@@ -38,6 +38,8 @@ public final class CloudArchive: @unchecked Sendable {
         public var tooLarge: [String] = []
         /// Recordings whose upload failed. The next pass tries them again.
         public var failed: [String] = []
+
+        public init() {}
     }
 
     /// Uploads every finished recording that is not archived yet, then deletes local copies of archived

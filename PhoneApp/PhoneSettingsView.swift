@@ -21,7 +21,7 @@ struct PhoneSettingsView: View {
                 } header: {
                     PhoneLabel("Sync with")
                 } footer: {
-                    Text("Use the same choice as Mossad on your Mac, in Settings › Sync & Server.")
+                    Text("Use the same choice as Mossad on your Mac, in Settings › Storage & Sync.")
                         .foregroundStyle(Palette.secondary)
                 }
                 .listRowBackground(Palette.fill)
@@ -142,7 +142,7 @@ struct ConnectServerView: View {
                             .accessibilityHidden(true)
                         Text(connected == nil ? "Connect your server" : "Connected to \(connected?.address.host ?? "")")
                             .textRole(.title).foregroundStyle(Palette.ink)
-                        Text(connected == nil ? "On your Mac, open Mossad › Settings › Sync & Server, and click Show code." : "Your meetings are on the way.")
+                        Text(connected == nil ? "On your Mac, open Mossad › Settings › Storage & Sync, and click Show code." : "Your meetings are on the way.")
                             .textRole(.body).foregroundStyle(Palette.secondary)
                     }
                     .multilineTextAlignment(.center)

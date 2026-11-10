@@ -2,7 +2,8 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// Settings › Recording: the live transcript, how long audio stays, voices, calendars, storage, and folders.
+/// Settings › Recording: the live transcript, shared screens, voices, calendars, and folders. How long audio stays
+/// is in Storage & Sync.
 struct RecordingSettings: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
@@ -13,17 +14,6 @@ struct RecordingSettings: View {
             SettingsGroup(label: "Recording") {
                 SettingsSwitchRow(title: "Live transcript while recording", isOn: $controller.liveTranscriptEnabled)
                     .help("Shows what is said as the call runs, with AssemblyAI streaming. AssemblyAI bills the time a call records with this on. The note still uses the full transcription after the call.")
-                Toggle(isOn: $controller.deleteRecordings) {
-                    SettingsRowText(title: "Delete recordings after a period of time",
-                                    detail: "Notes and transcripts are always kept. A recording uses about 14 MB an hour.")
-                }
-                .toggleStyle(TrailingCheckboxStyle())
-                .padding(.vertical, 9)
-                if controller.deleteRecordings {
-                    SettingsRow(title: "Keep audio for") {
-                        DaysField(title: "Days to keep audio", value: $controller.recordingDays, range: 1...3650)
-                    }
-                }
             }
             if !Rehearsal.isOn {
                 SettingsGroup(label: "Shared screens", footer: "Mossad keeps frames of the meeting window only, when its picture changes, and reads their text on this Mac. The frames stay on this Mac. Get consent before you capture what other people share. macOS shows its screen recording mark during a call.") {
@@ -86,7 +76,6 @@ struct RecordingSettings: View {
                     .font(.system(size: 13))
                     .padding(.vertical, 9)
             }
-            StorageSettings()
             SettingsGroup(label: "Folders") {
                 folderRow("Meetings", controller.paths.meetings)
                 folderRow("Audio", controller.paths.audio)
