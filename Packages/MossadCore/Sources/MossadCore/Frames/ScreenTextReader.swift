@@ -92,9 +92,23 @@ public struct ScreenStep: Sendable {
     /// The call's screens, or nil when the call has no frames on disk (then the record keeps what it has).
     /// `known` are the people of the meeting and of the voice library, for the presenter's name. `existing` are the
     /// record's screens: one whose picture is no longer listed (removed with an old recording) keeps its text.
-    public func run(in dir: URL, known: [String], existing: [SharedScreen] = []) async -> Result? {
+    /// `deleted` are the screens the owner deleted: an entry of one that is still listed goes, with its picture.
+    public func run(in dir: URL, known: [String], existing: [SharedScreen] = [], deleted: Set<String> = []) async -> Result? {
         guard var index = FrameIndex.load(from: dir) else { return nil }
+        if index.frames.contains(where: { deleted.contains($0.file) }) {
+            index.frames.removeAll { deleted.contains($0.file) }
+            do { try index.save(to: dir) } catch { Log.error("Saving the frames list failed: \(error)") }
+        }
         FrameStore.removeUnlisted(in: dir)
+        /// This run holds its own copy of the list for as long as it reads. A screen that the owner deletes in
+        /// that time leaves the list on disk; it must leave this copy too, before the copy is saved over it.
+        func save() {
+            if let disk = FrameIndex.load(from: dir) {
+                let listed = Set(disk.frames.map(\.file))
+                index.frames.removeAll { !listed.contains($0.file) }
+            }
+            do { try index.save(to: dir) } catch { Log.error("Saving the frames list failed: \(error)") }
+        }
         var unsaved = 0
         for frame in index.frames where frame.text == nil {
             let duringCall = await isRecording()
@@ -122,12 +136,11 @@ public struct ScreenStep: Sendable {
             unsaved += 1
             if unsaved >= Self.saveEvery {
                 unsaved = 0
-                do { try index.save(to: dir) } catch { Log.error("Saving the frames list failed: \(error)") }
+                save()
             }
         }
-        if unsaved > 0 {
-            do { try index.save(to: dir) } catch { Log.error("Saving the frames list failed: \(error)") }
-        }
+        // Also with nothing new to save: a delete during the run must not be in the answer.
+        save()
         let listed = Set(index.frames.map(\.file))
         var screens = index.screens.map { s in
             var s = s
@@ -135,7 +148,7 @@ public struct ScreenStep: Sendable {
             s.presenter = s.presenter.map { PresenterLabel.resolve($0, known: known) }
             return s
         }
-        screens += existing.filter { !listed.contains($0.file) && !FileManager.default.fileExists(atPath: FrameIndex.folder(in: dir).appendingPathComponent($0.file).path) }
+        screens += existing.filter { !deleted.contains($0.file) && !listed.contains($0.file) && !FileManager.default.fileExists(atPath: FrameIndex.folder(in: dir).appendingPathComponent($0.file).path) }
         screens.sort { $0.offset < $1.offset }
         return Result(screens: screens, gaps: ScreenGap.shown(index.gaps ?? [], screens: screens))
     }

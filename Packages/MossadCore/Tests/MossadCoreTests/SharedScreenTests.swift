@@ -127,6 +127,21 @@ final class SharedScreenTests: XCTestCase {
         XCTAssertNil(FilmstripLayout.nearest(offsets, atX: 20, duration: 0, span: 900))
     }
 
+    func testTheRulersScreenMarksTakeClicksOnlyNearAMark() {
+        let offsets: [TimeInterval] = [60, 600, 3000]
+        let areas = FilmstripLayout.hitAreas(offsets, duration: 3600, span: 900, reach: 8, height: 12)
+        XCTAssertEqual(areas.count, 3)
+        func hit(_ x: Double) -> Bool { areas.contains { $0.contains(CGPoint(x: x, y: 4)) } }
+        // The mark at 60 s is at 15 pt. A decision dot at 400 pt keeps its own clicks.
+        XCTAssertTrue(hit(15) && hit(22) && hit(150) && hit(750))
+        XCTAssertFalse(hit(400) || hit(30) || hit(880))
+        // The areas and the rule that opens a screen say the same for every point of the line.
+        for x in stride(from: 0.25, through: 900, by: 0.5) {
+            XCTAssertEqual(hit(x), FilmstripLayout.nearest(offsets, atX: x, duration: 3600, span: 900, reach: 8) != nil, "\(x)")
+        }
+        XCTAssertEqual(FilmstripLayout.hitAreas(offsets, duration: 0, span: 900, reach: 8, height: 12), [])
+    }
+
     // MARK: Times of day
 
     func testTheTimeOfDayAfterAPauseComesFromTheFrame() {

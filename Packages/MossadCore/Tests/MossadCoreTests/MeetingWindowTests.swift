@@ -230,6 +230,49 @@ final class MeetingWindowTests: XCTestCase {
         XCTAssertEqual([outside.x, outside.y, outside.width, outside.height], [0, 0, 100, 100])
     }
 
+    // MARK: The same window by two names
+
+    func testTheWindowServerTitleMatchesTheAccessibilityTitleOfTheSameWindow() {
+        // Chrome adds its name, the profile, and the recording state for Accessibility.
+        XCTAssertTrue(WindowTitle.same("Meet - fkq-xdfx-vbe", "Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)"))
+        XCTAssertTrue(WindowTitle.same("Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)", "Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)"))
+        XCTAssertTrue(WindowTitle.same("Meet – Weekly sync", "Meet – Weekly sync - Camera and microphone recording - Google Chrome"))
+        XCTAssertTrue(WindowTitle.same(" Meet - abc-defg-hij ", "Meet - abc-defg-hij - Brave"))
+        // Edge writes its name with a hidden character in it.
+        XCTAssertTrue(WindowTitle.same("Meeting with Alex Rivera | Microsoft Teams", "Meeting with Alex Rivera | Microsoft Teams - Microsoft\u{200B} Edge"))
+        XCTAssertTrue(WindowTitle.same("Meeting with Alex Rivera | Microsoft Teams", "Meeting with Alex Rivera | Microsoft Teams"))
+        XCTAssertEqual(WindowTitle.core("Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)"), "Meet - fkq-xdfx-vbe")
+        XCTAssertEqual(WindowTitle.core("Inbox - Gmail - Google Chrome"), "Inbox - Gmail")
+    }
+
+    func testTwoDifferentWindowsOfOneBrowserDoNotMatch() {
+        XCTAssertFalse(WindowTitle.same("Meet - fkq-xdfx-vbe", "Inbox - Gmail - Google Chrome"))
+        XCTAssertFalse(WindowTitle.same("Meet - fkq-xdfx-vbe", "Google Meet - Google Chrome"))
+        XCTAssertFalse(WindowTitle.same("Meet - fkq-xdfx-vbe", "Meet - fkq-xdfx-vbz - Google Chrome"))
+        // A start that is not a whole part of the title is no match, and a short word matches nothing longer.
+        XCTAssertFalse(WindowTitle.same("Meet - fkq-xdfx", "Meet - fkq-xdfx-vbe - Google Chrome"))
+        XCTAssertFalse(WindowTitle.same("Meet", "Meet - fkq-xdfx-vbe - Google Chrome"))
+        XCTAssertFalse(WindowTitle.same("", "Google Chrome"))
+        XCTAssertFalse(WindowTitle.same("", ""))
+    }
+
+    func testPickingTheAccessibilityWindowOfAWindowServerWindow() {
+        let meet = "Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)", mail = "Inbox - Gmail - Google Chrome - Sam (Work)"
+        let none: (Int) -> CGRect? = { _ in nil }
+        XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: [mail, meet], frameOf: none), 1)
+        XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: [mail], frameOf: none))
+        // The exact window wins over one whose title only begins the same way.
+        let notes = "Meet - fkq-xdfx-vbe - Notes - Google Chrome - Sam (Work)"
+        XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: [notes, meet], frameOf: none), 1)
+        XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe - Notes", frame: nil, among: [notes, meet], frameOf: none), 0)
+        // The same meeting open in two windows: only the frame can tell them apart. With no sure answer, none.
+        let a = CGRect(x: 0, y: 30, width: 1200, height: 800), b = CGRect(x: 300, y: 60, width: 1200, height: 800)
+        XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: [meet, meet], frameOf: none))
+        XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: b.offsetBy(dx: 1, dy: 0), among: [meet, meet], frameOf: { [a, b][$0] }), 1)
+        XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: a, among: [meet, meet], frameOf: { _ in a }))
+        XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: a, among: [meet, meet], frameOf: none))
+    }
+
     // MARK: Covered windows
 
     func testAWindowCoveredByOthersIsNotOnScreen() {

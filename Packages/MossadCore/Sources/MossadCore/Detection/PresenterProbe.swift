@@ -25,7 +25,9 @@ public struct PresenterProbe: Sendable {
         var complete = false
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
             let windows = AXWalk.windows(of: app.processIdentifier)
-            guard let window = windows.first(where: { $0.1 == windowTitle })?.0 else { continue }
+            // The title is the window server's; a browser's Accessibility title has more at its end.
+            guard let at = WindowTitle.pick(title: windowTitle, frame: nil, among: windows.map(\.1), frameOf: { _ in nil }) else { continue }
+            let window = windows[at].0
             // Zoom names the presenter in the title of a window of its own. A browser's other windows are the owner's.
             if case .zoomApp? = MeetingMatcher.appKind(bundleID: bundleID), let name = PresenterLabel.name(in: windows.map(\.1)) { return .name(name) }
             var labels: [String] = []

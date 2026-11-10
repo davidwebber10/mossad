@@ -10,6 +10,8 @@ final class FakeScreenReader: ScreenTextReading, @unchecked Sendable {
     /// The QoS of the thread each read ran on.
     private var _classes: [qos_class_t] = []
     var classes: [qos_class_t] { lock.withLock { _classes } }
+    /// Called in each read, before it answers. A test waits in it to do something while the text step runs.
+    var onRead: (@Sendable (String) -> Void)?
     /// Files that cannot be read, as when Vision fails.
     var unreadable: Set<String> = []
 
@@ -18,6 +20,7 @@ final class FakeScreenReader: ScreenTextReading, @unchecked Sendable {
             _read.append(url.lastPathComponent)
             _classes.append(qos_class_self())
         }
+        if let hook = lock.withLock({ onRead }) { hook(url.lastPathComponent) }
         if unreadable.contains(url.lastPathComponent) { return nil }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         return (text, [ScreenWord(text: text, x: 0.1, y: 0.1, width: 0.5, height: 0.05)])
@@ -125,6 +128,58 @@ final class PipelineScreenTests: XCTestCase {
         await pipeline().process("a")
         XCTAssertEqual(reader.read, ["25000.heic"])
         XCTAssertEqual(try CallRecord.load(from: dir).screens?.count, 2)
+    }
+
+    func testAScreenDeletedWhileTheTextStepRunsDoesNotComeBack() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (25, slide + " two", nil)])
+        let dir = paths.callDirectory("a")
+        // The second frame could not be read in the first run, so a later run reads it.
+        reader.unreadable = ["25000.heic"]
+        let p = pipeline()
+        await p.process("a")
+        XCTAssertEqual(try CallRecord.load(from: dir).screens?.map(\.file), ["12000.heic"])
+        reader.unreadable = []
+        // The next run stops in the read of the second frame; in that time the owner deletes the first screen.
+        let reached = DispatchSemaphore(value: 0), go = DispatchSemaphore(value: 0)
+        reader.onRead = { _ in reached.signal(); go.wait() }
+        let run = Task { await p.regenerateSummary("a") }
+        await withCheckedContinuation { done in DispatchQueue.global().async { reached.wait(); done.resume() } }
+        let deleted = await p.deleteScreen(callID: "a", file: "12000.heic")
+        XCTAssertTrue(deleted)
+        reader.onRead = nil
+        go.signal()
+        await run.value
+        XCTAssertEqual(try CallRecord.load(from: dir).screens?.map(\.file), ["25000.heic"])
+        XCTAssertEqual(FrameIndex.load(from: dir)?.frames.map(\.file), ["25000.heic"])
+        XCTAssertEqual(files("a"), ["25000.heic"])
+        // And not with the next summary either.
+        await p.regenerateSummary("a")
+        XCTAssertEqual(try CallRecord.load(from: dir).screens?.map(\.file), ["25000.heic"])
+        XCTAssertFalse(MarkdownWriter.transcript(try CallRecord.load(from: dir)).contains("[00:00:12] (Screen"))
+    }
+
+    func testADeletedScreenWhoseEntryStayedIsDroppedByTheNextRun() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (25, slide + " two", nil)])
+        let dir = paths.callDirectory("a")
+        let p = pipeline()
+        await p.process("a")
+        let before = try XCTUnwrap(FrameIndex.load(from: dir))
+        await p.deleteScreen(callID: "a", file: "12000.heic")
+        // As if the save of the frames list failed at the delete: the entry, with its text, is still there.
+        try before.save(to: dir)
+        await p.regenerateSummary("a")
+        XCTAssertEqual(try CallRecord.load(from: dir).screens?.map(\.file), ["25000.heic"])
+        XCTAssertEqual(FrameIndex.load(from: dir)?.frames.map(\.file), ["25000.heic"])
+    }
+
+    func testADeletedScreenAlsoLeavesTheRecordKeptForAnUndo() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (25, slide + " two", nil)])
+        let dir = paths.callDirectory("a")
+        let p = pipeline()
+        await p.process("a")
+        try FileManager.default.copyItem(at: dir.appendingPathComponent(CallRecord.fileName), to: dir.appendingPathComponent(Pipeline.previousFileName))
+        await p.deleteScreen(callID: "a", file: "12000.heic")
+        XCTAssertEqual(try CallRecord.load(from: dir, fileName: Pipeline.previousFileName).screens?.map(\.file), ["25000.heic"])
     }
 
     func testTheNoteDoesNotWaitForAnotherCallToEnd() async throws {

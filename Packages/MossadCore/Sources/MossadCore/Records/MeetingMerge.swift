@@ -71,6 +71,8 @@ public enum MeetingMerge {
         merged.utterances.sort { $0.start < $1.start }
         merged.screens = records.contains { $0.screens != nil } ? screens : nil
         merged.screenGaps = gaps.isEmpty ? nil : gaps
+        // The joined frames have new names; the old names of deleted ones mean nothing there.
+        merged.deletedScreens = nil
         merged.meUtterances = me
         merged.themUtterances = them
         merged.end = sorted.map(\.end).max() ?? merged.end

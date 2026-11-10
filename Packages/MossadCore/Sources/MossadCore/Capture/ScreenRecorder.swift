@@ -77,6 +77,8 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
     private var presenterAsked: TimeInterval = -.infinity
     /// The session's first read gave no answer: the next read is still the session's own, not a change of presenter.
     private var presenterOpen = false
+    /// After a read with no answer, the wait before the next one: 20 s, 40 s, then 60 s. Nil after an answer.
+    private var presenterRetry: TimeInterval?
     /// A covered window with no new picture is a pause, but it ends the share session only after this long.
     static let coverEndsSession: TimeInterval = 300
     private var coverPaused = false
@@ -141,7 +143,8 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
         // Nothing comes after the waiting picture, so it stayed. Not when the owner turned the capture off: the
         // newest picture is the one the owner wanted to stop.
         let last = selector.finish(at: offset())
-        if keepWaiting { keep(last) } else if last.keepHeldAt != nil { selector.keepFailed() }
+        // Also when the call ends, or pauses, before a frame or a check saw that the setting went off.
+        if keepWaiting, isEnabled() { keep(last) } else if last.keepHeldAt != nil { selector.keepFailed() }
         held = nil
         // The owner's pause ends the share session too.
         sessionEnded = true
@@ -205,13 +208,15 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
     func tick() {
         var ask: (file: String, start: Bool)?
         var stopSource = false
+        guard lock.withLock({ running && !closed }) else { return }
+        // The window first: when it is no longer the meeting's (or its page moved), the source sends `.lost` next,
+        // and a picture that waits must not be kept by this check. Read outside the lock: it asks the call app,
+        // and a stop from the capture queue must not wait for that answer.
+        let sight = source.windowSight
         lock.withLock {
             guard running, !closed else { return }
             if endIfTurnedOff() { stopSource = true; return }
             let at = offset()
-            // The window first: when it is no longer the meeting's (or its page moved), the source sends `.lost`
-            // next, and a picture that waits must not be kept by this check.
-            let sight = source.windowSight
             if sight != nil { ask = keep(selector.quiet(at: at)) }
             mark(liveness?.check(at: at, sight: sight))
         }
@@ -263,8 +268,13 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
         }
         index.insert(frame)
         do { try index.save(to: dir) } catch { Log.error("Saving the frames list failed: \(error)") }
-        if isNew { presenterOpen = true }
-        guard presenter != nil, presenterOpen || at - presenterAsked >= Self.presenterInterval else { return nil }
+        if isNew {
+            presenterOpen = true
+            presenterRetry = nil
+        }
+        // A new session asks at once. A read that gave no answer is tried again soon, but not at each kept frame.
+        let wait = isNew ? 0 : presenterRetry ?? (presenterOpen ? 0 : Self.presenterInterval)
+        guard presenter != nil, at - presenterAsked >= wait else { return nil }
         presenterAsked = at
         return (frame.file, presenterOpen)
     }
@@ -282,11 +292,12 @@ public final class ScreenRecorder: ScreenCapturing, @unchecked Sendable {
                 let name: String?
                 switch read {
                 case .unknown:
-                    self.presenterAsked = -.infinity
+                    self.presenterRetry = min(Self.presenterInterval, (self.presenterRetry ?? 10) * 2)
                     return
                 case .name(let found): name = found
                 case .none: name = nil
                 }
+                self.presenterRetry = nil
                 guard !self.closed, let at = self.index.frames.firstIndex(where: { $0.file == file }),
                       let number = self.index.frames[at].session else { return }
                 if start {

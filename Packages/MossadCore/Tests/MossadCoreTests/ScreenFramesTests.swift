@@ -163,14 +163,32 @@ final class ScreenFramesTests: XCTestCase {
         // Covered, and nothing new: a browser stops drawing then.
         XCTAssertNil(l.check(at: 6, sight: .covered))
         XCTAssertEqual(l.check(at: 15, sight: .covered), .paused(at: 3, covered: true))
-        // A new picture while covered: this app draws. The pause ends, and cover is no pause for it from now on.
+        // A new picture while covered, and the next check still says covered: this app draws. The pause ends, and
+        // cover is no pause for it from now on.
         XCTAssertEqual(l.frame(at: 90), .resumed(at: 90))
+        XCTAssertFalse(l.drawsWhileCovered)
+        XCTAssertNil(l.check(at: 91, sight: .covered))
         XCTAssertTrue(l.drawsWhileCovered)
         for t in stride(from: 93.0, to: 600, by: 3) { XCTAssertNil(l.check(at: t, sight: .covered)) }
         // Hidden is still a pause, and another window has to prove itself again.
         XCTAssertEqual(l.check(at: 612, sight: .hidden), .paused(at: 597, covered: false))
         l.newWindow()
         XCTAssertFalse(l.drawsWhileCovered)
+    }
+
+    func testAPictureAtTheMomentTheWindowIsUncoveredProvesNothing() {
+        // A browser stops drawing when covered and draws at once when uncovered. That picture comes before the next
+        // 3 s check, which then says "visible".
+        var l = ScreenLiveness(at: 0)
+        XCTAssertNil(l.check(at: 3, sight: .covered))
+        XCTAssertEqual(l.check(at: 15, sight: .covered), .paused(at: 0, covered: true))
+        XCTAssertEqual(l.frame(at: 20), .resumed(at: 20))
+        XCTAssertNil(l.check(at: 21, sight: .visible))
+        XCTAssertFalse(l.drawsWhileCovered)
+        // So the next cover is a pause again.
+        _ = l.frame(at: 22)
+        XCTAssertNil(l.check(at: 24, sight: .covered))
+        XCTAssertEqual(l.check(at: 36, sight: .covered), .paused(at: 22, covered: true))
     }
 
     func testAPictureBeforeTheCoverProvesNothing() {

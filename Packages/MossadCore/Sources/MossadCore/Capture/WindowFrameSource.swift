@@ -36,17 +36,32 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         var size: CGSize
         var crop: CGRect
         var title: String
-        /// A browser window's page: its Accessibility element and its frame inside the window when the stream
-        /// began. Read again at each check; when it moved, the crop is no longer the page.
-        var page: (element: AXUIElement, frame: CGRect)?
+        var page: Page?
     }
 
-    /// A browser window whose page could not be found, so the walk is not made again at each search.
+    /// A browser window's page: the Accessibility elements of the window and of the page, and the page's frame
+    /// inside the window when the stream began. Read again at each check; when it moved, the crop is no longer the
+    /// page. Both frames come from Accessibility, so a window that the owner moves gives the same answer.
+    private struct Page {
+        var window: AXUIElement
+        var element: AXUIElement
+        var frame: CGRect
+    }
+
+    /// A browser window that is not captured, so the walk is not made again at each search. A sure answer (no page,
+    /// two pages) waits a minute. An answer that is not sure (the browser was busy) is tried again at the next
+    /// search, then after 20 s, then each minute.
     private struct Refusal {
         var id: CGWindowID
         var size: CGSize
         var title: String
         var at: Date
+        var tries: Int
+        var wait: TimeInterval
+
+        func covers(_ w: WindowCandidate) -> Bool {
+            id == w.id && title == w.title && size == CGSize(width: w.width, height: w.height)
+        }
     }
 
     /// What other threads read.
@@ -70,6 +85,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     private var proven: Set<String> = []
     private var refused: [String: (at: Date, wait: TimeInterval)] = [:]
     private var refusedPage: Refusal?
+    private var lastPageWalk = Date.distantPast
+    private var loggedNoContent = false
 
     public init(platform: Platform, bundleID: String, meetingID: String?) {
         self.platform = platform
@@ -111,7 +128,7 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     /// recorder asks each 3 s.
     public var windowSight: WindowSight? {
         guard let chosen else { return nil }
-        guard let now = Self.describe(chosen.id), stillMeeting(chosen, now), !pageMoved(chosen, window: now.frame) else {
+        guard let now = Self.describe(chosen.id), stillMeeting(chosen, now), !pageMoved(chosen) else {
             queue.async { [weak self] in self?.windowChanged(chosen.id) }
             return nil
         }
@@ -121,10 +138,43 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
 
     /// True when a browser's page is no longer where the stream's crop expects it (a bookmarks bar, a side panel,
     /// a toolbar that slid in), or when its frame cannot be read.
-    private func pageMoved(_ chosen: Chosen, window: CGRect) -> Bool {
+    private func pageMoved(_ chosen: Chosen) -> Bool {
         guard let page = chosen.page else { return false }
-        let now = AXWalk.frame(page.element)?.offsetBy(dx: -window.minX, dy: -window.minY)
-        return MeetingWindow.pageMoved(from: page.frame, to: now)
+        func place() -> CGRect? {
+            guard let window = AXWalk.frame(page.window), let area = AXWalk.frame(page.element) else { return nil }
+            return area.offsetBy(dx: -window.minX, dy: -window.minY)
+        }
+        guard MeetingWindow.pageMoved(from: page.frame, to: place()) else { return false }
+        // The two frames are read one after the other, so a window in motion can give one false answer. Once more.
+        return MeetingWindow.pageMoved(from: page.frame, to: place())
+    }
+
+    /// True for a browser's own window with tabs: the one kind of window of which only a part is kept.
+    private func hasTabs(_ w: WindowCandidate) -> Bool {
+        guard case .browser(let browser)? = MeetingMatcher.appKind(bundleID: bundleID) else { return false }
+        return w.layer == 0 && w.bundleID.lowercased() == browser.lowercased()
+    }
+
+    /// The pages of a browser window, with their frames counted from the window's own Accessibility frame.
+    private func readPages(_ w: WindowCandidate) -> (page: Page?, areas: [CGRect])? {
+        lastPageWalk = Date()
+        guard case .pages(let window, let frame, let found) = WebAreaProbe.read(bundleID: w.bundleID, windowTitle: w.title,
+                                                                                windowFrame: Self.describe(w.id)?.frame) else { return nil }
+        let inside = found.map { (element: $0.element, frame: $0.frame.offsetBy(dx: -frame.minX, dy: -frame.minY)) }
+        let largest = inside.max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
+        return (largest.map { Page(window: window, element: $0.element, frame: $0.frame) }, inside.map(\.frame))
+    }
+
+    /// While a browser stream runs, the whole window is walked again now and then: a second page that opened
+    /// over the page without moving it does not show in the page's own frame. A walk with no sure answer changes
+    /// nothing; the checks of the page's frame go on.
+    private func recheckPages(_ w: WindowCandidate) {
+        guard let chosen, chosen.page != nil, Date().timeIntervalSince(lastPageWalk) >= Self.reviewInterval,
+              let read = readPages(w) else { return }
+        guard MeetingWindow.keptPart(of: w, bundleID: bundleID, webAreas: read.areas) == nil else { return }
+        Log.info("The meeting window is no longer captured: it shows a second page")
+        refusedPage = Refusal(id: w.id, size: CGSize(width: w.width, height: w.height), title: w.title, at: Date(), tries: 1, wait: Self.proofRetry)
+        windowChanged(chosen.id, searchNow: false)
     }
 
     // MARK: Finding the window
@@ -189,25 +239,30 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         }
         let names = MeetingWindow.teamsMeetingNames(windows.map(\.title), confirmed: confirmed)
         shared.withLock { sharedState.teamsNames = names }
-        if chosen?.id == best.id, stream != nil { return }
+        if chosen?.id == best.id, stream != nil {
+            recheckPages(best)
+            return
+        }
         if let old = chosen { windowChanged(old.id, searchNow: false) }
         // Of a browser window only the page is kept. Without the page's frame, or with two pages in the window,
         // nothing is captured; the read is tried again later, not at each search.
-        var page: (element: AXUIElement, frame: CGRect)?
+        var page: Page?
         var areas: [CGRect]?
-        let size = CGSize(width: best.width, height: best.height)
-        if case .browser? = MeetingMatcher.appKind(bundleID: bundleID), best.layer == 0, best.bundleID.lowercased() == appID.lowercased() {
-            if let r = refusedPage, r.id == best.id, r.size == size, r.title == best.title, Date().timeIntervalSince(r.at) < Self.proofRetry { return }
-            if let origin = Self.describe(best.id)?.frame.origin {
-                let found = WebAreaProbe.areas(bundleID: best.bundleID, windowTitle: best.title)
-                    .map { ($0.element, $0.frame.offsetBy(dx: -origin.x, dy: -origin.y)) }
-                areas = found.map(\.1)
-                page = found.max { $0.1.width * $0.1.height < $1.1.width * $1.1.height }.map { (element: $0.0, frame: $0.1) }
+        var sure = true
+        if hasTabs(best) {
+            if let r = refusedPage, r.covers(best), Date().timeIntervalSince(r.at) < r.wait { return }
+            if let read = readPages(best) {
+                page = read.page
+                areas = read.areas
+            } else {
+                sure = false
             }
         }
         guard let crop = MeetingWindow.keptPart(of: best, bundleID: bundleID, webAreas: areas) else {
-            Log.info("The meeting window is not captured: the page's place in the browser window is not sure")
-            refusedPage = Refusal(id: best.id, size: size, title: best.title, at: Date())
+            let tries = (refusedPage.flatMap { $0.covers(best) ? $0.tries : nil } ?? 0) + 1
+            if tries == 1 { Log.info("The meeting window is not captured: the page's place in the browser window is not sure") }
+            refusedPage = Refusal(id: best.id, size: CGSize(width: best.width, height: best.height), title: best.title, at: Date(),
+                                  tries: tries, wait: sure ? Self.proofRetry : tries == 1 ? 0 : tries == 2 ? 20 : Self.proofRetry)
             return
         }
         refusedPage = nil
@@ -230,7 +285,7 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     }
 
     private func begin(_ window: SCWindow, candidate: WindowCandidate, kind: MeetingWindow.Kind, crop: CGRect,
-                       page: (element: AXUIElement, frame: CGRect)?) {
+                       page: Page?) {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let scale = max(1, Double(filter.pointPixelScale))
         // The kept part, not the whole window, is at most `longEdge` wide or high.
@@ -244,6 +299,10 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         configuration.showsCursor = false
         configuration.capturesAudio = false
         configuration.queueDepth = 3
+        // The shadow is not part of the window: with it, the kept part would be counted from a larger picture.
+        configuration.ignoreShadowsSingleWindow = true
+        // A browser's child windows (the card of another tab, the address suggestions) hang over the page.
+        if page != nil { configuration.includeChildWindows = false }
         configuration.minimumFrameInterval = CMTime(seconds: Self.frameInterval, preferredTimescale: 600)
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         do {
@@ -342,13 +401,20 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         case .complete:
             // Checked for each frame: one click on another tab makes the same window show something else, and a
             // bar or a panel of the browser moves the page out of the kept part.
-            guard let now = Self.describe(chosen.id), stillMeeting(chosen, now), !pageMoved(chosen, window: now.frame) else {
+            guard let now = Self.describe(chosen.id), stillMeeting(chosen, now), !pageMoved(chosen) else {
                 windowChanged(chosen.id)
                 return
             }
             guard let buffer = sampleBuffer.imageBuffer else { return }
             // The window's picture can be a part of the frame only; the kept part is counted inside that part.
-            handler(.picture(PixelPicture(buffer: buffer, crop: chosen.crop, content: Self.content(of: sampleBuffer)),
+            // When the stream does not say where it is, a frame of which only a part may be kept is not kept.
+            let content = Self.content(of: sampleBuffer)
+            if content == nil, chosen.page != nil {
+                if !loggedNoContent { Log.error("The screen capture gave no place of the window in its frames; frames of the browser window are dropped") }
+                loggedNoContent = true
+                return
+            }
+            handler(.picture(PixelPicture(buffer: buffer, crop: chosen.crop, content: content),
                              window: "\(chosen.owner)#\(chosen.id)"))
         case .idle:
             handler(.idle)
@@ -372,7 +438,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         guard let list = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
               let info = list.first, let dictionary = info[.contentRect] as? NSDictionary,
               let rect = CGRect(dictionaryRepresentation: dictionary as CFDictionary) else { return nil }
-        let scale = (info[.scaleFactor] as? Double) ?? (info[.scaleFactor] as? NSNumber)?.doubleValue ?? 1
+        // Without the scale the rectangle's size in pixels is not known.
+        guard let scale = (info[.scaleFactor] as? Double) ?? (info[.scaleFactor] as? NSNumber)?.doubleValue, scale > 0 else { return nil }
         return CGRect(x: rect.minX * scale, y: rect.minY * scale, width: rect.width * scale, height: rect.height * scale)
     }
 

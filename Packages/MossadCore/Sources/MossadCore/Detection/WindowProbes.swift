@@ -35,30 +35,40 @@ enum CallWindowProbe {
     }
 }
 
+/// What a read of a browser window's pages gave.
+enum PageRead {
+    /// The whole window was walked: its Accessibility element and frame, and every web area with its frame, all in
+    /// screen points from the top left. No web area is a sure answer too.
+    case pages(window: AXUIElement, frame: CGRect, areas: [(element: AXUIElement, frame: CGRect)])
+    /// Nothing can be said: no Accessibility, the window not found for sure, a walk that was cut short, or an
+    /// element that could not be read. This is not "one page" and not "no page".
+    case unknown
+}
+
 /// The pages inside a browser window, so a frame keeps the page and not the tabs and panels around it.
 enum WebAreaProbe {
     static let elementLimit = 3_000
     static let budget: TimeInterval = 0.5
 
-    /// Every web area of the window with this title, with its frame in screen points from the top left. Empty
-    /// when Accessibility is not allowed, the window is not found, or the walk was cut short: a walk that did not
-    /// finish cannot say that there is only one page.
-    static func areas(bundleID: String, windowTitle: String) -> [(element: AXUIElement, frame: CGRect)] {
-        guard AXIsProcessTrusted() else { return [] }
+    /// `windowTitle` and `windowFrame` are the window server's; the Accessibility window is matched to them.
+    static func read(bundleID: String, windowTitle: String, windowFrame: CGRect?) -> PageRead {
+        guard AXIsProcessTrusted() else { return .unknown }
         AccessibilityTimeout.apply()
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
-            for (window, title) in AXWalk.windows(of: app.processIdentifier) where title == windowTitle {
-                var found: [(element: AXUIElement, frame: CGRect)] = []
-                let complete = AXWalk.walk(window, limit: elementLimit, budget: budget) { element, role in
-                    guard role == "AXWebArea" else { return true }
-                    if let f = AXWalk.frame(element) { found.append((element, f)) }
-                    // The page's own content is not walked.
-                    return false
-                }
-                if complete, !found.isEmpty { return found }
+            guard let window = AXWalk.window(of: app.processIdentifier, title: windowTitle, frame: windowFrame),
+                  let frame = AXWalk.frame(window) else { continue }
+            var found: [(element: AXUIElement, frame: CGRect)] = []
+            var unreadable = false
+            let complete = AXWalk.walk(window, limit: elementLimit, budget: budget, strict: true) { element, role in
+                guard role == "AXWebArea" else { return true }
+                // A page whose place cannot be read may be a second page: then nothing is sure.
+                if let f = AXWalk.frame(element) { found.append((element, f)) } else { unreadable = true }
+                // The page's own content is not walked.
+                return false
             }
+            return complete && !unreadable ? .pages(window: window, frame: frame, areas: found) : .unknown
         }
-        return []
+        return .unknown
     }
 }
 
@@ -70,6 +80,12 @@ enum AXWalk {
         var value: AnyObject?
         guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success, let windows = value as? [AXUIElement] else { return [] }
         return windows.map { ($0, text($0, kAXTitleAttribute) ?? "") }
+    }
+
+    /// The app's window that the window server calls `title` (and has at `frame`), or nil when that is not sure.
+    static func window(of pid: pid_t, title: String, frame: CGRect?) -> AXUIElement? {
+        let all = windows(of: pid)
+        return WindowTitle.pick(title: title, frame: frame, among: all.map(\.1), frameOf: { AXWalk.frame(all[$0].0) }).map { all[$0].0 }
     }
 
     static func text(_ e: AXUIElement, _ name: String) -> String? {
@@ -90,20 +106,37 @@ enum AXWalk {
     }
 
     /// Visits elements until the limit, the time budget, or an app that does not answer. `visit` gets the element
-    /// and its role and returns whether to go into its children. Returns false when the walk was cut short.
+    /// and its role and returns whether to go into its children. Returns false when the walk was cut short. With
+    /// `strict`, a role that cannot be read and a tree deeper than the limit also count as cut short: for a caller
+    /// that must know it saw everything.
     @discardableResult
-    static func walk(_ root: AXUIElement, limit: Int, budget: TimeInterval, visit: (AXUIElement, String) -> Bool) -> Bool {
+    static func walk(_ root: AXUIElement, limit: Int, budget: TimeInterval, strict: Bool = false, visit: (AXUIElement, String) -> Bool) -> Bool {
         var visited = 0
         var cut = false
         let deadline = Date().addingTimeInterval(budget)
         func go(_ e: AXUIElement, depth: Int) {
-            guard !cut, depth < 40 else { return }
+            guard !cut else { return }
+            guard depth < 40 else {
+                if strict { cut = true }
+                return
+            }
             visited += 1
             guard visited < limit, Date() < deadline else {
                 cut = true
                 return
             }
-            guard visit(e, text(e, kAXRoleAttribute) ?? "") else { return }
+            var value: AnyObject?
+            var role = ""
+            switch AXUIElementCopyAttributeValue(e, kAXRoleAttribute as CFString, &value) {
+            case .success: role = value as? String ?? ""
+            case .noValue, .attributeUnsupported, .notImplemented: break
+            default:
+                if strict {
+                    cut = true
+                    return
+                }
+            }
+            guard visit(e, role) else { return }
             var children: AnyObject?
             switch AXUIElementCopyAttributeValue(e, kAXChildrenAttribute as CFString, &children) {
             case .success: for child in (children as? [AXUIElement]) ?? [] { go(child, depth: depth + 1) }

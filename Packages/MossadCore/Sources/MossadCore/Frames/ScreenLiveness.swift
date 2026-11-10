@@ -28,6 +28,9 @@ public struct ScreenLiveness: Equatable, Sendable {
     public private(set) var isPaused = false
     /// The app was seen to draw its window while it was covered.
     public private(set) var drawsWhileCovered = false
+    /// A picture came after a check that said "covered". It is proof only when the next check says so too: a
+    /// browser draws at once when it is uncovered, before a check can see that.
+    private var pictureWhileCovered = false
 
     public init(at time: TimeInterval) {
         lastLive = time
@@ -37,18 +40,20 @@ public struct ScreenLiveness: Equatable, Sendable {
     public mutating func restart(at time: TimeInterval) {
         if !isPaused { lastLive = time }
         lastSight = nil
+        pictureWhileCovered = false
     }
 
     /// Another window is captured now: what the last one proved does not hold for it.
     public mutating func newWindow() {
         drawsWhileCovered = false
+        pictureWhileCovered = false
         lastSight = nil
     }
 
     /// A new picture came. An idle frame is not one: a covered window sends those too.
     public mutating func frame(at time: TimeInterval) -> Change? {
         lastLive = time
-        if lastSight == .covered { drawsWhileCovered = true }
+        if lastSight == .covered { pictureWhileCovered = true }
         guard isPaused else { return nil }
         isPaused = false
         return .resumed(at: time)
@@ -57,6 +62,8 @@ public struct ScreenLiveness: Equatable, Sendable {
     /// `sight` is nil when no meeting window is found.
     public mutating func check(at time: TimeInterval, sight: WindowSight?) -> Change? {
         lastSight = sight
+        if pictureWhileCovered, sight == .covered { drawsWhileCovered = true }
+        pictureWhileCovered = false
         if sight == .visible || (sight == .covered && drawsWhileCovered) {
             // A window that shows the same picture is live, and a window that is back is live again.
             lastLive = time

@@ -301,12 +301,23 @@ final class ScreenRecorderTests: XCTestCase {
         keep(40, at: 90)
         XCTAssertEqual(index?.frames.map(\.presenter), ["Sam Carter", "Sam Carter", "Sam Carter", "Sam Carter"])
         XCTAssertEqual(index?.frames.map(\.session), [0, 0, 0, 0])
-        // It asks again at the next kept frame, not a minute later.
-        XCTAssertEqual(presenterReads, 3)
+        // It asks again sooner than a minute later, but not at each kept frame: 20 s after the read with no answer.
+        XCTAssertEqual(presenterReads, 2)
         shown.unknown = false
         keep(120, at: 105)
-        XCTAssertEqual(presenterReads, 4)
+        XCTAssertEqual(presenterReads, 3)
         XCTAssertEqual(index?.frames.map(\.session), [0, 0, 0, 0, 0])
+    }
+
+    func testReadsWithNoAnswerComeLessAndLessOften() {
+        let screen = make(presenter: true)
+        screen.start()
+        shown.unknown = true
+        // A kept frame each 10 s for 5 minutes, and the app never answers.
+        for n in 0..<30 { keep(UInt8(40 + (n % 4) * 60), at: 10 + Double(n) * 10) }
+        // At 10 s, then 20 s, 40 s, and 60 s apart: 10, 30, 70, 130, 190, 250. Not 30 walks.
+        XCTAssertEqual(presenterReads, 6)
+        XCTAssertEqual(Set(index?.frames.compactMap(\.session) ?? []), [0])
     }
 
     func testAFirstReadWithNoAnswerIsStillTheSessionsOwnWhenItComes() {
@@ -348,6 +359,19 @@ final class ScreenRecorderTests: XCTestCase {
         setting.isOn = true
         screen.start()
         XCTAssertEqual(source.starts, 1)
+        XCTAssertEqual(index?.frames.map(\.offset), [10])
+        XCTAssertEqual(files, ["10000.heic"])
+    }
+
+    func testAStopRightAfterTheSettingWentOffDoesNotKeepTheWaitingPicture() {
+        let screen = make()
+        screen.start()
+        keep(40, at: 10)
+        clock.now = 30
+        source.show(200)
+        // Off, and the call ends before the next frame or check could see it.
+        setting.isOn = false
+        screen.close()
         XCTAssertEqual(index?.frames.map(\.offset), [10])
         XCTAssertEqual(files, ["10000.heic"])
     }

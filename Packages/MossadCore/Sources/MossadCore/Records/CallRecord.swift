@@ -263,6 +263,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var screens: [SharedScreen]?
     /// Pauses of the screen capture next to a share session, shown as lines of the transcript.
     public var screenGaps: [ScreenGap]?
+    /// The file names of screens the owner deleted. The text step drops them from `frames.json` if they are still
+    /// there (a failed save, a run that was reading at that moment), so a deleted screen never comes back.
+    public var deletedScreens: [String]?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -354,6 +357,7 @@ extension CallRecord {
         mutedAudioPending = try c.decodeIfPresent(Bool.self, forKey: .mutedAudioPending) ?? false
         screens = try c.decodeIfPresent([SharedScreen].self, forKey: .screens)
         screenGaps = try c.decodeIfPresent([ScreenGap].self, forKey: .screenGaps)
+        deletedScreens = try c.decodeIfPresent([String].self, forKey: .deletedScreens)
     }
 }
 

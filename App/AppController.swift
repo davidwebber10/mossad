@@ -1153,6 +1153,8 @@ final class AppController: ObservableObject {
         guard !isSecondCopy else { return }
         Task {
             await pipeline.deleteScreen(callID: callID, file: file)
+            // After the file is gone, so a decode that was on its way cannot put the picture back in memory.
+            FrameThumbnails.shared.forget(FrameIndex.folder(in: paths.callDirectory(callID)).appendingPathComponent(file))
             refresh()
         }
     }

@@ -56,8 +56,6 @@ extension SharedScreen {
 /// Which frames of the viewer's filmstrip get a picture. Every frame has a mark on the line; a picture is drawn
 /// (and decoded) only where there is room for one.
 public enum FilmstripLayout {
-    /// The open frame, and others whose place is at least `spacing` from each one already chosen, in time order.
-    /// `span` is the line's length; a frame's place is its offset's part of `duration`.
     /// The frame whose mark is nearest to a click at `x` on a line of `span` points, or nil when no mark is within
     /// `reach` points of it.
     public static func nearest(_ offsets: [TimeInterval], atX x: Double, duration: TimeInterval, span: Double, reach: Double = .infinity) -> Int? {
@@ -67,6 +65,15 @@ public enum FilmstripLayout {
         return i
     }
 
+    /// The parts of the line where a click opens a screen: `reach` points to each side of each mark. A click
+    /// anywhere else belongs to what lies under the marks (a decision's dot, for example).
+    public static func hitAreas(_ offsets: [TimeInterval], duration: TimeInterval, span: Double, reach: Double, height: Double) -> [CGRect] {
+        guard duration > 0, span > 0 else { return [] }
+        return offsets.map { CGRect(x: span * min(1, $0 / duration) - reach, y: 0, width: reach * 2, height: height) }
+    }
+
+    /// The open frame, and others whose place is at least `spacing` from each one already chosen, in time order.
+    /// `span` is the line's length; a frame's place is its offset's part of `duration`.
     public static func pictured(_ offsets: [TimeInterval], open: Int, duration: TimeInterval, span: Double, spacing: Double) -> [Int] {
         guard duration > 0, offsets.indices.contains(open) else { return [] }
         func x(_ i: Int) -> Double { span * min(1, offsets[i] / duration) }

@@ -56,6 +56,7 @@ public struct SyncPayload: Sendable {
         // The pictures of shared screens stay on the Mac, so their list does too.
         slim.screens = nil
         slim.screenGaps = nil
+        slim.deletedScreens = nil
         id = r.id
         fields = MeetingFields(title: r.title, start: r.start, end: r.end, platform: r.platform.rawValue, headline: r.headline,
                                kind: r.kind, tags: r.tags, status: r.status.rawValue)

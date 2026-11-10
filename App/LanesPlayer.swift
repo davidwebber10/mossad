@@ -256,6 +256,12 @@ private struct PlayerRuler: View {
                             .frame(width: 60, alignment: i == 0 ? .leading : i == ticks.count - 1 ? .trailing : .center)
                             .position(x: i == 0 ? 30 : i == ticks.count - 1 ? w - 30 : w * t.fraction, y: 18)
                     }
+                    if let screens = record.screens, !screens.isEmpty {
+                        // One drawing for all screens, under the decision dots and the bookmark flags, so those keep
+                        // their clicks and their tooltips. It takes clicks only near a mark, and no play position.
+                        RulerScreenMarks(screens: screens, duration: duration, width: w) { openScreen?($0) }
+                            .equatable()
+                    }
                     ForEach(Array(record.decisions.enumerated()), id: \.offset) { i, d in
                         if let at = d.at {
                             marker(at: at, x: w * at / duration, help: "Decision · \(clock(at))\n\(d.text)", label: "Decision at \(clock(at))") {
@@ -265,11 +271,6 @@ private struct PlayerRuler: View {
                                     .frame(width: 7, height: 7)
                             }
                         }
-                    }
-                    if let screens = record.screens, !screens.isEmpty {
-                        // One drawing and one click target for all screens. It does not take the play position.
-                        RulerScreenMarks(screens: screens, duration: duration, width: w) { openScreen?($0) }
-                            .equatable()
                     }
                     ForEach(Array(bookmarks.enumerated()), id: \.offset) { _, b in
                         let note = b.note?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty

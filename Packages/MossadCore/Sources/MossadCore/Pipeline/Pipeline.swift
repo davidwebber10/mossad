@@ -636,7 +636,7 @@ public actor Pipeline {
         guard let screenStep, FrameStore.hasFrames(in: dir) else { return }
         detail(r.id, "Reading the shared screens")
         let known = Set(r.speakerNames.values).union(r.attendees).union(library.profiles.map(\.name))
-        if let result = await screenStep.run(in: dir, known: known.sorted(), existing: r.screens ?? []) {
+        if let result = await screenStep.run(in: dir, known: known.sorted(), existing: r.screens ?? [], deleted: Set(r.deletedScreens ?? [])) {
             r.screens = result.screens
             r.screenGaps = result.gaps.isEmpty ? nil : result.gaps
         }
@@ -973,20 +973,29 @@ public actor Pipeline {
     }
 
     /// Deletes one shared screen of a finished meeting: its picture, its entry in `frames.json`, and its line in the
-    /// transcript. The note is written again. The summary stays as it is; "Write the summary again" makes a new one
+    /// transcript. The note is written again. The summary stays as it is; "Regenerate summary" makes a new one
     /// without that screen's text. Returns false when the meeting has no such screen.
     @discardableResult
     public func deleteScreen(callID: String, file: String) -> Bool {
         let dir = paths.callDirectory(callID)
         guard var r = edit(callID, { r in
-            guard let screens = r.screens, screens.contains(where: { $0.file == file }) else { return false }
-            r.screens = screens.filter { $0.file != file }
+            let listed = r.screens?.contains { $0.file == file } ?? false
+            let known = r.deletedScreens?.contains(file) ?? false
+            guard listed || known else { return false }
+            r.screens = r.screens?.filter { $0.file != file }
+            if !known { r.deletedScreens = (r.deletedScreens ?? []) + [file] }
             // A pause is shown next to a share session; with the screen gone, its session may be gone too.
             r.screenGaps = r.screenGaps.map { ScreenGap.shown($0, screens: r.screens ?? []) }.flatMap { $0.isEmpty ? nil : $0 }
-            return true
+            return listed
         }) else { return false }
-        // The picture first: if the record's save fails, the screen is still listed, with no picture, and can be deleted again.
+        // The record remembers the delete, so an entry that stays in `frames.json` (a failed save, a text step that
+        // reads at this moment) is dropped by the next run of that step and never comes back.
         FrameStore.removeFrame(file, in: dir)
+        // The record kept for one undo of "Transcribe again" holds the screen's text too.
+        if var previous = try? CallRecord.load(from: dir, fileName: Self.previousFileName), previous.screens?.contains(where: { $0.file == file }) == true {
+            previous.screens?.removeAll { $0.file == file }
+            try? previous.save(to: dir, fileName: Self.previousFileName)
+        }
         save(&r, dir: dir)
         return true
     }

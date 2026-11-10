@@ -178,7 +178,7 @@ struct ScreensTab: View {
         .confirmationDialog("Delete this screen?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { screen in
             Button("Delete screen", role: .destructive) { delete(screen) }
         } message: { _ in
-            Text("Mossad removes the picture and its line in the transcript, and writes the note again. The summary is not changed.")
+            Text("Mossad removes the picture and its line in the transcript, and writes the note again. The summary is not changed and can still mention this screen. Use Regenerate summary for a summary without it.")
         }
     }
 
@@ -188,7 +188,6 @@ struct ScreensTab: View {
         if selected == screen.file, let i = all.firstIndex(where: { $0.file == screen.file }) {
             selected = (all[safe: i + 1] ?? all[safe: i - 1])?.file
         }
-        FrameThumbnails.shared.forget(record.frameURL(screen))
         controller.deleteScreen(callID: record.id, file: screen.file)
     }
 
@@ -607,6 +606,12 @@ struct RulerScreenMarks: View, Equatable {
 
     private static let reach: Double = 8
 
+    private var hitShape: Path {
+        var path = Path()
+        for area in FilmstripLayout.hitAreas(screens.map(\.offset), duration: duration, span: width, reach: Self.reach, height: 12) { path.addRect(area) }
+        return path
+    }
+
     nonisolated static func == (a: RulerScreenMarks, b: RulerScreenMarks) -> Bool {
         a.duration == b.duration && a.width == b.width && a.screens.count == b.screens.count
             && a.screens.first?.file == b.screens.first?.file && a.screens.last?.file == b.screens.last?.file
@@ -622,12 +627,13 @@ struct RulerScreenMarks: View, Equatable {
             }
         }
         .frame(width: width, height: 12)
-        .contentShape(Rectangle())
+        // Only near a mark: the rest of the ruler is not this view's to click or to explain.
+        .contentShape(hitShape)
         .gesture(SpatialTapGesture().onEnded { tap in
             let offsets = screens.map(\.offset)
             if let i = FilmstripLayout.nearest(offsets, atX: tap.location.x, duration: duration, span: width, reach: Self.reach) { open(screens[i]) }
         })
-        .help(screens.count == 1 ? "A shared screen. Click it to open it." : "Shared screens. Click one to open it.")
+        // No tooltip: it would show along the whole ruler, not only on the marks.
         .accessibilityElement()
         .accessibilityLabel(screens.count == 1 ? "1 shared screen" : "\(screens.count) shared screens")
         .accessibilityHint("Open the Screens tab for each one")
