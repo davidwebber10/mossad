@@ -12,7 +12,7 @@ private extension MeetingAnalytics {
     /// because the range is per hour and the cell shows a count.
     func usual(_ s: Speaker, _ metric: PersonMetric) -> (reading: Reading, usually: String, tip: String)? {
         guard let b = baselines.person(s.id), let context = b.context, let reading = b[metric], let usual = reading.usual else { return nil }
-        let usually = MeetingFindings.usually(metric, usual, context: context)
+        let usually = MeetingFindings.usually(metric, usual, context: context, value: reading.value)
         let perHour: Set<PersonMetric> = [.questionsPerHour, .cutInsPerHour, .cutOffsPerHour]
         let rate = perHour.contains(metric) ? "\(MeetingFindings.value(metric, reading.value)) an hour in this call; " : ""
         return (reading, usually, "\(sentenceCase(rate + usually)) (\(MeetingFindings.basis(usual)))")

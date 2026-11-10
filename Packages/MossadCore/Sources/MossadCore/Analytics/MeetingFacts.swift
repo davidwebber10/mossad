@@ -122,6 +122,8 @@ public struct MeetingFacts: Sendable, Equatable {
         self.values = values
     }
 
+    static let minimumTurns = 6
+
     init(record r: CallRecord, owner: String, voices v: MeetingAnalytics.Voices) {
         id = r.id
         stamp = MeetingAnalytics.stamp(r)
@@ -134,7 +136,9 @@ public struct MeetingFacts: Sendable, Equatable {
         mainVoices = v.speakers.filter { Self.isMain(seconds: $0.seconds, share: $0.share) }.count
         let hours = max(v.duration / 3600, Self.minimumHours)
         people = v.speakers.filter { !$0.isUnknown && $0.seconds > 0 }.map { s in
-            var values: [PersonMetric: Double] = [.talkShare: s.share, .questionsPerHour: Double(s.questions) / hours, .averageTurn: s.averageTurn]
+            var values: [PersonMetric: Double] = [.talkShare: s.share, .questionsPerHour: Double(s.questions) / hours]
+            // A typical turn from a few turns is noise, here and in the history.
+            if s.turns >= Self.minimumTurns { values[.averageTurn] = s.averageTurn }
             values[.wordsPerMinute] = s.wordsPerMinute
             values[.fillersPerMinute] = s.fillersPerMinute
             values[.longestTurn] = s.longestTurn?.seconds

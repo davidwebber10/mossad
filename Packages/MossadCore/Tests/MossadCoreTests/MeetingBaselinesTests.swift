@@ -215,7 +215,7 @@ final class MeetingBaselinesTests: XCTestCase {
         XCTAssertNil(dana[.talkShare], "half of a talk between two is not more than a fifth of a talk between five")
         XCTAssertNil(dana[.cutInsPerHour])
         XCTAssertEqual(dana.shareTrend, [])
-        XCTAssertNotNil(dana[.averageTurn], "a number that does not follow the size is still compared")
+        XCTAssertNotNil(dana[.wordsPerMinute], "a number that does not follow the size is still compared")
         XCTAssertNil(b.meeting[.voices], "and 2 people is not fewer than usual")
         XCTAssertNotNil(b.meeting[.length])
         XCTAssertEqual(b.standouts.filter { $0.id.contains("talkShare") || $0.id.contains("voices") }, [])
@@ -527,6 +527,15 @@ final class MeetingBaselinesTests: XCTestCase {
         XCTAssertEqual(B.topics(["Budget", "Roadmap"]), "about Budget or Roadmap")
         XCTAssertEqual(B.topics(["Budget", "Roadmap", "Hiring"]), "about Budget, Roadmap, or Hiring")
         XCTAssertEqual(B.topics(["Budget", "Roadmap", "Hiring", "Pricing", "Legal"]), "about Budget, Roadmap, Hiring, or 2 more of its topics")
+    }
+
+    /// A typical turn from a few turns is noise: under six turns there is no typical turn to compare.
+    func testATypicalTurnNeedsSixTurns() {
+        let r = call(minutes: 30, title: "Dana / Sam", [
+            ("me:A", 0, 3, "A."), ("them:A", 4, 60, "B."), ("me:A", 61, 64, "C."), ("them:A", 65, 120, "D."),
+        ])
+        let a = analytics(r, oneOnOnes(person: [.averageTurn: 20], onlyFor: owner))
+        XCTAssertNil(a.baselines.person("me:A")?[.averageTurn], "two turns give no typical turn")
     }
 
     func testAnOrdinaryCallHasNothingToSay() {
