@@ -119,6 +119,27 @@ final class LatestModelTests: XCTestCase {
         XCTAssertEqual(log.all().last?.model, "claude-sonnet-5-5")
     }
 
+    /// A write to the defaults tells its observers at once, on the writing thread. SwiftUI is one of them, and it
+    /// waits for the main thread, which can be waiting for an id: Settings › AI then never draws.
+    func testAnObserverOfTheDefaultsCanReadAnIdWhileTheCacheSaves() {
+        let defaults = freshDefaults()
+        let cache = LatestModelCache(defaults: defaults)
+        let answered = expectation(description: "the cache answers while it saves")
+        answered.assertForOverFulfill = false
+        let observer = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: defaults, queue: nil) { _ in
+            let done = DispatchSemaphore(value: 0)
+            DispatchQueue.global().async {
+                _ = cache.id("latest:opus", provider: .anthropic)
+                done.signal()
+            }
+            if done.wait(timeout: .now() + 1) == .success { answered.fulfill() }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        cache.update(.anthropic, models: [ModelInfo(id: "claude-opus-5-5", name: "Claude Opus 5.5")])
+        wait(for: [answered], timeout: 5)
+        XCTAssertEqual(LatestModelCache(defaults: defaults).id("latest:opus", provider: .anthropic), "claude-opus-5-5")
+    }
+
     func testPricesUseTheResolvedModel() {
         let alias = Pricing.hourEstimate(transcription: .local, ai: .anthropic, model: "latest:haiku")
         let id = Pricing.hourEstimate(transcription: .local, ai: .anthropic, model: "claude-haiku-5-5")

@@ -71,6 +71,7 @@ public final class LatestModelCache: @unchecked Sendable {
 
     private let defaults: UserDefaults
     private let lock = NSLock()
+    private let saveLock = NSLock()
     private var ids: [String: [String: String]]
     private var refreshed: [String: Date]
 
@@ -95,13 +96,24 @@ public final class LatestModelCache: @unchecked Sendable {
         for alias in LatestModel.aliases(for: provider) {
             if let id = LatestModel.resolve(alias.id, in: models) { found[alias.id] = id }
         }
-        return lock.withLock {
+        let changed = lock.withLock {
             let changed = ids[provider.rawValue] ?? [:] != found
             ids[provider.rawValue] = found
             refreshed[provider.rawValue] = now
+            return changed
+        }
+        save()
+        return changed
+    }
+
+    /// Never under `lock`: a write tells every observer of the defaults at once, on this thread. SwiftUI is one
+    /// of them and waits for the main thread, which can be waiting on `lock` for an id in a view's body.
+    private func save() {
+        saveLock.withLock {
+            // Read inside the save, so two updates cannot leave the older one in the defaults.
+            let (ids, refreshed) = lock.withLock { (self.ids, self.refreshed) }
             defaults.set(ids, forKey: Self.idsKey)
             defaults.set(refreshed, forKey: Self.refreshedKey)
-            return changed
         }
     }
 
