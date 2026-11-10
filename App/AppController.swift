@@ -83,6 +83,15 @@ final class AppController: ObservableObject {
     @AppStorage("rawTracksDays") var rawTracksDays = Retention.rawTracksDays
     /// The largest recording the server keeps, as it said in its hello. 0 for a server from before it kept any.
     @AppStorage("serverRecordingLimit") var serverRecordingLimit = 0.0
+    /// The id that the server gave itself. Each recording on the server is saved with it, so a recording on
+    /// another server than this one is not taken for a backup.
+    @AppStorage("serverID") var serverID = ""
+    /// The owner asked for the move, and the server has not said yet that it keeps recordings. Until it does, the
+    /// backup choice stays as it is.
+    @AppStorage("backupMoveRequested") var backupMoveRequested = false
+    /// Recordings that the move did not find in the bucket or on this Mac. While it is not 0, the bucket's settings
+    /// are not removed by themselves.
+    @AppStorage("backupMoveMissing") var backupMoveMissing = 0
     /// The owner asked for every backup to move from the bucket to the server. Stays on until the move is done,
     /// so a move that the app's end interrupted goes on at the next launch.
     @AppStorage("backupMovePending") var backupMovePending = false
@@ -93,7 +102,6 @@ final class AppController: ObservableObject {
     @Published var backupMoveProgress: (done: Int, total: Int)?
     /// What the last upload pass could not do, for Settings.
     @Published var backupReport = CloudArchive.Report()
-    var serverFactsChecked = false
     var backupMoveRequestSeen = false
     /// Whether the server answered the last time it was asked, for the status in Settings.
     @Published var serverCheck = SettingsCheck.idle
@@ -751,7 +759,9 @@ final class AppController: ObservableObject {
             if let archive = cloudArchive {
                 Task { await archive.delete(record) }
             } else {
-                Log.error("The backup copy of \(record.id) stays: no backup is set up on this Mac")
+                // Remembered, and removed when its place is set up again.
+                CloudArchive.rememberDeletes(of: record, paths: paths)
+                Log.error("The backup copy of \(record.id) could not be removed: no backup is set up on this Mac. Mossad tries again when one is")
             }
         }
         stopSharing(callID: record.id)
@@ -1291,19 +1301,26 @@ final class AppController: ObservableObject {
         guard !isInert, let pipeline else { return }
         // A request during a loop runs one more loop after it, so a recording finished meanwhile is not left out.
         if cloudSyncing { cloudSyncAgain = true; return }
+        // A move that was asked for starts when the server is ready. Until then this pass works as before.
+        if backupMoveRequested { startRequestedMove() }
         guard let archive = cloudArchive else { return }
         let days = backupChoice == .none ? nil : cloudKeepLocalDays
-        // A server from before it kept recordings cannot take them. The move waits for the update.
-        let moving = backupMovePending && serverKeepsRecordings && canMoveBackups
-        if backupMovePending, canMoveBackups, !moving { backupMoveWaitsForServer() }
+        // While a move is asked for, old copies stay until its end, also in a pass that cannot run it now
+        // (a call records, or the server is not ready).
+        let pending = backupMovePending && canMoveBackups
+        let moving = pending && serverKeepsRecordings && backupMoveMayRun
+        if pending, !serverKeepsRecordings { backupMoveWaitsForServer() }
         cloudSyncing = true
         Task.detached(priority: .utility) {
-            let report = await archive.sync(keepLocalDays: days, pipeline: pipeline, holdLeftovers: moving)
+            let report = await archive.sync(keepLocalDays: days, pipeline: pipeline, holdLeftovers: pending)
             var move: CloudArchive.MoveReport?
             if moving {
-                move = await archive.move(from: .bucket, to: .server, pipeline: pipeline) { done, total in
-                    Task { @MainActor in self.backupMoveProgress = (done, total) }
-                }
+                move = await archive.move(from: .bucket, to: .server, pipeline: pipeline,
+                                          shouldContinue: { await MainActor.run { self.backupMoveMayRun } },
+                                          progress: { done, total in
+                    // Only while this pass runs: a late message must not bring the bar back after the end.
+                    Task { @MainActor in if self.cloudSyncing, self.backupMovePending { self.backupMoveProgress = (done, total) } }
+                })
             }
             await MainActor.run {
                 self.cloudSyncing = false
@@ -1540,7 +1557,11 @@ final class AppController: ObservableObject {
         makingRecordings = true
         let audio = paths.audio
         Task(priority: .background) { [weak self] in
-            let missing = await Task.detached(priority: .background) { Recording.missing(audioRoot: audio) }.value
+            // A recording whose backup is not in reach (another server) is made again from its raw tracks.
+            let archive = self?.cloudArchive
+            let missing = await Task.detached(priority: .background) {
+                Recording.missing(audioRoot: audio, hasBackup: { archive?.holds($0) ?? false })
+            }.value
             for dir in missing {
                 // A call that starts meanwhile gets the processor; the rest waits for the next time.
                 guard let self, !self.isRecording else { break }
@@ -1556,8 +1577,10 @@ final class AppController: ObservableObject {
         consumeBackupMoveRequest()
         await track { await self.pipeline.runPending() }
         let audio = paths.audio, days = deleteRecordings ? max(1, recordingDays) : nil, tracks = max(1, rawTracksDays)
+        // Only a backup that this Mac can read counts as "the recording exists": a mark for another server does not.
+        let archive = cloudArchive
         await Task.detached(priority: .background) {
-            Retention.sweep(audioRoot: audio, rawTracksAfterDays: tracks, recordingsAfterDays: days)
+            Retention.sweep(audioRoot: audio, rawTracksAfterDays: tracks, recordingsAfterDays: days, hasBackup: { archive?.holds($0) ?? false })
         }.value
         runCoach()
         runCommitments()

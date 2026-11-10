@@ -84,7 +84,11 @@ The calls, all on `SHARE_HOST` and all with `Authorization: Bearer <owner secret
 | `GET /api/recordings/<call id>` | The recording, with `Range` support. Also answers without the header for `?expires=<unix seconds>&signature=<hex>`, where the signature is HMAC-SHA256 of `mossad-recording\n<call id>\n<expires>` with the owner secret, and `expires` is at most 24 hours ahead. |
 | `DELETE /api/recordings/<call id>` | Removes it. Also `200` when it was not there. |
 
-`GET /api/hello` answers `recordings: { maxBytes }` on a server that has these calls. Mossad offers the backup only then.
+`GET /api/hello` answers `recordings: { maxBytes }` on a server that has these calls, and `recordings.id` to the owner. Mossad offers the backup only then.
+
+The id is made at the owner's first call and kept in the bucket as `server-id`. Mossad saves it with each recording that it sends. A recording on a server with another id (another bucket) does not count as backed up: Mossad keeps the local copy and sends it to the connected server. Do not delete `server-id`.
+
+A link with a wrong signature is counted apart from wrong secrets (20 an hour for one address), so an old link in a player cannot pause your own sync.
 
 ## Update your server
 

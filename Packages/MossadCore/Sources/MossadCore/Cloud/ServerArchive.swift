@@ -6,10 +6,13 @@ import Foundation
 public struct ServerArchive: ArchiveBackend {
     let client: ServerClient
     public let maxBytes: Int64?
+    /// The id that the server gave itself. Each record keeps it, so a recording on another server is known as such.
+    public let id: String?
 
-    /// `maxBytes` is what the server said in its hello: the largest recording it takes.
-    public init(_ connection: ServerConnection, maxBytes: Int64?, session: URLSession = .shared) {
+    /// `id` and `maxBytes` are what the server said in its hello: its own id, and the largest recording it takes.
+    public init(_ connection: ServerConnection, id: String?, maxBytes: Int64?, session: URLSession = .shared) {
         client = ServerClient(connection, session: session)
+        self.id = id
         self.maxBytes = maxBytes
     }
 
@@ -39,7 +42,8 @@ public struct ServerArchive: ArchiveBackend {
     }
 
     public func presence(_ key: String) async -> ArchivePresence {
-        guard let request = request(key, method: "HEAD") else { return .absent }
+        // A key that the server has no address for: nothing is known about it.
+        guard let request = request(key, method: "HEAD") else { return .unknown }
         guard let (_, response) = try? await client.session.data(for: request), let http = response as? HTTPURLResponse else { return .unknown }
         if http.statusCode == 404 { return .absent }
         let length = http.value(forHTTPHeaderField: "X-Recording-Size") ?? http.value(forHTTPHeaderField: "Content-Length")
@@ -48,7 +52,7 @@ public struct ServerArchive: ArchiveBackend {
     }
 
     public func remove(_ key: String) async -> Bool {
-        guard let request = request(key, method: "DELETE") else { return true }
+        guard let request = request(key, method: "DELETE") else { return false }
         guard let (_, response) = try? await client.session.data(for: request), let status = (response as? HTTPURLResponse)?.statusCode else { return false }
         return (200..<300).contains(status) || status == 404
     }

@@ -24,6 +24,8 @@ public enum MeetingMerge {
         merged.cloudKey = nil
         merged.cloudSize = nil
         merged.cloudBackend = nil
+        merged.cloudServer = nil
+        merged.cloudHash = nil
         merged.transcriptionJobs = nil
         merged.summaryMissing = nil
         var screens: [SharedScreen] = []

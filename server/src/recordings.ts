@@ -19,6 +19,22 @@ export function maxRecordingBytes(env: Env): number {
   return (Number.isFinite(mb) && mb > 0 ? mb : defaultMaxMB) * 1024 * 1024;
 }
 
+/**
+ * This server's own id, made at the owner's first call and kept in the bucket that holds the recordings. The Mac
+ * saves it with each recording it sends, so a recording on another server (another bucket) is never taken for one
+ * that is here.
+ */
+export async function serverID(env: Env): Promise<string> {
+  const key = 'server-id';
+  const found = await env.FILES.get(key);
+  if (found) return (await found.text()).trim();
+  // Only the first writer wins, and each caller reads what was kept, so two first calls at once get one id.
+  await env.FILES.put(key, crypto.randomUUID(), { onlyIf: new Headers({ 'If-None-Match': '*' }) });
+  const kept = await env.FILES.get(key);
+  if (!kept) throw new Error('The server id could not be saved.');
+  return (await kept.text()).trim();
+}
+
 function hmacKey(secret: string, usage: 'sign' | 'verify'): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, [usage]);
 }

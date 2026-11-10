@@ -77,22 +77,31 @@ public struct BackupSettings: Equatable, Sendable {
 
 /// How many recordings are in each place, for the line under the backup choice.
 public struct BackupCounts: Equatable, Sendable {
+    /// On the server that is connected.
     public var onServer = 0
+    /// On a server that is not the connected one. They cannot play, and their local copies stay.
+    public var onOtherServer = 0
     public var inBucket = 0
     /// Written meetings with no backup copy yet.
     public var notBackedUp = 0
-    /// Old copies that a move has not removed yet.
-    public var leftovers = 0
+    /// Old copies in the bucket that a move has not removed yet.
+    public var bucketLeftovers = 0
 
-    /// `hasRecording` says whether a call has its recording on this Mac: only such a call can wait for a backup.
-    public init(_ records: [CallRecord], hasRecording: (String) -> Bool = { _ in true }) {
+    /// `serverID` is the connected server's id. `hasRecording` says whether a call has its recording on this Mac:
+    /// only such a call can wait for a backup.
+    public init(_ records: [CallRecord], serverID: String? = nil, hasRecording: (String) -> Bool = { _ in true }) {
         for r in records {
-            switch r.archived?.kind {
-            case .server: onServer += 1
+            let copy = r.archived
+            switch copy?.kind {
+            case .server:
+                if let serverID, copy?.server == serverID { onServer += 1 } else {
+                    onOtherServer += 1
+                    if r.status == .written, hasRecording(r.id) { notBackedUp += 1 }
+                }
             case .bucket: inBucket += 1
             case nil: if r.status == .written, r.cloudKey == nil, hasRecording(r.id) { notBackedUp += 1 }
             }
-            leftovers += r.cloudLeftovers?.count ?? 0
+            bucketLeftovers += r.cloudLeftovers?.filter { $0.kind == .bucket }.count ?? 0
         }
     }
 }

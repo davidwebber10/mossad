@@ -23,22 +23,25 @@ public struct S3Config: Sendable, Equatable {
 /// Signature Version 4 query signing. One signed URL per request (PUT, GET, DELETE) keeps the client small,
 /// and a signed GET URL lets the player stream a recording without the secret.
 public enum S3Presigner {
-    public static func url(_ c: S3Config, method: String, key: String, date: Date = Date(), expires: Int = 900) -> URL {
+    /// `query` adds parameters of the request itself, such as `list-type` for a list; an empty key is the bucket.
+    public static func url(_ c: S3Config, method: String, key: String, query extra: [(String, String)] = [], date: Date = Date(), expires: Int = 900) -> URL {
         // The signed host header carries a port that is not the default one (MinIO on :9000), as the request does.
         let port = c.endpoint.port.map { ":\($0)" } ?? ""
         let name = c.pathStyle ? (c.endpoint.host ?? "") : "\(c.bucket).\(c.endpoint.host ?? "")"
         let host = name + port
         let segments = (c.pathStyle ? [c.bucket] : []) + key.split(separator: "/").map(String.init)
+        // The address of the bucket itself is "/" with the bucket in the host, or "/bucket" with it in the path.
         let path = "/" + segments.map(encode).joined(separator: "/")
         let stamp = Self.stamp(date), day = String(stamp.prefix(8))
         let scope = "\(day)/\(c.region)/s3/aws4_request"
-        let query = [
+        // SigV4 wants the parameters in the order of their encoded names.
+        let query = ([
             ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
             ("X-Amz-Credential", "\(c.accessKeyID)/\(scope)"),
             ("X-Amz-Date", stamp),
             ("X-Amz-Expires", String(expires)),
             ("X-Amz-SignedHeaders", "host"),
-        ].map { "\(encode($0.0))=\(encode($0.1))" }.sorted().joined(separator: "&")
+        ] + extra).map { (encode($0.0), encode($0.1)) }.sorted { $0.0 < $1.0 }.map { "\($0.0)=\($0.1)" }.joined(separator: "&")
         let canonical = [method, path, query, "host:\(host)", "", "host", "UNSIGNED-PAYLOAD"].joined(separator: "\n")
         let toSign = ["AWS4-HMAC-SHA256", stamp, scope, hex(SHA256.hash(data: Data(canonical.utf8)))].joined(separator: "\n")
         var key = SymmetricKey(data: Data("AWS4\(c.secret)".utf8))

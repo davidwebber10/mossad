@@ -7,7 +7,7 @@ final class ServerArchiveTests: XCTestCase {
     var file: URL!
 
     override func setUp() {
-        archive = ServerArchive(connection, maxBytes: 1000, session: StubURLProtocol.session())
+        archive = ServerArchive(connection, id: "srv-1", maxBytes: 1000, session: StubURLProtocol.session())
         file = tempDirectory().appendingPathComponent("recording.m4a")
         try! Data("audio-one".utf8).write(to: file)
     }
@@ -71,6 +71,17 @@ final class ServerArchiveTests: XCTestCase {
         XCTAssertEqual(unknown, .unknown)
     }
 
+    /// A key that the server has no address for: nothing is known, and nothing was removed.
+    func testAKeyThatTheServerCannotNameIsUnknown() async {
+        StubURLProtocol.handler = { _ in (200, Data()) }
+        let presence = await archive.presence("calls/one/recording.m4a")
+        XCTAssertEqual(presence, .unknown)
+        let removed = await archive.remove("calls/one/recording.m4a")
+        XCTAssertFalse(removed)
+        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+        XCTAssertEqual(archive.object(for: "one"), ArchivedObject(key: "recordings/one/recording.m4a", kind: .server, server: "srv-1"))
+    }
+
     func testRemoveSaysWhetherTheRecordingIsGone() async {
         StubURLProtocol.handler = { _ in (200, json(["ok": true])) }
         let gone = await archive.remove(archive.key(for: "one"))
@@ -106,12 +117,14 @@ final class ServerArchiveTests: XCTestCase {
     }
 
     func testHelloSaysHowLargeARecordingCanBe() async throws {
-        StubURLProtocol.handler = { _ in (200, json(["mossad": true, "authorized": true, "chat": false, "recordings": ["maxBytes": 99_614_720]])) }
+        StubURLProtocol.handler = { _ in (200, json(["mossad": true, "authorized": true, "chat": false, "recordings": ["maxBytes": 99_614_720, "id": "0b1c"]])) }
         let hello = try await ServerClient(connection, session: StubURLProtocol.session()).hello()
         XCTAssertEqual(hello.recordingLimit, 99_614_720)
+        XCTAssertEqual(hello.id, "0b1c")
         StubURLProtocol.handler = { _ in (200, json(["mossad": true, "authorized": true, "chat": false])) }
         let older = try await ServerClient(connection, session: StubURLProtocol.session()).hello()
         XCTAssertNil(older.recordingLimit)
+        XCTAssertNil(older.id)
     }
 
     func testAFileHashIsTheSHA256OfItsBytes() throws {

@@ -8,6 +8,7 @@ struct ServerGroup: View {
     @EnvironmentObject var controller: AppController
     @Binding var settingUp: Bool
     @State private var confirmDisconnect = false
+    @State private var confirmChange = false
 
     private static let guide = URL(string: "https://github.com/davidwebber10/mossad/tree/main/server#readme")!
 
@@ -30,7 +31,12 @@ struct ServerGroup: View {
         .confirmationDialog("Disconnect your server?", isPresented: $confirmDisconnect) {
             Button("Disconnect", role: .destructive) { controller.disconnectServer() }
         } message: {
-            Text("Mossad goes back to iCloud. Your server keeps its data, and share links keep working until you stop them or they expire.\(controller.backupChoice == .server ? " Recordings are not backed up until you connect it again." : "")")
+            Text("Mossad goes back to iCloud. Your server keeps its data, and share links keep working until you stop them or they expire.\(controller.backupChoice == .server ? " Recordings are not backed up until you connect it again." : "")\(recordingsNote)")
+        }
+        .confirmationDialog("Change to another server?", isPresented: $confirmChange) {
+            Button("Change server…") { settingUp = true }
+        } message: {
+            Text("Another server does not have what is on this one.\(recordingsNote)")
         }
     }
 
@@ -50,7 +56,7 @@ struct ServerGroup: View {
                         .help("Asks your server again. With the recording backup on it, Mossad also sends a small test file.")
                     Menu {
                         Button("Copy secret") { copy(connection.secret) }
-                        Button("Change server…") { settingUp = true }
+                        Button("Change server…") { if recordingsHere > 0 { confirmChange = true } else { settingUp = true } }
                         Divider()
                         Button("Disconnect…", role: .destructive) { confirmDisconnect = true }
                     } label: {
@@ -68,6 +74,18 @@ struct ServerGroup: View {
             .padding(.vertical, 9)
             SettingsCheckFailure(state: controller.serverCheck)
         }
+    }
+
+    /// The recordings whose backup is on this server.
+    private var recordingsHere: Int {
+        controller.meetings.filter { $0.archived?.kind == .server && $0.archived?.server == controller.serverID && !controller.serverID.isEmpty }.count
+    }
+
+    /// What a change of server means for the recordings on this one.
+    private var recordingsNote: String {
+        let n = recordingsHere
+        guard n > 0 else { return "" }
+        return " \(n == 1 ? "1 recording is" : "\(n) recordings are") backed up on this server. Without it, \(n == 1 ? "it plays" : "they play") only where this Mac still has the local copy. Mossad keeps every local copy that it has, and sends \(n == 1 ? "it" : "them") to the backup that you choose next."
     }
 
     /// What the server does now, in one sentence.

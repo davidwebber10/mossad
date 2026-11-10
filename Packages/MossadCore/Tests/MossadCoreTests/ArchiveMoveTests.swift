@@ -4,6 +4,7 @@ import XCTest
 /// A place for recordings in memory, with the faults a real one can have.
 final class FakeArchive: ArchiveBackend, @unchecked Sendable {
     let kind: ArchiveKind
+    var id: String?
     var maxBytes: Int64?
     private let lock = NSLock()
     private var stored: [String: Data] = [:]
@@ -18,8 +19,9 @@ final class FakeArchive: ArchiveBackend, @unchecked Sendable {
     var removeFails = false
     var onPut: (() -> Void)?
 
-    init(_ kind: ArchiveKind, maxBytes: Int64? = nil) {
+    init(_ kind: ArchiveKind, id: String? = nil, maxBytes: Int64? = nil) {
         self.kind = kind
+        self.id = id ?? (kind == .server ? "srv-1" : nil)
         self.maxBytes = maxBytes
     }
 
@@ -69,12 +71,7 @@ final class ArchiveMoveTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
 
     override func setUp() {
-        FakeS3.objects = [:]
-        FakeS3.failPuts = false
-        FakeS3.onPut = nil
-        FakeS3.puts = 0
-        FakeS3.down = false
-        FakeS3.deletes = []
+        FakeS3.reset()
         paths = Paths(root: tempDirectory())
         try! paths.ensureDirectories()
         server = FakeArchive(.server)
@@ -125,7 +122,9 @@ final class ArchiveMoveTests: XCTestCase {
         XCTAssertEqual(r.cloudKey, "recordings/new/recording.m4a")
         XCTAssertEqual(r.cloudBackend, "server")
         XCTAssertEqual(r.cloudSize, 9)
-        XCTAssertEqual(r.archived, ArchivedObject(key: "recordings/new/recording.m4a", kind: .server))
+        XCTAssertEqual(r.cloudServer, "srv-1")
+        XCTAssertEqual(r.cloudHash, try FileHash.sha256(of: Recording.url(in: paths.callDirectory("new"))))
+        XCTAssertEqual(r.archived, ArchivedObject(key: "recordings/new/recording.m4a", kind: .server, server: "srv-1"))
     }
 
     func testARecordingInTheBucketStaysThereWhenTheServerIsChosen() async throws {
@@ -146,7 +145,14 @@ final class ArchiveMoveTests: XCTestCase {
         var onServer = CallRecord(id: "s", platform: .meet, bundleID: "x", start: now, end: now, status: .written)
         onServer.cloudKey = "recordings/s/recording.m4a"
         onServer.cloudBackend = "server"
+        onServer.cloudServer = "srv-1"
         XCTAssertEqual(archive.playbackURL(for: onServer)?.host, "fake.example.com")
+        // On another server than the connected one: not in reach.
+        var elsewhere = onServer
+        elsewhere.cloudServer = "srv-old"
+        XCTAssertNil(archive.playbackURL(for: elsewhere))
+        XCTAssertFalse(archive.holds(elsewhere))
+        XCTAssertTrue(archive.holds(onServer))
         // The place is not set up any more: no link, and no crash.
         var inBucket = onServer
         inBucket.cloudKey = "calls/s/recording.m4a"
@@ -221,6 +227,7 @@ final class ArchiveMoveTests: XCTestCase {
         r.cloudLeftovers = [r.archived!]
         r.cloudKey = "recordings/one/recording.m4a"
         r.cloudBackend = "server"
+        r.cloudServer = "srv-1"
         await archive.delete(r)
         XCTAssertTrue(server.objects.isEmpty)
         XCTAssertTrue(FakeS3.objects.isEmpty)
@@ -281,7 +288,7 @@ final class ArchiveMoveTests: XCTestCase {
         try call("away", inBucket: true, local: false)
         try call("never")
         let progress = Progress()
-        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline) { done, total in progress.note(done, total) }
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline, progress: { done, total in progress.note(done, total) })
         XCTAssertEqual(report.total, 2)
         XCTAssertEqual(report.moved, 2)
         XCTAssertEqual(report.removed, 2)
@@ -291,7 +298,7 @@ final class ArchiveMoveTests: XCTestCase {
         XCTAssertTrue(FakeS3.objects.isEmpty)
         for id in ["here", "away"] {
             let r = try record(id)
-            XCTAssertEqual(r.archived, ArchivedObject(key: "recordings/\(id)/recording.m4a", kind: .server))
+            XCTAssertEqual(r.archived, ArchivedObject(key: "recordings/\(id)/recording.m4a", kind: .server, server: "srv-1"))
             XCTAssertEqual(r.cloudSize, Int64("audio-\(id)".utf8.count))
             XCTAssertNil(r.cloudLeftovers)
         }
@@ -400,21 +407,45 @@ final class ArchiveMoveTests: XCTestCase {
         XCTAssertEqual(try record("one").archived?.kind, .bucket)
     }
 
-    func testARecordingThatIsInNoPlaceIsNamedAndDoesNotHoldUpTheRest() async throws {
+    /// The bucket answers, and it does not have the file: the mark was false. It goes, so the raw tracks stay and
+    /// the recording can be made again; a mark for a file that is nowhere would let Retention delete them.
+    func testARecordingThatIsInNoPlaceLosesItsFalseMarkAndIsNamed() async throws {
         try call("gone", inBucket: true, local: false)
         try call("fine", inBucket: true)
         FakeS3.objects["/mossad/calls/gone/recording.m4a"] = nil
         let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
         XCTAssertEqual(report.missing, ["gone"])
         XCTAssertEqual(report.moved, 1)
-        XCTAssertTrue(report.complete)
-        XCTAssertEqual(try record("gone").cloudKey, "calls/gone/recording.m4a", "its record is left as it was")
+        XCTAssertTrue(report.complete, "nothing is left in the bucket; the app keeps the settings while one was missing")
+        let r = try record("gone")
+        XCTAssertNil(r.cloudKey)
+        XCTAssertNil(r.cloudSize)
+        XCTAssertFalse(archive.holds(r))
         XCTAssertEqual(report.summary(old: "Cloudflare R2", new: "your server"),
                        "Moved 1 recording to your server. Removed the old copy from Cloudflare R2. 1 was not in Cloudflare R2 and had no copy to move.")
     }
 
-    func testARecordingTooLargeForTheServerStaysInTheBucketAndTheMoveIsNotDone() async throws {
-        try call("long", inBucket: true)
+    /// A record from before sizes were kept, with its file on this Mac: it is not missing. The next upload sends it.
+    func testARecordingThatIsOnThisMacIsNotCalledMissing() async throws {
+        let dir = try call("here", inBucket: true)
+        var r = try record("here")
+        r.cloudSize = nil
+        try r.save(to: dir)
+        FakeS3.objects = [:]
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertTrue(report.missing.isEmpty)
+        XCTAssertEqual(report.waiting, ["here"])
+        XCTAssertNil(try record("here").cloudKey)
+        await archive.sync(keepLocalDays: nil, now: now, pipeline: pipeline, holdLeftovers: true)
+        XCTAssertEqual(server.objects["recordings/here/recording.m4a"], Data("audio-here".utf8))
+        let done = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertTrue(done.complete)
+    }
+
+    /// A recording over the server's limit stays in the bucket. The others move, and the move then rests: another
+    /// run changes nothing, so it must not run each hour for ever.
+    func testARecordingTooLargeForTheServerStaysInTheBucketAndTheMoveRests() async throws {
+        try call("long", inBucket: true, local: false)
         try call("short", inBucket: true)
         FakeS3.objects["/mossad/calls/short/recording.m4a"] = Data("a".utf8)
         var r = try record("short")
@@ -426,8 +457,244 @@ final class ArchiveMoveTests: XCTestCase {
         XCTAssertEqual(report.tooLarge, ["long"])
         XCTAssertEqual(report.moved, 1)
         XCTAssertFalse(report.complete)
-        XCTAssertEqual(FakeS3.objects.count, 2)
+        XCTAssertTrue(report.settled)
+        XCTAssertTrue(FakeS3.gets.isEmpty, "a file that the server cannot take is not downloaded")
+        XCTAssertEqual(report.removed, 1, "the old copy of the one that moved goes")
+        XCTAssertEqual(Array(FakeS3.objects.keys), ["/mossad/calls/long/recording.m4a"])
         XCTAssertEqual(try record("long").archived?.kind, .bucket)
+        XCTAssertEqual(report.summary(old: "Cloudflare R2", new: "your server"),
+                       "Moved 1 of 2 recordings to your server. 1 is larger than your server takes and stays in Cloudflare R2. Removed 1 old copy from Cloudflare R2.")
+    }
+
+    /// What the app asks at the moment it forgets the bucket: no record names it, and every record could be read.
+    func testNothingIsLeftOnlyWhenEveryRecordCanBeReadAndNoneNamesTheBucket() async throws {
+        try call("plain")
+        XCTAssertTrue(CloudArchive.nothingLeft(in: paths, from: .bucket))
+        let dir = try call("one", inBucket: true)
+        XCTAssertFalse(CloudArchive.nothingLeft(in: paths, from: .bucket))
+        var r = try record("one")
+        r.cloudLeftovers = [r.archived!]
+        r.cloudKey = "recordings/one/recording.m4a"
+        r.cloudBackend = "server"
+        r.cloudServer = "srv-1"
+        try r.save(to: dir)
+        XCTAssertFalse(CloudArchive.nothingLeft(in: paths, from: .bucket), "an old copy is still named")
+        r.cloudLeftovers = nil
+        try r.save(to: dir)
+        XCTAssertTrue(CloudArchive.nothingLeft(in: paths, from: .bucket))
+        try Data("{ not json".utf8).write(to: paths.callDirectory("plain").appendingPathComponent(CallRecord.fileName))
+        XCTAssertFalse(CloudArchive.nothingLeft(in: paths, from: .bucket), "a record that cannot be read may name the bucket")
+    }
+
+    /// What the app does at the end of a run. A run that the owner ended must never make the app forget the bucket.
+    func testTheEndOfARunForgetsTheBucketOnlyForAMoveThatIsStillAskedForAndChecked() {
+        var done = CloudArchive.MoveReport()
+        done.complete = true
+        XCTAssertEqual(CloudArchive.moveEnd(done, stillAsked: true, nothingLeftNow: true, missing: 0), .forgetOldPlace)
+        XCTAssertEqual(CloudArchive.moveEnd(done, stillAsked: false, nothingLeftNow: true, missing: 0), .ignored,
+                       "the owner chose another place during the run")
+        XCTAssertEqual(CloudArchive.moveEnd(done, stillAsked: true, nothingLeftNow: false, missing: 0), .again,
+                       "a record names the bucket again at the moment of the end")
+        XCTAssertEqual(CloudArchive.moveEnd(done, stillAsked: true, nothingLeftNow: true, missing: 2), .doneKeepSettings,
+                       "recordings were missing: the owner decides when the bucket is forgotten")
+        var stopped = done
+        stopped.stopped = true
+        XCTAssertEqual(CloudArchive.moveEnd(stopped, stillAsked: true, nothingLeftNow: true, missing: 0), .paused)
+        var rests = CloudArchive.MoveReport()
+        rests.settled = true
+        XCTAssertEqual(CloudArchive.moveEnd(rests, stillAsked: true, nothingLeftNow: true, missing: 0), .rests)
+        XCTAssertEqual(CloudArchive.moveEnd(rests, stillAsked: false, nothingLeftNow: true, missing: 0), .ignored)
+        XCTAssertEqual(CloudArchive.moveEnd(CloudArchive.MoveReport(), stillAsked: true, nothingLeftNow: true, missing: 0), .again)
+    }
+
+    // MARK: Stops
+
+    /// The owner chooses another place during the move: the run ends at once. Nothing more is copied or deleted.
+    func testAMoveThatTheOwnerEndedStopsAtOnce() async throws {
+        try call("a", inBucket: true)
+        try call("b", inBucket: true)
+        try call("c", inBucket: true)
+        let asked = AskCounter()
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline, shouldContinue: { asked.next() <= 2 })
+        XCTAssertTrue(report.stopped)
+        XCTAssertFalse(report.complete)
+        XCTAssertFalse(report.settled)
+        XCTAssertEqual(report.moved, 1, "asked once at the start and once for each copy")
+        XCTAssertEqual(server.puts.count, 1)
+        XCTAssertEqual(FakeS3.objects.count, 3)
+        XCTAssertEqual(report.summary(old: "Cloudflare R2", new: "your server"),
+                       "Moved 1 of 3 recordings to your server. The move stopped before it was done. Nothing was removed from Cloudflare R2.")
+    }
+
+    func testAMoveThatIsEndedDuringTheDeletesRemovesNothingMore() async throws {
+        try call("a", inBucket: true)
+        try call("b", inBucket: true)
+        let asked = AskCounter()
+        // 1 at the start, 2 for the copies, 1 for the first delete, and then the owner ends it.
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline, shouldContinue: { asked.next() <= 4 })
+        XCTAssertTrue(report.stopped)
+        XCTAssertFalse(report.complete)
+        XCTAssertEqual(report.moved, 2)
+        XCTAssertEqual(report.removed, 1)
+        XCTAssertEqual(FakeS3.objects.count, 1)
+    }
+
+    func testAMoveThatIsEndedBeforeItsLastCheckIsNotDone() async throws {
+        try call("a", inBucket: true)
+        let asked = AskCounter()
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline, shouldContinue: { asked.next() <= 3 })
+        XCTAssertTrue(report.stopped)
+        XCTAssertFalse(report.complete, "the app must not forget the bucket for a move that the owner ended")
+    }
+
+    /// The owner deletes a meeting while its recording is copied: nothing of it stays on the server.
+    func testAMeetingDeletedDuringItsCopyLeavesNothingOnTheServer() async throws {
+        let dir = try call("one", inBucket: true, local: false)
+        try call("two", inBucket: true)
+        var first = true
+        server.onPut = { if first { first = false; try! FileManager.default.removeItem(at: dir) } }
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertNil(server.objects["recordings/one/recording.m4a"])
+        XCTAssertEqual(server.removes, ["recordings/one/recording.m4a"])
+        XCTAssertEqual(report.moved, 1)
+        XCTAssertTrue(report.waiting.isEmpty, "a meeting that is gone does not hold the move up")
+    }
+
+    /// A merged meeting has its old copy as a leftover and no copy on the server yet. Its old copy is its only
+    /// backup, so the move does not remove it and is not done.
+    func testTheOldCopyOfAMergedMeetingStaysUntilItsNewRecordingIsOnTheServer() async throws {
+        let dir = try call("joined", inBucket: true)
+        var r = try record("joined")
+        r.cloudLeftovers = [r.archived!]
+        r.cloudKey = nil
+        r.cloudSize = nil
+        try r.save(to: dir)
+        try Data("joined-audio".utf8).write(to: Recording.url(in: dir))
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertEqual(report.waiting, ["joined"])
+        XCTAssertFalse(report.complete)
+        XCTAssertNotNil(FakeS3.objects["/mossad/calls/joined/recording.m4a"])
+        // Too large for the server: it can never go up, so the move rests and the bucket keeps the copy.
+        server.maxBytes = 5
+        let large = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertEqual(large.tooLarge, ["joined"])
+        XCTAssertTrue(large.settled)
+        XCTAssertNotNil(FakeS3.objects["/mossad/calls/joined/recording.m4a"])
+        // After its upload the old copy goes.
+        server.maxBytes = nil
+        await archive.sync(keepLocalDays: nil, now: now, pipeline: pipeline, holdLeftovers: true)
+        let done = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertTrue(done.complete)
+        XCTAssertTrue(FakeS3.objects.isEmpty)
+    }
+
+    /// Before an old copy goes, the server must still have the same bytes, not only the same size.
+    func testAnOldCopyStaysWhenTheServersCopyChanged() async throws {
+        try call("one", inBucket: true, local: false)
+        let asked = AskCounter()
+        // Ends before the deletes: the record names the server, and the old copy is its leftover.
+        _ = await archive.move(from: .bucket, to: .server, pipeline: pipeline, shouldContinue: { asked.next() <= 2 })
+        XCTAssertEqual(try record("one").archived?.kind, .server)
+        server.objects["recordings/one/recording.m4a"] = Data("AUDIO-ONE".utf8)
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertEqual(report.removed, 0)
+        XCTAssertFalse(report.complete)
+        XCTAssertFalse(report.settled, "a copy that could not be checked is tried again")
+        XCTAssertNotNil(FakeS3.objects["/mossad/calls/one/recording.m4a"])
+    }
+
+    /// A download whose bytes are not the bucket's object (by its MD5) is not copied.
+    func testADownloadThatIsNotTheBucketsObjectIsNotCopied() async throws {
+        try call("one", inBucket: true, local: false)
+        FakeS3.etags["/mossad/calls/one/recording.m4a"] = String(repeating: "0", count: 32)
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertEqual(report.waiting, ["one"])
+        XCTAssertTrue(server.puts.isEmpty)
+        // With the right MD5, and with a tag of another form (a multipart upload), the copy goes on.
+        FakeS3.etags["/mossad/calls/one/recording.m4a"] = "c1e8aa4d32fcd9d3ae8e15ec8ac1bd36-2"
+        let again = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertEqual(again.moved, 1)
+    }
+
+    /// An object in the bucket that no meeting names (an earlier delete that failed) is still a recording of the
+    /// owner. The move says so, and is not "nothing is left".
+    func testARecordingInTheBucketThatNoMeetingNamesKeepsTheMoveFromDone() async throws {
+        try call("one", inBucket: true)
+        FakeS3.objects["/mossad/calls/deleted-long-ago/recording.m4a"] = Data([1])
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertEqual(report.moved, 1)
+        XCTAssertEqual(report.strays, 1)
+        XCTAssertFalse(report.complete)
+        XCTAssertTrue(report.settled)
+        XCTAssertEqual(report.summary(old: "Cloudflare R2", new: "your server"),
+                       "Moved 1 of 1 recording to your server. Removed 1 old copy from Cloudflare R2. 1 recording is still in Cloudflare R2.")
+    }
+
+    func testABucketThatMayNotListKeepsTheMoveFromDone() async throws {
+        try call("one", inBucket: true)
+        FakeS3.failLists = true
+        let report = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertNil(report.strays)
+        XCTAssertFalse(report.complete)
+        XCTAssertTrue(report.settled)
+        XCTAssertEqual(report.summary(old: "Cloudflare R2", new: "your server"),
+                       "Moved 1 of 1 recording to your server. Removed 1 old copy from Cloudflare R2. Cloudflare R2 did not say what it still holds.")
+    }
+
+    // MARK: Another server
+
+    /// The owner connects another server. The recordings on the old one are not in the backup any more: they go
+    /// up to the new server, and no local copy goes before that.
+    func testAfterAChangeOfServerTheLocalCopiesStayUntilTheyAreOnTheNewServer() async throws {
+        let dir = try call("one", endedDaysAgo: 40)
+        await archive.sync(keepLocalDays: nil, now: now, pipeline: pipeline)
+        XCTAssertEqual(try record("one").cloudServer, "srv-1")
+        // Another server at the same address: another id, and an empty bucket.
+        server = FakeArchive(.server, id: "srv-2")
+        archive = make(target: .server)
+        XCTAssertFalse(archive.holds(try record("one")))
+        server.putErrors = [ServerError.http(403, "")]
+        await archive.sync(keepLocalDays: 7, now: now, pipeline: pipeline)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path), "the only copy in reach stays")
+        await archive.sync(keepLocalDays: 7, now: now, pipeline: pipeline)
+        XCTAssertEqual(server.objects["recordings/one/recording.m4a"], Data("audio-one".utf8))
+        XCTAssertEqual(try record("one").cloudServer, "srv-2")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
+        XCTAssertEqual(try record("one").cloudLeftovers, [ArchivedObject(key: "recordings/one/recording.m4a", kind: .server, server: "srv-1")],
+                       "the copy on the old server is remembered: it cannot be removed from here")
+    }
+
+    /// A server that did not say its id cannot be told from another one, so nothing on it is trusted.
+    func testAServerWithNoIDHoldsNothing() throws {
+        var r = CallRecord(id: "s", platform: .meet, bundleID: "x", start: now, end: now, status: .written)
+        r.cloudKey = "recordings/s/recording.m4a"
+        r.cloudBackend = "server"
+        XCTAssertFalse(archive.holds(r), "a record with no server id")
+        r.cloudServer = "srv-1"
+        XCTAssertTrue(archive.holds(r))
+        server.id = nil
+        XCTAssertFalse(make(target: .server).holds(r), "a server with no id")
+    }
+
+    /// Retention and the recording backfill ask whether the backup is in reach, not only whether a mark is there.
+    func testRawTracksStayWhenTheBackupIsOnAnotherServer() throws {
+        let dir = try call("one", local: false, endedDaysAgo: 40)
+        var r = try record("one")
+        r.cloudKey = "recordings/one/recording.m4a"
+        r.cloudBackend = "server"
+        r.cloudServer = "srv-old"
+        try r.save(to: dir)
+        try Data([1]).write(to: dir.appendingPathComponent("me.caf"))
+        let archive = archive!
+        Retention.sweep(audioRoot: paths.audio, now: now, hasBackup: { archive.holds($0) })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("me.caf").path))
+        XCTAssertEqual(Recording.missing(audioRoot: paths.audio, hasBackup: { archive.holds($0) }).map(\.lastPathComponent), ["one"],
+                       "the recording is made again from the raw tracks")
+        r.cloudServer = "srv-1"
+        try r.save(to: dir)
+        XCTAssertTrue(Recording.missing(audioRoot: paths.audio, hasBackup: { archive.holds($0) }).isEmpty)
+        Retention.sweep(audioRoot: paths.audio, now: now, hasBackup: { archive.holds($0) })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("me.caf").path))
     }
 
     /// The local file is newer than the bucket's copy (a merge): the old bytes are not copied over it.
@@ -462,10 +729,15 @@ final class ArchiveMoveTests: XCTestCase {
         XCTAssertEqual(FakeS3.objects.count, 2, "also the copy of the one that was moved stays until the end")
         XCTAssertEqual(report.summary(old: "Cloudflare R2", new: "your server"),
                        "Moved 1 of 1 recording to your server. 1 meeting on this Mac could not be read, so its backup is not known. Nothing was removed from Cloudflare R2.")
+        // The owner deletes the damaged meeting's folder by hand. Its copy in the bucket is then named by no meeting.
         try FileManager.default.removeItem(at: damaged)
         let again = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
-        XCTAssertTrue(again.complete)
         XCTAssertEqual(again.removed, 1)
+        XCTAssertEqual(again.strays, 1)
+        XCTAssertFalse(again.complete, "the bucket still holds a recording")
+        FakeS3.objects["/mossad/calls/damaged/recording.m4a"] = nil
+        let done = await archive.move(from: .bucket, to: .server, pipeline: pipeline)
+        XCTAssertTrue(done.complete)
     }
 
     func testAMoveWithNothingInTheBucketIsDoneAtOnce() async throws {
@@ -475,6 +747,13 @@ final class ArchiveMoveTests: XCTestCase {
         XCTAssertEqual(report.total, 0)
         XCTAssertEqual(report.summary(old: "Cloudflare R2", new: "your server"), "Every backup is on your server. Nothing is left in Cloudflare R2.")
     }
+}
+
+/// Counts the questions of a move, to end it at a chosen point.
+private final class AskCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var n = 0
+    func next() -> Int { lock.withLock { n += 1; return n } }
 }
 
 private final class Progress: @unchecked Sendable {
@@ -533,13 +812,18 @@ final class BackupSettingsTests: XCTestCase {
             return r
         }
         var moved = record("d", key: "recordings/d/recording.m4a", backend: "server")
-        moved.cloudLeftovers = [ArchivedObject(key: "calls/d/recording.m4a", kind: .bucket)]
-        let counts = BackupCounts([record("a", key: "calls/a/recording.m4a"), record("b", key: "recordings/b/recording.m4a", backend: "server"),
-                                   record("c"), record("live", status: .recording), moved])
+        moved.cloudServer = "srv-1"
+        moved.cloudLeftovers = [ArchivedObject(key: "calls/d/recording.m4a", kind: .bucket), ArchivedObject(key: "recordings/d/recording.m4a", kind: .server, server: "srv-0")]
+        var onServer = record("b", key: "recordings/b/recording.m4a", backend: "server")
+        onServer.cloudServer = "srv-1"
+        var elsewhere = record("e", key: "recordings/e/recording.m4a", backend: "server")
+        elsewhere.cloudServer = "srv-0"
+        let counts = BackupCounts([record("a", key: "calls/a/recording.m4a"), onServer, record("c"), record("live", status: .recording), moved, elsewhere], serverID: "srv-1")
         XCTAssertEqual(counts.inBucket, 1)
         XCTAssertEqual(counts.onServer, 2)
-        XCTAssertEqual(counts.notBackedUp, 1)
-        XCTAssertEqual(counts.leftovers, 1)
+        XCTAssertEqual(counts.onOtherServer, 1)
+        XCTAssertEqual(counts.notBackedUp, 2, "one with no copy, and one whose copy is on another server")
+        XCTAssertEqual(counts.bucketLeftovers, 1, "only old copies in the bucket are the move's work")
         // A meeting whose recording is gone (deleted after its keep time) is not one that waits for a backup.
         let known = BackupCounts([record("c"), record("gone")]) { $0 == "c" }
         XCTAssertEqual(known.notBackedUp, 1)

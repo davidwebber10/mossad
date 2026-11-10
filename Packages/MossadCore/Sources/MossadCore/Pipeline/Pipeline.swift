@@ -368,7 +368,7 @@ public actor Pipeline {
     /// becomes a leftover, for the archive to remove once this one is safe. With `ifCurrent`, nothing changes
     /// unless the record still names that copy. False when the record cannot be read or was not changed.
     @discardableResult
-    public func setArchived(callID: String, _ object: ArchivedObject, size: Int64, ifCurrent: ArchivedObject? = nil) -> Bool {
+    public func setArchived(callID: String, _ object: ArchivedObject, size: Int64, sha256: String? = nil, ifCurrent: ArchivedObject? = nil) -> Bool {
         let changed = edit(callID) { r in
             let current = r.archived
             if let ifCurrent, current != ifCurrent, current != object { return false }
@@ -377,11 +377,35 @@ public actor Pipeline {
             r.cloudSize = size
             // The bucket has no name in the record, as before places had names, so an older build reads it the same.
             r.cloudBackend = object.kind == .bucket ? nil : object.backend
+            r.cloudServer = object.server
+            r.cloudHash = sha256
             return true
         }
         guard let r = changed else { return false }
         do { try store(r, dir: paths.callDirectory(callID)) } catch {
             Log.error("Saving the archive key of \(callID) failed: \(error)")
+            return false
+        }
+        return true
+    }
+
+    /// Takes away a backup mark that is false: the place answered that it does not have the file. Without the mark
+    /// the recording counts as not backed up, so its audio on this Mac stays and it is sent again. Only a record
+    /// that still names `object` changes.
+    @discardableResult
+    public func clearArchived(callID: String, ifCurrent object: ArchivedObject) -> Bool {
+        let changed = edit(callID) { r in
+            guard r.archived == object else { return false }
+            r.cloudKey = nil
+            r.cloudSize = nil
+            r.cloudBackend = nil
+            r.cloudServer = nil
+            r.cloudHash = nil
+            return true
+        }
+        guard let r = changed else { return false }
+        do { try store(r, dir: paths.callDirectory(callID)) } catch {
+            Log.error("Saving the archive mark of \(callID) failed: \(error)")
             return false
         }
         return true

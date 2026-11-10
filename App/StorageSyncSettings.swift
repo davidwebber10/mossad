@@ -51,8 +51,8 @@ private struct ThisMacGroup: View {
                     DaysField(title: "Days to keep a local copy", value: $controller.cloudKeepLocalDays, range: 0...3650)
                 }
                 Toggle(isOn: $controller.deleteRecordings) {
-                    SettingsRowText(title: "Also delete recordings that are not backed up",
-                                    detail: "After a time, a recording goes from this Mac even when the backup does not have it. The backup keeps its copies.")
+                    SettingsRowText(title: "Delete every local recording after a time",
+                                    detail: "Also a recording that no backup has, and the pictures of shared screens with it. The backup keeps its copies. A time shorter than the one above wins.")
                 }
                 .toggleStyle(TrailingCheckboxStyle())
                 .padding(.vertical, 9)
@@ -63,7 +63,7 @@ private struct ThisMacGroup: View {
                 }
             } else {
                 SettingsRow(title: "Recordings",
-                            detail: "The file you listen to, about 14 MB an hour. With a recording backup, Mossad can free the local copy and still play it.") {
+                            detail: "The file you listen to, about 14 MB an hour, and the pictures of shared screens with it. With a recording backup, Mossad can free the local copy and still play it.") {
                     HStack(spacing: Space.s) {
                         FillPicker(title: "Keep recordings", selection: $controller.deleteRecordings,
                                    choices: [(false, "Keep always"), (true, "Delete after")])
@@ -176,6 +176,8 @@ private struct BackupGroup: View {
     @EnvironmentObject var controller: AppController
     @Binding var settingUp: Bool
     @State private var confirmMove = false
+    @State private var confirmForget = false
+    @State private var showBucket = false
 
     private static let updateGuide = URL(string: "https://github.com/davidwebber10/mossad/tree/main/server#update-your-server")!
 
@@ -186,7 +188,7 @@ private struct BackupGroup: View {
     private var choice: BackupChoice { controller.backupChoice }
     private var connected: Bool { controller.hasServer }
     /// Recordings, or old copies of them, that a move would still take out of the bucket.
-    private var inBucket: Int { counts.inBucket + counts.leftovers }
+    private var inBucket: Int { counts.inBucket + counts.bucketLeftovers }
 
     var body: some View {
         SettingsGroup(label: "Recording backup", footer: footer) {
@@ -200,20 +202,29 @@ private struct BackupGroup: View {
             switch choice {
             case .none:
                 if inBucket > 0 || counts.onServer > 0 { leftBehind }
+                if moving { moveRows }
             case .server:
                 serverRows
-                if inBucket > 0 || controller.backupMovePending { moveRows }
+                if inBucket > 0 || moving { moveRows }
             case .r2, .s3:
                 BucketFields()
-                if controller.serverKeepsRecordings { moveRows }
+                if controller.hasServer { moveRows }
             }
-            if !controller.backupMoveResult.isEmpty, !moving { moveResult }
+            if !result.isEmpty { moveResult }
+            // The bucket's settings while another place is chosen: to repair them during a move, or to remove them after it.
+            if !choice.isBucket, controller.backupSettings.hasBucket || (inBucket > 0 && connected) { bucketRows }
         }
         .task(id: CountKey(meetings: controller.meetings.count, busy: controller.cloudSyncing, choice: choice)) {
             let records = controller.meetings, paths = controller.paths
+            let server = controller.serverID.isEmpty ? nil : controller.serverID
             counted = await Task.detached(priority: .utility) {
-                BackupCounts(records) { FileManager.default.fileExists(atPath: Recording.url(in: paths.callDirectory($0)).path) }
+                BackupCounts(records, serverID: server) { FileManager.default.fileExists(atPath: Recording.url(in: paths.callDirectory($0)).path) }
             }.value
+        }
+        .confirmationDialog("Remove the \(controller.bucketName) settings?", isPresented: $confirmForget) {
+            Button("Remove settings", role: .destructive) { if controller.removeBucketSettings() { showBucket = false } }
+        } message: {
+            Text("Mossad forgets the bucket: its address, its key, and its secret. No meeting on this Mac names a recording there. The bucket itself stays as it is in \(controller.bucketName).")
         }
         .confirmationDialog("Move every backup to your server?", isPresented: $confirmMove) {
             Button("Move to your server") { controller.moveBackupsToServer() }
@@ -239,7 +250,9 @@ private struct BackupGroup: View {
         }
     }
 
-    private var moving: Bool { controller.backupMovePending || BackupSample.progress != nil }
+    private var result: String { BackupSample.result ?? controller.backupMoveResult }
+
+    private var moving: Bool { controller.backupMovePending || controller.backupMoveRequested || BackupSample.progress != nil }
 
     /// How many recordings are backed up, and the pass that runs now.
     private var statusRow: some View {
@@ -248,6 +261,8 @@ private struct BackupGroup: View {
         var parts = ["\(total) backed up"]
         if counts.onServer > 0, counts.inBucket > 0 { parts = ["\(counts.onServer) on your server", "\(counts.inBucket) in \(controller.bucketName)"] }
         if waiting > 0 { parts.append("\(waiting) waiting") }
+        // After a change of server: those recordings are not in reach, and go to this server from their local copies.
+        if counts.onOtherServer > 0 { parts.append("\(counts.onOtherServer) on a server that is not connected") }
         let large = controller.backupReport.tooLarge.count
         var detail = waiting > 0 ? "Mossad sends the waiting ones after each meeting and every hour."
             : total > 0 ? "Every finished recording has its second copy." : "Mossad sends each recording after its note is written."
@@ -294,14 +309,21 @@ private struct BackupGroup: View {
         let bucket = controller.bucketName
         if moving {
             let p = BackupSample.progress ?? controller.backupMoveProgress
-            SettingsRow(title: p.map { "Moving to your server · \($0.done) of \($0.total) copied" } ?? "Moving to your server",
-                        detail: "Each copy is checked on your server. The copies in \(bucket) go only when all of them are there. You can quit Mossad; the move goes on at the next start.") {
-                if let p, p.total > 0 {
-                    MoveProgressBar(fraction: Double(p.done) / Double(p.total))
-                } else if controller.cloudSyncing {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Button("Try now") { controller.syncCloud() }.buttonStyle(.settings)
+            let waits = controller.backupMoveRequested
+            SettingsRow(title: waits ? "The move waits for your server" : p.map { "Moving to your server · \($0.done) of \($0.total) copied" } ?? "Moving to your server",
+                        detail: waits ? "Nothing has changed yet: new recordings keep their place until your server is ready. To end the move, click Stop."
+                            : "Each copy is checked on your server. The copies in \(bucket) go only when all of them are there. You can quit Mossad; the move goes on at the next start.") {
+                HStack(spacing: Space.s) {
+                    if let p, p.total > 0, controller.cloudSyncing || BackupSample.progress != nil {
+                        MoveProgressBar(fraction: Double(p.done) / Double(p.total))
+                    } else if controller.cloudSyncing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Try now") { controller.syncCloud() }.buttonStyle(.settings)
+                    }
+                    Button("Stop") { controller.stopBackupMove() }.buttonStyle(.settings)
+                        .accessibilityLabel("Stop the move")
+                        .help("Ends the move. What was copied stays on your server, and no setting is removed.")
                 }
             }
         } else if choice == .server {
@@ -309,7 +331,7 @@ private struct BackupGroup: View {
                         detail: "They play from there, and nothing moves by itself. A move copies each one to your server, checks it, and then removes it from \(bucket).") {
                 Button("Move to your server…") { confirmMove = true }.buttonStyle(.settings)
             }
-        } else {
+        } else if controller.serverKeepsRecordings {
             SettingsRow(title: "Use your server instead",
                         detail: "Your server can keep the recordings, with no other key. A move copies each one there, checks it, and then removes it from \(bucket).") {
                 Button("Move to your server…") { confirmMove = true }.buttonStyle(.settings)
@@ -317,18 +339,39 @@ private struct BackupGroup: View {
         }
     }
 
+    /// The bucket's settings while it is not the chosen place: closed by default, with what they are still for.
+    @ViewBuilder
+    private var bucketRows: some View {
+        let bucket = controller.bucketName
+        SettingsRow(title: "\(bucket) settings",
+                    detail: inBucket > 0 ? "Mossad needs them to read and move the \(inBucket == 1 ? "recording that is" : "\(inBucket) recordings that are") still there."
+                        : "No meeting on this Mac names a recording there now. You can remove them.") {
+            HStack(spacing: Space.s) {
+                if inBucket == 0, !moving {
+                    Button("Remove…") { confirmForget = true }.buttonStyle(.settings)
+                        .accessibilityLabel("Remove the \(bucket) settings")
+                }
+                Button(showBucket ? "Hide" : "Show") { showBucket.toggle() }.buttonStyle(.settings)
+                    .accessibilityLabel(showBucket ? "Hide the \(bucket) settings" : "Show the \(bucket) settings")
+            }
+        }
+        if showBucket { BucketFields() }
+    }
+
     private var moveResult: some View {
         let date = controller.backupMoveDate > 0 ? Date(timeIntervalSince1970: controller.backupMoveDate).formatted(.dateTime.month(.abbreviated).day().hour().minute()) : nil
         return HStack(alignment: .firstTextBaseline, spacing: Space.s) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Last move\(date.map { " · \($0)" } ?? "")").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
-                Text(controller.backupMoveResult).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Text("\(moving ? "State of the move" : "Last move")\(date.map { " · \($0)" } ?? "")").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
+                Text(result).font(.system(size: 12)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: Space.m)
-            Button("Dismiss") { controller.backupMoveResult = "" }
-                .buttonStyle(SettingsTextButtonStyle())
-                .accessibilityLabel("Dismiss the result of the last move")
+            if !moving {
+                Button("Dismiss") { controller.backupMoveResult = "" }
+                    .buttonStyle(SettingsTextButtonStyle())
+                    .accessibilityLabel("Dismiss the result of the last move")
+            }
         }
         .padding(.vertical, 9)
     }
@@ -379,7 +422,7 @@ private struct BucketFields: View {
     @State private var replacing = false
     @State private var check = SettingsCheck.idle
 
-    private var r2: Bool { controller.backupChoice == .r2 }
+    private var r2: Bool { controller.backupSettings.bucketFlavor == .r2 }
     private var keysPage: URL {
         URL(string: r2 ? "https://developers.cloudflare.com/r2/api/tokens/" : "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html")!
     }
@@ -452,10 +495,16 @@ enum BackupSample {
     static var counts: BackupCounts? {
         guard let value else { return nil }
         var c = BackupCounts([])
-        c.onServer = value == "bucket" ? 0 : 212
-        c.inBucket = value == "server" ? 0 : value == "bucket" ? 226 : 14
-        c.notBackedUp = value == "server" ? 0 : 3
+        c.onServer = value == "bucket" ? 0 : value == "large" ? 225 : 212
+        c.inBucket = value == "server" ? 0 : value == "bucket" ? 226 : value == "large" ? 1 : 14
+        c.notBackedUp = value == "server" || value == "large" ? 0 : 3
         return c
+    }
+
+    /// `MOSSAD_MOVE_RESULT` in a preview: the line of a last move, to look at the row that shows it.
+    static var result: String? {
+        guard CommandLine.arguments.contains("--ui-preview"), let line = ProcessInfo.processInfo.environment["MOSSAD_MOVE_RESULT"], !line.isEmpty else { return nil }
+        return line
     }
 
     static var progress: (done: Int, total: Int)? { value == "moving" ? (37, 214) : nil }

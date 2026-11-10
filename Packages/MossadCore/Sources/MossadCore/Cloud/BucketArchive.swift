@@ -12,7 +12,17 @@ public struct BucketArchive: ArchiveBackend {
 
     public var kind: ArchiveKind { .bucket }
     public var maxBytes: Int64? { nil }
-    public func key(for callID: String) -> String { "calls/\(callID)/\(Recording.fileName)" }
+    static let prefix = "calls/"
+    public func key(for callID: String) -> String { "\(Self.prefix)\(callID)/\(Recording.fileName)" }
+
+    /// The objects under `calls/`, from one list of at most 1000. Enough to tell "none" from "some". Nil when the
+    /// bucket did not answer, or the key may not list.
+    public func recordingCount() async -> Int? {
+        let url = S3Presigner.url(config, method: "GET", key: "", query: [("list-type", "2"), ("prefix", Self.prefix), ("max-keys", "1000")])
+        guard let (data, response) = try? await session.data(from: url), (response as? HTTPURLResponse)?.statusCode == 200,
+              let text = String(data: data, encoding: .utf8), text.contains("<ListBucketResult") else { return nil }
+        return text.components(separatedBy: "<Key>").count - 1
+    }
 
     public func put(_ file: URL, key: String, sha256: String) async throws {
         var request = URLRequest(url: S3Presigner.url(config, method: "PUT", key: key))

@@ -43,7 +43,9 @@ const read = await call('tools/call', { name: 'read_meeting', arguments: { call_
 const s = await call('tools/call', { name: 'search', arguments: { query: 'friday' } }); ok(s.result.structuredContent.results[0].id === 'm1', 'search');
 // Recording backup
 const rec = crypto.randomBytes(300_000), recHash = crypto.createHash('sha256').update(rec).digest('hex');
-r = await fetch(`${share}/api/hello`); ok((await r.json()).recordings?.maxBytes > 0, 'hello names the recording limit');
+r = await fetch(`${share}/api/hello`); const open = await r.json(); ok(open.recordings?.maxBytes > 0 && !open.recordings.id, 'hello names the recording limit, and no id without the secret');
+const id1 = (await (await fetch(`${share}/api/hello`, { headers: auth })).json()).recordings.id, id2 = (await (await fetch(`${share}/api/hello`, { headers: auth })).json()).recordings.id;
+ok(/^[0-9a-f-]{36}$/.test(id1) && id1 === id2, 'the server id is the same each time');
 r = await fetch(`${share}/api/recordings/m1`, { method: 'PUT', headers: { ...auth, 'Content-Type': 'audio/mp4', 'X-Recording-SHA256': recHash }, body: rec }); const put = await r.json(); ok(r.ok && put.size === rec.length && put.sha256 === recHash, 'recording put ' + r.status);
 r = await fetch(`${share}/api/recordings/m1`, { method: 'PUT', headers: { ...auth, 'X-Recording-SHA256': 'a'.repeat(64) }, body: rec.subarray(0, 100) }); ok(r.status === 422, 'recording with a wrong hash refused ' + r.status);
 r = await fetch(`${share}/api/recordings/m1`, { method: 'HEAD', headers: auth }); ok(r.ok && r.headers.get('x-recording-size') === String(rec.length) && r.headers.get('x-recording-sha256') === recHash, 'recording head, still the first upload');

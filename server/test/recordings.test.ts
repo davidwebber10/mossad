@@ -21,7 +21,8 @@ function fakeFiles() {
   const objects = new Map<string, Stored>();
   const files = {
     objects,
-    async put(key: string, body: unknown, options: { sha256?: string; customMetadata?: Record<string, string> } = {}) {
+    async put(key: string, body: unknown, options: { sha256?: string; customMetadata?: Record<string, string>; onlyIf?: Headers } = {}) {
+      if (options.onlyIf?.get('If-None-Match') === '*' && objects.has(key)) return null;
       const bytes = await bytesOf(body);
       if (options.sha256 && (await hex(bytes)) !== options.sha256) {
         throw new Error('put: The SHA-256 checksum you specified did not match what we received.');
@@ -37,7 +38,7 @@ function fakeFiles() {
       const o = objects.get(key);
       if (!o) return null;
       const m = /^bytes=(\d+)-(\d*)$/.exec(options.range?.get('Range') ?? '');
-      if (!m) return { key, size: o.bytes.length, body: new Blob([o.bytes]).stream(), customMetadata: o.customMetadata, async json() { return JSON.parse(new TextDecoder().decode(o.bytes)); } };
+      if (!m) return { key, size: o.bytes.length, body: new Blob([o.bytes]).stream(), customMetadata: o.customMetadata, async json() { return JSON.parse(new TextDecoder().decode(o.bytes)); }, async text() { return new TextDecoder().decode(o.bytes); } };
       const offset = Number(m[1]), end = m[2] ? Number(m[2]) : o.bytes.length - 1;
       return { key, size: o.bytes.length, range: { offset, length: end - offset + 1 }, body: new Blob([o.bytes.slice(offset, end + 1)]).stream() };
     },
@@ -79,6 +80,21 @@ describe('recording backup', () => {
     const small = fakeEnv({ RECORDING_MAX_MB: '10' });
     const other = await (await handleAPI(new Request('https://notes.example.com/api/hello'), small.env)).json() as { recordings: { maxBytes: number } };
     expect(other.recordings.maxBytes).toBe(10 * 1024 * 1024);
+  });
+
+  it('names itself to its owner, with the same id each time, and to nobody else', async () => {
+    const hello = async (headers: Record<string, string> = {}) =>
+      (await (await handleAPI(new Request('https://notes.example.com/api/hello', { headers }), e.env)).json()) as { recordings: { maxBytes: number; id?: string } };
+    expect((await hello()).recordings.id).toBeUndefined();
+    expect(e.files.objects.size).toBe(0);
+    const first = (await hello(auth)).recordings.id;
+    expect(first).toMatch(/^[0-9a-f-]{36}$/);
+    expect((await hello(auth)).recordings.id).toBe(first);
+    // The id is in the bucket that holds the recordings: another bucket is another server.
+    expect(new TextDecoder().decode(e.files.objects.get('server-id')!.bytes)).toBe(first);
+    const other = fakeEnv();
+    const second = (await (await handleAPI(new Request('https://notes.example.com/api/hello', { headers: auth }), other.env)).json()) as { recordings: { id: string } };
+    expect(second.recordings.id).not.toBe(first);
   });
 
   it('needs the secret for every call', async () => {
@@ -190,11 +206,23 @@ describe('recording backup', () => {
     expect((await handleAPI(new Request(`${base}/m1`, { method: 'HEAD', headers: auth }), e.env)).status).toBe(404);
   });
 
-  it('counts wrong links like wrong secrets, and pauses after too many', async () => {
+  it('pauses wrong links after too many, while the calls of the owner go on', async () => {
+    // A player that holds a link from before a change of the secret asks many times. That must not stop sync.
     const soon = Math.floor(Date.now() / 1000) + 60;
     let last = 0;
     for (let i = 0; i < 22; i++) last = (await handleAPI(new Request(`${base}/m1?expires=${soon}&signature=${'0'.repeat(64)}`), e.env)).status;
     expect(last).toBe(429);
+    expect((await handleAPI(new Request(`${base}/m1`, { method: 'HEAD', headers: auth }), e.env)).status).toBe(404);
+    expect((await handleAPI(put('m1'), e.env)).status).toBe(200);
+  });
+
+  it('answers a storage fault on a signed read as JSON', async () => {
+    await handleAPI(put('m1'), e.env);
+    const soon = Math.floor(Date.now() / 1000) + 60;
+    (e.files as unknown as { get: () => Promise<never> }).get = async () => { throw new Error('r2 is down'); };
+    const r = await handleAPI(new Request(`${base}/m1?expires=${soon}&signature=${await linkSignature('owner-secret', 'm1', soon)}`), e.env);
+    expect(r.status).toBe(500);
+    expect(await r.json()).toEqual({ error: 'The server failed.' });
   });
 });
 

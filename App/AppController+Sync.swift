@@ -57,6 +57,8 @@ extension AppController {
         serverMCP = hello.mcp?.absoluteString ?? ""
         serverHasChat = hello.chat
         serverRecordingLimit = Double(hello.recordingLimit ?? 0)
+        // Another server has another id: the recordings on the old one are then not "in the backup" any more.
+        serverID = hello.id ?? ""
         do { try keychain.set(c.secret, for: .serverSecret) } catch { Log.error("Saving the server secret failed") }
         keysChanged()
         serverAddress = c.address.absoluteString
@@ -77,6 +79,7 @@ extension AppController {
         serverAddress = ""
         serverMCP = ""
         serverRecordingLimit = 0
+        serverID = ""
         if syncWith == .server { syncWith = Self.hasICloud ? .icloud : .off }
         syncEngine = nil
         mirrorEngine = nil
@@ -277,7 +280,12 @@ extension AppController {
         let local = Recording.url(in: paths.callDirectory(r.id))
         if FileManager.default.fileExists(atPath: local.path) { return local }
         guard let remote = cloudArchive?.playbackURL(for: r) else { return nil }
-        let (file, _) = try await URLSession.shared.download(from: remote)
+        let (file, response) = try await URLSession.shared.download(from: remote)
+        // An error page is not the recording: it must not go out as the audio of a share.
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            try? FileManager.default.removeItem(at: file)
+            throw ArchiveError.http((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
         return file
     }
 

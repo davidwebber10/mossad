@@ -13,7 +13,10 @@ final class LiveServerArchiveTests: XCTestCase {
         let connection = ServerConnection(address: address, secret: secret)
         let hello = try await ServerClient(connection).hello()
         let limit = try XCTUnwrap(hello.recordingLimit, "the server keeps recordings")
-        let archive = ServerArchive(connection, maxBytes: limit)
+        let id = try XCTUnwrap(hello.id, "the server names itself")
+        let again = try await ServerClient(connection).hello()
+        XCTAssertEqual(again.id, id, "with the same id each time")
+        let archive = ServerArchive(connection, id: id, maxBytes: limit)
         let ok = await archive.check()
         XCTAssertTrue(ok)
 

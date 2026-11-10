@@ -254,6 +254,11 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// The place `cloudKey` is in, as an `ArchiveKind`. Nil is the bucket (Cloudflare R2 or Amazon S3), as before
     /// places had names; "server" is the owner's own server.
     public var cloudBackend: String?
+    /// For a recording on a server: the id of that server. A recording on another server than the connected one
+    /// does not count as backed up.
+    public var cloudServer: String?
+    /// The SHA-256 of the recording that was uploaded, when the place checked it.
+    public var cloudHash: String?
     /// Older copies of the recording in a backup. They go once the recording as it is now is safe: after a move to
     /// another place is checked, or after a merge made a new recording.
     public var cloudLeftovers: [ArchivedObject]?
@@ -378,6 +383,8 @@ extension CallRecord {
         cloudKey = try c.decodeIfPresent(String.self, forKey: .cloudKey)
         cloudSize = try c.decodeIfPresent(Int64.self, forKey: .cloudSize)
         cloudBackend = try c.decodeIfPresent(String.self, forKey: .cloudBackend)
+        cloudServer = try c.decodeIfPresent(String.self, forKey: .cloudServer)
+        cloudHash = try c.decodeIfPresent(String.self, forKey: .cloudHash)
         cloudLeftovers = try c.decodeIfPresent([ArchivedObject].self, forKey: .cloudLeftovers)
         transcriptionJobs = try c.decodeIfPresent([String: String].self, forKey: .transcriptionJobs)
         summaryMissing = try c.decodeIfPresent(Bool.self, forKey: .summaryMissing)

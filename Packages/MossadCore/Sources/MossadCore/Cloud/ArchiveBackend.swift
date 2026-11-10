@@ -15,14 +15,18 @@ public struct ArchivedObject: Codable, Equatable, Hashable, Sendable {
     public var key: String
     /// An `ArchiveKind`, as text: a place that a newer build adds must not make this record unreadable.
     public var backend: String
+    /// Which server, for a file on a server: the id that the server gave itself. A recording on another server
+    /// than the connected one is not "in the backup": it cannot be read, and its local copy must stay.
+    public var server: String?
 
-    public init(key: String, kind: ArchiveKind) {
-        self.init(key: key, backend: kind.rawValue)
+    public init(key: String, kind: ArchiveKind, server: String? = nil) {
+        self.init(key: key, backend: kind.rawValue, server: server)
     }
 
-    public init(key: String, backend: String) {
+    public init(key: String, backend: String, server: String? = nil) {
         self.key = key
         self.backend = backend
+        self.server = server
     }
 
     public var kind: ArchiveKind? { ArchiveKind(rawValue: backend) }
@@ -57,6 +61,8 @@ public enum ArchiveError: Error, Equatable, LocalizedError {
 /// with which size) is the same for every place and lives in `CloudArchive`.
 public protocol ArchiveBackend: Sendable {
     var kind: ArchiveKind { get }
+    /// Which one of its kind this is, when the kind has more than one: the id of a server. Nil for the bucket.
+    var id: String? { get }
     /// The largest file this place takes, when it has a limit.
     var maxBytes: Int64? { get }
     func key(for callID: String) -> String
@@ -69,17 +75,31 @@ public protocol ArchiveBackend: Sendable {
     func playbackURL(_ key: String, expires: Int) -> URL?
     /// Checks that the place answers with these keys: uploads and removes a tiny test object.
     func check() async -> Bool
+    /// How many recordings the place holds, when it can say. Nil when it cannot, or did not answer.
+    func recordingCount() async -> Int?
 }
 
 extension ArchiveBackend {
-    /// The object in a temporary file. The caller removes the file.
+    public var id: String? { nil }
+    public func recordingCount() async -> Int? { nil }
+
+    func object(for callID: String) -> ArchivedObject { ArchivedObject(key: key(for: callID), kind: kind, server: id) }
+
+    /// The object in a temporary file. The caller removes the file. When the place sends the MD5 of the object
+    /// (an S3 ETag of a one-part upload), the file must have it.
     func download(_ key: String, session: URLSession) async throws -> URL {
         guard let url = playbackURL(key, expires: 900) else { throw ArchiveError.http(404) }
         let (file, response) = try await session.download(from: url)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
+        let http = response as? HTTPURLResponse
+        do {
+            guard let status = http?.statusCode, (200..<300).contains(status) else { throw ArchiveError.http(http?.statusCode ?? 0) }
+            if let tag = http?.value(forHTTPHeaderField: "ETag")?.trimmingCharacters(in: CharacterSet(charactersIn: "\"")).lowercased(),
+               tag.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil, try FileHash.md5(of: file) != tag {
+                throw ArchiveError.notWhole
+            }
+        } catch {
             try? FileManager.default.removeItem(at: file)
-            throw ArchiveError.http(status)
+            throw error
         }
         return file
     }
@@ -87,10 +107,15 @@ extension ArchiveBackend {
 
 public enum FileHash {
     /// The SHA-256 of a file as lowercase hex, read in pieces, so a long recording is never in memory at once.
-    public static func sha256(of file: URL) throws -> String {
+    public static func sha256(of file: URL) throws -> String { try digest(SHA256.self, of: file) }
+
+    /// Only to compare with the MD5 that an S3 bucket reports for an object. Not for anything secret.
+    static func md5(of file: URL) throws -> String { try digest(Insecure.MD5.self, of: file) }
+
+    private static func digest<H: HashFunction>(_: H.Type, of file: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: file)
         defer { try? handle.close() }
-        var hasher = SHA256()
+        var hasher = H()
         while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty { hasher.update(data: chunk) }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
