@@ -131,10 +131,8 @@ struct MeetingsView: View {
         HStack(spacing: 0) {
             ListColumn("Meetings", widthKey: "meetings") {
                 CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, Space.s)
-                // "Now" is only the call recording at this moment; a record that still says "recording" for any
-                // other reason is listed with its day.
-                MeetingList(days: MeetingGroups.byDay(results.filter { !controller.isLive($0) }),
-                            live: results.filter { controller.isLive($0) },
+                MeetingList(days: MeetingGroups.byDay(results.filter { $0.status != .recording }),
+                            live: results.filter { $0.status == .recording },
                             selection: $controller.selectedMeetingID, deleting: $deleting)
             }
             DetailColumn { toolbar } content: {
@@ -318,7 +316,10 @@ struct MeetingMenuItems: View {
 
     var body: some View {
         if record.status == .recording {
-            Button("Skip and delete this call", systemImage: "xmark.bin", role: .destructive) { controller.skipCurrentCall() }
+            // Only for the call that records now: skipping deletes that call, never another one.
+            if controller.isLive(record) {
+                Button("Skip and delete this call", systemImage: "xmark.bin", role: .destructive) { controller.skipCurrentCall() }
+            }
         } else {
             Button("Open note", systemImage: "doc.richtext") {
                 if let path = record.markdownPath { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }

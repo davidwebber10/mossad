@@ -35,7 +35,9 @@ struct MeetingList: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if !live.isEmpty {
                         GroupHeader(title: "Now", color: Palette.recording, first: true)
-                        ForEach(live, id: \.id) { r in
+                        // Its own id in the stack: with the record's id, a stopped call's row moved to its day kept
+                        // the live row's view, timer and all.
+                        ForEach(live, id: \.liveRowID) { r in
                             CurrentCallRow(record: r)
                                 .listRow(selected: selection == r.id, tint: Palette.recordingTint) { select(r.id) }
                                 .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
@@ -101,8 +103,13 @@ struct MeetingList: View {
 
     /// Only a row off screen: scrolling to one already in view moved the list under the toolbar.
     private func reveal(_ id: String?, _ proxy: ScrollViewProxy) {
-        guard let id, !visible.contains(id), order.contains(id) else { return }
-        proxy.scrollTo(id, anchor: .center)
+        guard let id, !visible.contains(stackID(id)), order.contains(id) else { return }
+        proxy.scrollTo(stackID(id), anchor: .center)
+    }
+
+    /// The id of a row in the stack: the live row has its own (see `liveRowID`), every other row the record's.
+    private func stackID(_ id: String) -> String {
+        live.contains { $0.id == id } ? CallRecord.liveRowID(id) : id
     }
 
     private func select(_ id: String) {
@@ -114,7 +121,7 @@ struct MeetingList: View {
         guard let id else { return .ignored }
         scrolledHere = id
         selection = id
-        proxy.scrollTo(id)
+        proxy.scrollTo(stackID(id))
         return .handled
     }
 
@@ -140,7 +147,7 @@ struct MeetingList: View {
         let index = selection.flatMap { ids.firstIndex(of: $0) }.map { min(max($0 + by, 0), ids.count - 1) } ?? 0
         scrolledHere = ids[index]
         selection = ids[index]
-        proxy.scrollTo(ids[index])
+        proxy.scrollTo(stackID(ids[index]))
         return .handled
     }
 }
@@ -320,4 +327,10 @@ private struct CurrentCallRow: View {
             .padding(.leading, 18)
         }
     }
+}
+
+extension CallRecord {
+    /// The live row's id in the list's stack, apart from the same call's row in its day.
+    static func liveRowID(_ id: String) -> String { "now:" + id }
+    var liveRowID: String { Self.liveRowID(id) }
 }

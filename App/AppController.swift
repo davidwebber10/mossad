@@ -582,8 +582,8 @@ final class AppController: ObservableObject {
     /// Whether `r` is the call being recorded now: its record says so and it began when the recording did. A saved
     /// copy that still says "recording" after the call stopped is not live.
     func isLive(_ r: CallRecord) -> Bool {
-        guard r.status == .recording, case .recording(_, let since) = status else { return false }
-        return abs(r.start.timeIntervalSince(since)) < 2
+        if case .recording(_, let since) = status { return r.isLive(recordingSince: since) }
+        return false
     }
 
     var callsNeedingNames: [CallRecord] {

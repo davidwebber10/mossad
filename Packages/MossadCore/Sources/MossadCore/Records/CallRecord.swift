@@ -306,6 +306,13 @@ public struct CallRecord: Codable, Equatable, Sendable {
 
     public static let fileName = "call.json"
 
+    /// Whether this record is the call that records now, which began at `since` (nil when nothing records). The
+    /// saved start has whole seconds and the recorder's has fractions, so they agree within 2 s.
+    public func isLive(recordingSince since: Date?) -> Bool {
+        guard status == .recording, let since else { return false }
+        return abs(start.timeIntervalSince(since)) < 2
+    }
+
     public func save(to dir: URL, fileName: String = CallRecord.fileName) throws {
         let encoder = JSONEncoder()
         // Not pretty-printed: a record holds every word with its times, three times over, and the line breaks and
