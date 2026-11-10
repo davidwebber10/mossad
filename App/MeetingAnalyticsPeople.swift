@@ -7,10 +7,15 @@ private let shownSpeakers = 12
 private extension MeetingAnalytics {
     var shown: [Speaker] { Array(speakers.prefix(shownSpeakers)) }
 
-    /// A speaker's number against their usual, and the words for the range; nil with no history for it.
-    func usual(_ s: Speaker, _ metric: PersonMetric) -> (reading: Reading, usually: String)? {
+    /// A speaker's number against their history; nil with no history for it. `usually` is the range in words
+    /// ("usually 30 to 40% in 1:1s with you"). `tip` is the tooltip: for a count, the rate of this call first,
+    /// because the range is per hour and the cell shows a count.
+    func usual(_ s: Speaker, _ metric: PersonMetric) -> (reading: Reading, usually: String, tip: String)? {
         guard let b = baselines.person(s.id), let context = b.context, let reading = b[metric], let usual = reading.usual else { return nil }
-        return (reading, MeetingFindings.usually(metric, usual, context: context))
+        let usually = MeetingFindings.usually(metric, usual, context: context)
+        let perHour: Set<PersonMetric> = [.questionsPerHour, .cutInsPerHour, .cutOffsPerHour]
+        let rate = perHour.contains(metric) ? "\(MeetingFindings.value(metric, reading.value)) an hour in this call; " : ""
+        return (reading, usually, "\(sentenceCase(rate + usually)) (\(MeetingFindings.basis(usual)))")
     }
 }
 
@@ -61,7 +66,9 @@ struct TalkTimeSection: View {
     private var rows: some View {
         let a = analytics
         let peak = max(a.speakers.map(\.seconds).max() ?? 1, 1)
-        let trends = a.baselines.people.contains { $0.shareTrend.count >= MeetingAnalytics.Trends.minimumPoints }
+        let trends = a.baselines.people.contains { !$0.shareTrend.isEmpty }
+        // The lines under the names show only when at least one person has a range for their share.
+        let ranges = a.baselines.people.contains { $0[.talkShare]?.usual != nil }
         return VStack(spacing: 0) {
             ForEach(a.shown) { s in
                 let speaker = people.speaker(forKey: s.id)
@@ -76,14 +83,14 @@ struct TalkTimeSection: View {
                             .frame(height: 8)
                             .accessibilityHidden(true)
                         Text(MeetingFindings.span(s.seconds)).foregroundStyle(Palette.secondary).lineLimit(1).frame(width: 82, alignment: .trailing)
-                        Marked(text: percentText(s.share), reading: usual?.reading, usually: usual?.usually).frame(width: 54, alignment: .trailing)
+                        Marked(text: percentText(s.share), reading: usual?.reading, tip: usual?.tip).frame(width: 54, alignment: .trailing)
                         if trends {
-                            Sparkline(values: a.baselines.person(s.id)?.shareTrend ?? []).frame(width: 52, height: 16)
-                                .help("Their talk share in the last meetings; the dot is this call")
+                            Sparkline(values: a.baselines.person(s.id)?.shareTrend ?? [], minimumSpan: 0.2).frame(width: 52, height: 16)
+                                .help("Their talk share in the earlier meetings; the dot is this call")
                         }
                     }
-                    if a.baselines.hasHistory, !s.isUnknown {
-                        Text(usualLine(s, usual))
+                    if ranges, !s.isUnknown, let line = usualLine(s, usual?.usually) {
+                        Text(line)
                             .font(.system(size: 11.5))
                             .foregroundStyle(usual?.reading.stoodOut == true ? Palette.ink : Palette.tertiary)
                             .padding(.leading, 16)
@@ -97,10 +104,12 @@ struct TalkTimeSection: View {
         .hairline(.top)
     }
 
-    /// "Usually 30 to 40% in 1:1s with you", as the owner's example reads.
-    private func usualLine(_ s: MeetingAnalytics.Speaker, _ usual: (reading: MeetingAnalytics.Reading, usually: String)?) -> String {
-        guard let usual else { return "Not enough history yet" }
-        return usual.usually.prefix(1).uppercased() + usual.usually.dropFirst()
+    /// "Usually 30 to 40% in 1:1s with you", as the owner's example reads; with fewer than five meetings, "30 to
+    /// 40% in 1:1s with you, in 3 meetings so far". No line when the person's history is of meetings of other
+    /// sizes, which say nothing about a share.
+    private func usualLine(_ s: MeetingAnalytics.Speaker, _ usually: String?) -> String? {
+        if let usually { return sentenceCase(usually) }
+        return analytics.baselines.person(s.id)?.context == nil ? "Not enough history yet" : nil
     }
 }
 
@@ -112,16 +121,18 @@ private struct OwnerWithRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Your share next to each person").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.secondary)
+            Text("Your share of this meeting, against meetings of this size with each person").font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Palette.secondary)
                 .padding(.bottom, 6)
             ForEach(analytics.baselines.ownerWith) { w in
                 if let usual = w.reading.usual {
                     HStack(spacing: 12) {
                         SpeakerCell(speaker: people.speaker(forKey: w.id), name: analytics.speaker(w.id)?.name ?? "", callID: callID)
                             .frame(width: 150, alignment: .leading)
-                        Marked(text: percentText(w.reading.value), reading: w.reading, usually: "usually \(MeetingFindings.range(.talkShare, usual)) \(w.context.label)")
+                        let usually = MeetingFindings.usually(.talkShare, usual, context: w.context)
+                        Marked(text: percentText(w.reading.value), reading: w.reading, tip: "\(sentenceCase(usually)) (\(MeetingFindings.basis(usual)))")
                             .frame(width: 60, alignment: .leading)
-                        Text("usually \(MeetingFindings.range(.talkShare, usual)) \(w.context.label)")
+                        Text(usually)
                             .foregroundStyle(w.reading.stoodOut ? Palette.ink : Palette.tertiary).lineLimit(1)
                         Spacer(minLength: 0)
                     }
@@ -177,7 +188,11 @@ private struct FloorStrip: View {
 
 // MARK: Conversation flow
 
-/// Turns per person, who cut in on whom, pauses before answers, and silence.
+/// Turns per person, the pause before answers, silence, and the cut-ins between the owner and the others.
+///
+/// Who talked over whom can only be seen between the owner's microphone and the call (see `MeetingAnalytics.Flow`).
+/// So the table says "Cut in on you" and "You cut in", the owner's row holds the totals, and a call on one track
+/// has no such columns at all. A cell that cannot be measured shows a dash, never 0.
 struct FlowSection: View {
     let analytics: MeetingAnalytics
     let people: MeetingPeople
@@ -190,16 +205,21 @@ struct FlowSection: View {
             if let finding = MeetingFindings.flow(a) {
                 SpeakerFinding(speaker: finding.subject.flatMap(people.speaker(forKey:)), callID: callID, text: finding.text)
             }
-            // A narrow window drops the average turn and the pause before answers before a name would squeeze.
+            // A narrow window drops the turns, the average turn, and the pause before answers before a name would squeeze.
             ViewThatFits(in: .horizontal) {
                 table(columns(full: true))
                 table(columns(full: false))
             }
             MoreVoices(analytics: a)
-            if a.baselines.hasHistory { MarkKey() }
+            if a.baselines.hasFirmHistory { MarkKey() }
             if let flow = a.flow {
+                Text(flow.crossTalkMeasured
+                     ? "Cut-ins and talking at once are measured between your microphone and the call. People in the call who talk over each other are not measured."
+                     : "Cut-ins and talking at once are not measured in this call: every voice is on one audio track.")
+                    .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 FlowFigures(flow: flow, long: long)
-                if !flow.interruptions.isEmpty { CutIns(flow: flow, people: people, callID: callID, long: long) }
+                if flow.crossTalkMeasured, !flow.interruptions.isEmpty { CutIns(flow: flow, people: people, callID: callID, long: long) }
             }
         }
     }
@@ -211,18 +231,19 @@ struct FlowSection: View {
 
     private func columns(full: Bool) -> [SpeakerTable.Column] {
         let a = analytics
-        var out = [SpeakerTable.Column("Turns", width: 44) { s in Text("\(s.turns)").foregroundStyle(Palette.secondary) }]
+        var out: [SpeakerTable.Column] = []
         if full {
+            out.append(SpeakerTable.Column("Turns", width: 44) { s in Text("\(s.turns)").foregroundStyle(Palette.secondary) })
             out.append(SpeakerTable.Column("Average turn", width: 84) { s in
                 let u = a.usual(s, .averageTurn)
-                Marked(text: MeetingFindings.span(s.averageTurn), reading: u?.reading, usually: u?.usually)
+                Marked(text: MeetingFindings.span(s.averageTurn), reading: u?.reading, tip: u?.tip)
             })
         }
         out.append(SpeakerTable.Column("Longest turn", width: 132) { s in
             if let turn = s.longestTurn {
                 let u = a.usual(s, .longestTurn)
                 HStack(spacing: 6) {
-                    Marked(text: MeetingFindings.span(turn.seconds), reading: u?.reading, usually: u?.usually)
+                    Marked(text: MeetingFindings.span(turn.seconds), reading: u?.reading, tip: u?.tip)
                     PlayAt(at: turn.start, long: long).font(.system(size: 11.5))
                 }
             } else {
@@ -233,33 +254,53 @@ struct FlowSection: View {
             out.append(SpeakerTable.Column("Answers after", width: 84) { s in
                 if let gap = s.medianResponse {
                     let u = a.usual(s, .responseGap)
-                    Marked(text: MeetingFindings.pause(gap), reading: u?.reading, usually: u?.usually)
+                    Marked(text: MeetingFindings.pause(gap), reading: u?.reading, tip: u?.tip)
                 } else {
                     NoValue()
                 }
             })
         }
-        out.append(SpeakerTable.Column("Cut in", width: 50) { s in
-            let u = a.usual(s, .cutInsPerHour)
-            Marked(text: "\(s.interruptionsMade)", reading: u?.reading, usually: u?.usually)
+        guard a.flow?.crossTalkMeasured == true else { return out }
+        // With the owner in the call, both columns are about the owner and one other person; the owner's row is the total.
+        let owned = a.owner != nil
+        out.append(SpeakerTable.Column(owned ? "Cut in on you" : "Cut in", width: 88) { s in
+            cutIns(s, onOwner: true, owned: owned)
         })
-        out.append(SpeakerTable.Column("Was cut off", width: 68) { s in
-            let u = a.usual(s, .cutOffsPerHour)
-            Marked(text: "\(s.interruptionsReceived)", reading: u?.reading, usually: u?.usually)
+        out.append(SpeakerTable.Column(owned ? "You cut in" : "Was cut off", width: 72) { s in
+            cutIns(s, onOwner: false, owned: owned)
         })
         return out
     }
+
+    /// A count of cut-ins for one row. With the owner in the call: in a person's row, how often they cut in on the
+    /// owner (`onOwner`) or the owner on them; in the owner's row, the totals. A voice on the owner's own
+    /// microphone that is not the owner has nothing to show here.
+    @ViewBuilder
+    private func cutIns(_ s: MeetingAnalytics.Speaker, onOwner: Bool, owned: Bool) -> some View {
+        let made = owned && s.isOwner ? !onOwner : onOwner
+        let count = made ? s.interruptionsMade : s.interruptionsReceived
+        if let count, !owned || s.isOwner || !s.id.hasPrefix("me:") {
+            let u = analytics.usual(s, made ? .cutInsPerHour : .cutOffsPerHour)
+            Marked(text: "\(count)", reading: u?.reading, tip: u?.tip)
+        } else {
+            NoValue().help("Not measured: this voice is on your microphone")
+        }
+    }
 }
 
-/// Overlaps, the pause before answers, and silence, as the Analytics page's small figures.
+/// The pause before answers and silence, and, where it can be measured, how often the owner and someone in the
+/// call talked at once.
 private struct FlowFigures: View {
     let flow: MeetingAnalytics.Flow
     let long: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            SmallFigure(value: "\(flow.overlapCount)",
-                        label: flow.overlapCount == 0 ? "times two people talked at once" : "times two people talked at once, \(MeetingFindings.span(flow.overlapSeconds)) in all")
+            if flow.crossTalkMeasured {
+                SmallFigure(value: "\(flow.overlapCount)",
+                            label: flow.overlapCount == 0 ? "times you and someone in the call talked at once"
+                                : "times you and someone in the call talked at once, \(MeetingFindings.span(flow.overlapSeconds)) in all")
+            }
             SmallFigure(value: flow.medianResponse.map(MeetingFindings.pause) ?? "–", label: "before an answer, at the median")
             SmallFigure(value: MeetingFindings.span(flow.silenceSeconds), label: "of silence, \(percentText(flow.silenceShare)) of the call")
             if let longest = flow.longestSilence {
@@ -271,11 +312,11 @@ private struct FlowFigures: View {
         }
         .padding(.top, 12)
         .hairline(.top)
-        .help("An overlap is one second or more of two people talking at once. Silence is every pause of 3 seconds or more between the first word and the last.")
+        .help("Talking at once is one second or more of two voices together. Silence is every pause of 3 seconds or more between the first word and the last.")
     }
 }
 
-/// "Sam Carter cut in on Dana Lee 3×", with the moments to play.
+/// "Sam Carter cut in on Dana Lee 3×", with the moments to play. Always the owner's microphone and the call.
 private struct CutIns: View {
     let flow: MeetingAnalytics.Flow
     let people: MeetingPeople
@@ -284,7 +325,7 @@ private struct CutIns: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Who cut in on whom").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.secondary)
+            Text("Cut-ins between you and others").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.secondary)
                 .padding(.bottom, 6)
             ForEach(flow.interruptions.prefix(6)) { cut in
                 HStack(spacing: 8) {
@@ -293,7 +334,7 @@ private struct CutIns: View {
                     name(cut.of)
                     Text("\(cut.count)×").foregroundStyle(Palette.secondary)
                     Spacer(minLength: 8)
-                    ForEach(cut.moments.prefix(4), id: \.self) { at in PlayAt(at: at, long: long).font(.system(size: 11.5)) }
+                    ForEach(Array(cut.moments.prefix(4).enumerated()), id: \.offset) { _, at in PlayAt(at: at, long: long).font(.system(size: 11.5)) }
                 }
                 .font(.system(size: 12.5)).monospacedDigit()
                 .lineLimit(1)
@@ -301,7 +342,7 @@ private struct CutIns: View {
                 .hairline(.top)
             }
         }
-        .help("Someone cut in when they began at least a second after the other person, said three words or more, talked along for a second or more, and kept talking after the other person stopped.")
+        .help("Someone cut in when they began at least a second after the other person, said three words or more, talked along for a second or more, and kept talking for 3 seconds or more after the other person stopped.")
     }
 
     private func name(_ id: String) -> some View {
@@ -343,7 +384,7 @@ struct DeliverySection: View {
         out.append(SpeakerTable.Column("Words a minute", width: 104) { s in
             if let pace = s.wordsPerMinute {
                 let u = a.usual(s, .wordsPerMinute)
-                Marked(text: "\(Int(pace.rounded()))", reading: u?.reading, usually: u?.usually)
+                Marked(text: "\(Int(pace.rounded()))", reading: u?.reading, tip: u?.tip)
             } else {
                 NoValue().help("Too little speech to measure a pace")
             }
@@ -351,14 +392,14 @@ struct DeliverySection: View {
         out.append(SpeakerTable.Column("Fillers a minute", width: 104) { s in
             if let fillers = s.fillersPerMinute {
                 let u = a.usual(s, .fillersPerMinute)
-                Marked(text: String(format: "%.1f", fillers), reading: u?.reading, usually: u?.usually)
+                Marked(text: String(format: "%.1f", fillers), reading: u?.reading, tip: u?.tip)
             } else {
                 NoValue()
             }
         })
         out.append(SpeakerTable.Column("Questions", width: 76) { s in
             let u = a.usual(s, .questionsPerHour)
-            Marked(text: "\(s.questions)", reading: u?.reading, usually: u?.usually)
+            Marked(text: "\(s.questions)", reading: u?.reading, tip: u?.tip)
         })
         return out
     }

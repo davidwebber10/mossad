@@ -236,7 +236,7 @@ private struct TurnRow: View {
         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
                 // A saved person's name opens their profile. An unnamed voice keeps "Name this voice" under its words.
-                PersonName(block.speaker)
+                PersonName(block.speaker, person: .some(speaker?.person))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(unknown ? Palette.accent : Palette.ink)
                     .lineLimit(1).truncationMode(.tail)

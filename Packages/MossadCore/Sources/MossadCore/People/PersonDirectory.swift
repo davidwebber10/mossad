@@ -1,7 +1,10 @@
 import Foundation
 
-/// The saved people, for turning a name or an email written in a meeting into the person it stands for. The
-/// meeting page links a name to a profile only when this finds one person, never a guess between two.
+/// The saved people, for turning a name or an email written in a meeting into the person it stands for.
+///
+/// There are two questions, with two answers. `link` says whose profile a click on the name opens: only a sure
+/// match, because a wrong profile is worse than no link. `match` says which saved person an invited name is: it
+/// may read a short form, but only among the people of the meeting, and only when one of them fits.
 public struct PersonDirectory: Sendable, Equatable {
     public struct Person: Sendable, Equatable {
         public var name: String
@@ -15,12 +18,18 @@ public struct PersonDirectory: Sendable, Equatable {
 
     public let people: [Person]
     private let byEmail: [String: String]
-    private let byName: [String: String]
+    /// Nil for a name that two saved people have.
+    private let byName: [String: String?]
 
     public init(_ people: [Person] = []) {
         self.people = people
         byEmail = Dictionary(people.compactMap { p in p.email.map { (Self.emailKey($0), p.name) } }, uniquingKeysWith: { a, _ in a })
-        byName = Dictionary(people.map { (PeopleDuplicates.normalized($0.name), $0.name) }, uniquingKeysWith: { a, _ in a })
+        var byName: [String: String?] = [:]
+        for p in people {
+            let key = PeopleDuplicates.normalized(p.name)
+            byName[key] = byName[key] == nil ? .some(p.name) : .some(nil)
+        }
+        self.byName = byName
     }
 
     public init(profiles: [VoiceProfile]) {
@@ -29,35 +38,64 @@ public struct PersonDirectory: Sendable, Equatable {
 
     private static func emailKey(_ email: String) -> String { email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
 
-    /// The saved person for `text`, in this order: their email; their name in any case and spacing; a short form
-    /// of their name ("Sam Reed" for "Samuel Reed", "Sam C." for "Sam Carter"). A first name alone ("Sam") only
-    /// matches a person in `context` (the meeting's speakers and invited people), and only when one of them fits.
-    public func person(for text: String, among context: [String] = []) -> String? {
-        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return nil }
-        if text.contains("@") { return byEmail[Self.emailKey(text)] }
-        if let exact = byName[PeopleDuplicates.normalized(text)] { return exact }
-        // "Speaker C" is a label, not a name.
-        guard !text.hasPrefix("Speaker ") else { return nil }
-        let words = Self.words(text)
-        guard let first = words.first else { return nil }
-        let fits = people.filter { p in
-            let theirs = Self.words(p.name)
-            guard let theirFirst = theirs.first, theirFirst == first || Nicknames.related(theirFirst, first) else { return false }
-            guard words.count > 1, let last = words.last else { return true }
-            guard theirs.count > 1, let theirLast = theirs.last else { return false }
-            return last == theirLast || (last.count == 1 && theirLast.hasPrefix(last))
-        }
-        let inContext = Set(context.map(PeopleDuplicates.normalized))
-        let near = fits.filter { inContext.contains(PeopleDuplicates.normalized($0.name)) }
-        if near.count == 1 { return near[0].name }
-        // A first name alone needs the meeting to say who it is. So does a name that fits two people.
-        guard near.isEmpty, words.count > 1, fits.count == 1 else { return nil }
-        return fits[0].name
-    }
-
     /// Lowercase words without the period of an initial: "Sam C." gives "sam", "c".
     private static func words(_ name: String) -> [String] {
         name.lowercased().split(whereSeparator: \.isWhitespace).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ".,")) }.filter { !$0.isEmpty }
+    }
+
+    /// The one saved person with exactly this name, in any case and spacing.
+    private func exact(_ text: String) -> String? { byName[PeopleDuplicates.normalized(text)] ?? nil }
+
+    /// Whether `written` can be a form of the name `full`: the same first name or its short form, and, when
+    /// `written` has more words, the same last name or its initial.
+    private static func fits(_ written: [String], _ full: [String]) -> Bool {
+        guard let first = written.first, let theirFirst = full.first, first == theirFirst || Nicknames.shortAndFull(first, theirFirst) else { return false }
+        guard written.count > 1, let last = written.last else { return true }
+        guard full.count > 1, let theirLast = full.last else { return false }
+        return last == theirLast || (last.count == 1 && theirLast.hasPrefix(last))
+    }
+
+    // MARK: Links
+
+    /// The saved person whose profile `text` may open: the person with that email, or the one saved person with
+    /// exactly that name. A first name, a short form, or an initial opens nothing. A name of one word ("Sam",
+    /// for a person saved as "Sam") opens nothing when `meeting` (its speakers and invited people, saved or not)
+    /// has someone else that the word could mean.
+    public func link(for text: String, in meeting: [String] = []) -> String? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        if text.contains("@") { return byEmail[Self.emailKey(text)] }
+        // "Speaker C" is a label, not a name.
+        guard !text.hasPrefix("Speaker "), let person = exact(text) else { return nil }
+        let words = Self.words(text)
+        guard words.count == 1 else { return person }
+        let key = PeopleDuplicates.normalized(person)
+        let others = meeting.filter { PeopleDuplicates.normalized($0) != key && Self.fits(words, Self.words($0)) }
+        return others.isEmpty ? person : nil
+    }
+
+    // MARK: Matching
+
+    /// The saved person that an invited name or email is. In this order: their email; the one saved person with
+    /// exactly that name of two words or more; then, only among `meeting` (the speakers and the other invited
+    /// people, saved or not), the one person the name can be a form of ("Sam" or "Sam C." for Sam Carter, "Sam
+    /// Reed" for Samuel Reed), when that person is saved. Two who fit, or one who is not saved, is nobody.
+    public func match(_ text: String, among meeting: [String] = []) -> String? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        if text.contains("@") { return byEmail[Self.emailKey(text)] }
+        guard !text.hasPrefix("Speaker ") else { return nil }
+        let words = Self.words(text)
+        guard !words.isEmpty else { return nil }
+        if words.count > 1, let person = exact(text) { return person }
+        var seen: Set<String> = []
+        let near = meeting.filter { name in
+            guard !name.contains("@"), !name.hasPrefix("Speaker "), seen.insert(PeopleDuplicates.normalized(name)).inserted else { return false }
+            // The text itself, as an invited entry, is not a second person.
+            return Self.fits(words, Self.words(name)) && (PeopleDuplicates.normalized(name) != PeopleDuplicates.normalized(text) || exact(name) != nil)
+        }
+        if near.count == 1 { return exact(near[0]) }
+        // A person saved under one word, in a meeting where nobody else can be meant.
+        return near.isEmpty && words.count == 1 ? exact(text) : nil
     }
 }

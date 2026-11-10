@@ -234,6 +234,7 @@ struct Figure: View {
                 }
             }
             Text(detail.isEmpty ? " " : detail).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)

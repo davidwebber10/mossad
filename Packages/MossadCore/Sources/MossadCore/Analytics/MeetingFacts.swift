@@ -59,6 +59,9 @@ public struct MeetingFacts: Sendable, Equatable {
     public struct Person: Sendable, Equatable {
         public var name: String
         public var isOwner: Bool
+        /// False for a voice that said almost nothing; see `MeetingFacts.isMain`.
+        public var isMain = true
+        /// A number that the meeting cannot give is absent, never 0.
         public var values: [PersonMetric: Double]
     }
 
@@ -67,22 +70,34 @@ public struct MeetingFacts: Sendable, Equatable {
     public var stamp: Int
     public var start: Date
     public var title: String
-    /// The title in one spelling, for finding the series; nil for a call named only after its app.
+    /// The title in one spelling, for finding the series. Only a title from the calendar or from the owner makes
+    /// a series: two unrelated calls can get the same title from the model.
     public var series: String?
     public var kind: String?
     public var tags: [String]
     /// Every voice, named or not.
     public var voices: Int
+    /// The voices that count for the setting: without the ones that said almost nothing. A three-second voice
+    /// from a split by the transcriber does not turn a 1:1 into a group.
+    public var mainVoices: Int
     public var people: [Person]
+    /// A number that the meeting cannot give is absent, never 0: no screens entry without screen capture, no
+    /// decisions or action items without a summary, no rating without a review.
     public var values: [MeetingMetric: Double]
 
-    public var size: Size { Size(voices: voices) }
+    public var size: Size { Size(voices: mainVoices) }
     public func person(_ name: String) -> Person? { people.first { $0.name == name } }
     public var owner: Person? { people.first(where: \.isOwner) }
-    /// The other person of a meeting of two named voices.
+    /// The other person of a meeting of two main voices, both named.
     public var partner: Person? {
-        voices == 2 && people.count == 2 && owner != nil ? people.first { !$0.isOwner } : nil
+        let main = people.filter(\.isMain)
+        return mainVoices == 2 && main.count == 2 && main.contains(where: \.isOwner) ? main.first { !$0.isOwner } : nil
     }
+
+    /// A voice counts for the setting with at least this much speech and this part of the talk.
+    static let mainSeconds: TimeInterval = 10
+    static let mainShare = 0.02
+    static func isMain(seconds: TimeInterval, share: Double) -> Bool { seconds >= mainSeconds && share >= mainShare }
 
     /// Counts are measured against at least this much of an hour, so three questions in a five-minute call are
     /// not "36 an hour".
@@ -92,8 +107,8 @@ public struct MeetingFacts: Sendable, Equatable {
         self.init(record: r, owner: owner, voices: MeetingAnalytics.Voices(record: r, owner: owner))
     }
 
-    init(id: String, stamp: Int, start: Date, title: String, series: String?, kind: String?, tags: [String], voices: Int, people: [Person],
-         values: [MeetingMetric: Double]) {
+    init(id: String, stamp: Int, start: Date, title: String, series: String?, kind: String?, tags: [String], voices: Int, mainVoices: Int? = nil,
+         people: [Person], values: [MeetingMetric: Double]) {
         self.id = id
         self.stamp = stamp
         self.start = start
@@ -102,6 +117,7 @@ public struct MeetingFacts: Sendable, Equatable {
         self.kind = kind
         self.tags = tags
         self.voices = voices
+        self.mainVoices = mainVoices ?? voices
         self.people = people
         self.values = values
     }
@@ -111,26 +127,32 @@ public struct MeetingFacts: Sendable, Equatable {
         stamp = MeetingAnalytics.stamp(r)
         start = r.start
         title = r.title
-        series = r.titleSource == .platform ? nil : PeopleDuplicates.normalized(r.title)
+        series = r.titleSource == .calendar || r.titleSource == .custom ? PeopleDuplicates.normalized(r.title) : nil
         kind = r.kind
         tags = r.tags
         voices = v.speakers.count
+        mainVoices = v.speakers.filter { Self.isMain(seconds: $0.seconds, share: $0.share) }.count
         let hours = max(v.duration / 3600, Self.minimumHours)
         people = v.speakers.filter { !$0.isUnknown && $0.seconds > 0 }.map { s in
-            var values: [PersonMetric: Double] = [
-                .talkShare: s.share, .questionsPerHour: Double(s.questions) / hours, .averageTurn: s.averageTurn,
-                .cutInsPerHour: Double(s.interruptionsMade) / hours, .cutOffsPerHour: Double(s.interruptionsReceived) / hours,
-            ]
+            var values: [PersonMetric: Double] = [.talkShare: s.share, .questionsPerHour: Double(s.questions) / hours, .averageTurn: s.averageTurn]
             values[.wordsPerMinute] = s.wordsPerMinute
             values[.fillersPerMinute] = s.fillersPerMinute
             values[.longestTurn] = s.longestTurn?.seconds
             values[.responseGap] = s.medianResponse
-            return Person(name: s.name, isOwner: s.isOwner, values: values)
+            // Nil in a call that cannot show who talked over whom.
+            values[.cutInsPerHour] = s.interruptionsMade.map { Double($0) / hours }
+            values[.cutOffsPerHour] = s.interruptionsReceived.map { Double($0) / hours }
+            return Person(name: s.name, isOwner: s.isOwner, isMain: Self.isMain(seconds: s.seconds, share: s.share), values: values)
         }
+        // A joined meeting's end minus its start holds the time between its recordings; its audio does not.
         var values: [MeetingMetric: Double] = [
-            .length: max(0, r.end.timeIntervalSince(r.start)), .voices: Double(v.speakers.count), .decisions: Double(r.decisions.count),
-            .actionItems: Double(r.actionItems.count), .screens: Double(r.screens?.count ?? 0),
+            .length: r.parts.isEmpty ? max(0, r.end.timeIntervalSince(r.start)) : v.duration, .voices: Double(v.speakers.count),
         ]
+        if r.summary != nil {
+            values[.decisions] = Double(r.decisions.count)
+            values[.actionItems] = Double(r.actionItems.count)
+        }
+        if let screens = r.screens { values[.screens] = Double(screens.count) }
         if let flow = v.flow { values[.silenceShare] = flow.silenceShare }
         let words = v.speakers.reduce(0) { $0 + $1.words }
         if v.speechSeconds >= MeetingAnalytics.minimumPaceSeconds { values[.wordsPerMinute] = Double(words) / (v.speechSeconds / 60) }
@@ -142,6 +164,9 @@ public struct MeetingFacts: Sendable, Equatable {
 /// only when its record changed, so one new or edited meeting costs one meeting's work.
 public final class MeetingFactsCache: @unchecked Sendable {
     private let lock = NSLock()
+    /// Held for a whole pass: a second caller waits and then finds the first one's work, so two meetings opened
+    /// at launch do not both read every meeting.
+    private let working = NSLock()
     private var entries: [String: MeetingFacts] = [:]
     private var owner = ""
     private var reads = 0
@@ -153,6 +178,8 @@ public final class MeetingFactsCache: @unchecked Sendable {
     /// The facts of the written meetings with speech among `records`. Call it off the main thread: the first
     /// call reads every meeting.
     public func facts(for records: [CallRecord], owner: String) -> [MeetingFacts] {
+        working.lock()
+        defer { working.unlock() }
         let known: [String: MeetingFacts] = lock.withLock {
             // Another owner name changes who "you" is in every meeting.
             if self.owner != owner { entries = [:]; self.owner = owner }

@@ -14,6 +14,7 @@ final class MeetingAnalyticsTests: XCTestCase {
         var r = CallRecord(id: id, platform: .meet, bundleID: "", start: begin, end: begin.addingTimeInterval(minutes * 60), status: .written)
         r.speakerNames = names ?? trio
         r.calendarTitle = title
+        r.summary = "A summary."
         r.utterances = lines.map(utterance)
         return r
     }
@@ -148,24 +149,53 @@ final class MeetingAnalyticsTests: XCTestCase {
         let a = analytics(call([
             ("them:A", 0, 20, "Here is the plan for the whole quarter."),
             ("me:A", 15, 30, "Wait, that date is wrong."),
-            ("them:B", 40, 50, "Next topic is hiring."),
+            ("me:A", 40, 50, "Next topic is hiring."),
             ("them:A", 44, 60, "Before that, one more thing."),
-            ("them:B", 62, 80, "Fine, then hiring it is."),
-            ("them:A", 70, 90, "Sorry, also the budget."),
+            ("me:A", 62, 80, "Fine, then hiring it is."),
+            ("them:B", 70, 90, "Sorry, also the budget."),
         ]))
         let flow = a.flow!
+        XCTAssertTrue(flow.crossTalkMeasured)
         XCTAssertEqual(flow.interruptions, [
-            .init(by: "them:A", of: "them:B", moments: [44, 70]),
             .init(by: "me:A", of: "them:A", moments: [15]),
-        ], "the pair with the most comes first")
+            .init(by: "them:A", of: "me:A", moments: [44]),
+            .init(by: "them:B", of: "me:A", moments: [70]),
+        ])
         XCTAssertEqual(flow.interruptionCount, 3)
-        XCTAssertEqual(a.speakers.map(\.interruptionsMade), [1, 2, 0])
-        XCTAssertEqual(a.speakers.map(\.interruptionsReceived), [0, 1, 2])
+        XCTAssertEqual(a.speakers.map(\.interruptionsMade), [1, 1, 1])
+        XCTAssertEqual(a.speakers.map(\.interruptionsReceived), [2, 1, 0])
         XCTAssertEqual(flow.overlaps, [
-            .init(first: "them:A", second: "them:B", count: 2, seconds: 16),
-            .init(first: "me:A", second: "them:A", count: 1, seconds: 5),
+            .init(first: "me:A", second: "them:A", count: 2, seconds: 11),
+            .init(first: "me:A", second: "them:B", count: 1, seconds: 10),
         ])
         XCTAssertEqual(flow.overlapSeconds, 21)
+    }
+
+    func testTwoPeopleOfTheCallAreNeverCountedAgainstEachOther() {
+        // The call track holds one line after the other: two of its people who talk at once leave no trace in a
+        // real record. So lines of one track that do overlap count for nothing, and nobody "cut in 0 times".
+        let a = analytics(call([
+            ("me:A", 0, 5, "Go ahead."),
+            ("them:A", 10, 30, "Here is the plan for the whole quarter."),
+            ("them:B", 20, 45, "Wait, that date is wrong, I think."),
+        ]))
+        XCTAssertEqual(a.flow?.interruptions, [])
+        XCTAssertEqual(a.flow?.overlaps, [])
+        XCTAssertEqual(a.flow?.crossTalkMeasured, true, "Dana's microphone is the other track")
+        XCTAssertEqual(a.speakers.map(\.interruptionsMade), [0, 0, 0], "each person against the other track only")
+    }
+
+    func testACallOnOneTrackHasNoCountOfCutInsAtAll() {
+        // A meeting in a room: every voice is on the microphone.
+        let a = analytics(call(names: ["me:A": "Dana Lee", "me:B": "Sam Carter"], [
+            ("me:A", 0, 20, "Here is the plan for the whole quarter."),
+            ("me:B", 15, 40, "Wait, that date is wrong, I think."),
+        ]))
+        XCTAssertEqual(a.flow?.crossTalkMeasured, false)
+        XCTAssertEqual(a.speakers.map(\.interruptionsMade), [nil, nil], "not measured is not 0")
+        XCTAssertEqual(a.speakers.map(\.interruptionsReceived), [nil, nil])
+        XCTAssertEqual(a.flow?.overlaps, [])
+        XCTAssertNotNil(a.flow?.medianResponse ?? a.flow?.silenceSeconds, "the rest of the flow does not need two tracks")
     }
 
     func testListeningAndTalkingAlongAreNotInterruptions() {
@@ -173,16 +203,25 @@ final class MeetingAnalyticsTests: XCTestCase {
             ("them:A", 0, 60, "A long explanation of the plan."),
             ("me:A", 10, 12, "Yeah."),
             ("me:A", 20, 30, "Right, and the budget too."),
-            ("them:B", 59.5, 70, "Thanks, my turn now."),
+            ("me:A", 59.5, 70, "Thanks, my turn now."),
             ("me:A", 100, 110, "Both of us start."),
             ("them:B", 100.5, 115, "At the same moment here."),
         ]))
         let flow = a.flow!
         XCTAssertEqual(flow.interruptions, [], "a word, a line the other talks through, a hand-off, and a joint start")
         XCTAssertEqual(flow.overlaps.map(\.id), ["me:A|them:A", "me:A|them:B"])
-        XCTAssertEqual(flow.overlaps.first { $0.id == "me:A|them:A" }?.count, 2)
+        XCTAssertEqual(flow.overlaps.first { $0.id == "me:A|them:A" }?.count, 2, "half a second together at the hand-off is not one")
         XCTAssertEqual(flow.overlaps.first { $0.id == "me:A|them:B" }?.seconds, 9.5)
-        XCTAssertNil(flow.overlaps.first { $0.id == "them:A|them:B" }, "half a second together is a hand-off")
+    }
+
+    func testAnAgreementSaidAcrossAPauseIsNotAnInterruption() {
+        // Sam talks for 10 s, stops for 1.2 s, and goes on in the same line. Dana agrees across the pause.
+        var r = call()
+        r.utterances = [timed("them:A", 0, "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty", pauses: [10: 1.2]),
+                        timed("me:A", 4, "yeah that makes sense", pace: 0.4)]
+        let flow = analytics(r).flow!
+        XCTAssertEqual(flow.overlaps.map(\.count), [1], "they did talk at once")
+        XCTAssertEqual(flow.interruptions, [], "but Dana did not hold the floor for 3 s after Sam stopped")
     }
 
     func testWordTimesShowThatAPauseInALineIsNotSpeech() {
@@ -262,14 +301,35 @@ final class MeetingAnalyticsTests: XCTestCase {
         r.attendees = ["dana@example.com", "Samuel Carter", "Jordan Lee", "casey@example.com", "sam.carter@example.com"]
         let people = PersonDirectory([.init(name: "Dana Lee", email: "dana@example.com"), .init(name: "Sam Carter", email: "sam.carter@example.com"),
                                       .init(name: "Jordan Lee", email: nil)])
-        let p = MeetingAnalytics(record: r, owner: "Dana Lee", people: people).participation!
-        XCTAssertEqual(p.invited.map(\.label), ["Dana Lee", "Samuel Carter", "Jordan Lee", "casey@example.com", "Sam Carter"])
-        XCTAssertEqual(p.invited.map(\.person), ["Dana Lee", "Sam Carter", "Jordan Lee", nil, "Sam Carter"])
-        XCTAssertEqual(p.invited.map(\.speaker), ["me:A", "them:A", nil, nil, "them:A"])
-        XCTAssertEqual(p.invited.map(\.email), ["dana@example.com", nil, nil, "casey@example.com", "sam.carter@example.com"])
-        XCTAssertEqual(p.unheard.map(\.label), ["Jordan Lee", "casey@example.com"])
-        XCTAssertEqual(p.uninvited, ["them:B"], "Riley spoke with no invite")
-        XCTAssertEqual(p.unnamedVoices, 0)
+        var p = MeetingAnalytics(record: r, owner: "Dana Lee", people: people).participation!
+        XCTAssertEqual(p.invited.map(\.label), ["Dana Lee", "Samuel Carter", "Jordan Lee", "casey@example.com"], "Sam by name and by email is one entry")
+        XCTAssertEqual(p.invited.map(\.person), ["Dana Lee", "Sam Carter", "Jordan Lee", nil])
+        XCTAssertEqual(p.invited.map(\.speaker), ["me:A", "them:A", nil, nil])
+        XCTAssertEqual(p.invited.map(\.email), ["dana@example.com", nil, nil, "casey@example.com"])
+        XCTAssertEqual(p.spoke.map(\.label), ["Dana Lee", "Samuel Carter"])
+        XCTAssertEqual(p.didNotSpeak.map(\.label), ["Jordan Lee"], "a saved person with no voice, in a call where every voice has a name")
+        XCTAssertEqual(p.notMatched.map(\.label), ["casey@example.com"], "an email nobody saved: Mossad does not know who it is")
+        XCTAssertEqual(p.unmatchedSpeakers, ["them:B"])
+        XCTAssertEqual(p.uninvited, [], "Riley can be casey@example.com, so Riley is not \"without an invite\"")
+        XCTAssertEqual(MeetingFindings.participation(p), "At least 2 of 4 invited people spoke; 1 invited entry is not matched to a person")
+
+        r.attendees.removeAll { $0 == "casey@example.com" }
+        p = MeetingAnalytics(record: r, owner: "Dana Lee", people: people).participation!
+        XCTAssertTrue(p.isMatched)
+        XCTAssertEqual(p.uninvited, ["them:B"], "with every entry matched, Riley spoke with no invite")
+        XCTAssertEqual(MeetingFindings.participation(p), "2 of 3 invited people spoke")
+    }
+
+    func testAnInvitedEmailOfSomeoneWhoSpokeIsNotSilence() {
+        // The review's case: the invite has an email that nobody saved, and Sam Carter spoke.
+        var r = call([("me:A", 0, 10, "Hi."), ("them:A", 10, 20, "Hi.")])
+        r.attendees = ["sam@x.com"]
+        let p = analytics(r).participation!
+        XCTAssertEqual(p.didNotSpeak, [])
+        XCTAssertEqual(p.notMatched.map(\.label), ["sam@x.com"])
+        XCTAssertEqual(p.uninvited, [])
+        XCTAssertEqual(p.unmatchedSpeakers, ["them:A"])
+        XCTAssertEqual(MeetingFindings.participation(p), "At least 0 of 1 invited person spoke; 1 invited entry is not matched to a person")
     }
 
     func testAnInvitedFirstNameFindsItsSpeakerWithNoSavedPeople() {
@@ -279,15 +339,20 @@ final class MeetingAnalyticsTests: XCTestCase {
         XCTAssertEqual(p.invited.map(\.speaker), ["them:A", "me:A"], "and a name invited twice is one person")
         XCTAssertEqual(p.invited.map(\.person), [nil, nil])
         XCTAssertEqual(p.uninvited, [])
+        XCTAssertEqual(MeetingFindings.participation(p), "All 2 invited people spoke")
     }
 
-    func testTheOwnerIsNeverUninvitedAndUnnamedVoicesAreCounted() {
+    func testAnInvitedPersonWithNoVoiceIsNotCalledSilentWhileAVoiceHasNoName() {
         var r = call(names: ["me:A": "Dana Lee"], [("me:A", 0, 10, "Hi."), ("them:A", 10, 20, "Hi."), ("them:B", 20, 30, "Hi.")])
-        r.attendees = ["Sam Carter"]
-        let p = analytics(r).participation!
-        XCTAssertEqual(p.uninvited, [])
+        r.attendees = ["Sam Carter", "Jo Park"]
+        let people = PersonDirectory([.init(name: "Sam Carter", email: nil)])
+        let p = MeetingAnalytics(record: r, owner: "Dana Lee", people: people).participation!
         XCTAssertEqual(p.unnamedVoices, 2)
-        XCTAssertEqual(MeetingFindings.participation(p), "0 of 1 invited person spoke by name; 2 voices have no name yet")
+        XCTAssertEqual(p.withoutVoice.map(\.label), ["Sam Carter"])
+        XCTAssertEqual(p.didNotSpeak, [], "Sam can be one of the two voices with no name")
+        XCTAssertEqual(p.notMatched.map(\.label), ["Jo Park"], "a name nobody saved and nobody in the call has")
+        XCTAssertEqual(p.uninvited, [])
+        XCTAssertEqual(MeetingFindings.participation(p), "At least 0 of 2 invited people spoke; 1 invited entry is not matched to a person, and 2 voices have no name yet")
         XCTAssertNil(analytics(call([("me:A", 0, 10, "Hi.")])).participation, "no invite, no part")
     }
 
@@ -313,6 +378,20 @@ final class MeetingAnalyticsTests: XCTestCase {
         XCTAssertEqual(o.tasks, [.init(id: mine.id, text: "Write the notes", done: true)])
         XCTAssertEqual(MeetingFindings.outcomes(o), "1 decision and 5 action items")
         XCTAssertNil(analytics(call([("me:A", 0, 10, "Hi.")])).outcomes)
+    }
+
+    func testAnOwnerWrittenAsAFirstNameKeepsThatNameAndCountsWithItsOneSpeaker() {
+        var r = call([("me:A", 0, 10, "Hi."), ("them:A", 10, 20, "Hi.")])
+        r.actionItems = [ActionItem(owner: "Sam", task: "Send the budget"), ActionItem(owner: "sam", task: "Call finance")]
+        var o = analytics(r).outcomes!
+        XCTAssertEqual(o.owners.map(\.name), ["Sam"], "the row says what the items say, so a first name is never a link")
+        XCTAssertEqual(o.owners.map(\.speaker), ["them:A"], "but the two items are counted with the one Sam who spoke")
+        XCTAssertEqual(o.owners[0].tasks.count, 2)
+        // A second Sam was invited: nobody can say whose items they are.
+        r.attendees = ["Sam Lee"]
+        o = analytics(r).outcomes!
+        XCTAssertEqual(o.owners.map(\.speaker), [nil])
+        XCTAssertEqual(o.owners.map(\.name), ["Sam"])
     }
 
     func testTheCoachPartIsTheReviewsValueAndScores() {
@@ -367,16 +446,35 @@ final class MeetingAnalyticsTests: XCTestCase {
         XCTAssertFalse(cost.estimated)
     }
 
-    func testAnOlderCallGetsTheAnalyticsEstimate() {
+    func testOnlyACallFromBeforeTheLogGetsTheAnalyticsEstimate() {
         let r = call(minutes: 60, [("me:A", 0, 10, "Hi.")])
-        let cost = analytics(r).cost!
+        let after = r.end.addingTimeInterval(86_400), before = r.start.addingTimeInterval(-86_400)
+        let cost = MeetingAnalytics(record: r, owner: "Dana Lee", usageSince: after).cost!
         XCTAssertTrue(cost.estimated)
         let estimate = Pricing.estimates(for: [r], logged: []).map(Pricing.cost).reduce(0, +)
         XCTAssertEqual(cost.total, estimate, accuracy: 0.0001)
         XCTAssertGreaterThan(cost.transcription, 0)
         XCTAssertGreaterThan(cost.ai, 0)
+        XCTAssertNil(MeetingAnalytics(record: r, owner: "Dana Lee", usageSince: before).cost, "the log was there and has nothing for the call: models on this Mac")
+        XCTAssertNil(analytics(r).cost, "no log at all says nothing about a price")
+        let other = UsageEvent(date: before, callID: "other", service: .claude, purpose: .summary, model: "claude-opus-5-5", inputTokens: 1000)
+        XCTAssertNil(MeetingAnalytics(record: r, owner: "Dana Lee", usage: [other]).cost, "the whole log as it is: its first event is before the call")
         let local = UsageEvent(date: start, callID: "c", service: .local, purpose: .transcription, model: nil, audioSeconds: 3600)
         XCTAssertNil(MeetingAnalytics(record: r, owner: "Dana Lee", usage: [local]).cost, "a call transcribed on this Mac cost nothing")
+    }
+
+    func testTheUsageLogGivesOneCallsEventsAndItsFirstDate() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("usage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = UsageLog(directory: dir)
+        XCTAssertEqual(log.events(forCall: "c").events, [])
+        XCTAssertNil(log.events(forCall: "c").since)
+        for (id, day) in [("other", 0.0), ("c", 1), ("c2", 2), ("c", 3)] {
+            log.record(UsageEvent(date: start.addingTimeInterval(day * 86_400), callID: id, service: .claude, purpose: .summary, model: "m", inputTokens: 10))
+        }
+        let found = log.events(forCall: "c")
+        XCTAssertEqual(found.events.map(\.callID), ["c", "c"], "not the call whose id only begins the same")
+        XCTAssertEqual(found.since, start)
     }
 
     // MARK: Empty, findings, stamp
@@ -399,7 +497,7 @@ final class MeetingAnalyticsTests: XCTestCase {
             ("me:A", 150, 250, Array(repeating: "word", count: 200).joined(separator: " ")),
         ]))
         XCTAssertEqual(MeetingFindings.talk(a), .init(subject: "them:A", "talked most: 3 min 20 s, 67% of the talk"))
-        XCTAssertEqual(MeetingFindings.flow(a), .init(subject: "them:A", "held the longest turn, 3 min 20 s; one person cut in once"))
+        XCTAssertEqual(MeetingFindings.flow(a), .init(subject: "them:A", "held the longest turn, 3 min 20 s"))
         XCTAssertEqual(MeetingFindings.delivery(a), .init(subject: "them:A", "spoke fastest, at 150 words a minute"))
         XCTAssertEqual(MeetingFindings.span(48), "48 s")
         XCTAssertEqual(MeetingFindings.span(120), "2 min")
@@ -424,7 +522,7 @@ final class MeetingAnalyticsTests: XCTestCase {
         var r = call([("me:A", 0, 10, "Hi.")])
         let first = MeetingAnalytics.stamp(r)
         XCTAssertEqual(first, MeetingAnalytics.stamp(r))
-        r.summary = "The summary is not read."
+        r.summary = "The words of the summary are not read."
         XCTAssertEqual(first, MeetingAnalytics.stamp(r))
         var changes: [CallRecord] = []
         var c = r; c.speakerNames["them:A"] = "Riley Chen"; changes.append(c)
@@ -437,6 +535,15 @@ final class MeetingAnalyticsTests: XCTestCase {
         c = r; c.kind = "Standup"; changes.append(c)
         c = r; c.tags = ["Budget"]; changes.append(c)
         c = r; c.plannedEnd = start; changes.append(c)
-        for (i, changed) in changes.enumerated() { XCTAssertNotEqual(first, MeetingAnalytics.stamp(changed), "change \(i)") }
+        c = r; c.summary = nil; changes.append(c)
+        c = r; c.calendarTitle = nil; c.generatedTitle = r.title; changes.append(c)
+        for (i, changed) in changes.enumerated() {
+            XCTAssertNotEqual(first, MeetingAnalytics.stamp(changed), "change \(i)")
+            XCTAssertFalse(MeetingAnalytics.sameInputs(r, changed), "change \(i)")
+        }
+        var same = r
+        same.summary = "Other words."
+        same.markdownPath = "/tmp/note.md"
+        XCTAssertTrue(MeetingAnalytics.sameInputs(r, same), "the page asks this on each tick of the playback, and gets yes")
     }
 }

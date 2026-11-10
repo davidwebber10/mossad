@@ -37,12 +37,9 @@ public enum MeetingFindings {
     }
 
     public static func flow(_ a: MeetingAnalytics) -> Sentence? {
-        guard let flow = a.flow else { return nil }
-        let cuts = flow.interruptionCount
-        let tail = cuts == 0 ? "nobody cut in" : cuts == 1 ? "one person cut in once" : "people cut in \(cuts) times"
-        guard let holder = a.speakers.max(by: { ($0.longestTurn?.seconds ?? 0) < ($1.longestTurn?.seconds ?? 0) }),
-              let longest = holder.longestTurn, longest.seconds > 0 else { return Sentence(tail.prefix(1).uppercased() + tail.dropFirst()) }
-        return Sentence(subject: holder.id, "held the longest turn, \(span(longest.seconds)); \(tail)")
+        guard a.flow != nil, let holder = a.speakers.max(by: { ($0.longestTurn?.seconds ?? 0) < ($1.longestTurn?.seconds ?? 0) }),
+              let longest = holder.longestTurn, longest.seconds > 0 else { return nil }
+        return Sentence(subject: holder.id, "held the longest turn, \(span(longest.seconds))")
     }
 
     public static func delivery(_ a: MeetingAnalytics) -> Sentence? {
@@ -52,15 +49,34 @@ public enum MeetingFindings {
         return Sentence(subject: fastest.id, paced.count == 1 ? "spoke at \(pace)" : "spoke fastest, at \(pace)")
     }
 
+    /// How many of the invited people spoke. "At least" when the count can be too low: an invited entry that is
+    /// not matched to anyone, or a voice with no name, can be one more.
     public static func participation(_ p: MeetingAnalytics.Participation) -> String {
         let invited = p.invited.count, spoke = p.spoke.count
         let people = invited == 1 ? "person" : "people"
-        if p.unnamedVoices > 0, spoke < invited {
-            return "\(spoke) of \(invited) invited \(people) spoke by name; \(count(p.unnamedVoices, "voice has", "voices have")) no name yet"
+        var unknown: [String] = []
+        if !p.isMatched { unknown.append(count(p.notMatched.count, "invited entry is", "invited entries are") + " not matched to a person") }
+        if p.unnamedVoices > 0 { unknown.append(count(p.unnamedVoices, "voice has", "voices have") + " no name yet") }
+        guard unknown.isEmpty else {
+            return "At least \(spoke) of \(invited) invited \(people) spoke; " + unknown.joined(separator: ", and ")
         }
         if spoke == invited { return invited == 1 ? "The one invited person spoke" : "All \(invited) invited people spoke" }
         if spoke == 0 { return invited == 1 ? "The one invited person did not speak" : "None of the \(invited) invited people spoke" }
         return "\(spoke) of \(invited) invited \(people) spoke"
+    }
+
+    /// The recording against the invite's start: "you joined 6 min after the planned start". The recording begins
+    /// when the owner joins, so this is about the owner, not about when the meeting began.
+    public static func joined(_ s: MeetingAnalytics.Schedule) -> String {
+        let d = s.startDelay
+        return abs(d) < 60 ? "you joined on time" : d > 0 ? "you joined \(span(d)) after the planned start" : "you joined \(span(-d)) before the planned start"
+    }
+
+    /// The recording against the invite's end: "the recording ran 28 min past the planned end".
+    public static func ended(_ s: MeetingAnalytics.Schedule) -> String {
+        let o = s.overrun
+        return abs(o) < 60 ? "the recording ended on time" : o > 0 ? "the recording ran \(span(o)) past the planned end"
+            : "the recording ended \(span(-o)) before the planned end"
     }
 
     public static func outcomes(_ o: MeetingAnalytics.Outcomes) -> String {
@@ -146,27 +162,47 @@ public enum MeetingFindings {
 
     private static func rating(_ level: Double) -> String { MeetingValue.Rating(level: level)?.rawValue ?? whole(level) }
 
-    /// What a person did, to follow their name or "You": "talked 60% of the time".
-    public static func did(_ metric: PersonMetric, _ v: Double, you: Bool) -> String {
-        let n = Int(v.rounded())
+    /// What a person did, to follow their name or "You": "talked 60% of the time". A number that the history
+    /// holds per hour says the count of this call first, then the rate: "asked 6 questions (12 an hour)". The
+    /// count, not the rounded rate, decides "no questions". Cut-ins are between the owner and the other person.
+    public static func did(_ metric: PersonMetric, _ v: Double, count n: Int? = nil, you: Bool) -> String {
+        let rate = "\(Int(v.rounded())) an hour"
+        let times = n ?? Int(v.rounded())
         switch metric {
         case .talkShare: return "talked \(percent(v)) of the time"
-        case .wordsPerMinute: return "spoke at \(n) words a minute"
+        case .wordsPerMinute: return "spoke at \(Int(v.rounded())) words a minute"
         case .fillersPerMinute: return "used \(tenth(v)) filler words a minute"
-        case .questionsPerHour: return n == 0 ? "asked no questions" : "asked \(count(n, "question", "questions")) an hour"
+        case .questionsPerHour: return times == 0 ? "asked no questions" : "asked \(count(times, "question", "questions")) (\(rate))"
         case .averageTurn: return "took turns of \(span(v)) on average"
         case .longestTurn: return "held one turn for \(span(v))"
-        case .cutInsPerHour: return n == 0 ? "did not cut in" : "cut in \(count(n, "time", "times")) an hour"
-        case .cutOffsPerHour: return n == 0 ? "\(you ? "were" : "was") not cut off" : "\(you ? "were" : "was") cut off \(count(n, "time", "times")) an hour"
+        case .cutInsPerHour:
+            let whom = you ? "" : " on you"
+            return times == 0 ? "did not cut in\(whom)" : "cut in\(whom) \(count(times, "time", "times")) (\(rate))"
+        case .cutOffsPerHour:
+            let verb = you ? "were" : "was", by = you ? "" : " by you"
+            return times == 0 ? "\(verb) not cut off\(by)" : "\(verb) cut off\(by) \(count(times, "time", "times")) (\(rate))"
         case .responseGap: return "took \(pause(v)) to answer"
         }
     }
 
+    private static let perHour: Set<PersonMetric> = [.questionsPerHour, .cutInsPerHour, .cutOffsPerHour]
+
     /// "usually 30 to 40% in 1:1s with you": the range and where it comes from. Counts say that they are per hour.
+    /// A range from fewer than five meetings is not called usual: "30 to 40% in 1:1s with you, in 3 meetings so far".
     public static func usually(_ metric: PersonMetric, _ u: MeetingAnalytics.Usual, context: MeetingAnalytics.Context) -> String {
-        let perHour: Set<PersonMetric> = [.questionsPerHour, .cutInsPerHour, .cutOffsPerHour]
-        return "usually \(range(metric, u))\(perHour.contains(metric) ? " an hour" : "") \(context.label)"
+        tell("\(range(metric, u))\(perHour.contains(metric) ? " an hour" : "")", u, context)
     }
+
+    public static func usually(_ metric: MeetingMetric, _ u: MeetingAnalytics.Usual, context: MeetingAnalytics.Context) -> String {
+        tell(range(metric, u), u, context)
+    }
+
+    private static func tell(_ range: String, _ u: MeetingAnalytics.Usual, _ context: MeetingAnalytics.Context) -> String {
+        u.isFirm ? "usually \(range) \(context.label)" : "\(range) \(context.label), in \(u.samples) meetings so far"
+    }
+
+    /// "from 8 meetings": how many earlier values a range comes from, which can be fewer than the context has.
+    public static func basis(_ u: MeetingAnalytics.Usual) -> String { "from \(count(u.samples, "meeting", "meetings"))" }
 
     /// The sentence over the meeting's own numbers: "Compared with 8 earlier meetings in Weekly sync".
     public static func compared(_ context: MeetingAnalytics.Context) -> String {
@@ -177,21 +213,17 @@ public enum MeetingFindings {
         // "in meetings of 3 to 4 people" already says "meetings"; "in your 1:1s with Sam" says whose.
         case .setting where context.label.hasPrefix("in "):
             return "Compared with \(n) earlier \(context.label.dropFirst(3))"
-        case .oneOnOne where context.label.hasPrefix("in your "):
+        case .oneOnOne where context.label.hasPrefix("in your "), .ownOneOnOnes where context.label.hasPrefix("in your "):
             return "Compared with your \(n) earlier \(context.label.dropFirst(8))"
         default:
             return "Compared with \(count(n, "earlier meeting", "earlier meetings")) \(context.label)"
         }
     }
 
-    public static func usually(_ metric: MeetingMetric, _ u: MeetingAnalytics.Usual, context: MeetingAnalytics.Context) -> String {
-        "usually \(range(metric, u)) \(context.label)"
-    }
-
     /// What follows the person's name in "What stood out": "talked 60% of the time; usually 30 to 40% in 1:1s with you".
-    static func sentence(_ metric: PersonMetric, _ r: MeetingAnalytics.Reading, you: Bool, context: MeetingAnalytics.Context) -> String {
-        guard let usual = r.usual else { return did(metric, r.value, you: you) }
-        return "\(did(metric, r.value, you: you)); \(usually(metric, usual, context: context))"
+    static func sentence(_ metric: PersonMetric, _ r: MeetingAnalytics.Reading, count: Int? = nil, you: Bool, context: MeetingAnalytics.Context) -> String {
+        guard let usual = r.usual else { return did(metric, r.value, count: count, you: you) }
+        return "\(did(metric, r.value, count: count, you: you)); \(usually(metric, usual, context: context))"
     }
 
     /// A whole sentence about the meeting: "The meeting ran 52 min; usually 25 to 35 min in Weekly sync".

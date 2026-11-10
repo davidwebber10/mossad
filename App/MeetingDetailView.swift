@@ -68,6 +68,7 @@ struct MeetingDetailView: View {
         }
             .background(Palette.window)
             .environment(\.personLinks, people.links)
+            .environment(\.personOpener, controller.personOpener)
             .environment(\.openScreen) { screen in
                 openScreen = screen.file
                 tabBinding.wrappedValue = .screens
@@ -152,7 +153,7 @@ struct MeetingDetailView: View {
             }
         case .analytics:
             // Equatable, so the playback's ticks do not draw it again; its numbers are made off the main thread.
-            MeetingAnalyticsTab(record: record, people: people, player: player, stamp: MeetingAnalytics.stamp(record),
+            MeetingAnalyticsTab(record: record, people: people, player: player,
                                 top: Self.underTabs + 32, openCoach: { tabBinding.wrappedValue = .coach })
                 .equatable()
         case .chat:
@@ -306,7 +307,8 @@ struct MeetingPeople {
         for u in record.utterances where !allKeys.contains(u.speakerKey) { allKeys.append(u.speakerKey) }
         let profiles = library.profiles
         let directory = PersonDirectory(profiles: profiles)
-        let knownNames = lanes.filter { record.speakerNames[$0.key] != nil }.map(\.name)
+        // Everyone the meeting names, saved or not: a second "Sam" among them makes a person saved as "Sam" unsure.
+        let knownNames = lanes.filter { record.speakerNames[$0.key] != nil }.map(\.name) + record.attendees.filter { !$0.contains("@") }
         var byKey: [String: Speaker] = [:]
         let list = lanes.enumerated().map { i, lane in
             let known = record.speakerNames[lane.key] != nil
@@ -314,7 +316,7 @@ struct MeetingPeople {
             let keys = known ? allKeys.filter { record.speakerNames[$0] != nil && names[$0] == lane.name } : [lane.key]
             let s = Speaker(key: lane.key, keys: keys, name: lane.name, email: profiles.first { $0.name == lane.name }?.email,
                             color: Palette.speaker(i), isOwner: lane.name == ownerName, isUnknown: !known, seconds: lane.seconds,
-                            person: known ? directory.person(for: lane.name, among: knownNames) : nil)
+                            person: known ? directory.link(for: lane.name, in: knownNames) : nil)
             for k in keys { byKey[k] = s }
             return s
         }
@@ -325,14 +327,18 @@ struct MeetingPeople {
             guard a.contains("@") else { return (a, nil) }
             return (library.name(forEmail: a) ?? a, library.name(forEmail: a) == nil ? nil : a)
         }
-        // A first name alone ("Sam") stands for a person only when the meeting has one Sam: among its speakers
-        // and the people invited to it.
-        links = PersonLinks(stamp: stamp, directory: directory, context: knownNames + attendees.map(\.name),
+        links = PersonLinks(stamp: stamp, directory: directory, meeting: knownNames,
                             names: list.map(\.name) + record.attendees + attendees.map(\.name) + record.actionItems.compactMap(\.owner)
                                 + (record.screens ?? []).compactMap(\.presenter))
     }
 
     func speaker(forKey key: String) -> Speaker? { byKey[key] }
+
+    /// The saved people among the first speakers, each one time, for the lanes' VoiceOver actions.
+    var profileActions: [String] {
+        var seen: Set<String> = []
+        return speakers.prefix(12).compactMap(\.person).filter { seen.insert($0).inserted }
+    }
     func name(forKey key: String) -> String { names[key] ?? key }
 
     func color(forKey key: String) -> Color { byKey[key]?.color ?? Palette.tertiaryMark }

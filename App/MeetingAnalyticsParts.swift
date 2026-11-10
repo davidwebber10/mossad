@@ -48,13 +48,13 @@ struct PlayAt: View {
 
 // MARK: A number against its usual
 
-/// A number in a table with its mark: an arrow when it is outside the person's usual range, a quiet dot when it
-/// is inside, and nothing when there is no history to say. The range is the tooltip.
+/// A number in a table with its mark: an arrow when it stood out against the person's history, a quiet dot when
+/// the history calls it usual, and nothing when the history is too short to say. The range is the tooltip.
 struct Marked: View {
     let text: String
     var reading: MeetingAnalytics.Reading?
-    /// "usually 30 to 40% in 1:1s with you".
-    var usually: String?
+    /// The tooltip: "Usually 30 to 40% in 1:1s with you (from 8 meetings)".
+    var tip: String?
 
     static let markWidth: CGFloat = 9
 
@@ -64,7 +64,7 @@ struct Marked: View {
             mark.frame(width: Self.markWidth)
             Text(text).fontWeight(out ? .semibold : .regular).foregroundStyle(Palette.ink)
         }
-        .help(usually.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "")
+        .help(tip ?? "")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
     }
@@ -86,23 +86,23 @@ struct Marked: View {
         case .usual: ", as usual"
         case nil: ""
         }
-        return text + standing + (usually.map { ", \($0)" } ?? "")
+        return text + standing + (tip.map { ". \($0)" } ?? "")
     }
 }
 
-/// "↑ ↓ outside the usual range · as usual": the key under a table with marks.
+/// "↑ ↓ far from the person's usual · as usual": the key under a table with marks.
 struct MarkKey: View {
     var body: some View {
-        HStack(spacing: 12) {
+        FlowLayout(spacing: 12) {
             HStack(spacing: 4) {
                 Text("↑ ↓").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.accent)
-                Text("outside the person’s usual range")
+                Text("far from the person’s usual")
             }
             HStack(spacing: 5) {
                 Circle().fill(Palette.tertiaryMark).frame(width: 3, height: 3)
                 Text("as usual")
             }
-            Text("Point at a number for the range.")
+            Text("No mark: fewer than 5 earlier meetings. Point at a number for the range.")
         }
         .font(.system(size: 11.5))
         .foregroundStyle(Palette.tertiary)
@@ -110,31 +110,46 @@ struct MarkKey: View {
     }
 }
 
+/// "Usually 30 to 40% in 1:1s with you": a sentence part with its first letter in upper case.
+func sentenceCase(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
+
 // MARK: Sparkline
 
 /// A small line over the last meetings, in the Analytics page's line: the accent, 1.5 pt, with this call as a dot
-/// at the end and a hairline at the median.
+/// at the end and a hairline at the median of the meetings before it.
 struct Sparkline: View {
     let values: [Double]
     var median = false
-    /// The scale's ends when the values do not set it: a share always runs from 0 to 1.
+    /// The scale's ends when the values do not set it: a rating always runs from 1 to 3.
     var domain: ClosedRange<Double>?
+    /// The least the scale covers, around the values: 20 points for a share, so 30% to 32% does not fill the height.
+    var minimumSpan: Double?
+
+    private var scale: ClosedRange<Double> {
+        if let domain { return domain }
+        let low = values.min() ?? 0, high = values.max() ?? 1
+        guard let minimumSpan, high - low < minimumSpan else { return low...max(high, low) }
+        let middle = (low + high) / 2
+        return (middle - minimumSpan / 2)...(middle + minimumSpan / 2)
+    }
 
     var body: some View {
         Canvas { context, size in
             guard values.count >= 2 else { return }
-            let low = domain?.lowerBound ?? values.min() ?? 0, high = domain?.upperBound ?? values.max() ?? 1
-            let span = high - low
+            let low = scale.lowerBound, span = scale.upperBound - scale.lowerBound
             let inset: CGFloat = 3
+            func y(_ value: Double) -> CGFloat {
+                let part = span > 0 ? (value - low) / span : 0.5
+                return inset + (size.height - inset * 2) * (1 - min(max(part, 0), 1))
+            }
             func point(_ i: Int) -> CGPoint {
-                let x = inset + (size.width - inset * 2) * CGFloat(i) / CGFloat(values.count - 1)
-                let part = span > 0 ? (values[i] - low) / span : 0.5
-                return CGPoint(x: x, y: inset + (size.height - inset * 2) * (1 - min(max(part, 0), 1)))
+                CGPoint(x: inset + (size.width - inset * 2) * CGFloat(i) / CGFloat(values.count - 1), y: y(values[i]))
             }
             if median, span > 0 {
-                let mid = values.sorted()[values.count / 2]
-                let y = inset + (size.height - inset * 2) * (1 - (mid - low) / span)
-                context.fill(Path(CGRect(x: 0, y: y - 0.5, width: size.width, height: 1)), with: .color(Palette.hairline))
+                // The earlier meetings only: this call is what the line is read against.
+                let earlier = values.dropLast().sorted()
+                let middle = earlier[earlier.count / 2]
+                context.fill(Path(CGRect(x: 0, y: y(middle) - 0.5, width: size.width, height: 1)), with: .color(Palette.hairline))
             }
             var line = Path()
             line.move(to: point(0))
@@ -150,23 +165,36 @@ struct Sparkline: View {
 
 // MARK: Sentences with a person
 
-/// A sentence that begins with a speaker: the name is a link (or "You"), the rest is text. The font and the color
-/// come from the caller.
+/// A sentence that begins with a speaker: the name is a link (or "You"), the rest is text. The words follow the
+/// name with the font's own word space and wrap under the name, as one line of text does. `size` is the font
+/// size, which the caller also sets as the font; the color comes from the caller.
 struct SpeakerSentence: View {
     let speaker: MeetingPeople.Speaker?
     let callID: String
     let text: String
+    var size: CGFloat = 15
 
     var body: some View {
         if let speaker {
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                SpeakerName(speaker: speaker, callID: callID, shown: speaker.isOwner ? "You" : nil)
-                    .lineLimit(1).fixedSize()
-                Text(text).fixedSize(horizontal: false, vertical: true)
+            // A word space of the system font is about a quarter of its size.
+            FlowLayout(spacing: size * 0.26) {
+                name(speaker)
+                ForEach(Array(text.split(separator: " ").enumerated()), id: \.offset) { _, word in Text(word) }
+            }
+            // VoiceOver reads the link, then the sentence in one piece, not word by word.
+            .accessibilityRepresentation {
+                HStack {
+                    name(speaker)
+                    Text(text)
+                }
             }
         } else {
             Text(text).fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func name(_ speaker: MeetingPeople.Speaker) -> some View {
+        SpeakerName(speaker: speaker, callID: callID, shown: speaker.isOwner ? "You" : nil).lineLimit(1).fixedSize()
     }
 }
 
@@ -177,7 +205,7 @@ struct SpeakerFinding: View {
     let text: String
 
     var body: some View {
-        SpeakerSentence(speaker: speaker, callID: callID, text: text)
+        SpeakerSentence(speaker: speaker, callID: callID, text: text, size: 15)
             .font(.system(size: 15, weight: .medium))
             .foregroundStyle(Palette.ink)
             .accessibilityAddTraits(.isHeader)

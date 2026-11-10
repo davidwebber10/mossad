@@ -10,23 +10,24 @@ struct MeetingAnalyticsTab: View {
     let people: MeetingPeople
     /// Not observed: the tab does not draw again on each tick of the playback.
     let player: AudioPlayer
-    /// `MeetingAnalytics.stamp` of the record, worked out by the page.
-    let stamp: Int
     var top: CGFloat = 32
     /// Opens the meeting's Coach tab, for the coach's part.
     var openCoach: () -> Void = {}
     @State private var data: MeetingAnalytics?
     @State private var audio = false
     @State private var wide = true
+    /// True when the numbers take longer than a moment: then the empty tab says that it is working.
+    @State private var slow = false
 
-    /// The tab's content column is this wide with the label column beside it; narrower, the labels go above.
-    private static let wideWidth: CGFloat = 840
+    /// With the label column beside it, the content must still hold the widest table. Narrower, the labels go above.
+    private static let wideWidth: CGFloat = 960
 
+    /// Made here, not by the page: this body runs when something changed, the page's on each tick of the playback.
     private var key: MeetingAnalyticsStore.Key {
         var people = Hasher()
         for p in controller.library.profiles { people.combine(p.name); people.combine(p.email) }
-        return MeetingAnalyticsStore.Key(record: stamp, owner: controller.ownerName, people: people.finalize(), coach: controller.coachVersion,
-                                         commitments: controller.commitmentsVersion, meetings: controller.meetingsVersion)
+        return MeetingAnalyticsStore.Key(record: MeetingAnalytics.stamp(record), owner: controller.ownerName, people: people.finalize(),
+                                         coach: controller.coachVersion, commitments: controller.commitmentsVersion, meetings: controller.meetingsVersion)
     }
 
     var body: some View {
@@ -45,7 +46,12 @@ struct MeetingAnalyticsTab: View {
                             MeetingAnalyticsPage(analytics: shown, record: record, people: people, openCoach: openCoach)
                         }
                     } else {
-                        Color.clear.frame(height: 320)
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("Reading your earlier meetings…").font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                        }
+                        .opacity(slow ? 1 : 0)
+                        .frame(maxWidth: .infinity, minHeight: 320, alignment: .topLeading)
                     }
                 }
                 .detailColumn(top: top)
@@ -62,7 +68,13 @@ struct MeetingAnalyticsTab: View {
         .environment(\.momentPlayer, audio ? MomentPlayer { [player] at in player.play(from: at) } : nil)
         .onReceive(player.$isAvailable.removeDuplicates()) { audio = $0 }
         .task(id: key) {
+            slow = false
+            let waiting = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                if !Task.isCancelled { slow = true }
+            }
             let made = await MeetingAnalyticsStore.shared.analytics(for: record, key: key, controller: controller)
+            waiting.cancel()
             guard !Task.isCancelled else { return }
             withAnimation(.smooth) { data = made }
         }
@@ -70,10 +82,10 @@ struct MeetingAnalyticsTab: View {
 }
 
 /// The meeting page draws again on each tick of the playback. The tab does not: it is the same until the record,
-/// the people, or its place change.
+/// the people, or its place change. The comparison reads no words and hashes nothing (`sameInputs`).
 extension MeetingAnalyticsTab: Equatable {
     nonisolated static func == (a: MeetingAnalyticsTab, b: MeetingAnalyticsTab) -> Bool {
-        a.stamp == b.stamp && a.people.stamp == b.people.stamp && a.top == b.top && a.player === b.player
+        a.people.stamp == b.people.stamp && a.top == b.top && a.player === b.player && MeetingAnalytics.sameInputs(a.record, b.record)
     }
 }
 
@@ -95,7 +107,7 @@ private struct MeetingAnalyticsPage: View {
                 .hairline()
             VStack(alignment: .leading, spacing: 36) {
                 // With no history at all, "What stood out" already says so; the group shows only when it has more.
-                if a.baselines.hasHistory || a.baselines.schedule != nil || a.baselines.trends != nil {
+                if a.baselines.meeting.context != nil || a.baselines.schedule != nil || a.baselines.trends != nil {
                     MeetingAnalyticsGroup("Against the usual") { UsualSection(analytics: a, record: record) }
                 }
                 if !a.speakers.isEmpty {
@@ -126,9 +138,10 @@ private struct MeetingAnalyticsPage: View {
 
 // MARK: What stood out
 
-/// The few numbers furthest from what is usual for this meeting and its people, each with where to check it.
+/// The numbers that stood out against what is usual for this meeting and its people, each with where to check
+/// it. An ordinary call has one quiet line.
 private struct StandoutsSection: View {
-    @EnvironmentObject var controller: AppController
+    @Environment(\.personOpener) private var opener
     let analytics: MeetingAnalytics
     let people: MeetingPeople
     let callID: String
@@ -136,23 +149,21 @@ private struct StandoutsSection: View {
     var body: some View {
         let b = analytics.baselines
         if b.standouts.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                Finding(b.hasHistory ? "Nothing unusual" : "Not enough history yet")
-                Text(b.hasHistory ? "Every number of this call is inside its usual range."
-                     : "Mossad compares a call with at least 3 earlier meetings of the same series, the same setting, or the same people.")
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(b.hasFirmHistory ? "Nothing unusual in this call."
+                 : "Not enough history yet. Mossad calls a number unusual only against 5 or more earlier meetings like this one.")
+                .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(b.standouts) { s in
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        SpeakerSentence(speaker: s.subject.flatMap(people.speaker(forKey:)), callID: callID, text: s.text)
+                    HStack(alignment: .top, spacing: 12) {
+                        SpeakerSentence(speaker: s.subject.flatMap(people.speaker(forKey:)), callID: callID, text: s.text, size: 15)
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(Palette.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         evidence(s.evidence)
                             .font(.system(size: 12, weight: .semibold))
+                            .padding(.top, 2)
                     }
                     .padding(.vertical, 8)
                     .hairline()
@@ -167,8 +178,8 @@ private struct StandoutsSection: View {
         case .moment(let at):
             PlayAt(at: at, icon: true)
         case .person(let id):
-            if let person = people.speaker(forKey: id)?.person {
-                Button { controller.openPerson(person) } label: {
+            if let opener, let person = people.speaker(forKey: id)?.person {
+                Button { opener(person) } label: {
                     HStack(spacing: 3) {
                         Text("Profile")
                         IconImage(.chevronRight, size: 9)
@@ -178,7 +189,7 @@ private struct StandoutsSection: View {
                 }
                 .buttonStyle(.plain)
                 .help("Open \(person)\u{2019}s profile")
-                .accessibilityLabel("Open \(person)\u{2019}s profile")
+                .accessibilityHint("Opens \(person)\u{2019}s profile")
                 .accessibilityAddTraits(.isLink)
                 .accessibilityRemoveTraits(.isButton)
             }
@@ -190,22 +201,25 @@ private struct StandoutsSection: View {
 
 // MARK: Figures
 
-/// Four numbers of the call, each with what is usual for it.
+/// Up to four numbers of the call, each with what is usual for it. A number the call does not have (no voice of
+/// the owner's, no summary to count decisions in) has no tile: a dash or a zero would read as a fact.
 private struct MeetingFigures: View {
     let analytics: MeetingAnalytics
     let record: CallRecord
 
     var body: some View {
         let a = analytics, m = a.baselines.meeting
-        let length = max(0, record.end.timeIntervalSince(record.start))
         HStack(alignment: .top, spacing: 24) {
-            Figure(title: "Length", value: hours(length), detail: lengthDetail, change: nil,
+            Figure(title: "Length", value: hours(a.facts.values[.length] ?? 0), detail: lengthDetail, change: nil,
                    mark: mark(m[.length], .length, m.context, above: "longer", below: "shorter"))
             Figure(title: "People who spoke", value: "\(a.speakers.count)", detail: peopleDetail, change: nil,
                    mark: mark(m[.voices], .voices, m.context, above: "more", below: "fewer"))
-            Figure(title: "Your talk share", value: a.ownerShare.map(percentText) ?? "–", detail: shareDetail, change: nil, mark: shareMark)
-            Figure(title: "Decisions · action items", value: "\(a.outcomes?.decisions ?? 0) · \(a.outcomes?.actionItems ?? 0)",
-                   detail: outcomesDetail, change: nil, mark: nil)
+            if let share = a.ownerShare {
+                Figure(title: "Your talk share", value: percentText(share), detail: shareDetail, change: nil, mark: shareMark)
+            }
+            if let decisions = a.facts.values[.decisions], let items = a.facts.values[.actionItems] {
+                Figure(title: "Decisions · action items", value: "\(Int(decisions)) · \(Int(items))", detail: outcomesDetail, change: nil, mark: nil)
+            }
         }
     }
 
@@ -214,23 +228,25 @@ private struct MeetingFigures: View {
         guard let reading, reading.stoodOut, let usual = reading.usual, let context else { return nil }
         let up = reading.standing == .above
         let usually = MeetingFindings.usually(metric, usual, context: context)
-        return Figure.Mark(text: "\(up ? "↑" : "↓") \(up ? above : below)", help: usually.prefix(1).uppercased() + usually.dropFirst(),
+        return Figure.Mark(text: "\(up ? "↑" : "↓") \(up ? above : below)", help: "\(sentenceCase(usually)) (\(MeetingFindings.basis(usual)))",
                            spoken: "\(up ? above : below) than usual, \(usually)")
     }
 
-    /// The planned length when the invite has one, else the usual range.
+    /// One short fact, so the line is never cut off: the time past the plan when there is some, else the plan,
+    /// else the usual range.
     private var lengthDetail: String {
         if let s = analytics.baselines.schedule {
-            // One fact, so the line never cuts off: the overrun when there is one, else the plan.
-            return s.ranOver ? "\(MeetingFindings.span(s.overrun)) over the planned \(hours(s.plannedLength))" : "planned \(hours(s.plannedLength))"
+            return s.ranOver ? "\(MeetingFindings.span(s.overrun)) past plan" : "planned \(hours(s.plannedLength))"
         }
-        let m = analytics.baselines.meeting
-        return m[.length]?.usual.map { "usually \(MeetingFindings.range(.length, $0))" } ?? ""
+        guard let usual = analytics.baselines.meeting[.length]?.usual, usual.isFirm else { return "" }
+        return "usually \(MeetingFindings.range(.length, usual))"
     }
 
+    /// "4 of 6 invited" only when every invited entry is matched and every voice has a name.
     private var peopleDetail: String {
-        guard let p = analytics.participation else { return analytics.speakers.contains(where: \.isUnknown) ? "some with no name yet" : "" }
-        return "\(p.spoke.count) of \(p.invited.count) invited"
+        let unnamed = analytics.speakers.filter(\.isUnknown).count
+        guard let p = analytics.participation else { return unnamed > 0 ? "\(unnamed) with no name yet" : "" }
+        return p.isMatched && unnamed == 0 ? "\(p.spoke.count) of \(p.invited.count) invited" : "\(p.invited.count) invited"
     }
 
     private var ownerBaseline: MeetingAnalytics.PersonBaseline? {
@@ -238,7 +254,7 @@ private struct MeetingFigures: View {
     }
 
     private var shareDetail: String {
-        guard let b = ownerBaseline, let usual = b[.talkShare]?.usual else { return analytics.ownerShare == nil ? "you did not speak" : "" }
+        guard let usual = ownerBaseline?[.talkShare]?.usual, usual.isFirm else { return "" }
         return "usually \(MeetingFindings.range(.talkShare, usual))"
     }
 
@@ -246,7 +262,7 @@ private struct MeetingFigures: View {
         guard let b = ownerBaseline, let context = b.context, let reading = b[.talkShare], reading.stoodOut, let usual = reading.usual else { return nil }
         let up = reading.standing == .above
         let usually = MeetingFindings.usually(.talkShare, usual, context: context)
-        return Figure.Mark(text: up ? "↑ more" : "↓ less", help: usually.prefix(1).uppercased() + usually.dropFirst(),
+        return Figure.Mark(text: up ? "↑ more" : "↓ less", help: "\(sentenceCase(usually)) (\(MeetingFindings.basis(usual)))",
                            spoken: "\(up ? "more" : "less") than usual, \(usually)")
     }
 
@@ -275,33 +291,38 @@ private struct UsualSection: View {
             if let context = b.meeting.context {
                 Finding(MeetingFindings.compared(context))
                 table(b.meeting, context)
-            } else if b.hasHistory {
-                Text("The meeting has fewer than 3 earlier meetings of its series or its setting, so only its people have a usual range.")
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             if let s = b.schedule { ScheduleLine(schedule: s) }
             if let t = b.trends { TrendsRow(trends: t) }
         }
     }
 
+    /// A row needs a value of this call and a range. A row of nothing against nothing (no screens, usually none)
+    /// is left out.
+    private func rows(_ m: MeetingAnalytics.MeetingBaseline) -> [(MeetingMetric, String, MeetingAnalytics.Reading, MeetingAnalytics.Usual)] {
+        Self.metrics.compactMap { metric, title in
+            guard let reading = m[metric], let usual = reading.usual, !(reading.value == 0 && usual.low == 0 && usual.high == 0) else { return nil }
+            return (metric, title, reading, usual)
+        }
+    }
+
     private func table(_ m: MeetingAnalytics.MeetingBaseline, _ context: MeetingAnalytics.Context) -> some View {
         VStack(spacing: 0) {
-            ForEach(Self.metrics.filter { m[$0.0]?.usual != nil }, id: \.1) { metric, title in
-                if let reading = m[metric], let usual = reading.usual {
-                    HStack(spacing: 12) {
-                        Text(title).foregroundStyle(Palette.secondary).lineLimit(1).frame(width: 170, alignment: .leading)
-                        Marked(text: value(metric, reading.value), reading: reading, usually: MeetingFindings.usually(metric, usual, context: context))
-                            .frame(width: 110, alignment: .leading)
-                        Text("usually \(MeetingFindings.range(metric, usual))")
-                            .foregroundStyle(reading.stoodOut ? Palette.ink : Palette.tertiary)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                    }
-                    .font(.system(size: 12.5)).monospacedDigit()
-                    .padding(.vertical, 6)
-                    .hairline()
+            ForEach(rows(m), id: \.1) { metric, title, reading, usual in
+                HStack(spacing: 12) {
+                    Text(title).foregroundStyle(Palette.secondary).lineLimit(1).frame(width: 170, alignment: .leading)
+                    Marked(text: value(metric, reading.value), reading: reading,
+                           tip: "\(sentenceCase(MeetingFindings.usually(metric, usual, context: context))) (\(MeetingFindings.basis(usual)))")
+                        .frame(width: 110, alignment: .leading)
+                    // "Usually" needs five meetings; fewer are "so far".
+                    Text(usual.isFirm ? "usually \(MeetingFindings.range(metric, usual))" : "\(MeetingFindings.range(metric, usual)) in \(usual.samples) meetings so far")
+                        .foregroundStyle(reading.stoodOut ? Palette.ink : Palette.tertiary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
                 }
+                .font(.system(size: 12.5)).monospacedDigit()
+                .padding(.vertical, 6)
+                .hairline()
             }
         }
         .hairline(.top)
@@ -318,32 +339,23 @@ private struct UsualSection: View {
     }
 }
 
-/// "Planned 10:00 – 10:30 AM · began 6 min late · ran 12 min over".
+/// "Planned 10:00 – 10:30 AM · you joined 6 min after the planned start · the recording ran 12 min past the planned
+/// end". The recording begins when the owner joins, so the line is about the owner, not about the meeting.
 private struct ScheduleLine: View {
     let schedule: MeetingAnalytics.Schedule
 
     var body: some View {
         let s = schedule
         let planned = (s.plannedStart..<s.plannedEnd).formatted(.interval.hour().minute())
-        HStack(spacing: 6) {
+        FlowLayout(spacing: 6) {
             Text("Planned \(planned)").foregroundStyle(Palette.secondary)
             Text("·").foregroundStyle(Palette.tertiary)
-            Text(start).fontWeight(s.startedLate ? .semibold : .regular).foregroundStyle(s.startedLate ? Palette.ink : Palette.secondary)
+            Text(MeetingFindings.joined(s)).fontWeight(s.joinedLate ? .semibold : .regular).foregroundStyle(s.joinedLate ? Palette.ink : Palette.secondary)
             Text("·").foregroundStyle(Palette.tertiary)
-            Text(end).fontWeight(s.ranOver ? .semibold : .regular).foregroundStyle(s.ranOver ? Palette.ink : Palette.secondary)
+            Text(MeetingFindings.ended(s)).fontWeight(s.ranOver ? .semibold : .regular).foregroundStyle(s.ranOver ? Palette.ink : Palette.secondary)
         }
         .font(.system(size: 12.5)).monospacedDigit()
         .accessibilityElement(children: .combine)
-    }
-
-    private var start: String {
-        let d = schedule.startDelay
-        return abs(d) < 60 ? "began on time" : d > 0 ? "began \(MeetingFindings.span(d)) late" : "began \(MeetingFindings.span(-d)) early"
-    }
-
-    private var end: String {
-        let o = schedule.overrun
-        return abs(o) < 60 ? "ended on time" : o > 0 ? "ran \(MeetingFindings.span(o)) over" : "ended \(MeetingFindings.span(-o)) early"
     }
 }
 
@@ -356,7 +368,7 @@ private struct TrendsRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 24) {
                 if let last = t.talkShare.last {
-                    TrendLine(title: "Your talk share", value: percentText(last.value), points: t.talkShare.map(\.value), domain: nil)
+                    TrendLine(title: "Your talk share", value: percentText(last.value), points: t.talkShare.map(\.value), domain: nil, minimumSpan: 0.2)
                 }
                 if let last = t.value.last {
                     TrendLine(title: "The coach’s rating", value: MeetingValue.Rating(level: last.value)?.rawValue.capitalized ?? "–",
@@ -366,7 +378,7 @@ private struct TrendsRow: View {
                     TrendLine(title: "Length", value: hours(last.value), points: t.length.map(\.value), domain: nil)
                 }
             }
-            Text("The last \(t.context.meetings) \(t.context.meetings == 1 ? "meeting" : "meetings") \(t.context.label), oldest first; the dot is this call.")
+            Text("\(t.context.meetings) earlier \(t.context.meetings == 1 ? "meeting" : "meetings") \(t.context.label) and this call, oldest first. The dot is this call.")
                 .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
         }
         .padding(.top, 4)
@@ -379,12 +391,13 @@ private struct TrendLine: View {
     let value: String
     let points: [Double]
     let domain: ClosedRange<Double>?
+    var minimumSpan: Double?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.system(size: 12)).foregroundStyle(Palette.secondary)
             Text(value).font(.system(size: 20, weight: .semibold)).tracking(-0.4).monospacedDigit()
-            Sparkline(values: points, median: true, domain: domain)
+            Sparkline(values: points, median: true, domain: domain, minimumSpan: minimumSpan)
                 .frame(height: 34)
                 .padding(.top, 8)
         }
@@ -392,6 +405,6 @@ private struct TrendLine: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .hairline(.top)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title), \(value) in this call, over the last \(points.count) meetings")
+        .accessibilityLabel("\(title), \(value) in this call, over \(points.count - 1) earlier \(points.count == 2 ? "meeting" : "meetings") and this call")
     }
 }

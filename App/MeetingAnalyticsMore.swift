@@ -30,7 +30,9 @@ private struct ValueRow: View {
 
 // MARK: Participation
 
-/// The invited people against the voices: who spoke, who did not, and who spoke with no invite.
+/// The invited people against the voices. An entry is in one of four lists: spoke; did not speak (a saved person,
+/// in a call where every voice has a name); no voice with their name (a saved person, while a voice has no name);
+/// and not matched (Mossad does not know who the entry is, so it says nothing about them).
 struct ParticipationSection: View {
     let participation: MeetingAnalytics.Participation
     let analytics: MeetingAnalytics
@@ -39,30 +41,39 @@ struct ParticipationSection: View {
 
     var body: some View {
         let p = participation
+        let silent = p.didNotSpeak, unsure = p.unnamedVoices > 0 ? p.withoutVoice : []
         VStack(alignment: .leading, spacing: 12) {
             Finding(MeetingFindings.participation(p))
-            SplitBar(parts: [(fraction(p.spoke.count, p.invited.count), Palette.accentFill), (fraction(p.unheard.count, p.invited.count), Palette.bar)])
+            SplitBar(parts: [(fraction(p.spoke.count, p.invited.count), Palette.accentFill), (fraction(p.withoutVoice.count, p.invited.count), Palette.bar),
+                             (fraction(p.notMatched.count, p.invited.count), Palette.fill)])
                 .frame(maxWidth: 420)
             if !p.spoke.isEmpty { list("Spoke", p.spoke) }
-            if !p.unheard.isEmpty {
-                // With unnamed voices in the call, a person with no voice is not known to be silent.
-                list(p.unnamedVoices == 0 ? "Did not speak" : "No voice with their name", p.unheard)
+            if !silent.isEmpty { list("Did not speak", silent) }
+            if !unsure.isEmpty { list("No voice with their name", unsure) }
+            if !p.notMatched.isEmpty {
+                list("Invited (not matched)", p.notMatched,
+                     note: "Mossad cannot connect these entries to a saved person or to a voice, so it does not know if they spoke. Add the email to the person in People to match it.")
             }
-            if !p.uninvited.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Subheading("Spoke with no invite")
-                    FlowLayout(spacing: 14) {
-                        ForEach(p.uninvited, id: \.self) { id in
-                            SpeakerCell(speaker: people.speaker(forKey: id), name: people.name(forKey: id), callID: callID)
-                        }
-                    }
-                    .font(.system(size: 12.5))
-                }
+            if !p.unmatchedSpeakers.isEmpty {
+                // "No invite" is a fact only when every invited entry is matched to someone.
+                speakers(p.isMatched ? "Spoke with no invite" : "Spoke, and not matched to an invited entry", p.unmatchedSpeakers)
             }
         }
     }
 
-    private func list(_ title: String, _ attendees: [MeetingAnalytics.Participation.Attendee]) -> some View {
+    private func speakers(_ title: String, _ ids: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Subheading("\(title) · \(ids.count)")
+            FlowLayout(spacing: 14) {
+                ForEach(ids, id: \.self) { id in
+                    SpeakerCell(speaker: people.speaker(forKey: id), name: people.name(forKey: id), callID: callID)
+                }
+            }
+            .font(.system(size: 12.5))
+        }
+    }
+
+    private func list(_ title: String, _ attendees: [MeetingAnalytics.Participation.Attendee], note: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Subheading("\(title) · \(attendees.count)")
             FlowLayout(spacing: 14) {
@@ -78,6 +89,9 @@ struct ParticipationSection: View {
                 }
             }
             .font(.system(size: 12.5))
+            if let note {
+                Text(note).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
@@ -220,9 +234,15 @@ struct MeetingScreensSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Group {
                 if let subject = finding.subject {
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    FlowLayout(spacing: 15 * 0.26) {
                         PersonName(subject).lineLimit(1).fixedSize()
-                        Text(finding.text)
+                        ForEach(Array(finding.text.split(separator: " ").enumerated()), id: \.offset) { _, word in Text(word) }
+                    }
+                    .accessibilityRepresentation {
+                        HStack {
+                            PersonName(subject)
+                            Text(finding.text)
+                        }
                     }
                 } else {
                     Text(finding.text)
@@ -279,7 +299,7 @@ struct MeetingCostSection: View {
             .padding(.top, 12)
             .frame(maxWidth: 320)
             if cost.estimated {
-                Text("Estimated from the call's length and transcript size: this call is from before Mossad logged usage.")
+                Text("Estimated from the call's length and transcript size: this call ended before Mossad began to log usage.")
                     .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 10)

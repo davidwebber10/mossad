@@ -86,7 +86,7 @@ struct LanesPlayer: View {
             // VoiceOver reads the lanes as one position slider, so each person's profile is an action of it.
             Slider(value: Binding(get: { player.time }, set: { player.seek(to: $0) }), in: 0...duration) { Text("Position") }
                 .accessibilityActions {
-                    ForEach(people.speakers.prefix(12).compactMap(\.person), id: \.self) { person in
+                    ForEach(people.profileActions, id: \.self) { person in
                         Button("Open \(person)\u{2019}s profile") { controller.openPerson(person) }
                     }
                 }
@@ -171,6 +171,7 @@ private struct LaneRow: View, @MainActor Equatable {
     let scrub: (TimeInterval) -> Void
     let seek: (TimeInterval) -> Void
     @State private var naming = false
+    @State private var hovered = false
 
     private var unknown: Bool { speaker?.isUnknown ?? true }
     private var color: Color { speaker?.color ?? Palette.bar }
@@ -194,6 +195,8 @@ private struct LaneRow: View, @MainActor Equatable {
             }
             .font(.system(size: 12)).monospacedDigit()
             .frame(width: Detail.labelColumn, alignment: .trailing)
+            .contentShape(Rectangle())
+            .onHover { hovered = $0 }
             GeometryReader { g in
                 Canvas { context, size in
                     let track = CGRect(x: 0, y: (size.height - Detail.laneTrack) / 2, width: size.width, height: Detail.laneTrack)
@@ -223,18 +226,30 @@ private struct LaneRow: View, @MainActor Equatable {
         .accessibilityLabel("\(lane.name), \(minutes)")
     }
 
-    /// A saved person's name opens their profile, and "Change who this is" moves to the menu of a right click.
-    /// Any other name names the voice, as before.
+    /// A saved person's name opens their profile. "Change who this is" is then the pencil that shows beside the
+    /// name while the pointer is on the row, and the menu of a right click. Any other name names the voice, as before.
     @ViewBuilder
     private var name: some View {
         if let speaker, speaker.person != nil {
-            PersonName(speaker.name)
-                .fontWeight(current ? .semibold : .regular)
-                .foregroundStyle(Palette.ink)
-                .lineLimit(1).truncationMode(.tail)
-                .contextMenu {
-                    if editable { Button("Change who this is…", systemImage: "person.crop.circle.badge.questionmark") { naming = true } }
+            HStack(spacing: 4) {
+                if editable {
+                    Button { naming = true } label: {
+                        IconImage(.pencil, size: 10).foregroundStyle(Palette.secondary)
+                            .frame(width: 14, height: 14).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(hovered || naming ? 1 : 0)
+                    .help("Change who this is")
+                    .accessibilityLabel("Change who \(speaker.name) is")
                 }
+                PersonName(speaker.name, person: .some(speaker.person))
+                    .fontWeight(current ? .semibold : .regular)
+                    .foregroundStyle(Palette.ink)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            .contextMenu {
+                if editable { Button("Change who this is…", systemImage: "pencil") { naming = true } }
+            }
         } else {
             Button { naming = true } label: {
                 Text(lane.name)

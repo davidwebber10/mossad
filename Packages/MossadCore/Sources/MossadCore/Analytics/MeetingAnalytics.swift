@@ -40,8 +40,11 @@ public struct MeetingAnalytics: Sendable, Equatable {
         public var firstQuestion: TimeInterval?
         /// The median pause before they answered someone; nil when they never did.
         public var medianResponse: TimeInterval?
-        public var interruptionsMade = 0
-        public var interruptionsReceived = 0
+        /// Times they began to talk over someone on the other track (the owner over people in the call; a person
+        /// in the call over the owner) and took the floor. Nil when the call cannot show it; see `Flow`.
+        public var interruptionsMade: Int?
+        /// Times someone on the other track did that to them. Nil when the call cannot show it.
+        public var interruptionsReceived: Int?
     }
 
     /// Who held the floor in one stretch of the call, for the strip under the talk time.
@@ -65,21 +68,34 @@ public struct MeetingAnalytics: Sendable, Equatable {
         }
 
         public var invited: [Attendee]
-        /// The `id`s of the people who spoke with no invite. Unnamed voices are not here.
-        public var uninvited: [String]
+        /// The `id`s of the named speakers that no invited entry was matched to. The owner is not here.
+        public var unmatchedSpeakers: [String]
         /// Voices with no name. While there are some, an invited person with no voice is not known to be silent.
         public var unnamedVoices: Int
 
+        /// Invited entries matched to a voice of the call.
         public var spoke: [Attendee] { invited.filter { $0.speaker != nil } }
-        public var unheard: [Attendee] { invited.filter { $0.speaker == nil } }
+        /// Invited entries that Mossad cannot connect to a saved person or to a voice: an email nobody saved, or a
+        /// name nobody in the call has. Nothing is known about them, so they are neither "spoke" nor "did not speak".
+        public var notMatched: [Attendee] { invited.filter { $0.speaker == nil && $0.person == nil } }
+        /// Saved people who were invited and have no voice of their own in the call.
+        public var withoutVoice: [Attendee] { invited.filter { $0.speaker == nil && $0.person != nil } }
+        /// The saved people who are known not to have spoken: empty while a voice has no name.
+        public var didNotSpeak: [Attendee] { unnamedVoices == 0 ? withoutVoice : [] }
+        /// True when every invited entry is matched to a person or a voice. Only then is "x of y invited people
+        /// spoke" a fact, and only then did a speaker with no entry come without an invite.
+        public var isMatched: Bool { notMatched.isEmpty }
+        /// The speakers who came with no invite: known only for a matched invite list.
+        public var uninvited: [String] { isMatched ? unmatchedSpeakers : [] }
     }
 
     public struct Outcomes: Sendable, Equatable {
         public struct Owner: Sendable, Equatable, Identifiable {
             public var id: String { name ?? "" }
-            /// Nil for items with no owner.
+            /// The owner as the items wrote it; the speaker's whole name when an item wrote exactly that. Nil for
+            /// items with no owner.
             public var name: String?
-            /// The `id` of the speaker who owns them, when the owner spoke.
+            /// The `id` of the speaker the items are counted with, when one speaker fits the written name.
             public var speaker: String?
             public var tasks: [String]
         }
@@ -166,12 +182,13 @@ public struct MeetingAnalytics: Sendable, Equatable {
     /// Below this much speech a pace is noise.
     static let minimumPaceSeconds: TimeInterval = 20
 
-    /// `history` is the owner's other meetings as facts (`MeetingFactsCache`); only the ones that started before
-    /// this call count. `value` gives the coach's rating of one of them, read only for the few that are asked.
-    /// `people` is the saved people, for the invited names; `commitments` the owner's tasks.
-    public init(record r: CallRecord, owner: String, review: CoachReview? = nil, usage: [UsageEvent] = [], history: [MeetingFacts] = [],
-                value: (String) -> MeetingValue.Rating? = { _ in nil }, people: PersonDirectory = PersonDirectory(),
-                commitments: [Commitment] = []) {
+    /// `usage` is the usage log, or only this call's events of it with `usageSince` as the date of the log's first
+    /// event. `history` is the owner's other meetings as facts (`MeetingFactsCache`); only the ones that started
+    /// before this call count. `value` gives the coach's rating of one of them, read only for the few that are
+    /// asked. `people` is the saved people, for the invited names; `commitments` the owner's tasks.
+    public init(record r: CallRecord, owner: String, review: CoachReview? = nil, usage: [UsageEvent] = [], usageSince: Date? = nil,
+                history: [MeetingFacts] = [], value: (String) -> MeetingValue.Rating? = { _ in nil },
+                people: PersonDirectory = PersonDirectory(), commitments: [Commitment] = []) {
         let voices = Voices(record: r, owner: owner)
         duration = voices.duration
         speechSeconds = voices.speechSeconds
@@ -184,7 +201,7 @@ public struct MeetingAnalytics: Sendable, Equatable {
         outcomes = Self.outcomes(r, speakers: speakers, commitments: commitments)
         coach = review.flatMap { $0.value == nil && $0.scorecard == nil ? nil : Coach(value: $0.value, scorecard: $0.scorecard) }
         screens = Self.screens(r)
-        cost = Self.cost(r, usage: usage)
+        cost = Self.cost(r, usage: usage, since: usageSince ?? usage.map(\.date).min())
         var facts = MeetingFacts(record: r, owner: owner, voices: voices)
         facts.values[.value] = review?.value.map { Double($0.rating.level) }
         self.facts = facts
@@ -306,6 +323,19 @@ extension MeetingAnalytics {
 // MARK: The stamp
 
 extension MeetingAnalytics {
+    /// Whether two values of a record give the same numbers: everything `stamp` reads is equal. For a view that
+    /// is asked "did anything change" on each tick of the playback: two copies of one record share their arrays,
+    /// and equal arrays that share storage compare in one step, so this hashes nothing and reads no words.
+    public static func sameInputs(_ a: CallRecord, _ b: CallRecord) -> Bool {
+        a.id == b.id && a.status == b.status && a.start == b.start && a.end == b.end
+            && a.customTitle == b.customTitle && a.calendarTitle == b.calendarTitle && a.generatedTitle == b.generatedTitle
+            && a.utterances.count == b.utterances.count && a.utterances.last?.end == b.utterances.last?.end
+            && a.speakerNames == b.speakerNames && a.attendees == b.attendees && a.actionItems == b.actionItems
+            && a.decisions.count == b.decisions.count && a.parts.count == b.parts.count && a.kind == b.kind && a.tags == b.tags
+            && a.plannedStart == b.plannedStart && a.plannedEnd == b.plannedEnd && (a.summary == nil) == (b.summary == nil)
+            && a.screens == b.screens
+    }
+
     /// Changes when anything the analytics read from the record changes. Cheap enough for a view to compare on
     /// each draw: it reads counts and the small lists, never the words.
     public static func stamp(_ r: CallRecord) -> Int {
@@ -326,6 +356,10 @@ extension MeetingAnalytics {
         h.combine(r.tags)
         h.combine(r.plannedStart)
         h.combine(r.plannedEnd)
+        // Without a summary there are no decisions or action items to count; the title's source decides the series.
+        h.combine(r.summary == nil)
+        h.combine(r.calendarTitle == nil)
+        h.combine(r.customTitle == nil)
         for s in r.screens ?? [] {
             h.combine(s.file)
             h.combine(s.presenter)

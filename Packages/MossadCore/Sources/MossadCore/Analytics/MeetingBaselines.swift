@@ -1,29 +1,60 @@
 import Foundation
 
 extension MeetingAnalytics {
-    /// What is normal for one number: the middle of its history. A value inside `low...high` is usual.
+    /// What is normal for one number, from its history.
     public struct Usual: Sendable, Equatable {
-        /// The 20th and the 80th percentile of the history.
+        /// The range of the history: its lowest and highest value up to `percentileSamples` values, then its 10th
+        /// and 90th percentile.
         public var low: Double
         public var high: Double
         public var median: Double
+        /// How far the history spreads around its median: the larger of the scaled median absolute deviation and
+        /// the standard deviation.
+        public var spread: Double
         public var samples: Int
 
-        /// Fewer earlier meetings than this say nothing about what is normal.
+        /// Fewer earlier meetings than this give no range at all.
         public static let minimumSamples = 3
+        /// Fewer than this give a range, but no judgment: three meetings do not say what is usual.
+        public static let firmSamples = 5
+        static let percentileSamples = 10
+
+        /// True when the history is long enough to call a value usual or not.
+        public var isFirm: Bool { samples >= Self.firmSamples }
 
         public init?(_ history: [Double]) {
             guard history.count >= Self.minimumSamples else { return nil }
             let sorted = history.sorted()
-            func percentile(_ p: Double) -> Double {
-                let at = p * Double(sorted.count - 1)
-                let below = Int(at.rounded(.down)), above = min(sorted.count - 1, below + 1)
-                return sorted[below] + (sorted[above] - sorted[below]) * (at - Double(below))
+            func percentile(_ values: [Double], _ p: Double) -> Double {
+                let at = p * Double(values.count - 1)
+                let below = Int(at.rounded(.down)), above = min(values.count - 1, below + 1)
+                return values[below] + (values[above] - values[below]) * (at - Double(below))
             }
-            low = percentile(0.2)
-            high = percentile(0.8)
-            median = percentile(0.5)
+            let n = Double(sorted.count)
+            let middle = percentile(sorted, 0.5)
+            median = middle
+            low = sorted.count < Self.percentileSamples ? sorted[0] : percentile(sorted, 0.1)
+            high = sorted.count < Self.percentileSamples ? sorted[sorted.count - 1] : percentile(sorted, 0.9)
+            let deviation = percentile(sorted.map { abs($0 - middle) }.sorted(), 0.5) * 1.4826
+            let mean = sorted.reduce(0, +) / n
+            let standard = (sorted.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / (n - 1)).squareRoot()
+            spread = max(deviation, standard)
             samples = sorted.count
+        }
+
+        /// The 97.5% point of Student's t for the history's size over the normal one: a short history knows its
+        /// own spread badly, so a value must be further out before it counts.
+        var smallSample: Double {
+            let table: [(df: Int, t: Double)] = [(4, 2.776), (5, 2.571), (6, 2.447), (7, 2.365), (8, 2.306), (9, 2.262), (10, 2.228), (12, 2.179),
+                                                 (15, 2.131), (20, 2.086), (25, 2.060), (30, 2.042), (60, 2.000)]
+            let t = table.last { $0.df <= samples - 1 }?.t ?? 3.182
+            return t / 1.96 * (1 + 1 / Double(samples)).squareRoot()
+        }
+
+        /// How far `value` is from the median, in spreads. `floor` is half the least difference that matters for
+        /// the metric, so a history of equal values does not make every other value infinitely far.
+        func score(_ value: Double, floor: Double) -> Double {
+            abs(value - median) / (max(spread, floor) * smallSample)
         }
     }
 
@@ -32,33 +63,53 @@ extension MeetingAnalytics {
     /// One number of this call next to what is usual for it.
     public struct Reading: Sendable, Equatable {
         public var value: Double
-        /// Nil with too little history.
+        /// Nil with fewer than `Usual.minimumSamples` earlier values.
         public var usual: Usual?
-        /// Nil when `usual` is. Outside the usual range by a margin that matters, or usual.
+        /// Nil when there is no judgment: no range, or a range from fewer than `Usual.firmSamples` values.
         public var standing: Standing?
-        /// How far outside the range, in widths of the range; 0 when usual. The tab ranks by it.
+        /// How far from the median, in spreads; 0 unless the value stood out. The tab ranks by it.
         public var score: Double
 
-        /// `margin` is how far outside the range a value must be before it stands out, so 41% against a usual
-        /// "30 to 40%" stays quiet.
-        init(value: Double, history: [Double], margin: (Usual) -> Double) {
+        /// A value stands out only at this score or more.
+        public static let minimumScore = 2.5
+
+        /// A value stands out when the history is firm and all of these hold: it is outside the range, it is at
+        /// least `margin` from the median, and its score is at least `minimumScore`.
+        init(value: Double, history: [Double], margin: Double) {
             self.value = value
             usual = Usual(history)
-            guard let usual else { standing = nil; score = 0; return }
-            let least = margin(usual)
-            let outside = value > usual.high ? value - usual.high : value < usual.low ? usual.low - value : 0
-            guard outside >= least, outside > 0 else { standing = .usual; score = 0; return }
-            standing = value > usual.high ? .above : .below
-            score = outside / max(usual.high - usual.low, least)
+            score = 0
+            guard let usual, usual.isFirm else { standing = nil; return }
+            let outside = value > usual.high || value < usual.low
+            let found = usual.score(value, floor: margin / 2)
+            guard outside, abs(value - usual.median) >= margin, found >= Self.minimumScore else { standing = .usual; return }
+            standing = value > usual.median ? .above : .below
+            score = found
         }
 
         public var stoodOut: Bool { standing == .above || standing == .below }
     }
 
-    /// The earlier meetings a baseline comes from, most alike first: the same series, then the same setting
-    /// (the 1:1s with that person, or meetings of a similar size and kind), then every meeting with the person.
+    /// The earlier meetings a baseline comes from, most alike first.
     public struct Context: Sendable, Equatable {
-        public enum Kind: Sendable, Equatable { case series, oneOnOne, setting, person, recent }
+        public enum Kind: Sendable, Equatable {
+            /// Earlier meetings with the same title.
+            case series
+            /// The 1:1s with the same other person.
+            case oneOnOne
+            /// All of the owner's 1:1s, with anyone.
+            case ownOneOnOnes
+            /// Meetings of the same size, and of the same kind or topics when enough are.
+            case setting
+            /// Every meeting with the person, of any size.
+            case person
+            /// The owner's last meetings, of any size.
+            case recent
+
+            /// False for the contexts that mix meetings of all sizes. A talk share, a number of people, and
+            /// cut-ins follow the size, so those contexts do not compare them.
+            var hasOneSize: Bool { self != .person && self != .recent }
+        }
 
         public var kind: Kind
         public var meetings: Int
@@ -72,13 +123,14 @@ extension MeetingAnalytics {
         /// Nil when no context has `Usual.minimumSamples` earlier meetings: not enough history yet.
         public var context: Context?
         public var readings: [PersonMetric: Reading]
-        /// Their talk share in the context's last meetings, oldest first, with this call last. Empty with no context.
+        /// Their talk share in the context's last meetings, oldest first, with this call last. Empty with fewer
+        /// than `Trends.minimumPoints` points, or in a context of mixed sizes.
         public var shareTrend: [Double]
 
         public subscript(_ metric: PersonMetric) -> Reading? { readings[metric] }
     }
 
-    /// The owner's talk share in this call against their share in earlier meetings with one other person.
+    /// The owner's talk share in this call against their share in earlier meetings of this size with one other person.
     public struct OwnerWith: Sendable, Equatable, Identifiable {
         /// The other person's speaker `id`.
         public var id: String
@@ -93,20 +145,21 @@ extension MeetingAnalytics {
         public subscript(_ metric: MeetingMetric) -> Reading? { readings[metric] }
     }
 
-    /// The call against its calendar invite.
+    /// The recording against the calendar invite. The recording begins when the owner joins and ends when the
+    /// owner leaves, so these say when the owner was there, not when the meeting began.
     public struct Schedule: Sendable, Equatable {
         public var plannedStart: Date
         public var plannedEnd: Date
         /// Positive when the recording began after the planned start.
         public var startDelay: TimeInterval
-        /// Positive when the call ended after the planned end.
+        /// Positive when the recording ended after the planned end.
         public var overrun: TimeInterval
         public var plannedLength: TimeInterval { max(0, plannedEnd.timeIntervalSince(plannedStart)) }
 
         /// A minute or two is not late, and not over.
         public static let lateStart: TimeInterval = 5 * 60
         public static let longOverrun: TimeInterval = 5 * 60
-        public var startedLate: Bool { startDelay >= Self.lateStart }
+        public var joinedLate: Bool { startDelay >= Self.lateStart }
         public var ranOver: Bool { overrun >= Self.longOverrun }
     }
 
@@ -118,7 +171,7 @@ extension MeetingAnalytics {
     }
 
     /// The last meetings of the series, or with the one other person, oldest first with this call last. A line
-    /// with fewer than `minimumPoints` points is empty.
+    /// with fewer than `minimumPoints` points is empty. A meeting with no value for a line has no point on it.
     public struct Trends: Sendable, Equatable {
         public var context: Context
         /// The owner's part of the talk, 0 to 1.
@@ -156,18 +209,22 @@ extension MeetingAnalytics {
         public var earlier: Int
         /// One per named speaker, in the speakers' order.
         public var people: [PersonBaseline]
-        /// For a meeting with more than one other named person.
+        /// For a group: one per other named person with enough meetings of this size together.
         public var ownerWith: [OwnerWith]
         public var meeting: MeetingBaseline
         /// Nil for a call with no calendar invite, or an invite from before the planned times were saved.
         public var schedule: Schedule?
         public var trends: Trends?
-        /// The few numbers furthest from usual, the furthest first.
+        /// The numbers that passed the test of `Reading`, the furthest first. Empty for an ordinary call.
         public var standouts: [Standout]
 
         public func person(_ id: String) -> PersonBaseline? { people.first { $0.id == id } }
-        /// True when at least one number has a usual range to stand against.
+        /// True when at least one number has a range to stand against.
         public var hasHistory: Bool { meeting.context != nil || people.contains { $0.context != nil } }
+        /// True when at least one number has a history long enough to be judged.
+        public var hasFirmHistory: Bool {
+            meeting.readings.values.contains { $0.standing != nil } || people.contains { $0.readings.values.contains { $0.standing != nil } }
+        }
 
         static let maximumStandouts = 5
         /// At most this many about one person, so one loud voice does not fill the list. A 1:1 has two people
@@ -180,19 +237,22 @@ extension MeetingAnalytics {
 // MARK: Margins
 
 extension PersonMetric {
-    /// How far outside the usual range this number must be to stand out.
+    /// The least difference from the median that matters for this number.
     func margin(_ u: MeetingAnalytics.Usual) -> Double {
         switch self {
-        case .talkShare: 0.05
-        case .wordsPerMinute: 10
-        case .fillersPerMinute: 0.5
-        case .questionsPerHour: 2
-        case .averageTurn: max(5, u.median * 0.2)
-        case .longestTurn: max(15, u.median * 0.2)
-        case .cutInsPerHour, .cutOffsPerHour: 1.5
-        case .responseGap: 0.5
+        case .talkShare: 0.08
+        case .wordsPerMinute: 20
+        case .fillersPerMinute: 1
+        case .questionsPerHour: 3
+        case .averageTurn: max(8, u.median * 0.25)
+        case .longestTurn: max(20, u.median * 0.25)
+        case .cutInsPerHour, .cutOffsPerHour: 2
+        case .responseGap: 0.7
         }
     }
+
+    /// True for a number that follows how many people are in the meeting.
+    var followsSize: Bool { self == .talkShare || self == .cutInsPerHour || self == .cutOffsPerHour }
 }
 
 extension MeetingMetric {
@@ -201,10 +261,20 @@ extension MeetingMetric {
         case .length: max(300, u.median * 0.15)
         case .voices, .decisions, .actionItems: 2
         case .screens: 3
-        case .silenceShare: 0.05
-        case .wordsPerMinute: 10
+        case .silenceShare: 0.08
+        case .wordsPerMinute: 20
         case .value: 1
         }
+    }
+}
+
+extension MeetingAnalytics.Reading {
+    init(value: Double, history: [Double], metric: PersonMetric) {
+        self.init(value: value, history: history, margin: MeetingAnalytics.Usual(history).map(metric.margin) ?? 0)
+    }
+
+    init(value: Double, history: [Double], metric: MeetingMetric) {
+        self.init(value: value, history: history, margin: MeetingAnalytics.Usual(history).map(metric.margin) ?? 0)
     }
 }
 
@@ -222,21 +292,39 @@ extension MeetingAnalytics {
         static let recent = 20
         static let ownerLimit = 50
 
+        /// One earlier meeting of a person's context, with the row to read the person's numbers from.
+        typealias Row = (meeting: MeetingFacts, person: MeetingFacts.Person)
+
         init(this: MeetingFacts, history: [MeetingFacts]) {
             self.this = this
             before = history.filter { $0.id != this.id && $0.start < this.start }.sorted { $0.start > $1.start }
         }
 
-        private static func enough(_ meetings: [MeetingFacts]) -> Bool { meetings.count >= Usual.minimumSamples }
+        private static func enough<T>(_ rows: [T]) -> Bool { rows.count >= Usual.minimumSamples }
+        private static func first(_ name: String) -> String { name.split(separator: " ").first.map(String.init) ?? name }
 
-        private func context(_ kind: Context.Kind, _ meetings: [MeetingFacts], _ label: String, limit: Int = limit) -> (Context, [MeetingFacts]) {
-            let used = Array(meetings.prefix(limit))
+        private func context<T>(_ kind: Context.Kind, _ rows: [T], _ label: String, limit: Int = limit) -> (Context, [T]) {
+            let used = Array(rows.prefix(limit))
             return (Context(kind: kind, meetings: used.count, label: label), used)
         }
 
-        private var seriesMeetings: [MeetingFacts] {
-            this.series.map { s in before.filter { $0.series == s } } ?? []
+        private func rows(_ meetings: [MeetingFacts], of name: String) -> [Row] {
+            meetings.compactMap { m in m.person(name).map { (m, $0) } }
         }
+
+        /// Earlier meetings with this call's title. For a 1:1, only the ones that were a 1:1 too.
+        private var seriesMeetings: [MeetingFacts] {
+            guard let series = this.series else { return [] }
+            return before.filter { $0.series == series && (this.partner == nil || $0.partner != nil) }
+        }
+
+        /// The 1:1s with this call's other person; empty when this call is not a 1:1.
+        private var oneOnOnes: [MeetingFacts] {
+            this.partner.map { p in before.filter { $0.partner?.name == p.name } } ?? []
+        }
+
+        /// All of the owner's 1:1s, with anyone.
+        private var ownOneOnOnes: [MeetingFacts] { before.filter { $0.partner != nil } }
 
         /// "monthly update" for "Monthly update", so it reads inside a sentence; "QBR" stays.
         private static func inSentence(_ kind: String) -> String {
@@ -247,7 +335,7 @@ extension MeetingAnalytics {
         /// Meetings of this call's size among `meetings`, narrowed by its kind or its topics when enough of them
         /// share one.
         private func setting(_ meetings: [MeetingFacts]) -> (meetings: [MeetingFacts], label: String)? {
-            let sized = meetings.filter { $0.size == this.size }
+            let sized = meetings.filter { $0.size == this.size && $0.partner == nil }
             if let kind = this.kind?.nonBlank {
                 let same = sized.filter { $0.kind?.caseInsensitiveCompare(kind) == .orderedSame }
                 if Self.enough(same) { return (same, "in \(Self.inSentence(kind)) meetings of \(this.size.words)") }
@@ -260,50 +348,57 @@ extension MeetingAnalytics {
             return Self.enough(sized) ? (sized, "in meetings of \(this.size.words)") : nil
         }
 
-        /// The 1:1s with this call's other person; empty when this call is not a 1:1.
-        private var oneOnOnes: [MeetingFacts] {
-            this.partner.map { p in before.filter { $0.partner?.name == p.name } } ?? []
-        }
-
-        private static func first(_ name: String) -> String { name.split(separator: " ").first.map(String.init) ?? name }
-
         /// The context for one person's numbers.
-        func context(for person: MeetingFacts.Person) -> (Context, [MeetingFacts])? {
-            let with = before.filter { $0.person(person.name) != nil }
-            let series = seriesMeetings.filter { $0.person(person.name) != nil }
+        ///
+        /// A group: the series, then meetings of this size (and kind or topics), then every meeting with the person.
+        /// A 1:1: the series, then the 1:1s with this person, then all of the owner's 1:1s (the owner against
+        /// their own 1:1s, the other person against the other people of those 1:1s), then every meeting with
+        /// this person. A 1:1 is never compared with groups while there are 1:1s to compare with.
+        func context(for person: MeetingFacts.Person) -> (Context, [Row])? {
+            let series = rows(seriesMeetings, of: person.name)
             if Self.enough(series) { return context(.series, series, "in \(this.title)") }
             if let partner = this.partner {
-                if Self.enough(oneOnOnes) {
-                    return context(.oneOnOne, oneOnOnes, person.isOwner ? "in your 1:1s with \(Self.first(partner.name))" : "in 1:1s with you")
+                let together = rows(oneOnOnes, of: person.name)
+                if Self.enough(together) {
+                    return context(.oneOnOne, together, person.isOwner ? "in your 1:1s with \(Self.first(partner.name))" : "in 1:1s with you")
                 }
-            } else if let s = setting(with) {
-                return context(.setting, s.meetings, s.label)
+                // The role, not the person: you in your 1:1s, and whoever sat across from you.
+                let own: [Row] = ownOneOnOnes.compactMap { m in (person.isOwner ? m.owner : m.partner).map { (m, $0) } }
+                if Self.enough(own) {
+                    return context(.ownOneOnOnes, own, person.isOwner ? "in your 1:1s" : "for the other person in your 1:1s")
+                }
+                let with = rows(before.filter { $0.person(partner.name) != nil }, of: person.name)
+                guard Self.enough(with) else { return nil }
+                return context(.person, with, person.isOwner ? "in all \(with.count) meetings with \(Self.first(partner.name))" : "in all \(with.count) meetings with you",
+                               limit: .max)
             }
+            let with = before.filter { $0.person(person.name) != nil }
+            if let s = setting(with) { return context(.setting, rows(s.meetings, of: person.name), s.label) }
             guard Self.enough(with) else { return nil }
             if person.isOwner {
-                return context(.person, with, with.count > Self.ownerLimit ? "in your last \(Self.ownerLimit) meetings" : "in all \(with.count) of your meetings",
-                               limit: Self.ownerLimit)
+                return context(.person, rows(with, of: person.name),
+                               with.count > Self.ownerLimit ? "in your last \(Self.ownerLimit) meetings" : "in all \(with.count) of your meetings", limit: Self.ownerLimit)
             }
-            return context(.person, with, "in all \(with.count) meetings with you", limit: .max)
+            return context(.person, rows(with, of: person.name), "in all \(with.count) meetings with you", limit: .max)
         }
 
-        /// The context for the owner's talk share next to one other person: meetings of this size with them,
-        /// then every meeting with them.
+        /// The context for the owner's talk share next to one other person of a group: meetings of this size
+        /// with them. Meetings of other sizes say nothing about a share.
         func context(ownerWith other: MeetingFacts.Person) -> (Context, [MeetingFacts])? {
-            let with = before.filter { $0.person(other.name) != nil && $0.owner != nil }
-            let name = Self.first(other.name)
-            if let s = setting(with) { return context(.setting, s.meetings, "\(s.label) with \(name)") }
-            return Self.enough(with) ? context(.person, with, "in all \(with.count) meetings with \(name)", limit: .max) : nil
+            guard let s = setting(before.filter { $0.person(other.name) != nil && $0.owner != nil }) else { return nil }
+            return context(.setting, s.meetings, "\(s.label) with \(Self.first(other.name))")
         }
 
-        /// The context for the meeting's own numbers.
+        /// The context for the meeting's own numbers, in the same order as a person's.
         func meetingContext() -> (Context, [MeetingFacts])? {
             if Self.enough(seriesMeetings) { return context(.series, seriesMeetings, "in \(this.title)") }
             if let partner = this.partner {
                 if Self.enough(oneOnOnes) { return context(.oneOnOne, oneOnOnes, "in your 1:1s with \(Self.first(partner.name))") }
-            } else if let s = setting(before) {
-                return context(.setting, s.meetings, s.label)
+                if Self.enough(ownOneOnOnes) { return context(.ownOneOnOnes, ownOneOnOnes, "in your 1:1s") }
+                let with = before.filter { $0.person(partner.name) != nil }
+                return Self.enough(with) ? context(.person, with, "in all \(with.count) meetings with \(Self.first(partner.name))", limit: .max) : nil
             }
+            if let s = setting(before) { return context(.setting, s.meetings, s.label) }
             let recent = Array(before.prefix(Self.recent))
             return Self.enough(recent) ? context(.recent, recent, "in your last \(recent.count) meetings") : nil
         }
@@ -333,39 +428,45 @@ extension MeetingAnalytics.Baselines {
         var people: [A.PersonBaseline] = []
         for s in speakers where !s.isUnknown {
             guard let person = this.person(s.name) else { continue }
-            guard let (context, meetings) = past.context(for: person) else {
+            guard let (context, rows) = past.context(for: person) else {
                 people.append(A.PersonBaseline(id: s.id, context: nil, readings: [:], shareTrend: []))
                 continue
             }
             var readings: [PersonMetric: A.Reading] = [:]
-            for metric in PersonMetric.allCases {
+            for metric in PersonMetric.allCases where context.kind.hasOneSize || !metric.followsSize {
                 guard let now = person.values[metric] else { continue }
-                readings[metric] = A.Reading(value: now, history: meetings.compactMap { $0.person(s.name)?.values[metric] }, margin: metric.margin)
+                readings[metric] = A.Reading(value: now, history: rows.compactMap { $0.person.values[metric] }, metric: metric)
             }
-            let trend = meetings.prefix(A.Trends.earlier).reversed().compactMap { $0.person(s.name)?.values[.talkShare] } + [s.share]
+            var trend: [Double] = []
+            // Not for the other people of the owner's 1:1s: their shares are not this person's history.
+            if context.kind.hasOneSize, context.kind != .ownOneOnOnes || s.isOwner {
+                trend = rows.prefix(A.Trends.earlier).reversed().compactMap { $0.person.values[.talkShare] } + [s.share]
+                if trend.count < A.Trends.minimumPoints { trend = [] }
+            }
             people.append(A.PersonBaseline(id: s.id, context: context, readings: readings, shareTrend: trend))
         }
         self.people = people
 
-        // The owner next to each other person, when there is more than one.
+        // The owner next to each other person of a group.
         var ownerWith: [A.OwnerWith] = []
         if let owner = this.owner, let share = owner.values[.talkShare], this.partner == nil {
             for s in speakers where !s.isUnknown && !s.isOwner {
                 guard let other = this.person(s.name), let (context, meetings) = past.context(ownerWith: other) else { continue }
-                let reading = A.Reading(value: share, history: meetings.compactMap { $0.owner?.values[.talkShare] }, margin: PersonMetric.talkShare.margin)
+                let reading = A.Reading(value: share, history: meetings.compactMap { $0.owner?.values[.talkShare] }, metric: .talkShare)
                 if reading.usual != nil { ownerWith.append(A.OwnerWith(id: s.id, context: context, reading: reading)) }
             }
         }
         self.ownerWith = ownerWith
 
-        // The meeting.
+        // The meeting. Only the series can say how many people is usual: every other context either has this
+        // call's size by its definition, or mixes all sizes.
         var meeting = A.MeetingBaseline(context: nil, readings: [:])
         if let (context, meetings) = past.meetingContext() {
             meeting.context = context
-            for metric in MeetingMetric.allCases {
+            for metric in MeetingMetric.allCases where metric != .voices || context.kind == .series {
                 guard let now = this.values[metric] else { continue }
                 let history = metric == .value ? meetings.compactMap { value($0.id).map { Double($0.level) } } : meetings.compactMap { $0.values[metric] }
-                meeting.readings[metric] = A.Reading(value: now, history: history, margin: metric.margin)
+                meeting.readings[metric] = A.Reading(value: now, history: history, metric: metric)
             }
         }
         self.meeting = meeting
@@ -377,7 +478,7 @@ extension MeetingAnalytics.Baselines {
             schedule = nil
         }
 
-        // Trends.
+        // Trends. A meeting with no value for a line has no point on it: no owner's voice is not "0%".
         if let (context, meetings) = past.trendContext() {
             let oldestFirst = Array(meetings.reversed())
             func line(_ of: (MeetingFacts) -> Double?, this now: Double?) -> [A.TrendPoint] {
@@ -387,7 +488,7 @@ extension MeetingAnalytics.Baselines {
                 return points.count >= A.Trends.minimumPoints ? points : []
             }
             let trends = A.Trends(context: context,
-                                  talkShare: line({ $0.owner?.values[.talkShare] ?? 0 }, this: this.owner?.values[.talkShare]),
+                                  talkShare: line({ $0.owner?.values[.talkShare] }, this: this.owner?.values[.talkShare]),
                                   value: line({ value($0.id).map { Double($0.level) } }, this: this.values[.value]),
                                   length: line({ $0.values[.length] }, this: this.values[.length]))
             self.trends = trends.isEmpty ? nil : trends
@@ -399,9 +500,9 @@ extension MeetingAnalytics.Baselines {
                                    schedule: schedule)
     }
 
-    /// Every number outside its usual range, the furthest first; at most two about one person (three in a 1:1),
-    /// and five in all. In a 1:1 a fact about the pair is said one time: the owner's talk share stands for the
-    /// other person's, and who cut in stands for who was cut off.
+    /// The numbers that stood out (see `Reading`), the furthest first; at most two about one person (three in a
+    /// 1:1), and five in all. In a 1:1 a fact about the pair is said one time: the owner's talk share stands for
+    /// the other person's, and who cut in stands for who was cut off.
     static func standouts(_ this: MeetingFacts, speakers: [A.Speaker], flow: A.Flow?, record r: CallRecord, people: [A.PersonBaseline],
                           ownerWith: [A.OwnerWith], meeting: A.MeetingBaseline, schedule: A.Schedule?) -> [A.Standout] {
         var all: [A.Standout] = []
@@ -419,15 +520,15 @@ extension MeetingAnalytics.Baselines {
                     if metric == .cutOffsPerHour, other(of: s)?.readings[.cutInsPerHour]?.stoodOut == true { continue }
                 }
                 all.append(A.Standout(id: "\(p.id).\(metric.rawValue)", subject: p.id,
-                                      text: MeetingFindings.sentence(metric, reading, you: s.isOwner, context: context),
+                                      text: MeetingFindings.sentence(metric, reading, count: count(metric, s), you: s.isOwner, context: context),
                                       evidence: evidence(metric, s, flow), score: reading.score))
             }
         }
         if let owner = speakers.first(where: \.isOwner) {
             for w in ownerWith where w.reading.stoodOut {
-                guard let other = speakers.first(where: { $0.id == w.id }), let usual = w.reading.usual else { continue }
+                guard let usual = w.reading.usual else { continue }
                 all.append(A.Standout(id: "with.\(w.id)", subject: owner.id,
-                                      text: "talked \(MeetingFindings.percent(w.reading.value)) of the time with \(other.name); "
+                                      text: "talked \(MeetingFindings.percent(w.reading.value)) of the time; "
                                         + "usually \(MeetingFindings.range(.talkShare, usual)) \(w.context.label)",
                                       evidence: .person(w.id), score: w.reading.score))
             }
@@ -445,18 +546,6 @@ extension MeetingAnalytics.Baselines {
                                       evidence: moment.flatMap { $0 >= 0 ? .moment($0) : nil }, score: reading.score))
             }
         }
-        if let schedule {
-            if schedule.startedLate {
-                all.append(A.Standout(id: "schedule.start", subject: nil, text: "Started \(MeetingFindings.span(schedule.startDelay)) late",
-                                      evidence: nil, score: min(3, schedule.startDelay / A.Schedule.lateStart)))
-            }
-            // The meeting's length says it when the length itself stood out.
-            if schedule.ranOver, meeting.readings[.length]?.standing != .above {
-                let at = schedule.plannedEnd.timeIntervalSince(r.start)
-                all.append(A.Standout(id: "schedule.end", subject: nil, text: "Ran \(MeetingFindings.span(schedule.overrun)) over the planned end",
-                                      evidence: at >= 0 ? .moment(at) : nil, score: min(3, schedule.overrun / A.Schedule.longOverrun)))
-            }
-        }
         var perSubject: [String: Int] = [:]
         var out: [A.Standout] = []
         for s in all.sorted(by: { ($0.score, $1.id) > ($1.score, $0.id) }) {
@@ -467,6 +556,16 @@ extension MeetingAnalytics.Baselines {
             if out.count == maximumStandouts { break }
         }
         return out
+    }
+
+    /// The count in this call behind a number that the history holds per hour.
+    private static func count(_ metric: PersonMetric, _ s: A.Speaker) -> Int? {
+        switch metric {
+        case .questionsPerHour: s.questions
+        case .cutInsPerHour: s.interruptionsMade
+        case .cutOffsPerHour: s.interruptionsReceived
+        default: nil
+        }
     }
 
     /// The moment that shows a number, or the person it is about.

@@ -33,6 +33,23 @@ enum Nicknames {
         return Set(ids.flatMap { groups[$0] }).subtracting([name])
     }
 
+    /// The full names of the groups. Two of them in one group are two different names: Samuel and Samantha both
+    /// shorten to Sam, and are not one person.
+    private static let fullNames: Set<String> = [
+        "benjamin", "zachary", "james", "william", "robert", "michael", "matthew", "christopher", "christoper", "katherine", "catherine",
+        "kathryn", "david", "daniel", "thomas", "joseph", "anthony", "steven", "stephen", "nicholas", "alexander", "alexandra", "alexandria",
+        "andrew", "jennifer", "elizabeth", "samuel", "samantha", "theodore", "edward", "richard", "patrick", "patricia", "timothy", "kenneth",
+        "gregory", "jeffrey", "geoffrey", "joshua", "jonathan", "john", "peter", "philip", "phillip", "ronald", "lawrence", "susan", "suzanne",
+        "deborah", "debra", "rebecca", "abigail", "margaret", "terrence", "terence", "charles", "frederick", "gerald", "jerome", "henry",
+        "jackson", "victoria", "nathan", "nathaniel", "sandra", "donald", "douglas", "walter", "allison", "alison",
+    ]
+
+    /// Whether one lowercase first name is the short form of the other: "sam" and "samuel". Two full names of one
+    /// group ("samuel", "samantha") and two short forms ("bill", "will") are not: they can be two people.
+    static func shortAndFull(_ a: String, _ b: String) -> Bool {
+        related(a, b) && fullNames.contains(a) != fullNames.contains(b)
+    }
+
     /// Whether two lowercase first names are short forms of one another. Equal names are not "nicknames".
     static func related(_ a: String, _ b: String) -> Bool {
         guard a != b, let x = index[a], let y = index[b] else { return false }

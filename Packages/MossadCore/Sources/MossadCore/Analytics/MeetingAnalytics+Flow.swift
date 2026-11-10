@@ -3,6 +3,12 @@ import Foundation
 extension MeetingAnalytics {
     /// How the conversation moved: turns, people talking at once, who cut in on whom, pauses before answers, and
     /// silence. The rules are strict on purpose: a count here is a moment worth playing, not a guess.
+    ///
+    /// Two people talking at once can only be seen between the two tracks: the owner's microphone and the call.
+    /// Inside one track the transcriber writes one line after the other, so two people of the call who talk at
+    /// once leave no trace. Overlaps and cut-ins are therefore counted between the tracks only, and a call with
+    /// speech on one track (a meeting in a room) has none that can be counted: `crossTalkMeasured` is false, and
+    /// the counts are nil, never 0.
     public struct Flow: Sendable, Equatable {
         /// `by` began to talk while `of` was talking, and took the floor.
         public struct Interruption: Sendable, Equatable, Identifiable {
@@ -24,9 +30,11 @@ extension MeetingAnalytics {
         }
 
         public var turns: Int
-        /// The most times first.
+        /// False when the call has speech of different people on one track only, so nothing below can be counted.
+        public var crossTalkMeasured: Bool
+        /// Between the microphone and the call only. The most times first.
         public var interruptions: [Interruption]
-        /// The most time first.
+        /// Between the microphone and the call only. The most time first.
         public var overlaps: [Overlap]
         /// The median pause before one person answered another; nil when nobody did.
         public var medianResponse: TimeInterval?
@@ -51,6 +59,9 @@ extension MeetingAnalytics {
         static let minimumCutInWords = Exchange.minimumCutInWords
         /// A longer pause is a new thought, not an answer.
         static let maxReplyGap = Exchange.maxReplyGap
+        /// The one who cut in must go on this long after the other stopped. Less is an agreement said across a
+        /// pause ("yeah, that makes sense"), not taking the floor.
+        static let minimumHold: TimeInterval = 3
         /// A pause this long inside one line ends a run of speech, when the line has word times.
         static let runGap: TimeInterval = 1
         static let minimumSilence: TimeInterval = 3
@@ -58,6 +69,7 @@ extension MeetingAnalytics {
         /// One line of the transcript, with its speaker as an index into the speakers.
         struct Line {
             var speaker: Int
+            var track: Track
             var start: TimeInterval
             var end: TimeInterval
             var text: String
@@ -65,6 +77,7 @@ extension MeetingAnalytics {
 
             init(speaker: Int, utterance u: Utterance) {
                 self.speaker = speaker
+                track = u.track
                 start = u.start
                 end = max(u.start, u.end)
                 text = u.text
@@ -82,6 +95,7 @@ extension MeetingAnalytics {
         /// A stretch of one person's speech with no pause of `runGap` in it.
         struct Run {
             var speaker: Int
+            var track: Track
             var start: TimeInterval
             var end: TimeInterval
             var words: Int
@@ -107,16 +121,16 @@ extension MeetingAnalytics {
             var out: [Run] = []
             for l in lines {
                 guard let words = l.words, !words.isEmpty else {
-                    out.append(Run(speaker: l.speaker, start: l.start, end: l.end, words: DeliveryStats.tokens(l.text).count))
+                    out.append(Run(speaker: l.speaker, track: l.track, start: l.start, end: l.end, words: DeliveryStats.tokens(l.text).count))
                     continue
                 }
                 var current: Run?
                 for w in words {
                     if let c = current, w.start - c.end < runGap {
-                        current = Run(speaker: c.speaker, start: c.start, end: max(c.end, w.end), words: c.words + 1)
+                        current = Run(speaker: c.speaker, track: c.track, start: c.start, end: max(c.end, w.end), words: c.words + 1)
                     } else {
                         if let c = current { out.append(c) }
-                        current = Run(speaker: l.speaker, start: w.start, end: max(w.start, w.end), words: 1)
+                        current = Run(speaker: l.speaker, track: l.track, start: w.start, end: max(w.start, w.end), words: 1)
                     }
                 }
                 if let current { out.append(current) }
@@ -130,29 +144,35 @@ extension MeetingAnalytics {
         let runs = Flow.runs(lines)
 
         // Overlaps and interruptions, in one pass over the runs in start order. `active` holds the runs that
-        // are still going, so each later run meets only the few it can overlap.
+        // are still going, so each later run meets only the few it can overlap. Only a pair on two tracks counts.
+        let measured = runs.contains { a in runs.contains { $0.track != a.track && $0.speaker != a.speaker } }
         var active: [Flow.Run] = []
         var together: [[Int]: (count: Int, seconds: TimeInterval)] = [:]
         var cuts: [[Int]: [TimeInterval]] = [:]
         for r in runs {
             active.removeAll { $0.end <= r.start }
-            for a in active where a.speaker != r.speaker {
+            for a in active where a.speaker != r.speaker && a.track != r.track {
                 let shared = min(a.end, r.end) - r.start
                 guard shared >= Flow.overlapGrace else { continue }
                 let pair = [min(a.speaker, r.speaker), max(a.speaker, r.speaker)]
                 together[pair, default: (0, 0)].count += 1
                 together[pair]!.seconds += shared
                 // The later one cut in when the first was well into their words, the later one said more than
-                // a word or two, and went on after the first one stopped.
-                if r.start - a.start >= Flow.minimumLead, r.words >= Flow.minimumCutInWords, r.end > a.end {
+                // a word or two, and held the floor after the first one stopped. One start is one cut-in, also
+                // when the first person has two lines there.
+                if r.start - a.start >= Flow.minimumLead, r.words >= Flow.minimumCutInWords, r.end - a.end >= Flow.minimumHold,
+                   cuts[[r.speaker, a.speaker]]?.last != r.start {
                     cuts[[r.speaker, a.speaker], default: []].append(r.start)
                 }
             }
             active.append(r)
         }
-        for (pair, moments) in cuts {
-            speakers[pair[0]].interruptionsMade += moments.count
-            speakers[pair[1]].interruptionsReceived += moments.count
+        if measured {
+            for i in speakers.indices { speakers[i].interruptionsMade = 0; speakers[i].interruptionsReceived = 0 }
+            for (pair, moments) in cuts {
+                speakers[pair[0]].interruptionsMade! += moments.count
+                speakers[pair[1]].interruptionsReceived! += moments.count
+            }
         }
 
         // An answer: a turn that begins after everyone before it stopped, within `maxReplyGap` of the last word,
@@ -184,6 +204,7 @@ extension MeetingAnalytics {
 
         return Flow(
             turns: turns.count,
+            crossTalkMeasured: measured,
             interruptions: cuts.map { Flow.Interruption(by: speakers[$0.key[0]].id, of: speakers[$0.key[1]].id, moments: $0.value.sorted()) }
                 .sorted { ($0.count, -($0.moments.first ?? 0), $1.id) > ($1.count, -($1.moments.first ?? 0), $0.id) },
             overlaps: together.map { Flow.Overlap(first: speakers[$0.key[0]].id, second: speakers[$0.key[1]].id, count: $0.value.count, seconds: $0.value.seconds) }

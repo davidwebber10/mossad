@@ -83,6 +83,16 @@ public final class UsageLog: Sendable {
         record(event)
     }
 
+    /// The events of one call, and when the log began. Only the lines that name the call are decoded, so a long
+    /// log costs one read of its text. `since` is nil for an empty log.
+    public func events(forCall callID: String) -> (events: [UsageEvent], since: Date?) {
+        let text = lock.withLock { (try? String(contentsOf: url, encoding: .utf8)) ?? "" }
+        let lines = text.split(separator: "\n")
+        func decode(_ line: Substring) -> UsageEvent? { try? JSONDecoder.coach.decode(UsageEvent.self, from: Data(line.utf8)) }
+        let mine = lines.filter { $0.contains(callID) }.compactMap(decode).filter { $0.callID == callID }
+        return (mine, lines.lazy.compactMap(decode).first?.date)
+    }
+
     public func all() -> [UsageEvent] {
         let text = lock.withLock { (try? String(contentsOf: url, encoding: .utf8)) ?? "" }
         return text.split(separator: "\n").compactMap { try? JSONDecoder.coach.decode(UsageEvent.self, from: Data($0.utf8)) }

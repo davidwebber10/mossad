@@ -100,6 +100,9 @@ final class AppController: ObservableObject {
             if !meetingQuery.isEmpty { filterMeetings(debounce: false) }
         }
     }
+    /// Opens a person from a name on a meeting page. One object for the app's life, so the pages' environment
+    /// holds a reference that never changes.
+    private(set) lazy var personOpener = PersonOpener { [weak self] in self?.openPerson($0) }
     /// Counts the changes of `meetings`, so a view can ask "did any meeting change" without comparing the records.
     private(set) var meetingsVersion = 0
     /// False until the first list is read at launch (off the main thread), so no view says "no meetings" meanwhile.

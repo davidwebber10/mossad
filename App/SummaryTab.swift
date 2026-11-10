@@ -296,7 +296,7 @@ struct TalkShare: View {
             ForEach(Array(named.enumerated()), id: \.element.key) { i, s in
                 HStack(spacing: 4) {
                     if i > 0 { Text("·").accessibilityHidden(true) }
-                    PersonName(s.name, shown: s.isOwner ? "You" : firstName(s.name))
+                    PersonName(s.name, shown: s.isOwner ? "You" : firstName(s.name), person: .some(s.person))
                     Text(percent(s)).monospacedDigit()
                 }
             }
