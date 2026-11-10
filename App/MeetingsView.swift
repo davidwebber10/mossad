@@ -131,8 +131,10 @@ struct MeetingsView: View {
         HStack(spacing: 0) {
             ListColumn("Meetings", widthKey: "meetings") {
                 CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, Space.s)
-                MeetingList(days: MeetingGroups.byDay(results.filter { $0.status != .recording }),
-                            live: results.filter { $0.status == .recording },
+                // "Now" is only the call recording at this moment; a record that still says "recording" for any
+                // other reason is listed with its day.
+                MeetingList(days: MeetingGroups.byDay(results.filter { !controller.isLive($0) }),
+                            live: results.filter { controller.isLive($0) },
                             selection: $controller.selectedMeetingID, deleting: $deleting)
             }
             DetailColumn { toolbar } content: {

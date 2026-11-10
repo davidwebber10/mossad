@@ -231,6 +231,8 @@ private struct DetailTabs: View {
             }
         }
         .padding(3)
+        // Solid under the glass: the band's edge and the page must not show through the tabs.
+        .background(Palette.surface, in: Capsule())
         .chromeGlass(in: Capsule())
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Meeting tabs")

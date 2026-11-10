@@ -579,6 +579,13 @@ final class AppController: ObservableObject {
         return false
     }
 
+    /// Whether `r` is the call being recorded now: its record says so and it began when the recording did. A saved
+    /// copy that still says "recording" after the call stopped is not live.
+    func isLive(_ r: CallRecord) -> Bool {
+        guard r.status == .recording, case .recording(_, let since) = status else { return false }
+        return abs(r.start.timeIntervalSince(since)) < 2
+    }
+
     var callsNeedingNames: [CallRecord] {
         meetings.filter { $0.status == .written && !$0.unknownSpeakers.isEmpty }
     }
@@ -760,7 +767,8 @@ final class AppController: ObservableObject {
                 Task { @MainActor in self.refresh() }
                 return
             }
-            Task { @MainActor in self.refresh() }
+            // The stopped record goes into the list at once, so its row stops saying "recording".
+            Task { @MainActor in self.update(record); self.refresh() }
             // Utility: the next call may start in the same minute, and the call app comes first.
             Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
         }
@@ -1421,7 +1429,7 @@ final class AppController: ObservableObject {
                 Task { @MainActor in self.refresh() }
                 return
             }
-            Task { @MainActor in self.refresh() }
+            Task { @MainActor in self.update(record); self.refresh() }
             // Utility: the next call may start in the same minute, and the call app comes first.
             Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
         }
