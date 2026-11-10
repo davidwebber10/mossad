@@ -55,6 +55,14 @@ public struct PersonDirectory: Sendable, Equatable {
         return last == theirLast || (last.count == 1 && theirLast.hasPrefix(last))
     }
 
+    /// Whether a name as someone wrote it ("Sam", "Sam C.") can stand for the full name `full`. A label such as
+    /// "Speaker C" and an email are not names.
+    public static func isForm(_ written: String, of full: String) -> Bool {
+        guard !written.contains("@"), !written.hasPrefix("Speaker ") else { return false }
+        let short = words(written)
+        return !short.isEmpty && fits(short, words(full))
+    }
+
     // MARK: Links
 
     /// The saved person whose profile `text` may open: the person with that email, or the one saved person with
