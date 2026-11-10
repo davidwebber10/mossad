@@ -76,4 +76,20 @@ final class MuteControlTests: XCTestCase {
         XCTAssertFalse(MuteState.keepsControls(labels: [], cut: false, platform: .meet))
         XCTAssertFalse(MuteState.hasControl(labels: ["Myself video, Sam Carter, Unmuted"], platform: .teams))
     }
+
+    /// A walk cut before it reached the call window found only the menu item, which can keep an old title after a
+    /// mouse unmute. It must not decide alone, or the rest of the call is written as silence.
+    func testACutWalkWithTheControlOnlyInTheMenuBarIsUnknown() {
+        let r = MuteState.walkResult(menu: ["Unmute Audio"], window: [], cut: true, failed: false, platform: .zoom)
+        XCTAssertNil(r.labels)
+        XCTAssertFalse(r.keep)
+        let full = MuteState.walkResult(menu: ["Unmute Audio"], window: [], cut: false, failed: false, platform: .zoom)
+        XCTAssertEqual(full.labels, ["Unmute Audio"], "a full walk with no window control lets the menu answer")
+        let both = MuteState.walkResult(menu: ["Unmute Audio"], window: ["Unmute audio"], cut: true, failed: false, platform: .zoom)
+        XCTAssertEqual(both.labels, ["Unmute Audio", "Unmute audio"])
+        XCTAssertTrue(both.keep)
+        XCTAssertNil(MuteState.walkResult(menu: [], window: [], cut: true, failed: false, platform: .zoom).labels)
+        XCTAssertNil(MuteState.walkResult(menu: [], window: [], cut: false, failed: true, platform: .zoom).labels)
+        XCTAssertEqual(MuteState.walkResult(menu: [], window: [], cut: false, failed: false, platform: .zoom).labels, [])
+    }
 }

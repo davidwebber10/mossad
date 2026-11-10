@@ -25,6 +25,18 @@ public enum MuteState {
         !labels.isEmpty && (!cut || hasControl(labels: labels, platform: platform))
     }
 
+    /// What one walk of the call app answers, and whether its controls are cached. A menu item can keep an old
+    /// title after a mouse mute, so it answers alone only after a full walk that found no window control. A walk
+    /// cut before it found the owner's control in a window answers unknown and keeps nothing: a wrong "muted"
+    /// writes silence over the owner's speech. A cut or failed walk that found nothing is unknown too.
+    public static func walkResult(menu: [String], window: [String], cut: Bool, failed: Bool,
+                                  platform: Platform) -> (labels: [String]?, keep: Bool) {
+        if cut, !hasControl(labels: window, platform: platform) { return (nil, false) }
+        let all = menu + window
+        if all.isEmpty, cut || failed { return (nil, false) }
+        return (all, keepsControls(labels: all, cut: cut, platform: platform))
+    }
+
     private static func controls(in labels: [String], platform: Platform) -> (muted: Bool, unmuted: Bool) {
         let lower = labels.map { $0.lowercased() }
         func has(_ prefixes: String...) -> Bool { lower.contains { l in prefixes.contains { l.hasPrefix($0) } } }

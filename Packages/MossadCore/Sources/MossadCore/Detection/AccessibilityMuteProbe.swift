@@ -170,17 +170,17 @@ public final class AccessibilityMuteProbe: MuteProbing, @unchecked Sendable {
         // item can keep an old title until its menu opens, so it never decides alone while a window control can be
         // read: when the two disagree, `MuteState.from` gives unknown, and unknown never mutes.
         menus.forEach { walk($0, depth: 0) }
+        let menuCount = found.count
         roots.forEach { walk($0, depth: 0) }
-        // The controls of a cut walk are kept only when the owner's own mute control is among them: reading them
-        // again is cheap, and a tree too large to walk in time would otherwise be walked again at every check.
-        // Without that control nothing is kept, and the backoff decides when the next walk looks for it.
-        let keep = MuteState.keepsControls(labels: found, cut: cut, platform: platform)
+        // The controls of a cut walk are kept only when the owner's own mute control in a window is among them:
+        // reading them again is cheap, and a tree too large to walk in time would otherwise be walked again at
+        // every check. Without it nothing is kept, the answer is unknown, and the backoff decides the next walk.
+        let result = MuteState.walkResult(menu: Array(found[..<menuCount]), window: Array(found[menuCount...]),
+                                          cut: cut, failed: anyCopyFailed, platform: platform)
         lock.withLock {
-            if entries[bundleID]?.key == key { entries[bundleID]?.elements = keep ? elements : [] }
+            if entries[bundleID]?.key == key { entries[bundleID]?.elements = result.keep ? elements : [] }
         }
-        // A cut walk, or a copy that did not answer, still proves the labels it found, but not their absence.
-        if found.isEmpty, cut || anyCopyFailed { return nil }
-        return found
+        return result.labels
     }
 
     /// The browser windows that can hold the current call's controls. A window whose title shows the meeting code
