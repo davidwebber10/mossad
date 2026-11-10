@@ -91,4 +91,119 @@ final class LiveTranscriberFailureTests: XCTestCase {
         XCTAssertFalse(session.isAlive)
         wait(for: [failed], timeout: 1)
     }
+
+    /// The filter ran over every pair of lines four times a second, on the main thread, for the whole call.
+    func testTheEchoFilterWithItsMemoShowsTheSameLinesAtEveryStep() {
+        func turn(_ order: Int, _ text: String, final: Bool) -> Data {
+            Data(#"{"type":"Turn","turn_order":\#(order),"end_of_turn":\#(final),"transcript":"\#(text)","speaker_label":"A","words":[]}"#.utf8)
+        }
+        var live = LiveTranscript()
+        var memo = LiveTranscript.EchoMemo()
+        var hidden = 0
+        for i in 0..<120 {
+            let t = Double(i) * 5
+            let call = "we should move the shipment to friday number \(i)"
+            // A draft first, then the final text, as the service sends them.
+            live.apply(turn(i, "we should move", final: false), source: .them, at: t)
+            XCTAssertEqual(live.visibleLines(memo: &memo), live.visibleLines)
+            // Every third mic line is the echo of the call line; the others are the owner's own words.
+            let mine = i % 3 == 0 ? call : "I will send the forecast today number \(i)"
+            live.apply(turn(i, mine, final: false), source: .me, at: t + 2)
+            XCTAssertEqual(live.visibleLines(memo: &memo), live.visibleLines)
+            live.apply(turn(i, call, final: true), source: .them, at: t)
+            live.apply(turn(i, mine, final: true), source: .me, at: t + 2)
+            XCTAssertEqual(live.visibleLines(memo: &memo), live.visibleLines)
+            hidden = live.lines.count - live.visibleLines.count
+        }
+        XCTAssertEqual(hidden, 40, "the echo lines are hidden")
+        XCTAssertGreaterThan(memo.shown.count, 110, "nearly every mic line is settled and is not looked at again")
+        XCTAssertLessThan(memo.shown.count, 120, "the last lines can still change")
+    }
+
+    func testAMicLineIsNotSettledWhileACallLineNearItIsStillSpoken() {
+        func turn(_ order: Int, _ text: String, final: Bool) -> Data {
+            Data(#"{"type":"Turn","turn_order":\#(order),"end_of_turn":\#(final),"transcript":"\#(text)","speaker_label":"A","words":[]}"#.utf8)
+        }
+        var live = LiveTranscript()
+        var memo = LiveTranscript.EchoMemo()
+        // A long turn on the call that is still a draft when the mic line is final and old.
+        live.apply(turn(0, "we should", final: false), source: .them, at: 0)
+        live.apply(turn(0, "we should move the shipment to friday", final: true), source: .me, at: 2)
+        live.apply(turn(1, "something else entirely", final: true), source: .them, at: 60)
+        XCTAssertEqual(live.visibleLines(memo: &memo).count, 3, "the draft does not match yet")
+        live.apply(turn(0, "we should move the shipment to friday", final: true), source: .them, at: 0)
+        XCTAssertEqual(live.visibleLines(memo: &memo).count, 2, "the mic line was not settled early, so it is hidden now")
+        XCTAssertEqual(live.visibleLines(memo: &memo), live.visibleLines)
+    }
+
+    // MARK: What waits for the network
+
+    func testAudioGoesOutOneMessageAtATimeInOrder() {
+        var q = LiveSendQueue()
+        XCTAssertTrue(q.add(Data([1, 1]), at: 0))
+        XCTAssertEqual(q.next(), Data([1, 1]))
+        XCTAssertTrue(q.add(Data([2]), at: 0.1))
+        XCTAssertTrue(q.add(Data([3]), at: 0.2))
+        XCTAssertNil(q.next(), "one message is on its way")
+        q.sent()
+        XCTAssertEqual(q.next(), Data([2, 3]), "what waited goes out together")
+        q.sent()
+        XCTAssertNil(q.next())
+        XCTAssertEqual(q.waitingBytes, 0)
+    }
+
+    /// On a slow uplink the waiting audio grew in memory for the whole call.
+    func testWaitingAudioHasALimitAndTheOldestGoesFirst() {
+        var q = LiveSendQueue()
+        for i in 0..<30 { XCTAssertTrue(q.add(Data(repeating: UInt8(i), count: 3_200), at: Double(i) * 0.1)) }
+        XCTAssertLessThanOrEqual(q.waitingBytes, LiveSendQueue.limitBytes)
+        XCTAssertEqual(q.droppedBytes, 10 * 3_200)
+        XCTAssertEqual(q.next()?.first, 10, "the oldest chunks were dropped; the newest wait")
+    }
+
+    func testAQueueThatStaysFullSaysTheUplinkCannotCarryTheStream() {
+        var q = LiveSendQueue()
+        var carries = true
+        var time = 0.0
+        while carries, time < 60 {
+            carries = q.add(Data(count: 3_200), at: time)
+            time += 0.1
+        }
+        XCTAssertFalse(carries)
+        XCTAssertEqual(time, 2 + LiveSendQueue.stuckAfter, accuracy: 0.3, "2 s to fill, then 10 s of dropping")
+    }
+
+    func testAQueueThatRunsEmptyStartsItsCountAgain() {
+        var q = LiveSendQueue()
+        for i in 0..<25 { _ = q.add(Data(count: 3_200), at: Double(i) * 0.1) }
+        while q.next() != nil { q.sent() }
+        XCTAssertEqual(q.waitingBytes, 0)
+        for i in 0..<25 { XCTAssertTrue(q.add(Data(count: 3_200), at: 100 + Double(i) * 0.1), "an old burst does not count") }
+    }
+
+    /// One late chunk a minute after an old burst is not a network that cannot carry the stream.
+    func testDropsFarApartDoNotAddUp() {
+        var q = LiveSendQueue()
+        for i in 0..<25 { XCTAssertTrue(q.add(Data(count: 3_200), at: Double(i) * 0.1)) }
+        // The queue stays near its limit (never empty) for a minute, with no drop, then drops again.
+        XCTAssertTrue(q.add(Data(count: 3_200), at: 60), "the old drops are not counted with this one")
+        for second in 61..<70 { XCTAssertTrue(q.add(Data(count: 3_200), at: Double(second))) }
+        XCTAssertFalse(q.add(Data(count: 3_200), at: 70), "10 s of drops close to each other still close the session")
+    }
+
+    func testOneMessageHoldsHalfASecondOfAudioAtMost() {
+        var q = LiveSendQueue()
+        for i in 0..<10 { _ = q.add(Data(count: 3_200), at: Double(i) * 0.1) }
+        XCTAssertEqual(q.next()?.count, 16_000)
+    }
+
+    /// While muted, the mic stream was silence at the full 32 KB each second.
+    func testAMutedMicSendsItsFirstSecondAndThenOnlyAKeepAlive() {
+        var t = SilenceThrottle()
+        var sent = 0
+        for _ in 0..<600 where t.shouldSend(bytes: 3_200, silent: true) { sent += 3_200 }
+        XCTAssertEqual(sent, 32_000 + 11 * 3_200, "1 s, then one chunk each 5 s of the minute")
+        XCTAssertTrue(t.shouldSend(bytes: 3_200, silent: false), "speech always goes out")
+        XCTAssertTrue(t.shouldSend(bytes: 3_200, silent: true), "and the next silence starts with its first second again")
+    }
 }

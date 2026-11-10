@@ -4,7 +4,16 @@ import CoreAudio
 
 final class FakeMic: MicUsageProbing {
     var list: [AudioProcess] = []
+    /// The list itself cannot be read.
+    var unreadable = false
+    var callActiveSeen: [Bool] = []
+    var forgets = 0
+    func forget() { forgets += 1 }
     func processes() -> [AudioProcess] { list }
+    func scan(callActive: Bool) -> [AudioProcess]? {
+        callActiveSeen.append(callActive)
+        return unreadable ? nil : list
+    }
 }
 
 final class FakeTabs: BrowserTabProbing {
@@ -24,6 +33,11 @@ final class FakeMute: MuteProbing {
     var labels: [String]? = nil
     var calls = 0
     var lastMeetingID: String?
+    var paces: [MuteReadPace] = []
+    func labels(bundleID: String, platform: Platform, meetingID: String?, pace: MuteReadPace) -> [String]? {
+        paces.append(pace)
+        return labels(bundleID: bundleID, platform: platform, meetingID: meetingID)
+    }
     func labels(bundleID: String, platform: Platform, meetingID: String?) -> [String]? {
         calls += 1
         lastMeetingID = meetingID
@@ -52,8 +66,147 @@ final class DetectionServiceTests: XCTestCase {
     lazy var service = DetectionService(mic: mic, tabs: tabs, windows: windows)
     let now = Date(timeIntervalSince1970: 2_000_000)
 
-    func proc(_ id: AudioObjectID, _ bundle: String, input: Bool, output: Bool = true) -> AudioProcess {
+    func proc(_ id: AudioObjectID, _ bundle: String, input: Bool?, output: Bool? = true) -> AudioProcess {
         AudioProcess(objectID: id, pid: pid_t(id), bundleID: bundle, isRunningInput: input, isRunningOutput: output)
+    }
+
+    /// Unknown is not false: a mic state that cannot be read keeps a Meet call, which a released mic ends in 6 s.
+    func testAMicStateThatCannotBeReadDoesNotEndTheCall() {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        mic.list = [proc(1, chrome, input: true)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        XCTAssertEqual(events.count, 1)
+        mic.list = [proc(1, chrome, input: nil, output: nil)]
+        for i in 1...10 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 1, "the call must go on while the mic state is unknown")
+        mic.unreadable = true
+        for i in 11...20 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 1, "the call must go on while the list is unknown")
+        mic.unreadable = false
+        mic.list = [proc(1, chrome, input: false)]
+        for i in 21...26 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(events.count, 2, "a known released mic ends the call")
+    }
+
+    func testAnUnknownMicStateNeverStartsACall() {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        mic.list = [proc(1, chrome, input: nil)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    func testTheScanLearnsWhetherACallRuns() {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        mic.list = [proc(1, chrome, input: true)]
+        service.tick(at: now)
+        service.tick(at: now.addingTimeInterval(2))
+        XCTAssertEqual(mic.callActiveSeen, [false, true])
+    }
+
+    func testOneProcessThatRunsWinsOverOneThatIsUnknown() {
+        XCTAssertEqual(DetectionService.anyRunning([nil, true]), true)
+        XCTAssertNil(DetectionService.anyRunning([false, nil]))
+        XCTAssertEqual(DetectionService.anyRunning([false, false]), false)
+        XCTAssertEqual(DetectionService.anyRunning([]), false)
+    }
+
+    /// While the owner is muted the probe must look for a lost button often enough for the 10 s rule.
+    func testTheMuteCheckTellsTheProbeWhenTheLastStateIsMuted() {
+        let mute = FakeMute()
+        let s = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        mic.list = [proc(1, chrome, input: true)]
+        s.tick(at: now)
+        mute.labels = ["Turn off microphone"]
+        s.checkMute(at: now)
+        mute.labels = ["Turn on microphone"]
+        s.checkMute(at: now.addingTimeInterval(3))
+        mute.labels = nil
+        s.checkMute(at: now.addingTimeInterval(4))
+        XCTAssertEqual(mute.paces, [.backoff, .backoff, .whileMuted])
+    }
+
+    /// The idle Teams check has its own 10 s pace; it must not push the probe's walks further apart.
+    func testTheIdleTeamsCheckDoesNotCountForTheBackoff() {
+        let mute = FakeMute()
+        let s = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        let teams = "com.microsoft.teams2"
+        windows.titles[teams] = ["Chat | Microsoft Teams"]
+        windows.running = [teams]
+        mic.list = [proc(4, teams, input: false, output: true)]
+        s.tick(at: now)
+        XCTAssertEqual(mute.paces, [.callerPaced])
+    }
+
+    func testAResetAlsoClearsWhatTheMicProbeRemembers() {
+        service.reset()
+        XCTAssertEqual(mic.forgets, 1)
+    }
+
+    // MARK: Tab reads outside a call
+
+    private func dictationInChrome() -> String {
+        let chrome = "com.google.Chrome"
+        tabs.tabs[chrome] = [BrowserTab(url: "https://example.com/notes", title: "Notes", isActive: true)]
+        windows.titles[chrome] = ["Notes"]
+        mic.list = [proc(1, chrome, input: true)]
+        return chrome
+    }
+
+    /// A browser that used the mic for dictation was asked for its tabs every 2 s for as long as that lasted.
+    func testANoMeetingAnswerOutsideACallHoldsForTenSeconds() {
+        let chrome = dictationInChrome()
+        for i in 0..<5 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(tabs.queried, [chrome], "one read for the ticks at 0, 2, 4, 6, and 8 s")
+        service.tick(at: now.addingTimeInterval(10))
+        XCTAssertEqual(tabs.queried.count, 2)
+    }
+
+    func testTheTabsAreReadAgainAtOnceWhenTheMicStopsAndStarts() {
+        let chrome = dictationInChrome()
+        service.tick(at: now)
+        mic.list = [proc(1, chrome, input: false)]
+        service.tick(at: now.addingTimeInterval(2))
+        mic.list = [proc(1, chrome, input: true)]
+        service.tick(at: now.addingTimeInterval(4))
+        XCTAssertEqual(tabs.queried.count, 2)
+    }
+
+    /// The owner joins a call in the browser that already used the mic: the window title changes, so the next
+    /// tick reads the tabs and the call starts with no wait.
+    func testACallThatStartsDuringOtherMicUseIsSeenAtTheNextTick() {
+        let chrome = dictationInChrome()
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        tabs.tabs[chrome] = [BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - abc-defg-hij", isActive: true)]
+        windows.titles[chrome] = ["Meet - abc-defg-hij"]
+        service.tick(at: now.addingTimeInterval(2))
+        XCTAssertEqual(events, [.started(platform: .meet, bundleID: chrome, at: now.addingTimeInterval(2))])
+    }
+
+    func testAnUnreadableAnswerIsNotHeld() {
+        let chrome = dictationInChrome()
+        tabs.unreadable = [chrome]
+        service.tick(at: now)
+        service.tick(at: now.addingTimeInterval(2))
+        XCTAssertEqual(tabs.queried.count, 2, "unknown is asked again; the probe has its own backoff")
+    }
+
+    func testAfterACallTheTabsAreReadAgainAtOnce() {
+        let chrome = dictationInChrome()
+        service.tick(at: now)
+        service.reset()
+        service.tick(at: now.addingTimeInterval(2))
+        XCTAssertEqual(tabs.queried.count, 2)
     }
 
     /// An in-person recording owns the mic, so the tick skips the Core Audio scan it would throw away.
@@ -231,7 +384,8 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(tabs.queried.count, 1)
     }
 
-    func testBeforeACallTheTabsAreReadOnEveryTick() {
+    /// Without readable window titles there is no proof that the tabs are the same, so nothing is held.
+    func testBeforeACallTheTabsAreReadOnEveryTickWhenTheWindowTitlesAreUnknown() {
         mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
         tabs.tabs["com.google.Chrome"] = [BrowserTab(url: "https://www.youtube.com/watch?v=x", title: "YouTube", isActive: true)]
         for s in stride(from: 0.0, through: 8, by: 2) { service.tick(at: now.addingTimeInterval(s)) }

@@ -56,7 +56,42 @@ final class LiveSpeakerNamerTests: XCTestCase {
         live.names = names
         let calls = provider.calls
         _ = await namer.names(for: live, themURL: them)
-        XCTAssertEqual(provider.calls - calls, 1, "only the unnamed voice with enough speech is tried again")
+        XCTAssertEqual(provider.calls - calls, 0, "a voice with no more speech than at the last try is not tried again")
+    }
+
+    /// A voice the library does not know was fingerprinted again every 20 s for the whole call.
+    func testAnUnknownVoiceIsTriedAgainOnlyWhenItSaidHalfAsMuchAgain() async throws {
+        let them = dir.appendingPathComponent("them.caf")
+        try writeSegments(them, total: 40, [(0, 30, 800)])
+        let library = VoiceLibrary(directory: dir)
+        try library.add([0, 1, 0, 0], to: "Sam Lee")
+        let provider = ToneEmbeddingProvider()
+        let namer = LiveSpeakerNamer(library: library, provider: provider)
+        var live = LiveTranscript()
+        live.apply(turn(0, "A", from: 0, to: 8), source: .them, at: 8)
+        _ = await namer.names(for: live, themURL: them)
+        let first = provider.calls
+        XCTAssertGreaterThan(first, 0)
+        live.apply(turn(1, "A", from: 9, to: 11), source: .them, at: 11)
+        _ = await namer.names(for: live, themURL: them)
+        XCTAssertEqual(provider.calls, first, "10 s after 8 s is not half as much again")
+        live.apply(turn(2, "A", from: 12, to: 16), source: .them, at: 16)
+        _ = await namer.names(for: live, themURL: them)
+        XCTAssertGreaterThan(provider.calls, first, "14 s after 8 s is")
+    }
+
+    func testAVoiceWithAFullMinuteOfSpeechIsNotTriedAgain() {
+        var tries = LiveNamingTries()
+        XCTAssertTrue(tries.isDue("A", speech: 4))
+        tries.tried("A", speech: 4)
+        XCTAssertFalse(tries.isDue("A", speech: 5.9))
+        XCTAssertTrue(tries.isDue("A", speech: 6))
+        tries.tried("A", speech: 50)
+        XCTAssertFalse(tries.isDue("A", speech: 59))
+        XCTAssertTrue(tries.isDue("A", speech: 60), "the last try, with all the speech a fingerprint uses")
+        tries.tried("A", speech: 60)
+        XCTAssertFalse(tries.isDue("A", speech: 600))
+        XCTAssertTrue(tries.isDue("B", speech: 4))
     }
 
     func testATrackStillRecordingCanBeRead() throws {

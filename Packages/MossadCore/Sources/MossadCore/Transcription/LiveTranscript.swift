@@ -96,15 +96,48 @@ public struct LiveTranscript: Codable, Equatable, Sendable {
     /// a "You" line that repeats a call line from the same few seconds is that echo. Short lines such as
     /// "Yeah." stay, since they are as likely to be the owner's own.
     public var visibleLines: [Line] {
-        let calls = lines.filter { $0.source == .them }
+        var memo = EchoMemo()
+        return visibleLines(memo: &memo)
+    }
+
+    /// What the echo filter found for the mic lines that cannot change any more, by line ID. The transcript is
+    /// published four times a second for the whole call; with this, a pass looks only at the last seconds.
+    public struct EchoMemo: Sendable {
+        var shown: [String: Bool] = [:]
+        public init() {}
+    }
+
+    /// The same lines as `visibleLines`. `memo` must belong to this transcript; start a new one after `reset()`.
+    public func visibleLines(memo: inout EchoMemo) -> [Line] {
+        // The lines are in time order, so the call lines near a mic line are found by halving, and a call line is
+        // split into words once, not once for each pair of lines.
+        let calls = lines.indices.filter { lines[$0].source == .them }
+        var callWords: [Int: Set<String>] = [:]
+        let newest = lines.last?.time ?? 0
         return lines.filter { line in
             guard line.source == .me else { return true }
-            let mine = Self.words(line.text)
-            guard mine.count >= Self.echoMinimumWords else { return true }
-            return !calls.contains { call in
-                abs(call.time - line.time) <= Self.echoWindow
-                    && Double(mine.filter(Set(Self.words(call.text)).contains).count) / Double(mine.count) >= Self.echoShare
+            if let known = memo.shown[line.id] { return known }
+            var low = 0, high = calls.count
+            while low < high {
+                let mid = (low + high) / 2
+                if lines[calls[mid]].time < line.time - Self.echoWindow { low = mid + 1 } else { high = mid }
             }
+            var shown = true
+            // Settled: the line and every call line near it are final, and no new line can still start near it.
+            var settled = line.isFinal && newest - line.time > Self.echoWindow * 2
+            let mine = Self.words(line.text)
+            var c = low
+            while c < calls.count, lines[calls[c]].time <= line.time + Self.echoWindow {
+                let i = calls[c]
+                c += 1
+                if !lines[i].isFinal { settled = false }
+                guard shown, mine.count >= Self.echoMinimumWords else { continue }
+                let words = callWords[i] ?? Set(Self.words(lines[i].text))
+                callWords[i] = words
+                if Double(mine.filter(words.contains).count) / Double(mine.count) >= Self.echoShare { shown = false }
+            }
+            if settled { memo.shown[line.id] = shown }
+            return shown
         }
     }
 

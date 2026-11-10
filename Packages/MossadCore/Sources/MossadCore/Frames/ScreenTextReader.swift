@@ -62,15 +62,22 @@ public struct ScreenStep: Sendable {
     static let queue = DispatchQueue(label: "com.dwebber.mossad.screen-text", qos: .background)
 
     let reader: ScreenTextReading
-    let isRecording: @Sendable () -> Bool
+    let isRecording: @Sendable () async -> Bool
     /// The rest between two frames while a call records.
     let rest: @Sendable () async -> Void
 
-    public init(reader: ScreenTextReading, isRecording: @escaping @Sendable () -> Bool = { false },
+    public init(reader: ScreenTextReading, isRecording: @escaping @Sendable () async -> Bool = { false },
                 rest: @escaping @Sendable () async -> Void = { try? await Task.sleep(for: .seconds(2)) }) {
         self.reader = reader
         self.isRecording = isRecording
         self.rest = rest
+    }
+
+    /// The same step, which also rests while the gate for heavy work is held (a call records). Other heavy steps
+    /// wait at that gate until the call ends; this one only slows down, so a note never waits for the next call.
+    public func gated(by gate: HeavyWorkGate) -> ScreenStep {
+        let own = isRecording
+        return ScreenStep(reader: reader, isRecording: { if await own() { return true }; return await gate.isHeld }, rest: rest)
     }
 
     private func read(_ url: URL) async -> (text: String, words: [ScreenWord])? {
@@ -88,7 +95,7 @@ public struct ScreenStep: Sendable {
         FrameStore.removeUnlisted(in: dir)
         var unsaved = 0
         for frame in index.frames where frame.text == nil {
-            if isRecording() { await rest() }
+            if await isRecording() { await rest() }
             let url = index.url(of: frame, in: dir)
             let read = await read(url)
             guard let at = index.frames.firstIndex(where: { $0.file == frame.file }) else { continue }

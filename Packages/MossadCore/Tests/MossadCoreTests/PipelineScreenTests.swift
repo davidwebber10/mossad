@@ -142,6 +142,52 @@ final class PipelineScreenTests: XCTestCase {
         XCTAssertEqual(rests.count, 3)
     }
 
+    func testTheGateForHeavyWorkSlowsTheTextStepAndDoesNotStopIt() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (25, slide + " two", nil)])
+        final class Rests: @unchecked Sendable {
+            let lock = NSLock()
+            var count = 0
+        }
+        let rests = Rests()
+        // A call records for as long as the test runs: a step that waited at the gate would never return.
+        let gate = HeavyWorkGate(pollInterval: .seconds(3600), isCallRecording: { true })
+        let step = ScreenStep(reader: reader, rest: { rests.lock.withLock { rests.count += 1 } }).gated(by: gate)
+        let result = await step.run(in: paths.callDirectory("a"), known: [])
+        XCTAssertEqual(result?.screens.count, 2)
+        XCTAssertEqual(rests.count, 2)
+        XCTAssertEqual(reader.classes, [QOS_CLASS_BACKGROUND, QOS_CLASS_BACKGROUND])
+    }
+
+    func testScreensSurviveTheCompactRecordAndTheRecordCache() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, "Sam Carter")])
+        let dir = paths.callDirectory("a")
+        var index = try XCTUnwrap(FrameIndex.load(from: dir))
+        index.frames[0].session = 0
+        index.frames[0].time = start.addingTimeInterval(12)
+        index.gaps = [ScreenGap(offset: 20, paused: true)]
+        try index.save(to: dir)
+        // Read once before the run, so the cache holds the record without screens.
+        XCTAssertNil(ProcessingQueue(paths: paths).allRecords().first?.screens)
+        await pipeline().process("a")
+        let expected = [SharedScreen(offset: 12, file: "12000.heic", text: slide, presenter: "Sam Carter", window: "w",
+                                     time: start.addingTimeInterval(12), session: 0)]
+        XCTAssertEqual(try CallRecord.load(from: dir).screens, expected)
+        let cached = try XCTUnwrap(ProcessingQueue(paths: paths).allRecords().first)
+        XCTAssertEqual(cached.screens, expected)
+        XCTAssertEqual(cached.screenGaps, [ScreenGap(offset: 20, paused: true)])
+        // One line, not pretty-printed, and still the same record.
+        let raw = try String(contentsOf: dir.appendingPathComponent(CallRecord.fileName), encoding: .utf8)
+        XCTAssertFalse(raw.contains("\n"))
+        XCTAssertTrue(raw.contains("\"screens\":["))
+        // The screen lines reach the transcript, the search, and the tools from the cached record.
+        XCTAssertTrue(MarkdownWriter.transcript(cached).contains("(Screen shared by Sam Carter: \"Q3 plan"))
+        XCTAssertEqual(SearchIndex(records: [cached]).moments(in: "a", matching: "revenue").map(\.time), [12])
+        let tools = ChatTools(records: [cached], owner: "Robin Vale", paths: paths)
+        XCTAssertEqual(tools.searchTranscripts(query: "revenue").map(\.at), [12])
+        XCTAssertTrue(tools.run("list_screens", input: ["meeting_id": "a"]).contains("1. at_seconds: 12"))
+        XCTAssertTrue(MeetingSearch.matches(cached, "revenue"))
+    }
+
     func testNoRestWhenNoCallRecords() async throws {
         try makeCall("a", at: start, frames: [(12, slide, nil), (25, slide + " two", nil)])
         final class Rests: @unchecked Sendable { var count = 0 }

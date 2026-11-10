@@ -163,4 +163,45 @@ final class ProcessingQueueTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: json).write(to: url)
         XCTAssertEqual(try CallRecord.load(from: paths.callDirectory("old")).muteSpans, [])
     }
+
+    private func longRecord() -> CallRecord {
+        var r = CallRecord(id: "20261020-143000", platform: .meet, bundleID: "com.google.Chrome",
+                           start: Date(timeIntervalSince1970: 1_800_000_000), end: Date(timeIntervalSince1970: 1_800_003_600), status: .written)
+        let words = (0..<40).map { Word(text: "word\($0)", start: Double($0) * 0.31, end: Double($0) * 0.31 + 0.25) }
+        let lines = (0..<250).map { i in
+            Utterance(track: i % 2 == 0 ? .me : .them, speakerLabel: "A", start: Double(i) * 14, end: Double(i) * 14 + 12,
+                      text: words.map(\.text).joined(separator: " "), words: words)
+        }
+        r.utterances = lines
+        r.meUtterances = lines.filter { $0.track == .me }
+        r.themUtterances = lines.filter { $0.track == .them }
+        return r
+    }
+
+    /// The file is written whole at every step and every edit; the layout was about half of it.
+    func testARecordIsSavedWithoutLayoutAndReadsBackTheSame() throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let r = longRecord()
+        try r.save(to: dir)
+        let data = try Data(contentsOf: dir.appendingPathComponent(CallRecord.fileName))
+        XCTAssertFalse(data.contains(0x0A), "one line: no line breaks and no indent")
+        XCTAssertEqual(try CallRecord.load(from: dir), r)
+        let pretty = JSONEncoder()
+        pretty.outputFormatting = [.prettyPrinted, .sortedKeys]
+        pretty.dateEncodingStrategy = .iso8601
+        XCTAssertLessThan(Double(data.count), Double(try pretty.encode(r).count) * 0.7)
+    }
+
+    /// The form older builds wrote, and still write, must load in this build.
+    func testARecordInTheOldLayoutStillLoads() throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let r = longRecord()
+        let pretty = JSONEncoder()
+        pretty.outputFormatting = [.prettyPrinted, .sortedKeys]
+        pretty.dateEncodingStrategy = .iso8601
+        try pretty.encode(r).write(to: dir.appendingPathComponent(CallRecord.fileName))
+        XCTAssertEqual(try CallRecord.load(from: dir), r)
+    }
 }

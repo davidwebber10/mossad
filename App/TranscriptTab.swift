@@ -12,6 +12,10 @@ struct TranscriptTab: View {
     /// A moment to mark and scroll to, such as where a commitment was made.
     var highlight: TimeInterval?
     @State private var blocks: [TranscriptBlock] = []
+    @State private var blocksAscend = true
+    /// The lines that hold the Find text. Kept, not worked out in `body`: the player draws this view four times a
+    /// second, and each time every line was searched again.
+    @State private var matched: [LineID] = []
     @State private var stats = ""
     /// The title of each screen's row, by file name, worked out with the blocks.
     @State private var screenTitles: [String: String] = [:]
@@ -31,7 +35,7 @@ struct TranscriptTab: View {
     }
 
     var body: some View {
-        let matches = self.matches()
+        let matches = matched
         let current = player.isPlaying || player.time > 0 ? currentBlock : nil
         let marked = highlight.flatMap { h in blocks.last { $0.start <= h + 0.5 }?.id }
         ScrollViewReader { proxy in
@@ -66,7 +70,8 @@ struct TranscriptTab: View {
                     }
                     .onChange(of: find) { _, _ in
                         matchIndex = 0
-                        if let first = self.matches().first { proxy.scrollTo(first.block, anchor: .center) }
+                        matched = self.matches()
+                        if let first = matched.first { proxy.scrollTo(first.block, anchor: .center) }
                     }
                 }
             }
@@ -74,6 +79,8 @@ struct TranscriptTab: View {
         .task(id: blocksKey) {
             blocks = TranscriptBlock.blocks(record)
             screenTitles = Dictionary((record.screens ?? []).map { ($0.file, record.screenTitle($0)) }, uniquingKeysWith: { a, _ in a })
+            blocksAscend = TranscriptBlock.startsAscend(blocks)
+            matched = self.matches()
             let words = record.utterances.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
             stats = "\(blocks.count.formatted()) \(blocks.count == 1 ? "turn" : "turns") · \(words.formatted()) words"
         }
@@ -208,7 +215,7 @@ struct TranscriptTab: View {
 
     /// The last turn that starts at or before the play position.
     private var currentBlock: Int? {
-        blocks.last { $0.start <= player.time }?.id
+        blocksAscend ? TranscriptBlock.current(at: player.time, in: blocks) : blocks.last { $0.start <= player.time }?.id
     }
 }
 

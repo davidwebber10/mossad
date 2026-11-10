@@ -162,6 +162,8 @@ final class PhoneStore {
         var days: [MeetingDay] = []
         var owner = ""
         var scores: [String: Int] = [:]
+        /// Changes when any meeting's review file did; nil when the meetings were not read.
+        var coachStamp: Int?
         var profile: CoachProfile
         var chats: [Chat]
         var commitments: CommitmentBook
@@ -178,9 +180,10 @@ final class PhoneStore {
             var counts: [String: Int] = [:]
             for r in meetings { for (key, name) in r.speakerNames where key.hasPrefix("me:") { counts[name, default: 0] += 1 } }
             s.owner = counts.max { $0.value < $1.value }?.key ?? ""
-            s.scores = Dictionary(uniqueKeysWithValues: meetings.compactMap { r in
-                CoachReview.load(in: paths.callDirectory(r.id))?.scorecard.map { (r.id, $0.score) }
-            })
+            // Only the reviews whose file changed are read again.
+            let coach = PhoneStore.coachScores.read(ids: meetings.map(\.id)) { paths.callDirectory($0) }
+            s.scores = coach.scores
+            s.coachStamp = coach.stamp
             return s
         }
     }
@@ -200,7 +203,14 @@ final class PhoneStore {
         await task.value
     }
 
+    nonisolated private static let coachScores = CoachScoreCache()
+    @ObservationIgnored private var coachStamp: Int?
+
     private func apply(_ s: Snapshot) {
+        // After a change made here (a note on a review) the open review reads again. After a read of the folder,
+        // only when a review file or the coach's memory changed: this runs at every return to the app.
+        let coachChanged = s.meetings == nil || s.coachStamp != coachStamp || profile != s.profile
+        if s.meetings != nil { coachStamp = s.coachStamp }
         if let m = s.meetings {
             if s.changed {
                 meetings = m
@@ -216,9 +226,12 @@ final class PhoneStore {
         if profile != s.profile { profile = s.profile }
         if chats != s.chats { chats = s.chats }
         if commitments != s.commitments { commitments = s.commitments }
-        coachVersion += 1
+        if coachChanged { coachVersion += 1 }
         refreshSearch()
     }
+
+    /// The meetings the search index holds, to find what changed.
+    @ObservationIgnored private var indexedRecords: [String: CallRecord] = [:]
 
     /// Builds the search index again when meetings or chats changed, and only swaps the tasks when only they did.
     private func refreshSearch() {
@@ -231,11 +244,29 @@ final class PhoneStore {
         indexed = (meetingsVersion, chats)
         let voices = paths.voices
         indexing?.cancel()
+        let base = searchIndex, old = indexedRecords
         indexing = Task {
             let people = await Task.detached { VoiceLibrary(directory: voices).profiles }.value
-            let index = await SearchIndex.build(records: meetings, people: people, tasks: tasks, chats: chats)
+            let records = Dictionary(meetings.map { ($0.id, $0) }, uniquingKeysWith: { _, b in b })
+            // A few changed meetings are put into the index one by one; a build of the whole index is for the
+            // first time and for many changes at once.
+            let changed = records.filter { old[$0.key] != $0.value }.map(\.value), removed = old.keys.filter { records[$0] == nil }
+            let index: SearchIndex
+            if old.isEmpty || changed.count + removed.count > 20 {
+                index = await SearchIndex.build(records: meetings, people: people, tasks: tasks, chats: chats)
+            } else {
+                index = await Task.detached(priority: .userInitiated) {
+                    var next = base
+                    for r in changed { next.update(r) }
+                    for id in removed { next.removeMeeting(id: id) }
+                    next.setPeople(people)
+                    next.setChats(chats)
+                    return next
+                }.value
+            }
             let stats = await Task.detached(priority: .userInitiated) { PersonStatistics.compute(meetings) }.value
             guard !Task.isCancelled else { return }
+            indexedRecords = records
             var latest = index
             latest.setTasks(commitments.items)
             searchIndex = latest

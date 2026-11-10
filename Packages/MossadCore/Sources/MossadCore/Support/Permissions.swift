@@ -91,3 +91,11 @@ public enum Permissions {
         return f
     }
 }
+
+/// How often the permissions are checked.
+public enum PermissionCheckRate {
+    /// Every second only while a page that shows them is open in a window the owner can see.
+    public static func interval(pageOpen: Bool, windowShows: Bool, background: TimeInterval) -> TimeInterval {
+        pageOpen && windowShows ? 1 : background
+    }
+}

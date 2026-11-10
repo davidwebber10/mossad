@@ -8,10 +8,11 @@ public struct AudioProcess: Equatable, Sendable {
     public var objectID: AudioObjectID
     public var pid: pid_t
     public var bundleID: String
-    public var isRunningInput: Bool
-    public var isRunningOutput: Bool
+    /// Nil when the state could not be read, or was not read: unknown is never "not running".
+    public var isRunningInput: Bool?
+    public var isRunningOutput: Bool?
 
-    public init(objectID: AudioObjectID, pid: pid_t, bundleID: String, isRunningInput: Bool, isRunningOutput: Bool) {
+    public init(objectID: AudioObjectID, pid: pid_t, bundleID: String, isRunningInput: Bool?, isRunningOutput: Bool?) {
         self.objectID = objectID
         self.pid = pid
         self.bundleID = bundleID
@@ -22,6 +23,16 @@ public struct AudioProcess: Equatable, Sendable {
 
 public protocol MicUsageProbing: AnyObject {
     func processes() -> [AudioProcess]
+    /// The same list for one detection tick; nil when the list itself could not be read. Outside a call the probe
+    /// may skip states that cannot matter (see `MicUsageProbe`).
+    func scan(callActive: Bool) -> [AudioProcess]?
+    func forget()
+}
+
+public extension MicUsageProbing {
+    func scan(callActive: Bool) -> [AudioProcess]? { processes() }
+    /// Drops what the probe remembers about the process objects, for a new start of detection.
+    func forget() {}
 }
 
 public protocol BrowserTabProbing: AnyObject {
@@ -40,6 +51,25 @@ public extension BrowserTabProbing {
 public protocol MuteProbing: AnyObject {
     /// `meetingID` narrows a browser to the window of the current call when its title shows the meeting code.
     func labels(bundleID: String, platform: Platform, meetingID: String?) -> [String]?
+    /// The same, with how often a full look at the app is worth its cost now.
+    func labels(bundleID: String, platform: Platform, meetingID: String?, pace: MuteReadPace) -> [String]?
+}
+
+/// How a probe spaces its costly full reads of the call app.
+public enum MuteReadPace: Sendable {
+    /// Full reads that do not pay off are spaced further and further apart.
+    case backoff
+    /// The last known state is "muted": a full read at least each 5 s, so the button is found again inside the
+    /// time after which "muted" turns into "unmuted".
+    case whileMuted
+    /// The caller asks seldom (the idle Teams check, each 10 s): each ask may read, and none counts.
+    case callerPaced
+}
+
+public extension MuteProbing {
+    func labels(bundleID: String, platform: Platform, meetingID: String?, pace: MuteReadPace) -> [String]? {
+        labels(bundleID: bundleID, platform: platform, meetingID: meetingID)
+    }
 }
 
 public protocol WindowTitleProbing: AnyObject {

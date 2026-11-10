@@ -149,8 +149,6 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     public var isRecording: Bool { record != nil }
-    /// The same, for any thread: work that can wait asks this before it starts.
-    public var isRecordingNow: Bool { lineLock.withLock { lines.me != nil } }
     /// Started by hand for an in-person meeting: detection neither ends it nor taps a call app for it.
     public private(set) var isManual = false
 

@@ -10,6 +10,7 @@ public enum TranscriptionStage: Equatable, Sendable {
 
 public protocol Transcribing: Sendable {
     var serviceName: String { get }
+    var runsOnThisDevice: Bool { get }
     func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance]
     /// `speakers`: how many voices the track holds, when the person said so. Services that cannot use it ignore it.
     func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance]
@@ -18,6 +19,9 @@ public protocol Transcribing: Sendable {
 extension Transcribing {
     /// The name in the progress line, such as "Deepgram is transcribing".
     public var serviceName: String { "AssemblyAI" }
+
+    /// True for a model that runs on this Mac: its work waits while a call records.
+    public var runsOnThisDevice: Bool { false }
 
     public func transcribe(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
         try await transcribe(file: file, track: track, progress: progress)

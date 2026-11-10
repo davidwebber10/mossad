@@ -9,10 +9,20 @@ public protocol EmbeddingProvider: Sendable {
 /// On-device speaker embeddings from FluidAudio's CoreML models (downloaded once on first use).
 public actor FluidEmbeddingProvider: EmbeddingProvider {
     private var manager: DiarizerManager?
+    private nonisolated let lease = ModelLease("voice models")
 
-    public init() {}
+    public init() {
+        lease.onRelease { [weak self] in await self?.releaseModels() }
+    }
+
+    private func releaseModels() {
+        guard lease.isFree else { return }
+        manager = nil
+    }
 
     public func embedding(for samples: [Float]) async throws -> [Float] {
+        lease.begin()
+        defer { lease.end() }
         let manager = try await loadedManager()
         return try manager.extractSpeakerEmbedding(from: samples)
     }

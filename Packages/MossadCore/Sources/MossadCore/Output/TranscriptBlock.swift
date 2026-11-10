@@ -14,6 +14,22 @@ public struct TranscriptBlock: Equatable, Sendable, Identifiable {
     public var end: TimeInterval
     public var lines: [Line]
 
+    /// Whether each turn starts at or after the one before it, so `current(at:in:)` can be used.
+    public static func startsAscend(_ blocks: [TranscriptBlock]) -> Bool {
+        zip(blocks, blocks.dropFirst()).allSatisfy { $0.start <= $1.start }
+    }
+
+    /// The last turn that starts at or before `time`, for turns in time order. The player asks four times a second,
+    /// so this halves its way to the turn; a scan of every turn each time adds up on a long meeting.
+    public static func current(at time: TimeInterval, in blocks: [TranscriptBlock]) -> Int? {
+        var low = 0, high = blocks.count
+        while low < high {
+            let mid = (low + high) / 2
+            if blocks[mid].start <= time { low = mid + 1 } else { high = mid }
+        }
+        return low > 0 ? blocks[low - 1].id : nil
+    }
+
     /// Seconds each speaker talked, longest first.
     public static func talkTime(_ r: CallRecord) -> [(speaker: String, seconds: TimeInterval)] {
         let names = MarkdownWriter.displayNames(r)

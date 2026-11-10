@@ -105,6 +105,110 @@ final class PipelineTests: XCTestCase {
                         onStep: { notifications.steps.append($0) }, onDetail: { _, text in notifications.detail(text) })
     }
 
+    /// Back-to-back meetings: the encodes and the voice fingerprints of the last call wait while the next one records.
+    func testProcessorHeavyStepsWaitWhileACallRecords() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        final class Flag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = true
+            var recording: Bool {
+                get { lock.withLock { value } }
+                set { lock.withLock { value = newValue } }
+            }
+        }
+        let call = Flag()
+        let gate = HeavyWorkGate(pollInterval: .milliseconds(20)) { call.recording }
+        let notifications = notifications
+        let later = start.addingTimeInterval(3600)
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         onDetail: { _, text in notifications.detail(text) }, heavy: gate)
+        let run = Task { await p.process(id) }
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(transcriber.calls, [], "nothing is encoded or sent while the call records")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("upload-me.m4a").path))
+        XCTAssertEqual(try CallRecord.load(from: dir).status, .recorded)
+        XCTAssertTrue(notifications.details.contains("Waiting for the current call to end"))
+        call.recording = false
+        await run.value
+        XCTAssertEqual(try CallRecord.load(from: dir).status, .written)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
+    }
+
+    /// The note of the last call does not wait for the next call to end: only its recording does.
+    func testANoteIsWrittenWhileACallRecordsAndItsRecordingIsMadeLater() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        final class Flag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = false
+            var recording: Bool {
+                get { lock.withLock { value } }
+                set { lock.withLock { value = newValue } }
+            }
+        }
+        let call = Flag()
+        let gate = HeavyWorkGate(pollInterval: .milliseconds(20)) { call.recording }
+        let later = start.addingTimeInterval(3600)
+        // The next call starts when the summary is done.
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         onStep: { if $0.status == .summarized { call.recording = true } }, heavy: gate)
+        await p.process(id)
+        XCTAssertEqual(try CallRecord.load(from: dir).status, .written)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
+        XCTAssertEqual(Recording.missing(audioRoot: paths.audio).map(\.lastPathComponent), [id])
+        Recording.backfill(audioRoot: paths.audio)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
+        XCTAssertEqual(Recording.missing(audioRoot: paths.audio), [])
+    }
+
+    /// The encode of the recording takes seconds, and the owner can edit the call in that time. The note once kept
+    /// the old title and the old file name, while the record had the new one.
+    func testAnEditDuringTheRecordingEncodeIsInTheNoteAndInTheRecord() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        let started = DispatchSemaphore(value: 0), proceed = DispatchSemaphore(value: 0)
+        let p = pipeline()
+        await p.setRecordingMaker { dir in
+            started.signal()
+            proceed.wait()
+            Recording.makeIfMissing(in: dir)
+        }
+        let run = Task { await p.process(id) }
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global().async {
+                started.wait()
+                c.resume()
+            }
+        }
+        await p.setTitle(callID: id, "Budget review")
+        await p.setTags(callID: id, ["Freight"])
+        proceed.signal()
+        await run.value
+        let r = try CallRecord.load(from: dir)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.customTitle, "Budget review")
+        XCTAssertEqual(r.tags, ["Freight"])
+        let notes = try FileManager.default.contentsOfDirectory(atPath: paths.meetings.path).filter { $0.hasSuffix(".md") }
+        XCTAssertEqual(notes.count, 1, "one note, under the new name")
+        XCTAssertTrue(notes[0].contains("Budget review"))
+        XCTAssertEqual(r.markdownPath, paths.meetings.appendingPathComponent(notes[0]).path)
+        let note = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertTrue(note.contains("title: Budget review") || note.contains("title: \"Budget review\""), note.prefix(300).description)
+        XCTAssertTrue(note.contains("Freight"))
+        XCTAssertEqual(note, MarkdownWriter.render(r), "the note is the record's own content")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
+    }
+
+    func testTheGateIsOpenWhenNothingSaysACallRecords() async {
+        let gate = HeavyWorkGate()
+        let held = await gate.isHeld
+        XCTAssertFalse(held)
+        await gate.waitForQuiet("a test")
+    }
+
     /// A call held because its muted parts could not be silenced is tried again by the pipeline's regular run. The
     /// silence is written before anything is sent to transcription.
     func testAHeldCallIsSilencedAndThenProcessed() async throws {

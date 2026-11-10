@@ -158,6 +158,15 @@ final class AnalyticsTests: XCTestCase {
         XCTAssertTrue(MeetingSearch.matches(r, " "))
     }
 
+    func testTheFilterGivesTheIDsOfTheMatchingMeetings() {
+        var a = call("a", date(10, 1), minutes: 10); a.tags = ["Budget"]
+        var b = call("b", date(10, 2), minutes: 10); b.calendarTitle = "Budget review"
+        let c = call("c", date(10, 3), minutes: 10)
+        XCTAssertEqual(MeetingSearch.matchingIDs([a, b, c], "#budget"), ["a"])
+        XCTAssertEqual(MeetingSearch.matchingIDs([a, b, c], "budget"), ["a", "b"])
+        XCTAssertEqual(MeetingSearch.matchingIDs([a, b, c], "nothing here"), [])
+    }
+
     func testReportCountsTimePerTag() {
         var a = call("a", date(10, 19), minutes: 30); a.tags = ["Budget", "Databricks"]
         var b = call("b", date(10, 20), minutes: 60); b.tags = ["Databricks"]
