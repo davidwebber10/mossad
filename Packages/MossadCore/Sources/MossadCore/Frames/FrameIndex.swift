@@ -184,8 +184,10 @@ public enum FrameStore {
     public static func removeFrame(_ file: String, in dir: URL) -> Bool {
         guard var index = FrameIndex.load(from: dir), index.frames.contains(where: { $0.file == file }) else { return false }
         index.frames.removeAll { $0.file == file }
-        do { try index.save(to: dir) } catch { return false }
+        // The picture goes also when the list cannot be saved: the list is tried again, a picture nobody lists
+        // would only lie on the disk.
         try? FileManager.default.removeItem(at: FrameIndex.folder(in: dir).appendingPathComponent(file))
+        do { try index.save(to: dir) } catch { return false }
         return true
     }
 

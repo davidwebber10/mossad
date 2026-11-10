@@ -317,6 +317,7 @@ public actor Pipeline {
         r.markers = current.markers
         r.screens = current.screens
         r.screenGaps = current.screenGaps
+        r.deletedScreens = current.deletedScreens
         r.status = .summarized
         do { try store(r, dir: dir) } catch { return false }
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.previousFileName))
@@ -806,6 +807,8 @@ public actor Pipeline {
             // The frames of shared screens move with their part; the first part's own stay as they are until the end.
             var starts: [TimeInterval] = [], total: TimeInterval = 0
             for length in lengths { starts.append(total); total += length }
+            // An entry of a deleted screen that stayed in a part's list (a failed save) must not be joined in.
+            for r in records { for file in r.deletedScreens ?? [] { FrameStore.removeFrame(file, in: paths.callDirectory(r.id)) } }
             try FrameStore.join(records.map { paths.callDirectory($0.id) }, offsets: starts)
             plan.phase = .replacing
             try plan.save(in: dir)

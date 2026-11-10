@@ -124,8 +124,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     }
 
     /// How the window can be seen, and the check that it still is the meeting with its page in the same place.
-    /// One request for the window, one for the windows above it, and for a browser two for the page's frame; the
-    /// recorder asks each 3 s.
+    /// One request for the window, one for the windows above it, and for a browser four to Accessibility (the
+    /// window's frame and the page's; eight when they do not agree at first); the recorder asks each 3 s.
     public var windowSight: WindowSight? {
         guard let chosen else { return nil }
         guard let now = Self.describe(chosen.id), stillMeeting(chosen, now), !pageMoved(chosen) else {

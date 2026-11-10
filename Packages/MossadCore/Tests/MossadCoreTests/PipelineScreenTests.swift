@@ -152,6 +152,9 @@ final class PipelineScreenTests: XCTestCase {
         XCTAssertEqual(try CallRecord.load(from: dir).screens?.map(\.file), ["25000.heic"])
         XCTAssertEqual(FrameIndex.load(from: dir)?.frames.map(\.file), ["25000.heic"])
         XCTAssertEqual(files("a"), ["25000.heic"])
+        // The summary of that same run did not get the deleted screen's line.
+        XCTAssertFalse(summarizer.lastTranscript.contains("[00:00:12] (Screen"), summarizer.lastTranscript)
+        XCTAssertTrue(summarizer.lastTranscript.contains("[00:00:25] (Screen"))
         // And not with the next summary either.
         await p.regenerateSummary("a")
         XCTAssertEqual(try CallRecord.load(from: dir).screens?.map(\.file), ["25000.heic"])
@@ -170,6 +173,55 @@ final class PipelineScreenTests: XCTestCase {
         await p.regenerateSummary("a")
         XCTAssertEqual(try CallRecord.load(from: dir).screens?.map(\.file), ["25000.heic"])
         XCTAssertEqual(FrameIndex.load(from: dir)?.frames.map(\.file), ["25000.heic"])
+    }
+
+    func testADeleteIsRememberedThroughARestoreOfThePreviousTranscript() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (25, slide + " two", nil)])
+        let dir = paths.callDirectory("a")
+        let p = pipeline()
+        await p.process("a")
+        let before = try XCTUnwrap(FrameIndex.load(from: dir))
+        // "Transcribe again" kept the record from before; then the owner deletes a screen, and its entry stays
+        // (a failed save); then the owner goes back to the transcript from before.
+        try FileManager.default.copyItem(at: dir.appendingPathComponent(CallRecord.fileName), to: dir.appendingPathComponent(Pipeline.previousFileName))
+        await p.deleteScreen(callID: "a", file: "12000.heic")
+        try before.save(to: dir)
+        let restored = await p.restorePreviousTranscript("a")
+        XCTAssertTrue(restored)
+        XCTAssertEqual(try CallRecord.load(from: dir).deletedScreens, ["12000.heic"])
+        await p.regenerateSummary("a")
+        XCTAssertEqual(try CallRecord.load(from: dir).screens?.map(\.file), ["25000.heic"])
+        XCTAssertEqual(FrameIndex.load(from: dir)?.frames.map(\.file), ["25000.heic"])
+    }
+
+    func testADeletedScreenWhoseEntryStayedDoesNotComeBackInAJoinedMeeting() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (20, slide + " kept", nil)])
+        try makeCall("b", at: start.addingTimeInterval(2400), frames: [(5, slide + " more", nil), (9, slide + " gone", nil)])
+        let p = pipeline()
+        await p.process("a")
+        await p.process("b")
+        let a = try XCTUnwrap(FrameIndex.load(from: paths.callDirectory("a"))), b = try XCTUnwrap(FrameIndex.load(from: paths.callDirectory("b")))
+        await p.deleteScreen(callID: "a", file: "12000.heic")
+        await p.deleteScreen(callID: "b", file: "9000.heic")
+        // As if both saves of the frames lists failed: the entries, with their text, are still there.
+        try a.save(to: paths.callDirectory("a"))
+        try b.save(to: paths.callDirectory("b"))
+        await p.merge(callIDs: ["a", "b"])
+        let r = try CallRecord.load(from: paths.callDirectory("a"))
+        XCTAssertEqual(r.screens?.map(\.file), ["20000.heic", "35000.heic"])
+        XCTAssertEqual(FrameIndex.load(from: paths.callDirectory("a"))?.frames.map(\.file), ["20000.heic", "35000.heic"])
+        XCTAssertEqual(files("a"), ["20000.heic", "35000.heic"])
+    }
+
+    func testThePictureGoesAlsoWhenTheFramesListCannotBeSaved() throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil)])
+        let dir = paths.callDirectory("a")
+        // The call's folder takes no new file, so the list cannot be written; the pictures' folder is as it was.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+        XCTAssertFalse(FrameStore.removeFrame("12000.heic", in: dir))
+        XCTAssertEqual(files("a"), [])
+        XCTAssertEqual(FrameIndex.load(from: dir)?.frames.map(\.file), ["12000.heic"])
     }
 
     func testADeletedScreenAlsoLeavesTheRecordKeptForAnUndo() async throws {

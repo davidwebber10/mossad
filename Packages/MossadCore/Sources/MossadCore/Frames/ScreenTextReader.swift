@@ -102,9 +102,11 @@ public struct ScreenStep: Sendable {
         FrameStore.removeUnlisted(in: dir)
         /// This run holds its own copy of the list for as long as it reads. A screen that the owner deletes in
         /// that time leaves the list on disk; it must leave this copy too, before the copy is saved over it.
+        var gone = deleted
         func save() {
             if let disk = FrameIndex.load(from: dir) {
                 let listed = Set(disk.frames.map(\.file))
+                gone.formUnion(index.frames.map(\.file).filter { !listed.contains($0) })
                 index.frames.removeAll { !listed.contains($0.file) }
             }
             do { try index.save(to: dir) } catch { Log.error("Saving the frames list failed: \(error)") }
@@ -148,7 +150,8 @@ public struct ScreenStep: Sendable {
             s.presenter = s.presenter.map { PresenterLabel.resolve($0, known: known) }
             return s
         }
-        screens += existing.filter { !deleted.contains($0.file) && !listed.contains($0.file) && !FileManager.default.fileExists(atPath: FrameIndex.folder(in: dir).appendingPathComponent($0.file).path) }
+        // A screen deleted before this run or during it is not in the answer, so this run's summary does not get its text.
+        screens += existing.filter { !gone.contains($0.file) && !listed.contains($0.file) && !FileManager.default.fileExists(atPath: FrameIndex.folder(in: dir).appendingPathComponent($0.file).path) }
         screens.sort { $0.offset < $1.offset }
         return Result(screens: screens, gaps: ScreenGap.shown(index.gaps ?? [], screens: screens))
     }

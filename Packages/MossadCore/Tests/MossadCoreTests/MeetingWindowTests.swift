@@ -259,18 +259,46 @@ final class MeetingWindowTests: XCTestCase {
     func testPickingTheAccessibilityWindowOfAWindowServerWindow() {
         let meet = "Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)", mail = "Inbox - Gmail - Google Chrome - Sam (Work)"
         let none: (Int) -> CGRect? = { _ in nil }
+        // One candidate is picked by its title alone.
         XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: [mail, meet], frameOf: none), 1)
         XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: [mail], frameOf: none))
-        // The exact window wins over one whose title only begins the same way.
-        let notes = "Meet - fkq-xdfx-vbe - Notes - Google Chrome - Sam (Work)"
-        XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: [notes, meet], frameOf: none), 1)
-        XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe - Notes", frame: nil, among: [notes, meet], frameOf: none), 0)
         // The same meeting open in two windows: only the frame can tell them apart. With no sure answer, none.
         let a = CGRect(x: 0, y: 30, width: 1200, height: 800), b = CGRect(x: 300, y: 60, width: 1200, height: 800)
         XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: [meet, meet], frameOf: none))
         XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: b.offsetBy(dx: 1, dy: 0), among: [meet, meet], frameOf: { [a, b][$0] }), 1)
         XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: a, among: [meet, meet], frameOf: { _ in a }))
         XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: a, among: [meet, meet], frameOf: none))
+    }
+
+    func testAnEqualTitleDoesNotWinOverAnotherCandidate() {
+        // Chrome's two forms of a Meet window's title for Accessibility. The window in the call has the recording
+        // state in it; a second window with the same link has not, so its title is equal to the window server's.
+        let inCall = "Meet - fkq-xdfx-vbe - Camera and microphone recording - Google Chrome"
+        let other = "Meet - fkq-xdfx-vbe - Google Chrome - Sam (Work)"
+        let callFrame = CGRect(x: 0, y: 30, width: 1400, height: 900), otherFrame = CGRect(x: 200, y: 80, width: 1000, height: 700)
+        let frames = [inCall: callFrame, other: otherFrame]
+        for titles in [[inCall, other], [other, inCall]] {
+            let frameOf: (Int) -> CGRect? = { frames[titles[$0]] }
+            // The frame decides, also against the equal title.
+            XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: callFrame, among: titles, frameOf: frameOf).map { titles[$0] }, inCall)
+            XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: otherFrame, among: titles, frameOf: frameOf).map { titles[$0] }, other)
+            // With no frame, with a frame that fits neither, or with frames that cannot be read: nothing.
+            XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: titles, frameOf: frameOf))
+            XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: CGRect(x: 9, y: 9, width: 500, height: 500), among: titles, frameOf: frameOf))
+            XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: callFrame, among: titles, frameOf: { _ in nil }))
+            // Two windows at the same place cannot be told apart.
+            XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: callFrame, among: titles, frameOf: { _ in callFrame }))
+        }
+        // The same with the second meeting's own title strings.
+        let weekly = "Meet – Weekly sync - Camera and microphone recording - Google Chrome", plain = "Meet – Weekly sync - Google Chrome"
+        XCTAssertNil(WindowTitle.pick(title: "Meet – Weekly sync", frame: nil, among: [weekly, plain], frameOf: { _ in nil }))
+        XCTAssertEqual(WindowTitle.pick(title: "Meet – Weekly sync", frame: callFrame, among: [plain, weekly], frameOf: { [otherFrame, callFrame][$0] }), 1)
+        // A window whose title only begins the same way is a candidate too: no pick by title then.
+        let notes = "Meet - fkq-xdfx-vbe - Notes - Google Chrome - Sam (Work)"
+        XCTAssertNil(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe", frame: nil, among: [notes, other], frameOf: { _ in nil }))
+        // The longer title of the two has one candidate only: the shorter Accessibility title is not it.
+        XCTAssertEqual(WindowTitle.pick(title: "Meet - fkq-xdfx-vbe - Notes", frame: nil, among: [notes, other], frameOf: { _ in nil }), 0)
+        XCTAssertFalse(WindowTitle.same("Meet - fkq-xdfx-vbe - Notes", other))
     }
 
     // MARK: Covered windows
