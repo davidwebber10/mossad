@@ -50,7 +50,7 @@ struct MeetingDetailView: View {
     private var cacheKey: String {
         "\(record.utterances.count)|\(controller.ownerName)|\(profilesKey)|"
             + record.speakerNames.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
-            + "|" + record.attendees.joined(separator: ",")
+            + "|" + record.attendees.joined(separator: ",") + "|" + (record.invitees ?? []).compactMap(\.email).joined(separator: ",")
             + "|" + record.actionItems.compactMap(\.owner).joined(separator: ",") + "|\(record.screens?.count ?? 0)"
     }
 
@@ -310,7 +310,8 @@ struct MeetingPeople {
         var allKeys: [String] = []
         for u in record.utterances where !allKeys.contains(u.speakerKey) { allKeys.append(u.speakerKey) }
         let profiles = library.profiles
-        let directory = PersonDirectory(profiles: profiles)
+        // With the invite's pairs, the address says who an invited name is.
+        let directory = PersonDirectory(profiles: profiles).with(invitees: record.invitees)
         // Everyone the meeting names, saved or not: a second "Sam" among them makes a person saved as "Sam" unsure.
         let knownNames = lanes.filter { record.speakerNames[$0.key] != nil }.map(\.name) + record.attendees.filter { !$0.contains("@") }
         var byKey: [String: Speaker] = [:]

@@ -75,6 +75,7 @@ public enum MeetingMerge {
                 merged.plannedEnd = r.plannedEnd
             }
             for a in r.attendees where !merged.attendees.contains(a) { merged.attendees.append(a) }
+            for i in r.invitees ?? [] where merged.invitees?.contains(i) != true { merged.invitees = (merged.invitees ?? []) + [i] }
             offset += durations[r.id] ?? r.end.timeIntervalSince(r.start)
         }
         merged.utterances.sort { $0.start < $1.start }

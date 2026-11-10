@@ -10,6 +10,8 @@ extension MeetingAnalytics {
     /// neither stays "not matched": Mossad does not know who it is, so it does not say that they were silent.
     static func participation(_ r: CallRecord, speakers: [Speaker], people: PersonDirectory) -> Participation? {
         guard !r.attendees.isEmpty else { return nil }
+        // With the invite's pairs, the address says who an invited name is.
+        let people = people.with(invitees: r.invitees)
         let named = speakers.filter { !$0.isUnknown }
         let meeting = named.map(\.name) + r.attendees.filter { !$0.contains("@") }
         // The speakers as a directory of their own, so an invited "Dana" finds the speaker Dana Lee even when

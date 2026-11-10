@@ -207,6 +207,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var plannedStart: Date?
     public var plannedEnd: Date?
     public var attendees: [String] = []
+    /// The invited people with the name and the address apart, when the calendar gave them. `attendees` has one
+    /// text for each; this has both, so the address can say who a name is. Nil in records from before it.
+    public var invitees: [Invitee]?
     public var utterances: [Utterance] = []
     /// Per-track results, kept so a failed track does not force the other one to be transcribed again.
     public var meUtterances: [Utterance]?
@@ -301,6 +304,7 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public mutating func setInvite(_ event: CalendarEventInfo) {
         calendarTitle = event.title
         attendees = event.attendees
+        invitees = event.participants.isEmpty ? nil : event.participants
         plannedStart = event.isAllDay ? nil : event.start
         plannedEnd = event.isAllDay ? nil : event.end
     }
@@ -357,6 +361,7 @@ extension CallRecord {
         plannedStart = try c.decodeIfPresent(Date.self, forKey: .plannedStart)
         plannedEnd = try c.decodeIfPresent(Date.self, forKey: .plannedEnd)
         attendees = try c.decodeIfPresent([String].self, forKey: .attendees) ?? []
+        invitees = try c.decodeIfPresent([Invitee].self, forKey: .invitees)
         utterances = try c.decodeIfPresent([Utterance].self, forKey: .utterances) ?? []
         meUtterances = try c.decodeIfPresent([Utterance].self, forKey: .meUtterances)
         themUtterances = try c.decodeIfPresent([Utterance].self, forKey: .themUtterances)

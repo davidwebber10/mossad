@@ -20,7 +20,25 @@ public struct PersonDirectory: Sendable, Equatable {
     private let resolver: PersonResolver
     private let names: [PersonID: String]
 
-    public static func == (a: PersonDirectory, b: PersonDirectory) -> Bool { a.people == b.people }
+    /// The address one meeting's invite gave with each name, by the key of the name.
+    private var inviteEmails: [String: String] = [:]
+
+    public static func == (a: PersonDirectory, b: PersonDirectory) -> Bool { a.people == b.people && a.inviteEmails == b.inviteEmails }
+
+    /// The same people for one meeting's invite: an invited name carries the address the invite gave with it, so
+    /// a name that fits nobody is still the saved person with that address.
+    public func with(invitees: [Invitee]?) -> PersonDirectory {
+        var copy = self
+        copy.inviteEmails = Invitee.emails(byName: invitees)
+        return copy
+    }
+
+    /// A written entry as the resolver wants it, with the invite's address for a name.
+    private func observation(_ text: String) -> Observation {
+        var o = Observation(text: text)
+        if o.email == nil, let name = o.name { o.email = inviteEmails[PersonNames.nameKey(name)] }
+        return o
+    }
 
     public init(_ people: [Person] = []) {
         self.people = people
@@ -91,7 +109,7 @@ public struct PersonDirectory: Sendable, Equatable {
     public func link(for text: String, in meeting: [String] = []) -> String? {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
-        switch resolver.resolve(Observation(text: text), in: context(meeting)) {
+        switch resolver.resolve(observation(text), in: context(meeting)) {
         case .resolved(let id, let rule, _) where Self.sure.contains(rule): return names[id]
         // Two saved people with one email: the first one, as before there were rules.
         case .ambiguous(let ids, .verifiedEmail): return ids.first.flatMap { names[$0] }
@@ -109,7 +127,7 @@ public struct PersonDirectory: Sendable, Equatable {
     public func match(_ text: String, among meeting: [String] = []) -> String? {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
-        switch resolver.resolve(Observation(text: text), in: context(meeting)) {
+        switch resolver.resolve(observation(text), in: context(meeting)) {
         case .resolved(let id, _, _): return names[id]
         case .ambiguous(let ids, .verifiedEmail): return ids.first.flatMap { names[$0] }
         default: return nil

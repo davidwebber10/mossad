@@ -1,20 +1,78 @@
 import EventKit
 import Foundation
 
+/// One invited person as the calendar gave them: the name, the address, or both.
+public struct Invitee: Codable, Equatable, Sendable, Hashable {
+    public var name: String?
+    /// Lowercase.
+    public var email: String?
+    /// True for the calendar owner's own entry; nil when it is not.
+    public var isSelf: Bool?
+
+    public init(name: String?, email: String?, isSelf: Bool? = nil) {
+        self.name = name
+        self.email = email
+        self.isSelf = isSelf
+    }
+
+    /// From what the calendar gives for a participant. `address` is its URL as text: "mailto:sam@example.com" for
+    /// most accounts. An Exchange account can give a directory path there; that is not an address, so the email
+    /// is unknown. Nil when neither a name nor an address is known.
+    public static func make(name: String?, address: String?, isCurrentUser: Bool) -> Invitee? {
+        var name = name?.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank
+        var email: String?
+        if let address, address.lowercased().hasPrefix("mailto:") {
+            let rest = String(address.dropFirst("mailto:".count)).split(separator: "?").first.map(String.init) ?? ""
+            email = isAddress(rest.removingPercentEncoding ?? rest)
+        }
+        // With no display name, the calendar gives the address as the name.
+        if let written = name, let asAddress = isAddress(written) {
+            email = email ?? asAddress
+            name = nil
+        }
+        guard name != nil || email != nil else { return nil }
+        return Invitee(name: name, email: email, isSelf: isCurrentUser ? true : nil)
+    }
+
+    /// The text when it is one address and nothing else, in lowercase.
+    private static func isAddress(_ text: String) -> String? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let parts = text.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty, parts[1].contains("."), !text.contains(where: { $0.isWhitespace || $0 == "/" || $0 == "<" }) else { return nil }
+        return text
+    }
+
+    /// The address the invite gave with each name, by the key of the name. A name with two addresses is left out.
+    public static func emails(byName invitees: [Invitee]?) -> [String: String] {
+        var out: [String: String?] = [:]
+        for i in invitees ?? [] {
+            guard let name = i.name, let email = i.email else { continue }
+            let key = PersonNames.nameKey(name)
+            guard !key.isEmpty else { continue }
+            if let known = out[key] { if known != email { out[key] = .some(nil) } } else { out[key] = email }
+        }
+        return out.compactMapValues { $0 }
+    }
+}
+
 public struct CalendarEventInfo: Sendable, Equatable {
     public var title: String
     public var start: Date
     public var end: Date
+    /// One text for each invited person: the name, or the address when there is no name.
     public var attendees: [String]
+    /// The same people with the name and the address apart. Empty from a source that does not give them.
+    public var participants: [Invitee]
     /// Location, notes, and URL together, for finding meeting links.
     public var text: String
     public var isAllDay: Bool
 
-    public init(title: String, start: Date, end: Date, attendees: [String], text: String, isAllDay: Bool) {
+    public init(title: String, start: Date, end: Date, attendees: [String], text: String, isAllDay: Bool, participants: [Invitee] = []) {
         self.title = title
         self.start = start
         self.end = end
         self.attendees = attendees
+        self.participants = participants
         self.text = text
         self.isAllDay = isAllDay
     }
@@ -155,7 +213,8 @@ public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
                 end: e.endDate,
                 attendees: (e.attendees ?? []).compactMap { $0.name ?? $0.url.absoluteString.replacingOccurrences(of: "mailto:", with: "") },
                 text: [e.location, e.notes, e.url?.absoluteString].compactMap { $0 }.joined(separator: "\n"),
-                isAllDay: e.isAllDay)
+                isAllDay: e.isAllDay,
+                participants: (e.attendees ?? []).compactMap { Invitee.make(name: $0.name, address: $0.url.absoluteString, isCurrentUser: $0.isCurrentUser) })
         }
     }
 }
