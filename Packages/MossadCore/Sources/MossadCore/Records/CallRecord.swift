@@ -261,6 +261,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var mutedAudioPending = false
     /// The kept frames of screens shared in the call, with their text. Nil for a call with no screen capture.
     public var screens: [SharedScreen]?
+    /// Pauses of the screen capture next to a share session, shown as lines of the transcript.
+    public var screenGaps: [ScreenGap]?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -348,6 +350,7 @@ extension CallRecord {
         muteSpans = try c.decodeIfPresent([MuteSpan].self, forKey: .muteSpans) ?? []
         mutedAudioPending = try c.decodeIfPresent(Bool.self, forKey: .mutedAudioPending) ?? false
         screens = try c.decodeIfPresent([SharedScreen].self, forKey: .screens)
+        screenGaps = try c.decodeIfPresent([ScreenGap].self, forKey: .screenGaps)
     }
 }
 

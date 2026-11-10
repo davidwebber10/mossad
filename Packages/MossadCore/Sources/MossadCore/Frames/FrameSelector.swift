@@ -28,6 +28,7 @@ public struct FrameSelector: Sendable {
 
     public let rules: FrameRules
     private var lastKept: (thumb: FrameThumb, time: TimeInterval)?
+    private var keptBefore: (thumb: FrameThumb, time: TimeInterval)?
     private var candidate: (thumb: FrameThumb, time: TimeInterval, stable: Bool)?
     private var keptTimes: [TimeInterval] = []
 
@@ -71,6 +72,22 @@ public struct FrameSelector: Sendable {
         return step
     }
 
+    /// The picture that was to be kept could not be written: it does not count as kept, so the same picture is
+    /// tried again when it comes again.
+    public mutating func keepFailed() {
+        guard lastKept != nil else { return }
+        lastKept = keptBefore
+        if !keptTimes.isEmpty { keptTimes.removeLast() }
+    }
+
+    /// The window stopped being the meeting. A candidate that no later frame confirmed may show what came after.
+    /// Returns true when the held picture must go.
+    public mutating func dropUnconfirmed() -> Bool {
+        guard let c = candidate, !c.stable else { return false }
+        candidate = nil
+        return true
+    }
+
     /// The time the candidate is kept at, when it is stable, far enough from the last kept frame, and the hour has room.
     private mutating func keepIfDue(at now: TimeInterval) -> TimeInterval? {
         guard let c = candidate, c.stable else { return nil }
@@ -80,6 +97,7 @@ public struct FrameSelector: Sendable {
         keptTimes.removeAll { time - $0 >= 3600 }
         guard keptTimes.count < rules.maxPerHour else { return nil }
         keptTimes.append(time)
+        keptBefore = lastKept
         lastKept = (c.thumb, time)
         candidate = nil
         return time

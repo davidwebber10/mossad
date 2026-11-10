@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// A window as the window server lists it.
@@ -41,16 +42,19 @@ public enum MeetingWindow {
     /// Windows this small are toolbars and badges, not content.
     static let minimumSide: Double = 120
 
-    /// The parts of the Teams app's main window. It shows chats and files, not the call.
+    /// Parts of the Teams app's main window that are known. They are never the call, also when something else
+    /// seems to say so. This list only refuses; no window is accepted because it is missing here.
     static let teamsSections: Set<String> = [
         "activity", "chat", "teams", "calendar", "calls", "files", "onedrive", "apps", "copilot", "search", "settings",
-        "people", "communities", "viva engage", "shifts", "approvals", "planner", "meet", "notifications", "tasks",
+        "people", "communities", "viva engage", "shifts", "approvals", "planner", "meet", "meetings", "notifications", "tasks",
         "microsoft teams", "meeting join",
     ]
 
     /// The window to capture for a call of `platform` in the app `bundleID`, or nil when none is surely the meeting.
-    public static func choose(_ windows: [WindowCandidate], platform: Platform, bundleID: String, meetingID: String? = nil) -> WindowCandidate? {
-        let ranked = windows.compactMap { w in kind(of: w, among: windows, platform: platform, bundleID: bundleID).map { (w, $0) } }
+    /// `confirmed` are the titles of windows that Accessibility showed to hold the call's own controls.
+    public static func choose(_ windows: [WindowCandidate], platform: Platform, bundleID: String, meetingID: String? = nil,
+                              confirmed: Set<String> = []) -> WindowCandidate? {
+        let ranked = windows.compactMap { w in kind(of: w, among: windows, platform: platform, bundleID: bundleID, confirmed: confirmed).map { (w, $0) } }
         // A small view only when the meeting's own window is not on screen.
         let usable = ranked.filter { pair in
             pair.1 != .small || !ranked.contains { $0.1 != .small && $0.0.onScreen }
@@ -71,7 +75,8 @@ public enum MeetingWindow {
 
     /// Whether a window is the call's, and which kind. `windows` are all windows of the list, for the Teams rule
     /// that ties a second window to the meeting's own.
-    public static func kind(of w: WindowCandidate, among windows: [WindowCandidate], platform: Platform, bundleID: String) -> Kind? {
+    public static func kind(of w: WindowCandidate, among windows: [WindowCandidate], platform: Platform, bundleID: String,
+                            confirmed: Set<String> = []) -> Kind? {
         guard min(w.width, w.height) >= minimumSide, let app = MeetingMatcher.appKind(bundleID: bundleID) else { return nil }
         let owner = w.bundleID.lowercased()
         switch (app, platform) {
@@ -80,8 +85,8 @@ public enum MeetingWindow {
             return zoomTitleIsMeeting(w.title) ? .meeting : nil
         case (.teamsApp, .teams):
             guard owner == MeetingMatcher.teamsBundleID.lowercased() else { return nil }
-            let names = Set(windows.filter { $0.bundleID.lowercased() == owner }.compactMap { teamsMeetingName($0.title) })
-            return teamsKind(w.title, meetingNames: names)
+            let titles = windows.filter { $0.bundleID.lowercased() == owner }.map(\.title)
+            return teamsKind(w.title, meetingNames: teamsMeetingNames(titles, confirmed: confirmed))
         case (.browser(let browser), _):
             let base = browser.lowercased()
             // A site installed as an app has a window of its own under the browser's ID.
@@ -101,7 +106,8 @@ public enum MeetingWindow {
         guard let app = MeetingMatcher.appKind(bundleID: bundleID) else { return false }
         switch (app, platform) {
         case (.zoomApp, .zoom): return zoomTitleIsMeeting(w.title)
-        case (.teamsApp, .teams): return teamsKind(w.title, meetingNames: meetingNames.union([teamsMeetingName(w.title)].compactMap { $0 })) != nil
+        // `meetingNames` are the names proven when the window was chosen; a new title must fit one of them.
+        case (.teamsApp, .teams): return teamsKind(w.title, meetingNames: meetingNames) != nil
         case (.browser, _): return tabTitleIsMeeting(w.title, platform: platform)
         default: return false
         }
@@ -119,23 +125,46 @@ public enum MeetingWindow {
         return Array(parts.dropLast())
     }
 
-    /// The meeting's name when the title is a meeting window's own: "<name> | Microsoft Teams".
-    static func teamsMeetingName(_ title: String) -> String? {
+    /// The name in a title of the form "<name> | Microsoft Teams", unless it is a known part of the main window.
+    /// This form alone proves nothing: the main window shows each of its pages and apps with the same form.
+    static func teamsSingleName(_ title: String) -> String? {
         guard let parts = teamsParts(title), parts.count == 1, !parts[0].isEmpty,
               !teamsSections.contains(parts[0].lowercased()) else { return nil }
         return parts[0]
     }
 
-    /// "<name> | Microsoft Teams" is the meeting, "Meeting compact view | <name> | …" its small view, and any other
-    /// "<x> | <name> | …" for the name of an open meeting is that meeting's second window: the popped-out share.
+    /// Titles that can be the meeting's own window but need proof from Accessibility (the call's controls).
+    public static func teamsTitlesToProve(_ titles: [String]) -> [String] {
+        let proven = teamsMeetingNames(titles, confirmed: [])
+        return titles.filter { title in teamsSingleName(title).map { !proven.contains($0) } ?? false }
+    }
+
+    /// The names of the meetings that surely have a window. A name counts when the title says so ("Meeting with …",
+    /// "Call with …"), when a compact view names it, or when Accessibility found the call's controls in its window.
+    /// Never because of the window's size, and never because the name is merely unknown.
+    static func teamsMeetingNames(_ titles: [String], confirmed: Set<String>) -> Set<String> {
+        var names: Set<String> = []
+        for title in titles {
+            guard let parts = teamsParts(title) else { continue }
+            if parts.count == 2, parts[0].lowercased() == "meeting compact view", !teamsSections.contains(parts[1].lowercased()) {
+                names.insert(parts[1])
+            }
+            guard let name = teamsSingleName(title) else { continue }
+            if confirmed.contains(title) || name.hasPrefix("Meeting with ") || name.hasPrefix("Call with ") { names.insert(name) }
+        }
+        return names
+    }
+
+    /// "<name> | Microsoft Teams" for a proven name is the meeting, "Meeting compact view | <name> | …" its small
+    /// view, and "<words for a share> | <name> | …" for a proven name its popped-out share. Anything else is not chosen.
     static func teamsKind(_ title: String, meetingNames: Set<String>) -> Kind? {
         guard let parts = teamsParts(title) else { return nil }
-        if parts.count == 1 { return teamsMeetingName(title) != nil ? .meeting : nil }
-        guard parts.count == 2 else { return nil }
+        if parts.count == 1 { return teamsSingleName(title).map(meetingNames.contains) == true ? .meeting : nil }
+        guard parts.count == 2, !teamsSections.contains(parts[1].lowercased()) else { return nil }
         let head = parts[0].lowercased()
         if head == "meeting compact view" { return .small }
         guard !teamsSections.contains(head), meetingNames.contains(parts[1]) else { return nil }
-        return .share
+        return ["shared", "sharing", "presenting", "presentation"].contains(where: head.contains) ? .share : nil
     }
 
     /// A browser window's title starts with its selected tab's title, so this is true only while the meeting is
@@ -145,13 +174,69 @@ public enum MeetingWindow {
         case .meet:
             return MeetingMatcher.meetWindowIsMeeting(title)
         case .teams:
+            // Only a page that names a meeting or a call with someone. "Calls", "Chat", and the other pages of
+            // Teams in a browser are the owner's own data.
             guard let end = title.range(of: "| Microsoft Teams") else { return false }
-            let head = title[..<end.lowerBound].components(separatedBy: "|").first ?? ""
-            return head.contains("Meeting") || head.hasPrefix("Call")
+            let parts = title[..<end.lowerBound].components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard let head = parts.first, !parts.contains(where: { teamsSections.contains($0.lowercased()) }) else { return false }
+            return head.hasPrefix("Meeting with ") || head.hasPrefix("Call with ") || head.hasPrefix("Meeting in ")
+                || head.hasSuffix(" Meeting") || head.hasSuffix(" meeting")
         case .zoom:
             return zoomTitleIsMeeting(title)
         case .inPerson:
             return false
         }
+    }
+
+    // MARK: What part of the window is kept
+
+    /// A browser's own bars above the page: tabs, the address, bookmarks. Cut when the page's place is not known.
+    static let browserTopBand: Double = 125
+
+    /// The part of the window that a frame keeps, in parts of the window (0 to 1, from the top left), or nil when
+    /// the window must not be captured. A browser window shows the owner's other tabs, the address, and bookmarks
+    /// around the page, so only the page is kept: `webArea` is the page's frame inside the window, in points, as
+    /// Accessibility gives it. Without it the top band is cut. A browser with its tabs at the side needs the page's frame.
+    public static func keptPart(of w: WindowCandidate, bundleID: String, webArea: CGRect?) -> CGRect? {
+        let whole = CGRect(x: 0, y: 0, width: 1, height: 1)
+        guard case .browser(let browser)? = MeetingMatcher.appKind(bundleID: bundleID) else { return whole }
+        // A site installed as an app and a picture-in-picture window have no tabs of other pages.
+        if w.layer != 0 || w.bundleID.lowercased() != browser.lowercased() { return whole }
+        guard w.width > 0, w.height > 0 else { return nil }
+        if let webArea, webArea.minX >= -2, webArea.minY >= -2, webArea.maxX <= w.width + 2, webArea.maxY <= w.height + 2,
+           webArea.width >= w.width * 0.4, webArea.height >= w.height * 0.4 {
+            return CGRect(x: max(0, webArea.minX) / w.width, y: max(0, webArea.minY) / w.height,
+                          width: min(webArea.width, w.width) / w.width, height: min(webArea.height, w.height) / w.height)
+                .intersection(whole)
+        }
+        guard browser != "company.thebrowser.Browser", w.height >= browserTopBand * 2.5 else { return nil }
+        let top = browserTopBand / w.height
+        return CGRect(x: 0, y: top, width: 1, height: 1 - top)
+    }
+}
+
+/// Whether other windows hide a window, from their frames alone.
+public enum WindowCover {
+    /// The part of `window` (0 to 1) that the windows above it cover.
+    public static func coveredPart(of window: CGRect, by above: [CGRect]) -> Double {
+        let area = window.width * window.height
+        guard area > 0 else { return 1 }
+        let parts = above.map { $0.intersection(window) }.filter { !$0.isNull && $0.width > 0 && $0.height > 0 }
+        guard !parts.isEmpty else { return 0 }
+        // The union's area on the grid of all edges: the frames are few.
+        let xs = Array(Set(parts.flatMap { [$0.minX, $0.maxX] })).sorted(), ys = Array(Set(parts.flatMap { [$0.minY, $0.maxY] })).sorted()
+        var covered = 0.0
+        for i in 0..<(xs.count - 1) {
+            for j in 0..<(ys.count - 1) {
+                let cell = CGRect(x: xs[i], y: ys[j], width: xs[i + 1] - xs[i], height: ys[j + 1] - ys[j])
+                if parts.contains(where: { $0.contains(CGPoint(x: cell.midX, y: cell.midY)) }) { covered += cell.width * cell.height }
+            }
+        }
+        return covered / area
+    }
+
+    /// Covered enough that the app can stop drawing it: 95 percent or more.
+    public static func isCovered(_ window: CGRect, by above: [CGRect]) -> Bool {
+        coveredPart(of: window, by: above) >= 0.95
     }
 }

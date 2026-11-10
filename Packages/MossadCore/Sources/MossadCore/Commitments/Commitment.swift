@@ -178,7 +178,7 @@ public struct CommitmentFinder: Sendable {
         at_seconds the time of that line ([00:12:40] is 760). The meeting was on \(day). Return an empty list when \
         there are none.
         """
-        let out = try await llm.json(system: system, user: "## Transcript\n" + MarkdownWriter.transcript(r), schema: Self.schema,
+        let out = try await llm.json(system: system, user: "## Transcript\n" + MarkdownWriter.transcript(r, screens: false), schema: Self.schema,
                                      effort: .medium, purpose: .summary, as: Output.self)
         let parser = DateFormatter()
         parser.calendar = Calendar(identifier: .gregorian)

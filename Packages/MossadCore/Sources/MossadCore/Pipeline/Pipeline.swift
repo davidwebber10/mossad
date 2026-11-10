@@ -312,6 +312,7 @@ public actor Pipeline {
         r.tagsSetByOwner = current.tagsSetByOwner
         r.markers = current.markers
         r.screens = current.screens
+        r.screenGaps = current.screenGaps
         r.status = .summarized
         do { try store(r, dir: dir) } catch { return false }
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.previousFileName))
@@ -577,7 +578,6 @@ public actor Pipeline {
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
-        await readScreens(&r)
         if quietRuns[r.id] == nil {
             detail(r.id, "Finding the calendar invite")
             let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
@@ -586,6 +586,8 @@ public actor Pipeline {
                 r.attendees = event.attendees
             }
         }
+        // After the calendar, so a presenter's name can be matched to the invited people.
+        await readScreens(&r)
         if summarizer != nil, !r.utterances.isEmpty { detail(r.id, "Claude is writing the summary") }
         if let summarizer, !r.utterances.isEmpty {
             do {
@@ -622,7 +624,10 @@ public actor Pipeline {
         guard let screenStep, FrameStore.hasFrames(in: dir) else { return }
         detail(r.id, "Reading the shared screens")
         let known = Set(r.speakerNames.values).union(r.attendees).union(library.profiles.map(\.name))
-        if let screens = await screenStep.run(in: dir, known: known.sorted()) { r.screens = screens }
+        if let result = await screenStep.run(in: dir, known: known.sorted(), existing: r.screens ?? []) {
+            r.screens = result.screens
+            r.screenGaps = result.gaps.isEmpty ? nil : result.gaps
+        }
     }
 
     private func knownTags() -> [String] { Tags.known(queue.allRecords()) }

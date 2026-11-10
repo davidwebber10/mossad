@@ -106,6 +106,30 @@ final class ScreenFramesTests: XCTestCase {
         XCTAssertFalse(s.holdsCandidate)
     }
 
+    func testAPictureThatCouldNotBeWrittenIsTriedAgain() {
+        var s = FrameSelector()
+        _ = s.frame(thumb(10), at: 0)
+        XCTAssertEqual(s.frame(thumb(10), at: 3).keepHeldAt, 0)
+        s.keepFailed()
+        // The same picture counts as new again.
+        XCTAssertEqual(s.frame(thumb(10), at: 6).hold, true)
+        XCTAssertEqual(s.frame(thumb(10), at: 9).keepHeldAt, 6)
+    }
+
+    func testACandidateThatNoFrameConfirmedGoesWhenTheWindowIsLost() {
+        var s = FrameSelector()
+        _ = s.frame(thumb(10), at: 0)
+        XCTAssertTrue(s.dropUnconfirmed())
+        XCTAssertNil(s.quiet(at: 10).keepHeldAt)
+        // One that a later frame confirmed, and that only waits for the 10 s, stays.
+        _ = s.frame(thumb(10), at: 20)
+        _ = s.frame(thumb(10), at: 23)
+        _ = s.frame(thumb(200), at: 24)
+        _ = s.frame(thumb(200), at: 27)
+        XCTAssertFalse(s.dropUnconfirmed())
+        XCTAssertEqual(s.quiet(at: 31).keepHeldAt, 30)
+    }
+
     // MARK: Liveness
 
     func testAMinimizedWindowIsMarkedOnceAndTheReturnOnce() {
@@ -141,13 +165,15 @@ final class ScreenFramesTests: XCTestCase {
         XCTAssertNil(FrameIndex.load(from: dir))
         var index = FrameIndex()
         index.insert(.init(offset: 30.5, file: FrameIndex.fileName(offset: 30.5), window: "w1"))
+        let time = Date(timeIntervalSince1970: 1_800_000_012)
         index.insert(.init(offset: 12.0004, file: FrameIndex.fileName(offset: 12.0004), presenter: "Sam Carter",
-                           text: "Plan", words: [ScreenWord(text: "Plan", x: 0.1, y: 0.2, width: 0.3, height: 0.05)]))
+                           text: "Plan", words: [ScreenWord(text: "Plan", x: 0.1, y: 0.2, width: 0.3, height: 0.05)], time: time, session: 2))
+        index.gaps = [ScreenGap(offset: 20, paused: true)]
         XCTAssertEqual(index.frames.map(\.file), ["12000.heic", "30500.heic"])
         try index.save(to: dir)
         XCTAssertEqual(FrameIndex.load(from: dir), index)
         // Only frames whose text was read are in the record's list.
-        XCTAssertEqual(index.screens, [SharedScreen(offset: 12.0004, file: "12000.heic", text: "Plan", presenter: "Sam Carter")])
+        XCTAssertEqual(index.screens, [SharedScreen(offset: 12.0004, file: "12000.heic", text: "Plan", presenter: "Sam Carter", time: time, session: 2)])
     }
 
     func testAnIndexFromAnOlderBuildStillLoads() throws {
@@ -158,9 +184,9 @@ final class ScreenFramesTests: XCTestCase {
 
     func frames(in dir: URL, _ offsets: [TimeInterval], text: String? = nil) throws {
         try FileManager.default.createDirectory(at: FrameIndex.folder(in: dir), withIntermediateDirectories: true)
-        var index = FrameIndex()
+        var index = FrameIndex(gaps: [ScreenGap(offset: 1, paused: true)])
         for o in offsets {
-            let f = FrameIndex.Frame(offset: o, file: FrameIndex.fileName(offset: o), text: text)
+            let f = FrameIndex.Frame(offset: o, file: FrameIndex.fileName(offset: o), text: text, session: 0)
             index.insert(f)
             try Data("picture \(o)".utf8).write(to: index.url(of: f, in: dir))
         }
@@ -193,6 +219,9 @@ final class ScreenFramesTests: XCTestCase {
         FrameStore.finishJoin(in: one)
         let joined = FrameIndex.load(from: one)
         XCTAssertEqual(joined?.frames.map(\.offset), [10, 50, 255])
+        // The sessions of two parts stay apart, and the pauses move with their part.
+        XCTAssertEqual(joined?.frames.map(\.session), [0, 0, 1])
+        XCTAssertEqual(joined?.gaps?.map(\.offset), [1, 251])
         XCTAssertEqual(files(one), ["10000.heic", "255000.heic", "50000.heic"])
         XCTAssertEqual(try String(contentsOf: FrameIndex.folder(in: one).appendingPathComponent("255000.heic"), encoding: .utf8), "picture 5.0")
     }
@@ -245,5 +274,9 @@ final class ScreenFramesTests: XCTestCase {
         XCTAssertEqual(ScreenText.matches(words, query: "Chur").map(\.text), ["Churn"])
         XCTAssertEqual(ScreenText.matches(words, query: " ").count, 0)
         XCTAssertEqual(ScreenText.matches(words, query: "budget").count, 0)
+        // The grid's filter uses the same words: every one of them, in any order.
+        XCTAssertTrue(ScreenText.contains("Revenue grew\nChurn fell", query: "churn revenue"))
+        XCTAssertFalse(ScreenText.contains("Revenue grew", query: "churn revenue"))
+        XCTAssertFalse(ScreenText.contains("Revenue grew", query: " "))
     }
 }

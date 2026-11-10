@@ -5,14 +5,17 @@ import XCTest
 final class FakeFrames: FrameSource, @unchecked Sendable {
     struct Picture: FramePicture {
         let gray: UInt8
+        var fails = false
+        var failsWrite = false
         var thumb: FrameThumb? { FrameThumb(pixels: [UInt8](repeating: gray, count: FrameThumb.width * FrameThumb.height)) }
-        func held() -> HeldPicture? { Held(gray: gray) }
+        func held() -> HeldPicture? { fails ? nil : Held(gray: gray, fails: failsWrite) }
     }
 
     final class Held: HeldPicture {
         let gray: UInt8
-        init(gray: UInt8) { self.gray = gray }
-        func write(to url: URL) -> Bool { (try? Data([gray]).write(to: url)) != nil }
+        let fails: Bool
+        init(gray: UInt8, fails: Bool = false) { self.gray = gray; self.fails = fails }
+        func write(to url: URL) -> Bool { !fails && (try? Data([gray]).write(to: url)) != nil }
     }
 
     private(set) var handler: ((FrameEvent) -> Void)?
@@ -31,15 +34,20 @@ final class FakeFrames: FrameSource, @unchecked Sendable {
         handler = nil
     }
 
-    func show(_ gray: UInt8) { handler?(.picture(Picture(gray: gray), window: window)) }
+    func show(_ gray: UInt8) { handler?(.picture(Picture(gray: gray, fails: failsCopy, failsWrite: failsWrite), window: window)) }
     func idle() { handler?(.idle) }
+    func lose() { handler?(.lost) }
+    var failsCopy = false
+    var failsWrite = false
 }
 
-final class MarkerList: @unchecked Sendable {
+final class Switch: @unchecked Sendable {
     private let lock = NSLock()
-    private var list: [TranscriptMarker] = []
-    var all: [TranscriptMarker] { lock.withLock { list } }
-    func add(_ offset: TimeInterval, _ text: String) { lock.withLock { list.append(TranscriptMarker(offset: offset, text: text)) } }
+    private var value = true
+    var isOn: Bool {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
+    }
 }
 
 final class OffsetClock: @unchecked Sendable {
@@ -54,8 +62,11 @@ final class OffsetClock: @unchecked Sendable {
 final class ScreenRecorderTests: XCTestCase {
     var dir: URL!
     let source = FakeFrames()
-    let markers = MarkerList()
+    let setting = Switch()
     let clock = OffsetClock()
+    let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    /// Wall seconds that the recording's own time leaves out (a pause).
+    var pausedSeconds: TimeInterval = 0
     final class Presenter: @unchecked Sendable {
         var reads = 0
         var name: String? = "Sam Carter"
@@ -75,11 +86,12 @@ final class ScreenRecorderTests: XCTestCase {
     override func tearDown() { try? FileManager.default.removeItem(at: dir) }
 
     func make(presenter: Bool = false) -> ScreenRecorder {
-        let clock = clock, markers = markers, shown = shown
+        let clock = clock, shown = shown, setting = setting, t0 = t0
         let reader: @Sendable () -> String? = { shown.reads += 1; return shown.name }
         let read = presenter ? reader : nil
-        return ScreenRecorder(dir: dir, source: source, offset: { clock.now }, addMarker: { markers.add($0, $1) },
-                              presenter: read, usesTimer: false, runPresenter: { $0() })
+        nonisolated(unsafe) let test = self
+        return ScreenRecorder(dir: dir, source: source, offset: { clock.now }, now: { t0.addingTimeInterval(clock.now + test.pausedSeconds) },
+                              isEnabled: { setting.isOn }, presenter: read, usesTimer: false, runPresenter: { $0() })
     }
 
     var index: FrameIndex? { FrameIndex.load(from: dir) }
@@ -98,7 +110,11 @@ final class ScreenRecorderTests: XCTestCase {
         clock.now = 18
         source.idle()
         XCTAssertEqual(files, ["12500.heic"])
-        XCTAssertEqual(index?.frames, [.init(offset: 12.5, file: "12500.heic", window: "us.zoom.xos#1")])
+        // The time of day is saved to the second.
+        XCTAssertEqual(index?.frames.first?.time?.timeIntervalSince(t0) ?? 0, 12.5, accuracy: 1)
+        var frame = index?.frames.first
+        frame?.time = nil
+        XCTAssertEqual(frame, .init(offset: 12.5, file: "12500.heic", window: "us.zoom.xos#1", session: 0))
     }
 
     func testTheTimerKeepsAPictureWhenTheWindowSendsNothingMore() {
@@ -160,7 +176,14 @@ final class ScreenRecorderTests: XCTestCase {
         XCTAssertEqual(files, ["10000.heic", "50000.heic"])
     }
 
-    func testAWindowThatGoesAwayLeavesOnePausedAndOneResumedMarker() {
+    func keep(_ gray: UInt8, at t: TimeInterval) {
+        clock.now = t
+        source.show(gray)
+        clock.now = t + 3
+        source.show(gray)
+    }
+
+    func testAWindowThatGoesAwayLeavesOnePauseAndOneReturn() {
         let screen = make()
         screen.start()
         clock.now = 5
@@ -170,49 +193,187 @@ final class ScreenRecorderTests: XCTestCase {
             clock.now = t
             screen.tick()
         }
-        XCTAssertEqual(markers.all, [TranscriptMarker(offset: 5, text: "Screen capture paused")])
+        XCTAssertEqual(index?.gaps, [ScreenGap(offset: 5, paused: true)])
         clock.now = 70
         source.windowOnScreen = true
         source.show(40)
         clock.now = 73
         source.idle()
-        XCTAssertEqual(markers.all.map(\.text), ["Screen capture paused", "Screen capture resumed"])
-        XCTAssertEqual(markers.all.last?.offset, 70)
+        XCTAssertEqual(index?.gaps, [ScreenGap(offset: 5, paused: true), ScreenGap(offset: 70, paused: false)])
     }
 
-    func testAQuietWindowOnScreenLeavesNoMarker() {
+    func testACoveredWindowThatOnlySendsIdleFramesIsAPause() {
+        // The window server still lists a covered window, and the stream still sends idle frames for it.
+        let screen = make()
+        screen.start()
+        clock.now = 5
+        source.show(40)
+        source.windowOnScreen = false
+        for t in stride(from: 8.0, through: 30, by: 3) {
+            clock.now = t
+            source.idle()
+            screen.tick()
+        }
+        XCTAssertEqual(index?.gaps, [ScreenGap(offset: 5, paused: true)])
+        // Uncovered again: the next check says so, with no new picture.
+        source.windowOnScreen = true
+        clock.now = 33
+        screen.tick()
+        XCTAssertEqual(index?.gaps?.last, ScreenGap(offset: 33, paused: false))
+    }
+
+    func testAQuietWindowOnScreenLeavesNoPause() {
         let screen = make()
         screen.start()
         for t in stride(from: 3.0, through: 300, by: 3) {
             clock.now = t
             screen.tick()
         }
-        XCTAssertEqual(markers.all, [])
+        XCTAssertNil(index)
     }
 
-    func testThePresenterIsReadOncePerShareSession() {
+    func testTurningTheSettingOffEndsTheCaptureAtOnce() {
+        let screen = make()
+        screen.start()
+        keep(40, at: 10)
+        clock.now = 30
+        source.show(200)
+        setting.isOn = false
+        // The next frame or tick sees it: the stream stops, and the waiting picture is kept (it came before).
+        clock.now = 33
+        screen.tick()
+        XCTAssertEqual(source.stops, 1)
+        XCTAssertNil(source.handler)
+        // Turning it on again in the same call does not start it again.
+        setting.isOn = true
+        screen.start()
+        XCTAssertEqual(source.starts, 1)
+        XCTAssertEqual(index?.frames.map(\.offset), [10, 30])
+    }
+
+    func testNoCaptureStartsWithTheSettingOff() {
+        setting.isOn = false
+        let screen = make()
+        screen.start()
+        XCTAssertEqual(source.starts, 0)
+    }
+
+    func testSlidesMinutesApartAreOneSessionAndThePresenterIsReadAtItsStart() {
         let screen = make(presenter: true)
         screen.start()
-        func keep(_ gray: UInt8, at t: TimeInterval) {
-            clock.now = t
-            source.show(gray)
-            clock.now = t + 3
-            source.show(gray)
-        }
         keep(40, at: 10)
         keep(120, at: 30)
-        keep(220, at: 60)
         XCTAssertEqual(presenterReads, 1)
-        XCTAssertEqual(index?.frames.map(\.presenter), ["Sam Carter", "Sam Carter", "Sam Carter"])
-        // More than a minute later it is a new session, and this time the app shows no name.
-        presenterName = nil
-        keep(40, at: 200)
-        XCTAssertEqual(presenterReads, 2)
-        XCTAssertEqual(index?.frames.last?.presenter, nil)
-        // Another window is a new session too.
-        source.window = "us.zoom.xos#2"
-        keep(120, at: 220)
+        // 90 s and then 3 minutes on one slide: still the same share. The name is read again, and it is the same.
+        keep(220, at: 120)
+        keep(40, at: 300)
+        XCTAssertEqual(index?.frames.map(\.session), [0, 0, 0, 0])
+        XCTAssertEqual(index?.frames.map(\.presenter), ["Sam Carter", "Sam Carter", "Sam Carter", "Sam Carter"])
         XCTAssertEqual(presenterReads, 3)
+    }
+
+    func testAnotherPresenterWithNoGapGetsTheirOwnSession() {
+        let screen = make(presenter: true)
+        screen.start()
+        keep(40, at: 10)
+        keep(120, at: 30)
+        // Dana takes over at once. The next read, a minute after the first, shows her name.
+        presenterName = "Dana Lee"
+        keep(220, at: 75)
+        keep(40, at: 90)
+        XCTAssertEqual(index?.frames.map(\.presenter), ["Sam Carter", "Sam Carter", "Dana Lee", "Dana Lee"])
+        XCTAssertEqual(index?.frames.map(\.session), [0, 0, 1, 1])
+        // Then the app shows no name: those frames carry none.
+        presenterName = nil
+        keep(120, at: 140)
+        XCTAssertEqual(index?.frames.last?.presenter, nil)
+        XCTAssertEqual(index?.frames.last?.session, 2)
+    }
+
+    func testAFrameBeforeTheShareDoesNotHideThePresenter() {
+        let screen = make(presenter: true)
+        screen.start()
+        // The gallery, before anyone shares: no name.
+        presenterName = nil
+        keep(40, at: 10)
+        presenterName = "Sam Carter"
+        keep(120, at: 30)
+        keep(220, at: 75)
+        XCTAssertEqual(index?.frames.map(\.presenter), [nil, nil, "Sam Carter"])
+        XCTAssertEqual(index?.frames.map(\.session), [0, 0, 1])
+    }
+
+    func testAPauseOfTheCaptureAndAnotherWindowStartNewSessions() {
+        let screen = make(presenter: true)
+        screen.start()
+        keep(40, at: 10)
+        // The window is gone for a while.
+        source.windowOnScreen = nil
+        for t in stride(from: 16.0, through: 40, by: 3) {
+            clock.now = t
+            screen.tick()
+        }
+        source.windowOnScreen = true
+        keep(120, at: 50)
+        // The owner's own pause.
+        screen.stop()
+        screen.start()
+        keep(220, at: 70)
+        source.window = "us.zoom.xos#2"
+        keep(40, at: 90)
+        XCTAssertEqual(index?.frames.map(\.session), [0, 1, 2, 3])
+        XCTAssertEqual(presenterReads, 4)
+    }
+
+    func testTheTimeOfDayIsSavedWithTheFrame() {
+        let screen = make()
+        screen.start()
+        keep(40, at: 10)
+        screen.stop()
+        // A 10 minute pause: the recording's time stands still, the day goes on.
+        pausedSeconds = 600
+        screen.start()
+        keep(200, at: 20)
+        XCTAssertEqual(index?.frames.map(\.time), [t0.addingTimeInterval(10), t0.addingTimeInterval(620)])
+    }
+
+    func testAPictureTakenJustBeforeTheWindowWasLostIsNotKept() {
+        let screen = make()
+        screen.start()
+        keep(40, at: 10)
+        // A frame composed right after a click on another tab, while the title still said "meeting".
+        clock.now = 30
+        source.show(200)
+        source.lose()
+        clock.now = 40
+        screen.tick()
+        XCTAssertEqual(index?.frames.map(\.offset), [10])
+    }
+
+    func testAFailedWriteDoesNotCountAsKept() {
+        let screen = make()
+        screen.start()
+        source.failsWrite = true
+        keep(40, at: 10)
+        XCTAssertNil(index)
+        source.failsWrite = false
+        keep(40, at: 20)
+        XCTAssertEqual(index?.frames.map(\.offset), [20])
+    }
+
+    func testTrimAlsoDropsLaterPauses() {
+        let screen = make()
+        screen.start()
+        keep(40, at: 10)
+        source.windowOnScreen = false
+        for t in stride(from: 16.0, through: 40, by: 3) {
+            clock.now = t
+            screen.tick()
+        }
+        screen.close()
+        screen.trim(to: 12)
+        XCTAssertEqual(index?.gaps, [])
+        XCTAssertEqual(index?.frames.map(\.offset), [10])
     }
 }
 
@@ -227,7 +388,7 @@ final class CallRecorderScreenTests: XCTestCase {
     lazy var recorder = CallRecorder(paths: paths, makeThem: { _ in self.them }, makeMe: { self.me }, clock: { self.now },
                                      captureClock: .following { self.now }, makeScreens: { call in
         self.made.append(call)
-        return ScreenRecorder(dir: call.directory, source: self.source, offset: call.offset, addMarker: call.addMarker, usesTimer: false)
+        return ScreenRecorder(dir: call.directory, source: self.source, offset: call.offset, usesTimer: false)
     })
 
     override func setUp() {
@@ -303,22 +464,64 @@ final class CallRecorderScreenTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: FrameIndex.folder(in: paths.callDirectory(id)).path), ["150000.heic"])
     }
 
-    func testAMissingWindowAddsOneMarkerToTheCall() throws {
+    func testTheAudioStopsBeforeTheLastPictureIsWritten() throws {
+        final class Order: @unchecked Sendable { var events: [String] = [] }
+        final class Screens: ScreenCapturing {
+            let order: Order
+            init(_ order: Order) { self.order = order }
+            func start() {}
+            func stop() { order.events.append("screens") }
+            func close() { order.events.append("screens") }
+            func trim(to length: TimeInterval) {}
+        }
+        let order = Order()
+        me.log = { _ in }
+        let recorder = CallRecorder(paths: paths, makeThem: { _ in self.them }, makeMe: { self.me }, clock: { self.now },
+                                    captureClock: .following { self.now }, makeScreens: { _ in Screens(order) })
+        _ = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [1], at: t0)
+        now = t0.addingTimeInterval(30)
+        recorder.pause()
+        XCTAssertTrue(me.stopped && them.stopped)
+        XCTAssertEqual(order.events, ["screens"])
+        recorder.resume()
+        recorder.skip()
+        XCTAssertEqual(order.events, ["screens", "screens"])
+    }
+
+    func testAMissingWindowIsKeptAsAPauseAndNotAsAMarkerOfTheCall() throws {
         var screen: ScreenRecorder?
         let recorder = CallRecorder(paths: paths, makeThem: { _ in self.them }, makeMe: { self.me }, clock: { self.now },
                                     captureClock: .following { self.now }, makeScreens: { call in
-            screen = ScreenRecorder(dir: call.directory, source: self.source, offset: call.offset, addMarker: call.addMarker, usesTimer: false)
+            screen = ScreenRecorder(dir: call.directory, source: self.source, offset: call.offset, usesTimer: false)
             return screen
         })
-        let id = try CaptureQueue.queue.sync { try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [1], at: t0) }
+        let id = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [1], at: t0)
         source.windowOnScreen = nil
         for s in stride(from: 3.0, through: 30, by: 3) {
             now = t0.addingTimeInterval(s)
             screen?.tick()
         }
-        CaptureQueue.queue.sync {}
-        let markers = try CallRecord.load(from: paths.callDirectory(id)).markers
-        XCTAssertEqual(markers, [TranscriptMarker(offset: 0, text: "Screen capture paused")])
-        CaptureQueue.queue.sync { recorder.skip() }
+        // Nobody shared anything: the note says nothing about the screen.
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).markers, [])
+        XCTAssertEqual(index(id)?.gaps, [ScreenGap(offset: 0, paused: true)])
+        recorder.skip()
+    }
+
+    func testARecoveredCallHasNoFramesAfterItsAudio() throws {
+        let id = "20261020-143000"
+        let dir = paths.callDirectory(id)
+        try FileManager.default.createDirectory(at: FrameIndex.folder(in: dir), withIntermediateDirectories: true)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 90, [(0, 10, 200)])
+        try CallRecord(id: id, platform: .zoom, bundleID: "us.zoom.xos", start: t0, end: t0, status: .recording).save(to: dir)
+        var frames = FrameIndex()
+        for o in [30.0, 120] {
+            let f = FrameIndex.Frame(offset: o, file: FrameIndex.fileName(offset: o))
+            frames.insert(f)
+            try Data([1]).write(to: frames.url(of: f, in: dir))
+        }
+        try frames.save(to: dir)
+        ProcessingQueue(paths: paths).recoverInterrupted()
+        XCTAssertEqual(try CallRecord.load(from: dir).status, .recorded)
+        XCTAssertEqual(index(id)?.frames.map(\.offset), [30])
     }
 }

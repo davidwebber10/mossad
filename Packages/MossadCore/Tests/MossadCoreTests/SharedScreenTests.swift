@@ -61,23 +61,95 @@ final class SharedScreenTests: XCTestCase {
         XCTAssertEqual(r.screenMarkers[0].text.count, "Screen: \"\"".count + 300)
     }
 
-    func testSessionsSplitAtAMinuteAndAtAChangeOfWindow() {
+    func testASlideThatStaysForMinutesDoesNotEndTheSession() {
+        // One new slide each 90 s, all in the capture's session 0; then a pause of the capture; then another window.
         let screens = [
-            SharedScreen(offset: 10, file: "a", text: "", window: "w1"),
-            SharedScreen(offset: 40, file: "b", text: "", presenter: "Sam Carter", window: "w1"),
-            SharedScreen(offset: 99, file: "c", text: "", window: "w1"),
-            SharedScreen(offset: 159, file: "d", text: "", presenter: "Dana Lee", window: "w1"),
-            SharedScreen(offset: 170, file: "e", text: "", window: "w2"),
+            SharedScreen(offset: 10, file: "a", text: "", presenter: "Sam Carter", window: "w1", session: 0),
+            SharedScreen(offset: 100, file: "b", text: "", presenter: "Sam Carter", window: "w1", session: 0),
+            SharedScreen(offset: 190, file: "c", text: "", presenter: "Sam Carter", window: "w1", session: 0),
+            SharedScreen(offset: 200, file: "d", text: "", window: "w1", session: 1),
+            SharedScreen(offset: 210, file: "e", text: "", window: "w2", session: 2),
         ]
         let sessions = ShareSession.group(screens.shuffled())
         XCTAssertEqual(sessions.map(\.count), [3, 1, 1])
-        XCTAssertEqual(sessions.map(\.presenter), ["Sam Carter", "Dana Lee", nil])
-        XCTAssertEqual(sessions.map(\.start), [10, 159, 170])
-        XCTAssertEqual(sessions.map(\.end), [99, 159, 170])
-        XCTAssertTrue(ShareSession.startsNew(offset: 5, window: "w", after: nil))
-        XCTAssertFalse(ShareSession.startsNew(offset: 64, window: "w", after: (5, "w")))
-        XCTAssertTrue(ShareSession.startsNew(offset: 65, window: "w", after: (5, "w")))
-        XCTAssertTrue(ShareSession.startsNew(offset: 6, window: "x", after: (5, "w")))
+        XCTAssertEqual(sessions.map(\.presenter), ["Sam Carter", nil, nil])
+        XCTAssertEqual(sessions.map(\.start), [10, 200, 210])
+        XCTAssertEqual(sessions.map(\.end), [190, 200, 210])
+    }
+
+    func testAPresenterNameIsNeverCarriedToAnotherSession() {
+        // The capture gave Dana's frames their own session; and even with one number, another name is another session.
+        let numbered = [
+            SharedScreen(offset: 10, file: "a", text: "", presenter: "Sam Carter", window: "w", session: 0),
+            SharedScreen(offset: 20, file: "b", text: "", presenter: "Dana Lee", window: "w", session: 1),
+            SharedScreen(offset: 30, file: "c", text: "", window: "w", session: 2),
+        ]
+        XCTAssertEqual(ShareSession.group(numbered).map(\.presenter), ["Sam Carter", "Dana Lee", nil])
+        let oneNumber = numbered.map { s -> SharedScreen in var s = s; s.session = 0; return s }
+        XCTAssertEqual(ShareSession.group(oneNumber).map(\.presenter), ["Sam Carter", "Dana Lee", nil])
+    }
+
+    func testRecordsFromBeforeSessionNumbersSplitAtAMinute() {
+        let screens = [
+            SharedScreen(offset: 10, file: "a", text: "", window: "w1"),
+            SharedScreen(offset: 40, file: "b", text: "", window: "w1"),
+            SharedScreen(offset: 159, file: "d", text: "", window: "w1"),
+            SharedScreen(offset: 170, file: "e", text: "", window: "w2"),
+        ]
+        XCTAssertEqual(ShareSession.group(screens).map(\.count), [2, 1, 1])
+    }
+
+    // MARK: Times of day
+
+    func testTheTimeOfDayAfterAPauseComesFromTheFrame() {
+        var r = record(nil)
+        // A 10 minute pause before this frame: second 120 of the files was 12 minutes after the start.
+        let saved = SharedScreen(offset: 120, file: "f", text: "", time: t0.addingTimeInterval(720))
+        XCTAssertEqual(r.date(of: saved), t0.addingTimeInterval(720))
+        // A record from before the time was saved falls back to the offset.
+        XCTAssertEqual(r.date(of: SharedScreen(offset: 120, file: "f", text: "")), t0.addingTimeInterval(120))
+        r.parts = []
+        XCTAssertEqual(r.date(atOffset: 30), t0.addingTimeInterval(30))
+    }
+
+    func testTheTimeOfDayInAJoinedMeetingCountsFromItsPart() {
+        var r = record(nil)
+        // 12:00 to 12:30 and 13:30 to 14:00, joined: the second part begins at second 1800 of the audio.
+        r.parts = [CallPart(start: t0, end: t0.addingTimeInterval(1800), offset: 0),
+                   CallPart(start: t0.addingTimeInterval(5400), end: t0.addingTimeInterval(7200), offset: 1800)]
+        XCTAssertEqual(r.date(atOffset: 300), t0.addingTimeInterval(300))
+        // 5 minutes into the second part is 13:35, not 12:35.
+        XCTAssertEqual(r.date(atOffset: 2100), t0.addingTimeInterval(5700))
+        XCTAssertEqual(r.date(of: SharedScreen(offset: 2100, file: "f", text: "")), t0.addingTimeInterval(5700))
+    }
+
+    // MARK: Pauses of the capture
+
+    func testAPauseShowsOnlyNextToAShareSession() {
+        let screens = [SharedScreen(offset: 600, file: "a", text: "", window: "w", session: 0),
+                       SharedScreen(offset: 700, file: "b", text: "", window: "w", session: 0)]
+        let gaps = [
+            ScreenGap(offset: 100, paused: true), ScreenGap(offset: 130, paused: false),    // nobody shared: not shown
+            ScreenGap(offset: 650, paused: true), ScreenGap(offset: 690, paused: false),    // inside the session
+            ScreenGap(offset: 750, paused: true), ScreenGap(offset: 2000, paused: false),   // right after it, with its return
+            ScreenGap(offset: 2500, paused: true),                                          // long after
+        ]
+        XCTAssertEqual(ScreenGap.shown(gaps.shuffled(), screens: screens).map(\.offset), [650, 690, 750, 2000])
+        XCTAssertEqual(ScreenGap.shown(gaps, screens: []), [])
+        var r = record(screens)
+        r.screenGaps = ScreenGap.shown(gaps, screens: screens)
+        XCTAssertTrue(MarkdownWriter.transcript(r).contains("[00:10:50] (Screen capture paused)\n[00:11:30] (Screen capture resumed)"))
+        XCTAssertTrue(r.markers.isEmpty)
+    }
+
+    func testTheCoachAndTheCommitmentFinderGetNoScreenLines() {
+        var r = record([SharedScreen(offset: 120, file: "f", text: "Budget table")])
+        r.screenGaps = [ScreenGap(offset: 130, paused: true)]
+        r.markers = [TranscriptMarker(offset: 60, text: "Paused from 10:01 to 10:02 (1 min)")]
+        let spoken = MarkdownWriter.transcript(r, screens: false)
+        XCTAssertFalse(spoken.contains("Screen"))
+        XCTAssertTrue(spoken.contains("(Paused from 10:01"))
+        XCTAssertTrue(MarkdownWriter.transcript(r).contains("(Screen: \"Budget table\")"))
     }
 
     func testSessionHeadings() {
@@ -126,6 +198,16 @@ final class SharedScreenTests: XCTestCase {
         XCTAssertNil(PresenterLabel.name(in: ["Someone is presenting"]))
     }
 
+    func testAPresenterComesOnlyFromAWholeShareLabel() {
+        // Lines that people wrote, and titles on a slide: the words are there, the label is not.
+        XCTAssertNil(PresenterLabel.name(in: ["Sam is presenting the numbers next week"]))
+        XCTAssertNil(PresenterLabel.name(in: ["Today's presentation", "Q3's presentation", "Dana's screen"]))
+        XCTAssertNil(PresenterLabel.name(in: ["I think Dana Lee is sharing their screen now, right?"]))
+        XCTAssertNil(PresenterLabel.name(in: ["who is presenting", "This is presenting", "the host is presenting", "2 is presenting"]))
+        XCTAssertNil(PresenterLabel.name(in: ["Content shared by everyone in the call is recorded"]))
+        XCTAssertEqual(PresenterLabel.name(in: ["Sam Carter is presenting."]), "Sam Carter")
+    }
+
     func testAPresenterNameMapsToAKnownPerson() {
         let known = ["Sam Carter", "Dana Lee", "Dana Lopez"]
         XCTAssertEqual(PresenterLabel.resolve("sam carter", known: known), "Sam Carter")
@@ -149,11 +231,18 @@ final class SharedScreenTests: XCTestCase {
         two.id = "two"
         two.start = t0.addingTimeInterval(700)
         two.end = t0.addingTimeInterval(900)
+        one.screens?[0].session = 0
+        two.screens?[0].session = 0
+        two.screens?[0].time = t0.addingTimeInterval(705)
+        two.screenGaps = [ScreenGap(offset: 8, paused: true)]
         let merged = MeetingMerge.combine([two, one], durations: ["one": 600, "two": 200])
+        // The offset and the file move; the time of day stays; the two parts' sessions stay apart.
         XCTAssertEqual(merged.screens, [
-            SharedScreen(offset: 10, file: "10000.heic", text: "First"),
-            SharedScreen(offset: 605, file: "605000.heic", text: "Second", presenter: "Dana Lee"),
+            SharedScreen(offset: 10, file: "10000.heic", text: "First", session: 0),
+            SharedScreen(offset: 605, file: "605000.heic", text: "Second", presenter: "Dana Lee", time: t0.addingTimeInterval(705), session: 1),
         ])
+        XCTAssertEqual(merged.screenGaps, [ScreenGap(offset: 608, paused: true)])
+        XCTAssertEqual(ShareSession.group(merged.screens ?? []).count, 2)
         // Meetings with no screen capture stay without the field.
         var plain = record(nil), other = record(nil)
         plain.id = "p"
@@ -162,7 +251,7 @@ final class SharedScreenTests: XCTestCase {
         XCTAssertNil(MeetingMerge.combine([plain, other], durations: [:]).screens)
     }
 
-    func testRetentionRemovesFramesWithTheRawTracksAndKeepsTheText() throws {
+    func testFramesStayAsLongAsTheRecordingAndGoWithIt() throws {
         let paths = Paths(root: tempDirectory())
         defer { try? FileManager.default.removeItem(at: paths.root) }
         try paths.ensureDirectories()
@@ -178,13 +267,18 @@ final class SharedScreenTests: XCTestCase {
             try FrameIndex(frames: [.init(offset: 10, file: "10000.heic", text: "Plan")]).save(to: dir)
             return dir
         }
-        let old = try call("old", daysAgo: 31), recent = try call("recent", daysAgo: 5)
+        func has(_ dir: URL, _ f: String) -> Bool { FileManager.default.fileExists(atPath: dir.appendingPathComponent(f).path) }
+        let old = try call("old", daysAgo: 31), older = try call("older", daysAgo: 91)
+        // The raw tracks go after 30 days; the recording and the frames stay.
         Retention.sweep(audioRoot: paths.audio, now: now)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: FrameIndex.folder(in: old).path))
-        XCTAssertFalse(FrameStore.hasFrames(in: old))
-        XCTAssertEqual(try CallRecord.load(from: old).screens?.first?.text, "Plan")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: recent.appendingPathComponent("frames/10000.heic").path))
-        XCTAssertTrue(FrameStore.hasFrames(in: recent))
+        XCTAssertFalse(has(old, "me.caf"))
+        XCTAssertTrue(has(old, "recording.m4a") && has(old, "frames/10000.heic") && FrameStore.hasFrames(in: old))
+        XCTAssertTrue(has(older, "frames/10000.heic"))
+        // With "delete recordings" on, the frames go with the recording. The text stays in the record.
+        Retention.sweep(audioRoot: paths.audio, recordingsAfterDays: 90, now: now)
+        XCTAssertFalse(has(older, "recording.m4a") || has(older, "frames") || FrameStore.hasFrames(in: older))
+        XCTAssertEqual(try CallRecord.load(from: older).screens?.first?.text, "Plan")
+        XCTAssertTrue(has(old, "frames/10000.heic"))
     }
 
     func testSearchFindsTextOnAScreen() {
@@ -199,12 +293,14 @@ final class SharedScreenTests: XCTestCase {
     }
 
     func testScreensDoNotSync() throws {
-        let r = record([SharedScreen(offset: 120, file: "f", text: "Plan")])
+        var r = record([SharedScreen(offset: 120, file: "f", text: "Plan")])
+        r.screenGaps = [ScreenGap(offset: 5, paused: true)]
         let payload = SyncPayload(record: r, coach: nil)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let sent = try JSONDecoder.callRecord.decode(CallRecord.self, from: payload.record)
         XCTAssertNil(sent.screens)
+        XCTAssertNil(sent.screenGaps)
         _ = decoder
     }
 }

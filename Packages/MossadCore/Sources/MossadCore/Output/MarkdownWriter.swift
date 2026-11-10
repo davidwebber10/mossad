@@ -62,11 +62,12 @@ public enum MarkdownWriter {
         return head.components(separatedBy: "\n").contains { $0 == "audio: ~/Mossad/Audio/\(id)" }
     }
 
-    public static func transcript(_ r: CallRecord) -> String {
+    /// `screens` false leaves out the lines of shared screens, for a reader that only wants what people said.
+    public static func transcript(_ r: CallRecord, screens: Bool = true) -> String {
         let names = displayNames(r)
         var lines = Transcript.interleaved(r.utterances).map { (start: $0.start, text: "[\(timestamp($0.start))] \(names[$0.speakerKey] ?? $0.speakerKey): \($0.text)") }
         // Where a later recording of a merged meeting begins.
-        lines += r.transcriptMarkers.map { (start: $0.offset, text: "[\(timestamp($0.offset))] (\($0.lineText))") }
+        lines += (screens ? r.transcriptMarkers : r.recordingMarkers).map { (start: $0.offset, text: "[\(timestamp($0.offset))] (\($0.lineText))") }
         return lines.enumerated().sorted { ($0.element.start, $0.offset) < ($1.element.start, $1.offset) }.map(\.element.text)
             .joined(separator: "\n")
     }

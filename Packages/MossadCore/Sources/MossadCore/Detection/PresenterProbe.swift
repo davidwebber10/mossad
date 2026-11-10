@@ -2,70 +2,40 @@
 import AppKit
 import ApplicationServices
 
-/// Reads who shares the screen from the call app's own labels, through Accessibility. One walk with a time budget;
-/// the screen capture asks at most once for each new share session, never for each frame. Nil when the app shows
-/// no name, when Accessibility is not allowed, or when the walk was cut short before it found one.
+/// Reads who shares the screen from the call app's own share indicator, through Accessibility: the titles of the
+/// app's windows (Zoom names the presenter there) and the labels in the window that is captured. Text that people
+/// wrote (a chat, a text field, a document) is not walked. One walk with a small budget; the screen capture asks at
+/// the start of a share session and at most once a minute while frames are kept, never for each frame. Nil when
+/// the app shows no name, when Accessibility is not allowed, or when the walk found none in its budget.
 public struct PresenterProbe: Sendable {
-    static let elementLimit = 4_000
-    static let budget: TimeInterval = 1
+    static let elementLimit = 1_500
+    static let budget: TimeInterval = 0.5
+    /// Places that hold what people wrote, not the app's own labels.
+    static let skippedRoles: Set<String> = ["AXTextArea", "AXTextField", "AXList", "AXTable", "AXOutline", "AXBrowser", "AXMenuBar"]
+    static let skippedSubroles: Set<String> = ["AXApplicationLog", "AXDocumentArticle", "AXContentList", "AXLandmarkComplementary"]
 
-    public init() {
+    public init() {}
+
+    /// `windowTitle` is the title of the window that is captured; only that window's labels are read.
+    public func presenter(bundleID: String, windowTitle: String?) -> String? {
+        guard AXIsProcessTrusted(), let windowTitle else { return nil }
         AccessibilityTimeout.apply()
-    }
-
-    public func presenter(bundleID: String, platform: Platform, meetingID: String?) -> String? {
-        guard AXIsProcessTrusted() else { return nil }
-        let isBrowser: Bool = switch MeetingMatcher.appKind(bundleID: bundleID) {
-        case .browser, .unreadableBrowser: true
-        default: false
-        }
-        var labels: [String] = []
-        var roots: [AXUIElement] = []
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
-            let element = AXUIElementCreateApplication(app.processIdentifier)
-            AXUIElementSetMessagingTimeout(element, Float(Self.budget))
-            var value: AnyObject?
-            guard AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString, &value) == .success,
-                  let windows = value as? [AXUIElement] else { continue }
-            let titles = windows.map { Self.text($0, kAXTitleAttribute) ?? "" }
-            if isBrowser {
-                roots += AccessibilityMuteProbe.callWindows(titles: titles, platform: platform, meetingID: meetingID).map { windows[$0] }
-            } else {
-                // Zoom names the presenter in the title of the share window.
-                labels += titles
-                roots += windows
+            let windows = AXWalk.windows(of: app.processIdentifier)
+            guard let window = windows.first(where: { $0.1 == windowTitle })?.0 else { continue }
+            if let name = PresenterLabel.name(in: windows.map(\.1)) { return name }
+            var labels: [String] = []
+            AXWalk.walk(window, limit: Self.elementLimit, budget: Self.budget) { element, role in
+                if Self.skippedRoles.contains(role) { return false }
+                if let subrole = AXWalk.text(element, kAXSubroleAttribute), Self.skippedSubroles.contains(subrole) { return false }
+                for name in [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute] {
+                    if let text = AXWalk.text(element, name), text.count <= 120, PresenterLabel.mayName(text) { labels.append(text) }
+                }
+                return true
             }
+            if let name = PresenterLabel.name(in: labels) { return name }
         }
-        if let name = PresenterLabel.name(in: labels) { return name }
-
-        var visited = 0
-        var stopped = false
-        let deadline = Date().addingTimeInterval(Self.budget)
-        func walk(_ e: AXUIElement, depth: Int) {
-            guard !stopped, depth < 40 else { return }
-            visited += 1
-            guard visited < Self.elementLimit, Date() < deadline else {
-                stopped = true
-                return
-            }
-            for name in [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute] {
-                if let text = Self.text(e, name), text.count <= 120, PresenterLabel.mayName(text) { labels.append(text) }
-            }
-            var children: AnyObject?
-            switch AXUIElementCopyAttributeValue(e, kAXChildrenAttribute as CFString, &children) {
-            case .success: for child in (children as? [AXUIElement]) ?? [] { walk(child, depth: depth + 1) }
-            case .noValue, .attributeUnsupported, .invalidUIElement, .notImplemented: break
-            default: stopped = true  // The app does not answer: do not hold it up.
-            }
-        }
-        roots.forEach { walk($0, depth: 0) }
-        return PresenterLabel.name(in: labels)
-    }
-
-    private static func text(_ e: AXUIElement, _ name: String) -> String? {
-        var value: AnyObject?
-        guard AXUIElementCopyAttributeValue(e, name as CFString, &value) == .success, let text = value as? String, !text.isEmpty else { return nil }
-        return text
+        return nil
     }
 }
 #endif

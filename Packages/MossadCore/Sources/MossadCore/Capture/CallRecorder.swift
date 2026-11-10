@@ -38,8 +38,6 @@ public struct ScreenCall: Sendable {
     public var meetingID: String?
     /// Where the recording is now, in seconds of the audio files (paused time left out). Any thread.
     public var offset: @Sendable () -> TimeInterval
-    /// Adds a line to the transcript. Any thread.
-    public var addMarker: @Sendable (TimeInterval, String) -> Void
 }
 
 /// Records one call: the "them" tap and the "me" mic, each to its own file, plus `call.json`.
@@ -538,18 +536,11 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     /// The shared screen is captured by the same rules as the audio: not in a room, not while paused, and only the
-    /// part of the call that the audio keeps. Its markers come from its own queue, so they pass through this one.
+    /// part of the call that the audio keeps.
     private func startScreens(_ r: CallRecord, dir: URL) {
         guard let makeScreens else { return }
-        let id = r.id
         screens = makeScreens(ScreenCall(directory: dir, platform: r.platform, bundleID: r.bundleID, meetingID: r.meetingID,
-                                         offset: { [weak self] in self?.recordedLength ?? 0 },
-                                         addMarker: { [weak self] offset, text in
-            CaptureQueue.queue.async { [weak self] in
-                guard let self, self.record?.id == id else { return }
-                self.addMarker(at: offset, text)
-            }
-        }))
+                                         offset: { [weak self] in self?.recordedLength ?? 0 }))
         screens?.start()
     }
 
@@ -558,9 +549,10 @@ public final class CallRecorder: @unchecked Sendable {
         guard isRecording, !isPaused else { return }
         isPaused = true
         pauseStart = (clock(), recordedLength)
-        screens?.stop()
         themSource?.stop()
         meSource?.stop()
+        // After the audio: the last picture may still be written, and the audio must not wait for that.
+        screens?.stop()
         themSource = nil
         meSource = nil
         // What the sources sent before the pause belongs in the files; a paused writer takes nothing.
@@ -626,11 +618,11 @@ public final class CallRecorder: @unchecked Sendable {
     /// Stops the sources, writes what the feeds still hold, and closes the files. Returns where the last sound on
     /// either track ended, in file seconds.
     private func stopAll() -> TimeInterval? {
-        // Before the folder can be deleted: after this the screen capture writes nothing more.
-        screens?.close()
-        screens = nil
         themSource?.stop()
         meSource?.stop()
+        // After the audio, and before the folder can be deleted: after this the screen capture writes nothing more.
+        screens?.close()
+        screens = nil
         let lines = lineLock.withLock {
             let current = self.lines
             self.lines = (nil, nil)

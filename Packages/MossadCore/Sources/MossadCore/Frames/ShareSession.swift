@@ -1,7 +1,9 @@
 import Foundation
 
-/// A run of kept frames from one window with no gap of a minute or more: one time someone shared a screen.
+/// One time someone shared a screen: the kept frames from one window with no pause of the capture in between. The
+/// capture numbers the sessions. A slide that stays for minutes does not end one.
 public struct ShareSession: Equatable, Sendable, Identifiable {
+    /// For records from before sessions were numbered: frames this far apart are two sessions.
     public static let maximumGap: TimeInterval = 60
 
     public var screens: [SharedScreen]
@@ -16,9 +18,8 @@ public struct ShareSession: Equatable, Sendable, Identifiable {
     public static func group(_ screens: [SharedScreen]) -> [ShareSession] {
         var sessions: [ShareSession] = []
         for s in screens.sorted(by: { $0.offset < $1.offset }) {
-            if let last = sessions.last?.screens.last, s.offset - last.offset < maximumGap, s.window == last.window {
+            if let last = sessions.last?.screens.last, same(last, s) {
                 sessions[sessions.count - 1].screens.append(s)
-                if sessions[sessions.count - 1].presenter == nil { sessions[sessions.count - 1].presenter = s.presenter }
             } else {
                 sessions.append(ShareSession(screens: [s], presenter: s.presenter))
             }
@@ -26,10 +27,12 @@ public struct ShareSession: Equatable, Sendable, Identifiable {
         return sessions
     }
 
-    /// True when a frame at `offset` from `window` starts a new session after a frame at `last`.
-    public static func startsNew(offset: TimeInterval, window: String?, after last: (offset: TimeInterval, window: String?)?) -> Bool {
-        guard let last else { return true }
-        return offset - last.offset >= maximumGap || window != last.window
+    /// Two frames in a row belong to one session when the capture gave them one number. A name is never carried
+    /// from one presenter's frames to another's, so a change of the name also ends a session.
+    static func same(_ a: SharedScreen, _ b: SharedScreen) -> Bool {
+        guard a.window == b.window, a.presenter == b.presenter else { return false }
+        if let x = a.session, let y = b.session { return x == y }
+        return b.offset - a.offset < maximumGap
     }
 
     /// "Sam Carter shared 12:04–12:19 · 9 screens", or "Screen shared · 12:04–12:19 · 9 screens" with no presenter.

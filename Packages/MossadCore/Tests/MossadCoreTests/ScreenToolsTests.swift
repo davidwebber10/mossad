@@ -61,6 +61,15 @@ final class ScreenToolsTests: XCTestCase {
         XCTAssertEqual(tools(try makeMeeting()).run("list_screens", input: ["meeting_id": "nope"]), "No meeting with that call_id.")
     }
 
+    func testTheListKeepsEachFrameShort() throws {
+        var r = try makeMeeting()
+        r.screens = (0..<240).map { SharedScreen(offset: Double($0) * 15, file: "\($0)", text: String(repeating: "word ", count: 400), window: "w", session: 0) }
+        let text = tools(r).run("list_screens", input: ["meeting_id": "c1"])
+        XCTAssertLessThan(text.count, 240 * 140)
+        // The whole text is in get_screen.
+        XCTAssertTrue(tools(r).run("get_screen", input: ["meeting_id": "c1", "index": 1]).contains(String(repeating: "word ", count: 300)))
+    }
+
     func testAMeetingWithNoScreensSaysSo() throws {
         var r = try makeMeeting()
         r.screens = nil

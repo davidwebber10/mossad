@@ -289,8 +289,10 @@ final class AppController: ObservableObject {
         }
         let probe = PresenterProbe()
         let source = WindowFrameSource(platform: call.platform, bundleID: call.bundleID, meetingID: call.meetingID)
-        return ScreenRecorder(dir: call.directory, source: source, offset: call.offset, addMarker: call.addMarker,
-                              presenter: { probe.presenter(bundleID: call.bundleID, platform: call.platform, meetingID: call.meetingID) })
+        // Turned off in a call, the capture ends at once; the name is read from the window that is captured.
+        return ScreenRecorder(dir: call.directory, source: source, offset: call.offset,
+                              isEnabled: { UserDefaults.standard.bool(forKey: captureScreensKey) },
+                              presenter: { [weak source] in probe.presenter(bundleID: call.bundleID, windowTitle: source?.windowTitle) })
     }
 
     init() {

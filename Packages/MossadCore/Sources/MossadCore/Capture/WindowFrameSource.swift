@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import CoreGraphics
 import CoreMedia
 import CoreVideo
@@ -9,44 +10,62 @@ import UniformTypeIdentifiers
 
 /// Pictures of the call's own window through ScreenCaptureKit: one stream with a single-window filter, a frame each
 /// 3 s at most, on the screen queue. It never captures a display or another app's window, and it stops as soon as
-/// the window's title no longer shows the meeting (in a browser, the owner chose another tab).
+/// the window's title no longer shows the meeting (in a browser, the owner chose another tab). Of a browser window
+/// it hands on only the page, not the tabs, the address, or the bookmarks.
 ///
 /// It needs the Screen & System Audio Recording permission and never asks for it: without it, nothing is found.
 public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
     static let frameInterval: TimeInterval = 3
     static let longEdge = 1600
-    /// How often the window list is read while there is no good window, and while there is one.
+    /// How often the windows are looked at while there is no good window, and while there is one.
     static let searchInterval: TimeInterval = 10
     static let reviewInterval: TimeInterval = 30
+    /// A Teams title that Accessibility did not prove is asked about again after this long.
+    static let proofRetry: TimeInterval = 60
 
     private let platform: Platform
     private let bundleID: String
     private let meetingID: String?
     private let queue = ScreenRecorder.queue
 
+    private struct Chosen {
+        var id: CGWindowID
+        var owner: String
+        var kind: MeetingWindow.Kind
+        var size: CGSize
+        var crop: CGRect
+        var title: String
+    }
+
     /// What other threads read.
     private struct Shared {
         var active = false
-        var window: CGWindowID?
+        var chosen: Chosen?
+        var teamsNames: Set<String> = []
     }
     private let shared = NSLock()
     private var sharedState = Shared()
+    private var chosen: Chosen? { shared.withLock { sharedState.chosen } }
 
     // The rest only on `queue`.
     private var handler: ((FrameEvent) -> Void)?
     private var generation = 0
     private var stream: SCStream?
-    private var chosen: (id: CGWindowID, owner: String, kind: MeetingWindow.Kind, size: CGSize)?
-    private var teamsNames: Set<String> = []
     private var searching = false
+    private var searchAgain = false
     private var lastSearch = Date.distantPast
     private var timer: DispatchSourceTimer?
+    private var proven: Set<String> = []
+    private var refused: [String: Date] = [:]
 
     public init(platform: Platform, bundleID: String, meetingID: String?) {
         self.platform = platform
         self.bundleID = bundleID
         self.meetingID = meetingID
     }
+
+    /// The title of the window that is captured now, for the read of the presenter from that window. Any thread.
+    public var windowTitle: String? { chosen?.title }
 
     public func start(_ handler: @escaping (FrameEvent) -> Void) {
         shared.withLock { sharedState.active = true }
@@ -74,18 +93,21 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         }
     }
 
+    /// False for a window that is hidden, on another desktop, or covered by other windows (an app can stop drawing
+    /// then). One request for this window and one for the windows above it; the recorder asks each 3 s.
     public var windowOnScreen: Bool? {
-        guard let id = shared.withLock({ sharedState.window }) else { return nil }
-        guard let now = Self.describe(id) else {
-            queue.async { [weak self] in self?.windowChanged(id) }
+        guard let chosen else { return nil }
+        guard let now = Self.describe(chosen.id), stillMeeting(chosen, now) else {
+            queue.async { [weak self] in self?.windowChanged(chosen.id) }
             return nil
         }
-        return now.onScreen
+        guard now.onScreen else { return false }
+        return !WindowCover.isCovered(now.frame, by: Self.framesAbove(chosen.id))
     }
 
     // MARK: Finding the window
 
-    /// Reads the window list again when there is no window, when the window is hidden or is only a small view
+    /// Looks at the windows again when there is no window, when the window is hidden or is only a small view
     /// (the meeting's own window may be back), and now and then for a better window (a popped-out share).
     private func review() {
         let age = Date().timeIntervalSince(lastSearch)
@@ -97,46 +119,83 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         if age >= (hidden || chosen.kind == .small ? Self.searchInterval : Self.reviewInterval) { search() }
     }
 
+    /// The app that holds the call, without its helpers.
+    private var appID: String? {
+        switch MeetingMatcher.appKind(bundleID: bundleID) {
+        case .zoomApp: MeetingMatcher.zoomBundleID
+        case .teamsApp: MeetingMatcher.teamsBundleID
+        case .browser(let id): id
+        default: nil
+        }
+    }
+
+    /// Only the call app's own windows are listed, from the window server, with no capture call. ScreenCaptureKit
+    /// is asked only when one of them is the meeting and needs a stream.
     private func search() {
-        // Without the permission the window list would ask for it; a call never asks.
-        guard !searching, shared.withLock({ sharedState.active }), CGPreflightScreenCaptureAccess() else { return }
-        searching = true
+        // Without the permission the window list has no titles, and ScreenCaptureKit would ask; a call never asks.
+        guard shared.withLock({ sharedState.active }), CGPreflightScreenCaptureAccess(), let appID else { return }
+        guard !searching else {
+            searchAgain = true
+            return
+        }
         lastSearch = Date()
-        let generation = generation
-        let queue = queue
+        let windows = Self.windows(of: appID)
+        var confirmed: Set<String> = []
+        if case .teamsApp? = MeetingMatcher.appKind(bundleID: bundleID) {
+            // A title of the form "<name> | Microsoft Teams" is the meeting only with proof: the call's controls in it.
+            let now = Date()
+            let open = MeetingWindow.teamsTitlesToProve(windows.map(\.title))
+            proven.formIntersection(open)
+            let ask = open.filter { !proven.contains($0) && now.timeIntervalSince(refused[$0] ?? .distantPast) >= Self.proofRetry }
+            if !ask.isEmpty {
+                let found = CallWindowProbe.callTitles(bundleID: appID, among: Set(ask))
+                proven.formUnion(found)
+                for title in ask where !found.contains(title) { refused[title] = now }
+            }
+            confirmed = proven
+        }
+        guard let best = MeetingWindow.choose(windows, platform: platform, bundleID: bundleID, meetingID: meetingID, confirmed: confirmed),
+              let kind = MeetingWindow.kind(of: best, among: windows, platform: platform, bundleID: bundleID, confirmed: confirmed) else {
+            if let old = chosen { windowChanged(old.id, searchNow: false) }
+            return
+        }
+        let names = MeetingWindow.teamsMeetingNames(windows.map(\.title), confirmed: confirmed)
+        shared.withLock { sharedState.teamsNames = names }
+        if chosen?.id == best.id, stream != nil { return }
+        if let old = chosen { windowChanged(old.id, searchNow: false) }
+        // Of a browser window only the page is kept. Its place is read one time for each stream.
+        var webArea: CGRect?
+        if case .browser? = MeetingMatcher.appKind(bundleID: bundleID), best.layer == 0 {
+            webArea = WebAreaProbe.frame(bundleID: best.bundleID, windowTitle: best.title)
+        }
+        guard let crop = MeetingWindow.keptPart(of: best, bundleID: bundleID, webArea: webArea) else {
+            Log.info("The meeting window is not captured: the page's place in the browser window is not known")
+            return
+        }
+        searching = true
+        let generation = generation, queue = queue
         Task.detached(priority: .utility) { [weak self] in
             // Windows on every Space, also ones that are not on screen.
             let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-            queue.async { [weak self] in self?.found(content, generation: generation) }
+            let window = content?.windows.first { $0.windowID == best.id }
+            queue.async { [weak self] in
+                guard let self else { return }
+                self.searching = false
+                if generation == self.generation, let window { self.begin(window, candidate: best, kind: kind, crop: crop) }
+                if self.searchAgain {
+                    self.searchAgain = false
+                    self.search()
+                }
+            }
         }
     }
 
-    private func found(_ content: SCShareableContent?, generation: Int) {
-        searching = false
-        guard generation == self.generation, let content else { return }
-        var byID: [CGWindowID: SCWindow] = [:]
-        let candidates = content.windows.compactMap { w -> WindowCandidate? in
-            guard let app = w.owningApplication else { return nil }
-            byID[w.windowID] = w
-            return WindowCandidate(id: w.windowID, bundleID: app.bundleIdentifier, title: w.title ?? "", width: w.frame.width,
-                                   height: w.frame.height, onScreen: w.isOnScreen, layer: w.windowLayer)
-        }
-        guard let best = MeetingWindow.choose(candidates, platform: platform, bundleID: bundleID, meetingID: meetingID),
-              let window = byID[best.id],
-              let kind = MeetingWindow.kind(of: best, among: candidates, platform: platform, bundleID: bundleID) else {
-            if chosen != nil { dropStream() }
-            return
-        }
-        teamsNames = Set(candidates.compactMap { MeetingWindow.teamsMeetingName($0.title) })
-        if chosen?.id == best.id, stream != nil { return }
-        dropStream()
-        begin(window, candidate: best, kind: kind)
-    }
-
-    private func begin(_ window: SCWindow, candidate: WindowCandidate, kind: MeetingWindow.Kind) {
+    private func begin(_ window: SCWindow, candidate: WindowCandidate, kind: MeetingWindow.Kind, crop: CGRect) {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let scale = max(1, Double(filter.pointPixelScale))
-        let size = Self.fit(width: window.frame.width * scale, height: window.frame.height * scale)
+        // The kept part, not the whole window, is at most `longEdge` wide or high.
+        let size = Self.fit(width: window.frame.width * scale, height: window.frame.height * scale,
+                            longEdge: Int(Double(Self.longEdge) / max(0.3, max(crop.width, crop.height))))
         let configuration = SCStreamConfiguration()
         configuration.width = size.width
         configuration.height = size.height
@@ -155,8 +214,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
             return
         }
         self.stream = stream
-        chosen = (candidate.id, candidate.bundleID, kind, window.frame.size)
-        shared.withLock { sharedState.window = candidate.id }
+        let chosen = Chosen(id: candidate.id, owner: candidate.bundleID, kind: kind, size: window.frame.size, crop: crop, title: candidate.title)
+        shared.withLock { sharedState.chosen = chosen }
         Log.info("Capturing the meeting window (\(candidate.bundleID), \(Int(window.frame.width)) x \(Int(window.frame.height)))")
         stream.startCapture { [weak self] error in
             guard let error else { return }
@@ -168,50 +227,87 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     private func dropStream() {
         if let stream { stream.stopCapture { _ in } }
         stream = nil
-        chosen = nil
-        shared.withLock { sharedState.window = nil }
+        shared.withLock { sharedState.chosen = nil }
     }
 
-    /// The window is gone or shows something else: stop now, and look for the meeting's window again.
-    private func windowChanged(_ id: CGWindowID) {
+    /// The window is gone or shows something else: stop now, tell the recorder, and look for the meeting's window again.
+    private func windowChanged(_ id: CGWindowID, searchNow: Bool = true) {
         guard chosen?.id == id else { return }
         dropStream()
-        search()
+        handler?(.lost)
+        if searchNow { search() }
+    }
+
+    private struct Described {
+        var title: String
+        var onScreen: Bool
+        var frame: CGRect
+        var layer: Int
+    }
+
+    private static func described(_ info: [CFString: Any]) -> Described {
+        let bounds = (info[kCGWindowBounds] as? NSDictionary).flatMap { CGRect(dictionaryRepresentation: $0 as CFDictionary) } ?? .zero
+        return Described(title: info[kCGWindowName] as? String ?? "", onScreen: info[kCGWindowIsOnscreen] as? Bool ?? false,
+                         frame: bounds, layer: info[kCGWindowLayer] as? Int ?? 0)
     }
 
     /// The window as it is now, with one cheap request for this window only. Nil when it is gone.
-    private static func describe(_ id: CGWindowID) -> (title: String, onScreen: Bool, size: CGSize, layer: Int)? {
+    private static func describe(_ id: CGWindowID) -> Described? {
         let ids = [id as CFNumber] as CFArray
         guard let list = CGWindowListCreateDescriptionFromArray(ids) as? [[CFString: Any]], let info = list.first else { return nil }
-        let bounds = (info[kCGWindowBounds] as? NSDictionary).flatMap { CGRect(dictionaryRepresentation: $0 as CFDictionary) } ?? .zero
-        return (info[kCGWindowName] as? String ?? "", info[kCGWindowIsOnscreen] as? Bool ?? false, bounds.size, info[kCGWindowLayer] as? Int ?? 0)
+        return described(info)
     }
 
-    /// True while the chosen window still shows the meeting, at the size the stream was made for.
-    private func stillValid() -> Bool {
-        guard let chosen, let now = Self.describe(chosen.id) else { return false }
-        let window = WindowCandidate(id: chosen.id, bundleID: chosen.owner, title: now.title, width: now.size.width,
-                                     height: now.size.height, onScreen: now.onScreen, layer: now.layer)
-        guard MeetingWindow.stillMeeting(window, platform: platform, bundleID: bundleID, meetingNames: teamsNames) else { return false }
-        // A window that changed its size much gets a new stream of the right size.
-        let was = max(chosen.size.width, chosen.size.height), nowLong = max(now.size.width, now.size.height)
-        return was > 0 && abs(nowLong - was) / was <= 0.15
+    /// The frames of the normal windows in front of a window.
+    private static func framesAbove(_ id: CGWindowID) -> [CGRect] {
+        let list = CGWindowListCopyWindowInfo([.optionOnScreenAboveWindow, .excludeDesktopElements], id) as? [[CFString: Any]] ?? []
+        return list.compactMap { info in
+            guard (info[kCGWindowAlpha] as? Double ?? 1) > 0.9 else { return nil }
+            let d = described(info)
+            return d.layer == 0 ? d.frame : nil
+        }
+    }
+
+    /// The windows of one app (and of the sites it runs as apps), on every desktop, from the window server.
+    private static func windows(of appID: String) -> [WindowCandidate] {
+        let base = appID.lowercased()
+        var owners: [pid_t: String] = [:]
+        for app in NSWorkspace.shared.runningApplications {
+            guard let id = app.bundleIdentifier, id.lowercased() == base || id.lowercased().hasPrefix(base + ".app.") else { continue }
+            owners[app.processIdentifier] = id
+        }
+        guard !owners.isEmpty, let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[CFString: Any]] else { return [] }
+        return list.compactMap { info in
+            guard let pid = info[kCGWindowOwnerPID] as? pid_t, let owner = owners[pid], let id = info[kCGWindowNumber] as? CGWindowID else { return nil }
+            let d = described(info)
+            return WindowCandidate(id: id, bundleID: owner, title: d.title, width: d.frame.width, height: d.frame.height, onScreen: d.onScreen, layer: d.layer)
+        }
+    }
+
+    private func stillMeeting(_ chosen: Chosen, _ now: Described) -> Bool {
+        let window = WindowCandidate(id: chosen.id, bundleID: chosen.owner, title: now.title, width: now.frame.width,
+                                     height: now.frame.height, onScreen: now.onScreen, layer: now.layer)
+        let names = shared.withLock { sharedState.teamsNames }
+        guard MeetingWindow.stillMeeting(window, platform: platform, bundleID: bundleID, meetingNames: names) else { return false }
+        // A window that changed its size gets a new stream, with the page's place read again.
+        let was = max(chosen.size.width, chosen.size.height), nowLong = max(now.frame.width, now.frame.height)
+        return was > 0 && abs(nowLong - was) / was <= 0.02
     }
 
     // MARK: Frames
 
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen, stream === self.stream, sampleBuffer.isValid, shared.withLock({ sharedState.active }),
-              let handler else { return }
+              let handler, let chosen else { return }
         switch Self.status(of: sampleBuffer) {
         case .complete:
             // Checked for each frame: one click on another tab makes the same window show something else.
-            guard stillValid() else {
-                if let id = chosen?.id { windowChanged(id) }
+            guard let now = Self.describe(chosen.id), stillMeeting(chosen, now) else {
+                windowChanged(chosen.id)
                 return
             }
-            guard let buffer = sampleBuffer.imageBuffer, let chosen else { return }
-            handler(.picture(PixelPicture(buffer: buffer), window: "\(chosen.owner)#\(chosen.id)"))
+            guard let buffer = sampleBuffer.imageBuffer else { return }
+            handler(.picture(PixelPicture(buffer: buffer, crop: chosen.crop), window: "\(chosen.owner)#\(chosen.id)"))
         case .idle:
             handler(.idle)
         default:
@@ -224,8 +320,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
             guard let self, self.stream === stream else { return }
             Log.info("The screen capture stopped: \(error.localizedDescription)")
             self.stream = nil
-            self.chosen = nil
-            self.shared.withLock { self.sharedState.window = nil }
+            self.shared.withLock { self.sharedState.chosen = nil }
+            self.handler?(.lost)
         }
     }
 
@@ -248,13 +344,19 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
 /// is not a candidate.
 struct PixelPicture: FramePicture {
     let buffer: CVPixelBuffer
+    /// The part of the frame that is kept, in parts of it from the top left. The rest is never read or copied.
+    var crop = CGRect(x: 0, y: 0, width: 1, height: 1)
 
+    /// The kept part as a place in the frame's memory: its first byte, its size in pixels, and the row length.
     private func withBytes<T>(_ body: (UnsafeRawPointer, Int, Int, Int) -> T?) -> T? {
         guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA,
               CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return nil }
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(buffer) else { return nil }
-        return body(UnsafeRawPointer(base), CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer), CVPixelBufferGetBytesPerRow(buffer))
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
+        let part = PixelCrop.pixels(crop, width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+        guard part.width > 0, part.height > 0 else { return nil }
+        return body(UnsafeRawPointer(base) + part.y * bytesPerRow + part.x * 4, part.width, part.height, bytesPerRow)
     }
 
     var thumb: FrameThumb? {
@@ -264,8 +366,20 @@ struct PixelPicture: FramePicture {
     /// The one copy: the stream needs its surface back long before the candidate is decided.
     func held() -> HeldPicture? {
         withBytes { base, width, height, bytesPerRow in
-            HeldPixels(data: Data(bytes: base, count: bytesPerRow * height), width: width, height: height, bytesPerRow: bytesPerRow)
+            // The last row ends at its last kept pixel, so nothing outside the kept part is read.
+            HeldPixels(data: Data(bytes: base, count: bytesPerRow * (height - 1) + width * 4), width: width, height: height, bytesPerRow: bytesPerRow)
         }
+    }
+}
+
+/// A kept part in whole pixels, inside the frame.
+enum PixelCrop {
+    static func pixels(_ crop: CGRect, width: Int, height: Int) -> (x: Int, y: Int, width: Int, height: Int) {
+        let x = min(max(0, Int((crop.minX * Double(width)).rounded(.up))), width)
+        let y = min(max(0, Int((crop.minY * Double(height)).rounded(.up))), height)
+        let right = min(width, max(x, Int((crop.maxX * Double(width)).rounded(.down))))
+        let bottom = min(height, max(y, Int((crop.maxY * Double(height)).rounded(.down))))
+        return (x, y, right - x, bottom - y)
     }
 }
 

@@ -10,15 +10,22 @@ public struct SharedScreen: Codable, Equatable, Sendable, Identifiable {
     /// Who shared, when the call app showed it. Never a guess.
     public var presenter: String?
     public var window: String?
+    /// The time of day, saved when the frame was taken. Nil in records from before it was saved.
+    public var time: Date?
+    /// The share session's number from the capture; nil in records from before sessions were numbered.
+    public var session: Int?
 
     public var id: String { file }
 
-    public init(offset: TimeInterval, file: String, text: String, presenter: String? = nil, window: String? = nil) {
+    public init(offset: TimeInterval, file: String, text: String, presenter: String? = nil, window: String? = nil,
+                time: Date? = nil, session: Int? = nil) {
         self.offset = offset
         self.file = file
         self.text = text
         self.presenter = presenter
         self.window = window
+        self.time = time
+        self.session = session
     }
 
     public init(from decoder: Decoder) throws {
@@ -28,6 +35,8 @@ public struct SharedScreen: Codable, Equatable, Sendable, Identifiable {
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         presenter = try c.decodeIfPresent(String.self, forKey: .presenter)
         window = try c.decodeIfPresent(String.self, forKey: .window)
+        time = try c.decodeIfPresent(Date.self, forKey: .time)
+        session = try c.decodeIfPresent(Int.self, forKey: .session)
     }
 
     /// The transcript line for this screen, without the time: `Screen shared by Sam Carter: "…"`.
@@ -68,9 +77,20 @@ public enum ScreenText {
         text.count > storedLength ? String(text.prefix(storedLength)) : text
     }
 
+    /// The words of a query, as the marks and the grid's filter both use them.
+    public static func terms(_ query: String) -> [String] {
+        query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count >= 2 }
+    }
+
+    /// True when a screen's text holds every word of the query.
+    public static func contains(_ text: String, query: String) -> Bool {
+        let terms = terms(query), lower = text.lowercased()
+        return !terms.isEmpty && terms.allSatisfy(lower.contains)
+    }
+
     /// The boxes of the words that hold any word of the query, for the marks on a frame.
     public static func matches(_ words: [ScreenWord], query: String) -> [ScreenWord] {
-        let terms = query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count >= 2 }
+        let terms = terms(query)
         guard !terms.isEmpty else { return [] }
         return words.filter { w in
             let text = w.text.lowercased()
@@ -83,6 +103,19 @@ extension CallRecord {
     /// The screens as transcript lines. Made from `screens` each time, never stored in `markers`.
     public var screenMarkers: [TranscriptMarker] {
         (screens ?? []).map { TranscriptMarker(offset: $0.offset, text: $0.lineText) }
+            + (screenGaps ?? []).map { TranscriptMarker(offset: $0.offset, text: $0.text) }
+    }
+
+    /// The date at a second of the recording. The seconds leave out the time between the parts of a joined
+    /// meeting, so the part's own start counts. Paused time is not known here; a screen carries its own time.
+    public func date(atOffset offset: TimeInterval) -> Date {
+        guard let part = parts.last(where: { $0.offset <= offset }) else { return start.addingTimeInterval(offset) }
+        return part.start.addingTimeInterval(offset - part.offset)
+    }
+
+    /// The time of day a screen was on, exact when it was saved with the frame.
+    public func date(of screen: SharedScreen) -> Date {
+        screen.time ?? date(atOffset: screen.offset)
     }
 
     /// Lines of the transcript within `seconds` of a moment, with speaker names, for the view next to a screen.

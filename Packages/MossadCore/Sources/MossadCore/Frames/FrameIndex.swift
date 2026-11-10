@@ -17,6 +17,42 @@ public struct ScreenWord: Codable, Equatable, Sendable {
     }
 }
 
+/// A moment the capture of the shared screen stopped having a live picture (`paused`), or had one again.
+public struct ScreenGap: Codable, Equatable, Sendable {
+    public static let pausedText = "Screen capture paused"
+    public static let resumedText = "Screen capture resumed"
+    /// How near a share session a pause must be to show in the transcript.
+    static let reach: TimeInterval = 60
+
+    public var offset: TimeInterval
+    public var paused: Bool
+
+    public init(offset: TimeInterval, paused: Bool) {
+        self.offset = offset
+        self.paused = paused
+    }
+
+    public var text: String { paused ? Self.pausedText : Self.resumedText }
+
+    /// The gaps worth a line in the transcript: a pause inside or next to a share session, with the return that
+    /// follows it. A window that the owner left while nobody shared anything says nothing about a shared screen.
+    public static func shown(_ gaps: [ScreenGap], screens: [SharedScreen]) -> [ScreenGap] {
+        let sessions = ShareSession.group(screens)
+        var out: [ScreenGap] = []
+        var showNext = false
+        for gap in gaps.sorted(by: { $0.offset < $1.offset }) {
+            if gap.paused {
+                showNext = sessions.contains { gap.offset >= $0.start - reach && gap.offset <= $0.end + reach }
+                if showNext { out.append(gap) }
+            } else if showNext {
+                out.append(gap)
+                showNext = false
+            }
+        }
+        return out
+    }
+}
+
 /// `frames.json` in a call's folder: the kept frames of the shared screen, in time order. The pictures are in
 /// `frames/<offset in ms>.heic`. Offsets are seconds of the recording, which leave out paused time, as markers do.
 public struct FrameIndex: Codable, Equatable, Sendable {
@@ -34,22 +70,34 @@ public struct FrameIndex: Codable, Equatable, Sendable {
         /// The text on the frame, once it was read after the call.
         public var text: String?
         public var words: [ScreenWord]?
+        /// The time of day the frame shows. The offset cannot give it: it leaves out pauses and the time between
+        /// the parts of a joined meeting.
+        public var time: Date?
+        /// The share session's number, set while capturing: a new one for each window and after each pause of the capture.
+        public var session: Int?
+        /// How often the text could not be read. After a few tries the frame is given up.
+        public var attempts: Int?
 
         public init(offset: TimeInterval, file: String, window: String? = nil, presenter: String? = nil,
-                    text: String? = nil, words: [ScreenWord]? = nil) {
+                    text: String? = nil, words: [ScreenWord]? = nil, time: Date? = nil, session: Int? = nil) {
             self.offset = offset
             self.file = file
             self.window = window
             self.presenter = presenter
             self.text = text
             self.words = words
+            self.time = time
+            self.session = session
         }
     }
 
     public var frames: [Frame]
+    /// When the capture had no live picture, and when it had one again. Shown only next to a share session.
+    public var gaps: [ScreenGap]?
 
-    public init(frames: [Frame] = []) {
+    public init(frames: [Frame] = [], gaps: [ScreenGap]? = nil) {
         self.frames = frames
+        self.gaps = gaps
     }
 
     public static func fileName(offset: TimeInterval) -> String {
@@ -63,12 +111,15 @@ public struct FrameIndex: Codable, Equatable, Sendable {
     /// Nil when the call has no frames file (no screen capture, or the frames were removed).
     public static func load(from dir: URL, fileName: String = fileName) -> FrameIndex? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent(fileName)) else { return nil }
-        return try? JSONDecoder().decode(FrameIndex.self, from: data)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(FrameIndex.self, from: data)
     }
 
     public func save(to dir: URL, fileName: String = fileName) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
         try encoder.encode(self).write(to: dir.appendingPathComponent(fileName), options: .atomic)
     }
 
@@ -87,21 +138,26 @@ public struct FrameIndex: Codable, Equatable, Sendable {
         return cut
     }
 
-    /// The same frames `seconds` later, as part of a joined meeting. Each file gets the name of its new offset.
-    public func moved(by seconds: TimeInterval) -> FrameIndex {
-        guard seconds != 0 else { return self }
+    /// The same frames `seconds` later, as part of a joined meeting. Each file gets the name of its new offset, and
+    /// each session a number after `sessions`, so the sessions of two parts stay apart.
+    public func moved(by seconds: TimeInterval, sessionsFrom sessions: Int = 0) -> FrameIndex {
+        guard seconds != 0 || sessions != 0 else { return self }
         return FrameIndex(frames: frames.map { f in
             var f = f
             f.offset += seconds
-            f.file = Self.fileName(offset: f.offset)
+            if seconds != 0 { f.file = Self.fileName(offset: f.offset) }
+            f.session = f.session.map { $0 + sessions }
             return f
-        })
+        }, gaps: gaps?.map { ScreenGap(offset: $0.offset + seconds, paused: $0.paused) })
     }
+
+    /// The first session number that is free after this index's own.
+    public var nextSession: Int { (frames.compactMap(\.session).max() ?? -1) + 1 }
 
     /// The record's list: only frames whose text was read.
     public var screens: [SharedScreen] {
         frames.compactMap { f in
-            f.text.map { SharedScreen(offset: f.offset, file: f.file, text: $0, presenter: f.presenter, window: f.window) }
+            f.text.map { SharedScreen(offset: f.offset, file: f.file, text: $0, presenter: f.presenter, window: f.window, time: f.time, session: f.session) }
         }
     }
 }
@@ -147,7 +203,8 @@ public enum FrameStore {
         try fm.createDirectory(at: FrameIndex.folder(in: target), withIntermediateDirectories: true)
         for (dir, offset) in zip(dirs, offsets) {
             guard let index = FrameIndex.load(from: dir) else { continue }
-            let moved = index.moved(by: offset)
+            let moved = index.moved(by: offset, sessionsFrom: joined.nextSession)
+            if let gaps = moved.gaps { joined.gaps = (joined.gaps ?? []) + gaps }
             for (old, new) in zip(index.frames, moved.frames) {
                 let from = index.url(of: old, in: dir), to = moved.url(of: new, in: target)
                 if from != to, fm.fileExists(atPath: from.path) {

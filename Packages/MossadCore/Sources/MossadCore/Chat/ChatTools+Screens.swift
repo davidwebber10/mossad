@@ -31,10 +31,11 @@ extension ChatTools {
         var lines = ["call_id: \(r.id) | \(r.title) | \(screens.count) screens"]
         var number = 0
         for session in ShareSession.group(screens) {
+            // The list stays short; get_screen has a frame's whole text.
             lines.append(session.heading { MarkdownWriter.timestamp($0) })
             for s in session.screens {
                 number += 1
-                lines.append("\(number). at_seconds: \(Int(s.offset)) [\(MarkdownWriter.timestamp(s.offset))] \"\(ScreenText.excerpt(s.text))\"")
+                lines.append("\(number). at_seconds: \(Int(s.offset)) [\(MarkdownWriter.timestamp(s.offset))] \"\(String(ScreenText.excerpt(s.text).prefix(90)))\"")
             }
         }
         return lines.joined(separator: "\n")

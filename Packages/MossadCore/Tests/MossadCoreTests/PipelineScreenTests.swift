@@ -7,8 +7,18 @@ final class FakeScreenReader: ScreenTextReading, @unchecked Sendable {
     private var _read: [String] = []
     var read: [String] { lock.withLock { _read } }
 
+    /// The QoS of the thread each read ran on.
+    private var _classes: [qos_class_t] = []
+    var classes: [qos_class_t] { lock.withLock { _classes } }
+    /// Files that cannot be read, as when Vision fails.
+    var unreadable: Set<String> = []
+
     func read(_ url: URL) -> (text: String, words: [ScreenWord])? {
-        lock.withLock { _read.append(url.lastPathComponent) }
+        lock.withLock {
+            _read.append(url.lastPathComponent)
+            _classes.append(qos_class_self())
+        }
+        if unreadable.contains(url.lastPathComponent) { return nil }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         return (text, [ScreenWord(text: text, x: 0.1, y: 0.1, width: 0.5, height: 0.05)])
     }
@@ -52,11 +62,12 @@ final class PipelineScreenTests: XCTestCase {
         try index.save(to: dir)
     }
 
-    func pipeline(isRecording: @escaping @Sendable () -> Bool = { false }, wait: @escaping @Sendable () async -> Void = {}) -> Pipeline {
+    func pipeline(isRecording: @escaping @Sendable () -> Bool = { false }, rest: @escaping @Sendable () async -> Void = {},
+                  calendar: FakeCalendar = FakeCalendar()) -> Pipeline {
         let later = start.addingTimeInterval(7200)
         return Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
-                        calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "Robin Vale",
-                        screenStep: ScreenStep(reader: reader, isRecording: isRecording, wait: wait))
+                        calendar: calendar, summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "Robin Vale",
+                        screenStep: ScreenStep(reader: reader, isRecording: isRecording, rest: rest))
     }
 
     func files(_ id: String) -> [String] {
@@ -116,25 +127,96 @@ final class PipelineScreenTests: XCTestCase {
         XCTAssertEqual(try CallRecord.load(from: dir).screens?.count, 2)
     }
 
-    func testTheTextIsNotReadWhileACallRecords() async throws {
-        try makeCall("a", at: start, frames: [(12, slide, nil)])
-        let reader = reader
-        final class Calls: @unchecked Sendable {
+    func testTheNoteDoesNotWaitForAnotherCallToEnd() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (25, slide + " two", nil), (40, slide + " three", nil)])
+        final class Rests: @unchecked Sendable {
             let lock = NSLock()
-            var waits = 0
-            var readsWhileRecording = 0
+            var count = 0
         }
-        let calls = Calls()
-        let p = pipeline(isRecording: {
-            calls.lock.withLock {
-                if calls.waits < 3 { calls.readsWhileRecording += reader.read.count }
-                return calls.waits < 3
-            }
-        }, wait: { calls.lock.withLock { calls.waits += 1 } })
+        let rests = Rests()
+        // Another call records the whole time. The frames are read one at a time, with a rest before each one.
+        await pipeline(isRecording: { true }, rest: { rests.lock.withLock { rests.count += 1 } }).process("a")
+        let r = try CallRecord.load(from: paths.callDirectory("a"))
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.screens?.count, 3)
+        XCTAssertEqual(rests.count, 3)
+    }
+
+    func testNoRestWhenNoCallRecords() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (25, slide + " two", nil)])
+        final class Rests: @unchecked Sendable { var count = 0 }
+        let rests = Rests()
+        await pipeline(rest: { rests.count += 1 }).process("a")
+        XCTAssertEqual(rests.count, 0)
+    }
+
+    func testTheTextIsReadAtBackgroundPriorityAlsoForAWaitingTaskOfHighPriority() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil)])
+        let p = pipeline()
+        await Task(priority: .userInitiated) { await p.process("a") }.value
+        XCTAssertEqual(reader.classes, [QOS_CLASS_BACKGROUND])
+    }
+
+    func testAFrameThatCouldNotBeReadIsKeptForAnotherTry() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil), (25, slide + " two", nil)])
+        reader.unreadable = ["25000.heic"]
+        let p = pipeline()
         await p.process("a")
-        XCTAssertEqual(calls.waits, 3)
-        XCTAssertEqual(calls.readsWhileRecording, 0)
-        XCTAssertEqual(reader.read, ["12000.heic"])
+        // Not read is not "no text": the picture stays, and the record lists what was read.
+        XCTAssertEqual(files("a"), ["12000.heic", "25000.heic"])
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory("a")).screens?.map(\.offset), [12])
+        XCTAssertEqual(FrameIndex.load(from: paths.callDirectory("a"))?.frames.map(\.attempts), [nil, 1])
+        // The next run reads it.
+        reader.unreadable = []
+        await p.regenerateSummary("a")
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory("a")).screens?.map(\.offset), [12, 25])
+        // One that never reads is given up after three tries.
+        try makeCall("b", at: start.addingTimeInterval(4000), frames: [(5, slide, nil)])
+        reader.unreadable = ["5000.heic"]
+        await p.process("b")
+        await p.regenerateSummary("b")
+        await p.regenerateSummary("b")
+        XCTAssertEqual(files("b"), [])
+    }
+
+    func testThePresenterIsMatchedToTheInvitedPeople() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, "dana lee")])
+        let calendar = FakeCalendar(events: [CalendarEventInfo(title: "Plan review", start: start, end: start.addingTimeInterval(1800),
+                                                               attendees: ["Dana Lee"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)])
+        await pipeline(calendar: calendar).process("a")
+        let r = try CallRecord.load(from: paths.callDirectory("a"))
+        XCTAssertEqual(r.attendees, ["Dana Lee"])
+        XCTAssertEqual(r.screens?.first?.presenter, "Dana Lee")
+    }
+
+    func testPausesNextToAShareReachTheRecordAndOthersDoNot() async throws {
+        try makeCall("a", at: start, frames: [(600, slide, nil)])
+        let dir = paths.callDirectory("a")
+        var index = try XCTUnwrap(FrameIndex.load(from: dir))
+        index.gaps = [ScreenGap(offset: 30, paused: true), ScreenGap(offset: 60, paused: false),
+                      ScreenGap(offset: 620, paused: true), ScreenGap(offset: 640, paused: false)]
+        try index.save(to: dir)
+        await pipeline().process("a")
+        let r = try CallRecord.load(from: dir)
+        XCTAssertEqual(r.screenGaps, [ScreenGap(offset: 620, paused: true), ScreenGap(offset: 640, paused: false)])
+        XCTAssertTrue(r.markers.isEmpty)
+        let note = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
+        XCTAssertTrue(note.contains("[00:10:20] (Screen capture paused)"))
+        XCTAssertFalse(note.contains("[00:00:30] (Screen capture paused)"))
+    }
+
+    func testAJoinWithAPartWhosePicturesAreGoneKeepsThatPartsText() async throws {
+        try makeCall("a", at: start, frames: [(12, slide, nil)])
+        try makeCall("b", at: start.addingTimeInterval(2400), frames: [(5, slide + " more", nil)])
+        let p = pipeline()
+        await p.process("a")
+        await p.process("b")
+        // The first part's pictures went with its old recording; its text is in the record only.
+        FrameStore.remove(in: paths.callDirectory("a"))
+        await p.merge(callIDs: ["a", "b"])
+        let r = try CallRecord.load(from: paths.callDirectory("a"))
+        XCTAssertEqual(r.screens?.map(\.text), [slide, slide + " more"])
+        XCTAssertEqual(files("a"), ["35000.heic"])
     }
 
     func testTheScreensStayWhenTheFramesAreGone() async throws {

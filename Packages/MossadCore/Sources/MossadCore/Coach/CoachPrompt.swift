@@ -160,7 +160,7 @@ enum CoachPrompt {
             parts.append("## \(owner)'s delivery in this call\n" + numbers(delivery))
             parts.append("## Measured against goals\n" + checksText(metrics))
         }
-        parts.append("## Transcript\n" + MarkdownWriter.transcript(r))
+        parts.append("## Transcript\n" + MarkdownWriter.transcript(r, screens: false))
         return parts.joined(separator: "\n\n")
     }
 

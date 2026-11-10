@@ -71,6 +71,8 @@ public struct ProcessingQueue: Sendable {
             } else {
                 r.end = r.start.addingTimeInterval(duration)
                 r.status = .recorded
+                // The audio that was saved ends here; a frame after it has no place in the recording.
+                FrameStore.trim(in: dir, to: duration)
                 // The mic track holds the real samples until the call ends, so a crashed call has the muted time in it.
                 do { try MutedAudio.apply(to: &r, in: dir) } catch {
                     Log.error("Interrupted call \(r.id): \(error.localizedDescription); it waits until that works")
