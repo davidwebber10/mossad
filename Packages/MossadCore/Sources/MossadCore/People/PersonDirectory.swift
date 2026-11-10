@@ -17,34 +17,34 @@ public struct PersonDirectory: Sendable, Equatable {
     }
 
     public let people: [Person]
-    private let byEmail: [String: String]
-    /// Nil for a name that two saved people have.
-    private let byName: [String: String?]
+    private let resolver: PersonResolver
+    private let names: [PersonID: String]
+
+    public static func == (a: PersonDirectory, b: PersonDirectory) -> Bool { a.people == b.people }
 
     public init(_ people: [Person] = []) {
         self.people = people
-        byEmail = Dictionary(people.compactMap { p in p.email.map { (Self.emailKey($0), p.name) } }, uniquingKeysWith: { a, _ in a })
-        var byName: [String: String?] = [:]
-        for p in people {
-            let key = PeopleDuplicates.normalized(p.name)
-            byName[key] = byName[key] == nil ? .some(p.name) : .some(nil)
+        var names: [PersonID: String] = [:]
+        var records: [MossadCore.Person] = []
+        for (i, p) in people.enumerated() {
+            // The ids keep the order of the list, so "the first one" is the same person as before.
+            var record = MossadCore.Person(id: PersonID(rawValue: String(format: "%08d", i)), displayName: p.name, origin: .voiceNaming, at: .distantPast)
+            if let email = p.email { record.addEmail(email, state: .verified, source: .voiceNaming, at: .distantPast) }
+            names[record.id] = p.name
+            records.append(record)
         }
-        self.byName = byName
+        self.names = names
+        resolver = PersonResolver(people: records)
     }
 
     public init(profiles: [VoiceProfile]) {
         self.init(profiles.map { Person(name: $0.name, email: $0.email) })
     }
 
-    private static func emailKey(_ email: String) -> String { email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-
     /// Lowercase words without the period of an initial: "Sam C." gives "sam", "c".
     private static func words(_ name: String) -> [String] {
         name.lowercased().split(whereSeparator: \.isWhitespace).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ".,")) }.filter { !$0.isEmpty }
     }
-
-    /// The one saved person with exactly this name, in any case and spacing.
-    private func exact(_ text: String) -> String? { byName[PeopleDuplicates.normalized(text)] ?? nil }
 
     /// Whether `written` can be a form of the name `full`: the same first name or its short form, and, when
     /// `written` has more words, the same last name or its initial.
@@ -65,42 +65,75 @@ public struct PersonDirectory: Sendable, Equatable {
 
     // MARK: Links
 
+    /// The rules that are sure enough to open a profile: an email, a whole name in any written form, and the two
+    /// names in the other order when that person is in the meeting. Never a first name or a short form.
+    private static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .externalID, .nameForm, .provedOrder, .sameName, .swappedName]
+
+    /// The people of a meeting as the resolver wants them: the saved ones, and the names of the others. An email
+    /// and a label such as "Speaker C" are not names.
+    private func context(_ meeting: [String]) -> ResolutionContext {
+        var context = ResolutionContext()
+        for name in meeting where !name.contains("@") && !name.hasPrefix("Speaker ") {
+            // With nobody around it, a name resolves only by a sure rule, or as a person saved under that one word.
+            if case .resolved(let id, _, _) = resolver.resolve(Observation(name: name), in: ResolutionContext()) {
+                if !context.roster.contains(id) { context.roster.append(id) }
+            } else {
+                context.otherNames.append(name)
+            }
+        }
+        return context
+    }
+
     /// The saved person whose profile `text` may open: the person with that email, or the one saved person with
-    /// exactly that name of two words or more. A first name, a short form, an initial, or a person saved under
-    /// one word ("Sam") opens nothing.
+    /// that name of two words or more, in any written form ("Carter, Sam", "CARTER Sam", "Sam A. Carter"). A name
+    /// in the other order with no proof ("Carter Sam") is a link only when that person is in `meeting`. A first
+    /// name, a short form, an initial, or a person saved under one word ("Sam") opens nothing.
     public func link(for text: String, in meeting: [String] = []) -> String? {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
-        if text.contains("@") { return byEmail[Self.emailKey(text)] }
-        // "Speaker C" is a label, not a name.
-        guard !text.hasPrefix("Speaker "), let person = exact(text) else { return nil }
-        // A name of one word is never sure: another person with that first name can be invited by email only, or
-        // be a voice with no name, and neither shows in the meeting's names.
-        return Self.words(text).count > 1 ? person : nil
+        switch resolver.resolve(Observation(text: text), in: context(meeting)) {
+        case .resolved(let id, let rule, _) where Self.sure.contains(rule): return names[id]
+        // Two saved people with one email: the first one, as before there were rules.
+        case .ambiguous(let ids, .verifiedEmail): return ids.first.flatMap { names[$0] }
+        default: return nil
+        }
     }
 
     // MARK: Matching
 
     /// The saved person that an invited name or email is. In this order: their email; the one saved person with
-    /// exactly that name of two words or more; then, only among `meeting` (the speakers and the other invited
-    /// people, saved or not), the one person the name can be a form of ("Sam" or "Sam C." for Sam Carter, "Sam
-    /// Reed" for Samuel Reed), when that person is saved. Two who fit, or one who is not saved, is nobody.
+    /// that name of two words or more, in any written form; then, only among `meeting` (the speakers and the other
+    /// invited people, saved or not), the one person the name can be a form of ("Sam" or "Sam C." for Sam Carter,
+    /// "Sam Reed" for Samuel Reed, "Carter Sam" for Sam Carter), when that person is saved. Two who fit, or one who
+    /// is not saved, is nobody.
     public func match(_ text: String, among meeting: [String] = []) -> String? {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
-        if text.contains("@") { return byEmail[Self.emailKey(text)] }
-        guard !text.hasPrefix("Speaker ") else { return nil }
-        let words = Self.words(text)
-        guard !words.isEmpty else { return nil }
-        if words.count > 1, let person = exact(text) { return person }
-        var seen: Set<String> = []
-        let near = meeting.filter { name in
-            guard !name.contains("@"), !name.hasPrefix("Speaker "), seen.insert(PeopleDuplicates.normalized(name)).inserted else { return false }
-            // The text itself, as an invited entry, is not a second person.
-            return Self.fits(words, Self.words(name)) && (PeopleDuplicates.normalized(name) != PeopleDuplicates.normalized(text) || exact(name) != nil)
+        switch resolver.resolve(Observation(text: text), in: context(meeting)) {
+        case .resolved(let id, _, _): return names[id]
+        case .ambiguous(let ids, .verifiedEmail): return ids.first.flatMap { names[$0] }
+        default: return nil
         }
-        if near.count == 1 { return exact(near[0]) }
-        // A person saved under one word, in a meeting where nobody else can be meant.
-        return near.isEmpty && words.count == 1 ? exact(text) : nil
+    }
+
+    /// The saved person a typed name or a picked email stands for, when a voice is named. As `link`, and also a
+    /// name that only one saved person fits in the other order or by a short first name ("Mike Reed" for Michael
+    /// Reed), and a person saved under exactly that one word. The naming sheet shows the owner who it joins.
+    public func existing(name: String, email: String?) -> String? {
+        let email = email?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let email, !email.isEmpty {
+            switch resolver.resolve(Observation(email: email)) {
+            case .resolved(let id, _, _): return names[id]
+            case .ambiguous(let ids, _): return ids.first.flatMap { names[$0] }
+            default: break
+            }
+        }
+        switch resolver.resolve(Observation(name: name), in: ResolutionContext()) {
+        case .resolved(let id, _, _): return names[id]
+        // Two saved people with this name: the first one, so a third is not made.
+        case .ambiguous(let ids, let rule) where Self.sure.contains(rule): return ids.first.flatMap { names[$0] }
+        case .suggestion(let id, let rule, _) where rule == .swappedName || rule == .nickname: return names[id]
+        default: return nil
+        }
     }
 }
