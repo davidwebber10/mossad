@@ -51,6 +51,8 @@ public struct MeetingFilterPeople: Sendable {
         var othersInvited = false
         /// Invited names and addresses that are no saved person: people all the same, each one time.
         var unsureInvited: Set<String> = []
+        /// Voices whose own name was on the invite with no saved record: that entry is them, so no other one can be.
+        var spokeOnInvite: Set<String> = []
 
         /// The people of the meeting for the filter: who spoke, then who was invited, each one time.
         var people: [MeetingFilter.Who] {
@@ -89,6 +91,7 @@ public struct MeetingFilterPeople: Sendable {
         }
         if !out.invited.isEmpty { out.othersInvited = true }
         // A name on the invite that also spoke is that voice, not one more person.
+        out.spokeOnInvite = Set(out.spoke.filter { out.unsureInvited.contains(PersonNames.nameKey($0.name)) }.map(\.key))
         out.unsureInvited.subtract(out.spoke.map { PersonNames.nameKey($0.name) })
         return out
     }
@@ -113,9 +116,16 @@ public struct MeetingFilterPeople: Sendable {
         let others = names.filter { !isOwner($0) }
         let spoke = Set(others.compactMap { $0 }.map { who(saved: $0).key })
         let unnamed = others.filter { $0 == nil }.count
-        // An invited person with no saved record may also have been there, so they widen the most, as a sure one does.
-        let silent = Set(seen.invited.map(\.key)).subtracting(spoke).count + seen.unsureInvited.count
-        let fewest = 1 + spoke.count + unnamed, most = 1 + spoke.count + max(unnamed, silent)
+        // Who was invited and is not one of the voices may still have been there, silent. A sure invitee who did not
+        // speak can only be a voice with no name. An invited name or address with no saved record can be any voice
+        // that is not a sure invitee: a voice with no name, or a named one that the invite does not name surely.
+        let sureInvited = Set(seen.invited.map(\.key))
+        let sureSilent = sureInvited.subtracting(spoke).count
+        let namedNotInvited = spoke.subtracting(sureInvited).subtracting(seen.spokeOnInvite).count
+        let sureAsUnnamed = min(sureSilent, unnamed)
+        let extraSure = sureSilent - sureAsUnnamed
+        let extraUnsure = max(0, seen.unsureInvited.count - (unnamed - sureAsUnnamed) - namedNotInvited)
+        let fewest = 1 + spoke.count + unnamed, most = fewest + extraSure + extraUnsure
         let size = MeetingFilter.Size(people: fewest)
         guard MeetingFilter.Size(people: most) == size else { return .unknown }
         let ownerSpoke = names.contains(where: isOwner)
