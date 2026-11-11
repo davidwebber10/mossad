@@ -53,7 +53,7 @@ enum CoachPrompt {
 
         Questions. When you conclude something about \(owner)'s world that would change your advice, and the \
         material does not say it, ask: at most 2, often none. A plain claim to answer yes or no, at most 15 words \
-        ("Mitch reports to you."). kind is relationship, role, meeting_purpose, preference, or this_call. evidence \
+        ("Sam reports to you."). kind is relationship, role, meeting_purpose, preference, or this_call. evidence \
         is the quote behind it, with its time. Never ask what is a fact, waiting for an answer, or marked not \
         true, and do not treat an open question as true.
 

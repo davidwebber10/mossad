@@ -7,20 +7,20 @@ final class CoachFeedbackTests: XCTestCase {
     }
 
     private func review() -> CoachReview {
-        CoachReview(headline: "H", overview: "O", strengths: [point("Framed the goal")], improvements: [point("Let Mitch talk less")], focusProgress: nil)
+        CoachReview(headline: "H", overview: "O", strengths: [point("Framed the goal")], improvements: [point("Let Riley talk less")], focusProgress: nil)
     }
 
     func testRatingAPointIsSavedOnTheReviewAndRememberedInTheProfile() {
         var r = review()
         var profile = CoachProfile()
-        let fb = CoachFeedback(agree: false, note: "Letting Mitch lead is on purpose.", date: Date(timeIntervalSince1970: 5))
-        r.feedback["Let Mitch talk less"] = fb
-        profile.remember(fb, on: r.improvements[0], callID: "c1", title: "Mitch / David")
+        let fb = CoachFeedback(agree: false, note: "Letting Riley lead is on purpose.", date: Date(timeIntervalSince1970: 5))
+        r.feedback["Let Riley talk less"] = fb
+        profile.remember(fb, on: r.improvements[0], callID: "c1", title: "Riley / David")
         XCTAssertEqual(profile.rated.count, 1)
-        XCTAssertEqual(profile.rated.first?.title, "Let Mitch talk less")
+        XCTAssertEqual(profile.rated.first?.title, "Let Riley talk less")
         XCTAssertEqual(profile.rated.first?.agree, false)
         // Rating the same point again replaces the earlier rating.
-        profile.remember(CoachFeedback(agree: true, note: nil, date: Date()), on: r.improvements[0], callID: "c1", title: "Mitch / David")
+        profile.remember(CoachFeedback(agree: true, note: nil, date: Date()), on: r.improvements[0], callID: "c1", title: "Riley / David")
         XCTAssertEqual(profile.rated.count, 1)
         XCTAssertEqual(profile.rated.first?.agree, true)
     }
@@ -36,9 +36,9 @@ final class CoachFeedbackTests: XCTestCase {
 
     func testGuidanceIsAddedOnceAndCanBeRemoved() {
         var profile = CoachProfile()
-        profile.updateGuidance(add: ["Letting Mitch lead in 1:1s is on purpose.", " letting mitch lead in 1:1s is on purpose. ", ""], remove: [], at: Date())
-        XCTAssertEqual(profile.guidance.map(\.text), ["Letting Mitch lead in 1:1s is on purpose."])
-        profile.updateGuidance(add: ["Fillers do not matter to me."], remove: ["Letting Mitch lead in 1:1s is on purpose."], at: Date())
+        profile.updateGuidance(add: ["Letting Riley lead in 1:1s is on purpose.", " letting riley lead in 1:1s is on purpose. ", ""], remove: [], at: Date())
+        XCTAssertEqual(profile.guidance.map(\.text), ["Letting Riley lead in 1:1s is on purpose."])
+        profile.updateGuidance(add: ["Fillers do not matter to me."], remove: ["Letting Riley lead in 1:1s is on purpose."], at: Date())
         XCTAssertEqual(profile.guidance.map(\.text), ["Fillers do not matter to me."])
     }
 
@@ -47,27 +47,27 @@ final class CoachFeedbackTests: XCTestCase {
         profile.updateGuidance(add: ["Fillers do not matter to me."], remove: [], at: Date())
         profile.remember(CoachFeedback(agree: false, note: "Wrong person.", date: Date()), on: point("Interrupted Ed"), callID: "c", title: "Sync")
         var r = CallRecord(id: "x", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
-        r.speakerNames = ["me:A": "David Webber"]
-        let text = CoachPrompt.user(record: r, owner: "David Webber", profile: profile)
+        r.speakerNames = ["me:A": "Dana Lee"]
+        let text = CoachPrompt.user(record: r, owner: "Dana Lee", profile: profile)
         XCTAssertTrue(text.contains("Fillers do not matter to me."), text)
         XCTAssertTrue(text.contains("Interrupted Ed"))
         XCTAssertTrue(text.contains("Wrong person."))
-        XCTAssertTrue(CoachPrompt.system(owner: "David Webber").contains("guidance"))
+        XCTAssertTrue(CoachPrompt.system(owner: "Dana Lee").contains("guidance"))
     }
 
     func testTheCoachAnswersAReplyAndUpdatesItsGuidance() async throws {
-        let output = #"{"reply":"Understood. I will stop flagging that.","add_guidance":["Letting Mitch lead in 1:1s is on purpose."],"remove_guidance":[]}"#
+        let output = #"{"reply":"Understood. I will stop flagging that.","add_guidance":["Letting Riley lead in 1:1s is on purpose."],"remove_guidance":[]}"#
         StubURLProtocol.handler = { _ in (200, json(["stop_reason": "end_turn", "content": [["type": "text", "text": output]]])) }
-        let responder = CoachResponder(llm: AnthropicModel(apiKey: "k", session: StubURLProtocol.session()), ownerName: "David Webber")
+        let responder = CoachResponder(llm: AnthropicModel(apiKey: "k", session: StubURLProtocol.session()), ownerName: "Dana Lee")
         var r = CallRecord(id: "x", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
-        r.calendarTitle = "Mitch / David"
-        let answer = try await responder.respond(to: "That was on purpose, I let Mitch lead.", review: review(), record: r, profile: CoachProfile())
+        r.calendarTitle = "Riley / David"
+        let answer = try await responder.respond(to: "That was on purpose, I let Riley lead.", review: review(), record: r, profile: CoachProfile())
         XCTAssertEqual(answer.reply, "Understood. I will stop flagging that.")
-        XCTAssertEqual(answer.add, ["Letting Mitch lead in 1:1s is on purpose."])
+        XCTAssertEqual(answer.add, ["Letting Riley lead in 1:1s is on purpose."])
         let body = try JSONSerialization.jsonObject(with: XCTUnwrap(StubURLProtocol.requests.first).body) as! [String: Any]
         let user = ((body["messages"] as? [[String: Any]])?.first?["content"] as? String) ?? ""
-        XCTAssertTrue(user.contains("That was on purpose, I let Mitch lead."))
-        XCTAssertTrue(user.contains("Let Mitch talk less"))
+        XCTAssertTrue(user.contains("That was on purpose, I let Riley lead."))
+        XCTAssertTrue(user.contains("Let Riley talk less"))
     }
 
     func testOldReviewsWithoutFeedbackStillLoad() throws {
@@ -85,7 +85,7 @@ final class CoachMemoryTests: XCTestCase {
         profile.updateFacts(add: [CoachFact(kind: .role, text: "Head of data and technology"),
                                   CoachFact(kind: .responsibility, text: "Vendor contracts for data tools"),
                                   CoachFact(kind: .responsibility, text: " vendor contracts for data tools "),
-                                  CoachFact(kind: .relationship, text: "Mitch Haus is my direct report")], remove: [])
+                                  CoachFact(kind: .relationship, text: "Riley Haus is my direct report")], remove: [])
         XCTAssertEqual(profile.facts(.responsibility).map(\.text), ["Vendor contracts for data tools"])
         XCTAssertEqual(profile.facts(.role).map(\.text), ["Head of data and technology"])
         profile.updateFacts(add: [], remove: ["Vendor contracts for data tools"])
@@ -99,19 +99,19 @@ final class CoachMemoryTests: XCTestCase {
                                   CoachFact(kind: .goal, text: "Metric ownership agreed by December"),
                                   CoachFact(kind: .relationship, text: "Jeff Hill is my manager")], remove: [])
         var r = CallRecord(id: "x", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
-        r.speakerNames = ["me:A": "David Webber"]
-        let text = CoachPrompt.user(record: r, owner: "David Webber", profile: profile)
+        r.speakerNames = ["me:A": "Dana Lee"]
+        let text = CoachPrompt.user(record: r, owner: "Dana Lee", profile: profile)
         for expected in ["Role: Head of data and technology", "Responsible for:", "- The Databricks contract", "Goals:", "Jeff Hill is my manager"] {
             XCTAssertTrue(text.contains(expected), expected)
         }
         XCTAssertLessThan(text.range(of: "Head of data")!.lowerBound, text.range(of: "## The focus")!.lowerBound)
-        XCTAssertTrue(CoachPrompt.system(owner: "David Webber").contains("responsib"))
+        XCTAssertTrue(CoachPrompt.system(owner: "Dana Lee").contains("responsib"))
     }
 
     func testTheCoachCanLearnFactsFromAReply() async throws {
         let output = #"{"reply":"Got it.","add_guidance":[],"remove_guidance":[],"add_facts":[{"kind":"responsibility","text":"Vendor contracts for data tools"}],"remove_facts":[]}"#
         StubURLProtocol.handler = { _ in (200, json(["stop_reason": "end_turn", "content": [["type": "text", "text": output]]])) }
-        let responder = CoachResponder(llm: AnthropicModel(apiKey: "k", session: StubURLProtocol.session()), ownerName: "David Webber")
+        let responder = CoachResponder(llm: AnthropicModel(apiKey: "k", session: StubURLProtocol.session()), ownerName: "Dana Lee")
         let r = CallRecord(id: "x", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
         let review = CoachReview(headline: "H", overview: "O", strengths: [], improvements: [], focusProgress: nil)
         let answer = try await responder.respond(to: "I own vendor contracts.", review: review, record: r, profile: CoachProfile())

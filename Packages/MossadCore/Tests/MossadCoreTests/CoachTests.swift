@@ -5,9 +5,9 @@ final class CoachTests: XCTestCase {
     private let day: TimeInterval = 86_400
 
     private func record(_ id: String, start: Date, ownerSeconds: TimeInterval = 120, status: CallStatus = .written,
-                        others: [String: String] = ["them:A": "Mitch Haus"]) -> CallRecord {
+                        others: [String: String] = ["them:A": "Riley Haus"]) -> CallRecord {
         var r = CallRecord(id: id, platform: .meet, bundleID: "", start: start, end: start.addingTimeInterval(1800), status: status)
-        r.speakerNames = ["me:A": "David Webber"].merging(others) { a, _ in a }
+        r.speakerNames = ["me:A": "Dana Lee"].merging(others) { a, _ in a }
         r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 0, end: ownerSeconds, text: "Let me walk through the plan.")]
         for (i, key) in others.keys.sorted().enumerated() {
             r.utterances.append(Utterance(track: .them, speakerLabel: String(key.dropFirst(5)), start: ownerSeconds + Double(i), end: ownerSeconds + Double(i) + 30, text: "Sounds good."))
@@ -31,8 +31,8 @@ final class CoachTests: XCTestCase {
         let update = CoachProfileUpdate(summary: "A direct communicator.", focus: "Close every call with owners and dates.",
                                         patterns: [CoachPatternUpdate(name: "interrupts", kind: .growth, note: "Fewer cut-ins this time.", trend: .improving),
                                                    CoachPatternUpdate(name: "Frames the goal", kind: .strength, note: "Opens with the goal.", trend: .steady)],
-                                        people: [CoachPersonUpdate(name: "Mitch Haus", note: "Wants the decision first, then detail.")])
-        profile.apply(update, review: review(), callID: "c1", title: "Mitch / David", at: at)
+                                        people: [CoachPersonUpdate(name: "Riley Haus", note: "Wants the decision first, then detail.")])
+        profile.apply(update, review: review(), callID: "c1", title: "Riley / David", at: at)
 
         XCTAssertEqual(profile.summary, "A direct communicator.")
         XCTAssertEqual(profile.focus, "Close every call with owners and dates.")
@@ -45,8 +45,8 @@ final class CoachTests: XCTestCase {
         XCTAssertEqual(interrupts?.firstSeen, Date(timeIntervalSince1970: 0))
         XCTAssertEqual(interrupts?.lastSeen, at)
         XCTAssertEqual(profile.patterns.first { $0.name == "Frames the goal" }?.seen, 1)
-        XCTAssertEqual(profile.people["Mitch Haus"]?.note, "Wants the decision first, then detail.")
-        XCTAssertEqual(profile.people["Mitch Haus"]?.calls, 1)
+        XCTAssertEqual(profile.people["Riley Haus"]?.note, "Wants the decision first, then detail.")
+        XCTAssertEqual(profile.people["Riley Haus"]?.calls, 1)
         XCTAssertEqual(profile.history.map(\.callID), ["c1"])
         XCTAssertEqual(profile.history.first?.headline, "Clear plan, rushed close")
     }
@@ -85,20 +85,20 @@ final class CoachTests: XCTestCase {
 
     func testDeliveryMeasuresPaceFillersTurnsQuestionsAndInterruptions() {
         var r = CallRecord(id: "d", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
-        r.speakerNames = ["me:A": "David Webber", "them:A": "Mitch Haus"]
+        r.speakerNames = ["me:A": "Dana Lee", "them:A": "Riley Haus"]
         let ten = Array(repeating: "word", count: 10).joined(separator: " ")
         r.utterances = [
             // 20 words in 10 s: 120 wpm, with two fillers.
             Utterance(track: .me, speakerLabel: "A", start: 0, end: 10, text: "Um so \(ten) uh eight more words here to count ok"),
-            // Mitch talks from 12 to 30; David cuts in at 20.
+            // Riley talks from 12 to 30; David cuts in at 20.
             Utterance(track: .them, speakerLabel: "A", start: 12, end: 30, text: "Long reply"),
             // 30 words in 5 s: 360 wpm, a question.
             Utterance(track: .me, speakerLabel: "A", start: 20, end: 25, text: "\(ten) \(ten) \(ten) right?"),
-            // Mitch cuts in on David at 40.
+            // Riley cuts in on David at 40.
             Utterance(track: .me, speakerLabel: "A", start: 35, end: 50, text: "\(ten)"),
             Utterance(track: .them, speakerLabel: "A", start: 40, end: 45, text: "Wait"),
         ]
-        let d = DeliveryStats(record: r, owner: "David Webber")
+        let d = DeliveryStats(record: r, owner: "Dana Lee")
         XCTAssertEqual(d.talkSeconds, 30)
         XCTAssertEqual(d.talkShare, 30.0 / 53.0, accuracy: 0.001)
         XCTAssertEqual(d.fillers, 2)
@@ -111,7 +111,7 @@ final class CoachTests: XCTestCase {
     }
 
     func testDeliveryNumbersIncludeTheToneWhenMeasured() {
-        var d = DeliveryStats(record: record("c", start: Date()), owner: "David Webber")
+        var d = DeliveryStats(record: record("c", start: Date()), owner: "Dana Lee")
         XCTAssertFalse(CoachPrompt.numbers(d).contains("pitch"))
         d.tone = VoiceTone(medianPitch: 118, pitchVariation: 1.6, level: -24, loudnessRange: 9, endDrop: 4.2)
         let text = CoachPrompt.numbers(d)
@@ -125,15 +125,15 @@ final class CoachTests: XCTestCase {
     func testPromptCarriesTheProfileOnlyTheseAttendeesNotesAndTheTranscript() {
         var profile = CoachProfile()
         profile.focus = "Close with owners and dates."
-        profile.people = ["Mitch Haus": CoachPerson(note: "Wants the decision first.", calls: 3, lastSeen: Date()),
+        profile.people = ["Riley Haus": CoachPerson(note: "Wants the decision first.", calls: 3, lastSeen: Date()),
                           "Someone Else": CoachPerson(note: "Not on this call.", calls: 1, lastSeen: Date())]
         let r = record("c", start: Date())
-        let text = CoachPrompt.user(record: r, owner: "David Webber", profile: profile)
+        let text = CoachPrompt.user(record: r, owner: "Dana Lee", profile: profile)
         XCTAssertTrue(text.contains("Close with owners and dates."))
         XCTAssertTrue(text.contains("Wants the decision first."))
         XCTAssertFalse(text.contains("Not on this call."))
-        XCTAssertTrue(text.contains("David Webber: Let me walk through the plan."))
-        XCTAssertTrue(CoachPrompt.system(owner: "David Webber").contains("David Webber"))
+        XCTAssertTrue(text.contains("Dana Lee: Let me walk through the plan."))
+        XCTAssertTrue(CoachPrompt.system(owner: "Dana Lee").contains("Dana Lee"))
     }
 
     func testPromptGivesTheFactsForRatingTheMeetingsValue() {
@@ -142,10 +142,10 @@ final class CoachTests: XCTestCase {
         profile.apply(CoachProfileUpdate(summary: "", focus: "", patterns: [], people: []), review: review(), callID: "y", title: "weekly sync", at: Date())
         var r = record("c", start: Date())
         r.calendarTitle = "Weekly Sync"
-        r.actionItems = [ActionItem(owner: "David Webber", task: "a"), ActionItem(owner: "Mitch Haus", task: "b")]
+        r.actionItems = [ActionItem(owner: "Dana Lee", task: "a"), ActionItem(owner: "Riley Haus", task: "b")]
         r.decisions = [Decision(text: "d", at: nil)]
-        let text = CoachPrompt.user(record: r, owner: "David Webber", profile: profile)
-        XCTAssertTrue(text.contains("Action items for David Webber: 1 of 2"), text)
+        let text = CoachPrompt.user(record: r, owner: "Dana Lee", profile: profile)
+        XCTAssertTrue(text.contains("Action items for Dana Lee: 1 of 2"), text)
         XCTAssertTrue(text.contains("Decisions: 1"))
         XCTAssertTrue(text.contains("People who spoke: 2"))
         XCTAssertTrue(text.contains("Earlier coached meetings with this title: 2"))
@@ -166,18 +166,18 @@ final class CoachTests: XCTestCase {
             record("processing", start: since.addingTimeInterval(day), status: .summarized),
             record("reviewed", start: since.addingTimeInterval(day)),
         ]
-        let pending = CoachRunner.pending(calls, owner: "David Webber", since: since, reviewed: ["reviewed"])
+        let pending = CoachRunner.pending(calls, owner: "Dana Lee", since: since, reviewed: ["reviewed"])
         // A call where only others spoke is still reviewed; one where nobody spoke is not.
         XCTAssertEqual(pending.map(\.id), ["old", "quiet", "new"])
     }
 
     func testAQuietCallIsReviewedInListenerMode() {
-        let quiet = CoachPrompt.user(record: record("q", start: Date(), ownerSeconds: 10), owner: "David Webber", profile: CoachProfile())
+        let quiet = CoachPrompt.user(record: record("q", start: Date(), ownerSeconds: 10), owner: "Dana Lee", profile: CoachProfile())
         XCTAssertTrue(quiet.contains("Listener mode"), quiet)
-        let talking = CoachPrompt.user(record: record("t", start: Date(), ownerSeconds: 300), owner: "David Webber", profile: CoachProfile())
+        let talking = CoachPrompt.user(record: record("t", start: Date(), ownerSeconds: 300), owner: "Dana Lee", profile: CoachProfile())
         XCTAssertFalse(talking.contains("Listener mode"))
-        XCTAssertTrue(talking.contains("David Webber spoke for 5 min"), talking)
-        XCTAssertTrue(CoachReview.isListener(DeliveryStats(record: record("q", start: Date(), ownerSeconds: 10), owner: "David Webber")))
+        XCTAssertTrue(talking.contains("Dana Lee spoke for 5 min"), talking)
+        XCTAssertTrue(CoachReview.isListener(DeliveryStats(record: record("q", start: Date(), ownerSeconds: 10), owner: "Dana Lee")))
     }
 
     // MARK: Weekly email
@@ -252,14 +252,14 @@ final class CoachTests: XCTestCase {
             "improvements": [["title": "Close", "observation": "O2", "quote": "Q2", "at_seconds": 90, "principle": "P2", "try_instead": "Say X"]],
             "meeting_value": ["rating": "low", "reason": "Status only; you said nothing.", "action": "async", "suggestion": "Ask for a written update."],
             "profile": ["patterns": [["name": "Interrupts", "kind": "growth", "result": "did", "note": "N", "quote": "", "at_seconds": NSNull()]],
-                        "people": [["name": "Mitch Haus", "note": "Likes data"]]],
+                        "people": [["name": "Riley Haus", "note": "Likes data"]]],
         ]
         let text = String(decoding: json(output), as: UTF8.self)
         StubURLProtocol.handler = { _ in (200, self.reply(text)) }
         var profile = CoachProfile()
         profile.propose(CoachFocus(plan: "Date every commitment.", why: "W", metric: nil, proposed: Date()), at: Date())
         profile.acceptFocus(profile.proposedFocus!.id, plan: nil, at: Date())
-        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
+        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "Dana Lee")
         let result = try await coach.review(record: record("c", start: Date()), profile: profile, tone: nil)
         XCTAssertEqual(result.review.headline, "Your idea set the plan; date your own items")
         XCTAssertEqual(result.review.didWell?.at, 535)
@@ -281,7 +281,7 @@ final class CoachTests: XCTestCase {
         XCTAssertEqual(result.update.patterns.first?.result, .did)
         XCTAssertNil(result.update.patterns.first?.quote)
         XCTAssertEqual(result.update.summary, "", "a call does not write the summary")
-        XCTAssertEqual(result.update.people.first?.name, "Mitch Haus")
+        XCTAssertEqual(result.update.people.first?.name, "Riley Haus")
         XCTAssertEqual(result.review.value, MeetingValue(rating: .low, reason: "Status only; you said nothing.", action: .async, suggestion: "Ask for a written update."))
         let body = try JSONSerialization.jsonObject(with: XCTUnwrap(StubURLProtocol.requests.first).body) as! [String: Any]
         XCTAssertEqual(body["model"] as? String, "claude-opus-5-5")
@@ -326,9 +326,9 @@ final class CoachTests: XCTestCase {
                         at: Date())
         profile.apply(CoachProfileUpdate(summary: "", focus: "", patterns: [], people: []), review: review(), callID: "x", title: "Weekly Sync",
                       at: Date().addingTimeInterval(-day))
-        let measured = CoachMeasured(standouts: [CoachMeasured.Standout(id: "talkShare", text: "talked 81% of the time; usually 62 to 70% in your 1:1s with Mitch", at: nil)],
+        let measured = CoachMeasured(standouts: [CoachMeasured.Standout(id: "talkShare", text: "talked 81% of the time; usually 62 to 70% in your 1:1s with Riley", at: nil)],
                                      commitments: CommitmentShare(withDay: 4, total: 33))
-        let text = CoachPrompt.user(record: record("c", start: Date(), ownerSeconds: 300), owner: "David Webber", profile: profile, measured: measured)
+        let text = CoachPrompt.user(record: record("c", start: Date(), ownerSeconds: 300), owner: "Dana Lee", profile: profile, measured: measured)
         XCTAssertTrue(text.contains("- commitment-dates, last said "), text)
         XCTAssertTrue(text.contains("- other, skill_label \"offer the simple method\", last said "), text)
         XCTAssertTrue(text.contains("- answer-first, last said "), "the focus that waits for an answer is advice that was said")
@@ -336,7 +336,7 @@ final class CoachTests: XCTestCase {
         XCTAssertFalse(text.contains("interruptions, last said"), "a call that was only counted")
         XCTAssertFalse(text.contains("questions, last said"), "a note in a full review was not the line")
         XCTAssertTrue(text.contains("Praise you already gave: other, skill_label \"name the risk\""))
-        XCTAssertTrue(text.contains("David Webber talked 81% of the time; usually 62 to 70% in your 1:1s with Mitch"))
+        XCTAssertTrue(text.contains("Dana Lee talked 81% of the time; usually 62 to 70% in your 1:1s with Riley"))
         XCTAssertTrue(text.contains("4 of 33 commitments with a day"))
         XCTAssertFalse(text.contains("About the last call only."), "a summary that one call wrote is not sent back")
         XCTAssertFalse(text.contains("seen in 25"), "the old count is not sent back")
@@ -348,7 +348,7 @@ final class CoachTests: XCTestCase {
         XCTAssertEqual(text.components(separatedBy: "longest turn").count, 2, "one value for the longest turn")
         XCTAssertEqual(CoachPrompt.earlierAdvice(profile, record: record("c", start: Date())).map(\.skill),
                        ["other:offer the simple method", "commitment-dates", "answer-first"], "one row for a skill, the newest first")
-        let system = CoachPrompt.system(owner: "David Webber")
+        let system = CoachPrompt.system(owner: "Dana Lee")
         XCTAssertTrue(system.contains("Never judge a trend"))
         XCTAssertTrue(system.contains("seen_again"))
         XCTAssertTrue(system.contains("Do not coach filler words or pace."))
@@ -366,7 +366,7 @@ final class CoachTests: XCTestCase {
         let output: [String: Any] = [
             "quiet": false, "headline": "H",
             // A key that is not in the list, and no label.
-            "try_next": ["text": "When you hand work to Mitch, say what done looks like.", "quote": "Let me walk through the plan.", "at_seconds": 0,
+            "try_next": ["text": "When you hand work to Riley, say what done looks like.", "quote": "Let me walk through the plan.", "at_seconds": 0,
                          "say": "Done is the draft, reviewed.", "skill": "delegation"],
             // No key at all, and an empty label.
             "did_well": ["text": "You opened with the plan.", "quote": "Let me walk through the plan.", "at_seconds": 0, "skill_label": ""],
@@ -383,12 +383,12 @@ final class CoachTests: XCTestCase {
         }
         let llm = LocalServerModel(baseURL: URL(string: "http://localhost:11434/v1")!, model: "m", apiKey: nil, session: StubURLProtocol.session())
         let r = record("c", start: Date())
-        let written = try await LLMCoach(llm: llm, ownerName: "David Webber").review(record: r, profile: CoachProfile(), tone: nil)
+        let written = try await LLMCoach(llm: llm, ownerName: "Dana Lee").review(record: r, profile: CoachProfile(), tone: nil)
         XCTAssertEqual(StubURLProtocol.requests.count, 2, "the refused schema request, then one reply: the model is not asked again for a key")
         XCTAssertEqual(written.review.tryNext?.skill, "other:delegation")
         XCTAssertEqual(written.review.didWell?.skill, "other:", "no key and no label: an other with no name")
         XCTAssertEqual(written.proposal?.skill, "other:when you hand work over say what done looks like", "a focus with no name is named by its plan")
-        let settled = CoachLineRules.settle(written, record: r, owner: "David Webber", profile: CoachProfile(), measured: CoachMeasured())
+        let settled = CoachLineRules.settle(written, record: r, owner: "Dana Lee", profile: CoachProfile(), measured: CoachMeasured())
         XCTAssertEqual(settled.review.line?.kind, .tryNext, "the review goes on, and the advice with a name is its line")
         XCTAssertNil(settled.review.didWell, "a note that the log cannot find again is not kept")
     }
@@ -403,7 +403,7 @@ final class CoachTests: XCTestCase {
             "profile": ["patterns": [], "people": []],
         ]
         StubURLProtocol.handler = { _ in (200, self.reply(String(decoding: json(output), as: UTF8.self))) }
-        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
+        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "Dana Lee")
         let result = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
         XCTAssertEqual(result.review.tryNext?.skill, "other:delegation")
         XCTAssertEqual(result.review.seenAgain?.skill, "other:")
@@ -420,7 +420,7 @@ final class CoachTests: XCTestCase {
             "profile": ["patterns": [], "people": []],
         ]
         StubURLProtocol.handler = { _ in (200, self.reply(String(decoding: json(output), as: UTF8.self))) }
-        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
+        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "Dana Lee")
         let result = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
         XCTAssertTrue(result.review.quiet)
         XCTAssertNil(result.review.focusResult, "No active focus, so no result")
@@ -431,7 +431,7 @@ final class CoachTests: XCTestCase {
 
     func testCoachMalformedReplyThrows() async {
         StubURLProtocol.handler = { _ in (200, self.reply("nope")) }
-        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
+        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "Dana Lee")
         do {
             _ = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
             XCTFail("expected an error")
@@ -465,14 +465,14 @@ final class CoachTests: XCTestCase {
         let since = Date(timeIntervalSince1970: 0)
         let paths = try tempPaths([record("b", start: Date(timeIntervalSince1970: 200)), record("a", start: Date(timeIntervalSince1970: 100))])
         let coach = FakeCoach()
-        let done = await CoachRunner(paths: paths, coach: coach, owner: "David Webber", since: since).run()
+        let done = await CoachRunner(paths: paths, coach: coach, owner: "Dana Lee", since: since).run()
         XCTAssertEqual(done, 2)
         XCTAssertEqual(coach.seen.map(\.id), ["a", "b"])
         XCTAssertEqual(coach.seen.map(\.focus), ["", "after a"])
         XCTAssertEqual(CoachReview.load(in: paths.callDirectory("b"))?.headline, "H b")
         XCTAssertEqual(try CoachProfile.load(from: paths.coach).history.map(\.callID), ["a", "b"])
         // A second run has nothing left to do.
-        let again = await CoachRunner(paths: paths, coach: coach, owner: "David Webber", since: since).run()
+        let again = await CoachRunner(paths: paths, coach: coach, owner: "Dana Lee", since: since).run()
         XCTAssertEqual(again, 0)
     }
 
@@ -480,7 +480,7 @@ final class CoachTests: XCTestCase {
         let paths = try tempPaths([record("a", start: Date(timeIntervalSince1970: 100)), record("b", start: Date(timeIntervalSince1970: 200))])
         let coach = FakeCoach()
         coach.failOn = "a"
-        let done = await CoachRunner(paths: paths, coach: coach, owner: "David Webber", since: .distantPast).run()
+        let done = await CoachRunner(paths: paths, coach: coach, owner: "Dana Lee", since: .distantPast).run()
         XCTAssertEqual(done, 0)
         XCTAssertEqual(coach.seen.map(\.id), ["a"])
         XCTAssertNil(CoachReview.load(in: paths.callDirectory("b")))
@@ -505,12 +505,12 @@ final class CoachTests: XCTestCase {
             try CoachReview(headline: id, overview: "", strengths: [], improvements: [], focusProgress: nil).save(in: paths.callDirectory(id))
         }
         let fake = FakeMail()
-        let sent = await WeeklyEmail.sendIfDue(paths: paths, owner: "David Webber", to: "me@example.com", lastSent: date(12),
+        let sent = await WeeklyEmail.sendIfDue(paths: paths, owner: "Dana Lee", to: "me@example.com", lastSent: date(12),
                                                now: date(21), writer: fake, mailer: fake, calendar: cal)
         XCTAssertEqual(sent, date(21))
         XCTAssertEqual(fake.reviewed, ["in"])
         XCTAssertEqual(fake.sent, ["Week"])
-        let notDue = await WeeklyEmail.sendIfDue(paths: paths, owner: "David Webber", to: "me@example.com", lastSent: date(20),
+        let notDue = await WeeklyEmail.sendIfDue(paths: paths, owner: "Dana Lee", to: "me@example.com", lastSent: date(20),
                                                  now: date(21), writer: fake, mailer: fake, calendar: cal)
         XCTAssertNil(notDue)
     }
@@ -527,7 +527,7 @@ final class CoachTests: XCTestCase {
         let paths = try tempPaths([record("in", start: start)])
         try CoachReview(headline: "in", overview: "", strengths: [], improvements: [], focusProgress: nil).save(in: paths.callDirectory("in"))
         let fake = FakeMail()
-        let sent = await WeeklyEmail.sendIfDue(paths: paths, owner: "David Webber", to: "me@example.com, boss@example.com", lastSent: nil,
+        let sent = await WeeklyEmail.sendIfDue(paths: paths, owner: "Dana Lee", to: "me@example.com, boss@example.com", lastSent: nil,
                                                now: cal.date(from: DateComponents(year: 2026, month: 10, day: 21))!, writer: fake, mailer: fake, calendar: cal)
         XCTAssertNil(sent)
         XCTAssertTrue(fake.sent.isEmpty)
