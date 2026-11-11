@@ -84,6 +84,9 @@ public struct MeetingFacts: Sendable, Equatable {
     /// A number that the meeting cannot give is absent, never 0: no screens entry without screen capture, no
     /// decisions or action items without a summary, no rating without a review.
     public var values: [MeetingMetric: Double]
+    /// False for a record without the times of its words, such as a synced copy on the iPhone: a pause inside a
+    /// line is then speech, and an overlap is counted where the Mac counts none.
+    public var hasWordTimes = true
 
     public var size: Size { Size(voices: mainVoices) }
     public func person(_ name: String) -> Person? { people.first { $0.name == name } }
@@ -132,6 +135,7 @@ public struct MeetingFacts: Sendable, Equatable {
         series = r.titleSource == .calendar || r.titleSource == .custom ? PeopleDuplicates.normalized(r.title) : nil
         kind = r.kind
         tags = r.tags
+        hasWordTimes = r.utterances.contains { $0.words?.isEmpty == false }
         voices = v.speakers.count
         mainVoices = v.speakers.filter { Self.isMain(seconds: $0.seconds, share: $0.share) }.count
         let hours = max(v.duration / 3600, Self.minimumHours)

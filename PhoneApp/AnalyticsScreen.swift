@@ -12,7 +12,13 @@ struct AnalyticsScreen: View {
     @State private var data: (now: AnalyticsReport, before: AnalyticsReport)?
     @State private var scores: [(date: Date, score: Int)] = []
     @State private var stats: [String: PersonStats] = [:]
+    /// The charts of "How you communicate". They come after the page: the first time, every meeting is read.
+    @State private var trends: CommunicationTrends?
+    @AppStorage("analyticsTrendSplit") private var splitRaw = CommunicationTrends.Split.all.rawValue
     @State private var customizing = false
+
+    /// Each meeting's numbers, kept while the app runs: only a new or changed meeting is read again.
+    private static let facts = MeetingFactsCache()
 
     private var choice: PeriodChoice {
         PeriodChoice(preset: PeriodChoice.Preset(rawValue: presetRaw) ?? .last30Days,
@@ -22,23 +28,31 @@ struct AnalyticsScreen: View {
     var body: some View {
         @Bindable var store = store
         NavigationStack(path: $store.analyticsPath) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    periodMenu.frame(maxWidth: .infinity)
-                    peopleLink
-                    if let data {
-                        if data.now.calls == 0 {
-                            EmptyState(symbol: "chart.bar.xaxis", title: "No calls in this period",
-                                       message: "Pick a longer period, or wait for your next call.")
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        periodMenu.frame(maxWidth: .infinity)
+                        peopleLink
+                        if let data {
+                            if data.now.calls == 0 {
+                                EmptyState(symbol: "chart.bar.xaxis", title: "No calls in this period",
+                                           message: "Pick a longer period, or wait for your next call.")
+                            } else {
+                                content(data.now, data.before)
+                            }
                         } else {
-                            content(data.now, data.before)
+                            PhoneProcessingMark().frame(maxWidth: .infinity).padding(.top, 60)
                         }
-                    } else {
-                        PhoneProcessingMark().frame(maxWidth: .infinity).padding(.top, 60)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 24)
+                }
+                // Development hook for screenshots: MOSSAD_SCROLL_TO names a section, such as "How you communicate".
+                .onChange(of: trends?.interval) { _, _ in
+                    if let target = PhoneStore.hook("MOSSAD_SCROLL_TO") {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { proxy.scrollTo(target, anchor: .top) }
                     }
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 24)
             }
             .phonePage()
             .navigationTitle("Analytics")
@@ -134,11 +148,21 @@ struct AnalyticsScreen: View {
                     AnalyticsReport(records: records, usage: [], owner: owner, interval: AnalyticsRange.previous(interval), commitments: commitments),
                     scores, PersonStatistics.compute(records))
         }.value
+        // A load that was replaced must not put its older period under the newer load's charts: the two can
+        // end in either order, and the charts show only with the report of their own period.
+        guard !Task.isCancelled else { return }
         withAnimation(.smooth) {
             data = (result.0, result.1)
             scores = result.2
             stats = result.3
         }
+
+        let facts = Self.facts, interval = result.0.interval
+        let made = await Task.detached(priority: .userInitiated) {
+            CommunicationTrends(facts: facts.facts(for: records, owner: owner), interval: interval)
+        }.value
+        guard !Task.isCancelled else { return }
+        withAnimation(.smooth) { trends = made }
     }
 
     // MARK: Content
@@ -146,7 +170,6 @@ struct AnalyticsScreen: View {
     @ViewBuilder
     private func content(_ r: AnalyticsReport, _ b: AnalyticsReport) -> some View {
         let weeks = max(1, r.interval.duration / (7 * 86_400))
-        let days = max(1, Int((b.interval.duration / 86_400).rounded()))
         HStack(alignment: .top, spacing: Space.l) {
             StatTile(value: duration(r.callSeconds), label: "Time in calls", detail: "\(duration(r.callSeconds / weeks)) a week")
             StatTile(value: "\(r.calls)", label: "Calls", detail: change(Double(r.calls), Double(b.calls)) ?? "\(Int((Double(r.calls) / weeks).rounded())) a week")
@@ -183,17 +206,11 @@ struct AnalyticsScreen: View {
         heading("Who you meet with", AnalyticsFindings.people(r))
         people(r)
 
-        heading("How you communicate", AnalyticsFindings.communication(r.communication, talkShare: r.talkShare, before: b.communication, beforeDays: days))
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            PhoneMiniTrend(title: "Questions you ask", value: rate(r.communication.questionsPerHour), detail: "an hour",
-                           points: r.communication.points.map(\.questionsPerHour))
-            PhoneMiniTrend(title: "You cut in", value: rate(r.communication.interruptionsMadePerHour),
-                           detail: "an hour · others \(rate(r.communication.interruptionsReceivedPerHour))",
-                           points: r.communication.points.map(\.interruptionsPerHour))
-            PhoneMiniTrend(title: "Talk share", value: r.talkShare.map(pct) ?? "–", detail: "of the speech",
-                           points: r.communication.points.compactMap { $0.talkShare.map { $0 * 100 } })
-            PhoneMiniTrend(title: "Pace", value: r.delivery.isEmpty ? "–" : "\(Int(r.delivery.map(\.wordsPerMinute).reduce(0, +) / Double(r.delivery.count)))",
-                           detail: "words a minute", points: r.delivery.map(\.wordsPerMinute))
+        heading("How you communicate", AnalyticsFindings.communication(r.communication, talkShare: r.talkShare))
+        if let trends, trends.interval == r.interval {
+            communication(trends)
+        } else {
+            PhoneProcessingMark().frame(maxWidth: .infinity).padding(.vertical, Space.xl)
         }
         if scores.count > 1 { scoreChart }
 
@@ -218,6 +235,24 @@ struct AnalyticsScreen: View {
         .padding(.top, Space.xl)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
+        .id(label)
+    }
+
+    /// One full-width chart per number, and the choice of size over them when the period has 1:1s and groups.
+    @ViewBuilder
+    private func communication(_ trends: CommunicationTrends) -> some View {
+        let split = trends.splits.isEmpty ? .all : CommunicationTrends.Split(rawValue: splitRaw) ?? .all
+        if !trends.splits.isEmpty {
+            Picker("Meetings in the charts", selection: $splitRaw) {
+                ForEach(trends.splits) { Text($0.title).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+        }
+        ForEach(trends.series(split)) { series in
+            Card {
+                TrendPanel(series: series, interval: trends.interval) { store.analyticsPath.append($0) }
+            }
+        }
     }
 
     private func topics(_ r: AnalyticsReport) -> some View {
@@ -424,33 +459,6 @@ private struct PhoneBalance: View {
             .frame(height: 5)
             Text(total > 0 ? "You \(Int((share * 100).rounded()))%" : "–").font(.caption2).foregroundStyle(.secondary).monospacedDigit()
         }
-    }
-}
-
-private struct PhoneMiniTrend: View {
-    let title: String
-    let value: String
-    let detail: String
-    let points: [Double]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.system(.title2, design: .rounded, weight: .semibold)).monospacedDigit()
-            Text(detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-            if points.count >= 2 {
-                Chart(Array(points.enumerated()), id: \.offset) { i, v in
-                    AreaMark(x: .value("Meeting", i), y: .value(title, v))
-                        .foregroundStyle(LinearGradient(colors: [Palette.accentFill.opacity(0.25), .clear], startPoint: .top, endPoint: .bottom))
-                    LineMark(x: .value("Meeting", i), y: .value(title, v)).foregroundStyle(Palette.accentFill)
-                }
-                .chartXAxis(.hidden).chartYAxis(.hidden)
-                .frame(height: 40)
-                .accessibilityHidden(true)
-            }
-        }
-        .padding(.vertical, Space.s)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

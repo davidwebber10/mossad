@@ -97,15 +97,11 @@ public enum AnalyticsFindings {
         return "\(first.name) is \(percent(first.seconds / r.callSeconds)) of your call time"
     }
 
-    /// Talk share against the period before (groups when both periods have group calls), then who cuts in more.
-    public static func communication(_ c: AnalyticsReport.Communication, talkShare: Double?,
-                                     before: AnalyticsReport.Communication?, beforeDays: Int) -> String? {
+    /// The talk share, then who cuts in more. It says no change: the charts under it do, by the trend's rules
+    /// (`CommunicationTrends`), and a looser rule here would say a change over a chart that says none.
+    public static func communication(_ c: AnalyticsReport.Communication, talkShare: Double?) -> String? {
         var clauses: [String] = []
-        if let now = c.groupShare, let then = before?.groupShare, abs(now - then) >= 0.03 {
-            clauses.append("you talk \(now < then ? "less" : "more") in groups than in the \(beforeDays) days before")
-        } else if let talkShare {
-            clauses.append("you talk \(percent(talkShare)) of the time")
-        }
+        if let talkShare { clauses.append("you talk \(percent(talkShare)) of the time") }
         if let made = c.interruptionsMadePerHour, let received = c.interruptionsReceivedPerHour, made + received > 0 {
             if made > received * 1.2, made - received >= 0.5 {
                 clauses.append("you cut in more than others do")
