@@ -88,6 +88,8 @@ final class AppController: ObservableObject {
     @Published private(set) var stepDetails: [String: String] = [:]
     /// Each call's progress while it is processed, for the progress card.
     @Published private(set) var progress: [String: ProcessingProgress] = [:]
+    /// The calls whose next step waits for the call that records now; each shows "Process now".
+    @Published private(set) var waitingCalls: Set<String> = []
     /// What was said so far, from AssemblyAI streaming; shown while the call runs, not used for the note.
     /// What was said so far, from AssemblyAI streaming. Its own object, so only the transcript view redraws when
     /// a message arrives, not the whole window.
@@ -580,6 +582,9 @@ final class AppController: ObservableObject {
             // Detection starts in `finishLaunch`, after the interrupted calls are recovered.
             let isRecordingNow: @Sendable () async -> Bool = { [weak self] in await self?.isRecording ?? false }
             HeavyWorkGate.shared.setCheck(isRecordingNow)
+            HeavyWorkGate.shared.onWaitingChange { [weak self] calls in
+                Task { @MainActor in self?.waitingCalls = calls }
+            }
             outputWatcher = OutputDeviceWatcher { @Sendable in
                 CaptureQueue.queue.async { recorder.rebuildThem() }
             }
@@ -998,6 +1003,19 @@ final class AppController: ObservableObject {
             }
         }
         if env["MOSSAD_MUTED"] == "1" { isMuted = true }
+        // `MOSSAD_WAITING=1`: each meeting being processed waits for the call that records, with "Process now".
+        if env["MOSSAD_WAITING"] == "1" {
+            for r in meetings {
+                guard let step = ProcessingStep(status: r.status) else { continue }
+                var p = ProcessingProgress(step: step, started: Date().addingTimeInterval(-412))
+                p.tracks = [.me: .uploading(nil), .them: .uploading(nil)]
+                p.detail = "Waiting for the current call to end"
+                p.waitsForCall = true
+                progress[r.id] = p
+                stepDetails[r.id] = p.detail
+                waitingCalls.insert(r.id)
+            }
+        }
         if let state = env["MOSSAD_PROGRESS"] {
             for r in meetings {
                 guard let step = ProcessingStep(status: r.status) else { continue }
@@ -1604,6 +1622,14 @@ final class AppController: ObservableObject {
             for (email, name) in pairs where email != name { await pipeline.renamePerson(email, to: name) }
             refresh()
         }
+    }
+
+    /// "Process now": the rest of this call's steps run at once, behind the call that records, at the lowest
+    /// priority. No question first: the owner asked for it, and the live recording is not touched.
+    func processNow(_ callID: String) {
+        HeavyWorkGate.shared.release(callID)
+        waitingCalls.remove(callID)
+        Log.info("Process now: \(callID) runs during the call")
     }
 
     func retry(_ callID: String) {

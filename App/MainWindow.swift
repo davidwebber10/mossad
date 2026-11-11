@@ -251,6 +251,11 @@ private struct SidebarStatus: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Palette.ink)
                 .padding(.horizontal, 10)
+                if let first = waiting.first {
+                    WaitingLine(count: waiting.count) { waiting.forEach { controller.processNow($0.id) } }
+                        .padding(.horizontal, 10)
+                        .accessibilityHint(waiting.count == 1 ? "Processes \(first.title) now" : "Processes these calls now")
+                }
             }
             if !permissions.allGood {
                 PermissionsCard()
@@ -267,6 +272,35 @@ private struct SidebarStatus: View {
             }
         }
         .opacity(appearsActive ? 1 : 0.55)
+    }
+
+    /// The calls that wait for this one to end, oldest first.
+    private var waiting: [CallRecord] {
+        controller.meetings.filter { controller.waitingCalls.contains($0.id) }.sorted { $0.start < $1.start }
+    }
+}
+
+/// "1 call waits · Process now", under the recording line. Only while a call waits.
+private struct WaitingLine: View {
+    let count: Int
+    let processNow: () -> Void
+
+    var body: some View {
+        // Two lines: the sidebar is narrow, and the action must never be cut.
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: Space.s) {
+                Circle().fill(Palette.accentFill).frame(width: 7, height: 7)
+                Text(count == 1 ? "1 call waits for this one" : "\(count) calls wait for this one").foregroundStyle(Palette.secondary)
+            }
+            Button("Process now", action: processNow)
+                .buttonStyle(.plain)
+                .fontWeight(.semibold)
+                .foregroundStyle(Palette.accent)
+                .padding(.leading, 7 + Space.s)
+                .help("Runs the rest of the waiting steps now, at low priority, while this call records")
+        }
+        .font(.system(size: 12))
+        .lineLimit(1)
     }
 }
 

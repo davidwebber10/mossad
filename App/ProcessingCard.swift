@@ -12,6 +12,8 @@ struct ProcessingCard: View {
     private var progress: ProcessingProgress? { controller.progress[record.id] }
     private var current: ProcessingStep { progress?.step ?? step }
     private var room: Bool { record.platform == .inPerson }
+    /// The next step waits for the call that records now. Nothing shows the button otherwise.
+    private var waits: Bool { controller.waitingCalls.contains(record.id) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
@@ -68,6 +70,7 @@ struct ProcessingCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(current.title), step \(current.rawValue) of \(ProcessingStep.total)")
         .accessibilityValue("\(Int(((progress?.fraction ?? 0) * 100).rounded())) percent")
+        .accessibilityAction(named: "Process now") { if waits { controller.processNow(record.id) } }
     }
 
     private func row(_ line: SubLine) -> some View {
@@ -86,13 +89,17 @@ struct ProcessingCard: View {
             case .fraction(let f): ProgressBar(fraction: f, height: 4, track: Palette.fill).frame(width: 120)
             case .waiting: WaitingBar().frame(width: 120)
             case .hint(let text): Text(text).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+            case .processNow:
+                Button("Process now") { controller.processNow(record.id) }
+                    .buttonStyle(SheetButtonStyle(kind: .secondary, compact: true))
+                    .help("Runs the rest of this call's steps now, at low priority, while the current call records")
             case .none: EmptyView()
             }
         }
     }
 
     private struct SubLine {
-        enum Trailing { case fraction(Double), waiting, hint(String), none }
+        enum Trailing { case fraction(Double), waiting, hint(String), processNow, none }
         let symbol: String
         let text: String
         let trailing: Trailing
@@ -102,6 +109,9 @@ struct ProcessingCard: View {
     /// One line per track while transcribing; the sub-step after that.
     private var subLines: [SubLine]? {
         guard let p = progress else { return nil }
+        if waits {
+            return [SubLine(symbol: "pause", text: p.detail ?? "Waiting for the current call to end", trailing: .processNow, done: false)]
+        }
         let service = controller.transcriptionProvider.displayName
         if p.step == .transcribing, p.detail == nil {
             return [Track.me, .them].compactMap { t in
