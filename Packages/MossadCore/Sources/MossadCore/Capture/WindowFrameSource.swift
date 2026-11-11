@@ -88,8 +88,6 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     private var lastPageWalk = Date.distantPast
     private var loggedNoContent = false
     private var restarts = StreamRestarts()
-    /// "<window> <loss>" once logged: a window that is lost the same way again says nothing new.
-    private var loggedLosses: Set<String> = []
 
     public init(platform: Platform, bundleID: String, meetingID: String?) {
         self.platform = platform
@@ -326,7 +324,12 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         stream.startCapture { [weak self] error in
             guard let error else { return }
             Log.error("The screen capture could not start: \(error.localizedDescription)")
-            self?.queue.async { [weak self] in if self?.stream === stream { self?.dropStream() } }
+            let id = candidate.id
+            self?.queue.async { [weak self] in
+                guard let self, self.stream === stream else { return }
+                self.streamEnded(id, reason: "it could not start", logged: true)
+                self.dropStream()
+            }
         }
     }
 
@@ -340,19 +343,23 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     /// `loss` is set when the check of a frame or a tick ended the stream.
     private func windowChanged(_ id: CGWindowID, loss: MeetingWindow.Loss? = nil, searchNow: Bool = true) {
         guard chosen?.id == id else { return }
-        if let loss {
-            if loggedLosses.insert("\(id) \(loss)").inserted { Log.info("The meeting window is no longer captured: \(loss.reason)") }
-            switch restarts.lost(id, at: Date()) {
-            case .none: break
-            case .refused(let wait):
-                Log.info("The meeting window is not captured for \(Int(wait)) s: its capture ended at once (\(loss.reason))")
-            case .refusedForTheCall:
-                Log.info("The meeting window is not captured for the rest of the call: its capture ended at once again (\(loss.reason))")
-            }
-        }
+        if let loss { streamEnded(id, reason: loss.reason, logged: false) }
         dropStream()
         handler?(.lost)
         if searchNow { search() }
+    }
+
+    /// Counts the end of a window's stream for the restart limit, whatever ended it, and logs it. A quick end that
+    /// refuses the window logs the refusal; the limit bounds the lines. `logged`: the caller logged the end itself.
+    private func streamEnded(_ id: CGWindowID, reason: String, logged: Bool) {
+        switch restarts.lost(id, at: Date()) {
+        case .none:
+            if !logged { Log.info("The meeting window is no longer captured: \(reason)") }
+        case .refused(let wait):
+            Log.info("The meeting window is not captured for \(Int(wait)) s: its capture ended soon after it began (\(reason))")
+        case .refusedForTheCall:
+            Log.info("The meeting window is not captured for the rest of the call: its capture ended soon after it began again (\(reason))")
+        }
     }
 
     struct Described {
@@ -456,6 +463,7 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         queue.async { [weak self] in
             guard let self, self.stream === stream else { return }
             Log.info("The screen capture stopped: \(error.localizedDescription)")
+            if let id = self.chosen?.id { self.streamEnded(id, reason: "the capture stopped", logged: true) }
             self.stream = nil
             self.shared.withLock { self.sharedState.chosen = nil }
             self.handler?(.lost)

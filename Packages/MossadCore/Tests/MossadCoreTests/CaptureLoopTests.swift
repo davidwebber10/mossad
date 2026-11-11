@@ -22,6 +22,10 @@ final class CaptureLoopTests: XCTestCase {
         let ids = WindowFrameSource.idList([id])
         XCTAssertEqual(CFArrayGetCount(ids), 1)
         XCTAssertEqual(UInt(bitPattern: CFArrayGetValueAtIndex(ids, 0)), UInt(id))
+        let two = WindowFrameSource.idList([0, 7])
+        XCTAssertEqual(CFArrayGetCount(two), 2)
+        XCTAssertEqual([0, 1].map { UInt(bitPattern: CFArrayGetValueAtIndex(two, $0)) }, [0, 7])
+        XCTAssertEqual(CFArrayGetCount(WindowFrameSource.idList([])), 0)
         XCTAssertNotNil(WindowFrameSource.describe(id), "the window \(id) is in the list but the check of a frame does not find it")
     }
     #endif
@@ -49,6 +53,10 @@ final class CaptureLoopTests: XCTestCase {
         _ = MeetingWindow.loss(of: meet("Inbox - Gmail"), size: size, platform: .meet, bundleID: chrome, pageMoved: { asked = true; return false })
         XCTAssertFalse(asked)
         XCTAssertFalse(MeetingWindow.Loss.gone.reason.isEmpty)
+        // A hidden window (minimized, on another desktop) is still the meeting's: the tick marks a pause.
+        var hidden = meet()
+        hidden.onScreen = false
+        XCTAssertNil(loss(hidden))
     }
 
     // MARK: Restarts
@@ -86,6 +94,49 @@ final class CaptureLoopTests: XCTestCase {
         XCTAssertTrue(restarts.allows(1213, at: t + 60))
         // A loss with no start (the stream of another search) refuses nothing.
         XCTAssertEqual(restarts.lost(99, at: t), StreamRestarts.Outcome.none)
+    }
+
+    /// Normal use gives a quick loss now and then: an edge drag, full screen, a side panel, a quick tab change.
+    /// A stream that ran well between them forgives the earlier ones, so the capture never ends for the call.
+    func testAStreamThatRanWellForgivesTheEarlierQuickLosses() {
+        var restarts = StreamRestarts()
+        var t = Date(timeIntervalSince1970: 1_000)
+        for _ in 0..<10 {
+            restarts.began(1213, at: t)
+            XCTAssertEqual(restarts.lost(1213, at: t + 1), .refused(30))
+            t += 31
+            XCTAssertTrue(restarts.allows(1213, at: t))
+            restarts.began(1213, at: t)
+            t += 40 * 60
+            XCTAssertEqual(restarts.lost(1213, at: t), StreamRestarts.Outcome.none)
+        }
+        // A stream that ran less than the forgiving time neither counts nor forgives.
+        restarts.began(1213, at: t)
+        XCTAssertEqual(restarts.lost(1213, at: t + 1), .refused(30))
+        t += 31
+        restarts.began(1213, at: t)
+        XCTAssertEqual(restarts.lost(1213, at: t + 20), StreamRestarts.Outcome.none)
+        t += 20
+        restarts.began(1213, at: t)
+        XCTAssertEqual(restarts.lost(1213, at: t + 1), .refused(120))
+    }
+
+    /// The system stops each stream at once (the stream fails, or it cannot start): the same limit, not a new
+    /// stream at each search for the whole call.
+    func testAStreamTheSystemStopsAtOnceIsLimitedTheSameWay() {
+        var restarts = StreamRestarts()
+        var t = Date(timeIntervalSince1970: 1_000)
+        var starts = 0
+        // A search each 10 s for 25 minutes, each stream stopped 0.5 s after it began.
+        for _ in 0..<(25 * 6) {
+            if restarts.allows(1213, at: t) {
+                starts += 1
+                restarts.began(1213, at: t)
+                _ = restarts.lost(1213, at: t + 0.5)
+            }
+            t += 10
+        }
+        XCTAssertEqual(starts, 4)
     }
 
     /// The loop of the owner's call: each start lost by its first frame, a quarter of a second later. Over 25
