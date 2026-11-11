@@ -103,14 +103,18 @@ public enum CoachVoice: String, Codable, Sendable, CaseIterable, Identifiable {
 /// take, and the ones the owner learned. The newest first.
 public struct GoalHistory: Equatable, Sendable {
     public var current: CoachFocus?
+    /// Offered, and the owner did not take it.
     public var offered: [CoachFocus]
+    /// Taken, then replaced by another goal before it was learned.
+    public var ended: [CoachFocus]
     public var finished: [CoachFocus]
 }
 
 extension CoachProfile {
     public var goalHistory: GoalHistory {
         GoalHistory(current: activeFocus ?? proposedFocus,
-                    offered: foci.filter { $0.status == .dismissed }.sorted { $0.updated > $1.updated },
+                    offered: foci.filter { $0.status == .dismissed && $0.accepted == nil }.sorted { $0.updated > $1.updated },
+                    ended: foci.filter { $0.status == .dismissed && $0.accepted != nil }.sorted { $0.updated > $1.updated },
                     finished: foci.filter { $0.status == .learned }.sorted { $0.updated > $1.updated })
     }
 

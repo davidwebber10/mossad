@@ -25,6 +25,9 @@ struct QuestionsPanel: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text(q.statement).font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                    if let name = q.personName {
+                        Label("About \(name)", systemImage: "person.crop.circle").font(.subheadline).foregroundStyle(.secondary)
+                    }
                     if !q.evidence.isEmpty {
                         Button {
                             if let id = q.callID { openMoment?(id, q.at ?? 0) }
@@ -57,7 +60,8 @@ struct QuestionsPanel: View {
                             noteFocused = true
                         }
                         .buttonStyle(.bordered)
-                        Button("No") { send(q, .rejected) }.buttonStyle(.bordered)
+                        // Not a plain no: the coach never asks this again.
+                        Button("Not true") { send(q, .rejected) }.buttonStyle(.bordered)
                     }
                 }
                 Text("Your answer shapes how the coach reads your calls.").font(.caption).foregroundStyle(.tertiary)

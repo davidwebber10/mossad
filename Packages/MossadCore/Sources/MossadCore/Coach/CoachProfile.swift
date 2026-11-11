@@ -324,6 +324,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         // The owner answers cards on either device.
         out.answers = Self.mergedAnswers(answers, other.answers)
         out.settleAnswers()
+        out.trimGuidance()
         out.focus = out.activeFocus?.plan ?? (out.foci.isEmpty ? out.focus : "")
         return out
     }

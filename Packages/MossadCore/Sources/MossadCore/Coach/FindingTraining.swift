@@ -151,6 +151,14 @@ extension CoachProfile {
     /// Makes what is stored agree with the answer that won between two devices: a conclusion that got a no or
     /// "never again" after a yes on the other device is no fact.
     mutating func settleAnswers() {
+        // A goal offer that got a yes on one device and a later no on the other: the focus the yes replaced is
+        // the owner's focus again, so the owner is not left with none.
+        for a in answers where a.kind == .goalOffer && a.verdict != .yes {
+            guard activeFocus == nil, let old = a.replaced, let j = foci.firstIndex(where: { $0.id == old }), foci[j].status == .dismissed else { continue }
+            foci[j].status = .active
+            foci[j].updated = max(foci[j].updated, a.date)
+            focus = foci[j].plan
+        }
         for a in answers where a.kind == .learning && (a.verdict == .no || a.verdict == .never) {
             guard let q = questions.first(where: { $0.id == a.questionID }),
                   facts.contains(where: { $0.text.caseInsensitiveCompare(q.statement) == .orderedSame && ($0.date ?? .distantPast) <= a.date }) else { continue }
@@ -168,7 +176,13 @@ extension CoachProfile {
     /// Each answer from either copy; the newer one of a card wins, also when it is a taken-back answer.
     static func mergedAnswers(_ a: [FindingAnswer], _ b: [FindingAnswer]) -> [FindingAnswer] {
         var byID: [String: FindingAnswer] = [:]
-        for x in a + b where (byID[x.id]?.date ?? .distantPast) <= x.date { byID[x.id] = x }
+        for x in a + b {
+            guard let old = byID[x.id] else { byID[x.id] = x; continue }
+            var keep = old.date <= x.date ? x : old
+            // The focus that a yes replaced stays known, also when a later answer wins.
+            keep.replaced = keep.replaced ?? (old.date <= x.date ? old : x).replaced
+            byID[x.id] = keep
+        }
         var seen = Set<String>()
         return (a + b).compactMap { seen.insert($0.id).inserted ? byID[$0.id] : nil }
     }

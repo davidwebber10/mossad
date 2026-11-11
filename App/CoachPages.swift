@@ -11,7 +11,7 @@ struct CoachGoalsPage: View {
     var body: some View {
         let profile = controller.shownCoachProfile
         let goals = profile.goalHistory
-        if goals.current == nil, goals.offered.isEmpty, goals.finished.isEmpty {
+        if goals.current == nil, goals.offered.isEmpty, goals.ended.isEmpty, goals.finished.isEmpty {
             DetailColumn {
                 PageToolbar(title: CoachPage.goals.title) { EmptyView() }
             } content: {
@@ -33,10 +33,11 @@ struct CoachGoalsPage: View {
                     if !goals.finished.isEmpty {
                         LabelColumn(label: "Learned", labelTopPadding: 2) { list(goals.finished) { "Learned \(day($0.updated)), \(hits($0))" } }
                     }
+                    if !goals.ended.isEmpty {
+                        LabelColumn(label: "Ended", labelTopPadding: 2) { list(goals.ended) { "Ended \(day($0.updated)) for a new goal, \(hits($0))" } }
+                    }
                     if !goals.offered.isEmpty {
-                        LabelColumn(label: "Not taken", labelTopPadding: 2) {
-                            list(goals.offered) { $0.accepted == nil ? "Offered \(day($0.proposed))" : "Ended \(day($0.updated)), \(hits($0))" }
-                        }
+                        LabelColumn(label: "Not taken", labelTopPadding: 2) { list(goals.offered) { "Offered \(day($0.proposed))" } }
                     }
                 }
             }

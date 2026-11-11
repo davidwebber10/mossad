@@ -123,10 +123,13 @@ public enum FindingRules {
                                 quote: quote, at: at, questionID: q.id, person: q.person, personName: q.personName))
         }
         let all = head + base.filter { !training.isLowered($0.skill) } + base.filter { training.isLowered($0.skill) }
-        return all.prefix(perCall).filter { card in
+        // Each answer of this call uses up one of its cards: an answer that takes a conclusion or an offer out of
+        // the list must not let a third card move up.
+        let answered = profile.answers.filter { $0.callID == callID && $0.verdict != nil }.count
+        return Array(all.filter { card in
             if card.kind == .learning, let q = profile.questions.first(where: { $0.id == card.questionID }), q.dismissed != nil { return false }
             return profile.answer(to: card.id) == nil
-        }
+        }.prefix(max(0, perCall - answered)))
     }
 
     /// "No, never again" is not offered on a card of the active focus: the owner would block the skill they

@@ -724,6 +724,18 @@ final class FindingTests: XCTestCase {
         XCTAssertEqual(goals.current?.id, c.id, "a proposal waits for an answer")
         XCTAssertEqual(goals.offered.map(\.id), [b.id])
         XCTAssertEqual(goals.finished.map(\.id), [a.id])
+        XCTAssertEqual(goals.ended, [])
+        // A goal that the owner took and a new goal replaced is ended, not "not taken".
+        let d = CoachFocus(plan: "D", why: "W", metric: nil, proposed: base.addingTimeInterval(3 * day), skill: risk)
+        var replaced = profile
+        replaced.dismissFocus(c.id, at: base.addingTimeInterval(3 * day))
+        let e = CoachFocus(plan: "E", why: "W", metric: nil, proposed: base.addingTimeInterval(3 * day), skill: dates)
+        replaced.propose(d, at: d.proposed)
+        replaced.acceptFocus(d.id, plan: nil, at: d.proposed)
+        replaced.propose(e, at: e.proposed)
+        replaced.acceptFocus(e.id, plan: nil, at: e.proposed.addingTimeInterval(60))
+        XCTAssertEqual(replaced.goalHistory.ended.map(\.id), [d.id])
+        XCTAssertFalse(replaced.goalHistory.offered.contains { $0.id == d.id })
     }
 
     func testAWeeklyEmailThatIsWrittenAndNotSentYetIsFound() throws {
@@ -737,5 +749,69 @@ final class FindingTests: XCTestCase {
         XCTAssertEqual(found.map(\.digest), [digest])
         XCTAssertEqual(found.first?.start, base)
         XCTAssertEqual(found.first?.weekly, true)
+    }
+
+    // MARK: Second review fixes
+
+    func testAnAnswerThatEndsAConclusionOrAGoalOfferMakesNoRoomForAThirdCard() {
+        let patterns = (0..<3).map { i in
+            CoachPatternUpdate(name: "P\(i)", kind: .growth, note: "Note \(i).", result: .missed,
+                               quote: ["I will send the forecast to finance.", "So what I am hearing is that the date moved.", "I went on for a long time about the history there."][i], at: 1)
+        }
+        let made = settle(review(tryNext: advice), patterns: patterns).review
+        var profile = CoachProfile()
+        profile.ask([question()])
+        let cards = deck(made, profile)
+        XCTAssertEqual(cards.map(\.kind), [.couldBeBetter, .learning])
+        profile.answer(cards[0], .yes, at: base.addingTimeInterval(day))
+        profile.answer(cards[1], .yes, at: base.addingTimeInterval(day))
+        XCTAssertEqual(deck(made, profile), [], "a confirmed conclusion leaves the list, and no pattern card moves up")
+        var never = CoachProfile()
+        never.ask([question()])
+        never.answer(cards[1], .never, at: base.addingTimeInterval(day))
+        XCTAssertEqual(deck(made, never).count, 1, "one answer, one card left")
+        // A goal offer: each answer ends the proposal, and the advice it stood for does not come back as a third card.
+        var offered = CoachProfile()
+        offered.propose(CoachFocus(plan: "When you take an item, say the day.", why: "W", metric: nil, proposed: base, skill: dates), at: base)
+        let withOffer = deck(made, offered)
+        XCTAssertEqual(withOffer.first?.kind, .goalOffer)
+        offered.answer(withOffer[0], .no, at: base.addingTimeInterval(day))
+        XCTAssertEqual(deck(made, offered).count, 1)
+        // Undo gives the room back.
+        offered.takeBack(withOffer[0].id, at: base.addingTimeInterval(day + 5))
+        XCTAssertEqual(deck(made, offered, now: 2).count, 2)
+    }
+
+    func testANoOnAGoalOfferOnAnotherDeviceGivesTheEarlierFocusBack() {
+        var profile = CoachProfile()
+        let old = CoachFocus(plan: "Leave room in your 1:1s.", why: "W", metric: nil, proposed: base.addingTimeInterval(-30 * day), skill: CoachSkill.longTurns.rawValue)
+        profile.propose(old, at: old.proposed)
+        profile.acceptFocus(old.id, plan: nil, at: old.proposed)
+        profile.propose(CoachFocus(plan: "When you take an item, say the day.", why: "W", metric: nil, proposed: base, skill: dates), at: base)
+        let card = deck(settle(review(tryNext: advice)).review, profile)[0]
+        var mac = profile, phone = profile
+        mac.answer(card, .yes, at: base.addingTimeInterval(day))
+        phone.answer(card, .no, at: base.addingTimeInterval(day + 60))
+        for merged in [mac.merged(with: phone), phone.merged(with: mac, takeCoaching: true)] {
+            XCTAssertEqual(merged.answer(to: card.id)?.verdict, .no)
+            XCTAssertEqual(merged.activeFocus?.id, old.id, "the owner keeps a focus")
+        }
+    }
+
+    func testTheLimitOfReasonsHoldsAfterAMerge() {
+        var mac = CoachProfile(), phone = CoachProfile()
+        for (copy, prefix) in [(0, "m"), (1, "p")] {
+            for i in 0..<10 {
+                let c = card(callID: "\(prefix)\(i)")
+                if copy == 0 {
+                    mac.answer(c, .no, at: base.addingTimeInterval(Double(i)))
+                    mac.explain(c.id, note: "Reason \(prefix)\(i).", at: base.addingTimeInterval(Double(i)))
+                } else {
+                    phone.answer(c, .no, at: base.addingTimeInterval(Double(i) + 0.5))
+                    phone.explain(c.id, note: "Reason \(prefix)\(i).", at: base.addingTimeInterval(Double(i) + 0.5))
+                }
+            }
+        }
+        XCTAssertEqual(mac.merged(with: phone).whyRules.count, CoachProfile.reasonLimit)
     }
 }

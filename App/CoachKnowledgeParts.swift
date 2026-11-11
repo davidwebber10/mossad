@@ -87,6 +87,11 @@ struct QuestionProse: View {
                     .cssLineHeight(size: 14)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
+                if let name = q.personName {
+                    Label("About \(name)", systemImage: "person.crop.circle")
+                        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        .padding(.top, 3)
+                }
                 if !q.evidence.isEmpty {
                     Button {
                         if let id = q.callID { controller.showMoment(id, at: q.at ?? 0) }
@@ -111,7 +116,8 @@ struct QuestionProse: View {
                     } else {
                         Button("Yes") { send(q, .confirmed) }.buttonStyle(.settingsAccent)
                         Button("Not quite…") { correcting = true; noteFocused = true }.buttonStyle(.settings)
-                        Button("No") { send(q, .rejected) }.buttonStyle(.settings)
+                        // Not a plain no: the coach never asks this again.
+                        Button("Not true") { send(q, .rejected) }.buttonStyle(.settings)
                         Text("Your answer shapes how the coach reads your calls.")
                             .font(.system(size: 12)).foregroundStyle(Palette.tertiary).padding(.leading, 6)
                     }

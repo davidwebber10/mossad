@@ -106,9 +106,13 @@ public struct CoachPeople: Sendable {
         let spoke = Set(r.speakerNames.values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }).filter { !$0.hasPrefix("Speaker ") }
         let same = spoke.filter { firstWord($0) == word }
         guard same.count == 1, let one = same.first, AdviceRules.key(one).split(separator: " ").count >= 2 else { return [] }
-        // Another invited person with that first name: the name could be either.
+        // Another invited person with that first name: the name could be either. An invite with an address and no
+        // name counts by the first part of the address, unless it is the speaker's own.
         let invited = (r.invitees ?? []).compactMap { $0.name?.nonBlank.map(PersonNames.plain) }
         guard !invited.contains(where: { firstWord($0) == word && PersonNames.nameKey($0) != PersonNames.nameKey(one) }) else { return [] }
+        let own = AdviceRules.key(one).split(separator: " ").joined(separator: ".")
+        let addresses = (r.invitees ?? []).filter { $0.name?.nonBlank == nil }.compactMap { $0.email?.lowercased().split(separator: "@").first.map(String.init) }
+        guard !addresses.contains(where: { $0.split(separator: ".").first.map(String.init) == word && $0 != own }) else { return [] }
         return [(one, nil)]
     }
 
@@ -247,7 +251,10 @@ extension CoachProfile {
                     (q.status == .confirmed && q.statement.caseInsensitiveCompare(before.text) == .orderedSame)
                         || (q.status == .corrected && q.note?.caseInsensitiveCompare(before.text) == .orderedSame)
                 }
-                facts[i].person = asked.map(\.person) ?? saved.onlyPerson(namedIn: before.text)
+                // A conclusion linked by a first name gives its id only through its card, which shows the whole
+                // name: a yes on a question row, which does not, links nobody.
+                let firstName = asked.map { ($0.about ?? "").split(whereSeparator: \.isWhitespace).count == 1 } ?? false
+                facts[i].person = firstName ? saved.onlyPerson(namedIn: before.text) : asked.map(\.person) ?? saved.onlyPerson(namedIn: before.text)
             } else {
                 facts[i].person = nil
             }
