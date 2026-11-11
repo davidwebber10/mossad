@@ -129,4 +129,40 @@ final class SummarizerTests: XCTestCase {
         let content = ((body["messages"] as? [[String: Any]])?.first?["content"] as? String) ?? ""
         XCTAssertTrue(content.contains("Known tags: Databricks, Triple Whale"), content)
     }
+
+    private func reply(summary: String, topicText: String) -> [String: Any] {
+        ["summary": summary, "topics": [["title": "Carrier rules", "summary": topicText]],
+         "action_items": [["owner": "Alex Rivera", "task": "Pull the data"]], "decisions": [],
+         "headline": "Alex and Sam tuned the carrier rules.", "kind": "Working session", "has_outcomes": true,
+         "tags": ["Carriers"], "title": ""]
+    }
+
+    // A 35-minute call came back with action items but no overview, no topic text, and no decisions; it replaced
+    // a good summary. A reply like that is not a summary.
+    func testAReplyWithoutAnOverviewIsNotASummary() async {
+        let s = LLMSummarizer(llm: FakeModel(output: reply(summary: " ", topicText: "Ten days for the slow carrier.")))
+        do {
+            _ = try await s.summarize(transcript: "[00:00:01] Alex Rivera: Hi", title: "Google Meet call")
+            XCTFail("A blank overview was accepted")
+        } catch {
+            guard case SummaryError.malformed = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+    }
+
+    func testATopicWithoutTextIsNotASummary() async {
+        let s = LLMSummarizer(llm: FakeModel(output: reply(summary: "Alex and Sam tuned the rules.", topicText: "")))
+        do {
+            _ = try await s.summarize(transcript: "[00:00:01] Alex Rivera: Hi", title: "Google Meet call")
+            XCTFail("A topic without text was accepted")
+        } catch {
+            guard case SummaryError.malformed = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+    }
+
+    func testACompleteReplyIsKept() async throws {
+        let s = LLMSummarizer(llm: FakeModel(output: reply(summary: "Alex and Sam tuned the rules.", topicText: "Ten days for the slow carrier.")))
+        let out = try await s.summarize(transcript: "[00:00:01] Alex Rivera: Hi", title: "Google Meet call")
+        XCTAssertEqual(out.summary, "Alex and Sam tuned the rules.")
+        XCTAssertEqual(out.topics.map(\.summary), ["Ten days for the slow carrier."])
+    }
 }

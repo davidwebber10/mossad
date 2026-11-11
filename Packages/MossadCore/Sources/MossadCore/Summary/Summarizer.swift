@@ -163,6 +163,12 @@ public struct LLMSummarizer: Summarizing {
                                         user: Self.userPrompt(knownTags: knownTags, title: title, transcript: transcript, people: people), schema: Self.schema,
                                         effort: .medium, purpose: .summary, as: Output.self)
         }
+        // A reply with no overview or an empty topic is not a summary, even when it has action items. Failing here
+        // keeps the summary a meeting already has, and a new meeting tries again.
+        guard result.summary.nonBlank != nil, result.topics.allSatisfy({ $0.summary.nonBlank != nil }) else {
+            Log.error("Claude returned a summary with no overview or an empty topic")
+            throw SummaryError.malformed
+        }
         let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)
         return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items.map { ActionItem(owner: $0.owner, task: $0.task) }, decisions: result.decisions.map { Decision(text: $0.text, at: $0.at_seconds.flatMap { $0 >= 0 ? $0 : nil }) },
                               headline: headline.isEmpty ? nil : headline,
