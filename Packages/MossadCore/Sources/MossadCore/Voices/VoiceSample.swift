@@ -229,6 +229,8 @@ public final class VoiceSampleStore: @unchecked Sendable {
         }
     }
 
+    static func decode(_ data: Data) -> [VoiceSample]? { (try? JSONDecoder.callRecord.decode(File.self, from: data))?.samples }
+
     public var samples: [VoiceSample] { lock.withLock { storage } }
     public func samples(of person: PersonID) -> [VoiceSample] { samples.filter { $0.personID == person } }
     public var exists: Bool { FileManager.default.fileExists(atPath: url.path) }

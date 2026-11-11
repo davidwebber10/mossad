@@ -198,19 +198,21 @@ struct VoiceNamingView: View {
     @ViewBuilder
     private func picks(for key: String) -> some View {
         let used = Set(emails.filter { $0.key != key }.values)
+        // A name the invite wrote in another form ("Carter, Sam") shows as the saved person it is.
+        let directory = PersonDirectory(profiles: controller.library.profiles).with(invitees: record.invitees)
         Section("Invited to this meeting") {
             ForEach(record.attendees.filter { !used.contains($0) }, id: \.self) { attendee in
-                let saved = attendee.contains("@") ? controller.library.name(forEmail: attendee) : nil
+                let saved = attendee.contains("@") ? controller.library.name(forEmail: attendee) : directory.link(for: attendee)
                 Button {
                     if attendee.contains("@") {
                         emails[key] = attendee
                         if let saved, names[key, default: ""].isEmpty { names[key] = saved }
                     } else {
-                        names[key] = attendee
+                        names[key] = saved ?? attendee
                     }
                 } label: {
                     Text(saved ?? attendee)
-                    if saved != nil { Text(attendee) }
+                    if saved != nil, saved != attendee { Text(attendee) }
                 }
             }
         }

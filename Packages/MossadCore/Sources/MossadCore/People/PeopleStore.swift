@@ -81,7 +81,7 @@ public final class PeopleStore: @unchecked Sendable {
         self.now = now
         onDisk = FileManager.default.fileExists(atPath: url.path)
         // Newer is not unreadable: a file with a higher version is never moved aside and never replaced.
-        if let data = try? Data(contentsOf: url), let v = (try? JSONDecoder().decode(VersionOnly.self, from: data))?.version, v > Self.currentVersion {
+        if let data = try? Data(contentsOf: url), let v = Self.version(of: data), v > Self.currentVersion {
             isReadOnly = true
             newerVersion = v
             do {
@@ -111,8 +111,11 @@ public final class PeopleStore: @unchecked Sendable {
     /// The people for code that only looks: nil when there is no file or it does not decode. Unlike the store, it
     /// never moves a damaged file aside.
     public static func peek(in directory: URL) -> [Person]? {
-        (try? Data(contentsOf: directory.appendingPathComponent(fileName))).flatMap { try? JSONDecoder.callRecord.decode(File.self, from: $0) }?.people
+        (try? Data(contentsOf: directory.appendingPathComponent(fileName))).flatMap(decode)
     }
+
+    static func decode(_ data: Data) -> [Person]? { (try? JSONDecoder.callRecord.decode(File.self, from: data))?.people }
+    static func version(of data: Data) -> Int? { (try? JSONDecoder().decode(VersionOnly.self, from: data))?.version }
 
     public var people: [Person] { lock.withLock { storage } }
     /// Whether `people.json` is on disk: false before the first save.
@@ -228,16 +231,9 @@ public final class PeopleStore: @unchecked Sendable {
     public func setEmail(_ email: String?, for id: PersonID) throws {
         try change { people, date in
             guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }) else { return [] }
-            let address = email.map(EmailIdentity.normalized).flatMap { $0.contains("@") ? $0 : nil }
             let old = people[i].email
-            guard address != old else { return [] }
-            people[i].emails.removeAll { $0.state == .verified }
-            if let address {
-                people[i].emails.removeAll { $0.address == address }
-                people[i].emails.insert(EmailIdentity(address: address, state: .verified, source: .owner, at: date), at: 0)
-            }
-            people[i].updated = date
-            return [PeopleLogEntry(at: date, kind: "email", actor: "owner", subject: id, before: old, after: address)]
+            guard people[i].setVerifiedEmail(email, at: date) else { return [] }
+            return [PeopleLogEntry(at: date, kind: "email", actor: "owner", subject: id, before: old, after: people[i].email)]
         }
     }
 

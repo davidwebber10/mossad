@@ -37,7 +37,8 @@ public struct Paths: Sendable {
     /// `usage.jsonl`: each billed request, for the costs in Analytics.
     public var usage: URL { root.appendingPathComponent("Usage") }
 
-    /// The HR export and the owner's matches to it. Never synced.
+    /// The people (`people.json`, with its log and the migration's plan and report), the HR export, and the
+    /// owner's matches to it. Nothing here syncs in this phase; when the people do, the HR data still never does.
     public var people: URL { root.appendingPathComponent("People") }
 
     public func callDirectory(_ id: String) -> URL {

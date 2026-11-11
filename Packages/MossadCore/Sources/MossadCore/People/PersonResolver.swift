@@ -127,7 +127,7 @@ public struct PersonResolver: Sendable {
         // Sorted, so the answer never depends on the order of the people.
         entries = people.filter(\.isLive).sorted { $0.id < $1.id }.map { p in
             let texts = p.forms.isEmpty ? [p.displayName] : p.forms.map(\.text)
-            return Entry(person: p, names: texts.map(PersonNames.parse).filter(\.isName), keys: Set(texts.map(PersonNames.key).filter { !$0.isEmpty }),
+            return Entry(person: p, names: texts.map(PersonNames.parse).filter(\.isName), keys: Set(texts.map(PersonNames.nameKey).filter { !$0.isEmpty }),
                          confirmedKeys: Set(p.forms.filter { $0.confirmed && ($0.kind == .alias || $0.kind == .nickname) }.map(\.key)))
         }
         index = Dictionary(entries.enumerated().map { ($1.person.id, $0) }, uniquingKeysWith: { a, _ in a })

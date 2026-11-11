@@ -70,7 +70,7 @@ public struct NameForm: Codable, Equatable, Sendable {
 
     /// As written: "Carter, Sam".
     public var text: String
-    /// `PersonNames.key(text)`: "carter sam".
+    /// `PersonNames.nameKey(text)`: "carter sam".
     public var key: String
     public var kind: Kind
     public var source: SourceKind
@@ -81,7 +81,7 @@ public struct NameForm: Codable, Equatable, Sendable {
 
     public init(text: String, kind: Kind, source: SourceKind, confirmed: Bool, at date: Date) {
         self.text = text
-        key = PersonNames.key(text)
+        key = PersonNames.nameKey(text)
         self.kind = kind
         self.source = source
         self.confirmed = confirmed
@@ -94,7 +94,7 @@ public struct NameForm: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         text = try c.decode(String.self, forKey: .text)
-        key = try c.decodeIfPresent(String.self, forKey: .key) ?? PersonNames.key(text)
+        key = try c.decodeIfPresent(String.self, forKey: .key) ?? PersonNames.nameKey(text)
         kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? .seen
         source = try c.decodeIfPresent(SourceKind.self, forKey: .source) ?? .migration
         confirmed = try c.decodeIfPresent(Bool.self, forKey: .confirmed) ?? false
@@ -281,7 +281,7 @@ extension Person {
     @discardableResult
     public mutating func addForm(_ text: String, kind: NameForm.Kind, source: SourceKind, confirmed: Bool, at date: Date) -> Bool {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let key = PersonNames.key(text)
+        let key = PersonNames.nameKey(text)
         guard !key.isEmpty else { return false }
         if let i = forms.firstIndex(where: { $0.key == key && $0.text == text }) {
             // A form the owner confirmed stays confirmed; the kind of a known form does not change by a sighting.
@@ -309,6 +309,21 @@ extension Person {
             return true
         }
         emails.append(EmailIdentity(address: address, state: state, source: source, at: date))
+        updated = date
+        return true
+    }
+
+    /// One verified address, as the People page keeps it today: a new one replaces the old one, and nil or a
+    /// blank one clears it. Returns true when the record changed.
+    @discardableResult
+    public mutating func setVerifiedEmail(_ email: String?, at date: Date) -> Bool {
+        let address = email.map(EmailIdentity.normalized).flatMap { $0.contains("@") ? $0 : nil }
+        guard address != self.email else { return false }
+        emails.removeAll { $0.state == .verified }
+        if let address {
+            emails.removeAll { $0.address == address }
+            emails.insert(EmailIdentity(address: address, state: .verified, source: .owner, at: date), at: 0)
+        }
         updated = date
         return true
     }
