@@ -70,7 +70,9 @@ struct ProcessingCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(current.title), step \(current.rawValue) of \(ProcessingStep.total)")
         .accessibilityValue("\(Int(((progress?.fraction ?? 0) * 100).rounded())) percent")
-        .accessibilityAction(named: "Process now") { if waits { controller.processNow(record.id) } }
+        .accessibilityActions {
+            if waits { Button("Process now") { controller.processNow(record.id) } }
+        }
     }
 
     private func row(_ line: SubLine) -> some View {

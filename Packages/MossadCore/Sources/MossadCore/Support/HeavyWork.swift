@@ -33,8 +33,8 @@ public enum HeavyStep: String, CaseIterable, Sendable {
     }
 
     /// The owner reads these lines to see what a call cost the call after it.
-    func logLine(callID: String, seconds: Double) -> String {
-        "During a call: \(name) of \(callID) took \(String(format: "%.1f", seconds)) s"
+    func logLine(callID: String, seconds: Double, failed: Bool = false) -> String {
+        "During a call: \(name) of \(callID) \(failed ? "failed after" : "took") \(String(format: "%.1f", seconds)) s"
     }
 }
 
@@ -56,6 +56,75 @@ public enum HeavyWorkPlan: Equatable, Sendable {
     public var duringCall: Bool { self != .run }
 }
 
+/// The words of the "Process now" button where it releases every call that waits (the sidebar, the menu). The
+/// meeting's own button releases only its call and always says "Process now".
+public enum ProcessNowLabel {
+    public static func title(waiting: Int) -> String? {
+        switch waiting {
+        case ..<1: nil
+        case 1: "Process now"
+        default: "Process \(waiting) calls now"
+        }
+    }
+
+    public static func line(waiting: Int) -> String? {
+        switch waiting {
+        case ..<1: nil
+        case 1: "1 call waits for this one"
+        default: "\(waiting) calls wait for this one"
+        }
+    }
+}
+
+/// The order of the jobs in one lane: one runs, the others wait in the order they came.
+struct LaneQueue {
+    private var running: Int?
+    private var queue: [Int] = []
+
+    /// True when the job may run now; otherwise it is in the queue.
+    mutating func request(_ job: Int) -> Bool {
+        guard running != nil else { running = job; return true }
+        queue.append(job)
+        return false
+    }
+
+    /// The running job ended. Returns the job that runs next, if one waits.
+    mutating func finish() -> Int? {
+        running = queue.isEmpty ? nil : queue.removeFirst()
+        return running
+    }
+}
+
+/// One heavy job at a time behind a call, for all calls together: the two tracks of a call and the calls released
+/// with "Process now" queue here, so the work beside a live call never adds up.
+public final class HeavyLane: Sendable {
+    private struct State {
+        var queue = LaneQueue()
+        var lastJob = 0
+        var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
+    }
+    private let state = Mutex(State())
+
+    public init() {}
+
+    public func run<T: Sendable>(_ body: @Sendable () async throws -> T) async -> Result<T, Error> {
+        let job = state.withLock { s in s.lastJob += 1; return s.lastJob }
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            let now = state.withLock { s in
+                if s.queue.request(job) { return true }
+                s.waiters[job] = c
+                return false
+            }
+            if now { c.resume() }
+        }
+        defer {
+            let next = state.withLock { s in s.queue.finish().flatMap { s.waiters.removeValue(forKey: $0) } }
+            next?.resume()
+        }
+        do { return .success(try await body()) } catch { return .failure(error) }
+    }
+}
+
 /// Holds back work that loads the processor while a call records: the call app needs the processor for video and
 /// sound. `HeavyWorkPlan` says which steps wait; "Process now" releases one call.
 public final class HeavyWorkGate: Sendable {
@@ -73,6 +142,8 @@ public final class HeavyWorkGate: Sendable {
     /// How often a wait looks for "Process now": a click must not wait for the next check of the call.
     private static let releaseInterval: Duration = .milliseconds(250)
     let log: @Sendable (String) -> Void
+    /// Every step that runs behind a call goes through this lane.
+    let lane = HeavyLane()
 
     public init(pollInterval: Duration = .seconds(5), isCallRecording: (@Sendable () async -> Bool)? = nil,
                 log: @escaping @Sendable (String) -> Void = { Log.info($0) }) {

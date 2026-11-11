@@ -251,8 +251,10 @@ private struct SidebarStatus: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Palette.ink)
                 .padding(.horizontal, 10)
-                if let first = waiting.first {
-                    WaitingLine(count: waiting.count) { waiting.forEach { controller.processNow($0.id) } }
+                // One click releases every call that waits; the words say how many.
+                if let first = waiting.first, let line = ProcessNowLabel.line(waiting: waiting.count),
+                   let title = ProcessNowLabel.title(waiting: waiting.count) {
+                    WaitingLine(line: line, title: title) { waiting.forEach { controller.processNow($0.id) } }
                         .padding(.horizontal, 10)
                         .accessibilityHint(waiting.count == 1 ? "Processes \(first.title) now" : "Processes these calls now")
                 }
@@ -276,13 +278,15 @@ private struct SidebarStatus: View {
 
     /// The calls that wait for this one to end, oldest first.
     private var waiting: [CallRecord] {
-        controller.meetings.filter { controller.waitingCalls.contains($0.id) }.sorted { $0.start < $1.start }
+        guard !controller.waitingCalls.isEmpty else { return [] }
+        return controller.meetings.filter { controller.waitingCalls.contains($0.id) }.sorted { $0.start < $1.start }
     }
 }
 
 /// "1 call waits · Process now", under the recording line. Only while a call waits.
 private struct WaitingLine: View {
-    let count: Int
+    let line: String
+    let title: String
     let processNow: () -> Void
 
     var body: some View {
@@ -290,9 +294,9 @@ private struct WaitingLine: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: Space.s) {
                 Circle().fill(Palette.accentFill).frame(width: 7, height: 7)
-                Text(count == 1 ? "1 call waits for this one" : "\(count) calls wait for this one").foregroundStyle(Palette.secondary)
+                Text(line).foregroundStyle(Palette.secondary)
             }
-            Button("Process now", action: processNow)
+            Button(title, action: processNow)
                 .buttonStyle(.plain)
                 .fontWeight(.semibold)
                 .foregroundStyle(Palette.accent)

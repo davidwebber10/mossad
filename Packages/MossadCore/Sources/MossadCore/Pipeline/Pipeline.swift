@@ -526,6 +526,7 @@ public actor Pipeline {
             Log.error("Deleting \(callID) failed: \(error)")
             return nil
         }
+        heavy.forget(callID)
         Log.info("Deleted call \(callID)")
         return r
     }
@@ -787,14 +788,25 @@ public actor Pipeline {
     private func clearance(_ id: String, _ step: HeavyStep) async -> HeavyWorkPlan {
         let plan = await heavy.plan(step, callID: id)
         guard plan == .wait else { return plan }
-        let before = progress[id]?.detail
-        detail(id, "Waiting for the current call to end")
-        setWaitsForCall(id, true)
+        // The two tracks can wait together: the first wait keeps the line from before, the last one puts it back.
+        if waits[id, default: (0, nil)].count == 0 {
+            waits[id] = (0, progress[id]?.detail)
+            detail(id, "Waiting for the current call to end")
+            setWaitsForCall(id, true)
+        }
+        waits[id]!.count += 1
         let cleared = await heavy.waitForClearance(step, callID: id)
-        setWaitsForCall(id, false)
-        if let before { detail(id, before) } else { clearDetail(id) }
+        waits[id]!.count -= 1
+        if waits[id]!.count == 0 {
+            let before = waits.removeValue(forKey: id)?.before
+            setWaitsForCall(id, false)
+            if let before { detail(id, before) } else { clearDetail(id) }
+        }
         return cleared
     }
+
+    /// The calls whose steps wait for a call, with how many wait and the sub-step line from before.
+    private var waits: [String: (count: Int, before: String?)] = [:]
 
     private func setWaitsForCall(_ id: String, _ waits: Bool) {
         guard var p = progress[id] else { return }
@@ -815,14 +827,19 @@ public actor Pipeline {
     /// Runs a heavy step off this actor at the plan's priority. A step that ran during a call logs its time.
     private func runHeavy<T: Sendable>(_ id: String, _ step: HeavyStep, _ plan: HeavyWorkPlan,
                                        _ body: @escaping @Sendable () async throws -> T) async throws -> T {
-        let clock = ContinuousClock(), start = clock.now
-        defer {
-            if plan.duringCall {
+        guard plan.duringCall else { return try await HeavyWork.run(priority: plan.priority, body) }
+        let heavy = heavy
+        return try await heavy.lane.run {
+            let clock = ContinuousClock(), start = clock.now
+            var failed = true
+            defer {
                 let d = (clock.now - start).components
-                heavy.log(step.logLine(callID: id, seconds: Double(d.seconds) + Double(d.attoseconds) / 1e18))
+                heavy.log(step.logLine(callID: id, seconds: Double(d.seconds) + Double(d.attoseconds) / 1e18, failed: failed))
             }
-        }
-        return try await HeavyWork.run(priority: plan.priority, body)
+            let value = try await HeavyWork.run(priority: plan.priority, body)
+            failed = false
+            return value
+        }.get()
     }
 
     /// Makes the recording file of a call folder. A test puts its own in, to edit a call during the encode.
@@ -1082,6 +1099,7 @@ public actor Pipeline {
         for r in parts {
             if let note = r.markdownPath { try? fm.removeItem(atPath: note) }
             try? fm.removeItem(at: paths.callDirectory(r.id))
+            heavy.forget(r.id)
             onDiscard(r)
         }
         for name in [Track.me.fileName, Track.them.fileName, Recording.fileName] {

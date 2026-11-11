@@ -15,7 +15,7 @@ struct MenuContent: View {
         VStack(alignment: .leading, spacing: 0) {
             statusSection
             if controller.processing > 0 { processingRow }
-            if !waitingCalls.isEmpty { waitingRow }
+            if !controller.waitingCalls.isEmpty, case let calls = waitingCalls, !calls.isEmpty { waitingRow(calls) }
             if controller.cloudSyncing, controller.processing == 0 {
                 PanelRow {
                     ProgressView().controlSize(.mini).frame(width: 16)
@@ -180,16 +180,18 @@ struct MenuContent: View {
     }
 
     private var waitingCalls: [String] {
-        controller.meetings.filter { controller.waitingCalls.contains($0.id) }.map(\.id)
+        guard !controller.waitingCalls.isEmpty else { return [] }
+        return controller.meetings.filter { controller.waitingCalls.contains($0.id) }.map(\.id)
     }
 
-    /// The calls whose next step waits for the call that records; one click runs them now.
-    private var waitingRow: some View {
-        PanelRow(action: { waitingCalls.forEach(controller.processNow) }) {
+    /// The calls whose next step waits for the call that records; one click runs them all now, and the words say
+    /// how many.
+    private func waitingRow(_ calls: [String]) -> some View {
+        PanelRow(action: { calls.forEach(controller.processNow) }) {
             Image(systemName: "pause.circle").frame(width: 16).foregroundStyle(Palette.secondary)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Process now")
-                Text(waitingCalls.count == 1 ? "1 call waits for this call to end" : "\(waitingCalls.count) calls wait for this call to end")
+                Text(ProcessNowLabel.title(waiting: calls.count) ?? "Process now")
+                Text(calls.count == 1 ? "1 call waits for this call to end" : "\(calls.count) calls wait for this call to end")
                     .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)

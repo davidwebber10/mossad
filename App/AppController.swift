@@ -582,8 +582,9 @@ final class AppController: ObservableObject {
             // Detection starts in `finishLaunch`, after the interrupted calls are recovered.
             let isRecordingNow: @Sendable () async -> Bool = { [weak self] in await self?.isRecording ?? false }
             HeavyWorkGate.shared.setCheck(isRecordingNow)
-            HeavyWorkGate.shared.onWaitingChange { [weak self] calls in
-                Task { @MainActor in self?.waitingCalls = calls }
+            // The set is read again on the main actor: two changes from two threads can arrive out of order.
+            HeavyWorkGate.shared.onWaitingChange { [weak self] _ in
+                Task { @MainActor in self?.waitingCalls = HeavyWorkGate.shared.waiting }
             }
             outputWatcher = OutputDeviceWatcher { @Sendable in
                 CaptureQueue.queue.async { recorder.rebuildThem() }

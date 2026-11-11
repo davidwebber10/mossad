@@ -201,6 +201,46 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(during.contains { $0.contains("the recording encode of \(id)") }, during.joined(separator: "\n"))
     }
 
+    /// Both tracks wait for their upload encode. After "Process now" the card shows the tracks again, not the old
+    /// waiting line.
+    func testTheWaitingLineGoesWhenTheStepGoesOn() async throws {
+        let id = try makeRecord()
+        final class Last: @unchecked Sendable { let lock = NSLock(); var progress: ProcessingProgress? }
+        let last = Last()
+        transcriber.delay = .milliseconds(600)
+        let gate = HeavyWorkGate(pollInterval: .seconds(3600), isCallRecording: { true }, log: { _ in })
+        let later = start.addingTimeInterval(3600)
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         onProgress: { _, p in last.lock.withLock { last.progress = p } }, heavy: gate)
+        let run = Task { await p.process(id) }
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(last.lock.withLock { last.progress?.detail }, "Waiting for the current call to end")
+        gate.release(id)
+        try await Task.sleep(for: .milliseconds(400))
+        let now = last.lock.withLock { last.progress }
+        XCTAssertEqual(now?.step, .transcribing)
+        XCTAssertNil(now?.detail, "the track lines show again")
+        XCTAssertEqual(now?.waitsForCall, false)
+        await run.value
+    }
+
+    func testADeletedCallLeavesTheReleasedList() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        var r = try CallRecord.load(from: dir)
+        r.status = .failed
+        try r.save(to: dir)
+        let gate = HeavyWorkGate(isCallRecording: { true }, log: { _ in })
+        gate.release(id)
+        let later = start.addingTimeInterval(3600)
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, heavy: gate)
+        let deleted = await p.delete(callID: id)
+        XCTAssertTrue(deleted)
+        XCTAssertFalse(gate.isReleased(id))
+    }
+
     /// The note of the last call does not wait for the next call to end: only its recording does.
     func testANoteIsWrittenWhileACallRecordsAndItsRecordingIsMadeLater() async throws {
         let id = try makeRecord()
