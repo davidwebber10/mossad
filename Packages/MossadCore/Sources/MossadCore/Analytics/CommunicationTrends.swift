@@ -215,7 +215,7 @@ extension CommunicationTrends.Series {
             let one = T.Mix(ones, interval: interval), group = T.Mix(groups, interval: interval)
             parts = [(T.Split.oneOnOne, one), (.group, group)].map { size, mix in
                 let (line, width) = T.line(mix.points, interval: interval, calendar: calendar)
-                return T.Part(split: size, line: line, lineDays: width, typical: median(of: mix.points.map(\.value)), held: mix.held)
+                return T.Part(split: size, line: metric.inside(line), lineDays: width, typical: median(of: mix.points.map(\.value)), held: mix.held)
             }
             line = []
             lineDays = parts[0].lineDays
@@ -225,7 +225,8 @@ extension CommunicationTrends.Series {
             change = .bySize(oneOnOne: T.change(metric, one, interval: interval, days: days), group: T.change(metric, group, interval: interval, days: days))
         } else {
             let mix = T.Mix(inside, interval: interval)
-            (line, lineDays) = T.line(mix.points, interval: interval, calendar: calendar)
+            let (steps, width) = T.line(mix.points, interval: interval, calendar: calendar)
+            (line, lineDays) = (metric.inside(steps), width)
             held = mix.held
             parts = []
             change = T.change(metric, mix, interval: interval, days: days)
@@ -239,4 +240,15 @@ extension PersonMetric {
     /// questions, which are counted per hour of the call, and the owner talks more of a 1:1's hour than of a
     /// group's.
     var followsSizeInTrend: Bool { followsSize || self == .questionsPerHour }
+
+    /// The steps kept inside what the number can be: a kind moved to the typical level can put a quiet week of a
+    /// count under 0, or a share over the whole.
+    func inside(_ steps: [CommunicationTrends.Step]) -> [CommunicationTrends.Step] {
+        steps.map { step in
+            var s = step
+            if isCount || self == .talkShare { s.value = max(0, s.value) }
+            if self == .talkShare { s.value = min(1, s.value) }
+            return s
+        }
+    }
 }

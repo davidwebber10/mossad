@@ -204,6 +204,60 @@ final class CommunicationTrendsChanceTests: XCTestCase {
         XCTAssertLessThan(rate, limit, "weekly series read as a trend in \(rate * 100)% of runs")
     }
 
+    func testNewWeeklyOneOnOnesInTheLastMonthAreNotATrend() {
+        // 1:1s with no series at 45%, two a week; in the last month new weekly 1:1s start with quiet people, where
+        // the owner talks 70%. The owner talks as ever in each: a new team is not a new owner.
+        for added in [2, 3, 5] {
+            let rate = claims({ d in
+                var out: [MeetingFacts] = []
+                for week in 0..<13 {
+                    for a in 0..<2 { out.append(meeting("w\(week)a\(a)", at: Double(week * 7) + d.unit() * 5, voices: 2, share: d.normal(0.45, 0.08))) }
+                    if week * 7 >= 59 {
+                        for n in 0..<added {
+                            out.append(meeting("w\(week)n\(n)", at: Double(week * 7 + n) + 0.5, voices: 2, series: "new \(n)", share: d.normal(0.70, 0.06)))
+                        }
+                    }
+                }
+                return out.filter { $0.start < period.end }
+            }, talk())
+            XCTAssertLessThan(rate, limit, "\(added) new weekly 1:1s read as a trend in \(rate * 100)% of runs")
+        }
+    }
+
+    func testReplacedSeriesAreNotATrend() {
+        // Weekly series with their own steady levels; some end in the middle third and new ones with their own
+        // levels take their place; two other meetings a week.
+        for (count, replaced) in [(4, 2), (4, 4), (8, 4), (8, 8)] {
+            let rate = claims({ d in replacing(count, replaced, &d) }, talk())
+            XCTAssertLessThan(rate, limit, "\(replaced) of \(count) series replaced read as a trend in \(rate * 100)% of runs")
+        }
+    }
+
+    /// `count` weekly series, `replaced` of them giving way to a new series in the middle third, and two other
+    /// meetings a week; `fall` is taken off every meeting from day 30 to day 60.
+    private func replacing(_ count: Int, _ replaced: Int, fall: Double = 0, _ d: inout Draws) -> [MeetingFacts] {
+        func level(_ d: inout Draws) -> Double { min(0.9, max(0.25, d.normal(0.5, 0.15))) }
+        let old = (0..<count).map { _ in level(&d) }, new = (0..<replaced).map { _ in level(&d) }
+        let cut = (0..<replaced).map { _ in 30 + 30 * d.unit() }
+        var out: [MeetingFacts] = []
+        for week in 0..<13 {
+            for s in 0..<count {
+                let day = Double(week * 7 + s % 5) + 0.4
+                guard day < 90, d.unit() > 0.15 else { continue }
+                let later = s < replaced && day >= cut[s]
+                let less = fall * min(1, max(0, (day - 30) / 30))
+                out.append(meeting("w\(week)s\(s)", at: day, series: later ? "new \(s)" : "series \(s)",
+                                   share: d.normal((later ? new[s] : old[s]) - less, 0.06)))
+            }
+            for a in 0..<2 {
+                let day = Double(week * 7) + d.unit() * 5
+                guard day < 90 else { continue }
+                out.append(meeting("w\(week)a\(a)", at: day, share: d.normal(0.5 - fall * min(1, max(0, (day - 30) / 30)), 0.15)))
+            }
+        }
+        return out
+    }
+
     // MARK: Real changes
 
     func testAFallInEveryKindIsFoundThroughAChangeOfMix() {
@@ -243,6 +297,23 @@ final class CommunicationTrendsChanceTests: XCTestCase {
             days(25, &d).enumerated().map { i, day in meeting("m\(i)", at: day, cutIns: perHour(day < 30 ? 8 : day < 60 ? 5 : 2, &d, none: 0.2)) }
         }) { $0.series(.cutInsPerHour, .all) }
         XCTAssertGreaterThanOrEqual(rate, 0.9, "a fall from 8 to 2 cut-ins an hour was found in \(rate * 100)% of runs")
+    }
+
+    func testAFallInEverySeriesIsFoundThroughReplacedSeries() {
+        let rate = claims(runs: 100, { d in replacing(8, 2, fall: 0.15, &d) }, talk())
+        XCTAssertGreaterThanOrEqual(rate, 0.9, "a fall of 15 points was found in \(rate * 100)% of runs")
+    }
+
+    func testTheMovedLineStaysInsideWhatTheNumberCanBe() {
+        // A quiet kind near 0 cut-ins an hour and a busy one near 8: moved to one level, a quiet week's median
+        // could fall under 0.
+        let facts = (0..<90).map { i -> MeetingFacts in
+            let quiet = i % 10 < (i < 45 ? 8 : 3)
+            return meeting("m\(i)", at: Double(i), kind: quiet ? "Review" : "Debate", cutIns: quiet ? 0 : 8 + Double(i % 3))
+        }
+        let s = T(facts: facts, interval: period, calendar: calendar).series(.cutInsPerHour, .all)!
+        XCTAssertFalse(s.line.isEmpty)
+        XCTAssertTrue(s.line.allSatisfy { $0.value >= 0 }, "\(s.line.map(\.value))")
     }
 
     // MARK: The line and the sentence

@@ -13,7 +13,9 @@ extension CommunicationTrends {
     /// The period's meetings, each compared only with meetings of its own kind (`Row.kind`), so a change in the
     /// mix of kinds (more 1:1s, a new all-hands, a series that ended) is not a change of the owner.
     ///
-    /// A kind that is not in both the first and the last third is compared within its group size alone. Each
+    /// A kind of two or more meetings that is not in both the first and the last third (a new series, one that
+    /// ended) keeps its own level and is not compared: its meetings say nothing of a change of the owner. A
+    /// meeting that is the only one of its kind is compared within its group size. Each
     /// point is moved by the distance from its kind's median to the median of all: the kinds then sit at one
     /// level, the line of their medians moves only when the owner does, and with one kind a point stays as it is.
     struct Mix {
@@ -27,11 +29,14 @@ extension CommunicationTrends {
         init(_ rows: [Row], interval: DateInterval) {
             let (firstEnd, lastStart) = CommunicationTrends.thirds(interval)
             var sides: [String: (first: Bool, last: Bool)] = [:]
+            var counts: [String: Int] = [:]
             for r in rows {
+                counts[r.kind, default: 0] += 1
                 if r.point.date < firstEnd { sides[r.kind, default: (false, false)].first = true }
                 if r.point.date >= lastStart { sides[r.kind, default: (false, false)].last = true }
             }
-            kinds = rows.map { r in sides[r.kind].map { $0.first && $0.last } == true ? r.kind : r.sizeKind }
+            // A kind of its own that is missing from one third has no pool on that side, so `change` leaves it out.
+            kinds = rows.map { r in sides[r.kind].map { $0.first && $0.last } == true || counts[r.kind, default: 0] > 1 ? r.kind : r.sizeKind }
             var byKind: [String: [Double]] = [:]
             for (r, kind) in zip(rows, kinds) { byKind[kind, default: []].append(r.point.value) }
             let all = median(of: rows.map(\.point.value)) ?? 0
@@ -252,7 +257,8 @@ extension CommunicationTrends.Series {
         let rule = "The typical meeting (the median) of the first third of the period against the last third, each kind of meeting against its own kind. A change is said only when it matters and chance gives one as large in fewer than 1 in 100 shuffles of the meetings."
         switch change {
         case .tooShort: return "A trend needs a period of at least \(T.minimumDays) days."
-        case .tooFew: return "A trend needs \(MeetingAnalytics.Usual.firmSamples) meetings in the first third of the period and in the last."
+        case .tooFew:
+            return "A trend needs \(MeetingAnalytics.Usual.firmSamples) meetings in the first third of the period and in the last, of kinds of meeting that are in both. A series that started or ended in the period is not compared."
         case .steady, .moved: return rule
         case .bySize: return "This number follows the size of the meeting, so 1:1s and groups are compared apart. \(rule)"
         }
