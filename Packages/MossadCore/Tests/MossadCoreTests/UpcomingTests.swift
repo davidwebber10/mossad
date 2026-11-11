@@ -22,20 +22,20 @@ final class UpcomingTests: XCTestCase {
     }
 
     func testTheDefaultCalendarsAreTheOwnersOwn() {
-        let all = [CalendarInfo(id: "1", title: "David Webber", account: "dwebber@polywood.com"),
-                   CalendarInfo(id: "2", title: "Ecom Schedules", account: "dwebber@polywood.com"),
-                   CalendarInfo(id: "3", title: "dwebber@polywood.com", account: "dwebber@polywood.com"),
+        let all = [CalendarInfo(id: "1", title: "Avery Lane", account: "alane@example.com"),
+                   CalendarInfo(id: "2", title: "Ecom Schedules", account: "alane@example.com"),
+                   CalendarInfo(id: "3", title: "alane@example.com", account: "alane@example.com"),
                    CalendarInfo(id: "4", title: "US Holidays", account: "Other")]
-        XCTAssertEqual(CalendarInfo.defaults(all, ownerName: "David Webber"), ["1", "3"])
+        XCTAssertEqual(CalendarInfo.defaults(all, ownerName: "Avery Lane"), ["1", "3"])
         // The real layout: the account is named "Google", and the main calendar is titled with the address.
-        let real = [CalendarInfo(id: "a", title: "Ecom Schedules", account: "Google"), CalendarInfo(id: "b", title: "dwebber@polywood.com", account: "Google"),
-                    CalendarInfo(id: "c", title: "Personal", account: "Google"), CalendarInfo(id: "d", title: "Home", account: "webberassistant@gmail.com")]
-        XCTAssertEqual(CalendarInfo.defaults(real, ownerName: "David Webber"), ["b"])
-        XCTAssertTrue(CalendarInfo.isOwnersAddress("david.webber@x.com", ownerName: "David Webber"))
-        XCTAssertTrue(CalendarInfo.isOwnersAddress("davidw@x.com", ownerName: "David Webber"))
-        XCTAssertFalse(CalendarInfo.isOwnersAddress("ecom@x.com", ownerName: "David Webber"))
+        let real = [CalendarInfo(id: "a", title: "Ecom Schedules", account: "Google"), CalendarInfo(id: "b", title: "alane@example.com", account: "Google"),
+                    CalendarInfo(id: "c", title: "Personal", account: "Google"), CalendarInfo(id: "d", title: "Home", account: "assistant@example.org")]
+        XCTAssertEqual(CalendarInfo.defaults(real, ownerName: "Avery Lane"), ["b"])
+        XCTAssertTrue(CalendarInfo.isOwnersAddress("avery.lane@x.com", ownerName: "Avery Lane"))
+        XCTAssertTrue(CalendarInfo.isOwnersAddress("averyl@x.com", ownerName: "Avery Lane"))
+        XCTAssertFalse(CalendarInfo.isOwnersAddress("ecom@x.com", ownerName: "Avery Lane"))
         // With no calendar of their own, every calendar is read rather than none.
-        XCTAssertEqual(CalendarInfo.defaults([all[1], all[3]], ownerName: "David Webber"), ["2", "4"])
+        XCTAssertEqual(CalendarInfo.defaults([all[1], all[3]], ownerName: "Avery Lane"), ["2", "4"])
     }
 
     func testTheWorkEmailFindsTheOwnersCalendarWhenTheNameDoesNot() {

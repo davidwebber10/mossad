@@ -8,12 +8,12 @@ final class MCPServerTests: XCTestCase {
         var r = CallRecord(id: "c1", platform: .meet, bundleID: "", start: Date(timeIntervalSince1970: 1_800_000_000),
                            end: Date(timeIntervalSince1970: 1_800_001_800), status: .written)
         r.calendarTitle = "Launch sync"
-        r.speakerNames = ["me:A": "David Webber", "them:A": "Austin Ray"]
+        r.speakerNames = ["me:A": "Avery Lane", "them:A": "Austin Ray"]
         r.utterances = [Utterance(track: .them, speakerLabel: "A", start: 30, end: 40, text: "I will send the deck by Friday.")]
         r.markdownPath = "/notes/Launch sync.md"
         try FileManager.default.createDirectory(at: paths.callDirectory("c1"), withIntermediateDirectories: true)
         try r.save(to: paths.callDirectory("c1"))
-        return MCPServer(paths: paths, owner: "David Webber")
+        return MCPServer(paths: paths, owner: "Avery Lane")
     }
 
     private func reply(_ s: MCPServer, _ request: [String: Any]) throws -> [String: Any]? {

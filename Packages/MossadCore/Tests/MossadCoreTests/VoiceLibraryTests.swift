@@ -81,9 +81,9 @@ final class VoiceLibraryTests: XCTestCase {
     }
 
     func testPersistsAcrossInstances() throws {
-        try VoiceLibrary(directory: dir).add([0, 0, 1], to: "David Webber", isOwner: true)
+        try VoiceLibrary(directory: dir).add([0, 0, 1], to: "Avery Lane", isOwner: true)
         let reloaded = VoiceLibrary(directory: dir)
-        XCTAssertEqual(reloaded.profiles.map(\.name), ["David Webber"])
-        XCTAssertEqual(reloaded.owner?.name, "David Webber")
+        XCTAssertEqual(reloaded.profiles.map(\.name), ["Avery Lane"])
+        XCTAssertEqual(reloaded.owner?.name, "Avery Lane")
     }
 }

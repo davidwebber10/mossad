@@ -20,11 +20,11 @@ final class MeetingMergeTests: XCTestCase {
         let first = record("one", start: 0, end: 200, [
             Utterance(track: .me, speakerLabel: "A", start: 1, end: 3, text: "Hi."),
             Utterance(track: .them, speakerLabel: "A", start: 4, end: 6, text: "Hello."),
-        ], names: ["me:A": "David Webber", "them:A": "Mitch"])
+        ], names: ["me:A": "Avery Lane", "them:A": "Mitch"])
         let second = record("two", start: 203, end: 500, [
             Utterance(track: .me, speakerLabel: "B", start: 2, end: 5, text: "Back."),
             Utterance(track: .them, speakerLabel: "A", start: 6, end: 8, text: "Who is this?"),
-        ], names: ["me:B": "David Webber"], unknown: ["them:A"])
+        ], names: ["me:B": "Avery Lane"], unknown: ["them:A"])
 
         let merged = MeetingMerge.combine([second, first], durations: ["one": 200, "two": 297])
 
@@ -33,7 +33,7 @@ final class MeetingMergeTests: XCTestCase {
         XCTAssertEqual(merged.end, t0.addingTimeInterval(500))
         XCTAssertEqual(merged.utterances.map(\.start), [1, 4, 202, 206])
         XCTAssertEqual(merged.utterances.map(\.speakerKey), ["me:A", "them:A", "me:B2", "them:A2"])
-        XCTAssertEqual(merged.speakerNames, ["me:A": "David Webber", "them:A": "Mitch", "me:B2": "David Webber"])
+        XCTAssertEqual(merged.speakerNames, ["me:A": "Avery Lane", "them:A": "Mitch", "me:B2": "Avery Lane"])
         XCTAssertEqual(merged.unknownSpeakers, ["them:A2"])
         XCTAssertEqual(merged.parts, [CallPart(start: t0, end: t0.addingTimeInterval(200), offset: 0),
                                       CallPart(start: t0.addingTimeInterval(203), end: t0.addingTimeInterval(500), offset: 200)])

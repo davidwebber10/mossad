@@ -22,22 +22,22 @@ final class PersonStatisticsTests: XCTestCase {
 
     func testMeetingsNewestFirstWithFirstAndLastHeard() {
         let stats = PersonStatistics.compute([
-            call("1", 100, ["me:A": "David Webber", "them:A": "Alex Rivera"]),
-            call("2", 300, ["me:A": "David Webber"]),
+            call("1", 100, ["me:A": "Avery Lane", "them:A": "Alex Rivera"]),
+            call("2", 300, ["me:A": "Avery Lane"]),
             // Two keys with one name in a call still count as one meeting.
-            call("3", 200, ["me:A": "David Webber", "them:A": "Alex Rivera", "them:B": "Alex Rivera"]),
+            call("3", 200, ["me:A": "Avery Lane", "them:A": "Alex Rivera", "them:B": "Alex Rivera"]),
             call("4", 400, [:]),
         ])
-        XCTAssertEqual(Set(stats.keys), ["David Webber", "Alex Rivera"])
-        XCTAssertEqual(stats["David Webber"]?.meetings.map(\.id), ["2", "3", "1"])
-        XCTAssertEqual(stats["David Webber"]?.firstHeard, date(100))
-        XCTAssertEqual(stats["David Webber"]?.lastHeard, date(300))
+        XCTAssertEqual(Set(stats.keys), ["Avery Lane", "Alex Rivera"])
+        XCTAssertEqual(stats["Avery Lane"]?.meetings.map(\.id), ["2", "3", "1"])
+        XCTAssertEqual(stats["Avery Lane"]?.firstHeard, date(100))
+        XCTAssertEqual(stats["Avery Lane"]?.lastHeard, date(300))
         XCTAssertEqual(stats["Alex Rivera"]?.meetings.map(\.id), ["3", "1"])
     }
 
     func testTalkTimeSumsEveryKeyWithTheName() {
         let stats = PersonStatistics.compute([
-            call("1", 100, ["me:A": "David Webber", "them:A": "Alex Rivera", "them:B": "Alex Rivera"],
+            call("1", 100, ["me:A": "Avery Lane", "them:A": "Alex Rivera", "them:B": "Alex Rivera"],
                  talk: [("me:A", 30), ("them:A", 10), ("them:B", 50), ("them:C", 10)]),
         ])
         let alex = stats["Alex Rivera"]!
@@ -45,16 +45,16 @@ final class PersonStatisticsTests: XCTestCase {
         XCTAssertEqual(alex.totalTalk, 60)
         // 60 of the 100 seconds of speech, unnamed voices included.
         XCTAssertEqual(alex.meetings.first?.share ?? 0, 0.6, accuracy: 0.0001)
-        XCTAssertEqual(stats["David Webber"]?.totalTalk, 30)
+        XCTAssertEqual(stats["Avery Lane"]?.totalTalk, 30)
     }
 
     func testAverageShareSkipsMeetingsWithNoSpeech() {
         let stats = PersonStatistics.compute([
-            call("1", 100, ["me:A": "David Webber", "them:A": "Alex Rivera"], talk: [("me:A", 20), ("them:A", 80)]),
-            call("2", 200, ["me:A": "David Webber", "them:A": "Alex Rivera"], talk: [("me:A", 60), ("them:A", 40)]),
-            call("3", 300, ["me:A": "David Webber"]),
+            call("1", 100, ["me:A": "Avery Lane", "them:A": "Alex Rivera"], talk: [("me:A", 20), ("them:A", 80)]),
+            call("2", 200, ["me:A": "Avery Lane", "them:A": "Alex Rivera"], talk: [("me:A", 60), ("them:A", 40)]),
+            call("3", 300, ["me:A": "Avery Lane"]),
         ])
-        let david = stats["David Webber"]!
+        let david = stats["Avery Lane"]!
         XCTAssertEqual(david.averageShare ?? 0, 0.4, accuracy: 0.0001)
         XCTAssertEqual(david.totalTalk, 80)
         XCTAssertNil(david.meetings.first?.share)
@@ -62,23 +62,23 @@ final class PersonStatisticsTests: XCTestCase {
 
     func testOftenWithCountsSharedMeetings() {
         let stats = PersonStatistics.compute([
-            call("1", 100, ["me:A": "David Webber", "them:A": "Alex Rivera", "them:B": "Sam Cole"]),
-            call("2", 200, ["me:A": "David Webber", "them:A": "Alex Rivera"]),
-            call("3", 300, ["me:A": "David Webber", "them:A": "Sam Cole", "them:B": "Sam Cole"]),
-            call("4", 400, ["me:A": "David Webber", "them:A": "Jo Park"]),
+            call("1", 100, ["me:A": "Avery Lane", "them:A": "Alex Rivera", "them:B": "Sam Cole"]),
+            call("2", 200, ["me:A": "Avery Lane", "them:A": "Alex Rivera"]),
+            call("3", 300, ["me:A": "Avery Lane", "them:A": "Sam Cole", "them:B": "Sam Cole"]),
+            call("4", 400, ["me:A": "Avery Lane", "them:A": "Jo Park"]),
         ])
-        XCTAssertEqual(stats["David Webber"]?.oftenWith, [
+        XCTAssertEqual(stats["Avery Lane"]?.oftenWith, [
             CoSpeaker(name: "Alex Rivera", meetings: 2), CoSpeaker(name: "Sam Cole", meetings: 2), CoSpeaker(name: "Jo Park", meetings: 1),
         ])
-        XCTAssertEqual(stats["Alex Rivera"]?.oftenWith, [CoSpeaker(name: "David Webber", meetings: 2), CoSpeaker(name: "Sam Cole", meetings: 1)])
+        XCTAssertEqual(stats["Alex Rivera"]?.oftenWith, [CoSpeaker(name: "Avery Lane", meetings: 2), CoSpeaker(name: "Sam Cole", meetings: 1)])
     }
 
     func testActionItemsMatchExactNameOrUniqueFirstName() {
         let stats = PersonStatistics.compute([
-            call("1", 100, ["me:A": "David Webber", "them:A": "Alex Rivera"], items: [
+            call("1", 100, ["me:A": "Avery Lane", "them:A": "Alex Rivera"], items: [
                 ActionItem(owner: "Alex Rivera", task: "Send the deck"),
                 ActionItem(owner: "alex", task: "Book a room"),
-                ActionItem(owner: "David", task: "Review"),
+                ActionItem(owner: "Avery", task: "Review"),
                 ActionItem(owner: nil, task: "Nobody"),
             ]),
             // Two speakers named Alex: a first name alone is not enough.
@@ -87,12 +87,12 @@ final class PersonStatisticsTests: XCTestCase {
                 ActionItem(owner: "Alex Kim", task: "Exact"),
             ]),
             // Not a speaker in this call.
-            call("3", 300, ["me:A": "David Webber"], items: [ActionItem(owner: "Alex Rivera", task: "Elsewhere")]),
+            call("3", 300, ["me:A": "Avery Lane"], items: [ActionItem(owner: "Alex Rivera", task: "Elsewhere")]),
         ])
         XCTAssertEqual(stats["Alex Rivera"]?.actionItems.map(\.item.task), ["Send the deck", "Book a room"])
         XCTAssertEqual(stats["Alex Rivera"]?.actionItems.first?.meetingID, "1")
         XCTAssertEqual(stats["Alex Kim"]?.actionItems.map(\.item.task), ["Exact"])
-        XCTAssertEqual(stats["David Webber"]?.actionItems.map(\.item.task), ["Review"])
+        XCTAssertEqual(stats["Avery Lane"]?.actionItems.map(\.item.task), ["Review"])
     }
 
     func testUnnamedSpeakersDoNotMatchByFirstWord() {

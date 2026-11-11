@@ -90,7 +90,7 @@ final class TranscriptBlockTests: XCTestCase {
     func record(_ utterances: [Utterance]) -> CallRecord {
         var r = CallRecord(id: "x", platform: .meet, bundleID: "com.google.Chrome", start: Date(), end: Date(), status: .written)
         r.utterances = utterances
-        r.speakerNames = ["me:A": "David Webber"]
+        r.speakerNames = ["me:A": "Avery Lane"]
         return r
     }
 
@@ -102,7 +102,7 @@ final class TranscriptBlockTests: XCTestCase {
             Utterance(track: .me, speakerLabel: "A", start: 8, end: 9, text: "Great."),
         ])
         let blocks = TranscriptBlock.blocks(r)
-        XCTAssertEqual(blocks.map(\.speaker), ["David Webber", "Speaker A", "David Webber"])
+        XCTAssertEqual(blocks.map(\.speaker), ["Avery Lane", "Speaker A", "Avery Lane"])
         XCTAssertEqual(blocks[0].lines.map(\.text), ["Good morning.", "Can you hear me?"])
         XCTAssertEqual(blocks[0].start, 0)
         XCTAssertEqual(blocks[1].start, 6)
@@ -115,7 +115,7 @@ final class TranscriptBlockTests: XCTestCase {
             Utterance(track: .me, speakerLabel: "A", start: 14, end: 17, text: "Thanks."),
         ])
         let talk = TranscriptBlock.talkTime(r)
-        XCTAssertEqual(talk.map(\.speaker), ["Speaker A", "David Webber"])
+        XCTAssertEqual(talk.map(\.speaker), ["Speaker A", "Avery Lane"])
         XCTAssertEqual(talk.map(\.seconds), [10, 5])
     }
 

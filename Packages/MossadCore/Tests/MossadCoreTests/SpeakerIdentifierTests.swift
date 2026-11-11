@@ -20,15 +20,15 @@ final class SpeakerIdentifierTests: XCTestCase {
     }
 
     func identify(_ utterances: [Utterance]) async throws -> SpeakerIdentification {
-        try await SpeakerIdentifier(library: library, provider: provider, ownerName: "David Webber").identify(utterances: utterances, meURL: meURL, themURL: themURL)
+        try await SpeakerIdentifier(library: library, provider: provider, ownerName: "Avery Lane").identify(utterances: utterances, meURL: meURL, themURL: themURL)
     }
 
     func testOwnerEnrolledFromDominantMeSpeakerWhenLibraryHasNoOwner() async throws {
         try writeSegments(meURL, total: 30, [(0, 10, 200), (20, 23, 600)])
         try writeSegments(themURL, total: 30, [])
         let result = try await identify([u(.me, "A", 0, 10), u(.me, "B", 20, 23)])
-        XCTAssertEqual(result.names["me:A"], "David Webber")
-        XCTAssertEqual(library.owner?.name, "David Webber")
+        XCTAssertEqual(result.names["me:A"], "Avery Lane")
+        XCTAssertEqual(library.owner?.name, "Avery Lane")
         XCTAssertEqual(result.unknown, ["me:B"])
     }
 
@@ -37,8 +37,8 @@ final class SpeakerIdentifierTests: XCTestCase {
         try writeSegments(meURL, total: 60, [(0, 30, 600), (40, 50, 200)])
         try writeSegments(themURL, total: 60, [(0, 30, 400)])
         let result = try await identify([u(.me, "A", 0, 30), u(.them, "A", 0, 30), u(.me, "B", 40, 50)])
-        XCTAssertEqual(result.names["me:B"], "David Webber")
-        XCTAssertNotEqual(result.names["me:A"], "David Webber")
+        XCTAssertEqual(result.names["me:B"], "Avery Lane")
+        XCTAssertNotEqual(result.names["me:A"], "Avery Lane")
     }
 
     func testOwnerIsNotEnrolledFromSlightlyLateEcho() async throws {
@@ -46,7 +46,7 @@ final class SpeakerIdentifierTests: XCTestCase {
         try writeSegments(meURL, total: 60, [(0.1, 30.1, 600)])
         try writeSegments(themURL, total: 60, [(0, 30, 400)])
         let result = try await identify([u(.me, "A", 0.1, 30.1), u(.them, "A", 0, 30)])
-        XCTAssertNotEqual(result.names["me:A"], "David Webber")
+        XCTAssertNotEqual(result.names["me:A"], "Avery Lane")
         XCTAssertNil(library.owner)
     }
 
@@ -55,16 +55,16 @@ final class SpeakerIdentifierTests: XCTestCase {
         try writeSegments(meURL, total: 80, [(0, 60, 600), (70, 76, 200)])
         try writeSegments(themURL, total: 80, [(0, 60, 400)])
         let result = try await identify([u(.me, "A", 0, 60), u(.them, "A", 0, 60), u(.me, "A", 70, 76)])
-        XCTAssertNotEqual(result.names["me:A"], "David Webber")
+        XCTAssertNotEqual(result.names["me:A"], "Avery Lane")
         XCTAssertNil(library.owner)
     }
 
     func testOwnerMatchedByVoiceOnMeTrack() async throws {
-        try library.add([1, 0, 0, 0], to: "David Webber", isOwner: true)
+        try library.add([1, 0, 0, 0], to: "Avery Lane", isOwner: true)
         try writeSegments(meURL, total: 30, [(0, 3, 600), (5, 20, 200)])
         try writeSegments(themURL, total: 30, [])
         let result = try await identify([u(.me, "A", 0, 3), u(.me, "B", 5, 20)])
-        XCTAssertEqual(result.names["me:B"], "David Webber")
+        XCTAssertEqual(result.names["me:B"], "Avery Lane")
         XCTAssertNil(result.names["me:A"])
         XCTAssertEqual(result.unknown, ["me:A"])
     }

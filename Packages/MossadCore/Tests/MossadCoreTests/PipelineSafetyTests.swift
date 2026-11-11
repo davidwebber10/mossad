@@ -32,7 +32,7 @@ extension PipelineTests {
         let notifications = notifications
         return Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
                         calendar: calendar, summarizer: summarizer, notify: { notifications.records.append($0) },
-                        now: { clock.now }, ownerName: "David Webber",
+                        now: { clock.now }, ownerName: "Avery Lane",
                         onStep: { notifications.steps.append($0) }, onDetail: { _, text in notifications.detail(text) },
                         onDiscard: { discarded?.records.append($0) })
     }
@@ -48,7 +48,7 @@ extension PipelineTests {
 
         let good = FakeTranscriber()
         good.result = transcriber.result
-        p.configure(Pipeline.Configuration(transcriber: good, summarizer: summarizer, ownerName: "David Webber"))
+        p.configure(Pipeline.Configuration(transcriber: good, summarizer: summarizer, ownerName: "Avery Lane"))
         await p.retry(id)
         XCTAssertEqual(try load(id).status, .written)
         XCTAssertEqual(good.calls.count, 2)
@@ -61,7 +61,7 @@ extension PipelineTests {
         let p = pipeline()
         let first = Task { await p.process(id) }
         while transcriber.calls.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
-        p.configure(Pipeline.Configuration(transcriber: transcriber, summarizer: summarizer, ownerName: "David Webber"))
+        p.configure(Pipeline.Configuration(transcriber: transcriber, summarizer: summarizer, ownerName: "Avery Lane"))
         await p.runPending()
         await first.value
         XCTAssertEqual(transcriber.calls.count, 2, "each track one time")
@@ -341,7 +341,7 @@ extension PipelineTests {
         try r.save(to: paths.callDirectory(id))
         let jobs = JobTranscriber()
         jobs.release()
-        p.configure(Pipeline.Configuration(transcriber: jobs, summarizer: summarizer, ownerName: "David Webber"))
+        p.configure(Pipeline.Configuration(transcriber: jobs, summarizer: summarizer, ownerName: "Avery Lane"))
         await p.transcribeAgain(id, speakers: 3)
         XCTAssertEqual(jobs.resumed, [:], "no old job was resumed")
         XCTAssertEqual(try load(id).status, .written)

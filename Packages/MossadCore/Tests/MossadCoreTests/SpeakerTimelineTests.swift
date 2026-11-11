@@ -6,7 +6,7 @@ final class SpeakerTimelineTests: XCTestCase {
         var r = CallRecord(id: "x", platform: .meet, bundleID: "b", start: Date(timeIntervalSince1970: 0),
                            end: Date(timeIntervalSince1970: 600), status: .written)
         r.utterances = utterances
-        r.speakerNames = ["me:A": "David Webber"]
+        r.speakerNames = ["me:A": "Avery Lane"]
         return r
     }
 
@@ -17,8 +17,8 @@ final class SpeakerTimelineTests: XCTestCase {
     func testMergesShortGapsAndKeepsRealGaps() {
         let r = record([u(.me, "A", 0, 5), u(.me, "A", 6, 10), u(.me, "A", 20, 25), u(.them, "B", 25.5, 30)])
         XCTAssertEqual(SpeakerTimeline.segments(r), [
-            SpeakerSegment(speakerKey: "me:A", speaker: "David Webber", start: 0, end: 10),
-            SpeakerSegment(speakerKey: "me:A", speaker: "David Webber", start: 20, end: 25),
+            SpeakerSegment(speakerKey: "me:A", speaker: "Avery Lane", start: 0, end: 10),
+            SpeakerSegment(speakerKey: "me:A", speaker: "Avery Lane", start: 20, end: 25),
             SpeakerSegment(speakerKey: "them:B", speaker: "Speaker A", start: 25.5, end: 30),
         ])
     }

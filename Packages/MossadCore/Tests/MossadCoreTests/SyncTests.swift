@@ -5,7 +5,7 @@ final class SyncTests: XCTestCase {
     private func meeting(_ id: String, status: CallStatus = .written) -> CallRecord {
         var r = CallRecord(id: id, platform: .meet, bundleID: "", start: Date(timeIntervalSince1970: 1_800_000_000), end: Date(timeIntervalSince1970: 1_800_001_800), status: status)
         r.calendarTitle = "Launch sync"
-        r.speakerNames = ["me:A": "David Webber"]
+        r.speakerNames = ["me:A": "Avery Lane"]
         r.speakerEmbeddings = ["me:A": [0.1, 0.2]]
         r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 1, end: 2, text: "Hi.", words: [Word(text: "Hi.", start: 1, end: 2)])]
         r.meUtterances = r.utterances

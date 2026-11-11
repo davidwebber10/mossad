@@ -19,7 +19,7 @@ final class SummarizerTests: XCTestCase {
 
     func testSendsModelHeadersAndSchema() async throws {
         StubURLProtocol.handler = { _ in (200, self.reply(#"{"summary":"S","topics":[],"action_items":[],"decisions":[],"headline":"H","kind":"Status update","has_outcomes":false}"#)) }
-        _ = try await summarizer().summarize(transcript: "[00:00:01] David Webber: Hi", title: "Weekly Ops Sync")
+        _ = try await summarizer().summarize(transcript: "[00:00:01] Avery Lane: Hi", title: "Weekly Ops Sync")
         let r = try XCTUnwrap(StubURLProtocol.requests.first)
         XCTAssertEqual(r.url.absoluteString, "https://api.anthropic.com/v1/messages")
         let headers = Dictionary(uniqueKeysWithValues: r.headers.map { ($0.key.lowercased(), $0.value) })
@@ -42,7 +42,7 @@ final class SummarizerTests: XCTestCase {
         let item = (props?["action_items"] as? [String: Any])?["items"] as? [String: Any]
         XCTAssertEqual(Set(item?["required"] as? [String] ?? []), ["owner", "task"])
         let content = ((body["messages"] as? [[String: Any]])?.first?["content"] as? String) ?? ""
-        XCTAssertTrue(content.contains("Weekly Ops Sync") && content.contains("David Webber: Hi"))
+        XCTAssertTrue(content.contains("Weekly Ops Sync") && content.contains("Avery Lane: Hi"))
     }
 
     func testParsesSummaryAndActionItems() async throws {
@@ -118,7 +118,7 @@ final class SummarizerTests: XCTestCase {
     }
 
     func testPromptGivesBookmarkedMomentsWeight() {
-        XCTAssertTrue(LLMSummarizer.systemPrompt(owner: "David Webber", organization: "").contains("★ Bookmarked"))
+        XCTAssertTrue(LLMSummarizer.systemPrompt(owner: "Avery Lane", organization: "").contains("★ Bookmarked"))
     }
 
     func testSendsKnownTagsAndParsesTags() async throws {

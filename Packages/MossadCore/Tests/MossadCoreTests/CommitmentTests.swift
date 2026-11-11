@@ -87,10 +87,10 @@ final class CommitmentTests: XCTestCase {
         StubURLProtocol.handler = { _ in (200, self.reply(String(decoding: json(out), as: UTF8.self))) }
         var r = CallRecord(id: "c9", platform: .meet, bundleID: "", start: t0, end: t0.addingTimeInterval(1800), status: .written)
         r.calendarTitle = "Budget"
-        r.speakerNames = ["me:A": "David Webber"]
+        r.speakerNames = ["me:A": "Avery Lane"]
         r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 1962, end: 1965, text: "I'll have that by Tuesday"),
                         Utterance(track: .me, speakerLabel: "A", start: 2100, end: 2104, text: "Sure, I'll write that up for you.")]
-        let finder = CommitmentFinder(llm: AnthropicModel(apiKey: "k", model: "m", session: StubURLProtocol.session(), usage: nil), ownerName: "David Webber")
+        let finder = CommitmentFinder(llm: AnthropicModel(apiKey: "k", model: "m", session: StubURLProtocol.session(), usage: nil), ownerName: "Avery Lane")
         let found = try await finder.find(in: r)
         XCTAssertEqual(found.count, 2)
         XCTAssertEqual(found[0].to, "Jon Hueni")

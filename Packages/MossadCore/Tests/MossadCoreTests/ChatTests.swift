@@ -9,7 +9,7 @@ final class ChatTests: XCTestCase {
         let start = base.addingTimeInterval(day * 86_400)
         var r = CallRecord(id: id, platform: .meet, bundleID: "", start: start, end: start.addingTimeInterval(1800), status: .written)
         r.calendarTitle = title
-        r.speakerNames = ["me:A": "David Webber"]
+        r.speakerNames = ["me:A": "Avery Lane"]
         for (i, p) in people.enumerated() { r.speakerNames["them:\(Character(UnicodeScalar(UInt8(65 + i))))"] = p }
         let keys = r.speakerNames.keys.sorted()
         r.utterances = lines.enumerated().map { i, text in
@@ -32,7 +32,7 @@ final class ChatTests: XCTestCase {
         meeting("mitch", day: 9, title: "Data review", people: ["Mitch Haus"], lines: ["Supermetrics renews in December."], tags: ["Supermetrics"]),
     ]
 
-    private var tools: ChatTools { ChatTools(records: records, owner: "David Webber") }
+    private var tools: ChatTools { ChatTools(records: records, owner: "Avery Lane") }
 
     // MARK: Tools
 
@@ -95,7 +95,7 @@ final class ChatTests: XCTestCase {
             return (200, self.reply([["type": "text", "text": "Austin will send the deck by Friday. [Launch sync](mossad://call/both?t=30)"]], stop: "end_turn"))
         }
         let log = UsageLog(directory: tempDirectory())
-        let agent = ChatAgent(apiKey: "k", session: StubURLProtocol.session(), ownerName: "David Webber", usage: log)
+        let agent = ChatAgent(apiKey: "k", session: StubURLProtocol.session(), ownerName: "Avery Lane", usage: log)
         let steps = StepCollector()
         let answer = try await agent.answer("What did Jen agree to?", history: [], records: records) { steps.add($0) }
         XCTAssertTrue(answer.contains("mossad://call/both?t=30"))
@@ -117,7 +117,7 @@ final class ChatTests: XCTestCase {
 
     func testEarlierTurnsGoFirst() async throws {
         StubURLProtocol.handler = { _ in (200, self.reply([["type": "text", "text": "Yes."]], stop: "end_turn")) }
-        let agent = ChatAgent(apiKey: "k", session: StubURLProtocol.session(), ownerName: "David Webber")
+        let agent = ChatAgent(apiKey: "k", session: StubURLProtocol.session(), ownerName: "Avery Lane")
         _ = try await agent.answer("Was there a deadline?", history: [ChatMessage(role: .user, text: "What did Jen agree to?"),
                                                                        ChatMessage(role: .assistant, text: "To own the pricing page.")],
                                    records: records) { _ in }

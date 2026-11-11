@@ -10,7 +10,7 @@ final class ChatCoachToolsTests: XCTestCase {
         try paths.ensureDirectories()
         var r = CallRecord(id: "c1", platform: .meet, bundleID: "", start: base, end: base.addingTimeInterval(1800), status: .written)
         r.calendarTitle = "Mitch / David"
-        r.speakerNames = ["me:A": "David Webber", "them:A": "Mitch Haus"]
+        r.speakerNames = ["me:A": "Avery Lane", "them:A": "Mitch Haus"]
         r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 0, end: 120, text: "Let us start with the budget."),
                         Utterance(track: .them, speakerLabel: "A", start: 130, end: 400, text: "Sure.")]
         try FileManager.default.createDirectory(at: paths.callDirectory("c1"), withIntermediateDirectories: true)
@@ -30,7 +30,7 @@ final class ChatCoachToolsTests: XCTestCase {
         try profile.save(to: paths.coach)
     }
 
-    private var tools: ChatTools { ChatTools(records: ProcessingQueue(paths: paths).allRecords(), owner: "David Webber", paths: paths) }
+    private var tools: ChatTools { ChatTools(records: ProcessingQueue(paths: paths).allRecords(), owner: "Avery Lane", paths: paths) }
 
     func testTheCoachProfileToolCarriesFocusAndFacts() {
         let text = tools.run("coach_profile", input: [:])
@@ -87,7 +87,7 @@ final class ChatCoachToolsTests: XCTestCase {
         var chat = Chat(title: "Budget prep")
         chat.summary = "Planned how to pitch two hires."
         try ChatStore(directory: paths.chats).save(chat)
-        let system = ChatAgent.system(owner: "David Webber", tools: tools, now: base)
+        let system = ChatAgent.system(owner: "Avery Lane", tools: tools, now: base)
         XCTAssertTrue(system.contains("Close every call with owners and dates."), system)
         XCTAssertTrue(system.contains("Planned how to pitch two hires."))
         XCTAssertTrue(system.contains("remember"))
@@ -97,7 +97,7 @@ final class ChatCoachToolsTests: XCTestCase {
 extension ChatCoachToolsTests {
     func testLiveChatAnswersFromTheCoach() async throws {
         guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
-        let agent = ChatAgent(apiKey: key, ownerName: "David Webber")
+        let agent = ChatAgent(apiKey: key, ownerName: "Avery Lane")
         let records = ProcessingQueue(paths: paths).allRecords()
         let answer = try await agent.answer("from the coach, whats the #1 key point of feedback. 1 positive and 1 negative.", history: [],
                                             records: records, paths: paths) { print("LIVE step: \($0)") }

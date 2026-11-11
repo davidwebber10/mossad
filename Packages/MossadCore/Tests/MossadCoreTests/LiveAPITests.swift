@@ -58,9 +58,9 @@ final class LiveAPITests: XCTestCase {
     func testClaudeSummarizesTranscript() async throws {
         guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
         let transcript = """
-        [00:00:05] David Webber: Where are we on the cushion shipment?
+        [00:00:05] Avery Lane: Where are we on the cushion shipment?
         [00:00:09] Alex Rivera: Freight is booked. It leaves the north plant on Friday.
-        [00:00:15] David Webber: Good. Can you send me the updated forecast by Thursday?
+        [00:00:15] Avery Lane: Good. Can you send me the updated forecast by Thursday?
         [00:00:19] Alex Rivera: Yes, I will send it Thursday morning.
         """
         let result = try await LLMSummarizer(apiKey: key).summarize(transcript: transcript, title: "Cushion check-in")
@@ -73,7 +73,7 @@ final class LiveAPITests: XCTestCase {
     private func syntheticCall() -> CallRecord {
         var r = CallRecord(id: "live", platform: .meet, bundleID: "", start: Date().addingTimeInterval(-1800), end: Date(), status: .written)
         r.calendarTitle = "Cushion check-in"
-        r.speakerNames = ["me:A": "David Webber", "them:A": "Alex Rivera"]
+        r.speakerNames = ["me:A": "Avery Lane", "them:A": "Alex Rivera"]
         let lines: [(Track, String)] = [
             (.me, "So um, I wanted to, uh, go through a lot of things today, the freight, the forecast, the chairs, and also the budget, and the hiring plan, and, uh, where we are on cushions in general, so let me start with some background on how we got here."),
             (.them, "Sure. Freight is booked. It leaves the north plant on Friday."),
@@ -91,7 +91,7 @@ final class LiveAPITests: XCTestCase {
 
     func testLLMCoachReviewsACall() async throws {
         guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
-        let result = try await LLMCoach(apiKey: key, ownerName: "David Webber").review(record: syntheticCall(), profile: CoachProfile(), tone: nil)
+        let result = try await LLMCoach(apiKey: key, ownerName: "Avery Lane").review(record: syntheticCall(), profile: CoachProfile(), tone: nil)
         print("LIVE coach: \(result.review.headline) | value: \(String(describing: result.review.value)) | improve: \(result.review.improvements.map(\.title))")
         XCTAssertFalse(result.review.improvements.isEmpty)
         XCTAssertNotNil(result.review.value)
@@ -103,13 +103,13 @@ final class LiveAPITests: XCTestCase {
         var r = syntheticCall()
         r.calendarTitle = "Tech Team Monthly Sync"
         r.kind = "Monthly update"
-        r.speakerNames = ["me:A": "David Webber", "them:A": "Jeff Hill", "them:B": "Ed Ng"]
+        r.speakerNames = ["me:A": "Avery Lane", "them:A": "Jeff Hill", "them:B": "Ed Ng"]
         r.utterances = [
             Utterance(track: .them, speakerLabel: "A", start: 0, end: 300, text: "Infrastructure update: the firewall swap is done, the new laptops ship next week, and the Databricks migration slipped two weeks because the vendor contract is not signed."),
             Utterance(track: .them, speakerLabel: "B", start: 310, end: 600, text: "On data, the cost dashboard is live. Nobody owns the Databricks contract follow-up yet; someone from leadership needs to push the vendor."),
             Utterance(track: .me, speakerLabel: "A", start: 610, end: 612, text: "Thanks."),
         ]
-        let result = try await LLMCoach(apiKey: key, ownerName: "David Webber").review(record: r, profile: CoachProfile(), tone: nil)
+        let result = try await LLMCoach(apiKey: key, ownerName: "Avery Lane").review(record: r, profile: CoachProfile(), tone: nil)
         print("LIVE listener: \(result.review.headline) | \(result.review.overview)")
         print("LIVE listener value: \(result.review.value?.rating.rawValue ?? "-") \(result.review.value?.action.rawValue ?? "-"): \(result.review.value?.suggestion ?? "")")
         print("LIVE listener improve: \(result.review.improvements.map { "\($0.title): \($0.tryInstead ?? "")" })")
@@ -124,12 +124,12 @@ final class LiveAPITests: XCTestCase {
                                  focusProgress: nil)
         var r = syntheticCall()
         r.calendarTitle = "Mitch / David"
-        let answer = try await CoachResponder(llm: AnthropicModel(apiKey: key), ownerName: "David Webber")
+        let answer = try await CoachResponder(llm: AnthropicModel(apiKey: key), ownerName: "Avery Lane")
             .respond(to: "That was on purpose. Mitch is my direct report and I want him to own these 1:1s.", review: review, record: r, profile: CoachProfile())
         print("LIVE feedback reply: \(answer.reply)")
         print("LIVE feedback guidance: add \(answer.add) remove \(answer.remove)")
         XCTAssertFalse(answer.add.isEmpty)
-        let facts = try await CoachResponder(llm: AnthropicModel(apiKey: key), ownerName: "David Webber")
+        let facts = try await CoachResponder(llm: AnthropicModel(apiKey: key), ownerName: "Avery Lane")
             .respond(to: "For context: I run data and technology, I own our vendor contracts for data tools including Databricks, and Mitch reports to me.",
                      review: review, record: r, profile: CoachProfile())
         print("LIVE facts reply: \(facts.reply)")
@@ -142,7 +142,7 @@ final class LiveAPITests: XCTestCase {
         let review = CoachReview(headline: "Long openings", overview: "You took 90 s to reach the point.", strengths: [],
                                  improvements: [CoachPoint(title: "Lead with the ask", observation: "O", quote: "Q", at: 3, principle: "BLUF", tryInstead: "T")],
                                  focusProgress: nil)
-        let digest = try await LLMDigestWriter(apiKey: key).digest(owner: "David Webber", reviews: [(title: "Cushion check-in", date: Date(), review: review)],
+        let digest = try await LLMDigestWriter(apiKey: key).digest(owner: "Avery Lane", reviews: [(title: "Cushion check-in", date: Date(), review: review)],
                                                                     profile: CoachProfile(), kind: .weekly)
         print("LIVE digest: \(digest.subject) | \(digest.focus)")
         XCTAssertFalse(digest.subject.isEmpty)
@@ -151,7 +151,7 @@ final class LiveAPITests: XCTestCase {
 
     func testChatAgentFindsWhatSomeoneAgreedToAndAnswersAFollowUp() async throws {
         guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
-        let agent = ChatAgent(apiKey: key, ownerName: "David Webber")
+        let agent = ChatAgent(apiKey: key, ownerName: "Avery Lane")
         let records = [syntheticCall()]
         let question = "What did Alex agree to do last call, and was there a deadline?"
         let first = try await agent.answer(question, history: [], records: records) { print("LIVE step: \($0)") }
@@ -165,20 +165,20 @@ final class LiveAPITests: XCTestCase {
     }
 
     private let liveTranscript = """
-    [00:00:05] David Webber: Where are we on the cushion shipment?
+    [00:00:05] Avery Lane: Where are we on the cushion shipment?
     [00:00:09] Alex Rivera: Freight is booked. It leaves the north plant on Friday.
-    [00:00:15] David Webber: Good. Can you send me the updated forecast by Thursday?
+    [00:00:15] Avery Lane: Good. Can you send me the updated forecast by Thursday?
     [00:00:19] Alex Rivera: Yes, I will send it Thursday morning.
     """
 
     private func checkProvider(_ llm: any LanguageModel, _ label: String) async throws {
-        let summary = try await LLMSummarizer(llm: llm, ownerName: "David Webber").summarize(transcript: liveTranscript, title: "Cushion check-in")
+        let summary = try await LLMSummarizer(llm: llm, ownerName: "Avery Lane").summarize(transcript: liveTranscript, title: "Cushion check-in")
         print("LIVE \(label) summary: \(summary.headline ?? "") | items: \(summary.actionItems) | tags: \(summary.tags)")
         XCTAssertTrue(summary.actionItems.contains { $0.task.lowercased().contains("forecast") })
-        let coach = try await LLMCoach(llm: llm, ownerName: "David Webber").review(record: syntheticCall(), profile: CoachProfile(), tone: nil)
+        let coach = try await LLMCoach(llm: llm, ownerName: "Avery Lane").review(record: syntheticCall(), profile: CoachProfile(), tone: nil)
         print("LIVE \(label) coach: \(coach.review.headline) | value: \(coach.review.value?.rating.rawValue ?? "-")")
         XCTAssertFalse(coach.review.improvements.isEmpty)
-        let answer = try await ChatAgent(llm: llm, ownerName: "David Webber")
+        let answer = try await ChatAgent(llm: llm, ownerName: "Avery Lane")
             .answer("What did Alex agree to do last call, and was there a deadline?", history: [], records: [syntheticCall()]) { print("LIVE \(label) step: \($0)") }
         print("LIVE \(label) chat: \(answer)")
         XCTAssertTrue(answer.contains("mossad://call/live"))
@@ -271,7 +271,7 @@ final class LiveAPITests: XCTestCase {
         let md = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
         print("LIVE-E2E\n" + md)
         XCTAssertEqual(r.status, .written)
-        XCTAssertEqual(r.speakerNames.values.filter { $0 == "David Webber" }.count, 1)
+        XCTAssertEqual(r.speakerNames.values.filter { $0 == "Avery Lane" }.count, 1)
         XCTAssertEqual(r.unknownSpeakers.count, 2, "Daniel and Karen should be two unknown speakers: \(r.unknownSpeakers)")
         XCTAssertNotNil(r.summary)
 
@@ -292,7 +292,7 @@ final class LiveAPITests: XCTestCase {
         await pipeline.process(id2)
         let r2 = try CallRecord.load(from: dir2)
         print("LIVE-E2E-2 names: \(r2.speakerNames) unknown: \(r2.unknownSpeakers)")
-        XCTAssertEqual(Set(r2.speakerNames.values), ["David Webber", "Alex Rivera", "Amy Lee"])
+        XCTAssertEqual(Set(r2.speakerNames.values), ["Avery Lane", "Alex Rivera", "Amy Lee"])
         XCTAssertEqual(r2.unknownSpeakers, [])
     }
 }

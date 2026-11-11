@@ -108,7 +108,7 @@ final class PipelineTests: XCTestCase {
         let later = start.addingTimeInterval(3600)
         return Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
                         calendar: calendar, summarizer: summarizer, notify: { notifications.records.append($0) },
-                        now: { later }, ownerName: "David Webber", voiceFingerprints: voiceFingerprints,
+                        now: { later }, ownerName: "Avery Lane", voiceFingerprints: voiceFingerprints,
                         onStep: { notifications.steps.append($0) }, onDetail: { _, text in notifications.detail(text) })
     }
 
@@ -129,7 +129,7 @@ final class PipelineTests: XCTestCase {
         let notifications = notifications
         let later = start.addingTimeInterval(3600)
         let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
-                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "Avery Lane",
                          onDetail: { _, text in notifications.detail(text) }, heavy: gate)
         let run = Task { await p.process(id) }
         try await Task.sleep(for: .milliseconds(400))
@@ -157,7 +157,7 @@ final class PipelineTests: XCTestCase {
         let notifications = notifications
         let later = start.addingTimeInterval(3600)
         let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
-                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "Avery Lane",
                          onDetail: { _, text in notifications.detail(text) }, heavy: gate)
         await p.process(id)
         let done = try CallRecord.load(from: dir)
@@ -182,7 +182,7 @@ final class PipelineTests: XCTestCase {
         let notifications = notifications
         let later = start.addingTimeInterval(3600)
         let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
-                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "Avery Lane",
                          onDetail: { _, text in notifications.detail(text) },
                          onProgress: { _, p in if p?.waitsForCall == true { waiting.lock.withLock { waiting.seen = true } } }, heavy: gate)
         let run = Task { await p.process(id) }
@@ -211,7 +211,7 @@ final class PipelineTests: XCTestCase {
         let gate = HeavyWorkGate(pollInterval: .seconds(3600), isCallRecording: { true }, log: { _ in })
         let later = start.addingTimeInterval(3600)
         let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
-                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "Avery Lane",
                          onProgress: { _, p in last.lock.withLock { last.progress = p } }, heavy: gate)
         let run = Task { await p.process(id) }
         try await Task.sleep(for: .milliseconds(300))
@@ -258,7 +258,7 @@ final class PipelineTests: XCTestCase {
         let later = start.addingTimeInterval(3600)
         // The next call starts when the summary is done.
         let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
-                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "Avery Lane",
                          onStep: { if $0.status == .summarized { call.recording = true } }, heavy: gate)
         await p.process(id)
         XCTAssertEqual(try CallRecord.load(from: dir).status, .written)
@@ -742,7 +742,7 @@ final class PipelineTests: XCTestCase {
         let notifications = notifications
         let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
                          calendar: FakeCalendar(), summarizer: summarizer, notify: { notifications.records.append($0) },
-                         ownerName: "David Webber", onProgress: { _, progress in seen.withLock { $0.append(progress) } })
+                         ownerName: "Avery Lane", onProgress: { _, progress in seen.withLock { $0.append(progress) } })
         await p.process(id)
         let all = seen.withLock { $0 }
         XCTAssertEqual(all.compactMap { $0?.step }.reduce(into: [ProcessingStep]()) { if $0.last != $1 { $0.append($1) } },
@@ -814,7 +814,7 @@ final class PipelineTests: XCTestCase {
         await pipeline(voiceFingerprints: false).process(id)
         let r = try load(id)
         XCTAssertEqual(r.status, .written)
-        XCTAssertEqual(r.speakerNames, ["me:A": "David Webber"])
+        XCTAssertEqual(r.speakerNames, ["me:A": "Avery Lane"])
         XCTAssertEqual(r.speakerEmbeddings, [:])
         XCTAssertEqual(library.profiles.map(\.name), ["Alex Rivera"])
         XCTAssertTrue(notified.isEmpty)
@@ -1056,7 +1056,7 @@ final class PipelineTests: XCTestCase {
         await pipeline(calendar: calendar).process(id)
         let r = try load(id)
         XCTAssertEqual(r.status, .written)
-        XCTAssertEqual(r.speakerNames["me:A"], "David Webber")
+        XCTAssertEqual(r.speakerNames["me:A"], "Avery Lane")
         XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
         XCTAssertEqual(r.unknownSpeakers, ["them:B"])
         XCTAssertEqual(r.calendarTitle, "Weekly Ops Sync")

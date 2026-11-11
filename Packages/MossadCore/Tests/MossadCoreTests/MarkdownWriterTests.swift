@@ -18,7 +18,7 @@ final class MarkdownWriterTests: XCTestCase {
             Utterance(track: .them, speakerLabel: "A", start: 252, end: 260, text: "Cushions ship Friday."),
             Utterance(track: .them, speakerLabel: "C", start: 3725, end: 3730, text: "Who owns freight?"),
         ]
-        r.speakerNames = ["me:A": "David Webber", "them:A": "Alex Rivera"]
+        r.speakerNames = ["me:A": "Avery Lane", "them:A": "Alex Rivera"]
         r.unknownSpeakers = ["them:C"]
         r.summary = "The team confirmed the Friday cushion shipment."
         r.actionItems = [ActionItem(owner: "Alex Rivera", task: "confirm freight"), ActionItem(owner: nil, task: "book a room")]
@@ -36,7 +36,7 @@ final class MarkdownWriterTests: XCTestCase {
         platform: Google Meet
         title: "Weekly Ops Sync"
         attendees: ["Alex Rivera", "Amy Lee"]
-        speakers: ["David Webber", "Alex Rivera", "Speaker A"]
+        speakers: ["Avery Lane", "Alex Rivera", "Speaker A"]
         audio: ~/Mossad/Audio/20261020-143000
         ---
         # Weekly Ops Sync
@@ -57,7 +57,7 @@ final class MarkdownWriterTests: XCTestCase {
 
         ## Transcript
 
-        [00:00:05] David Webber: Morning, everyone.
+        [00:00:05] Avery Lane: Morning, everyone.
         [00:04:12] Alex Rivera: Cushions ship Friday.
         [01:02:05] Speaker A: Who owns freight?
 

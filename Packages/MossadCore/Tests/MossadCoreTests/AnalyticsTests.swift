@@ -14,14 +14,14 @@ final class AnalyticsTests: XCTestCase {
                       kind: String? = nil, ownerSeconds: Double = 60) -> CallRecord {
         var r = CallRecord(id: id, platform: platform, bundleID: "", start: start, end: start.addingTimeInterval(minutes * 60), status: .written)
         r.kind = kind
-        r.speakerNames["me:A"] = "David Webber"
+        r.speakerNames["me:A"] = "Avery Lane"
         r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 0, end: ownerSeconds, text: String(repeating: "word ", count: 100))]
         for (i, p) in people.enumerated() {
             let label = String(UnicodeScalar(UInt8(65 + i)))
             r.speakerNames["them:\(label)"] = p
             r.utterances.append(Utterance(track: .them, speakerLabel: label, start: 100, end: 160, text: "ok"))
         }
-        r.actionItems = [ActionItem(owner: "David Webber", task: "T")]
+        r.actionItems = [ActionItem(owner: "Avery Lane", task: "T")]
         return r
     }
 
@@ -103,7 +103,7 @@ final class AnalyticsTests: XCTestCase {
             UsageEvent(date: date(10, 20, 15), callID: "b", service: .claude, purpose: .coach, model: "claude-opus-5-5", inputTokens: 0, outputTokens: 100_000),
         ]
         let interval = DateInterval(start: date(10, 15, 0), end: date(10, 22, 0))
-        let r = AnalyticsReport(records: calls, usage: usage, owner: "David Webber", interval: interval, calendar: cal)
+        let r = AnalyticsReport(records: calls, usage: usage, owner: "Avery Lane", interval: interval, calendar: cal)
 
         XCTAssertEqual(r.calls, 2)
         XCTAssertEqual(r.callSeconds, 90 * 60)
@@ -131,7 +131,7 @@ final class AnalyticsTests: XCTestCase {
 
     func testReportBucketsLongRangesByWeek() {
         let interval = DateInterval(start: date(6, 1, 0), end: date(10, 1, 0))
-        let r = AnalyticsReport(records: [], usage: [], owner: "David Webber", interval: interval, calendar: cal)
+        let r = AnalyticsReport(records: [], usage: [], owner: "Avery Lane", interval: interval, calendar: cal)
         XCTAssertEqual(r.bucket, .week)
         XCTAssertLessThan(r.days.count, 20)
     }
@@ -170,7 +170,7 @@ final class AnalyticsTests: XCTestCase {
     func testReportCountsTimePerTag() {
         var a = call("a", date(10, 19), minutes: 30); a.tags = ["Budget", "Databricks"]
         var b = call("b", date(10, 20), minutes: 60); b.tags = ["Databricks"]
-        let r = AnalyticsReport(records: [a, b], usage: [], owner: "David Webber",
+        let r = AnalyticsReport(records: [a, b], usage: [], owner: "Avery Lane",
                                 interval: DateInterval(start: date(10, 15, 0), end: date(10, 22, 0)), calendar: cal)
         XCTAssertEqual(r.tags.map(\.name), ["Databricks", "Budget"])
         XCTAssertEqual(r.tags.first?.calls, 2)
@@ -187,7 +187,7 @@ final class AnalyticsTests: XCTestCase {
         var a = call("a", date(10, 16), minutes: 30); a.calendarTitle = "Weekly Sync"
         var b = call("b", date(10, 19), minutes: 30); b.calendarTitle = "Weekly Sync"
         var c = call("c", date(10, 20), minutes: 60); c.calendarTitle = "Planning"
-        let r = AnalyticsReport(records: [a, b, c], usage: [], owner: "David Webber",
+        let r = AnalyticsReport(records: [a, b, c], usage: [], owner: "Avery Lane",
                                 interval: DateInterval(start: date(10, 15, 0), end: date(10, 22, 0)),
                                 reviews: ["a": review(.low), "b": review(.low), "c": review(.high)], calendar: cal)
         XCTAssertEqual(r.valueSeconds[.low], 3600)
@@ -202,7 +202,7 @@ final class AnalyticsTests: XCTestCase {
         var a = call("a", date(10, 19, 9), minutes: 30); a.calendarTitle = "Weekly Sync"
         let b = call("b", date(10, 19, 14), minutes: 10)
         let c = call("c", date(10, 20, 10), minutes: 20)
-        let r = AnalyticsReport(records: [a, b, c], usage: [], owner: "David Webber",
+        let r = AnalyticsReport(records: [a, b, c], usage: [], owner: "Avery Lane",
                                 interval: DateInterval(start: date(10, 15, 0), end: date(10, 22, 0)), calendar: cal)
         XCTAssertEqual(r.scheduled.calls, 1)
         XCTAssertEqual(r.scheduled.seconds, 1800)

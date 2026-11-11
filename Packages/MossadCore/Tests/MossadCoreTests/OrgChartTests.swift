@@ -175,10 +175,10 @@ final class OrgChartTests: XCTestCase {
 
     func testThePromptsCarryThePeopleLines() {
         var r = CallRecord(id: "x", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
-        r.speakerNames = ["me:A": "David Webber"]
-        let coach = CoachPrompt.user(record: r, owner: "David Webber", profile: CoachProfile(), people: ["Sam Park, VP Planning"])
+        r.speakerNames = ["me:A": "Avery Lane"]
+        let coach = CoachPrompt.user(record: r, owner: "Avery Lane", profile: CoachProfile(), people: ["Sam Park, VP Planning"])
         XCTAssertTrue(coach.contains("Sam Park, VP Planning"))
-        XCTAssertFalse(CoachPrompt.user(record: r, owner: "David Webber", profile: CoachProfile()).contains("Job titles"))
+        XCTAssertFalse(CoachPrompt.user(record: r, owner: "Avery Lane", profile: CoachProfile()).contains("Job titles"))
         let summary = LLMSummarizer.userPrompt(knownTags: [], title: "Sync", transcript: "t", people: ["Sam Park, VP Planning"])
         XCTAssertTrue(summary.contains("Sam Park, VP Planning"))
         XCTAssertEqual(LLMSummarizer.userPrompt(knownTags: [], title: "Sync", transcript: "t", people: []), "Meeting: Sync\n\nTranscript:\nt")
