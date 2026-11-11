@@ -85,14 +85,15 @@ public struct LLMDigestWriter: DigestWriting {
         Do not pad: a quiet \(period) gets a short email. Address \(owner) as "you".
         """
         var user = ["## Profile", "Summary: \(profile.summary)", "## The focus\n" + CoachPrompt.focusText(profile)]
-        user += profile.patterns.map { "- \($0.name) (\($0.kind.rawValue), \($0.trend.rawValue), seen \($0.seen)): \($0.note)" }
+        user += profile.patterns.map { "- \($0.name) (\($0.kind.rawValue)): \($0.note) \(profile.standing($0))" }
         user.append("\n## This \(period)'s calls")
         for item in reviews {
             let r = item.review
             user.append("### \(item.date.formatted(.dateTime.weekday(.wide).month().day())) \(item.title)\n\(r.headline)\n\(r.overview)")
             if let f = r.focusResult { user.append("Focus result: \(f.outcome.rawValue). \(f.evidence)") }
-            if let n = r.lines.didWell { user.append("Did well: \(n.text)") }
-            if let n = r.lines.tryNext { user.append("Try next: \(n.text)") }
+            for line in [r.shownLine].compactMap({ $0 }) + r.others where line.kind != .focus {
+                user.append("\(line.title): \(line.text)" + (line.number.map { " \($0)." } ?? ""))
+            }
             if let p = r.focusProgress { user.append("Focus: \(p)") }
             if let card = r.scorecard { user.append("Score: \(card.score)/5. \(card.reason)") }
             if let v = r.value { user.append("Value: \(v.rating.rawValue); \(v.action.rawValue): \(v.suggestion)") }

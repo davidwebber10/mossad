@@ -10,13 +10,17 @@ public struct FocusResult: Codable, Equatable, Sendable, Hashable {
     /// One sentence on what happened, with the time when there was a moment.
     public var evidence: String
     public var at: TimeInterval?
+    /// The owner's own words that show it, found in the transcript by code. Without them the result counts
+    /// for the focus but is not a line.
+    public var quote: String?
 
-    public init(callID: String, date: Date, outcome: FocusOutcome, evidence: String, at: TimeInterval? = nil) {
+    public init(callID: String, date: Date, outcome: FocusOutcome, evidence: String, at: TimeInterval? = nil, quote: String? = nil) {
         self.callID = callID
         self.date = date
         self.outcome = outcome
         self.evidence = evidence
         self.at = at
+        self.quote = quote
     }
 }
 
@@ -39,13 +43,27 @@ public struct CoachFocus: Codable, Equatable, Sendable, Identifiable, Hashable {
     public var results: [FocusResult] = []
     /// The last change on any device; the newer copy wins when devices merge.
     public var updated: Date
+    /// The raw name of `measure`. Text, so a measure from a later build is no measure here and the memory
+    /// still reads.
+    public var measureName: String?
 
-    public init(plan: String, why: String, metric: FocusMetric?, proposed: Date) {
+    /// The id of the skill this focus is about (`CoachSkill.id`). Nil for a focus from before the skill list.
+    public var skill: String?
+
+    /// The number the app counts for this focus, when it is not one of the call's own numbers in `metric`.
+    public var measure: CoachMeasure? { measureName.flatMap(CoachMeasure.init(rawValue:)) ?? CoachSkill(id: skillID)?.measure }
+
+    /// The skill's id; for a focus from before the skill list, the one that its plan's words give.
+    public var skillID: String { skill ?? CoachSkill.seedID(plan) }
+
+    public init(plan: String, why: String, metric: FocusMetric?, proposed: Date, skill: String? = nil) {
         self.plan = plan
         self.why = why
         self.metric = metric
         self.proposed = proposed
         updated = proposed
+        self.skill = skill
+        measureName = skill.flatMap { CoachSkill(id: $0)?.measure?.rawValue }
     }
 
     /// The calls where the focus could show, oldest first.
@@ -144,6 +162,10 @@ extension CoachProfile {
                 seen.insert(r.callID)
             }
             keep.results.sort { $0.date < $1.date }
+            // A copy that a build from before these fields saved has none: the other copy's stay.
+            let other = f.updated > old.updated ? old : f
+            keep.skill = keep.skill ?? other.skill
+            keep.measureName = keep.measureName ?? other.measureName
             byID[f.id] = keep
         }
         return order.compactMap { byID[$0] }

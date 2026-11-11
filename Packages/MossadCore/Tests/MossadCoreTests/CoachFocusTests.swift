@@ -110,16 +110,6 @@ final class CoachReviewLinesTests: XCTestCase {
         CoachPoint(title: title, observation: "O", quote: "Q", at: 12, principle: "P", tryInstead: tryInstead)
     }
 
-    func testOlderReviewsShowTheirFirstPointsAsTheThreeLines() {
-        let r = CoachReview(headline: "H", overview: "O", strengths: [point("Led with the method", nil)],
-                            improvements: [point("Date your items", "My piece is due Tuesday.")], focusProgress: nil)
-        XCTAssertEqual(r.lines.didWell?.text, "Led with the method")
-        XCTAssertEqual(r.lines.didWell?.at, 12)
-        XCTAssertNil(r.lines.improving)
-        XCTAssertEqual(r.lines.tryNext?.text, "Date your items")
-        XCTAssertEqual(r.lines.tryNext?.say, "My piece is due Tuesday.")
-    }
-
     func testApplyingAReviewRecordsTheFocusResultAndAProposal() {
         var p = CoachProfile()
         p.propose(CoachFocus(plan: "A", why: "W", metric: nil, proposed: Date()), at: Date())

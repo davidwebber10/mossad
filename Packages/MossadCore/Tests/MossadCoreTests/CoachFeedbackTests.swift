@@ -104,7 +104,7 @@ final class CoachMemoryTests: XCTestCase {
         for expected in ["Role: Head of data and technology", "Responsible for:", "- The Databricks contract", "Goals:", "Jeff Hill is my manager"] {
             XCTAssertTrue(text.contains(expected), expected)
         }
-        XCTAssertLessThan(text.range(of: "Head of data")!.lowerBound, text.range(of: "coaching profile")!.lowerBound)
+        XCTAssertLessThan(text.range(of: "Head of data")!.lowerBound, text.range(of: "## The focus")!.lowerBound)
         XCTAssertTrue(CoachPrompt.system(owner: "David Webber").contains("responsib"))
     }
 

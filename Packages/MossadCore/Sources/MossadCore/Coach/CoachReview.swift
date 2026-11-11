@@ -92,23 +92,46 @@ public struct CoachFeedback: Codable, Equatable, Sendable {
     }
 }
 
-/// The coach's review of one call, saved as `coach.json` next to `call.json`.
-/// One short line of the review, with the moment it is about.
+/// One short note of the review, with the moment it is about.
 public struct CoachNote: Codable, Equatable, Sendable, Hashable {
     public var text: String
     public var quote: String?
     public var at: TimeInterval?
     /// For "try next time": the words the owner could say.
     public var say: String?
+    /// The behavior the note is about, in a few words, so the same advice is known when it comes again.
+    public var skill: String?
+    public var measure: CoachMeasure?
+    /// The measured number that stands next to the note, when its measure has one.
+    public var number: String?
 
-    public init(text: String, quote: String? = nil, at: TimeInterval? = nil, say: String? = nil) {
+    public init(text: String, quote: String? = nil, at: TimeInterval? = nil, say: String? = nil, skill: String? = nil,
+                measure: CoachMeasure? = nil, number: String? = nil) {
         self.text = text
         self.quote = quote
         self.at = at
         self.say = say
+        self.skill = skill
+        self.measure = measure
+        self.number = number
+    }
+
+    enum CodingKeys: String, CodingKey { case text, quote, at, say, skill, measure, number }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        text = try c.decode(String.self, forKey: .text)
+        quote = try c.decodeIfPresent(String.self, forKey: .quote)
+        at = try c.decodeIfPresent(TimeInterval.self, forKey: .at)
+        say = try c.decodeIfPresent(String.self, forKey: .say)
+        skill = try c.decodeIfPresent(String.self, forKey: .skill)
+        // A measure from a later build is no measure here, not a review that cannot be read.
+        measure = (try? c.decodeIfPresent(CoachMeasure.self, forKey: .measure)) ?? nil
+        number = try c.decodeIfPresent(String.self, forKey: .number)
     }
 }
 
+/// The coach's review of one call, saved as `coach.json` next to `call.json`.
 public struct CoachReview: Codable, Equatable, Sendable {
     public static let fileName = "coach.json"
 
@@ -127,7 +150,8 @@ public struct CoachReview: Codable, Equatable, Sendable {
     /// The owner's conversation with the coach about this review.
     public var thread: [ChatMessage] = []
     public var didWell: CoachNote?
-    /// Only from a measured change against earlier calls.
+    /// The model's own claim of a change, in reviews from before one line. Kept in the file and shown nowhere:
+    /// it compared one call with a median. A measured change is a line of the kind `progress`.
     public var improving: CoachNote?
     public var tryNext: CoachNote?
     /// The focus that was active for this call, and how the call went on it.
@@ -135,13 +159,12 @@ public struct CoachReview: Codable, Equatable, Sendable {
     public var focusResult: FocusResult?
     /// The owner mostly listened, or nothing stood out: the review is a line at most.
     public var quiet = false
-
-    /// The three lines, with older reviews' first points standing in.
-    public var lines: (didWell: CoachNote?, improving: CoachNote?, tryNext: CoachNote?) {
-        guard didWell == nil && improving == nil && tryNext == nil && !quiet else { return (didWell, improving, tryNext) }
-        return (strengths.first.map { CoachNote(text: $0.title, quote: $0.quote, at: $0.at) }, nil,
-                improvements.first.map { CoachNote(text: $0.title, quote: $0.quote, at: $0.at, say: $0.tryInstead) })
-    }
+    /// 0 for a review from before one line.
+    public var version = 0
+    /// The one line the review shows; nil when there is nothing with proof to say.
+    public var line: CoachLine?
+    /// Advice of the last 30 days that this call showed again: the moment, kept as evidence and not said again.
+    public var seenAgain: CoachNote?
 
     public init(headline: String, overview: String, strengths: [CoachPoint], improvements: [CoachPoint],
                 focusProgress: String?, value: MeetingValue? = nil, delivery: DeliveryStats? = nil, scorecard: Scorecard? = nil) {
@@ -157,7 +180,7 @@ public struct CoachReview: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case headline, overview, strengths, improvements, focusProgress, value, delivery, feedback, thread, scorecard
-        case didWell, improving, tryNext, focusID, focusResult, quiet
+        case didWell, improving, tryNext, focusID, focusResult, quiet, version, line, seenAgain
     }
 
     /// Reviews from before feedback existed have no feedback or thread.
@@ -179,6 +202,10 @@ public struct CoachReview: Codable, Equatable, Sendable {
         focusID = try c.decodeIfPresent(UUID.self, forKey: .focusID)
         focusResult = try c.decodeIfPresent(FocusResult.self, forKey: .focusResult)
         quiet = try c.decodeIfPresent(Bool.self, forKey: .quiet) ?? false
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 0
+        // A line of a kind from a later build is no line here, not a review that cannot be read.
+        line = (try? c.decodeIfPresent(CoachLine.self, forKey: .line)) ?? nil
+        seenAgain = (try? c.decodeIfPresent(CoachNote.self, forKey: .seenAgain)) ?? nil
     }
 
     /// This review with another device's ratings and conversation added: the newer rating of a point wins,

@@ -203,6 +203,39 @@ final class JSONRepairTests: XCTestCase {
         XCTAssertEqual(Set(SchemaCheck.fill(&wrong, schema: schema)),
                        ["title is missing", "owner must be a string or null", "kind is missing"])
     }
+
+    func testAnOpenListTakesAnUnknownOrMissingValueAsOtherWithItsLabel() {
+        // A list with "other" and a label next to it is open: a value outside it is an other, not a problem.
+        let schema = Schema.object(["text": Schema.string, "skill": Schema.oneOf(["dates", "questions", "other"]), "skill_label": Schema.string])
+        func filled(_ object: [String: Any]) -> (skill: String?, label: String?, problems: [String]) {
+            var value: Any = object
+            let problems = SchemaCheck.fill(&value, schema: schema)
+            let out = value as? [String: Any] ?? [:]
+            return (out["skill"] as? String, out["skill_label"] as? String, problems)
+        }
+        let unknown = filled(["text": "T", "skill": " Delegation ", "skill_label": ""])
+        XCTAssertEqual(unknown.skill, "other")
+        XCTAssertEqual(unknown.label, "Delegation", "the raw text is the label, trimmed")
+        XCTAssertEqual(unknown.problems, [])
+        let labelled = filled(["text": "T", "skill": "delegation", "skill_label": "Hand work over"])
+        XCTAssertEqual(labelled.label, "Hand work over", "a label that the model gave stays")
+        let missing = filled(["text": "T"])
+        XCTAssertEqual(missing.skill, "other")
+        XCTAssertEqual(missing.label, "")
+        XCTAssertEqual(missing.problems, [])
+        let noLabel = filled(["text": "T", "skill": "dates"])
+        XCTAssertEqual(noLabel.skill, "dates")
+        XCTAssertEqual(noLabel.label, "")
+        XCTAssertEqual(noLabel.problems, [])
+        let number = filled(["text": "T", "skill": 3, "skill_label": 4])
+        XCTAssertEqual(number.skill, "other")
+        XCTAssertEqual(number.label, "")
+        XCTAssertEqual(number.problems, [])
+        // A list with no "other", or with no label next to it, is closed as before.
+        var closed: Any = ["kind": "c", "skill": "x"] as [String: Any]
+        XCTAssertEqual(Set(SchemaCheck.fill(&closed, schema: Schema.object(["kind": Schema.oneOf(["a", "b"]), "skill": Schema.oneOf(["a", "other"])]))),
+                       ["kind must be one of: a, b", "skill must be one of: a, other"])
+    }
 }
 
 private final class LocalBox: @unchecked Sendable { var value = "" }

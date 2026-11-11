@@ -789,6 +789,7 @@ final class AppController: ObservableObject {
             }
         }
         stopSharing(callID: record.id)
+        forgetCoaching(of: record.id)
     }
 
     /// Puts a record saved by the pipeline into the list, so the step shows while the call is processed.

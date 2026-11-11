@@ -1,50 +1,64 @@
 import MossadCore
 import SwiftUI
 
-/// The coach's review of one meeting, as on the Mac: the scorecard, the meeting's value, delivery, the points
-/// with 👍 / 👎, and a conversation with the coach.
+/// The coach's review of one meeting, as on the Mac: one line with its proof, or that there is nothing to say.
+/// The rest (what else it noted, the numbers, the meeting's value, the points with 👍 / 👎, and a conversation
+/// with the coach) waits behind Full review.
 struct CoachSection: View {
     @Environment(PhoneStore.self) private var store
     let record: CallRecord
     let review: CoachReview
-    @State private var more = false
+    /// Development hook for screenshots: `MOSSAD_COACH_FULL=1` opens the full review.
+    @State private var more = PhoneStore.hook("MOSSAD_COACH_FULL") != nil
 
     var body: some View {
         let profile = store.profile
-        let metrics = CallMetrics(record: record, owner: store.owner,
-                                  history: profile.history.filter { $0.callID != record.id }.compactMap(\.delivery))
+        let line = review.shownLine
         VStack(alignment: .leading, spacing: 14) {
             QuestionsPanel(questions: profile.openQuestions.filter { $0.callID == record.id },
                            answer: { store.answerQuestion($0, $1, note: $2) })
-            if profile.activeFocus != nil || profile.proposedFocus != nil {
+            Card { CoachLineView(review: review) }
+            if FocusPanel.belongs(to: record, profile: profile) {
                 Card {
-                    FocusPanel(profile: profile, callID: record.id, result: review.focusResult,
+                    // The line already says how this call went on the focus.
+                    FocusPanel(profile: profile, callID: record.id, result: line?.kind == .focus ? nil : review.focusResult, compact: true,
                                accept: { store.acceptFocus($0, plan: $1) }, dismiss: { store.dismissFocus($0) })
                 }
             }
-            Card { CoachLines(review: review) }
             Button {
                 withAnimation(.snappy) { more.toggle() }
             } label: {
-                Label(more ? "Less" : "More from the coach", systemImage: more ? "chevron.up" : "chevron.down")
+                Label(more ? "Less" : "Full review", systemImage: more ? "chevron.up" : "chevron.down")
                     .font(.subheadline.weight(.semibold))
             }
             .padding(.horizontal, 4)
-            if more {
-                if !metrics.checks.isEmpty {
-                    Card {
-                        CardTitle(text: "Against your goals", symbol: "target")
-                        GoalsGrid(metrics: metrics, focus: profile.activeFocus?.metric)
-                        CallStrip(metrics: metrics)
-                    }
-                }
-                if let value = review.value { ValueCard(value: value) }
-                PointsCard(title: "What worked", symbol: "hand.thumbsup.fill", tint: Palette.ok, points: review.strengths, review: review, callID: record.id)
-                PointsCard(title: "What to work on", symbol: "arrow.up.forward.circle.fill", tint: Palette.accent, points: review.improvements, review: review, callID: record.id)
-                if let card = review.scorecard { ScorecardCard(card: card) }
-                CoachThread(callID: record.id, thread: review.thread)
+            if more { full(line: line, profile: profile) }
+        }
+    }
+
+    @ViewBuilder
+    private func full(line: CoachLine?, profile: CoachProfile) -> some View {
+        let metrics = CallMetrics(record: record, owner: store.owner,
+                                  history: profile.history.filter { $0.callID != record.id }.compactMap(\.delivery))
+        let others = review.others
+        if line != nil || !others.isEmpty {
+            Card {
+                if line != nil { Text(review.headline).font(.headline) }
+                ForEach(Array(others.enumerated()), id: \.offset) { _, l in CoachLineRow(line: l) }
             }
         }
+        if !metrics.checks.isEmpty {
+            Card {
+                CardTitle(text: "Against your goals", symbol: "target")
+                GoalsGrid(metrics: metrics, focus: profile.activeFocus?.metric)
+                CallStrip(metrics: metrics)
+            }
+        }
+        if let value = review.value { ValueCard(value: value) }
+        PointsCard(title: "What worked", symbol: "hand.thumbsup.fill", tint: Palette.ok, points: review.strengths, review: review, callID: record.id)
+        PointsCard(title: "What to work on", symbol: "arrow.up.forward.circle.fill", tint: Palette.accent, points: review.improvements, review: review, callID: record.id)
+        if let card = review.scorecard { ScorecardCard(card: card) }
+        CoachThread(callID: record.id, thread: review.thread)
     }
 }
 

@@ -13,14 +13,31 @@ extension AppController {
     var coachProfile: CoachProfile { (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile() }
 
     /// Loads the profile, changes it, and saves it. A profile that cannot be read throws, and nothing is saved:
-    /// an empty profile saved in its place would be the end of the coach's memory.
-    func changeCoachProfile(_ change: (inout CoachProfile) -> Void) throws {
+    /// an empty profile saved in its place would be the end of the coach's memory. Each change of the memory
+    /// from the app goes through here, on the main actor, one after the other: two writers that read at the
+    /// same time would save over each other. A change that changes nothing writes nothing. True when it saved.
+    @discardableResult
+    func changeCoachProfile(_ change: (inout CoachProfile) -> Void) throws -> Bool {
         var profile = try CoachProfile.load(from: paths.coach)
+        let before = profile
         change(&profile)
+        guard profile != before else { return false }
         try profile.save(to: paths.coach)
+        return true
     }
 
     func coachReview(_ callID: String) -> CoachReview? { CoachReview.load(in: paths.callDirectory(callID)) }
+
+    /// Takes a meeting that is gone out of the coach's memory: its lines, its moments, its results on the focus,
+    /// and its open questions. Through the one writer of the memory, like each other change from the app: on a
+    /// thread of its own it could save an older copy over the owner's answer to a focus or a question.
+    func forgetCoaching(of callID: String) {
+        do {
+            if try changeCoachProfile({ $0.forget(callID: callID) }) { coachVersion += 1 }
+        } catch {
+            Log.error("The coach's memory still has \(callID): \(error)")
+        }
+    }
 
     /// Reviews the calls that are due, one at a time, then sends the weekly email when it is due.
     func runCoach() {
@@ -29,7 +46,7 @@ extension AppController {
         coaching = true
         let runner = CoachRunner(paths: paths, coach: LLMCoach(llm: llm, ownerName: ownerName), owner: ownerName,
                                  since: Date(timeIntervalSince1970: coachSince),
-                                 titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) })
+                                 titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) }, facts: MeetingAnalyticsStore.shared.facts)
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
             await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName))
