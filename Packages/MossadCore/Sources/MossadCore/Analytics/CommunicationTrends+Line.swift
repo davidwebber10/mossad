@@ -18,8 +18,9 @@ extension CommunicationTrends {
     ///
     /// The width is the first of `widths` at which at least half of the steps hold `Usual.firmSamples` meetings
     /// (else `Usual.minimumSamples`) and the line has at most `maximumSteps` steps. A step with fewer than
-    /// `Usual.minimumSamples` meetings is left out; the line goes on past it. The oldest step takes the days
-    /// that do not fill a step of their own.
+    /// `Usual.minimumSamples` meetings, or with fewer than half of what a step usually holds (the week of a
+    /// holiday), is left out: its median is less sure than the others and would stand in the line as their
+    /// equal. The line goes on past it. The oldest step takes the days that do not fill a step of their own.
     static func line(_ points: [Point], interval: DateInterval, calendar: Calendar) -> (steps: [Step], days: Int) {
         // The period's last day ends the last step, so "the last 90 days" does not cut today in two.
         let lastDay = calendar.startOfDay(for: max(interval.start, interval.end.addingTimeInterval(-1)))
@@ -44,9 +45,11 @@ extension CommunicationTrends {
         guard let width = widths.first(where: { fits($0, usual.firmSamples) }) ?? widths.first(where: { fits($0, usual.minimumSamples) }),
               let filled = buckets(width) else { return ([], widths[0]) }
 
+        let typical = median(of: filled.map { Double($0.count) }) ?? 0
+        let least = max(usual.minimumSamples, Int((typical / 2).rounded(.up)))
         var steps: [Step] = []
         for (back, values) in filled.enumerated().reversed() {
-            guard values.count >= usual.minimumSamples, let value = median(of: values) else { continue }
+            guard values.count >= least, let value = median(of: values) else { continue }
             let newest = end.addingTimeInterval(-Double(back * width) * 86_400)
             let oldest = back == filled.count - 1 ? interval.start : end.addingTimeInterval(-Double((back + 1) * width) * 86_400)
             steps.append(Step(date: oldest.addingTimeInterval(newest.timeIntervalSince(oldest) / 2), value: value, meetings: values.count))

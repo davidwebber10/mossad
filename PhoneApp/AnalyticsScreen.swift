@@ -148,6 +148,9 @@ struct AnalyticsScreen: View {
                     AnalyticsReport(records: records, usage: [], owner: owner, interval: AnalyticsRange.previous(interval), commitments: commitments),
                     scores, PersonStatistics.compute(records))
         }.value
+        // A load that was replaced must not put its older period under the newer load's charts: the two can
+        // end in either order, and the charts show only with the report of their own period.
+        guard !Task.isCancelled else { return }
         withAnimation(.smooth) {
             data = (result.0, result.1)
             scores = result.2
@@ -158,7 +161,6 @@ struct AnalyticsScreen: View {
         let made = await Task.detached(priority: .userInitiated) {
             CommunicationTrends(facts: facts.facts(for: records, owner: owner), interval: interval)
         }.value
-        // The owner can have picked another period in the meantime; its own task brings its own charts.
         guard !Task.isCancelled else { return }
         withAnimation(.smooth) { trends = made }
     }

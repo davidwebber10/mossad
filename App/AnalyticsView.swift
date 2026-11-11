@@ -121,6 +121,9 @@ struct AnalyticsView: View {
             return (AnalyticsReport(records: records, usage: events, owner: owner, interval: interval, reviews: reviews, commitments: commitments),
                     AnalyticsReport(records: records, usage: events, owner: owner, interval: before, commitments: commitments))
         }.value
+        // A load that was replaced must not put its older period under the newer load's charts: the two can
+        // end in either order, and the charts show only with the report of their own period.
+        guard !Task.isCancelled else { return }
         withAnimation(.smooth) { data = result }
 
         // The second step: the meetings as facts, from the cache that the meeting pages fill.
@@ -128,7 +131,6 @@ struct AnalyticsView: View {
         let made = await Task.detached(priority: .userInitiated) {
             CommunicationTrends(facts: facts.facts(for: records, owner: owner), interval: interval)
         }.value
-        // The owner can have picked another period in the meantime; its own task brings its own charts.
         guard !Task.isCancelled else { return }
         withAnimation(.smooth) { trends = made }
     }

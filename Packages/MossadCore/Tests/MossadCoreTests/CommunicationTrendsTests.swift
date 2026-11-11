@@ -127,6 +127,19 @@ final class CommunicationTrendsTests: XCTestCase {
         XCTAssertEqual(s.points.count, 17, "the meetings are still points")
     }
 
+    func testAThinWeekAmongFullOnesHasNoStep() {
+        // Eight meetings in a usual week and three in the week of a holiday: the median of three would stand in
+        // the line as if it were a week like the others.
+        var facts: [MeetingFacts] = []
+        for week in 0..<4 {
+            for i in 0..<(week == 2 ? 3 : 8) { facts.append(meeting("w\(week)-\(i)", day: Double(week * 7) + Double(i) * 0.8, share: week == 2 ? 0.9 : 0.5)) }
+        }
+        let s = share(trends(facts, days: 28))
+        XCTAssertEqual(s.lineDays, 7)
+        XCTAssertEqual(s.line.map(\.meetings), [8, 8, 8])
+        XCTAssertEqual(s.line.map(\.value), [0.5, 0.5, 0.5])
+    }
+
     func testFewMeetingsAWeekGetWiderSteps() {
         // Two a week for 12 weeks: a week's median would be noise, four weeks hold eight.
         let sparse = share(trends(spread("m", count: 24, to: 84) { _ in 0.5 }, days: 84))
