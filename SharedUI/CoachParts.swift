@@ -75,7 +75,8 @@ struct FocusPanel: View {
                 if !f.results.isEmpty {
                     HStack(spacing: 10) {
                         FocusDots(results: f.results, current: callID)
-                        Text("\(f.chances.filter { $0.outcome == .hit }.count) of \(f.chances.count) chances").font(.caption).foregroundStyle(.secondary)
+                        Text("\(f.chances.filter { $0.outcome == .hit }.count) of \(f.chances.count) \(f.goal == nil ? "chances" : "1:1s at the target")")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 if let result {

@@ -16,13 +16,13 @@ struct FocusProse: View {
                 if !f.results.isEmpty {
                     HStack(spacing: 10) {
                         FocusDots(results: f.results)
-                        Text("\(f.chances.filter { $0.outcome == .hit }.count) of \(f.chances.count) chances")
+                        Text("\(f.chances.filter { $0.outcome == .hit }.count) of \(f.chances.count) \(f.goal == nil ? "chances" : "1:1s at the target")")
                             .font(.system(size: 12)).foregroundStyle(Palette.secondary)
                     }
                     .padding(.top, 4)
                 }
                 if let since = f.accepted {
-                    Text("Since \(since.formatted(.dateTime.month(.wide).day())). Each review reports how the call went on it.")
+                    Text("Since \(since.formatted(.dateTime.month(.wide).day())). " + (f.goal == nil ? "Each review reports how the call went on it." : "The app measures each 1:1."))
                         .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
                 }
             }

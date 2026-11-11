@@ -33,7 +33,7 @@ struct CoachMemoryView: View {
             .navigationDestination(for: String.self) { page in
                 switch page {
                 case "findings": FindingsScreen(close: { dismiss() })
-                case "goals": PhoneGoalsScreen()
+                case "goals": PhoneGoalsScreen(close: { dismiss() })
                 case "weekly": PhoneWeeklyScreen()
                 case "settings": PhoneCoachSettings()
                 default: PhoneKnowledgeScreen()
@@ -44,9 +44,15 @@ struct CoachMemoryView: View {
     }
 }
 
-/// Coach › Goals: the goal of now with each call on it, what was not taken, and what was learned.
+/// Coach › Goals: the goal of now with its number over time and each call on it, what was not taken, and what
+/// was learned or ended.
 private struct PhoneGoalsScreen: View {
     @Environment(PhoneStore.self) private var store
+    /// Closes the coach, to open a meeting.
+    let close: () -> Void
+    @State private var progress: GoalProgress?
+    /// The meetings as rows of history, read again only when one changed.
+    private static let facts = MeetingFactsCache()
 
     var body: some View {
         let p = store.profile
@@ -54,12 +60,38 @@ private struct PhoneGoalsScreen: View {
         Group {
             if goals.current == nil, goals.offered.isEmpty, goals.ended.isEmpty, goals.finished.isEmpty {
                 ContentUnavailableView("No goal yet", systemImage: "scope",
-                                       description: Text("After a few reviewed calls the coach offers one goal, as a card in Findings. When you take it, how each call went on it shows here."))
+                                       description: Text("After a few reviewed calls the coach offers one goal, as a card in Findings. When you take it, its number and how each call went on it show here."))
             } else {
                 List {
                     if goals.current != nil {
                         Section {
                             FocusPanel(profile: p, accept: { store.acceptFocus($0, plan: $1) }, dismiss: { store.dismissFocus($0) })
+                        } footer: {
+                            if let active = p.activeFocus, let goal = active.goal {
+                                Text("Target: \(goal.targetText) of the talk in your 1:1s. Before the goal: \(goal.typicalText), \(goal.usualText). The app measures each 1:1."
+                                     + (active.reviewDate.map { " Look at the goal again on \($0.formatted(.dateTime.month(.abbreviated).day()))." } ?? ""))
+                            }
+                        }
+                    }
+                    if let active = p.activeFocus, active.goal != nil {
+                        Section {
+                            if let progress, progress.goal == active.goal {
+                                GoalProgressPanel(progress: progress) { id in
+                                    close()
+                                    store.openMeeting(id)
+                                }
+                                    .padding(.vertical, Space.s)
+                            } else {
+                                Color.clear.frame(height: TrendPanel.chartHeight + TrendPanel.chrome)
+                            }
+                        }
+                        Section {
+                            if progress?.reached == true, progress?.goal == active.goal {
+                                Button("Mark as learned") { store.learnFocus(active.id) }
+                            }
+                            Button("End this goal", role: .destructive) { store.dismissFocus(active.id) }
+                        } footer: {
+                            Text("An ended goal moves to Ended. The coach can offer it again after 30 days.")
                         }
                     }
                     if let active = p.activeFocus, !active.results.isEmpty {
@@ -67,7 +99,8 @@ private struct PhoneGoalsScreen: View {
                             ForEach(active.results.reversed(), id: \.callID) { r in
                                 VStack(alignment: .leading, spacing: 3) {
                                     HStack {
-                                        Text(r.outcome.label).font(.subheadline.weight(.semibold)).foregroundStyle(r.outcome == .hit ? Palette.okText : Palette.secondary)
+                                        Text(active.goal != nil && r.outcome == .hit ? "At the target" : active.goal != nil && r.outcome == .missed ? "Over the target" : r.outcome.label)
+                                            .font(.subheadline.weight(.semibold)).foregroundStyle(r.outcome == .hit ? Palette.okText : Palette.secondary)
                                         Spacer()
                                         Text(r.date.formatted(.dateTime.month(.abbreviated).day())).font(.caption).foregroundStyle(.secondary)
                                     }
@@ -89,6 +122,25 @@ private struct PhoneGoalsScreen: View {
             }
         }
         .navigationTitle("Goals")
+        .task(id: Key(focus: p.activeFocus, meetings: store.meetings.count)) { await load(p.activeFocus) }
+    }
+
+    private struct Key: Equatable {
+        let focus: CoachFocus?
+        let meetings: Int
+    }
+
+    private func load(_ focus: CoachFocus?) async {
+        guard let focus, focus.goal != nil else {
+            progress = nil
+            return
+        }
+        let records = store.meetings, owner = store.owner, facts = Self.facts
+        let made = await Task.detached(priority: .userInitiated) {
+            GoalProgress(focus: focus, facts: facts.facts(for: records, owner: owner), now: Date())
+        }.value
+        guard !Task.isCancelled else { return }
+        withAnimation(.smooth) { progress = made }
     }
 }
 

@@ -184,6 +184,17 @@ extension AppController {
         syncNow()
     }
 
+    /// The owner says the goal is learned.
+    func learnFocus(_ id: UUID) {
+        do {
+            try changeCoachProfile { profile in
+                profile.learnFocus(id, at: Date())
+            }
+        } catch { Log.error("Saving the coach's memory failed: \(error)") }
+        coachVersion += 1
+        syncNow()
+    }
+
     func dismissFocus(_ id: UUID) {
         do {
             try changeCoachProfile { profile in

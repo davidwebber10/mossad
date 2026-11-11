@@ -891,6 +891,12 @@ final class PhoneStore {
         changeProfile { $0.answer(id, status, note: note, at: now) }
     }
 
+    /// The owner says the goal is learned.
+    func learnFocus(_ id: UUID) {
+        let now = Date()
+        changeProfile { $0.learnFocus(id, at: now) }
+    }
+
     func dismissFocus(_ id: UUID) {
         let now = Date()
         changeProfile { $0.dismissFocus(id, at: now) }
