@@ -16,9 +16,15 @@ public struct ServerShare: Equatable, Identifiable, Sendable {
     public var wrongPins: Int?
     /// The copy on the server was deleted after the expiry; the row stays for its numbers.
     public var gone: Bool?
+    /// Views that the server counted before it counted people and days: they have no people, days, or last view.
+    public var earlierViews: Int?
+    /// When the server set the PIN, in its milliseconds.
+    public var pinSet: Int64?
+    /// When too many wrong PINs locked the share.
+    public var lockedAt: Date?
 
     public init(id: String, title: String, created: Date, expires: Date?, views: Int, questions: Int, viewers: Int?, firstView: Date?, lastView: Date?,
-                pin: Bool?, pinLocked: Bool?, wrongPins: Int?, gone: Bool?) {
+                pin: Bool?, pinLocked: Bool?, wrongPins: Int?, gone: Bool?, earlierViews: Int? = nil, pinSet: Int64? = nil, lockedAt: Date? = nil) {
         self.id = id
         self.title = title
         self.created = created
@@ -32,6 +38,9 @@ public struct ServerShare: Equatable, Identifiable, Sendable {
         self.pinLocked = pinLocked
         self.wrongPins = wrongPins
         self.gone = gone
+        self.earlierViews = earlierViews
+        self.pinSet = pinSet
+        self.lockedAt = lockedAt
     }
 
     init?(_ json: [String: Any]) {
@@ -39,7 +48,8 @@ public struct ServerShare: Equatable, Identifiable, Sendable {
         self.init(id: id, title: json["title"] as? String ?? "", created: Self.date(json["created"]) ?? .distantPast, expires: Self.date(json["expires"]),
                   views: (json["views"] as? NSNumber)?.intValue ?? 0, questions: (json["questions"] as? NSNumber)?.intValue ?? 0,
                   viewers: (json["viewers"] as? NSNumber)?.intValue, firstView: Self.date(json["firstView"]), lastView: Self.date(json["lastView"]),
-                  pin: json["pin"] as? Bool, pinLocked: json["pinLocked"] as? Bool, wrongPins: (json["wrongPins"] as? NSNumber)?.intValue, gone: json["gone"] as? Bool)
+                  pin: json["pin"] as? Bool, pinLocked: json["pinLocked"] as? Bool, wrongPins: (json["wrongPins"] as? NSNumber)?.intValue, gone: json["gone"] as? Bool,
+                  earlierViews: (json["earlierViews"] as? NSNumber)?.intValue, pinSet: (json["pinSet"] as? NSNumber)?.int64Value, lockedAt: Self.date(json["lockedAt"]))
     }
 
     /// The server writes its own times with milliseconds, and keeps an expiry as the app sent it, without.
@@ -195,18 +205,41 @@ public struct ShareRow: Equatable, Identifiable, Sendable {
         return "Expires in \(count(Int((left / 86_400).rounded()), "day"))"
     }
 
-    /// "12 views by 5 people"; "12 views" from a server that does not count visitors; nil when nothing is known.
+    /// The views that the server counted with their people and days; the earlier ones are not in it.
+    public var countedViews: Int {
+        guard let remote else { return 0 }
+        return max(0, remote.views - (remote.earlierViews ?? 0))
+    }
+
+    private var earlierViews: Int { remote?.earlierViews ?? 0 }
+
+    /// "12 views by 5 people"; "12 views" from a server that does not count visitors; "41 views before the server
+    /// update" when only those are known; nil when nothing is known.
     public var viewsText: String? {
         guard let remote else { return nil }
-        let views = Self.count(remote.views, "view")
-        guard let viewers = remote.viewers, remote.views > 0 else { return views }
+        if countedViews == 0, earlierViews > 0 { return "\(Self.count(earlierViews, "view")) before the server update" }
+        let views = Self.count(countedViews, "view")
+        guard let viewers = remote.viewers, countedViews > 0 else { return views }
         return "\(views) by \(viewers == 1 ? "1 person" : "\(viewers) people")"
+    }
+
+    /// "41 more views before the server update", beside newer views; nil when there are none, or nothing newer.
+    public var earlierViewsText: String? {
+        guard earlierViews > 0, countedViews > 0 else { return nil }
+        return "\(earlierViews) more \(earlierViews == 1 ? "view" : "views") before the server update"
     }
 
     public func lastViewedText(now: Date = Date()) -> String? {
         guard let remote, remote.viewers != nil else { return nil }
-        guard let last = remote.lastView else { return "Not viewed yet" }
+        guard let last = remote.lastView else { return earlierViews > 0 ? nil : "Not viewed yet" }
         return "Last viewed \(Self.ago(last, now: now))"
+    }
+
+    /// "Locked 2 days ago by too many wrong PINs"; nil for a share that is not locked.
+    public func lockedText(now: Date = Date()) -> String? {
+        guard pin == .locked else { return nil }
+        guard let at = remote?.lockedAt else { return "Locked by too many wrong PINs" }
+        return "Locked \(Self.ago(at, now: now)) by too many wrong PINs"
     }
 
     static func ago(_ date: Date, now: Date) -> String {
@@ -248,11 +281,14 @@ public enum ShareRows {
         }
     }
 
-    /// The server is what counts: a PIN that it does not have is no PIN, whatever this Mac remembers.
+    /// The server is what counts: a PIN that it does not have is no PIN, whatever this Mac remembers, and a PIN that
+    /// it set at another time than this Mac knows is not this Mac's. With no answer, the PIN of this Mac stands:
+    /// unknown is not false, and the person who gets the link needs the PIN.
     private static func pin(link: MeetingLink?, remote: ServerShare?) -> ShareRow.PIN {
-        guard let remote, let on = remote.pin else { return .off }
+        guard let remote, let on = remote.pin else { return link?.pin.map { .on($0) } ?? .off }
         guard on else { return .off }
         if remote.pinLocked == true { return .locked }
+        if let held = link?.pinSet, let set = remote.pinSet, held != set { return .unknown }
         return link?.pin.map { .on($0) } ?? .unknown
     }
 }
@@ -279,12 +315,14 @@ extension ServerClient {
         return detail
     }
 
-    /// Sets the PIN of a share. The PIN goes in the body of the request, never in its address; the server keeps a hash.
+    /// Sets the PIN of a share. The PIN goes in the body of the request, never in its address; the server keeps a
+    /// hash. Answers the PIN and the time the server set it, which an older server does not send.
     @discardableResult
-    public func setPIN(shareID: String, pin: String) async throws -> String {
+    public func setPIN(shareID: String, pin: String) async throws -> (pin: String, pinSet: Int64?) {
         let body = try JSONSerialization.data(withJSONObject: ["pin": pin])
         let data = try await newer { try await send(connection.request("api/shares/\(shareID)/pin", method: "PUT"), body: body) }
-        return (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["pin"] as? String ?? pin
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return (json?["pin"] as? String ?? pin, (json?["pinSet"] as? NSNumber)?.int64Value)
     }
 
     public func removePIN(shareID: String) async throws {

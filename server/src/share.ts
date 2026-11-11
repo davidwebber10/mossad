@@ -6,7 +6,7 @@ import { homePage, lockedPage, notFoundPage, pinPage, sharePage, shareContext, u
 import { audioResponse } from './recordings';
 import type { Env, Share } from './types';
 import { isToken, json, privateHeaders, sha256Hex } from './util';
-import { isPreview, missingSchema, recordView } from './views';
+import { isLinkPreview, isPreview, missingSchema, recordView } from './views';
 
 export const limits = { questionsPerLinkPerDay: 60, questionsPerVisitorPerMinute: 10, questionLength: 2000, historyTurns: 12 };
 const defaultModel = 'claude-sonnet-5-5';
@@ -75,24 +75,31 @@ async function under(env: Env, key: string, max: number, ttl: number): Promise<b
 
 interface Gate { hash: string | null; set: number; locked: boolean }
 
-/** The PIN of a share, if it has one. A database from before PINs has none; any other fault is thrown. */
+/**
+ * The PIN of a share, if it has one. Only a database from before PINs, with no PIN column at all, has none. Any
+ * other fault is thrown, also a missing tries table under a PIN: the page then is not shown.
+ */
 async function gate(env: Env, id: string): Promise<Gate> {
+  let row: { pin_hash: string | null; pin_set: number | null } | null;
   try {
-    const row = await env.DB.prepare(`SELECT s.pin_hash, s.pin_set, COALESCE(t.locked_until, 0) AS locked_until
-        FROM shares s LEFT JOIN share_pin_tries t ON t.share_id = s.id AND t.client = '' WHERE s.id = ?`)
-      .bind(id).first<{ pin_hash: string | null; pin_set: number | null; locked_until: number }>();
-    return { hash: row?.pin_hash ?? null, set: row?.pin_set ?? 0, locked: (row?.locked_until ?? 0) > Date.now() };
+    row = await env.DB.prepare('SELECT pin_hash, pin_set FROM shares WHERE id = ?').bind(id).first();
   } catch (error) {
-    if (missingSchema(error)) return { hash: null, set: 0, locked: false };
+    if (/no such column/i.test(error instanceof Error ? error.message : String(error))) return { hash: null, set: 0, locked: false };
     throw error;
   }
+  if (!row?.pin_hash) return { hash: null, set: 0, locked: false };
+  const lock = await env.DB.prepare(`SELECT locked_until FROM share_pin_tries WHERE share_id = ? AND client = ''`).bind(id).first<{ locked_until: number }>();
+  return { hash: row.pin_hash, set: row.pin_set ?? 0, locked: (lock?.locked_until ?? 0) > Date.now() };
 }
+
+/** A browser that loads a page before anyone asked for it, in case they will. That is not a view. */
+const isPrefetch = (request: Request) => /prefetch|prerender/i.test(`${request.headers.get('Sec-Purpose') ?? ''} ${request.headers.get('Purpose') ?? ''}`);
 
 export async function handleShareHost(request: Request, env: Env, ctx: ExecutionContext): Promise<Response | null> {
   const url = new URL(request.url);
   const path = url.pathname;
   if (path === '/robots.txt') return new Response('User-agent: *\nDisallow: /\n', { headers: { 'Content-Type': 'text/plain' } });
-  if (path === '/' && request.method === 'GET') return html((n) => homePage(n));
+  if (path === '/' && (request.method === 'GET' || request.method === 'HEAD')) return html((n) => homePage(n));
   if (path.startsWith('/api/')) return null;
   if (path.startsWith('/f/')) return fontResponse(path) ?? notFound();
   try {
@@ -117,7 +124,7 @@ async function sharePath(request: Request, env: Env, ctx: ExecutionContext, url:
   // The text for AI apps has an address only on a share with no PIN: such an app cannot enter one.
   if (markdown) {
     if (pin.hash || (method !== 'GET' && method !== 'HEAD')) return notFound();
-    if (method === 'GET') ctx.waitUntil(recordView(env, id, share, request, ''));
+    if (method === 'GET' && !isLinkPreview(request.headers.get('User-Agent') ?? '') && !isPrefetch(request)) ctx.waitUntil(recordView(env, id, share, request, ''));
     return new Response(method === 'HEAD' ? null : shareMarkdown(share), { headers: privateHeaders({ 'Content-Type': 'text/markdown; charset=utf-8' }) });
   }
 
@@ -127,11 +134,11 @@ async function sharePath(request: Request, env: Env, ctx: ExecutionContext, url:
   if (!action && (method === 'GET' || method === 'HEAD')) {
     // The owner's app opens a link with a mark, so the owner's own visits stay out of the count.
     const mark = url.searchParams.get('owner');
-    const owner = mark ? await ownerCookie(env, mark) : null;
+    const owner = mark ? await ownerCookie(env, mark, id) : null;
     if (owner) return new Response(null, { status: 302, headers: privateHeaders({ Location: `/${token}`, 'Set-Cookie': owner }) });
     if (!open) return pin.locked ? html((n) => lockedPage(n), 403) : html((n) => pinPage(n, token), 401);
     const extra = new Headers();
-    if (method === 'GET' && !isPreview(request.headers.get('User-Agent') ?? '')) {
+    if (method === 'GET' && !isPreview(request.headers.get('User-Agent') ?? '') && !isPrefetch(request)) {
       let viewer = cookie(request, 'v');
       if (!isViewer(viewer)) {
         const made = newViewer(token);

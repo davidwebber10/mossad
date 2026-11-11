@@ -1,5 +1,5 @@
 import { checkLink, handleRecording, maxRecordingBytes, readRecording, serverID } from './recordings';
-import { hashPIN, isPIN, newPIN } from './access';
+import { clientKey, hashPIN, isPIN, newPIN } from './access';
 import { deleteCopy, deleteShare } from './share';
 import type { Env, MeetingView, Share } from './types';
 import { bearer, json, sameSecret } from './util';
@@ -18,9 +18,13 @@ export async function isOwner(request: Request, env: Env): Promise<boolean> {
   return sameSecret(bearer(request), env.OWNER_SECRET);
 }
 
-/** Wrong secrets from one address: 20 an hour, then a pause. `count` names what is counted, each on its own. */
+/**
+ * Wrong secrets from one address: 20 an hour, then a pause. `count` names what is counted, each on its own. The
+ * key names the address by a keyed hash, as the PIN tries do, so KV holds no address.
+ */
 export async function tooManyFailures(env: Env, request: Request, failed: boolean, count = 'fail'): Promise<boolean> {
-  const key = `${count}:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}:${Math.floor(Date.now() / 3_600_000)}`;
+  const client = await clientKey(env, count, request).catch(() => 'unknown');
+  const key = `${count}:${client}:${Math.floor(Date.now() / 3_600_000)}`;
   const n = Number((await env.OAUTH_KV.get(key)) ?? 0);
   if (failed) await env.OAUTH_KV.put(key, String(n + 1), { expirationTtl: 3600 });
   return n >= 20;
@@ -185,8 +189,11 @@ async function putShare(request: Request, env: Env, id: string): Promise<Respons
   try { await upsert(', gone = 0'); } catch (error) {
     if (!missingSchema(error)) throw error;
     await upsert('');
+    return json({ ok: true, pin: false });
   }
-  return json({ ok: true });
+  // Whether the share has a PIN now: a row that the server had lost comes back without one, and the app then sets it again.
+  const row = await env.DB.prepare('SELECT pin_hash IS NOT NULL AS pin FROM shares WHERE id = ?').bind(id).first<{ pin: number }>();
+  return json({ ok: true, pin: row?.pin === 1 });
 }
 
 async function listShares(env: Env): Promise<Response> {
@@ -227,10 +234,11 @@ async function setPIN(request: Request, env: Env, id: string, on: boolean): Prom
   const body = on ? ((await request.json().catch(() => ({}))) as { pin?: unknown } | null) : null;
   if (on && body?.pin !== undefined && !isPIN(body.pin)) return json({ error: 'A PIN is 4 digits.' }, 400);
   const pin = on ? (isPIN(body?.pin) ? body.pin : newPIN()) : null;
+  const set = pin ? Date.now() : null;
   const changed = await env.DB.prepare('UPDATE shares SET pin_hash = ?, pin_set = ? WHERE id = ? RETURNING id')
-    .bind(pin ? await hashPIN(env, id, pin) : null, pin ? Date.now() : null, id).first();
+    .bind(pin ? await hashPIN(env, id, pin) : null, set, id).first();
   if (!changed) return json({ error: 'No such share.' }, 404);
   // A new PIN starts with no wrong tries, and ends a lock.
   await env.DB.prepare('DELETE FROM share_pin_tries WHERE share_id = ?').bind(id).run();
-  return json(pin ? { ok: true, pin } : { ok: true });
+  return json(pin ? { ok: true, pin, pinSet: set } : { ok: true });
 }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleAPI } from '../src/api';
 import { ownerMark, pinPolicy } from '../src/access';
+import { viewPolicy } from '../src/views';
 import { handleShareHost } from '../src/share';
 import type { Share } from '../src/types';
 import { sha256Hex } from '../src/util';
@@ -312,13 +313,13 @@ describe('views of a share', () => {
 
   it('makes the owner\'s mark the same way the Mac does', async () => {
     // The same numbers are in SharesTests.swift: the two sides must agree.
-    expect(await ownerMark('owner-secret', 1_900_000_000)).toBe('1900000000.9fdf58efd4b92221f7302285c0fb95c79766610af09165cf88fc57ed87ff2305');
+    expect(await ownerMark('owner-secret', 'f'.repeat(64), 1_900_000_000)).toBe('1900000000.c269117f8947674e0ccae0a38e665d799568722677b346e1f0bd9452982ed9b6');
   });
 
   it('does not count the owner, who comes with a mark that the app signed', async () => {
     const w = world();
     await share(w);
-    const mark = await ownerMark('owner-secret', Math.floor(Date.now() / 1000) + 300);
+    const mark = await ownerMark('owner-secret', id, Math.floor(Date.now() / 1000) + 300);
     const r = await visit(w, `/${token}?owner=${mark}`);
     expect(r.status).toBe(302);
     expect(r.headers.get('Location')).toBe(`/${token}`);
@@ -328,9 +329,9 @@ describe('views of a share', () => {
     await visit(w, `/${token}.md`, { cookie: jar });
     expect((await row(w)).views).toBe(0);
     // A mark made with another secret, or an old one, is no mark: the visit counts.
-    const wrong = await visit(w, `/${token}?owner=${await ownerMark('guess', Math.floor(Date.now() / 1000) + 300)}`);
+    const wrong = await visit(w, `/${token}?owner=${await ownerMark('guess', id, Math.floor(Date.now() / 1000) + 300)}`);
     expect(wrong.status).toBe(200);
-    const old = await visit(w, `/${token}?owner=${await ownerMark('owner-secret', Math.floor(Date.now() / 1000) - 5)}`);
+    const old = await visit(w, `/${token}?owner=${await ownerMark('owner-secret', id, Math.floor(Date.now() / 1000) - 5)}`);
     expect(old.status).toBe(200);
     expect((await row(w)).views).toBe(2);
   });
@@ -402,7 +403,8 @@ describe('the owner API for shares', () => {
     await setPIN(w, '4821');
     const body = (await (await api(w, 'GET', 'shares')).json()) as { shares: unknown[] };
     expect(body.shares).toEqual([{ id, title: 'Budget review', created: '2026-11-05T18:00:00.000Z', expires: '2026-12-01T00:00:00Z', audio: 0, chat: 0,
-      views: 0, questions: 0, viewers: 0, firstView: null, lastView: null, pin: true, pinLocked: false, wrongPins: 0, gone: false }]);
+      views: 0, questions: 0, viewers: 0, earlierViews: 0, firstView: null, lastView: null, pin: true, pinSet: Date.parse('2026-11-05T18:00:00Z'),
+      pinLocked: false, lockedAt: null, wrongPins: 0, gone: false }]);
   });
 
   it('changes the expiry on the row and in the copy, so the link stops or goes on', async () => {
@@ -517,5 +519,113 @@ describe('a server whose database was not updated yet', () => {
     // The old calls work as they did.
     expect((await api(w, 'DELETE', `shares/${id}`)).status).toBe(200);
     expect((await visit(w, `/${token}`)).status).toBe(404);
+  });
+});
+
+describe('review fixes', () => {
+  const list = async (w: World) => ((await (await api(w, 'GET', 'shares')).json()) as { shares: Record<string, unknown>[] }).shares;
+
+  it('says after a PUT whether the share has a PIN, so the app can set it again on a row the server lost', async () => {
+    const w = world();
+    let r = await api(w, 'PUT', `shares/${id}`, meeting);
+    expect(await r.json()).toMatchObject({ ok: true, pin: false });
+    await setPIN(w, '4821');
+    r = await api(w, 'PUT', `shares/${id}`, meeting);
+    expect(await r.json()).toMatchObject({ ok: true, pin: true });
+    expect((await api(w, 'DELETE', `shares/${id}`)).status).toBe(200);
+    r = await api(w, 'PUT', `shares/${id}`, meeting);
+    expect(await r.json()).toMatchObject({ ok: true, pin: false });
+  });
+
+  it('tells the app when the PIN was set, in the PIN answer and in the list', async () => {
+    const w = world();
+    await share(w);
+    const r = await api(w, 'PUT', `shares/${id}/pin`, { pin: '4821' });
+    const body = (await r.json()) as { pinSet: number };
+    expect(body.pinSet).toBe(Date.parse('2026-11-05T18:00:00Z'));
+    expect((await list(w))[0]).toMatchObject({ pinSet: body.pinSet });
+  });
+
+  it('keeps the views from before the update apart, so the people and the days agree with the count', async () => {
+    const w = world();
+    await share(w);
+    w.db.raw.prepare('UPDATE shares SET views = 41 WHERE id = ?').run(id);
+    expect((await list(w))[0]).toMatchObject({ views: 41, earlierViews: 41, viewers: 0, lastView: null });
+    await visit(w, `/${token}`);
+    expect((await list(w))[0]).toMatchObject({ views: 42, earlierViews: 41, viewers: 1 });
+  });
+
+  it('refuses a PIN share when the tries table is missing, and does not open the page', async () => {
+    const w = world();
+    await share(w);
+    await setPIN(w, '4821');
+    w.db.raw.exec('DROP TABLE share_pin_tries');
+    const r = await visit(w, `/${token}`);
+    expect(r.status).toBe(503);
+    expect(await r.text()).not.toContain('Budget review');
+    expect((await enter(w, '4821')).status).toBe(503);
+  });
+
+  it('forgets one wrong PIN of the share each day, and says when a share was locked', async () => {
+    const w = world();
+    await share(w);
+    await setPIN(w, '4821');
+    for (let i = 0; i < 20; i++) await enter(w, '0000', { ip: `198.51.100.${i}` });
+    expect((await list(w))[0]).toMatchObject({ wrongPins: 20, pinLocked: false, lockedAt: null });
+    vi.setSystemTime(new Date('2026-11-15T18:00:00Z'));
+    expect((await list(w))[0]).toMatchObject({ wrongPins: 10 });
+    // 10 are forgotten: 20 more from other visitors make 30 and lock it.
+    for (let i = 0; i < 19; i++) expect((await enter(w, '0000', { ip: `192.0.2.${i}` })).status).toBe(401);
+    expect((await enter(w, '0000', { ip: '192.0.2.200' })).status).toBe(403);
+    expect((await list(w))[0]).toMatchObject({ wrongPins: 30, pinLocked: true, lockedAt: '2026-11-15T18:00:00.000Z' });
+    // A lock does not wear off.
+    vi.setSystemTime(new Date('2026-12-30T18:00:00Z'));
+    expect((await list(w))[0]).toMatchObject({ pinLocked: true, wrongPins: 30 });
+  });
+
+  it('counts people from the rows of visitors, and puts visitors past the day\'s limit in one row', async () => {
+    const w = world();
+    await share(w);
+    const before = viewPolicy.newVisitorsPerDay;
+    viewPolicy.newVisitorsPerDay = 3;
+    try {
+      for (let i = 0; i < 6; i++) await visit(w, `/${token}`);
+    } finally { viewPolicy.newVisitorsPerDay = before; }
+    expect(w.db.raw.prepare('SELECT count(*) AS n FROM share_viewers').get()).toEqual({ n: 4 });
+    // The visitors past the limit are one visitor together, so a reload within 30 minutes is the same visit there too.
+    expect((await list(w))[0]).toMatchObject({ views: 4, viewers: 4 });
+  });
+
+  it('does not count a preview of the Markdown, or a prefetch of the page', async () => {
+    const w = world();
+    await share(w);
+    await visit(w, `/${token}.md`, { agent: 'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)' });
+    const prefetch = new Request(`${host}/${token}`, { headers: { 'Sec-Purpose': 'prefetch', 'User-Agent': 'Mozilla/5.0 (Macintosh) Safari/605.1.15' } });
+    expect((await handleShareHost(prefetch, w.env, w.ctx))!.status).toBe(200);
+    const old = new Request(`${host}/${token}`, { headers: { Purpose: 'prefetch', 'User-Agent': 'Mozilla/5.0 (Macintosh) Safari/605.1.15' } });
+    await handleShareHost(old, w.env, w.ctx);
+    await w.settle();
+    expect((await row(w)).views).toBe(0);
+  });
+
+  it('takes an owner\'s mark only for the share it was made for', async () => {
+    const w = world();
+    await share(w);
+    await share(w, otherID);
+    const at = Math.floor(Date.now() / 1000) + 300;
+    expect((await visit(w, `/${other}?owner=${await ownerMark('owner-secret', otherID, at)}`)).status).toBe(302);
+    expect((await visit(w, `/${token}?owner=${await ownerMark('owner-secret', otherID, at)}`)).status).toBe(200);
+  });
+
+  it('keeps no address in the count of wrong secrets', async () => {
+    const w = world();
+    await handleAPI(new Request(`${host}/api/shares`, { headers: { Authorization: 'Bearer guess', 'CF-Connecting-IP': '203.0.113.9' } }), w.env);
+    expect([...w.kv.keys()].length).toBe(1);
+    expect([...w.kv.keys()].join()).not.toContain('203.0.113.9');
+  });
+
+  it('answers HEAD on the home page as GET does', async () => {
+    const w = world();
+    expect((await handleShareHost(new Request(`${host}/`, { method: 'HEAD' }), w.env, w.ctx))!.status).toBe(200);
   });
 });

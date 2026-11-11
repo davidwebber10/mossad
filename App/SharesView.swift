@@ -170,6 +170,7 @@ private struct ShareListRow: View {
 
     private var numbers: String? {
         guard let views = row.viewsText else { return nil }
+        if let locked = row.lockedText() { return locked }
         guard let remote = row.remote, remote.views > 0 else { return row.remote?.viewers == nil ? views : "Not viewed yet" }
         guard let last = row.lastViewedText() else { return views }
         return "\(views) · \(last.replacingOccurrences(of: "Last viewed ", with: "last "))"

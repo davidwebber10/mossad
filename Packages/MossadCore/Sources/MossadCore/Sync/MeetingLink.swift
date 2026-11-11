@@ -40,6 +40,9 @@ public struct MeetingLink: Codable, Equatable, Identifiable, Sendable {
     /// The PIN of the link, when it has one. The server keeps only a hash, so this Mac is where the owner reads it.
     /// It is beside the token, which opens more than the PIN does.
     public var pin: String?
+    /// When the server set that PIN, in its milliseconds. When the server names another time, another Mac (or a new
+    /// owner secret) changed the PIN, and the one here is old.
+    public var pinSet: Int64?
 
     public var id: String { Self.serverID(token) }
 
@@ -101,6 +104,15 @@ public struct ShareDraft: Equatable, Sendable {
     public func differs(from link: MeetingLink) -> Bool { options != link.options || sentPIN != link.pin }
 }
 
+/// Whether the PIN must be sent after the meeting: when the owner chose another PIN, or when the server answers
+/// that the share has none although this Mac holds one (the server lost the row and made it again).
+public enum SharePINStep {
+    public static func needed(wanted: String?, held: String?, serverHasPIN: Bool?) -> Bool {
+        if wanted != held { return true }
+        return wanted != nil && serverHasPIN == false
+    }
+}
+
 /// The PIN of a share: 4 digits from the system's random source.
 public enum SharePIN {
     public static func random() -> String {
@@ -120,17 +132,19 @@ public enum ShareMessage {
 }
 
 /// The mark on a link that the owner opens from the app, so the server keeps the owner's own visits out of the
-/// count: "<unix seconds>.<hex HMAC-SHA256 of "mossad-owner-view\n<seconds>" with the owner secret>". It lasts five
-/// minutes and gives nothing but that.
+/// count: "<unix seconds>.<hex HMAC-SHA256 of "owner-view\n<share id>\n<seconds>">". The key is made from the owner
+/// secret for this one purpose, as the server makes it, so the address holds nothing to test a guess of the secret
+/// with. It lasts five minutes, for one share, and gives nothing but that.
 public enum OwnerMark {
-    public static func make(secret: String, expires: Int) -> String {
-        let mac = HMAC<SHA256>.authenticationCode(for: Data("mossad-owner-view\n\(expires)".utf8), using: SymmetricKey(data: Data(secret.utf8)))
+    public static func make(secret: String, shareID: String, expires: Int) -> String {
+        let key = HMAC<SHA256>.authenticationCode(for: Data("share\nowner-mark".utf8), using: SymmetricKey(data: Data(secret.utf8)))
+        let mac = HMAC<SHA256>.authenticationCode(for: Data("owner-view\n\(shareID)\n\(expires)".utf8), using: SymmetricKey(data: Data(key)))
         return "\(expires).\(mac.map { String(format: "%02x", $0) }.joined())"
     }
 
-    public static func url(_ link: URL, secret: String, now: Date = Date()) -> URL {
+    public static func url(_ link: URL, shareID: String, secret: String, now: Date = Date()) -> URL {
         var c = URLComponents(url: link, resolvingAgainstBaseURL: false)!
-        c.queryItems = [URLQueryItem(name: "owner", value: make(secret: secret, expires: Int(now.timeIntervalSince1970) + 300))]
+        c.queryItems = [URLQueryItem(name: "owner", value: make(secret: secret, shareID: shareID, expires: Int(now.timeIntervalSince1970) + 300))]
         return c.url ?? link
     }
 }
@@ -245,13 +259,17 @@ public struct ShareBook: Codable, Equatable, Sendable {
 
 extension ServerClient {
     /// Puts the copy on the server, and the recording when the link shows it.
-    public func putShare(_ link: MeetingLink, meeting: SharedMeeting, audio: URL?) async throws {
-        try await send(connection.request("api/shares/\(link.id)", method: "PUT"), body: meeting.encoded())
+    /// Sends the copy of a meeting. Answers whether the share has a PIN now, or nil from a server that does not say.
+    @discardableResult
+    public func putShare(_ link: MeetingLink, meeting: SharedMeeting, audio: URL?) async throws -> Bool? {
+        let data = try await send(connection.request("api/shares/\(link.id)", method: "PUT"), body: meeting.encoded())
+        let hasPIN = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["pin"] as? Bool
         if meeting.audio, let audio {
             var request = connection.request("api/shares/\(link.id)/audio", method: "PUT")
             request.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
             try await send(request, file: audio)
         }
+        return hasPIN
     }
 
     public func deleteShare(_ link: MeetingLink) async throws {

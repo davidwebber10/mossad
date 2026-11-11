@@ -4,7 +4,8 @@ import SwiftUI
 
 /// Share one meeting by a private link. The sheet first holds every setting and creates nothing: Share puts the
 /// meeting on the server, and the same sheet then shows the link to copy. It closes with its X, with Escape, with
-/// Cancel before Share, and with Done after.
+/// Command-period, with a click outside it, with Cancel before Share, and with Done after. A close while Share works
+/// cancels the share: a new link is taken off the server again, and nothing goes to the clipboard.
 struct ShareSheet: View {
     enum Phase { case settings, result }
 
@@ -20,6 +21,10 @@ struct ShareSheet: View {
     /// "Link created" or "Changes saved", after Share in this sheet.
     @State private var done: String?
     @State private var working = false
+    /// The share that runs now, so a close can cancel it.
+    @State private var sharing: Task<Void, Never>?
+    /// The sheet was closed: a share that ends after this keeps nothing new and copies nothing.
+    @State private var closed = false
     @State private var error: FriendlyError?
     @State private var copied: String?
     @State private var confirmStop = false
@@ -47,11 +52,13 @@ struct ShareSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(icon: .link, title: phase == .result ? "“\(record.title)” is shared" : "Share “\(record.title)”",
                         subtitle: record.start.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()),
-                        close: { dismiss() })
+                        close: close)
             if !hasServer { noServer } else if phase == .result, let link { result(link) } else { settings }
         }
         .mossadSheet(width: hasServer ? 480 : 420)
+        .closesOnOutsideClick(close)
         .onAppear(perform: start)
+        .onDisappear { if working { cancelShare() } }
         .confirmationDialog("Stop sharing this meeting?", isPresented: $confirmStop) {
             Button("Stop sharing", role: .destructive, action: stop)
         } message: {
@@ -87,7 +94,7 @@ struct ShareSheet: View {
             }
             .padding(.horizontal, 22).padding(.vertical, 16)
             SheetFooter {
-                Button("Cancel") { dismiss() }.buttonStyle(.sheetSecondary)
+                Button("Cancel", action: close).buttonStyle(.sheetSecondary)
                 Button("Set up your server…") {
                     UserDefaults.standard.set(SettingsPage.sync.rawValue, forKey: "settingsPage")
                     controller.open(.settings)
@@ -143,7 +150,7 @@ struct ShareSheet: View {
                 }
             } trailing: {
                 if working { ProgressView().controlSize(.small) }
-                Button("Cancel") { dismiss() }.buttonStyle(.sheetSecondary)
+                Button("Cancel", action: close).buttonStyle(.sheetSecondary)
                 if let link {
                     Button("Save changes", action: publish).buttonStyle(.sheetPrimary).keyboardShortcut(.defaultAction)
                         .disabled(working || !draft.canShare || !draft.differs(from: link))
@@ -217,7 +224,7 @@ struct ShareSheet: View {
             SheetFooter {
                 Button("Change settings…") { error = nil; done = nil; phase = .settings }.buttonStyle(.sheetText)
             } trailing: {
-                Button("Done") { dismiss() }.buttonStyle(.sheetSecondary).keyboardShortcut(.defaultAction)
+                Button("Done", action: close).buttonStyle(.sheetSecondary).keyboardShortcut(.defaultAction)
             }
         }
     }
@@ -234,13 +241,31 @@ struct ShareSheet: View {
 
     // MARK: Actions
 
+    /// X, Escape, Command-period, Cancel, Done, and a click outside all come here.
+    private func close() {
+        cancelShare()
+        dismiss()
+    }
+
+    private func cancelShare() {
+        closed = true
+        sharing?.cancel()
+    }
+
     private func publish() {
         working = true
         error = nil
+        closed = false
         let first = link == nil
-        Task {
+        sharing = Task {
+            defer { working = false; sharing = nil }
             do {
                 let made = try await controller.share(record, options: draft.options, pin: draft.sentPIN, existing: link)
+                // The sheet closed while the server answered: a new link goes again, and nothing is copied.
+                if closed {
+                    if first { controller.abandonKept(made) }
+                    return
+                }
                 link = made
                 draft = ShareDraft(existing: made, hasRecording: controller.hasRecording(record))
                 done = first ? "Link created" : "Changes saved"
@@ -248,11 +273,14 @@ struct ShareSheet: View {
                 // A new link goes to the clipboard at once, with its PIN when it has one.
                 if first, let url = controller.shareURL(made) { put(ShareMessage.text(url: url, pin: made.pin), as: "all") }
             } catch {
+                if closed || error is CancellationError || (error as? URLError)?.code == .cancelled {
+                    Log.info("A share was cancelled when its sheet closed")
+                    return
+                }
                 Log.error("Share link failed: \(error)")
                 let friendly = FriendlyError(error, context: .sharing, service: "your server")
                 if friendly.shouldShow(failures: 1) { self.error = friendly }
             }
-            working = false
         }
     }
 

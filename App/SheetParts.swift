@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The parts every sheet shares: an accent tile and a title over a hairline, a body, and the buttons under a
@@ -89,6 +90,12 @@ extension SheetFooter where Leading == EmptyView {
 }
 
 extension View {
+    /// Closes a sheet when its owner clicks the window under it. The click goes no further, so it cannot also press
+    /// something in that window. A sheet with another sheet or an alert over it ignores the click.
+    func closesOnOutsideClick(_ action: @escaping () -> Void) -> some View {
+        background(OutsideClickWatcher(action: action))
+    }
+
     /// A sheet's ground: the opaque window color at the canvas's width.
     func mossadSheet(width: CGFloat) -> some View {
         frame(width: width)
@@ -264,5 +271,45 @@ struct GlassSegmented<Value: Hashable>: View {
         }
         .padding(3)
         .mossadGlass(in: Capsule())
+    }
+}
+
+/// Watches the clicks of the app while its sheet shows, and calls `action` for a click in the window under the sheet.
+private struct OutsideClickWatcher: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        context.coordinator.action = action
+        context.coordinator.start(view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) { context.coordinator.action = action }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { coordinator.stop() }
+
+    @MainActor
+    final class Coordinator {
+        var action: () -> Void = {}
+        private weak var view: NSView?
+        private var monitor: Any?
+
+        func start(_ view: NSView) {
+            self.view = view
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+                guard let self, let sheet = self.view?.window, let parent = sheet.sheetParent,
+                      event.window === parent, sheet.attachedSheet == nil else { return event }
+                self.action()
+                return nil
+            }
+        }
+
+        func stop() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
     }
 }

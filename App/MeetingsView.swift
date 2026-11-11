@@ -172,9 +172,13 @@ struct MeetingsView: View {
             if mode == .split || opened != nil {
                 let record = opened.flatMap { id in controller.meetings.first { $0.id == id } } ?? selected
                 ToolbarCapsule {
+                    ToolbarIconButton(icon: .link, label: "Share", help: "Share this meeting by a private link (⇧⌘S)") {
+                        if let record { controller.sharingCallID = record.id }
+                    }
+                    .disabled(record?.status != .written)
                     ExportMenu(record: record)
                     ToolbarMenuButton(icon: .more, label: "More", help: "More for this meeting") {
-                        if let record { MeetingMenuItems(record: record, deleting: $deleting) }
+                        if let record { MeetingMenuItems(record: record, deleting: $deleting, sharing: false) }
                     }
                     .disabled(record == nil)
                 }
@@ -224,7 +228,7 @@ struct MeetingsView: View {
     }
 }
 
-/// Export for the open meeting: a private link, or the note itself.
+/// The note of the open meeting: open it, or show it in Finder. Share has its own button beside this one.
 private struct ExportMenu: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord?
@@ -232,8 +236,6 @@ private struct ExportMenu: View {
     var body: some View {
         Menu {
             if let record {
-                Button("Share…", systemImage: "link") { controller.sharingCallID = record.id }
-                    .disabled(record.status != .written)
                 Button("Open note", systemImage: "doc.richtext") {
                     if let path = record.markdownPath { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
                 }
@@ -254,7 +256,7 @@ private struct ExportMenu: View {
         .fixedSize()
         .accessibilityLabel("Export")
         .disabled(record == nil || record?.status == .recording)
-        .help("Share or open this meeting's note")
+        .help("Open this meeting's note")
     }
 }
 
@@ -328,11 +330,13 @@ struct ModePicker: View {
     }
 }
 
-/// The right-click menu and the More menu share these items.
+/// The right-click menu and the More menu share these items. The More menu leaves out Share: the header has a
+/// button for it.
 struct MeetingMenuItems: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
     @Binding var deleting: CallRecord?
+    var sharing = true
 
     var body: some View {
         if record.status == .recording {
@@ -353,8 +357,10 @@ struct MeetingMenuItems: View {
             if record.status == .written, record.unknownSpeakers.isEmpty, !record.skippedSpeakers.isEmpty {
                 Button("Name skipped voices…", systemImage: "person.wave.2") { controller.namingCallID = record.id }
             }
-            Button("Share…", systemImage: "square.and.arrow.up") { controller.sharingCallID = record.id }
-                .disabled(record.status != .written)
+            if sharing {
+                Button("Share…", systemImage: "square.and.arrow.up") { controller.sharingCallID = record.id }
+                    .disabled(record.status != .written)
+            }
             Button("Regenerate summary", systemImage: "arrow.clockwise") { controller.regenerateSummary(record.id) }
                 .disabled(record.status != .written || record.utterances.isEmpty)
             let dir = controller.paths.callDirectory(record.id)

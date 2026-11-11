@@ -24,6 +24,8 @@ extension AppController {
     /// Makes or updates the link for a meeting with these options and this PIN (nil for none), and returns it.
     /// Nothing is kept on this Mac until the server has the meeting and, when asked for, the PIN.
     /// `fromNow` counts the days from today also when the choice of days is the one the link had.
+    /// A new link that fails or is cancelled part way is taken off the server again, so nothing stays open there
+    /// that this Mac does not list.
     func share(_ record: CallRecord, options: ShareOptions, pin: String?, existing: MeetingLink?, fromNow: Bool = false) async throws -> MeetingLink {
         guard let c = serverConnection else { throw ServerError.wrongSecret }
         let now = Date()
@@ -36,27 +38,63 @@ extension AppController {
         let model = aiProvider == .anthropic ? aiProvider.resolvedModel(aiModel) : nil
         let meeting = SharedMeeting(MeetingView(record), owner: ownerName, options: options, expires: link.expires, model: model)
         let audio = options.recording ? try await recordingFile(record) : nil
+        try Task.checkCancellation()
         let client = ServerClient(c)
-        try await client.putShare(link, meeting: meeting, audio: audio)
-        if pin != existing?.pin {
-            do {
-                if let pin { try await client.setPIN(shareID: link.id, pin: pin) } else { try await client.removePIN(shareID: link.id) }
+        var sent = false
+        do {
+            let serverHasPIN = try await client.putShare(link, meeting: meeting, audio: audio)
+            sent = true
+            try Task.checkCancellation()
+            // Also when the PIN is the one this Mac holds: a row that the server lost comes back with no PIN.
+            if SharePINStep.needed(wanted: pin, held: existing?.pin, serverHasPIN: serverHasPIN) {
+                if let pin {
+                    link.pinSet = try await client.setPIN(shareID: link.id, pin: pin).pinSet
+                } else {
+                    try await client.removePIN(shareID: link.id)
+                    link.pinSet = nil
+                }
                 link.pin = pin
-            } catch {
-                // A new link must not stay open without the PIN that its owner asked for.
-                if existing == nil { try? await client.deleteShare(link) } else { keep(link) }
-                throw error
             }
+            try Task.checkCancellation()
+        } catch {
+            // A new link must not stay open without the PIN that its owner asked for, or after its sheet closed.
+            // An existing one keeps what the server now has.
+            if existing == nil { abandon(link) } else if sent { keep(link) }
+            throw error
         }
         keep(link)
         return link
     }
 
+    /// Takes a new link off the server, in its own task so a cancelled share can still do it. If the server cannot
+    /// be told now, the link is kept marked to stop, and the next sync tries again; it is never listed as a share.
+    func abandon(_ link: MeetingLink) {
+        guard let c = serverConnection else { return }
+        Task {
+            do { try await ServerClient(c).deleteShare(link) } catch {
+                Log.error("A new share link could not be taken off the server yet; it is tried again after the next sync: \(error)")
+                keep(link)
+                shareBook.markStopping(token: link.token, after: Date())
+                saveShares()
+            }
+        }
+    }
+
+    /// A new link that this Mac kept just as its sheet closed: off the list and off the server, as if never made.
+    func abandonKept(_ link: MeetingLink) {
+        shareBook.remove(link.token)
+        saveShares()
+        abandon(link)
+    }
+
     /// Sets a new PIN on a link, or removes it with nil. The server keeps a hash; this Mac keeps the PIN for its owner.
     func setPIN(_ link: MeetingLink, pin: String?) async throws {
         guard let c = serverConnection else { throw ServerError.wrongSecret }
-        if let pin { try await ServerClient(c).setPIN(shareID: link.id, pin: pin) } else { try await ServerClient(c).removePIN(shareID: link.id) }
         var changed = link
+        if let pin { changed.pinSet = try await ServerClient(c).setPIN(shareID: link.id, pin: pin).pinSet } else {
+            try await ServerClient(c).removePIN(shareID: link.id)
+            changed.pinSet = nil
+        }
         changed.pin = pin
         keep(changed)
     }
@@ -152,7 +190,7 @@ extension AppController {
     /// Opens a link in the browser with the owner's mark, so the owner's own visits are not counted as views.
     func openShare(_ link: MeetingLink) {
         guard let c = serverConnection else { return }
-        NSWorkspace.shared.open(OwnerMark.url(link.url(on: c.address), secret: c.secret))
+        NSWorkspace.shared.open(OwnerMark.url(link.url(on: c.address), shareID: link.id, secret: c.secret))
     }
 
     private func keep(_ link: MeetingLink) {

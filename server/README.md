@@ -62,8 +62,8 @@ Add a custom connector with the MCP address, such as `https://mcp.example.com/mo
 
 A share page shows the parts of one meeting that you chose, and it does not name Mossad. It asks no other site for anything: the text face comes from this Worker.
 
-- **PIN.** A share can have a PIN of 4 digits. The page then shows only the PIN entry. After the right PIN, the visitor gets a pass for that one share for 12 hours: a signed cookie that is `HttpOnly`, `Secure`, and `SameSite=Lax`. The database keeps a salted hash of the PIN, under a key that comes from your owner secret, and never the PIN. Five wrong PINs pause that visitor for a minute, and each wrong PIN after that doubles the pause, up to a day. Thirty wrong PINs from all visitors together lock the share until you make a new PIN in Mossad. The PIN travels in the body of a request and never in an address.
-- **Views.** The server counts visits and visitors for each share, per day, with the country that Cloudflare names and the kind of device. A visitor is a random cookie that belongs to that one share. The server does not keep addresses. Link previews are not counted, and your own visits are not counted after you open a link from Mossad once in that browser.
+- **PIN.** A share can have a PIN of 4 digits. The page then shows only the PIN entry. After the right PIN, the visitor gets a pass for that one share for 12 hours: a signed cookie that is `HttpOnly`, `Secure`, and `SameSite=Lax`. The database keeps a salted hash of the PIN, under a key that comes from your owner secret, and never the PIN. Five wrong PINs pause that visitor for a minute, and each wrong PIN after that doubles the pause, up to a day. Thirty wrong PINs from all visitors together lock the share until you make a new PIN in Mossad; the share forgets one of them each day, but a lock does not wear off, and Mossad shows when a share was locked. If the server cannot read what the PIN check needs, the page is not shown. The PIN travels in the body of a request and never in an address.
+- **Views.** The server counts visits and visitors for each share, per day, with the country that Cloudflare names and the kind of device. A visitor is a random cookie that belongs to that one share. The server does not keep addresses. A client that keeps no cookie is a new visitor each time, so after 500 new visitors in a day a share counts the rest as one. Link previews and browser prefetches are not counted, and your own visits are not counted after you open a link from Mossad once in that browser.
 - **Copy for your AI.** A button at the foot of the page copies the meeting as Markdown. A share with no PIN also serves that text at its link with `.md`. A share with a PIN does not.
 - **Expiry.** After a link expires, the server deletes the copy of the meeting at the next visit or when Mossad next lists your shares. The row with its numbers stays until you stop the share in Mossad.
 
@@ -71,12 +71,12 @@ The calls, all on `SHARE_HOST` and all with `Authorization: Bearer <owner secret
 
 | Call | What it does |
 | --- | --- |
-| `GET /api/shares` | Every share: `id`, `title`, `created`, `expires`, `audio`, `chat`, `views`, `questions`, `viewers`, `firstView`, `lastView`, `pin`, `pinLocked`, `wrongPins`, `gone`. With `migrate: true` when the database is from before the views. |
+| `GET /api/shares` | Every share: `id`, `title`, `created`, `expires`, `audio`, `chat`, `views`, `questions`, `viewers`, `earlierViews` (views counted before the views per day), `firstView`, `lastView`, `pin`, `pinSet` (when the PIN was set, in ms), `pinLocked`, `lockedAt`, `wrongPins`, `gone`. With `migrate: true` when the database is from before the views. |
 | `GET /api/shares/<id>` | `{ share, days: [{ day, views, viewers }], countries: [{ country, viewers }], devices: [{ device, viewers }] }`. Days are in your time zone. |
-| `PUT /api/shares/<id>` | Stores the copy of the meeting. Sending it again keeps the PIN and the views. |
+| `PUT /api/shares/<id>` | Stores the copy of the meeting. Sending it again keeps the PIN and the views. Answers `{ ok, pin }`, where `pin` says whether the share has a PIN now. |
 | `PUT /api/shares/<id>/audio` | Stores the recording of a share. |
 | `PATCH /api/shares/<id>` | `{ "expires": "<ISO 8601>" }` or `{ "expires": null }` changes the expiry. `410` when the copy was deleted after the expiry. |
-| `PUT /api/shares/<id>/pin` | `{ "pin": "4821" }` sets that PIN; `{}` makes a random one. Answers `{ ok, pin }`. A new PIN ends every pass and every lock. |
+| `PUT /api/shares/<id>/pin` | `{ "pin": "4821" }` sets that PIN; `{}` makes a random one. Answers `{ ok, pin, pinSet }`. A new PIN ends every pass and every lock. |
 | `DELETE /api/shares/<id>/pin` | Removes the PIN. |
 | `DELETE /api/shares/<id>` | Stops the share: the copy, the recording, and the numbers go. |
 
@@ -130,6 +130,8 @@ Run the two `wrangler` steps in this order. Every migration only adds tables and
 - **If you deploy first**, nothing breaks: share links open as before and views count the old way. Mossad then shows "Finish the update of your server" until you run the migration step.
 - **Your `wrangler.jsonc`** needs no change for this update: no binding, variable, or secret is new. Wrangler finds `migrations/` next to the file. (`wrangler.example.jsonc` now names it with `migrations_dir`, which you can copy.)
 - Wrangler lists the migrations that are due and asks before it applies them.
+- **A new `OWNER_SECRET`** makes every PIN and every pass invalid, because their keys come from it. Mossad still shows the old PINs, and visitors who enter them use up their tries. After you change the secret, make a new PIN for each share that has one.
+- **Do not go back to an older Worker** after the migration. An older Worker does not know `pin_hash`, so it opens every share that has a PIN to anyone who has the link.
 
 ### The chat of older links
 

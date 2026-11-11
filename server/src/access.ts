@@ -13,6 +13,11 @@ export const pinPolicy = {
   pauseSeconds: 60,
   /** Wrong PINs from all visitors together that lock the share until the owner makes a new PIN. */
   shareTries: 30,
+  /**
+   * The share forgets one of those wrong PINs a day, so the readers of a long-lived link do not lock it over
+   * months. A lock does not wear off. Slow on purpose: someone with many addresses gains one guess a day.
+   */
+  shareForgetHours: 24,
   /** How long a pass lasts after the right PIN. */
   passSeconds: 12 * 3600,
   /**
@@ -111,13 +116,21 @@ export async function takeTry(env: Env, id: string, client: string, now = Date.n
     const row = await env.DB.prepare('SELECT locked_until FROM share_pin_tries WHERE share_id = ? AND client = ?').bind(id, client).first<{ locked_until: number }>();
     return { allowed: false, locked: false, seconds: Math.max(1, Math.ceil(((row?.locked_until ?? now) - now) / 1000)) };
   }
+  const kept = `max(0, fails - CAST((? - updated) / ? AS INTEGER))`;
   const all = await env.DB.prepare(`INSERT INTO share_pin_tries (share_id, client, fails, locked_until, updated) VALUES (?, '', 1, 0, ?)
-      ON CONFLICT(share_id, client) DO UPDATE SET fails = fails + 1, locked_until = CASE WHEN fails + 1 >= ? THEN ? ELSE 0 END, updated = ?
+      ON CONFLICT(share_id, client) DO UPDATE SET fails = ${kept} + 1, locked_until = CASE WHEN ${kept} + 1 >= ? THEN ? ELSE 0 END, updated = ?
       WHERE locked_until <= ?
       RETURNING fails`)
-    .bind(id, now, p.shareTries, forever, now, now).first<{ fails: number }>();
+    .bind(id, now, now, forgetMs(), now, forgetMs(), p.shareTries, forever, now, now).first<{ fails: number }>();
   if (!all) return { allowed: false, locked: true };
   return { allowed: true, left: Math.max(0, p.freeTries - mine.fails) };
+}
+
+const forgetMs = () => pinPolicy.shareForgetHours * 3_600_000;
+
+/** The wrong PINs that a share still holds against it: all of them while it is locked, else less one a day. */
+export function shareFails(fails: number, updated: number, locked: boolean, now = Date.now()): number {
+  return locked ? fails : Math.max(0, fails - Math.floor(Math.max(0, now - updated) / forgetMs()));
 }
 
 /** After a wrong PIN: what the visitor is told. The try is already counted. */
@@ -178,22 +191,28 @@ export async function viewerKey(id: string, value: string): Promise<string> {
   return hex(await crypto.subtle.digest('SHA-256', encoder.encode(`viewer\n${id}\n${value}`))).slice(0, 32);
 }
 
-const markText = (expires: number) => `mossad-owner-view\n${expires}`;
+const markText = (id: string, expires: number) => `owner-view\n${id}\n${expires}`;
+
+/** The key of the owner's mark, made from the owner secret for that one purpose, as the Mac makes it. */
+async function markKey(secret: string): Promise<CryptoKey> {
+  return hmacKey(await sign(await hmacKey(secret), 'share\nowner-mark'));
+}
 
 /**
  * What the owner's app puts on a link that it opens in the browser: "<unix seconds>.<hex HMAC-SHA256 of
- * "mossad-owner-view\n<seconds>" with the owner secret>", for a few minutes. The Mac makes the same.
+ * "owner-view\n<share id>\n<seconds>">", for a few minutes, with a key of its own from the owner secret, so the
+ * address holds nothing to test a guess of the secret with. The Mac makes the same.
  */
-export async function ownerMark(secret: string, expires: number): Promise<string> {
-  return `${expires}.${hex(await sign(await hmacKey(secret), markText(expires)))}`;
+export async function ownerMark(secret: string, id: string, expires: number): Promise<string> {
+  return `${expires}.${hex(await sign(await markKey(secret), markText(id, expires)))}`;
 }
 
 /** Trades a mark from the app for a cookie that keeps the owner's own visits out of the count. Null for no mark. */
-export async function ownerCookie(env: Env, mark: string, now = Date.now()): Promise<string | null> {
+export async function ownerCookie(env: Env, mark: string, id: string, now = Date.now()): Promise<string | null> {
   const [expires, signature] = mark.split('.');
   const at = Number(expires);
   if (!signature || !Number.isInteger(at) || at * 1000 <= now || at * 1000 > now + 3_600_000) return null;
-  const made = await ownerMark(env.OWNER_SECRET, at);
+  const made = await ownerMark(env.OWNER_SECRET, id, at);
   let diff = made.length ^ mark.length;
   for (let i = 0; i < made.length; i++) diff |= made.charCodeAt(i) ^ mark.charCodeAt(i);
   if (diff !== 0) return null;

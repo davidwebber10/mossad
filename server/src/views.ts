@@ -1,4 +1,4 @@
-import { isOwnerBrowser, viewerKey } from './access';
+import { isOwnerBrowser, shareFails, viewerKey } from './access';
 import type { Env, Share } from './types';
 
 /**
@@ -9,10 +9,23 @@ import type { Env, Share } from './types';
 /** A reload or a way back within this time is the same visit. */
 const visitMinutes = 30;
 
+export const viewPolicy = {
+  /**
+   * New visitor rows per share per day. A client that keeps no cookie is a new visitor at each request; past this
+   * number they share one row, so nobody can fill the table through one link.
+   */
+  newVisitorsPerDay: 500,
+};
+
 /** Programs that open a link to show a preview of it in a chat or a mail. They are not readers. */
 const previews = /bot\b|bot[/;) ]|crawler|spider|preview|facebookexternalhit|whatsapp|telegram|discord|skype|embedly|slack|linkedin|pinterest|vkshare|snippet|unfurl|headless|lighthouse|monitor|curl\/|wget\/|python-|go-http-client|okhttp|java\/|axios|node-fetch|undici/i;
 
 export const isPreview = (agent: string) => !agent || previews.test(agent);
+
+/** Programs that show a preview of a link in a chat or a mail. An AI app that reads the Markdown is not one. */
+const linkPreviews = /bot\b|bot[/;) ]|crawler|spider|preview|facebookexternalhit|whatsapp|telegram|discord|skype|embedly|slack|linkedin|pinterest|vkshare|snippet|unfurl/i;
+
+export const isLinkPreview = (agent: string) => linkPreviews.test(agent);
 
 /** "phone", "tablet", "computer", or "other" for anything that is not a browser a person holds. */
 export function deviceClass(agent: string): string {
@@ -38,9 +51,17 @@ export const missingSchema = (error: unknown) => /no such (table|column)|has no 
 export async function recordView(env: Env, id: string, share: Share, request: Request, viewer: string, now = Date.now()): Promise<void> {
   try {
     if (await isOwnerBrowser(env, request, now)) return;
-    const key = viewer ? await viewerKey(id, viewer) : 'apps';
+    let key = viewer ? await viewerKey(id, viewer) : 'apps';
     const at = new Date(now).toISOString();
-    const seen = await env.DB.prepare('SELECT last FROM share_viewers WHERE share_id = ? AND viewer = ?').bind(id, key).first<{ last: string }>();
+    const day = localDay(now, share.timeZone);
+    let seen = await env.DB.prepare('SELECT last FROM share_viewers WHERE share_id = ? AND viewer = ?').bind(id, key).first<{ last: string }>();
+    if (!seen && viewer) {
+      const today = await env.DB.prepare('SELECT viewers FROM share_days WHERE share_id = ? AND day = ?').bind(id, day).first<{ viewers: number }>();
+      if ((today?.viewers ?? 0) >= viewPolicy.newVisitorsPerDay) {
+        key = 'many';
+        seen = await env.DB.prepare('SELECT last FROM share_viewers WHERE share_id = ? AND viewer = ?').bind(id, key).first<{ last: string }>();
+      }
+    }
     if (seen && now - Date.parse(seen.last) < visitMinutes * 60_000) {
       await env.DB.batch([
         env.DB.prepare('UPDATE share_viewers SET last = ? WHERE share_id = ? AND viewer = ?').bind(at, id, key),
@@ -57,7 +78,7 @@ export async function recordView(env: Env, id: string, share: Share, request: Re
         .bind(id, key, at, at, typeof country === 'string' && /^[A-Z]{2}$/.test(country) ? country : null, viewer ? deviceClass(agent) : 'other'),
       env.DB.prepare(`INSERT INTO share_days (share_id, day, views, viewers) VALUES (?, ?, 1, ?)
           ON CONFLICT(share_id, day) DO UPDATE SET views = views + 1, viewers = viewers + excluded.viewers`)
-        .bind(id, localDay(now, share.timeZone), fresh),
+        .bind(id, day, fresh),
       env.DB.prepare('UPDATE shares SET views = views + 1, viewers = viewers + ?, first_view = COALESCE(first_view, ?), last_view = ? WHERE id = ?')
         .bind(fresh, at, at, id),
     ]);
@@ -68,21 +89,28 @@ export async function recordView(env: Env, id: string, share: Share, request: Re
   }
 }
 
-const columns = `s.id, s.title, s.created, s.expires, s.audio, s.chat, s.views, s.questions, s.viewers, s.first_view, s.last_view,
-  s.pin_hash IS NOT NULL AS pin, s.gone, COALESCE(t.fails, 0) AS wrong, COALESCE(t.locked_until, 0) AS locked_until`;
+// People are counted from their rows, so the number always agrees with the rows by device and country. Views
+// from before the views per day (an older Worker, or before the migration) are counted apart.
+const columns = `s.id, s.title, s.created, s.expires, s.audio, s.chat, s.views, s.questions,
+  (SELECT count(*) FROM share_viewers v WHERE v.share_id = s.id) AS viewers,
+  s.views - COALESCE((SELECT sum(d.views) FROM share_days d WHERE d.share_id = s.id), 0) AS earlier, s.first_view, s.last_view,
+  s.pin_hash IS NOT NULL AS pin, s.pin_set, s.gone, COALESCE(t.fails, 0) AS wrong, COALESCE(t.locked_until, 0) AS locked_until, COALESCE(t.updated, 0) AS tried`;
 const from = `FROM shares s LEFT JOIN share_pin_tries t ON t.share_id = s.id AND t.client = ''`;
 
 interface Row {
   id: string; title: string; created: string; expires: string | null; audio: number; chat: number; views: number; questions: number; viewers: number;
-  first_view: string | null; last_view: string | null; pin: number; gone: number; wrong: number; locked_until: number;
+  earlier: number; first_view: string | null; last_view: string | null; pin: number; pin_set: number | null; gone: number; wrong: number;
+  locked_until: number; tried: number;
 }
 
 /** A share as the owner's app lists it. The first eight fields are as they were before the views. */
 function listed(r: Row, now: number) {
+  const locked = r.pin === 1 && r.locked_until > now;
   return {
     id: r.id, title: r.title, created: r.created, expires: r.expires, audio: r.audio, chat: r.chat, views: r.views, questions: r.questions,
-    viewers: r.viewers, firstView: r.first_view, lastView: r.last_view, pin: r.pin === 1, pinLocked: r.pin === 1 && r.locked_until > now,
-    wrongPins: r.pin === 1 ? r.wrong : 0, gone: r.gone === 1,
+    viewers: r.viewers, earlierViews: Math.max(0, r.earlier), firstView: r.first_view, lastView: r.last_view, pin: r.pin === 1,
+    pinSet: r.pin === 1 ? r.pin_set : null, pinLocked: locked, lockedAt: locked ? new Date(r.tried).toISOString() : null,
+    wrongPins: r.pin === 1 ? shareFails(r.wrong, r.tried, locked, now) : 0, gone: r.gone === 1,
   };
 }
 

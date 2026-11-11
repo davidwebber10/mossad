@@ -10,12 +10,13 @@ import { decisionLine, escapeHtml as e, formatDay, timestamp } from './util';
 
 export const fonts = { roman: '/f/literata-v1.woff2', italic: '/f/literata-italic-v1.woff2' };
 
-const CSS = `
+/** The one style sheet of every page. Exported for the tests of contrast and wrapping. */
+export const css = `
 @font-face{font-family:Literata;src:url(${fonts.roman}) format("woff2");font-weight:200 900;font-style:normal;font-display:swap}
 @font-face{font-family:Literata;src:url(${fonts.italic}) format("woff2");font-weight:200 900;font-style:italic;font-display:swap}
-:root{color-scheme:light dark;--paper:#fbfbf9;--ink:#17191c;--soft:#565a61;--faint:#8b8f96;--rule:#d3d4cf;--hair:#e7e7e2;--mark:#efeee4;--accent:#17594a;
+:root{color-scheme:light dark;--paper:#fbfbf9;--ink:#17191c;--soft:#565a61;--faint:#6e7279;--dim:#8b8f96;--rule:#d3d4cf;--hair:#e7e7e2;--mark:#efeee4;--accent:#17594a;
 --serif:Literata,Charter,"Iowan Old Style","Sitka Text",Cambria,Georgia,serif;--margin:10.5rem;--gap:2.75rem;--measure:37.5rem;--page:calc(var(--margin) + var(--gap) + var(--measure))}
-@media (prefers-color-scheme:dark){:root{--paper:#121314;--ink:#e8e6e1;--soft:#a6a8ab;--faint:#75787c;--rule:#35373b;--hair:#242628;--mark:#1c2321;--accent:#86c9b1}}
+@media (prefers-color-scheme:dark){:root{--paper:#121314;--ink:#e8e6e1;--soft:#a6a8ab;--faint:#7d8084;--dim:#64676b;--rule:#35373b;--hair:#242628;--mark:#1c2321;--accent:#86c9b1}}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-padding-top:1.5rem}
 body{margin:0;background:var(--paper);color:var(--ink);font:400 1.0625rem/1.62 var(--serif);font-kerning:normal;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;hanging-punctuation:first}
@@ -42,6 +43,7 @@ h1,h2,h3,p{margin:0}
 .sec h2{color:var(--soft);margin:.1rem 0 .9rem}
 .sec.slim{padding-bottom:1.35rem}
 .names{text-wrap:pretty}
+h1,.by,.names,.prose,.dec li,.grp h3,.grp li,.who,.ln p,.qa,.gate .lede{overflow-wrap:anywhere}
 
 .prose p{margin:0 0 .85em;text-wrap:pretty}
 .prose > :last-child{margin-bottom:0}
@@ -50,7 +52,7 @@ h1,h2,h3,p{margin:0}
 .prose b{font-weight:650}
 .prose ul{list-style:none;margin:0 0 .85em;padding:0 0 0 1.25em}
 .prose li{position:relative;margin:.28em 0;text-wrap:pretty}
-.prose li::before{content:"\\2013";position:absolute;left:-1.25em;color:var(--faint)}
+.prose li::before{content:"\\2013";position:absolute;left:-1.25em;color:var(--dim)}
 
 .dec{list-style:none;margin:0;padding:0;counter-reset:d}
 .dec li{counter-increment:d;position:relative;padding-left:1.9em;margin:0 0 .65em;text-wrap:pretty}
@@ -71,9 +73,9 @@ button.t:hover{color:var(--accent);text-decoration:underline;text-underline-offs
 .grp li::before{content:"";position:absolute;left:.05em;top:.46em;width:.66em;height:.66em;border:1.25px solid var(--soft);border-radius:1.5px}
 
 .find{display:block;width:100%;font-size:.875rem;background:none;border:0;border-bottom:1px solid var(--rule);border-radius:0;padding:.3rem 0;-webkit-appearance:none;appearance:none}
-.find::placeholder,.ask textarea::placeholder{color:var(--faint);font-style:italic;opacity:1}
+.find::placeholder,.ask textarea::placeholder{color:var(--dim);font-style:italic;opacity:1}
 .find:focus,.ask textarea:focus{outline:0}
-.find:focus{border-bottom-color:var(--ink)}
+.find:focus{border-bottom-color:var(--accent);box-shadow:0 1px 0 var(--accent)}
 .count{font-size:.75rem;color:var(--faint);min-height:1.35rem;padding-top:.3rem;font-variant-numeric:tabular-nums lining-nums}
 .ln{display:grid;grid-template-columns:3.1rem minmax(0,1fr);column-gap:.95rem;align-items:baseline;padding:.14rem .55rem;margin:0 -.55rem;border-radius:2px}
 .ln.turn{margin-top:.95rem}
@@ -169,13 +171,14 @@ body{font-size:1.125rem}
 }
 @media print{
 @page{margin:18mm 17mm 20mm}
-:root{--paper:#fff;--ink:#000;--soft:#333;--faint:#555;--rule:#999;--hair:#ccc;--mark:transparent}
+:root{--paper:#fff;--ink:#000;--soft:#333;--faint:#555;--dim:#555;--rule:#999;--hair:#ccc;--mark:transparent}
 body{font-size:10.5pt;line-height:1.5}
 .doc{max-width:none;padding:0;left:0}
-.row{display:grid;grid-template-columns:8.5rem minmax(0,1fr);column-gap:1.5rem}
+.row{display:grid;grid-template-columns:10.5rem minmax(0,1fr);column-gap:1.5rem}
 .row > .side{grid-column:1;grid-row:1}
 .row > .main{grid-column:2;grid-row:1;min-width:0}
 .head .meta{display:block;margin-top:0;padding-top:.45rem}
+.head .meta p{white-space:nowrap}
 .player,.toc,.find,.count,.ask,.ai,#questions .note{display:none}
 .sec > .side{position:static}
 .sec{padding-bottom:1.6rem}
@@ -183,6 +186,7 @@ h1,h2,h3,.who{break-after:avoid}
 .ln,.grp li,.dec li{break-inside:avoid}
 .hide{display:grid}
 .ln.now,.ln.flash{background:none;box-shadow:none}
+.ln{margin-left:0;margin-right:0;padding-left:0;padding-right:0}
 }
 `;
 
@@ -215,7 +219,7 @@ function page(head: Head, nonce: string, body: string, script = ''): string {
 <meta property="og:type" content="article"><meta property="og:title" content="${e(head.title)}"><meta property="og:description" content="${e(head.description)}">` : ''}
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='3' y='1.5' width='10' height='13' rx='1' fill='%2317594a'/%3E%3Cpath d='M5.5 5.5h5M5.5 8h5M5.5 10.5h3' stroke='%23fff' stroke-width='1'/%3E%3C/svg%3E">${head.preload ? `
 <link rel="preload" href="${fonts.roman}" as="font" type="font/woff2" crossorigin>` : ''}
-<style nonce="${nonce}">${CSS}</style></head>
+<style nonce="${nonce}">${css}</style></head>
 <body${head.bodyClass ? ` class="${head.bodyClass}"` : ''}>${body}${script ? `<script nonce="${nonce}">${script}</script>` : ''}</body></html>`;
 }
 
@@ -299,8 +303,8 @@ export function sharePage(s: Share, token: string, nonce: string, o: PageOptions
 <p class="fine">This page is private. Only people who have the link${o.pin ? ' and the PIN' : ''} can open it.${until}</p></div></footer>`;
   const player = s.audio ? `<div class="player" id="player"><audio id="audio" controls preload="metadata" src="/${token}/audio"></audio>
 <div class="ctl" id="ctl" hidden><button class="pp" id="pp" type="button" aria-label="Play"><svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.6 2.6v10.8L13.4 8z"/></svg><svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.8 2.8h3v10.4h-3zM9.2 2.8h3v10.4h-3z"/></svg></button>
-<span class="pt" id="pt">${clock(0, long)}</span><input id="pos" type="range" min="0" max="1000" value="0" aria-label="Position"><span class="pt" id="pd">${clock(w.minutes * 60, long)}</span>
-<button class="rate" id="rate" type="button" aria-label="Speed">1×</button></div></div>` : '';
+<span class="pt" id="pt">${clock(0, long)}</span><input id="pos" type="range" min="0" max="1000" value="0" aria-label="Position" aria-valuetext="${clock(0, long)}"><span class="pt" id="pd">${clock(w.minutes * 60, long)}</span>
+<button class="rate" id="rate" type="button" aria-label="Speed, 1 times">1×</button></div></div>` : '';
   return page({ title: s.title, description: `Shared by ${s.owner}. ${w.day}, ${minutesText(w.minutes)}.`, preload: true, bodyClass: s.audio ? 'has-player' : '' }, nonce,
     `<main class="doc">${header}\n${parts.join('\n')}\n${footer}</main>${player}`, shareScript(token, long));
 }
@@ -327,14 +331,14 @@ if(A){
   A.controls=false;A.hidden=true;ctl.hidden=false;
   const len=()=>isFinite(A.duration)&&A.duration>0?A.duration:0;
   const draw=()=>{const d=len(),t=A.currentTime;if(d)pd.textContent=fmt(d);pt.textContent=fmt(t);
-    if(!drag){pos.value=d?Math.round(t/d*1000):0;pos.style.setProperty('--p',(d?t/d*100:0)+'%')}
+    if(!drag){pos.value=d?Math.round(t/d*1000):0;pos.style.setProperty('--p',(d?t/d*100:0)+'%');pos.setAttribute('aria-valuetext',fmt(t)+(d?' of '+fmt(d):''))}
     const el=A.paused&&!t?null:lineAt(t);if(el!==now){if(now)now.classList.remove('now');if(el)el.classList.add('now');now=el}};
   pp.addEventListener('click',()=>A.paused?A.play():A.pause());
   for(const name of ['play','pause','ended'])A.addEventListener(name,()=>{ctl.classList.toggle('playing',!A.paused);pp.setAttribute('aria-label',A.paused?'Play':'Pause')});
   for(const name of ['timeupdate','loadedmetadata','seeked'])A.addEventListener(name,draw);
   pos.addEventListener('input',()=>{drag=true;pos.style.setProperty('--p',pos.value/10+'%');pt.textContent=fmt(pos.value/1000*len())});
   pos.addEventListener('change',()=>{drag=false;if(len())A.currentTime=pos.value/1000*len()});
-  rate.addEventListener('click',()=>{const r=rates[(rates.indexOf(A.playbackRate)+1)%rates.length];A.playbackRate=r;rate.textContent=r+'\\u00d7'});
+  rate.addEventListener('click',()=>{const r=rates[(rates.indexOf(A.playbackRate)+1)%rates.length];A.playbackRate=r;rate.textContent=r+'\\u00d7';rate.setAttribute('aria-label','Speed, '+r+' times')});
 }
 const copy=$('copy');
 if(copy)copy.addEventListener('click',async()=>{
@@ -380,13 +384,13 @@ export const lockedPage = (nonce: string) =>
 
 /** The PIN entry. It shows nothing of the share: not its title, its owner, or its date. */
 export function pinPage(nonce: string, token: string, message = '', paused = false): string {
-  return page({ title: 'Private page', preload: true }, nonce, `<main class="doc gate"><p class="label">Private page</p><h1>Enter the PIN</h1>
+  return page({ title: message ? `${message} Private page` : 'Private page', preload: true }, nonce, `<main class="doc gate"><p class="label">Private page</p><h1>Enter the PIN</h1>
 <p class="lede">This page is protected. Enter the <b>4-digit PIN</b> that came with the link.</p>
 <form class="pinform" id="pf" method="post" action="/${token}/pin" autocomplete="off">
 <input id="pin" name="pin" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" placeholder="&#183;&#183;&#183;&#183;" aria-label="PIN" aria-describedby="msg" required${paused ? '' : ' autofocus'}>
 <button class="btn">Open</button></form>
-<p class="msg" id="msg" role="alert">${e(message)}</p></main>`,
-  `const p=document.getElementById('pin');p.addEventListener('input',()=>{p.value=p.value.replace(/\\D/g,'').slice(0,4);if(p.value.length===4)p.form.requestSubmit()});`);
+<p class="msg" id="msg" aria-live="polite">${e(message)}</p></main>`,
+  `const p=document.getElementById('pin');p.addEventListener('input',()=>{p.value=p.value.replace(/\\D/g,'').slice(0,4)});`);
 }
 
 export function homePage(nonce: string): string {

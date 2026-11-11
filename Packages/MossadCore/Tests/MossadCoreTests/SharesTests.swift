@@ -182,9 +182,9 @@ final class SharesTests: XCTestCase {
 
     func testTheOwnersMarkIsTheOneTheServerChecks() {
         // The same numbers are in share.test.ts.
-        XCTAssertEqual(OwnerMark.make(secret: "owner-secret", expires: 1_900_000_000),
-                       "1900000000.9fdf58efd4b92221f7302285c0fb95c79766610af09165cf88fc57ed87ff2305")
-        let url = OwnerMark.url(link("a").url(on: connection.address), secret: "owner-secret", now: now)
+        XCTAssertEqual(OwnerMark.make(secret: "owner-secret", shareID: String(repeating: "f", count: 64), expires: 1_900_000_000),
+                       "1900000000.c269117f8947674e0ccae0a38e665d799568722677b346e1f0bd9452982ed9b6")
+        let url = OwnerMark.url(link("a").url(on: connection.address), shareID: link("a").id, secret: "owner-secret", now: now)
         XCTAssertTrue(url.absoluteString.hasPrefix("https://notes.example.com/a?owner=1800000300."))
     }
 
@@ -227,8 +227,10 @@ final class SharesTests: XCTestCase {
 
     func testThePINGoesInTheBodyAndNeverInTheAddress() async throws {
         StubURLProtocol.handler = { r in (200, json(["ok": true, "pin": "4821"])) }
+        StubURLProtocol.handler = { r in (200, json(["ok": true, "pin": "4821", "pinSet": 1_800_000_000_123])) }
         let made = try await client.setPIN(shareID: "abc", pin: "4821")
-        XCTAssertEqual(made, "4821")
+        XCTAssertEqual(made.pin, "4821")
+        XCTAssertEqual(made.pinSet, 1_800_000_000_123)
         let sent = try XCTUnwrap(StubURLProtocol.requests.first)
         XCTAssertEqual(sent.method, "PUT")
         XCTAssertEqual(sent.url.absoluteString, "https://notes.example.com/api/shares/abc/pin")
@@ -289,5 +291,91 @@ final class SharesTests: XCTestCase {
         XCTAssertEqual(detail.devices.map { ShareDetail.deviceName($0.name) }, ["Computer", "Phone"])
         XCTAssertEqual(ShareDetail.deviceName("other"), "Other apps")
         XCTAssertEqual(detail.countries.map { ShareDetail.countryName($0.name) }, ["United States", "Canada"])
+    }
+
+    // MARK: Review fixes
+
+    func testWithNoAnswerFromTheServerARowKeepsThePINOfThisMac() {
+        // Unknown is not false: the person who gets the link needs the PIN.
+        let row = ShareRows.make(links: [link("a", pin: "4821")], remote: nil, now: now)[0]
+        XCTAssertEqual(row.pin, .on("4821"))
+        XCTAssertEqual(row.copyText(on: connection.address), "https://notes.example.com/a\nPIN: 4821")
+        XCTAssertEqual(ShareRows.make(links: [link("a")], remote: nil, now: now)[0].pin, .off)
+    }
+
+    func testAPINThatWasSetAgainElsewhereIsNotShownAsThisMacsPIN() {
+        var a = link("a", pin: "4821")
+        a.pinSet = 1_000
+        var r = remote(a, pin: true)
+        r.pinSet = 2_000
+        XCTAssertEqual(ShareRows.make(links: [a], remote: [r], now: now)[0].pin, .unknown)
+        r.pinSet = 1_000
+        XCTAssertEqual(ShareRows.make(links: [a], remote: [r], now: now)[0].pin, .on("4821"))
+        // A link from before the server told the time is taken at its word.
+        a.pinSet = nil
+        r.pinSet = 2_000
+        XCTAssertEqual(ShareRows.make(links: [a], remote: [r], now: now)[0].pin, .on("4821"))
+    }
+
+    func testViewsFromBeforeTheServerUpdateAreShownApart() {
+        let a = link("a")
+        var r = remote(a, views: 41, viewers: 0)
+        r.earlierViews = 41
+        let row = ShareRows.make(links: [a], remote: [r], now: now)[0]
+        XCTAssertEqual(row.viewsText, "41 views before the server update")
+        XCTAssertNil(row.lastViewedText(now: now), "no last view is known")
+        XCTAssertEqual(row.countedViews, 0)
+        XCTAssertNil(row.earlierViewsText)
+        r = remote(a, views: 44, viewers: 2, lastView: -3600)
+        r.earlierViews = 41
+        let later = ShareRows.make(links: [a], remote: [r], now: now)[0]
+        XCTAssertEqual(later.viewsText, "3 views by 2 people")
+        XCTAssertEqual(later.countedViews, 3)
+        XCTAssertEqual(later.earlierViewsText, "41 more views before the server update")
+        XCTAssertEqual(later.lastViewedText(now: now), "Last viewed 1 hour ago")
+    }
+
+    func testALockedShareSaysWhenItLocked() {
+        let a = link("a", pin: "4821")
+        var r = remote(a, pin: true, locked: true)
+        r.lockedAt = now.addingTimeInterval(-2 * 86_400)
+        let row = ShareRows.make(links: [a], remote: [r], now: now)[0]
+        XCTAssertEqual(row.pin, .locked)
+        XCTAssertEqual(row.lockedText(now: now), "Locked 2 days ago by too many wrong PINs")
+        r.lockedAt = nil
+        XCTAssertEqual(ShareRows.make(links: [a], remote: [r], now: now)[0].lockedText(now: now), "Locked by too many wrong PINs")
+        XCTAssertNil(ShareRows.make(links: [a], remote: [remote(a, pin: true)], now: now)[0].lockedText(now: now))
+    }
+
+    func testThePINIsSetAgainWhenTheServerLostIt() {
+        XCTAssertFalse(SharePINStep.needed(wanted: "4821", held: "4821", serverHasPIN: true))
+        XCTAssertTrue(SharePINStep.needed(wanted: "4821", held: "4821", serverHasPIN: false), "a row the server made again has no PIN")
+        XCTAssertFalse(SharePINStep.needed(wanted: "4821", held: "4821", serverHasPIN: nil), "an older server does not say")
+        XCTAssertTrue(SharePINStep.needed(wanted: "1234", held: "4821", serverHasPIN: true))
+        XCTAssertTrue(SharePINStep.needed(wanted: nil, held: "4821", serverHasPIN: true))
+        // A PIN that another Mac set is not removed by a change of the other settings here.
+        XCTAssertFalse(SharePINStep.needed(wanted: nil, held: nil, serverHasPIN: true))
+    }
+
+    func testTheServerSaysAfterAPutWhetherTheShareHasAPIN() async throws {
+        let meeting = try JSONDecoder.callRecord.decode(SharedMeeting.self, from: Data(#"{"title":"T","start":"2026-11-05T18:00:00Z","end":"2026-11-05T18:30:00Z","people":[],"owner":"Dana","audio":false,"chat":false}"#.utf8))
+        StubURLProtocol.handler = { _ in (200, json(["ok": true, "pin": false])) }
+        let lost = try await client.putShare(link("a"), meeting: meeting, audio: nil)
+        XCTAssertEqual(lost, false)
+        StubURLProtocol.handler = { _ in (200, json(["ok": true])) }
+        let old = try await client.putShare(link("a"), meeting: meeting, audio: nil)
+        XCTAssertNil(old, "an older server does not say")
+    }
+
+    func testTheListReadsTheEarlierViewsTheTimeOfThePINAndTheLock() async throws {
+        StubURLProtocol.handler = { _ in (200, json(["shares": [[
+            "id": "abc", "title": "T", "created": "2026-11-05T18:00:00.000Z", "expires": NSNull(), "views": 44, "questions": 3, "viewers": 2, "earlierViews": 41,
+            "pin": true, "pinSet": 1_800_000_000_123, "pinLocked": true, "lockedAt": "2026-11-09T10:00:00.000Z", "wrongPins": 30, "gone": false,
+        ]]])) }
+        let list = try await client.shares()
+        let s = try XCTUnwrap(list.shares.first)
+        XCTAssertEqual(s.earlierViews, 41)
+        XCTAssertEqual(s.pinSet, 1_800_000_000_123)
+        XCTAssertEqual(s.lockedAt, try Date("2026-11-09T10:00:00Z", strategy: .iso8601))
     }
 }

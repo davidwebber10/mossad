@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clock, homePage, lockedPage, md, notFoundPage, pinPage, sharePage } from '../src/pages';
+import { clock, css, homePage, lockedPage, md, notFoundPage, pinPage, sharePage } from '../src/pages';
 import type { Share } from '../src/types';
 
 const full: Share = {
@@ -85,5 +85,41 @@ describe('share page', () => {
   it('says when the link stops, in the owner\'s time zone', () => {
     expect(sharePage({ ...full, expires: '2026-12-04T03:00:00Z' }, 'tok', 'n', page)).toContain('The link stops working on December 3, 2026.');
     expect(sharePage(full, 'tok', 'n', page)).not.toContain('stops working');
+  });
+
+  it('breaks a long word, an address, or a link so the page never scrolls sideways', () => {
+    const long = 'Quarterly_budget_review_for_the_northern_region_and_partners_2026';
+    expect(long.length).toBeGreaterThan(60);
+    const html = sharePage({ ...full, title: long, people: ['jennifer.lee.finance.department@example.com'] }, 'tok', 'n', page);
+    expect(html).toContain(long);
+    const rule = /([^{}]+)\{[^}]*overflow-wrap:anywhere/.exec(css)!;
+    for (const part of ['h1', '.names', '.prose', '.ln p', '.grp li', '.dec li']) expect(rule[1].trim().split(',')).toContain(part);
+  });
+
+  it('sets small gray text dark enough to read: 4.5 to 1 on the paper', () => {
+    const ratio = (a: string, b: string) => {
+      const lum = (hex: string) => {
+        const [r, g, bl] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+      };
+      const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+      return (x + 0.05) / (y + 0.05);
+    };
+    const values = [...css.matchAll(/--paper:(#[0-9a-f]{6});[^}]*?--faint:(#[0-9a-f]{6})/g)].map((m) => [m[1], m[2]]);
+    expect(values.length).toBeGreaterThanOrEqual(2);
+    for (const [paper, faint] of values) expect(ratio(paper, faint)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('lets a person correct the PIN before it is sent, and names the message in the title', () => {
+    const html = pinPage('n', 'tok', 'That PIN is not right. 4 tries left before a pause.');
+    expect(html).not.toContain('requestSubmit');
+    expect(html).toContain('<title>That PIN is not right. 4 tries left before a pause. Private page</title>');
+    expect(pinPage('n', 'tok')).toContain('<title>Private page</title>');
+  });
+
+  it('gives the player a position and a speed that a screen reader can say', () => {
+    const html = sharePage({ ...full, audio: true }, 'tok', 'n', page);
+    expect(html).toContain('aria-valuetext');
+    expect(html).toContain('aria-label="Speed, 1 times"');
   });
 });

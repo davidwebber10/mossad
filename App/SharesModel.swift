@@ -79,18 +79,19 @@ enum ShareSample {
         link(5, "Holiday coverage plan", created: -40, expires: -10, days: 30),
     ]
 
-    private static func share(_ l: MeetingLink, views: Int, viewers: Int, first: Double?, last: Double?, pin: Bool = false, locked: Bool = false, wrong: Int = 0,
-                              gone: Bool = false) -> ServerShare {
-        ServerShare(id: l.id, title: l.title, created: l.created, expires: l.expires, views: views, questions: 0, viewers: viewers,
+    private static func share(_ l: MeetingLink, views: Int, viewers: Int, first: Double?, last: Double?, pin: Bool = false, locked: Double? = nil, wrong: Int = 0,
+                              gone: Bool = false, earlier: Int = 0, questions: Int = 0) -> ServerShare {
+        ServerShare(id: l.id, title: l.title, created: l.created, expires: l.expires, views: views, questions: questions, viewers: viewers,
                     firstView: first.map { now.addingTimeInterval($0 * day) }, lastView: last.map { now.addingTimeInterval($0 * day) },
-                    pin: pin, pinLocked: locked, wrongPins: wrong, gone: gone)
+                    pin: pin, pinLocked: locked != nil, wrongPins: wrong, gone: gone, earlierViews: earlier,
+                    lockedAt: locked.map { now.addingTimeInterval($0 * day) })
     }
 
     static let remote: [ServerShare] = [
         share(links[0], views: 23, viewers: 7, first: -10.8, last: -2.0 / 24, pin: true, wrong: 2),
         share(links[1], views: 0, viewers: 0, first: nil, last: nil),
-        share(links[2], views: 3, viewers: 2, first: -5, last: -4, pin: true, locked: true, wrong: 30),
-        share(links[3], views: 41, viewers: 12, first: -18.5, last: -1.2),
+        share(links[2], views: 3, viewers: 2, first: -5, last: -4, pin: true, locked: -1, wrong: 30),
+        share(links[3], views: 44, viewers: 2, first: -2.5, last: -1.2, earlier: 41, questions: 3),
         share(links[4], views: 6, viewers: 4, first: -39, last: -31, gone: true),
     ]
 

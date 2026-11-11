@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { copyText, shareMarkdown } from '../src/markdown';
+import { copyText, minutesText, shareMarkdown } from '../src/markdown';
 import type { Share } from '../src/types';
 
 const meeting: Share = {
@@ -62,5 +62,12 @@ Spend is **flat**.
     const closed = copyText(meeting, null).split('\n');
     expect(closed.slice(0, 3)).toEqual(['Here is a meeting transcript and its notes. Use it as context for my questions.', '', '# Budget review']);
     expect(copyText(meeting, null)).not.toContain('http');
+  });
+
+  it('gives a length of an hour or more in hours and minutes', () => {
+    expect(minutesText(47)).toBe('47 minutes');
+    expect(minutesText(1)).toBe('1 minute');
+    expect(minutesText(60)).toBe('1 h');
+    expect(minutesText(130)).toBe('2 h 10 min');
   });
 });

@@ -14,7 +14,12 @@ export function when(s: Share): { day: string; time: string; minutes: number } {
   return { day, time: `${clock(start)} to ${clock(end, true)}`, minutes: Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000)) };
 }
 
-export const minutesText = (n: number) => (n === 1 ? '1 minute' : `${n} minutes`);
+/** "47 minutes" under an hour; "1 h" and "2 h 10 min" from an hour on. */
+export function minutesText(n: number): string {
+  if (n < 60) return n === 1 ? '1 minute' : `${n} minutes`;
+  const h = Math.floor(n / 60), m = n % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
 
 export function shareMarkdown(s: Share): string {
   const w = when(s);

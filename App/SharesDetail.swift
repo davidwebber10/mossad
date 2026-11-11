@@ -127,8 +127,8 @@ struct ShareDetailPane: View {
                     note("Another Mac made this link, so this Mac cannot copy it. Its numbers show here, and you can stop it.")
                 }
                 if row.pin == .unknown { note("This link asks for a PIN that another Mac set. Make a new PIN to copy it from here.") }
-                if row.pin == .locked {
-                    note("Locked: too many wrong PINs were entered. Nobody can open the page until you make a new PIN.", color: Palette.recording)
+                if let locked = row.lockedText() {
+                    note("\(locked). Nobody can open the page until you make a new PIN.", color: Palette.recording)
                 }
             case .expired:
                 note("This link has expired. The copy of the meeting on your server is deleted. Choose a new time under Expires to share it again with the same link.")
@@ -149,14 +149,23 @@ struct ShareDetailPane: View {
     @ViewBuilder
     private var viewsGroup: some View {
         if let remote = row.remote, numbers || remote.viewers != nil {
+            let counted = row.countedViews
             VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top, spacing: 0) {
-                    SmallFigure(value: "\(remote.views)", label: remote.views == 1 ? "view" : "views").frame(width: 110, alignment: .leading)
-                    SmallFigure(value: "\(remote.viewers ?? 0)", label: remote.viewers == 1 ? "person" : "people").frame(width: 110, alignment: .leading)
-                    SmallFigure(value: remote.lastView.map { ago($0) } ?? "Not yet", label: "last viewed")
+                if counted == 0, let earlier = remote.earlierViews, earlier > 0 {
+                    // Only views from before the server counted people and days: there are no people or days to show.
+                    SmallFigure(value: "\(earlier)", label: earlier == 1 ? "view before the server update" : "views before the server update")
+                    note("Your server counts who opened the link, and when, from its update on. The next view shows here.")
+                } else {
+                    HStack(alignment: .top, spacing: 0) {
+                        SmallFigure(value: "\(counted)", label: counted == 1 ? "view" : "views").frame(width: 110, alignment: .leading)
+                        SmallFigure(value: "\(remote.viewers ?? 0)", label: remote.viewers == 1 ? "person" : "people").frame(width: 110, alignment: .leading)
+                        SmallFigure(value: remote.lastView.map { ago($0) } ?? "Not yet", label: "last viewed")
+                    }
                 }
-                if let detail, remote.views > 0 {
-                    ViewsChart(days: ShareDetail.filled(detail.days), total: remote.views)
+                let more = [row.earlierViewsText, questionsText].compactMap { $0 }
+                if !more.isEmpty { note(more.joined(separator: ". ") + ".") }
+                if let detail, counted > 0 {
+                    ViewsChart(days: ShareDetail.filled(detail.days), total: counted)
                     HStack(alignment: .top, spacing: 36) {
                         breakdown("Opened on", detail.devices.map { (ShareDetail.deviceName($0.name), $0.count) })
                         breakdown("From", detail.countries.map { (ShareDetail.countryName($0.name), $0.count) })
@@ -175,6 +184,12 @@ struct ShareDetailPane: View {
             default: note("The numbers show when your server answers.")
             }
         }
+    }
+
+    /// The chat of an older link: how many questions people asked it.
+    private var questionsText: String? {
+        guard let n = row.remote?.questions, n > 0 else { return nil }
+        return n == 1 ? "1 question to the chat of this link" : "\(n) questions to the chat of this link"
     }
 
     /// "2 hours ago", "Just now", or "Oct 11", for the figure over "last viewed".
@@ -230,7 +245,8 @@ struct ShareDetailPane: View {
                         Button("New PIN") { setPIN(SharePIN.random()) }.buttonStyle(.settingsAccent)
                         Button("Remove PIN") { setPIN(nil) }.buttonStyle(SettingsTextButtonStyle(color: Palette.secondary, weight: .medium))
                     }
-                    if let wrongText { note(wrongText) }
+                    if let locked = row.lockedText() { note("\(locked). A new PIN opens it again.", color: Palette.recording) }
+                    else if let wrongText { note(wrongText) }
                 }
             }
             .disabled(working)
@@ -239,7 +255,7 @@ struct ShareDetailPane: View {
 
     private var wrongText: String? {
         guard let wrong = row.remote?.wrongPins, wrong > 0 else { return nil }
-        return "\(wrong == 1 ? "1 wrong PIN was" : "\(wrong) wrong PINs were") entered since this PIN was made. 30 lock the page."
+        return "\(wrong == 1 ? "1 wrong PIN counts" : "\(wrong) wrong PINs count") against this PIN. 30 lock the page; one is forgotten each day."
     }
 
     // MARK: Expiry
