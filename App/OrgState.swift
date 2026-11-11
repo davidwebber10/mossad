@@ -65,9 +65,11 @@ final class OrgState: ObservableObject {
     }
 
     /// The saved matches are the base of any edit: a state that was never loaded must not save an empty set
-    /// over them.
+    /// over them, and a state loaded before a rename must not save the old names.
     private func prepareEdit() {
-        if !loaded, edits == 0 { matches = OrgMatches.load(paths: paths) }
+        // Read again at each edit: a rename since the load moved a match to the person's name of now, and the old
+        // map would take it away.
+        matches = OrgMatches.load(paths: paths)
         edits += 1
     }
 

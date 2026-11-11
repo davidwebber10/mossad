@@ -175,7 +175,7 @@ extension AppController {
                 do {
                     let changed = try await cloud.push()
                     received = try await cloud.pull(includeMeetings: false)
-                    let shared = try await cloud.pushShared()
+                    let shared = try await cloud.pushShared(people: true)
                     if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
                     if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
                 } catch {
@@ -196,6 +196,8 @@ extension AppController {
                 // Chats, ratings, and memories from the phone show here at once.
                 if received > 0 {
                     self.coachVersion += 1; self.chatsVersion += 1; self.commitmentsVersion += 1
+                    // A commitment saved by a phone that does not know the ids gets its person's id back.
+                    self.linkCommitmentPeople(self.library.identity?.people.people ?? [], records: self.meetings)
                     // A room recording from the iPhone is a new call to process, also while another call is
                     // processed: the pipeline takes each call once, and the hourly run would be a long wait.
                     self.processPending()

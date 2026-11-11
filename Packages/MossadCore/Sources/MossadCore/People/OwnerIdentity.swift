@@ -5,10 +5,13 @@ import Foundation
 public struct OwnerIdentity: Sendable, Equatable, ExpressibleByStringLiteral {
     /// The name in Settings now.
     public let name: String
+    /// The owner's id in `people.json`, when the store has the owner.
+    public let id: String?
     private let keys: Set<String>
 
-    public init(name: String, also names: [String] = []) {
+    public init(name: String, also names: [String] = [], id: String? = nil) {
         self.name = name
+        self.id = id
         keys = Set(([name] + names).map(PersonNames.key).filter { !$0.isEmpty })
     }
 
@@ -16,19 +19,25 @@ public struct OwnerIdentity: Sendable, Equatable, ExpressibleByStringLiteral {
 
     public func isOwner(_ name: String) -> Bool { keys.contains(PersonNames.key(name)) }
 
-    /// The speaker keys of a call that are the owner.
-    public func speakerKeys(in r: CallRecord) -> Set<String> { Set(r.speakerNames.filter { isOwner($0.value) }.keys) }
+    /// The speaker keys of a call that are the owner: by the owner's id where the record has ids, and by each of the
+    /// owner's names for a record from before them.
+    public func speakerKeys(in r: CallRecord) -> Set<String> {
+        var keys = Set(r.speakerNames.filter { isOwner($0.value) }.keys)
+        if let id { keys.formUnion(r.speakerNames.keys.filter { r.speakerPeople?[$0] == id }) }
+        return keys
+    }
 
     /// The owner's name as the transcript of this call shows it.
     public func name(in r: CallRecord) -> String {
-        r.speakerNames.sorted { $0.key < $1.key }.first { isOwner($0.value) }?.value ?? name
+        let keys = speakerKeys(in: r)
+        return r.speakerNames.sorted { $0.key < $1.key }.first { keys.contains($0.key) }?.value ?? name
     }
 
     /// The record with each of the owner's names as the name in Settings, for code that knows the owner by that one
     /// name (the coach). The file on disk does not change.
     public func withCurrentName(_ r: CallRecord) -> CallRecord {
         var r = r
-        for (key, value) in r.speakerNames where value != name && isOwner(value) { r.speakerNames[key] = name }
+        for key in speakerKeys(in: r) where r.speakerNames[key] != name { r.speakerNames[key] = name }
         return r
     }
 
@@ -38,9 +47,10 @@ public struct OwnerIdentity: Sendable, Equatable, ExpressibleByStringLiteral {
         let people = PeopleStore.peek(in: paths.people)?.filter(\.isLive) ?? []
         // A name typed in "Your name" by mistake can be another saved person's name. That person's lines are theirs.
         let others = Set(people.filter { !$0.isOwner }.map { PersonNames.key($0.displayName) })
-        var names = people.first(where: \.isOwner)?.forms.map(\.text).filter { !others.contains(PersonNames.key($0)) } ?? []
+        let owner = people.first(where: \.isOwner)
+        var names = owner?.forms.map(\.text).filter { !others.contains(PersonNames.key($0)) } ?? []
         if let data = try? Data(contentsOf: paths.voices.appendingPathComponent("voices.json")),
            let voice = (try? JSONDecoder().decode([VoiceProfile].self, from: data))?.first(where: \.isOwner) { names.append(voice.name) }
-        return OwnerIdentity(name: name, also: names)
+        return OwnerIdentity(name: name, also: names, id: owner?.id.rawValue)
     }
 }

@@ -15,6 +15,7 @@ public enum MeetingMerge {
         var merged = sorted[0]
         merged.utterances = []
         merged.speakerNames = [:]
+        merged.speakerPeople = nil
         merged.unknownSpeakers = []
         merged.speakerEmbeddings = [:]
         merged.speakerSamples = nil
@@ -53,6 +54,7 @@ public enum MeetingMerge {
             me = me.flatMap { list in r.meUtterances.map { list + $0.map(move) } }
             them = them.flatMap { list in r.themUtterances.map { list + $0.map(move) } }
             for (k, name) in r.speakerNames { merged.speakerNames[key(k)] = name }
+            for (k, id) in r.speakerPeople ?? [:] { merged.speakerPeople = (merged.speakerPeople ?? [:]).merging([key(k): id]) { _, new in new } }
             merged.unknownSpeakers += r.unknownSpeakers.map(key)
             for (k, e) in r.speakerEmbeddings { merged.speakerEmbeddings[key(k)] = e }
             for (k, d) in r.speakerSamples ?? [:] { merged.speakerSamples = (merged.speakerSamples ?? [:]).merging([key(k): d]) { _, new in new } }

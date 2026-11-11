@@ -314,8 +314,8 @@ extension MeetingAnalytics {
             return (Context(kind: kind, meetings: used.count, label: label), used)
         }
 
-        private func rows(_ meetings: [MeetingFacts], of name: String) -> [Row] {
-            meetings.compactMap { m in m.person(name).map { (m, $0) } }
+        private func rows(_ meetings: [MeetingFacts], of person: MeetingFacts.Person) -> [Row] {
+            meetings.compactMap { m in m.person(person).map { (m, $0) } }
         }
 
         /// Earlier meetings with this call's title. For a 1:1, only the ones that were a 1:1 too.
@@ -326,7 +326,7 @@ extension MeetingAnalytics {
 
         /// The 1:1s with this call's other person; empty when this call is not a 1:1.
         private var oneOnOnes: [MeetingFacts] {
-            this.partner.map { p in before.filter { $0.partner?.name == p.name } } ?? []
+            this.partner.map { p in before.filter { $0.partner?.isSame(as: p) == true } } ?? []
         }
 
         /// All of the owner's 1:1s, with anyone.
@@ -365,10 +365,10 @@ extension MeetingAnalytics {
         /// their own 1:1s, the other person against the other people of those 1:1s), then every meeting with
         /// this person. A 1:1 is never compared with groups while there are 1:1s to compare with.
         func context(for person: MeetingFacts.Person) -> (Context, [Row])? {
-            let series = rows(seriesMeetings, of: person.name)
+            let series = rows(seriesMeetings, of: person)
             if Self.enough(series) { return context(.series, series, "in \(this.title)") }
             if let partner = this.partner {
-                let together = rows(oneOnOnes, of: person.name)
+                let together = rows(oneOnOnes, of: person)
                 if Self.enough(together) {
                     return context(.oneOnOne, together, person.isOwner ? "in your 1:1s with \(Self.first(partner.name))" : "in 1:1s with you")
                 }
@@ -377,25 +377,25 @@ extension MeetingAnalytics {
                 if Self.enough(own) {
                     return context(.ownOneOnOnes, own, person.isOwner ? "in your 1:1s" : "for the other person in your 1:1s")
                 }
-                let with = rows(before.filter { $0.person(partner.name) != nil }, of: person.name)
+                let with = rows(before.filter { $0.person(partner) != nil }, of: person)
                 guard Self.enough(with) else { return nil }
                 return context(.person, with, person.isOwner ? "in all \(with.count) meetings with \(Self.first(partner.name))" : "in all \(with.count) meetings with you",
                                limit: .max)
             }
-            let with = before.filter { $0.person(person.name) != nil }
-            if let s = setting(with) { return context(.setting, rows(s.meetings, of: person.name), s.label) }
+            let with = before.filter { $0.person(person) != nil }
+            if let s = setting(with) { return context(.setting, rows(s.meetings, of: person), s.label) }
             guard Self.enough(with) else { return nil }
             if person.isOwner {
-                return context(.person, rows(with, of: person.name),
+                return context(.person, rows(with, of: person),
                                with.count > Self.ownerLimit ? "in your last \(Self.ownerLimit) meetings" : "in all \(with.count) of your meetings", limit: Self.ownerLimit)
             }
-            return context(.person, rows(with, of: person.name), "in all \(with.count) meetings with you", limit: .max)
+            return context(.person, rows(with, of: person), "in all \(with.count) meetings with you", limit: .max)
         }
 
         /// The context for the owner's talk share next to one other person of a group: meetings of this size
         /// with them. Meetings of other sizes say nothing about a share.
         func context(ownerWith other: MeetingFacts.Person) -> (Context, [MeetingFacts])? {
-            guard let s = setting(before.filter { $0.person(other.name) != nil && $0.owner != nil }) else { return nil }
+            guard let s = setting(before.filter { $0.person(other) != nil && $0.owner != nil }) else { return nil }
             return context(.setting, s.meetings, "\(s.label) with \(Self.first(other.name))")
         }
 
@@ -405,7 +405,7 @@ extension MeetingAnalytics {
             if let partner = this.partner {
                 if Self.enough(oneOnOnes) { return context(.oneOnOne, oneOnOnes, "in your 1:1s with \(Self.first(partner.name))") }
                 if Self.enough(ownOneOnOnes) { return context(.ownOneOnOnes, ownOneOnOnes, "in your 1:1s") }
-                let with = before.filter { $0.person(partner.name) != nil }
+                let with = before.filter { $0.person(partner) != nil }
                 return Self.enough(with) ? context(.person, with, "in all \(with.count) meetings with \(Self.first(partner.name))", limit: .max) : nil
             }
             if let s = setting(before) { return context(.setting, s.meetings, s.label) }

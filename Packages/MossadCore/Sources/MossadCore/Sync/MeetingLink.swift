@@ -245,9 +245,10 @@ public struct SharedMeeting: Codable, Equatable, Sendable {
             topics = view.topics
             decisions = view.decisions
             decisionTimes = view.decisionTimes
-            actionItems = view.actionItems
+            // A person id is a key across pages: a reader of two share pages must not be able to connect them.
+            actionItems = view.actionItems.map { var i = $0; i.ownerId = nil; return i }
         }
-        if o.transcript { lines = view.lines }
+        if o.transcript { lines = view.lines.map { var l = $0; l.speakerId = nil; return l } }
         audio = o.recording
         // The chat answers from what is shared, so it needs something to read.
         chat = o.chat && (o.summary || o.transcript)

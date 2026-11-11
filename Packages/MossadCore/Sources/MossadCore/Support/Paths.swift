@@ -38,8 +38,12 @@ public struct Paths: Sendable {
     public var usage: URL { root.appendingPathComponent("Usage") }
 
     /// The people (`people.json`, with its log and the migration's plan and report), the HR export, and the
-    /// owner's matches to it. Nothing here syncs in this phase; when the people do, the HR data still never does.
+    /// owner's matches to it. Only the people sync, from the Mac to the phone, as `SyncedPeople` (a list of allowed
+    /// fields); the log, the HR data, the matches, and `local.json` never do.
     public var people: URL { root.appendingPathComponent("People") }
+
+    /// Copies made before a migration changed a file, so it can be undone by hand.
+    public var backups: URL { root.appendingPathComponent("Backups") }
 
     public func callDirectory(_ id: String) -> URL {
         audio.appendingPathComponent(id)

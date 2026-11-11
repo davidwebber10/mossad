@@ -58,12 +58,15 @@ final class SearchModel: ObservableObject {
         // One by one costs more than a fresh build once many meetings change, as at launch.
         let changed = records.filter { old[$0.key] != $0.value }.count + old.keys.filter { records[$0] == nil }.count
         if fresh || changed > 20 {
-            return (SearchIndex(records: s.records, people: s.library.profiles, tasks: tasks, chats: chats), records)
+            var index = SearchIndex(records: s.records, people: s.library.profiles, tasks: tasks, chats: chats)
+            index.setOtherNames(s.library.identity?.people.people ?? [])
+            return (index, records)
         }
         var index = base
         for (id, r) in records where old[id] != r { index.update(r) }
         for id in old.keys where records[id] == nil { index.removeMeeting(id: id) }
         index.setPeople(s.library.profiles)
+        index.setOtherNames(s.library.identity?.people.people ?? [])
         index.setTasks(tasks)
         index.setChats(chats)
         return (index, records)

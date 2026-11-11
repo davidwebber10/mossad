@@ -177,7 +177,7 @@ public final class PeopleStore: @unchecked Sendable {
         lock.withLock { Self.id(forVoiceName: name, isOwner: isOwner, in: storage) }
     }
 
-    static func id(forVoiceName name: String, isOwner: Bool, in people: [Person]) -> PersonID? {
+    public static func id(forVoiceName name: String, isOwner: Bool, in people: [Person]) -> PersonID? {
         if isOwner, let owner = people.first(where: { $0.isOwner && $0.isLive }) { return owner.id }
         // Another person with this name comes before the owner: "Your name" can hold another person's name for a moment.
         let hits = people.filter { $0.isLive && $0.displayName == name }
@@ -294,6 +294,17 @@ public final class PeopleStore: @unchecked Sendable {
         }
     }
 
+    /// The owner said these two are other people. It holds through a rename of either, on each device.
+    public func setDistinct(_ a: PersonID, _ b: PersonID) throws {
+        try change { people, date in
+            guard a != b, let i = people.firstIndex(where: { $0.id == a && $0.isLive }), let j = people.firstIndex(where: { $0.id == b && $0.isLive }) else { return [] }
+            var changed = false
+            if !people[i].distinctFrom.contains(b) { people[i].distinctFrom.append(b); people[i].updated = date; changed = true }
+            if !people[j].distinctFrom.contains(a) { people[j].distinctFrom.append(a); people[j].updated = date; changed = true }
+            return changed ? [PeopleLogEntry(at: date, kind: "distinct", actor: "owner", subject: a, other: b)] : []
+        }
+    }
+
     /// Leaves a marker with no personal data: the id and the date.
     public func delete(_ id: PersonID) throws {
         try change { people, date in
@@ -321,9 +332,21 @@ public final class PeopleStore: @unchecked Sendable {
             }
             let old = people[i].displayName
             guard old != name else { return [] }
+            // Another live person's name is that person's: the owner keeps their own, so no label of the owner's
+            // ever becomes the other person's name.
+            guard !Self.isOtherPersonsName(name, owner: people[i].id, in: people) else {
+                Log.error("People: \"Your name\" is the name of another saved person, so the owner keeps the name \(old)")
+                return []
+            }
             people[i].rename(to: name, source: .owner, at: date)
             return [PeopleLogEntry(at: date, kind: "ownerName", actor: "owner", subject: people[i].id, before: old, after: name)]
         }
+    }
+
+    /// Whether a name is the name of now of a live person other than the owner.
+    static func isOtherPersonsName(_ name: String, owner: PersonID, in people: [Person]) -> Bool {
+        let key = PersonNames.key(name)
+        return people.contains { $0.isLive && $0.id != owner && PersonNames.key($0.displayName) == key }
     }
 
     /// Replaces the whole list: the migration's write.

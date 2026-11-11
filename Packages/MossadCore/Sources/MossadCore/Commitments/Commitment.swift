@@ -6,8 +6,11 @@ public struct Commitment: Codable, Equatable, Sendable, Identifiable, Hashable {
 
     public var id = UUID()
     public var text: String
-    /// Who it was promised to, when the call says.
+    /// Who it was promised to, when the call says: a label.
     public var to: String?
+    /// The saved person `to` is, by the id in `people.json`, on a sure match. An older device drops it when it
+    /// saves the book; the next refresh on the Mac finds it again from `to` and the call.
+    public var toID: String?
     public var callID: String?
     public var callTitle: String?
     /// When it was said: the call's start plus the moment.
@@ -115,7 +118,14 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
         var byID: [UUID: Commitment] = [:]
         var order: [UUID] = []
         for c in items + other.items {
-            if let old = byID[c.id] { if c.updated > old.updated { byID[c.id] = c } } else { byID[c.id] = c; order.append(c.id) }
+            if let old = byID[c.id] {
+                // At the same time, the copy with the person's id wins: the Mac adds ids and names of now without a
+                // change of the time, so both new devices agree, and an older device keeps its copy.
+                if c.updated > old.updated || (c.updated == old.updated && old.toID == nil && c.toID != nil) { byID[c.id] = c }
+            } else {
+                byID[c.id] = c
+                order.append(c.id)
+            }
         }
         out.items = order.compactMap { byID[$0] }
         out.checked = checked.union(other.checked)
@@ -265,6 +275,8 @@ public actor CommitmentRunner {
             try? book.save(to: paths.commitments)
             Log.info("Commitments: removed \(before - book.visible.count) made by other people")
         }
+        // Who a promise was to, by the id of the person, where the people of the call surely say.
+        let refs = PersonReferences(people: PeopleStore.peek(in: paths.people) ?? [])
         var ledger = RetryLedger.load(from: paths.commitments)
         var done = cleaned ? 1 : 0
         for r in Self.pending(records, since: since, checked: book.checked) {
@@ -278,7 +290,7 @@ public actor CommitmentRunner {
                 // Read again: the owner may have edited a commitment while this one ran. A book that cannot be
                 // read now stops the run; the older copy must not be saved over the owner's edits.
                 var fresh = try CommitmentBook.load(from: paths.commitments)
-                fresh.add(found: found, callID: r.id, at: Date())
+                fresh.add(found: found.map { refs.refresh($0, call: refs.refresh(r, relabel: false)) }, callID: r.id, at: Date())
                 try fresh.save(to: paths.commitments)
                 done += 1
                 if ledger.entries[r.id] != nil { ledger.clear(r.id); ledger.save(to: paths.commitments) }

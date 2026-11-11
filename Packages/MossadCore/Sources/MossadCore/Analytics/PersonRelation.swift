@@ -59,10 +59,17 @@ public struct PersonRelation: Sendable {
     public let myCommitments: [Commitment]
     public let value: [MeetingValue.Rating: Int]
 
-    public init(name: String, owner: String, records all: [CallRecord], reviews: [String: CoachReview] = [:],
-                commitments: [Commitment] = [], now: Date = Date(), calendar: Calendar = .current) {
+    /// `personID`: the person's id in `people.json`. With it, a meeting, an item, or a commitment is this person's
+    /// by the id; one with no id counts by the name only when `nameIsUnique` (no other saved person has the name).
+    /// Without it, everything counts by the name, as before ids.
+    public init(name: String, personID: String? = nil, owner: String, records all: [CallRecord], reviews: [String: CoachReview] = [:],
+                commitments: [Commitment] = [], nameIsUnique: Bool = false, now: Date = Date(), calendar: Calendar = .current) {
         self.name = name
-        let shared = all.filter { $0.status == .written && $0.speakerNames.values.contains(name) }.sorted { $0.start < $1.start }
+        func isThem(_ key: String, in r: CallRecord) -> Bool {
+            if let personID, let id = r.speakerPeople?[key] { return id == personID }
+            return r.speakerNames[key] == name && (personID == nil || nameIsUnique)
+        }
+        let shared = all.filter { r in r.status == .written && r.speakerNames.keys.contains { isThem($0, in: r) } }.sorted { $0.start < $1.start }
         calls = shared.count
         seconds = shared.reduce(0) { $0 + max(0, $1.end.timeIntervalSince($1.start)) }
         let hours = seconds / 3600
@@ -89,7 +96,10 @@ public struct PersonRelation: Sendable {
             iCut += x.interruptions(by: owner, of: name); theyCut += x.interruptions(by: name, of: owner)
             mine += x.replyGaps(to: name, from: owner); theirs += x.replyGaps(to: owner, from: name)
             for t in Set(r.tags) { tags[t, default: 0] += 1 }
-            items += r.actionItems.filter { $0.owner == name }.map { Item(callID: r.id, title: r.title, date: r.start, task: $0.task) }
+            items += r.actionItems.filter { item in
+                if let personID, let id = item.ownerID { return id == personID }
+                return item.owner == name && (personID == nil || nameIsUnique)
+            }.map { Item(callID: r.id, title: r.title, date: r.start, task: $0.task) }
             if let rating = reviews[r.id]?.value?.rating { value[rating, default: 0] += 1 }
         }
         oneOnOne = hasOne ? one : nil
@@ -104,7 +114,15 @@ public struct PersonRelation: Sendable {
         theirReply = median(of: theirs)
         topics = tags.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.prefix(5).map(\.key)
         theirItems = items.reversed()
-        myCommitments = commitments.filter { c in !c.deleted && c.to.map { $0 == name || firstWord($0) == firstWord(name) } == true }
+        myCommitments = commitments.filter { c in
+            guard !c.deleted else { return false }
+            if let personID {
+                // By the id; with none, only the whole name: a first name can be two people.
+                if let id = c.toID { return id == personID }
+                return nameIsUnique && c.to == name
+            }
+            return c.to.map { $0 == name || firstWord($0) == firstWord(name) } == true
+        }
         self.value = value
 
         lastMet = shared.last?.start

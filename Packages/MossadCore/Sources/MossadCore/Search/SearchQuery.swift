@@ -347,7 +347,9 @@ extension SearchIndex {
             var all = true
             for w in words {
                 let b = max((best(p.name, w, names: true, typos: true) ?? 0) * SearchWeight.person,
-                            (p.email.flatMap { best($0, w) } ?? 0) * SearchWeight.email)
+                            (p.email.flatMap { best($0, w) } ?? 0) * SearchWeight.email,
+                            // A name of before is a little less than the name of now.
+                            (p.others.compactMap { best($0, w, names: true) }.max() ?? 0) * SearchWeight.email)
                 if b == 0 { all = false; break }
                 total += b
             }

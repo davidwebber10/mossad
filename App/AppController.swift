@@ -778,8 +778,31 @@ final class AppController: ObservableObject {
         Task.detached(priority: .utility) {
             guard let identity = PeopleMigration.runAtLaunch(paths: paths, library: library, ownerName: owner, notDuplicates: notDuplicates) else { return }
             library.identity = identity
-            // The people have their ids: what the coach knows of a person goes to that person.
-            await MainActor.run { self.linkCoachPeople() }
+            // The people have their ids: what the coach knows of a person goes to that person, and the records, the
+            // commitments, and the org matches get the ids of their people (and lose none that an older build dropped).
+            await MainActor.run {
+                self.linkCoachPeople()
+                self.refreshPeopleReferences()
+            }
+        }
+    }
+
+    /// Brings the references to people in step with the people store: the ids in records and commitments, the
+    /// labels after a rename or a merge, and the org matches by id. Off the main thread; each part compares before
+    /// it writes, so it is safe to run at any time. `renamed` is a rename the owner made just now.
+    func refreshPeopleReferences(renamed: (old: String, new: String)? = nil) {
+        guard !isInert, !isSecondCopy, let pipeline else { return }
+        let paths = paths
+        Task {
+            let changed = await pipeline.refreshLabels(renamed: renamed)
+            let people = library.identity?.people.people ?? []
+            let records = await Task.detached(priority: .utility) { () -> [CallRecord] in
+                do { try OrgMatches.linkPeople(paths: paths) } catch { Log.error("People: the org matches by id were not saved: \(error)") }
+                return ProcessingQueue(paths: paths).allRecords()
+            }.value
+            linkCommitmentPeople(people, records: records)
+            if changed > 0 { refresh() }
+            linkCoachPeople()
         }
     }
 
@@ -1247,8 +1270,11 @@ final class AppController: ObservableObject {
     }
 
     /// Opens the People page on one person; the page picks the name up when it loads.
+    /// Opens a person's page by the name, or by the id in the people store: an id gives the person's name of now,
+    /// and any other name a saved person surely is gives that person.
     func openPerson(_ name: String) {
-        personToOpen = name
+        let refs = PersonReferences(people: library.identity?.people.people ?? [])
+        personToOpen = refs.id(for: name).flatMap(refs.name(of:)) ?? name
         personRequests += 1
         open(.people)
     }
@@ -1520,9 +1546,16 @@ final class AppController: ObservableObject {
     /// A person's new name reaches every past meeting and note.
     func renamePerson(_ old: String, to new: String) {
         guard !isSecondCopy else { return }
-        Task {
-            await pipeline.renamePerson(old, to: new)
-            refresh()
+        // With the people store, the rename is in people.json already; this brings the labels in step.
+        refreshPeopleReferences(renamed: (old, new))
+    }
+
+    /// The owner said the two people of a pair are other people: kept on both, by id, in the people store.
+    func markDistinct(_ pair: PeopleDuplicates.Pair) {
+        guard !isSecondCopy, let people = library.identity?.people else { return }
+        Task.detached(priority: .utility) {
+            guard let (a, b) = PeopleDuplicates.people(of: pair, among: people.people) else { return }
+            do { try people.setDistinct(a, b) } catch { Log.error("People: \"not the same person\" was not saved: \(error)") }
         }
     }
 

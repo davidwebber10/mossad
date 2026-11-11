@@ -66,7 +66,8 @@ export class MeetingTools {
         if (from !== null && start < from) return false;
         if (to !== null && start >= to) return false;
         if (f.tag && !m.tags.some((t) => t.toLowerCase() === f.tag!.toLowerCase())) return false;
-        if (!names.every((n) => m.people.some((p) => nameMatches(n, p)))) return false;
+        // A person id from a person_ids line finds the person under any name.
+        if (!names.every((n) => m.persons?.some((p) => p.id === n) || m.people.some((p) => nameMatches(n, p)))) return false;
         return !q || this.matchesSearch(m, q);
       })
       .slice(0, limit);
@@ -89,6 +90,7 @@ export class MeetingTools {
     if (!m) return null;
     const parts = [this.header(m)];
     if (m.attendees.length) parts.push(`Invited: ${m.attendees.join(', ')}`);
+    if (m.persons?.length) parts.push(`person_ids: ${m.persons.map((p) => `${p.name}=${p.id}`).join('; ')}`);
     if (m.summary) parts.push(`Summary:\n${m.summary}`);
     for (const t of m.topics) parts.push(`### ${t.title}\n${t.summary}`);
     if (m.decisions.length) parts.push('Decisions:\n' + m.decisions.map((d, i) => `- ${decisionLine(d, m.decisionTimes?.[i])}`).join('\n'));
@@ -165,7 +167,7 @@ const filterProps = {
 export const toolDefinitions = [
   {
     name: 'find_meetings',
-    description: 'Lists meetings, newest first, with call_id, title, date, length, people, tags, and a one-line summary. Every filter is optional and they combine. people matches first names, short forms ("Jen" finds Jennifer), last names, or full names; every person listed must be in the meeting. Dates are YYYY-MM-DD in local time; to is inclusive.',
+    description: 'Lists meetings, newest first, with call_id, title, date, length, people, tags, and a one-line summary. Every filter is optional and they combine. people matches first names, short forms ("Jen" finds Jennifer), last names, full names, or a person id from a person_ids line of read_meeting; every person listed must be in the meeting. Dates are YYYY-MM-DD in local time; to is inclusive.',
     inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'Words in the title, tags, summary, or transcript.' }, ...filterProps, tag: { type: 'string' }, limit: { type: 'integer' } } },
   },
   {

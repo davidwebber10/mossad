@@ -321,10 +321,15 @@ struct PersonProfileView: View {
         guard !profile.isOwner else { return }
         let name = profile.name, owner = controller.ownerName, records = controller.meetings, paths = controller.paths
         let commitments = controller.commitmentBook.visible
+        let people = controller.library.identity?.people.people ?? []
         let r = await Task.detached(priority: .userInitiated) {
+            // By the person's id where the people store has it: two people with one name or one first name stay apart.
+            let same = people.filter { $0.isLive && $0.displayName == name }
+            let personID = PeopleStore.id(forVoiceName: name, isOwner: false, in: people)?.rawValue
             let shared = records.filter { $0.speakerNames.values.contains(name) }
             let reviews = Dictionary(uniqueKeysWithValues: shared.compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (r.id, $0) } })
-            return PersonRelation(name: name, owner: owner, records: records, reviews: reviews, commitments: commitments)
+            return PersonRelation(name: name, personID: personID, owner: owner, records: records, reviews: reviews, commitments: commitments,
+                                  nameIsUnique: same.count <= 1)
         }.value
         withAnimation(.smooth) { relation = r }
     }

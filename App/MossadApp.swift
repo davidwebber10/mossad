@@ -21,11 +21,13 @@ struct MossadEntry {
             MCPServer(paths: .live, owner: owner).run()
             exit(0)
         }
-        // `--people-migration dry-run | apply | revert [--out <folder>]` shows or makes the move to person ids and
+        // `--people-migration dry-run | apply | revert | apply-references | revert-references [--out <folder>]` shows or makes the move to person ids and
         // exits. A dry run with `--out` writes nothing in the data folder.
         if CommandLine.arguments.contains("--people-migration") {
             if Rehearsal.isOn { print("Mossad Rehearsal has no people to migrate."); exit(1) }
-            let owner = UserDefaults.standard.string(forKey: "ownerName") ?? NSFullUserName()
+            // The rule of the app: an empty name is the account's full name, so the dry run shows what the app does.
+            let typed = (UserDefaults.standard.string(forKey: "ownerName") ?? "").trimmingCharacters(in: .whitespaces)
+            let owner = typed.isEmpty ? NSFullUserName() : typed
             let notDuplicates = (UserDefaults.standard.string(forKey: "peopleNotDuplicates") ?? "").split(separator: "\n").map(String.init)
             let result = PeopleMigration.command(CommandLine.arguments, paths: .live, ownerName: owner, notDuplicates: notDuplicates)
             print(result.text)

@@ -4,7 +4,7 @@ import Foundation
 /// What both devices write and read: chats, the owner's ratings and conversation on a review, and the
 /// coach's memory. Meetings themselves come only from the Mac.
 public struct SharedPayload: Sendable {
-    public enum Kind: String, Sendable { case chat, notes, profile, commitments }
+    public enum Kind: String, Sendable { case chat, notes, profile, commitments, people }
 
     public let kind: Kind
     /// "chat:<uuid>", "notes:<call id>", or "profile": the record name and the key in the sync state.
@@ -20,7 +20,7 @@ public struct SharedPayload: Sendable {
     }
 
     /// Whether a sync-state key belongs to a shared record, not a meeting: "chat:…", "notes:…", "profile", "commitments".
-    static func isShared(_ key: String) -> Bool { key.contains(":") || key == "profile" || key == "commitments" }
+    static func isShared(_ key: String) -> Bool { key.contains(":") || key == "profile" || key == "commitments" || key == "people" }
 
     public static func chat(_ chat: Chat) -> SharedPayload {
         SharedPayload(kind: .chat, key: "chat:\(chat.id.uuidString)", data: (try? JSONEncoder.callRecord.encode(chat)) ?? Data())
@@ -35,6 +35,11 @@ public struct SharedPayload: Sendable {
 
     public static func commitments(_ book: CommitmentBook) -> SharedPayload {
         SharedPayload(kind: .commitments, key: "commitments", data: (try? JSONEncoder.callRecord.encode(book)) ?? Data())
+    }
+
+    /// The people, from the Mac to the phone: only the fields of `SyncedPeople`.
+    public static func people(_ people: [Person]) -> SharedPayload {
+        SharedPayload(kind: .people, key: "people", data: (try? JSONEncoder.callRecord.encode(SyncedPeople(people))) ?? Data())
     }
 
     public static func profile(_ profile: CoachProfile) -> SharedPayload {
@@ -56,4 +61,55 @@ extension SyncState {
         return (payloads.filter { uploaded[$0.key] != $0.hash },
                 deletedChats.map { "chat:\($0.uuidString)" }.filter { !keys.contains($0) }.sorted())
     }
+}
+
+/// The people as they go from the Mac to the phone and the owner's server. Built from a list of allowed fields, not
+/// by removing fields from the whole record: a new private field of `Person` never syncs by accident. Never in it:
+/// voice samples, the org data, ids of other services, the owner's own note on a person. It reads as the people
+/// file (`version` and `people`), so the phone keeps it as its `people.json`.
+public struct SyncedPeople: Codable, Equatable, Sendable {
+    public struct Entry: Codable, Equatable, Sendable {
+        public var id: PersonID
+        public var displayName: String
+        public var name: NameParts
+        public var forms: [NameForm]
+        public var emails: [EmailIdentity]
+        public var isOwner: Bool
+        public var company: String?
+        public var doNotProfile: Bool
+        public var provisional: Bool
+        public var distinctFrom: [PersonID]
+        public var mergedFrom: [PersonID]
+        public var mergedInto: PersonID?
+        public var created: Date
+        public var updated: Date
+        public var deleted: Date?
+
+        init(_ p: Person) {
+            id = p.id
+            displayName = p.displayName
+            name = p.name
+            forms = p.forms
+            emails = p.emails
+            isOwner = p.isOwner
+            company = p.company
+            doNotProfile = p.doNotProfile
+            provisional = p.provisional
+            distinctFrom = p.distinctFrom
+            mergedFrom = p.mergedFrom
+            mergedInto = p.mergedInto
+            created = p.created
+            updated = p.updated
+            deleted = p.deleted
+        }
+    }
+
+    /// The keys a person may have in the payload. A test fails when the payload has any other key.
+    public static let allowedKeys: Set<String> = ["id", "displayName", "name", "forms", "emails", "isOwner", "company", "doNotProfile", "provisional",
+                                                  "distinctFrom", "mergedFrom", "mergedInto", "created", "updated", "deleted"]
+
+    public var version = PeopleStore.currentVersion
+    public var people: [Entry]
+
+    public init(_ people: [Person]) { self.people = people.sorted { $0.id < $1.id }.map(Entry.init) }
 }
