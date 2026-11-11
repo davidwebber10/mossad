@@ -19,6 +19,7 @@ public struct PersonDirectory: Sendable, Equatable {
     public let people: [Person]
     private let resolver: PersonResolver
     private let names: [PersonID: String]
+    private let contexts = ContextCache()
 
     /// The address one meeting's invite gave with each name, by the key of the name.
     private var inviteEmails: [String: String] = [:]
@@ -34,8 +35,8 @@ public struct PersonDirectory: Sendable, Equatable {
     }
 
     /// A written entry as the resolver wants it, with the invite's address for a name.
-    private func observation(_ text: String) -> Observation {
-        var o = Observation(text: text)
+    private func observation(_ text: String) -> PersonObservation {
+        var o = PersonObservation(text: text)
         if o.email == nil, let name = o.name { o.email = inviteEmails[PersonNames.nameKey(name)] }
         return o
     }
@@ -90,16 +91,28 @@ public struct PersonDirectory: Sendable, Equatable {
     /// The people of a meeting as the resolver wants them: the saved ones, and the names of the others. An email
     /// and a label such as "Speaker C" are not names.
     private func context(_ meeting: [String]) -> ResolutionContext {
+        // A page asks about each of its names with the same meeting, so the last answer is kept.
+        if let hit = contexts.get(meeting) { return hit }
         var context = ResolutionContext()
         for name in meeting where !name.contains("@") && !name.hasPrefix("Speaker ") {
             // With nobody around it, a name resolves only by a sure rule, or as a person saved under that one word.
-            if case .resolved(let id, _, _) = resolver.resolve(Observation(name: name), in: ResolutionContext()) {
+            if case .resolved(let id, _, _) = resolver.resolve(PersonObservation(name: name), in: ResolutionContext()) {
                 if !context.roster.contains(id) { context.roster.append(id) }
             } else {
                 context.otherNames.append(name)
             }
         }
+        contexts.set(meeting, context)
         return context
+    }
+
+    /// The people of the last meeting asked about.
+    private final class ContextCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var last: (meeting: [String], context: ResolutionContext)?
+
+        func get(_ meeting: [String]) -> ResolutionContext? { lock.withLock { last?.meeting == meeting ? last?.context : nil } }
+        func set(_ meeting: [String], _ context: ResolutionContext) { lock.withLock { last = (meeting, context) } }
     }
 
     /// The saved person whose profile `text` may open: the person with that email, or the one saved person with
@@ -140,13 +153,13 @@ public struct PersonDirectory: Sendable, Equatable {
     public func existing(name: String, email: String?) -> String? {
         let email = email?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let email, !email.isEmpty {
-            switch resolver.resolve(Observation(email: email)) {
+            switch resolver.resolve(PersonObservation(email: email)) {
             case .resolved(let id, _, _): return names[id]
             case .ambiguous(let ids, _): return ids.first.flatMap { names[$0] }
             default: break
             }
         }
-        switch resolver.resolve(Observation(name: name), in: ResolutionContext()) {
+        switch resolver.resolve(PersonObservation(name: name), in: ResolutionContext()) {
         case .resolved(let id, _, _): return names[id]
         // Two saved people with this name: the first one, so a third is not made.
         case .ambiguous(let ids, let rule) where Self.sure.contains(rule): return ids.first.flatMap { names[$0] }

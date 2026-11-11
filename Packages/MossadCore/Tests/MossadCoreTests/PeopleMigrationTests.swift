@@ -98,7 +98,7 @@ final class PeopleMigrationTests: XCTestCase {
         XCTAssertEqual(person("Avery Webb", in: plan)?.isOwner, true)
         let sam = try XCTUnwrap(person("Sam Carter", in: plan))
         XCTAssertEqual(sam.emails.first, EmailIdentity(address: "sam.carter@example.com", state: .verified, source: .owner, at: now))
-        XCTAssertEqual(sam.name, PersonName(given: "sam", family: "carter"))
+        XCTAssertEqual(sam.name, NameParts(given: "sam", family: "carter"))
         XCTAssertEqual(sam.origin, .migration)
         XCTAssertEqual(Set(plan.people.map(\.id)).count, 6)
         XCTAssertTrue(plan.changes)
@@ -356,6 +356,7 @@ final class PeopleMigrationTests: XCTestCase {
         let identity = try XCTUnwrap(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now))
         XCTAssertEqual(identity.people.people.filter(\.isLive).count, 6)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: paths.people.path).filter { $0.contains(".unreadable-") }.count, 1)
+        XCTAssertTrue(StoredFile.takeUntold(in: [paths.people, paths.voices]).isEmpty, "with no notification")
     }
 
     func testTheOwnerIsAPersonAlsoWithNoVoiceProfile() throws {

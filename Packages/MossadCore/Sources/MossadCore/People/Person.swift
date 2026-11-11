@@ -23,7 +23,7 @@ public struct SourceKind: RawRepresentable, Hashable, Codable, Sendable {
 }
 
 /// The parts of a name, as keys. A part can be missing.
-public struct PersonName: Codable, Equatable, Sendable {
+public struct NameParts: Codable, Equatable, Sendable {
     public var given: String?
     public var middle: [String]
     public var family: String?
@@ -200,7 +200,7 @@ public struct Person: Codable, Equatable, Sendable, Identifiable {
     public var id: PersonID
     /// What Mossad shows. The owner can change it.
     public var displayName: String
-    public var name: PersonName
+    public var name: NameParts
     /// Every written form: the display name, former names, and forms that sources showed.
     public var forms: [NameForm]
     public var emails: [EmailIdentity]
@@ -227,7 +227,7 @@ public struct Person: Codable, Equatable, Sendable, Identifiable {
     public init(id: PersonID = PersonID(), displayName: String, isOwner: Bool = false, origin: SourceKind, at date: Date) {
         self.id = id
         self.displayName = displayName
-        name = PersonName(PersonNames.parse(displayName))
+        name = NameParts(PersonNames.parse(displayName))
         forms = [NameForm(text: displayName, kind: .display, source: origin, confirmed: true, at: date)]
         emails = []
         identities = []
@@ -254,7 +254,7 @@ public struct Person: Codable, Equatable, Sendable, Identifiable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(PersonID.self, forKey: .id)
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? ""
-        name = try c.decodeIfPresent(PersonName.self, forKey: .name) ?? PersonName(PersonNames.parse(displayName))
+        name = try c.decodeIfPresent(NameParts.self, forKey: .name) ?? NameParts(PersonNames.parse(displayName))
         forms = try c.decodeIfPresent([NameForm].self, forKey: .forms) ?? []
         emails = try c.decodeIfPresent([EmailIdentity].self, forKey: .emails) ?? []
         identities = try c.decodeIfPresent([SourceIdentity].self, forKey: .identities) ?? []
@@ -341,7 +341,7 @@ extension Person {
             forms.append(NameForm(text: new, kind: .display, source: source, confirmed: true, at: date))
         }
         displayName = new
-        name = PersonName(PersonNames.parse(new))
+        name = NameParts(PersonNames.parse(new))
         updated = date
     }
 }

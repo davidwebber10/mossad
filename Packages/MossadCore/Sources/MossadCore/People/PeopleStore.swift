@@ -96,7 +96,8 @@ public final class PeopleStore: @unchecked Sendable {
         isReadOnly = false
         newerVersion = nil
         do {
-            storage = try StoredFile.load(File.self, from: url, decoder: .callRecord, recovery: .local)?.people ?? []
+            // No note for the owner: in this phase the file is made again from the voice library at the next launch.
+            storage = try StoredFile.load(File.self, from: url, decoder: .callRecord)?.people ?? []
             loadError = nil
         } catch {
             // Unreadable is not empty: a read error keeps the file, and saves are refused until a restart reads it.
@@ -267,7 +268,7 @@ public final class PeopleStore: @unchecked Sendable {
             guard let i = people.firstIndex(where: { $0.id == id && $0.deleted == nil }) else { return [] }
             var marker = Person(id: id, displayName: "", origin: people[i].origin, at: people[i].created)
             marker.forms = []
-            marker.name = PersonName()
+            marker.name = NameParts()
             marker.updated = date
             marker.deleted = date
             people[i] = marker

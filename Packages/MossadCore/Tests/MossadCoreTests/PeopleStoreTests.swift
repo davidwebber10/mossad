@@ -32,7 +32,7 @@ final class PeopleStoreTests: XCTestCase {
         XCTAssertEqual(back.people, s.people)
         let p = try XCTUnwrap(back.person(id))
         XCTAssertEqual(p.displayName, "Sam Carter")
-        XCTAssertEqual(p.name, PersonName(given: "sam", family: "carter"))
+        XCTAssertEqual(p.name, NameParts(given: "sam", family: "carter"))
         XCTAssertEqual(p.forms.map(\.text), ["Sam Carter"])
         XCTAssertEqual(p.forms.first?.key, "sam carter")
         XCTAssertEqual(p.email, "sam.carter@example.com")
@@ -59,7 +59,7 @@ final class PeopleStoreTests: XCTestCase {
         XCTAssertEqual(p.name.family, "carter")
         XCTAssertFalse(p.isOwner)
         XCTAssertTrue(p.isLive)
-        XCTAssertEqual(s.resolver.resolve(Observation(name: "Carter, Sam")).person, PersonID(rawValue: "abc"), "with no forms, the display name resolves")
+        XCTAssertEqual(s.resolver.resolve(PersonObservation(name: "Carter, Sam")).person, PersonID(rawValue: "abc"), "with no forms, the display name resolves")
     }
 
     func testAnUnreadableFileIsSetAsideAndNotReplaced() throws {
@@ -69,6 +69,7 @@ final class PeopleStoreTests: XCTestCase {
         XCTAssertTrue(s.people.isEmpty)
         let kept = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.contains(".unreadable-") }
         XCTAssertEqual(kept.count, 1, "the damaged file is kept beside it")
+        XCTAssertTrue(StoredFile.takeUntold(in: [dir]).isEmpty, "the owner gets no notification: the file is made again from the voice library")
         XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent(kept[0]), encoding: .utf8), "not json")
         // The file was moved, so a save starts clean and the old data stays on disk.
         _ = try s.ensure(voiceName: "Sam Carter", isOwner: false, origin: .voiceNaming)
@@ -124,7 +125,7 @@ final class PeopleStoreTests: XCTestCase {
         XCTAssertEqual(p.displayName, "Dana Park")
         XCTAssertEqual(p.forms.map { "\($0.text):\($0.kind.rawValue)" }, ["Dana Lee:former", "Dana Park:display"])
         XCTAssertEqual(p.name.family, "park")
-        XCTAssertEqual(s.resolver.resolve(Observation(name: "Lee, Dana")).person, id, "the old name continues to resolve")
+        XCTAssertEqual(s.resolver.resolve(PersonObservation(name: "Lee, Dana")).person, id, "the old name continues to resolve")
         XCTAssertEqual(s.id(forVoiceName: "Dana Park"), id)
         XCTAssertNil(s.id(forVoiceName: "Dana Lee"))
     }
@@ -146,7 +147,7 @@ final class PeopleStoreTests: XCTestCase {
         XCTAssertEqual(survivor.email, "sam@example.com", "the survivor's own address stays the first")
         XCTAssertEqual(s.canonical(b), a, "the old id continues to resolve")
         XCTAssertEqual(s.canonical(a), a)
-        XCTAssertEqual(s.resolver.resolve(Observation(email: "s.carter@example.org")).person, a)
+        XCTAssertEqual(s.resolver.resolve(PersonObservation(email: "s.carter@example.org")).person, a)
     }
 
     func testCanonicalFollowsAChainAndStopsInALoop() throws {
@@ -171,7 +172,7 @@ final class PeopleStoreTests: XCTestCase {
         XCTAssertEqual(p.deleted, t0)
         XCTAssertEqual(p.displayName, "")
         XCTAssertTrue(p.forms.isEmpty && p.emails.isEmpty && p.identities.isEmpty)
-        XCTAssertEqual(s.resolver.resolve(Observation(name: "Sam Carter")), .unknown)
+        XCTAssertEqual(s.resolver.resolve(PersonObservation(name: "Sam Carter")), .unknown)
         // The same name later is a new person: the id is never used again.
         let again = try s.ensure(voiceName: "Sam Carter", isOwner: false, origin: .voiceNaming)
         XCTAssertNotEqual(again, id)

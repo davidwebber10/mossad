@@ -341,7 +341,7 @@ public enum PeopleMigration {
         }
 
         /// The owner under each of their names, then the rules.
-        func resolve(_ o: Observation, in context: ResolutionContext?) -> Resolution {
+        func resolve(_ o: PersonObservation, in context: ResolutionContext?) -> Resolution {
             if let ownerID, o.email == nil, let name = o.name, owner.isOwner(name) { return .resolved(ownerID, rule: .nameForm, confidence: .strong) }
             return resolver.resolve(o, in: context)
         }
@@ -356,7 +356,7 @@ public enum PeopleMigration {
             var roster: [PersonID] = [], others: [String] = []
             for (_, name) in r.speakerNames.sorted(by: { $0.key < $1.key }) {
                 // The voice library wrote this label: the profile with exactly this name is the person.
-                let answer = exact(name).map { Resolution.resolved($0, rule: .nameForm, confidence: .strong) } ?? resolve(Observation(text: name), in: nil)
+                let answer = exact(name).map { Resolution.resolved($0, rule: .nameForm, confidence: .strong) } ?? resolve(PersonObservation(text: name), in: nil)
                 if let id = answer.person, answer.rule.map(strong.contains) == true {
                     if !roster.contains(id) { roster.append(id) }
                     labels.add("speaker", name, r.id, resolved: true)
@@ -366,8 +366,8 @@ public enum PeopleMigration {
                 }
             }
             // The invited people: the pairs when the record has them, else one text for each.
-            let invited: [Observation] = r.invitees.map { $0.map { Observation(name: $0.name, email: $0.email, source: .calendar) } }
-                ?? r.attendees.map { Observation(text: $0, source: .calendar) }
+            let invited: [PersonObservation] = r.invitees.map { $0.map { PersonObservation(name: $0.name, email: $0.email, source: .calendar) } }
+                ?? r.attendees.map { PersonObservation(text: $0, source: .calendar) }
             // First each entry by itself: a whole name or an address needs nobody around it. The people found so
             // are in the meeting; the names that stay are the other names of the meeting.
             let alone = invited.map { o -> Resolution in
@@ -389,11 +389,11 @@ public enum PeopleMigration {
                 if !there.contains(id) { there.append(id) }
                 loose.removeAll { $0 == written }
                 // By the name alone: a name that only the address explains is not a form of this person.
-                let byName = resolve(Observation(name: written, source: .calendar), in: nil)
+                let byName = resolve(PersonObservation(name: written, source: .calendar), in: nil)
                 let named = byName.person == id && byName.rule.map(strong.contains) == true
                 if named {
                     if PersonNames.nameKey(written) != PersonNames.nameKey(display[id] ?? "") { seenForms.append((id, written)) }
-                    if let email = o.email, resolver.resolve(Observation(email: email)) == .unknown { seenEmails.append((id, email)) }
+                    if let email = o.email, resolver.resolve(PersonObservation(email: email)) == .unknown { seenEmails.append((id, email)) }
                 }
                 if !oldRule(written, id) { links[written] = (id, named ? byName.rule ?? rule : rule, (links[written]?.meetings ?? 0) + 1) }
             }
@@ -406,7 +406,7 @@ public enum PeopleMigration {
                     report.totals.actionItemsWithNoOwner += 1
                     continue
                 }
-                let answer = resolve(Observation(name: written), in: context)
+                let answer = resolve(PersonObservation(name: written), in: context)
                 let kind = answer.rule.map(strong.contains) == true ? "exact" : "short"
                 labels.add("action item owner", written, r.id, resolved: answer.person != nil, why: why(answer), detail: answer.person == nil ? nil : kind)
             }
@@ -415,7 +415,7 @@ public enum PeopleMigration {
         for c in input.commitments where !c.deleted {
             guard let to = c.to?.trimmingCharacters(in: .whitespacesAndNewlines), !to.isEmpty else { continue }
             let context = c.callID.flatMap { contexts[$0] }
-            let answer = resolve(Observation(name: to), in: context)
+            let answer = resolve(PersonObservation(name: to), in: context)
             // A commitment made by hand has no call around it: only a sure rule counts.
             let sure = answer.person != nil && (context != nil || answer.rule.map(strong.contains) == true)
             labels.add("commitment", to, c.callID ?? "added by hand", resolved: sure, why: why(answer))
@@ -424,7 +424,7 @@ public enum PeopleMigration {
         let spoken = Set(input.records.flatMap { $0.speakerNames.values })
         report.totals.coachNotes = input.coachPeople.count
         for key in input.coachPeople {
-            let answer = resolve(Observation(name: key), in: nil)
+            let answer = resolve(PersonObservation(name: key), in: nil)
             if answer.person != nil, answer.rule.map(strong.contains) == true {
                 report.totals.coachNotesResolved += 1
                 continue

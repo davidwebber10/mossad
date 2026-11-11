@@ -221,7 +221,8 @@ public final class VoiceSampleStore: @unchecked Sendable {
     public init(directory: URL) {
         url = directory.appendingPathComponent(Self.fileName)
         do {
-            storage = try StoredFile.load(File.self, from: url, decoder: .callRecord, recovery: .local)?.samples ?? []
+            // No note for the owner: the samples are made again from the voice library at the next launch.
+            storage = try StoredFile.load(File.self, from: url, decoder: .callRecord)?.samples ?? []
             loadError = nil
         } catch {
             storage = []

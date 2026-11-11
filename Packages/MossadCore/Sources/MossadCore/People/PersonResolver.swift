@@ -1,7 +1,7 @@
 import Foundation
 
 /// What a source showed: a name, an address, or both of one participant.
-public struct Observation: Sendable, Equatable {
+public struct PersonObservation: Sendable, Equatable {
     public var source: SourceKind
     public var account: String?
     public var name: String?
@@ -122,15 +122,32 @@ public struct PersonResolver: Sendable {
 
     private let entries: [Entry]
     private let index: [PersonID: Int]
+    /// The entries by each word of their names, and by each short or full form of their first names. A name can
+    /// fit only a person it has a word in common with, so most people are never compared.
+    private let byWord: [String: [Int]]
+    private let byEmail: [String: [Int]]
 
     public init(people: [Person]) {
         // Sorted, so the answer never depends on the order of the people.
-        entries = people.filter(\.isLive).sorted { $0.id < $1.id }.map { p in
+        let entries = people.filter(\.isLive).sorted { $0.id < $1.id }.map { p in
             let texts = p.forms.isEmpty ? [p.displayName] : p.forms.map(\.text)
             return Entry(person: p, names: texts.map(PersonNames.parse).filter(\.isName), keys: Set(texts.map(PersonNames.nameKey).filter { !$0.isEmpty }),
                          confirmedKeys: Set(p.forms.filter { $0.confirmed && ($0.kind == .alias || $0.kind == .nickname) }.map(\.key)))
         }
+        self.entries = entries
         index = Dictionary(entries.enumerated().map { ($1.person.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var byWord: [String: [Int]] = [:], byEmail: [String: [Int]] = [:]
+        for (i, e) in entries.enumerated() {
+            var words: Set<String> = []
+            for name in e.names {
+                words.formUnion(name.words)
+                if let given = name.given { words.formUnion(Nicknames.variants(of: given)) }
+            }
+            for w in words { byWord[w, default: []].append(i) }
+            for address in Set(e.person.emails.map(\.address)) { byEmail[address, default: []].append(i) }
+        }
+        self.byWord = byWord
+        self.byEmail = byEmail
     }
 
     public func person(_ id: PersonID) -> Person? { index[id].map { entries[$0].person } }
@@ -150,39 +167,40 @@ public struct PersonResolver: Sendable {
         }
     }
 
-    public func resolve(_ o: Observation, in context: ResolutionContext? = nil) -> Resolution {
+    public func resolve(_ o: PersonObservation, in context: ResolutionContext? = nil) -> Resolution {
         let written = o.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let email = (o.email ?? PersonNames.email(in: written) ?? (written.contains("@") && !written.contains(" ") ? written : nil)).map(EmailIdentity.normalized)
         // Rule 0: what the owner rejected is obeyed by each rule.
-        var open = entries
-        if let email {
-            open.removeAll { e in e.person.emails.contains { $0.address == email && $0.state == .rejected } }
-        }
-        if let identity = o.identity {
-            open.removeAll { e in e.person.identities.contains { $0.isSame(identity) && $0.state == .rejected } }
-        }
-        // Rules 1 and 1b: the email beats the name.
+        var blocked: Set<Int> = []
         if let email, !email.isEmpty {
+            let holders = byEmail[email] ?? []
             func having(_ state: IdentityState) -> [Entry] {
-                open.filter { e in e.person.emails.contains { $0.address == email && $0.state == state && !$0.shared } }
+                holders.filter { i in entries[i].person.emails.contains { $0.address == email && $0.state == state && !$0.shared } }.map { entries[$0] }
             }
+            blocked.formUnion(holders.filter { i in entries[i].person.emails.contains { $0.address == email && $0.state == .rejected } })
+            // Rules 1 and 1b: the email beats the name.
             if let r = Self.one(having(.verified), rule: .verifiedEmail, confidence: .certain) { return r }
             if let r = Self.one(having(.seen), rule: .seenEmail, confidence: .strong) { return r }
         }
-        // Rule 2.
-        if let identity = o.identity,
-           let r = Self.one(open.filter { e in e.person.identities.contains { $0.isSame(identity) } }, rule: .externalID, confidence: .certain) { return r }
+        if let identity = o.identity {
+            for (i, e) in entries.enumerated() where e.person.identities.contains(where: { $0.isSame(identity) && $0.state == .rejected }) { blocked.insert(i) }
+            // Rule 2.
+            let holders = entries.enumerated().filter { i, e in !blocked.contains(i) && e.person.identities.contains { $0.isSame(identity) } }.map(\.element)
+            if let r = Self.one(holders, rule: .externalID, confidence: .certain) { return r }
+        }
 
         let name = PersonNames.parse(written)
         guard name.isName else { return .unknown }
         let key = PersonNames.nameKey(written), words = name.words
+        // Only a person with a word of this name, or a short or full form of one, can fit it.
+        let near = Set(words.flatMap { byWord[$0] ?? [] }).subtracting(blocked).sorted()
         if words.count >= 2 {
             // Rule 0: a form the owner gave for one person.
-            if let r = Self.one(open.filter { $0.confirmedKeys.contains(key) }, rule: .ownerLink, confidence: .certain) { return r }
+            if let r = Self.one(near.map { entries[$0] }.filter { $0.confirmedKeys.contains(key) }, rule: .ownerLink, confidence: .certain) { return r }
             // Rule 3a.
-            if let r = Self.one(open.filter { $0.keys.contains(key) }, rule: .nameForm, confidence: .strong) { return r }
+            if let r = Self.one(near.map { entries[$0] }.filter { $0.keys.contains(key) }, rule: .nameForm, confidence: .strong) { return r }
         }
-        let fits = open.map { (entry: $0, fit: fit(name, $0)) }
+        let fits = near.map { (entry: entries[$0], fit: fit(name, entries[$0])) }
         func having(_ wanted: NameFit...) -> [Entry] { fits.filter { wanted.contains($0.fit) }.map(\.entry) }
         if name.family != nil {
             // Rules 3b and 3c.
@@ -202,7 +220,7 @@ public struct PersonResolver: Sendable {
             let there = fits.filter { roster.contains($0.entry.person.id) && ($0.fit == .nickname || $0.fit == .short) }
             var seen: Set<String> = [key]
             let others = context.otherNames.filter { other in
-                guard seen.insert(PersonNames.key(other)).inserted else { return false }
+                guard seen.insert(PersonNames.nameKey(other)).inserted else { return false }
                 return [NameFit.same, .sameWithMiddle, .nickname, .short].contains(PersonNames.fit(name, PersonNames.parse(other)))
             }
             if there.count == 1, others.isEmpty {
@@ -210,7 +228,8 @@ public struct PersonResolver: Sendable {
             }
             if there.count + others.count > 1 { return there.isEmpty ? .unknown : .ambiguous(there.map(\.entry.person.id), rule: .shortName) }
             // A person saved under one word, in a meeting where nobody else can be meant.
-            if there.isEmpty, others.isEmpty, words.count == 1, let r = Self.one(open.filter { $0.keys.contains(key) }, rule: .shortName, confidence: .probable) { return r }
+            if there.isEmpty, others.isEmpty, words.count == 1,
+               let r = Self.one(near.map { entries[$0] }.filter { $0.keys.contains(key) }, rule: .shortName, confidence: .probable) { return r }
             if !others.isEmpty { return .unknown }
         }
         let nick = having(.nickname)
@@ -218,11 +237,13 @@ public struct PersonResolver: Sendable {
             return .suggestion(nick[0].person.id, rule: .nickname, evidence: ["\"\(written)\" can be a short form of \"\(nick[0].person.displayName)\"."])
         }
         if nick.count > 1 { return .ambiguous(nick.map(\.person.id), rule: .nickname) }
-        // Rule 5: never a link.
+        // Rule 5: never a link. A name a letter off can have no word in common, so each person is looked at.
         guard words.count >= 2 else { return .unknown }
-        let near = fits.filter { $0.fit != .conflict && $0.entry.keys.contains { PeopleDuplicates.similar(key, $0) } }
-        if near.count == 1 {
-            return .suggestion(near[0].entry.person.id, rule: .similar, evidence: ["\"\(written)\" is almost \"\(near[0].entry.person.displayName)\"."])
+        let almost = entries.enumerated().filter { i, e in
+            !blocked.contains(i) && e.keys.contains { PeopleDuplicates.similar(key, $0) } && fit(name, e) != .conflict
+        }.map(\.element)
+        if almost.count == 1 {
+            return .suggestion(almost[0].person.id, rule: .similar, evidence: ["\"\(written)\" is almost \"\(almost[0].person.displayName)\"."])
         }
         return .unknown
     }

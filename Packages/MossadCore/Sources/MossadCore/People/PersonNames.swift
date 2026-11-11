@@ -41,7 +41,7 @@ public struct ParsedName: Equatable, Sendable {
 
     /// Each word of the name in the order first, middle, family.
     var words: [String] {
-        ([given].compactMap { $0 } + middle + [family].compactMap { $0 }).flatMap { $0.split(separator: " ").map(String.init) }
+        ([given].compactMap { $0 } + middle + [family].compactMap { $0 }).flatMap { $0.contains(" ") ? $0.split(separator: " ").map(String.init) : [$0] }
     }
 }
 

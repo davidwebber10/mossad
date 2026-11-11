@@ -20,7 +20,7 @@ final class PersonResolverTests: XCTestCase {
     private var resolver: PersonResolver { PersonResolver(people: people) }
 
     private func resolve(_ name: String? = nil, email: String? = nil, roster: [PersonID]? = nil, others: [String] = [], in people: [Person]? = nil) -> Resolution {
-        PersonResolver(people: people ?? self.people).resolve(Observation(name: name, email: email), in: roster.map { ResolutionContext(roster: $0, otherNames: others) })
+        PersonResolver(people: people ?? self.people).resolve(PersonObservation(name: name, email: email), in: roster.map { ResolutionContext(roster: $0, otherNames: others) })
     }
 
     // MARK: Rule 0
@@ -42,8 +42,8 @@ final class PersonResolverTests: XCTestCase {
 
     func testAVerifiedEmailResolvesInAnyCase() {
         XCTAssertEqual(resolve(email: " Sam.Carter@Example.com "), .resolved(sam, rule: .verifiedEmail, confidence: .certain))
-        XCTAssertEqual(PersonResolver(people: people).resolve(Observation(text: "sam.carter@example.com")).person, sam)
-        XCTAssertEqual(PersonResolver(people: people).resolve(Observation(text: "Someone <sam.carter@example.com>")).person, sam)
+        XCTAssertEqual(PersonResolver(people: people).resolve(PersonObservation(text: "sam.carter@example.com")).person, sam)
+        XCTAssertEqual(PersonResolver(people: people).resolve(PersonObservation(text: "Someone <sam.carter@example.com>")).person, sam)
         XCTAssertEqual(resolve(email: "nobody@example.com"), .unknown)
     }
 
@@ -72,10 +72,10 @@ final class PersonResolverTests: XCTestCase {
         var people = self.people
         people[1].identities = [id]
         let r = PersonResolver(people: people)
-        XCTAssertEqual(r.resolve(Observation(name: "Somebody Else", identity: id)), .resolved(dana, rule: .externalID, confidence: .certain))
+        XCTAssertEqual(r.resolve(PersonObservation(name: "Somebody Else", identity: id)), .resolved(dana, rule: .externalID, confidence: .certain))
         var other = id
         other.account = "another"
-        XCTAssertEqual(r.resolve(Observation(identity: other)), .unknown, "the same value in another account is another key")
+        XCTAssertEqual(r.resolve(PersonObservation(identity: other)), .unknown, "the same value in another account is another key")
     }
 
     // MARK: Rule 3
