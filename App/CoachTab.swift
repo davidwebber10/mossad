@@ -43,7 +43,7 @@ struct CoachTab: View {
         // answered there, and not a second time below.
         let cards = controller.findings(for: record)
         let asked = Set(cards.compactMap(\.questionID))
-        let questions = profile.openQuestions.filter { $0.callID == record.id && !asked.contains($0.id) && ($0.at == nil || $0.evidence.isEmpty) }
+        let questions = profile.openQuestions.filter { $0.callID == record.id && !asked.contains($0.id) }
         let offered = cards.contains { $0.kind == .goalOffer }
         // While the line waits as the top card, the card is the line: the same words are not shown two times.
         let lineIsTopCard = line.map { l in cards.first.map { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text } ?? false } ?? false

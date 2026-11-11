@@ -33,7 +33,7 @@ struct CoachSection: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            QuestionsPanel(questions: profile.openQuestions.filter { $0.callID == record.id && !asked.contains($0.id) && ($0.at == nil || $0.evidence.isEmpty) },
+            QuestionsPanel(questions: profile.openQuestions.filter { $0.callID == record.id && !asked.contains($0.id) },
                            answer: { store.answerQuestion($0, $1, note: $2) })
             if !lineIsTopCard { Card { CoachLineView(review: review) } }
             if FocusPanel.belongs(to: record, profile: profile), !cards.contains(where: { $0.kind == .goalOffer }) {
