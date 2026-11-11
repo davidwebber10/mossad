@@ -14,6 +14,8 @@ struct MainWindow: View {
             Group {
                 switch controller.section {
                 case .meetings: MeetingsView()
+                case .bookmarks: BookmarksView()
+                case .screens: AllScreensView()
                 case .commitments: CommitmentsView()
                 case .chat: ChatView()
                 case .people: PeopleView()
@@ -119,14 +121,25 @@ private struct Sidebar: View {
                 WindowDragArea().frame(height: Chrome.lightsRow + Chrome.lightsToNav)
             }
             VStack(alignment: .leading, spacing: Chrome.navRowGap) {
-                ForEach(AppController.Section.allCases) { section in
-                    if section == .coach {
-                        // Coach opens in place: its pages show under it while it is open.
-                        SidebarItemGroup(expanded: controller.section == .coach,
+                ForEach(AppController.Section.topLevel) { section in
+                    switch section {
+                    case .meetings:
+                        // Meetings opens in place: its pages show under it while it or one of them is open. A click
+                        // on Meetings itself opens the list of meetings.
+                        SidebarItemGroup(expanded: controller.sidebarOpen(.meetings),
+                                         children: AppController.Section.underMeetings.map { page in
+                                             page == .commitments
+                                                 ? SidebarChild(id: page, title: page.rawValue, count: openCommitments, countLabel: "\(openCommitments) open")
+                                                 : SidebarChild(id: page, title: page.rawValue) },
+                                         selection: controller.section.isUnderMeetings ? controller.section : nil,
+                                         select: { controller.section = $0 }) { row(section) }
+                    case .coach:
+                        // Coach opens in place on its first page: its pages show under it while it is open.
+                        SidebarItemGroup(expanded: controller.sidebarOpen(.coach),
                                          children: CoachPage.allCases.map { SidebarChild(id: $0, title: $0.title, count: $0 == .findings ? controller.findings.count : nil) },
                                          selection: controller.section == .coach ? controller.coachPage : nil,
-                                         select: { controller.coachPage = $0; controller.section = .coach }) { row(section) }
-                    } else {
+                                         select: { controller.go(to: SidebarNav.Spot(item: .section(.coach), child: .coach($0))) }) { row(section) }
+                    default:
                         row(section)
                     }
                 }
@@ -143,8 +156,8 @@ private struct Sidebar: View {
         .focusEffectDisabled()
         .onKeyPress(.downArrow) { move(1) }
         .onKeyPress(.upArrow) { move(-1) }
-        .onKeyPress(.home) { jump(to: AppController.Section.allCases.first) }
-        .onKeyPress(.end) { jump(to: AppController.Section.allCases.last) }
+        .onKeyPress(.home) { go(SidebarNav.first(AppController.sidebarItems, at: controller.sidebarSpot)) }
+        .onKeyPress(.end) { go(SidebarNav.last(AppController.sidebarItems, at: controller.sidebarSpot)) }
         .onKeyPress(characters: .letters) { press in
             // Only plain letters: a Command or Option shortcut is not a page name.
             guard press.modifiers.subtracting(.shift).isEmpty else { return .ignored }
@@ -157,9 +170,7 @@ private struct Sidebar: View {
     private func row(_ section: AppController.Section) -> some View {
         let on = controller.section == section
         return Button {
-            // A click on Coach opens its first page.
-            if section == .coach { controller.coachPage = .findings }
-            controller.section = section
+            controller.go(to: section)
         } label: {
             HStack(spacing: Chrome.navIconGap) {
                 IconImage(section.icon, size: Chrome.navIcon).foregroundStyle(Palette.accent)
@@ -182,26 +193,31 @@ private struct Sidebar: View {
 
     private func jump(to section: AppController.Section?) -> KeyPress.Result {
         guard let section else { return .ignored }
-        controller.section = section
+        controller.go(to: section)
         return .handled
     }
 
+    /// The arrow keys go through the rows that show: the sections and the pages of the open one.
     private func move(_ by: Int) -> KeyPress.Result {
-        let all = AppController.Section.allCases
-        guard let i = all.firstIndex(of: controller.section) else { return .ignored }
-        controller.section = all[min(max(i + by, 0), all.count - 1)]
+        go(SidebarNav.step(AppController.sidebarItems, from: controller.sidebarSpot, by: by))
+    }
+
+    private func go(_ spot: SidebarNav.Spot?) -> KeyPress.Result {
+        guard let spot else { return .ignored }
+        controller.go(to: spot)
         return .handled
     }
 
     @ViewBuilder
     private func trailing(_ section: AppController.Section) -> some View {
         switch section {
-        case .commitments where openCommitments > 0:
+        // The open tasks show on Meetings while Tasks is hidden under it, as Coach shows its cards.
+        case .meetings where openCommitments > 0 && !controller.sidebarOpen(.meetings):
             Text("\(openCommitments)")
                 .font(.system(size: 11)).monospacedDigit()
                 .foregroundStyle(Palette.tertiary)
-                .accessibilityLabel("\(openCommitments) open")
-        case .coach where !controller.findings.isEmpty && controller.section != .coach:
+                .accessibilityLabel("\(openCommitments) open tasks")
+        case .coach where !controller.findings.isEmpty && !controller.sidebarOpen(.coach):
             Text("\(controller.findings.count)")
                 .font(.system(size: 11)).monospacedDigit()
                 .foregroundStyle(Palette.tertiary)

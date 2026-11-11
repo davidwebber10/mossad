@@ -76,6 +76,11 @@ struct MeetingDetailView: View {
             .task(id: controller.seekRequest) {
                 guard let seek = controller.seekRequest, seek.callID == record.id else { return }
                 controller.seekRequest = nil
+                if let file = seek.screen, record.hasScreens {
+                    openScreen = file
+                    tabBinding.wrappedValue = .screens
+                    return
+                }
                 tabBinding.wrappedValue = .transcript
                 guard seek.play else { if seek.mark { highlight = seek.at }; return }
                 await play(from: seek.at)

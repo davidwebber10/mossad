@@ -7,11 +7,13 @@ struct SidebarChild<ID: Hashable>: Identifiable {
     let title: String
     /// A quiet number at the right, such as the cards that wait. Nil or 0 shows none.
     var count: Int?
+    /// What the count is, for VoiceOver: "3 open". Nil reads "3 to review".
+    var countLabel: String?
 }
 
-/// A sidebar item with child items, indented below it. The children show while the section is open; the click on
-/// the item itself opens its first child. The item's own count shows only while the children are hidden: then the
-/// child with the count says it. Used for Coach; any section with pages of its own can use it the same way.
+/// A sidebar item with child items, indented below it. The children show while the section is open; what the click
+/// on the item itself opens is the item's own choice (Coach opens its first child, Meetings its own list). The item's own count shows only while the children are hidden: then the
+/// child with the count says it. Used for Coach and Meetings; any section with pages of its own can use it the same way.
 struct SidebarItemGroup<ID: Hashable, Item: View>: View {
     let expanded: Bool
     let children: [SidebarChild<ID>]
@@ -24,7 +26,8 @@ struct SidebarItemGroup<ID: Hashable, Item: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Chrome.navRowGap) {
-            item
+            // VoiceOver says whether the pages show.
+            item.accessibilityValue(expanded ? "Expanded" : "Collapsed")
             if expanded {
                 ForEach(children) { child in row(child) }
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -41,7 +44,7 @@ struct SidebarItemGroup<ID: Hashable, Item: View>: View {
                 Spacer(minLength: 4)
                 if let count = child.count, count > 0 {
                     Text("\(count)").font(.system(size: 11)).monospacedDigit().foregroundStyle(Palette.tertiary)
-                        .accessibilityLabel("\(count) to review")
+                        .accessibilityLabel(child.countLabel ?? "\(count) to review")
                 }
             }
             .font(.system(size: 12.5, weight: on ? .medium : .regular))

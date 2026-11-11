@@ -16,10 +16,17 @@ struct MossadCommands: Commands {
         CommandMenu("Go") {
             Button("Search Everything…") { controller.toggleSearch() }.keyboardShortcut("k")
             Divider()
-            ForEach(AppController.Section.allCases) { section in
-                Button(section.rawValue) { controller.open(section) }
-                    .keyboardShortcut(KeyEquivalent(section.shortcut))
+            // In the order of the sidebar, a group for each item with pages under it. Coach opens on Findings.
+            ForEach([AppController.Section.meetings] + AppController.Section.underMeetings) { go($0) }
+            Divider()
+            ForEach([AppController.Section.chat, .people, .analytics]) { go($0) }
+            Divider()
+            go(.coach)
+            ForEach(CoachPage.allCases.filter { $0 != .findings }) { page in
+                Button(page == .settings ? "Coach Settings" : page.title) { controller.open(coach: page) }
             }
+            Divider()
+            ForEach([AppController.Section.settings, .log]) { go($0) }
         }
         CommandMenu("Meeting") {
             Button("Regenerate Summary") {
@@ -41,6 +48,10 @@ struct MossadCommands: Commands {
                 .keyboardShortcut("b", modifiers: [.command, .option])
                 .disabled(!controller.isRecording)
         }
+    }
+
+    private func go(_ section: AppController.Section) -> some View {
+        Button(section.rawValue) { controller.open(section) }.keyboardShortcut(section.shortcut)
     }
 
     private var selected: CallRecord? {

@@ -16,23 +16,30 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", commitments = "Tasks", chat = "Chat", people = "People", analytics = "Analytics", coach = "Coach",
-             shares = "Shares",
+        case meetings = "Meetings", bookmarks = "Bookmarks", screens = "Screens", shares = "Shares", commitments = "Tasks",
+             chat = "Chat", people = "People", analytics = "Analytics", coach = "Coach",
              settings = "Settings", log = "Log"
         var id: String { rawValue }
-        /// The number in the Go menu. Coach came after the others had theirs, so it takes the next free one and
-        /// Settings keeps Command-6.
-        var shortcut: Character {
+        /// The pages under Meetings in the sidebar, in their order there.
+        static let underMeetings: [Section] = [.bookmarks, .screens, .shares, .commitments]
+        /// The items of the sidebar's first level.
+        static var topLevel: [Section] { allCases.filter { !underMeetings.contains($0) } }
+        var isUnderMeetings: Bool { Self.underMeetings.contains(self) }
+        /// The key in the Go menu. Each page keeps the number it had before it moved under Meetings; Coach and Shares
+        /// took the next free numbers, Bookmarks takes 0, and Screens has Option-Command-S, as no number is left.
+        var shortcut: KeyboardShortcut {
             switch self {
-            case .meetings: "1"
-            case .commitments: "2"
-            case .chat: "3"
-            case .people: "4"
-            case .analytics: "5"
-            case .settings: "6"
-            case .log: "7"
-            case .coach: "8"
-            case .shares: "9"
+            case .meetings: KeyboardShortcut("1")
+            case .commitments: KeyboardShortcut("2")
+            case .chat: KeyboardShortcut("3")
+            case .people: KeyboardShortcut("4")
+            case .analytics: KeyboardShortcut("5")
+            case .settings: KeyboardShortcut("6")
+            case .log: KeyboardShortcut("7")
+            case .coach: KeyboardShortcut("8")
+            case .shares: KeyboardShortcut("9")
+            case .bookmarks: KeyboardShortcut("0")
+            case .screens: KeyboardShortcut("s", modifiers: [.command, .option])
             }
         }
         var icon: Icon {
@@ -44,6 +51,8 @@ final class AppController: ObservableObject {
             case .analytics: .analytics
             case .coach: .coach
             case .shares: .link
+            case .bookmarks: .bookmark
+            case .screens: .camera
             case .settings: .settings
             case .log: .log
             }
@@ -254,6 +263,8 @@ final class AppController: ObservableObject {
         var play = true
         /// False only opens the Transcript tab, with no line marked.
         var mark = true
+        /// A frame's file name: opens the Screens tab on that frame instead of the transcript.
+        var screen: String?
     }
     /// When the last bookmark was made, so the controls can confirm it.
     @Published private(set) var lastBookmark: Date?
@@ -1220,8 +1231,7 @@ final class AppController: ObservableObject {
     }
 
     func open(_ section: Section) {
-        if section == .coach, self.section != .coach { coachPage = .findings }
-        self.section = section
+        go(to: section)
         showWindow()
     }
 
@@ -1288,6 +1298,12 @@ final class AppController: ObservableObject {
     /// Opens a meeting and plays it from a time.
     func openMeeting(_ callID: String, at time: TimeInterval) {
         seekRequest = SeekRequest(callID: callID, at: time)
+        openMeeting(callID)
+    }
+
+    /// Opens a meeting's Screens tab on one frame.
+    func openScreen(_ callID: String, file: String) {
+        seekRequest = SeekRequest(callID: callID, at: 0, play: false, mark: false, screen: file)
         openMeeting(callID)
     }
 
