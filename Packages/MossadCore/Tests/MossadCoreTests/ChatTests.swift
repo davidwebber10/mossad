@@ -99,7 +99,7 @@ final class ChatTests: XCTestCase {
         let steps = StepCollector()
         let answer = try await agent.answer("What did Jen agree to?", history: [], records: records) { steps.add($0) }
         XCTAssertTrue(answer.contains("mossad://call/both?t=30"))
-        XCTAssertEqual(steps.all, ["CoachFinding meetings with Jen"])
+        XCTAssertEqual(steps.all, ["Finding meetings with Jen"])
         XCTAssertEqual(log.all().count, 2)
 
         let second = try JSONSerialization.jsonObject(with: StubURLProtocol.requests[1].body) as! [String: Any]

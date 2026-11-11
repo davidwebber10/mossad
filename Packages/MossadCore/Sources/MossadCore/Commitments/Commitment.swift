@@ -284,16 +284,16 @@ public actor CommitmentRunner {
                 if ledger.entries[r.id] != nil { ledger.clear(r.id); ledger.save(to: paths.commitments) }
             } catch {
                 guard !RetryLedger.isUnbilled(error), !(error is UnreadableFile) else {
-                    Log.error("CoachFinding commitments in \(r.id) waits: \(error)")
+                    Log.error("Finding commitments in \(r.id) waits: \(error)")
                     return done
                 }
                 ledger.fail(r.id, reason: Pipeline.failureReason(error), now: now())
                 ledger.save(to: paths.commitments)
                 if ledger.state(r.id, now: now()) == .gaveUp {
-                    Log.error("CoachFinding commitments in \(r.id) failed \(RetryLedger.maxAttempts) times; it is left out: \(error)")
+                    Log.error("Finding commitments in \(r.id) failed \(RetryLedger.maxAttempts) times; it is left out: \(error)")
                     continue
                 }
-                Log.error("CoachFinding commitments in \(r.id) failed; it waits before the next try: \(error)")
+                Log.error("Finding commitments in \(r.id) failed; it waits before the next try: \(error)")
                 return done
             }
         }

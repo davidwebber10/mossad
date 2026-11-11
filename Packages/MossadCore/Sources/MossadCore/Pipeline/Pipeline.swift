@@ -654,7 +654,7 @@ public actor Pipeline {
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
         if quietRuns[r.id] == nil {
-            detail(r.id, "CoachFinding the calendar invite")
+            detail(r.id, "Finding the calendar invite")
             let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
             if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
                 r.setInvite(event)

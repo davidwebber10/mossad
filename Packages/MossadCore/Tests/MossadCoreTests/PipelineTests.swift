@@ -652,7 +652,7 @@ final class PipelineTests: XCTestCase {
         await pipeline().process(id)
         let details = notifications.details
         for expected in ["Uploading", "AssemblyAI is transcribing", "Joining the two tracks", "Identifying speakers",
-                         "CoachFinding the calendar invite", "Claude is writing the summary", "Writing the note"] {
+                         "Finding the calendar invite", "Claude is writing the summary", "Writing the note"] {
             XCTAssertTrue(details.contains { $0.contains(expected) }, "missing \(expected) in \(details)")
         }
     }

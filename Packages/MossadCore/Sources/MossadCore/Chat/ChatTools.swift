@@ -206,13 +206,13 @@ public struct ChatTools: Sendable {
         return f.date(from: String(s.prefix(10)))
     }
 
-    /// The line shown while a tool runs, such as "CoachFinding meetings with Jen".
+    /// The line shown while a tool runs, such as "Finding meetings with Jen".
     static func step(_ name: String, input: [String: Any], title: (String) -> String?) -> String {
         switch name {
         case "find_meetings":
-            if let p = input["people"] as? [String], !p.isEmpty { return "CoachFinding meetings with \(p.joined(separator: " and "))" }
-            if let q = input["query"] as? String, !q.isEmpty { return "CoachFinding meetings about \(q)" }
-            return "CoachFinding meetings"
+            if let p = input["people"] as? [String], !p.isEmpty { return "Finding meetings with \(p.joined(separator: " and "))" }
+            if let q = input["query"] as? String, !q.isEmpty { return "Finding meetings about \(q)" }
+            return "Finding meetings"
         case "search_transcripts": return "Searching transcripts for “\(input["query"] as? String ?? "")”"
         case "current_call": return "Listening to the call"
         case "read_meeting": return "Reading \((input["call_id"] as? String).flatMap(title) ?? "a meeting")"

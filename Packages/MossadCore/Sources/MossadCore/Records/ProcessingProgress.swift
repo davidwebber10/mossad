@@ -15,7 +15,7 @@ public struct ProcessingProgress: Equatable, Sendable {
     public var started: Date
     public var stepStarted: Date
     public var tracks: [Track: TrackState] = [:]
-    /// The sub-step, such as "CoachFinding the calendar invite".
+    /// The sub-step, such as "Finding the calendar invite".
     public var detail: String?
 
     public init(step: ProcessingStep, started: Date) {

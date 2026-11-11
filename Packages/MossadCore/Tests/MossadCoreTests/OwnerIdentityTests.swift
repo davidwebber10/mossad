@@ -130,7 +130,7 @@ final class OwnerIdentityTests: XCTestCase {
         XCTAssertFalse(try CommitmentBook.load(from: paths.commitments).items.contains(where: \.deleted))
     }
 
-    // MARK: CoachFinding
+    // MARK: Finding
 
     func testANewCallUnderTheOldProfileNameIsStillReadForTheOwnersPromises() async throws {
         let out: [String: Any] = ["commitments": [["text": "Give access to the budget sheet", "to": "Pat Moreno", "due": NSNull(),
