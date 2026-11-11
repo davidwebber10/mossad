@@ -97,10 +97,14 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
     }
 
     /// Marks deleted the commitments found in calls whose quote is not the owner's own line; hand-added ones stay.
-    public mutating func dropOthers(records: [CallRecord], owner: String, at date: Date) {
+    ///
+    /// A call in which no speaker is the owner says nothing: whose line it was is unknown there, and unknown is
+    /// not "someone else's". That is the state of each old call when the owner's name changed and nothing knows
+    /// the old one, and a deletion made then would sync to each device.
+    public mutating func dropOthers(records: [CallRecord], owner: OwnerIdentity, at date: Date) {
         let byID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         for c in items where !c.deleted {
-            guard let id = c.callID, let r = byID[id] else { continue }
+            guard let id = c.callID, let r = byID[id], !owner.speakerKeys(in: r).isEmpty else { continue }
             if CommitmentFinder.ownerLine(quote: c.quote ?? "", at: c.at, in: r, owner: owner) == nil { delete(c.id, at: date) }
         }
     }
@@ -143,10 +147,13 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
 public struct CommitmentFinder: Sendable {
     private let llm: any LanguageModel
     let ownerName: String
+    /// Each name that is the owner's. The name in Settings alone, until the runner reads the others.
+    public var owner: OwnerIdentity
 
     public init(llm: any LanguageModel, ownerName: String) {
         self.llm = llm
         self.ownerName = ownerName
+        owner = OwnerIdentity(name: ownerName)
     }
 
     static var schema: [String: Any] {
@@ -158,12 +165,12 @@ public struct CommitmentFinder: Sendable {
 
     /// The owner's line a commitment came from: the one holding the quote, or else the one at the time given.
     /// Nil when another person said it, so their promises never count as the owner's.
-    static func ownerLine(quote: String, at: TimeInterval?, in r: CallRecord, owner: String) -> Utterance? {
+    static func ownerLine(quote: String, at: TimeInterval?, in r: CallRecord, owner: OwnerIdentity) -> Utterance? {
         func norm(_ s: String) -> String {
             s.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == " " }.map(String.init).joined()
                 .split(separator: " ").joined(separator: " ")
         }
-        let keys = Set(r.speakerNames.filter { $0.value == owner }.keys)
+        let keys = owner.speakerKeys(in: r)
         let q = norm(quote).split(separator: " ").prefix(8).joined(separator: " ")
         if q.split(separator: " ").count >= 3 {
             // A real quote must be found among the owner's own lines; a paraphrase is not proof.
@@ -174,6 +181,10 @@ public struct CommitmentFinder: Sendable {
     }
 
     public func find(in r: CallRecord) async throws -> [Commitment] {
+        // Only the owner's own lines count, so a call with none of them has nothing to find.
+        guard !owner.speakerKeys(in: r).isEmpty else { return [] }
+        // The name the transcript of this call shows: the owner's profile can still have an older name.
+        let ownerName = owner.name(in: r)
         let day = r.start.formatted(.dateTime.weekday(.wide).year().month(.wide).day())
         let system = """
         You find the commitments \(ownerName) made in a meeting. Only lines spoken by \(ownerName) count: a \
@@ -197,7 +208,7 @@ public struct CommitmentFinder: Sendable {
         parser.dateFormat = "yyyy-MM-dd"
         return out.commitments.compactMap { c in
             guard let text = c.text.nonBlank,
-                  let line = Self.ownerLine(quote: c.quote, at: c.at_seconds, in: r, owner: ownerName) else { return nil }
+                  let line = Self.ownerLine(quote: c.quote, at: c.at_seconds, in: r, owner: owner) else { return nil }
             return Commitment(text: text, to: c.to?.nonBlank, callID: r.id, callTitle: r.title,
                               madeAt: r.start.addingTimeInterval(line.start), at: line.start, quote: c.quote.nonBlank,
                               due: c.due.flatMap { parser.date(from: $0) })
@@ -243,9 +254,12 @@ public actor CommitmentRunner {
         guard !StoredFile.awaitsMerge(paths.commitments.appendingPathComponent(CommitmentBook.fileName)) else { return 0 }
         let records = ProcessingQueue(paths: paths).allRecords()
         guard var book = try? CommitmentBook.load(from: paths.commitments) else { return 0 }
+        // The owner under each name they have or had: the records keep the name of the time of the call.
+        var finder = finder
+        finder.owner = OwnerIdentity.read(name: finder.ownerName, paths: paths)
         // Promises other people made never count as the owner's, including ones found before this check existed.
         let before = book.visible.count
-        book.dropOthers(records: records, owner: finder.ownerName, at: Date())
+        book.dropOthers(records: records, owner: finder.owner, at: Date())
         let cleaned = book.visible.count != before
         if cleaned {
             try? book.save(to: paths.commitments)

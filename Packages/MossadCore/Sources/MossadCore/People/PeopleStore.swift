@@ -108,6 +108,12 @@ public final class PeopleStore: @unchecked Sendable {
 
     // MARK: Reading
 
+    /// The people for code that only looks: nil when there is no file or it does not decode. Unlike the store, it
+    /// never moves a damaged file aside.
+    public static func peek(in directory: URL) -> [Person]? {
+        (try? Data(contentsOf: directory.appendingPathComponent(fileName))).flatMap { try? JSONDecoder.callRecord.decode(File.self, from: $0) }?.people
+    }
+
     public var people: [Person] { lock.withLock { storage } }
     /// Whether `people.json` is on disk: false before the first save.
     public var exists: Bool { lock.withLock { onDisk } }

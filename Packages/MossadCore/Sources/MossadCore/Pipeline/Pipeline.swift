@@ -637,7 +637,9 @@ public actor Pipeline {
     /// quiet-time speech on the mic. Someone in the room with the owner is never on the call audio, so stays.
     private func dropNamedEcho(_ r: inout CallRecord) {
         let remote = Set(r.speakerNames.filter { $0.key.hasPrefix("them:") }.values)
-        let echo = Set(r.speakerNames.filter { $0.key.hasPrefix("me:") && remote.contains($0.value) && $0.value != ownerName }.keys)
+        // The owner's profile keeps its name when "Your name" changes in Settings, so both names are the owner.
+        let owner = library.owner?.name
+        let echo = Set(r.speakerNames.filter { $0.key.hasPrefix("me:") && remote.contains($0.value) && $0.value != ownerName && $0.value != owner }.keys)
         guard !echo.isEmpty else { return }
         r.utterances.removeAll { echo.contains($0.speakerKey) }
         for key in echo {
