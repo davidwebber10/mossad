@@ -118,7 +118,17 @@ private struct Sidebar: View {
                 WindowDragArea().frame(height: Chrome.lightsRow + Chrome.lightsToNav)
             }
             VStack(alignment: .leading, spacing: Chrome.navRowGap) {
-                ForEach(AppController.Section.allCases) { row($0) }
+                ForEach(AppController.Section.allCases) { section in
+                    if section == .coach {
+                        // Coach opens in place: its pages show under it while it is open.
+                        SidebarItemGroup(expanded: controller.section == .coach,
+                                         children: CoachPage.allCases.map { SidebarChild(id: $0, title: $0.title, count: $0 == .findings ? controller.findings.count : nil) },
+                                         selection: controller.section == .coach ? controller.coachPage : nil,
+                                         select: { controller.coachPage = $0; controller.section = .coach }) { row(section) }
+                    } else {
+                        row(section)
+                    }
+                }
             }
             Spacer(minLength: Space.m)
             SidebarStatus()
@@ -145,7 +155,11 @@ private struct Sidebar: View {
 
     private func row(_ section: AppController.Section) -> some View {
         let on = controller.section == section
-        return Button { controller.section = section } label: {
+        return Button {
+            // A click on Coach opens its first page.
+            if section == .coach { controller.coachPage = .findings }
+            controller.section = section
+        } label: {
             HStack(spacing: Chrome.navIconGap) {
                 IconImage(section.icon, size: Chrome.navIcon).foregroundStyle(Palette.accent)
                 Text(section.rawValue).foregroundStyle(on ? Palette.ink : Palette.navText).lineLimit(1)
@@ -186,7 +200,7 @@ private struct Sidebar: View {
                 .font(.system(size: 11)).monospacedDigit()
                 .foregroundStyle(Palette.tertiary)
                 .accessibilityLabel("\(openCommitments) open")
-        case .coach where !controller.findings.isEmpty:
+        case .coach where !controller.findings.isEmpty && controller.section != .coach:
             Text("\(controller.findings.count)")
                 .font(.system(size: 11)).monospacedDigit()
                 .foregroundStyle(Palette.tertiary)

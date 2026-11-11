@@ -14,6 +14,12 @@ struct MeetingsListView: View {
     @Namespace private var zoom
     /// The coach's findings deck. Development hook for screenshots: `MOSSAD_FINDINGS=1` opens it.
     @State private var findings = PhoneStore.hook("MOSSAD_FINDINGS") != nil
+    /// The cards the owner already saw in the deck. The row is for a new card only, not a standing prompt.
+    @AppStorage("findingsSeen") private var seen = ""
+    private var hasNewFindings: Bool {
+        let known = Set(seen.split(separator: "\n").map(String.init))
+        return store.findings.contains { !known.contains($0.id) }
+    }
 
     /// One quiet row above the meetings while cards wait for an answer.
     private var findingsRow: some View {
@@ -46,7 +52,7 @@ struct MeetingsListView: View {
                             .padding(.vertical, Space.s)
                     }
                     if !store.outbox.entries.isEmpty { outbox }
-                    if !store.findings.isEmpty { findingsRow }
+                    if hasNewFindings || PhoneStore.hook("MOSSAD_FINDINGS_ROW") != nil { findingsRow }
                     ForEach(store.days, id: \.date) { day in
                         PhoneLabel(day.title).padding(.top, Space.l).padding(.bottom, 2)
                         ForEach(Array(day.rows.enumerated()), id: \.element.id) { i, r in

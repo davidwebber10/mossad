@@ -10,10 +10,18 @@ extension AppController {
         coachPeopleCache.value(0, version: coachVersion) { CoachPeople(people: library.identity?.people.people ?? []) }
     }
 
-    /// The cards of one call that wait for an answer.
+    /// The one writer of the owner's answers: off the main thread, one after the other. `changeCoachProfile`
+    /// and each read of the memory from disk wait for it first, and so does the quit.
+    nonisolated static let answerWriter = DispatchQueue(label: "com.dwebber.mossad.coach-answers", qos: .userInitiated)
+
+    /// The cards of one call that wait for an answer, as of the last coach change: a page that draws on each tick
+    /// of the player does not make them again.
     func findings(for record: CallRecord) -> [CoachFinding] {
-        guard coachEnabled, let review = shownCoachReview(record.id) else { return [] }
-        return FindingRules.deck(callID: record.id, date: record.start, review: review, profile: shownCoachProfile)
+        guard coachEnabled else { return [] }
+        return coachFindingsCache.value(record.id, version: coachVersion) {
+            guard let review = shownCoachReview(record.id) else { return [] }
+            return FindingRules.deck(callID: record.id, date: record.start, review: review, profile: shownCoachProfile)
+        }
     }
 
     /// Reads the cards of all calls again, off the main thread: after each change of the coach's files and of
@@ -40,27 +48,51 @@ extension AppController {
 
     /// Saves the owner's answer to a card: in the coach's memory, and next to the call's review.
     func answerFinding(_ finding: CoachFinding, _ verdict: FindingVerdict) {
-        changeFindings { $0.answer(finding, verdict, at: Date()) }
+        let now = Date()
+        changeFindings(callID: finding.callID) { $0.answer(finding, verdict, at: now) }
     }
 
-    /// Undo in the deck, and "Allow again" in Settings.
+    /// Undo in the deck.
     func takeBackFinding(_ id: String) {
-        changeFindings { $0.takeBack(id, at: Date()) }
+        let now = Date()
+        changeFindings(callID: callID(ofAnswer: id)) { $0.takeBack(id, at: now) }
+    }
+
+    /// Undo in the list of what was blocked for good: on a goal it only takes the block away.
+    func allowFindingAgain(_ id: String) {
+        let now = Date()
+        changeFindings(callID: callID(ofAnswer: id)) { $0.allowAgain(id, at: now) }
     }
 
     /// Why the owner said no to a card: guidance for that card, read by the coach in later reviews.
     func explainFinding(_ id: String, note: String) {
-        changeFindings { $0.explain(id, note: note, at: Date()) }
+        let now = Date()
+        changeFindings(callID: callID(ofAnswer: id)) { $0.explain(id, note: note, at: now) }
     }
 
-    private func changeFindings(_ change: (inout CoachProfile) -> Void) {
-        do {
-            try changeCoachProfile(change)
-            let answers = coachProfile.answers, paths = paths
-            Task.detached(priority: .utility) { FindingStore.mirror(answers, paths: paths) }
-        } catch { Log.error("Saving the coach's memory failed: \(error)") }
-        coachVersion += 1
-        syncNow()
+    private func callID(ofAnswer id: String) -> String? { shownCoachProfile.answers.first { $0.id == id }?.callID }
+
+    /// The change shows at once: the memory in view is changed in memory, and the next card rises in the same
+    /// frame. The file is read, changed, and saved by the writer, off the main thread, with the call's own copy.
+    private func changeFindings(callID: String?, _ change: @escaping @Sendable (inout CoachProfile) -> Void) {
+        var shown = shownCoachProfile
+        change(&shown)
+        let next = coachVersion + 1
+        coachProfileCache.set(0, version: next, value: shown)
+        coachVersion = next
+        let paths = paths
+        Self.answerWriter.async {
+            do {
+                var profile = try CoachProfile.load(from: paths.coach)
+                let before = profile
+                change(&profile)
+                if profile != before { try profile.save(to: paths.coach) }
+                if let callID { FindingStore.mirror(profile.answers, callID: callID, paths: paths) }
+            } catch {
+                Log.error("Saving the coach's memory failed: \(error)")
+            }
+            Task { @MainActor in self.syncNow() }
+        }
     }
 
     /// Gives the coach's notes on people, its conclusions, and the facts the id of their person, where the people

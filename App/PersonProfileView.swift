@@ -23,6 +23,14 @@ struct PersonProfileView: View {
     /// By the person's id when the people store has one, so the read stays with the person through a new name.
     private var brief: PersonBrief? { controller.shownCoachProfile.note(on: profile.name, people: controller.shownCoachPeople)?.value.brief }
 
+    /// What the owner confirmed about this person on a card, by the person's id; by the label of the coach's
+    /// note when the people store is off.
+    private var confirmed: [CoachFact] {
+        let coach = controller.shownCoachProfile, saved = controller.shownCoachPeople
+        if let id = saved.id(of: profile.name) { return coach.learnings(about: id, people: saved) }
+        return coach.learnings(named: profile.name)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
@@ -32,6 +40,21 @@ struct PersonProfileView: View {
                     if let brief {
                         ForEach(brief.sections, id: \.title) { section in
                             LabelColumn(label: section.title) { prose(section.points) }
+                        }
+                    }
+                    if !profile.isOwner, !confirmed.isEmpty {
+                        LabelColumn(label: "You confirmed") {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(confirmed) { fact in
+                                    Label { Text(fact.text).fixedSize(horizontal: false, vertical: true) } icon: {
+                                        Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.okText)
+                                    }
+                                    .font(.system(size: 13)).foregroundStyle(Palette.ink)
+                                }
+                                Button("All the coach knows") { controller.open(coach: .knowledge) }
+                                    .buttonStyle(SettingsTextButtonStyle(color: Palette.accent))
+                                    .padding(.top, 2)
+                            }
                         }
                     }
                     LabelColumn(label: "By the numbers") { numbers }

@@ -196,6 +196,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Quit, logout, or a restart during a call ends the recording cleanly first, with no question. After 3 s the
     /// app quits anyway; the next launch recovers what reached the disk.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // An answer to a card that is on its way to the disk gets there.
+        AppController.answerWriter.sync {}
         guard let controller = AppController.current, controller.isRecording else { return .terminateNow }
         Log.info("Quit during a call: ending the recording first")
         quitPending = true

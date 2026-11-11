@@ -57,7 +57,8 @@ struct SettingsView: View {
         }
     }
 
-    /// The pages that need the owner: missing permissions, missing keys, a failed sync, the coach's questions.
+    /// The pages that need the owner: missing permissions, missing keys, a failed sync. The coach's cards and
+    /// questions are in Coach, with their count in the sidebar.
     private var attention: Set<SettingsPage> {
         var pages = Set<SettingsPage>()
         if !permissions.allGood { pages.insert(.general) }
@@ -67,10 +68,6 @@ struct SettingsView: View {
         if controller.syncActivity.error != nil { pages.insert(.sync) }
         // The backup is chosen and cannot run: the server is gone, or is from before it kept recordings.
         if controller.backupChoice == .server, !controller.serverKeepsRecordings { pages.insert(.sync) }
-        let coach = controller.shownCoachProfile
-        if controller.coachEnabled, coach.proposedFocus != nil || !coach.openQuestions.isEmpty {
-            pages.insert(.coach)
-        }
         return pages
     }
 }
@@ -171,7 +168,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .recording: "Recording, voices, calendars, folders"
         case .ai: "Providers and other AI apps"
         case .sync: "This Mac, iPhone, backup, your server"
-        case .coach: "Reviews, focus, what it knows, email"
+        case .coach: "Reviews, voice, emails"
         }
     }
 

@@ -19,6 +19,20 @@ final class AppController: ObservableObject {
         case meetings = "Meetings", commitments = "Tasks", chat = "Chat", people = "People", analytics = "Analytics", coach = "Coach",
              settings = "Settings", log = "Log"
         var id: String { rawValue }
+        /// The number in the Go menu. Coach came after the others had theirs, so it takes the next free one and
+        /// Settings keeps Command-6.
+        var shortcut: Character {
+            switch self {
+            case .meetings: "1"
+            case .commitments: "2"
+            case .chat: "3"
+            case .people: "4"
+            case .analytics: "5"
+            case .settings: "6"
+            case .log: "7"
+            case .coach: "8"
+            }
+        }
         var icon: Icon {
             switch self {
             case .meetings: .meetings
@@ -144,6 +158,8 @@ final class AppController: ObservableObject {
     @Published private(set) var processing = 0
     /// The window's title is hidden, but it names the page for the Window menu, Mission Control, and the Dock.
     @Published var section: Section = .meetings { didSet { window?.title = section.rawValue } }
+    /// The page inside Coach. Its children show under Coach in the sidebar while Coach is open.
+    @Published var coachPage: CoachPage = .findings
     /// The main window is in full screen, where the traffic lights leave the sidebar.
     @Published private(set) var fullScreen = false
     @Published var selectedMeetingID: String?
@@ -258,6 +274,7 @@ final class AppController: ObservableObject {
     let coachProfileCache = VersionedCache<Int, CoachProfile>()
     let coachReviewCache = VersionedCache<String, CoachReview?>()
     let coachPeopleCache = VersionedCache<Int, CoachPeople>()
+    let coachFindingsCache = VersionedCache<String, [CoachFinding]>()
     /// The cards of all calls that wait for an answer, the newest call first (+Findings).
     @Published var findings: [CoachFinding] = []
     /// Counts the reads of the cards, so an older read never replaces a newer one.
@@ -576,6 +593,14 @@ final class AppController: ObservableObject {
     private func finishLaunch(_ records: [CallRecord], held: [String], inert: Bool) {
         meetings = records
         meetingsLoaded = true
+        // The count of the cards in the sidebar, from the start, and again as cards get old.
+        refreshFindings()
+        Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1800))
+                self?.refreshFindings()
+            }
+        }
         defer {
             let waiting = waitingForLaunch
             waitingForLaunch = []
@@ -1188,7 +1213,14 @@ final class AppController: ObservableObject {
     }
 
     func open(_ section: Section) {
+        if section == .coach, self.section != .coach { coachPage = .findings }
         self.section = section
+        showWindow()
+    }
+
+    func open(coach page: CoachPage) {
+        coachPage = page
+        section = .coach
         showWindow()
     }
 

@@ -12,8 +12,10 @@ struct CoachSection: View {
     var read: ((TimeInterval) -> Void)?
     /// Development hook for screenshots: `MOSSAD_COACH_FULL=1` opens the full review.
     @State private var more = PhoneStore.hook("MOSSAD_COACH_FULL") != nil
-    /// A card was answered on this page: the deck stays for Undo and for the line about a no.
-    @State private var answeredHere = false
+    /// The cards answered on this page: the deck stays for Undo and for the line about a no, and the line of the
+    /// call stays hidden when its card was one of them.
+    @State private var answered: [CoachFinding] = []
+    private var answeredHere: Bool { !answered.isEmpty }
 
     var body: some View {
         let profile = store.profile
@@ -22,13 +24,17 @@ struct CoachSection: View {
         // answered there, and not a second time below.
         let cards = store.findings(for: record, review: review)
         let asked = Set(cards.compactMap(\.questionID))
-        let lineIsTopCard = line.map { l in cards.first.map { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text } ?? false } ?? false
+        let lineIsTopCard = line.map { l in
+            (cards.first.map { [$0] } ?? []).contains { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text }
+                || answered.contains { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text }
+        } ?? false
         VStack(alignment: .leading, spacing: 14) {
             if !cards.isEmpty || answeredHere {
                 VStack(alignment: .leading, spacing: Space.m) {
                     PhoneLabel(cards.isEmpty ? "Findings" : "Findings \u{00B7} \(cards.count)")
-                    FindingsDeck(cards: cards, play: read.map { read in { f in if let at = f.at { read(at) } } }, showsEmpty: false, preview: FindingsScreen.deckPreview,
-                                 answer: { store.answerFinding($0, $1); answeredHere = true }, undo: { store.takeBackFinding($0) },
+                    FindingsDeck(cards: cards, play: read.map { read in { f in if let at = f.at { read(at) } } },
+                                 offersNever: { FindingRules.offersNever($0, profile: profile) }, showsEmpty: false, preview: FindingsScreen.deckPreview,
+                                 answer: { store.answerFinding($0, $1); answered.append($0) }, undo: { store.takeBackFinding($0) },
                                  explain: { store.explainFinding($0, note: $1) })
                         .frame(maxWidth: .infinity)
                 }

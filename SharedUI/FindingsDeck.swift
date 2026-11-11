@@ -6,9 +6,10 @@ import AppKit
 
 /// The coach's findings as a stack of cards. A swipe to the right is yes; a swipe to the left is a plain no to
 /// this one card. The card follows the pointer or the finger, tilts, and takes a tint that grows with the
-/// distance; past the threshold a light tap says the answer will count, and the card leaves while the next one
-/// rises from behind. The arrow keys and two small buttons do the same. "No, never again" is its own quiet
-/// button on the card. After a no, one quiet line under the deck asks why; it never stands in the way.
+/// distance; past the threshold a light tap says the answer will count. At the release the answer is saved, and
+/// the card leaves with the speed of the hand while the next one rises from behind. The arrow keys and two small
+/// buttons do the same. "No, never again" is its own quiet button on the card. After a no, one quiet line under
+/// the deck asks why; it never stands in the way.
 struct FindingsDeck: View {
     /// A fixed state for a picture of the deck, in a preview only.
     struct Preview: Equatable {
@@ -25,6 +26,8 @@ struct FindingsDeck: View {
     /// Plays the card's moment. `playing` is the id of the card whose moment plays now.
     var play: ((CoachFinding) -> Void)?
     var playing: String?
+    /// Whether a card offers "No, never again". Not on a card of the active focus.
+    var offersNever: (CoachFinding) -> Bool = { _ in true }
     /// Shows the calm empty state when there is no card. Inside a meeting the deck is then not there at all.
     var showsEmpty = true
     /// Takes the arrow keys when the page opens. Off inside a meeting, where the keys belong to the page.
@@ -34,9 +37,12 @@ struct FindingsDeck: View {
     let undo: (String) -> Void
     let explain: (String, String) -> Void
 
+    /// A card on its way out: a copy, so the answer is saved at the release and the flight is only a picture.
     private struct Flight: Equatable {
-        var id: String
+        var card: CoachFinding
         var direction: CGFloat
+        var from: CGSize
+        var launched = false
     }
 
     private struct Answered: Equatable {
@@ -44,8 +50,14 @@ struct FindingsDeck: View {
         var verdict: FindingVerdict
     }
 
+    /// Changes with each answer: the tap it gives.
+    private struct Tick: Equatable {
+        var count = 0
+        var yes = false
+    }
+
     @State private var drag: CGSize = .zero
-    @State private var flying: Flight?
+    @State private var flight: Flight?
     /// Cards answered here that the owner of `cards` did not take out yet.
     @State private var gone: [String] = []
     @State private var last: Answered?
@@ -53,8 +65,10 @@ struct FindingsDeck: View {
     @State private var returnEdge: Edge = .leading
     /// -1 or 1 while the card is past the threshold: a change is the tap.
     @State private var armed = 0
-    @State private var answered = 0
+    @State private var tick = Tick()
     @State private var why: CoachFinding?
+    /// The card that just got "No, never again": one line says what it blocked.
+    @State private var blocked: CoachFinding?
     @State private var writing = false
     @State private var note = ""
     @State private var saved = false
@@ -65,7 +79,7 @@ struct FindingsDeck: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Past this distance a release answers the card.
-    static let threshold: CGFloat = 110
+    static let threshold = CGFloat(DeckRelease.threshold)
     /// The quiet line about a no stays this long when nobody opens it.
     static let whySeconds = 12.0
     #if os(iOS)
@@ -78,8 +92,8 @@ struct FindingsDeck: View {
 
     private var visible: [CoachFinding] { cards.filter { !gone.contains($0.id) } }
     private var spring: Animation? { reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.42, dampingFraction: 0.76) }
-    /// How far the top card is toward an answer, 0 to 1.
-    private var progress: CGFloat { flying != nil ? 1 : min(1, abs(drag.width) / Self.threshold) }
+    /// How far the top card is toward an answer, 0 to 1. The card behind rises as the top card leaves.
+    private var progress: CGFloat { min(1, abs(drag.width) / Self.threshold) }
 
     var body: some View {
         feedback(content)
@@ -87,6 +101,8 @@ struct FindingsDeck: View {
             // When the cards are there: a view that waits in a task would keep the cards of its start.
             .onChange(of: cards.isEmpty, initial: true) { _, empty in if !empty { startPreview() } }
             .onDisappear { whyTimer?.cancel() }
+            // The page and the sheet do not scroll or close while a card moves to the side.
+            .preference(key: DeckDragging.self, value: drag != .zero)
     }
 
     private var content: some View {
@@ -97,6 +113,7 @@ struct FindingsDeck: View {
                 controls(top)
             } else if showsEmpty {
                 FindingsEmpty(undo: emptyUndo)
+                    .overlay { if let flight { flying(flight) } }
             } else if last != nil {
                 HStack(spacing: Space.s) {
                     Text("All answered.").foregroundStyle(Palette.secondary)
@@ -104,6 +121,7 @@ struct FindingsDeck: View {
                 }
                 .textRole(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .top) { if let flight { flying(flight).frame(height: Self.cardMinHeight) } }
             }
             whyLine
         }
@@ -117,13 +135,13 @@ struct FindingsDeck: View {
         return { takeBack() }
     }
 
-    /// The light tap at the threshold, and the one at an answer.
+    /// The light tap at the threshold, and the one at an answer: a success for yes, a soft tap for a no.
     @ViewBuilder
     private func feedback(_ view: some View) -> some View {
         #if os(iOS)
         view
             .sensoryFeedback(.impact(weight: .light), trigger: armed) { _, now in now != 0 }
-            .sensoryFeedback(.success, trigger: answered)
+            .sensoryFeedback(trigger: tick) { _, now in now.count == 0 ? nil : now.yes ? .success : .impact(flexibility: .soft, intensity: 0.6) }
         #else
         view.onChange(of: armed) { _, now in if now != 0 { Haptic.threshold() } }
         #endif
@@ -156,6 +174,7 @@ struct FindingsDeck: View {
                     ForEach(Array(visible.prefix(3).enumerated()).reversed(), id: \.element.id) { depth, finding in
                         layer(finding, depth: depth)
                     }
+                    if let flight { flying(flight) }
                 }
             }
             .padding(.bottom, 22)
@@ -165,16 +184,18 @@ struct FindingsDeck: View {
             .focused($deckFocused)
             // A click on the card gives the deck the arrow keys.
             .simultaneousGesture(TapGesture().onEnded { deckFocused = true })
-            .onKeyPress(.leftArrow) { commit(top, .no); return .handled }
-            .onKeyPress(.rightArrow) { commit(top, .yes); return .handled }
+            // A key that is held answers one card, not one card after the other.
+            .onKeyPress(.leftArrow, phases: .down) { _ in commit(top, .no); return .handled }
+            .onKeyPress(.rightArrow, phases: .down) { _ in commit(top, .yes); return .handled }
             #if os(macOS)
             .background {
                 SwipeScroll { x in
-                    guard flying == nil else { return }
                     deckFocused = true
                     move(to: CGSize(width: x, height: 0))
                 } ended: { x, speed in
-                    release(top, x: x, predicted: x + speed * 12)
+                    release(top, x: x, predicted: x + speed * 12, velocity: speed * 90)
+                } cancelled: {
+                    release(top, x: 0, predicted: 0, velocity: 0)
                 }
             }
             #endif
@@ -183,41 +204,62 @@ struct FindingsDeck: View {
             .accessibilityAction(named: "No") { commit(top, .no) }
     }
 
-    private func card(_ finding: CoachFinding, faded: CGFloat = 1) -> some View {
+    private func card(_ finding: CoachFinding, faded: CGFloat = 1, quiet: CGFloat = 0) -> some View {
         FindingCard(finding: finding, source: source?(finding), openSource: openSource.map { open in { open(finding) } },
-                    play: play.map { play in { play(finding) } }, isPlaying: playing == finding.id, never: { commit(finding, .never) })
+                    play: play.map { play in { play(finding) } }, isPlaying: playing == finding.id,
+                    never: offersNever(finding) ? { commit(finding, .never) } : nil, quiet: quiet)
             .opacity(faded)
             .frame(maxWidth: .infinity, minHeight: Self.cardMinHeight, alignment: .topLeading)
     }
 
-    private func layer(_ finding: CoachFinding, depth: Int) -> some View {
-        let top = depth == 0
-        let flies = flying?.id == finding.id
-        // The cards behind move up as the top card leaves.
-        let place = CGFloat(depth) - (top ? 0 : progress)
-        let x = flies ? (flying?.direction ?? 1) * 760 : (top ? drag.width : 0)
-        let y = reduceMotion ? 0 : (flies ? 60 : (top ? drag.height * 0.22 : 0))
-        let turn = reduceMotion || !top ? 0 : max(-14, min(14, x / 24))
+    private func face(_ finding: CoachFinding, top: Bool, x: CGFloat, faded: CGFloat) -> some View {
         let shape = RoundedRectangle(cornerRadius: Radius.pane, style: .continuous)
-        return card(finding, faded: top ? 1 : (depth == 1 ? progress : 0))
+        let amount = min(1, abs(x) / Self.threshold)
+        return card(finding, faded: faded, quiet: top ? amount : 0)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Palette.raised, in: shape)
             .overlay { if top { tint(x).clipShape(shape).allowsHitTesting(false) } }
             .clipShape(shape)
             .overlay { shape.strokeBorder(Palette.hairline, lineWidth: 1) }
-            // In the corner that the card's own words leave free.
-            .overlay(alignment: .bottomTrailing) { if top { stamp(x) } }
+            #if os(macOS)
+            // Where the arrow keys go.
+            .overlay { if top, deckFocused { shape.strokeBorder(Palette.accent.opacity(0.35), lineWidth: 1.5).allowsHitTesting(false) } }
+            #endif
+            // Each mark on the side of the card that stays on the screen: "Yes" on the left in a swipe to the
+            // right, "No" on the right in a swipe to the left. "No, never again" steps back while it shows.
+            .overlay(alignment: x >= 0 ? .bottomLeading : .bottomTrailing) { if top { stamp(x) } }
             .shadow(color: .black.opacity(top ? 0.13 : 0.06), radius: top ? 18 : 8, y: top ? 9 : 4)
+    }
+
+    private func layer(_ finding: CoachFinding, depth: Int) -> some View {
+        let top = depth == 0
+        // The cards behind move up as the top card leaves.
+        let place = CGFloat(depth) - (top ? 0 : progress)
+        let x = top ? drag.width : 0
+        let y = reduceMotion ? 0 : (top ? drag.height * 0.22 : 0)
+        let turn = reduceMotion || !top ? 0 : max(-14, min(14, x / 24))
+        return face(finding, top: top, x: x, faded: top ? 1 : (depth == 1 ? progress : 0))
             .scaleEffect(1 - 0.05 * max(0, place), anchor: .bottom)
             .offset(y: 11 * max(0, place))
-            .opacity(flies && reduceMotion ? 0 : 1)
             .rotationEffect(.degrees(turn), anchor: .bottom)
             .offset(x: x, y: y)
             .zIndex(Double(10 - depth))
-            .allowsHitTesting(top && flying == nil)
+            .allowsHitTesting(top)
             .accessibilityHidden(!top)
-            .modifier(Dragging(on: top && flying == nil, changed: { move(to: $0) }, ended: { release(finding, x: $0.width, predicted: $1.width) }))
-            .transition(reduceMotion ? .opacity : .asymmetric(insertion: .move(edge: returnEdge).combined(with: .opacity), removal: .opacity))
+            .modifier(Dragging(on: top, changed: { move(to: $0) }, ended: { release(finding, x: $0.width, predicted: $1.width, velocity: $2) }))
+            .transition(reduceMotion ? .opacity : .asymmetric(insertion: .move(edge: returnEdge).combined(with: .opacity), removal: .identity))
+    }
+
+    /// The copy of an answered card on its way out, from where the hand left it.
+    private func flying(_ f: Flight) -> some View {
+        let x = f.launched ? f.direction * 760 : f.from.width
+        let y = f.launched ? 60 : f.from.height * 0.22
+        return face(f.card, top: true, x: f.launched ? f.direction * Self.threshold : f.from.width, faded: 1)
+            .rotationEffect(.degrees(max(-14, min(14, x / 24))), anchor: .bottom)
+            .offset(x: x, y: y)
+            .zIndex(20)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// Green for yes, a neutral wash for no: a no is not a mistake. It grows with the distance.
@@ -252,55 +294,61 @@ struct FindingsDeck: View {
     // MARK: Moving and answering
 
     private func move(to translation: CGSize) {
-        guard flying == nil else { return }
         drag = translation
         let now = abs(translation.width) >= Self.threshold ? (translation.width > 0 ? 1 : -1) : 0
         if now != armed { armed = now }
     }
 
     /// A release past the threshold, or a quick flick toward it, answers. Else the card springs back.
-    private func release(_ finding: CoachFinding, x: CGFloat, predicted: CGFloat) {
-        guard flying == nil else { return }
-        let flick = abs(predicted) > Self.threshold * 2.4 && abs(x) > Self.threshold * 0.35 && (predicted > 0) == (x > 0)
-        if abs(x) >= Self.threshold || flick {
-            commit(finding, x > 0 ? .yes : .no)
+    private func release(_ finding: CoachFinding, x: CGFloat, predicted: CGFloat, velocity: CGFloat) {
+        if let verdict = DeckRelease.verdict(x: Double(x), predicted: Double(predicted)) {
+            commit(finding, verdict, velocity: velocity)
         } else {
             armed = 0
             withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .interactiveSpring(response: 0.36, dampingFraction: 0.62)) { drag = .zero }
         }
     }
 
-    private func commit(_ finding: CoachFinding, _ verdict: FindingVerdict) {
-        guard flying == nil, visible.first?.id == finding.id else { return }
-        // The line about an earlier no goes when the owner answers again.
+    /// Saves the answer now, at the release, and lets a copy of the card fly out with the speed of the hand.
+    private func commit(_ finding: CoachFinding, _ verdict: FindingVerdict, velocity: CGFloat = 0) {
+        guard visible.first?.id == finding.id else { return }
+        // A reason that was typed and not saved is not lost: it is saved with the next answer.
+        let typed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if writing, let card = why, !typed.isEmpty { explain(card.id, typed) }
         hideWhy()
+        let from = drag
         let direction: CGFloat = verdict == .yes ? 1 : -1
-        let finish = {
+        returnEdge = verdict == .yes ? .trailing : .leading
+        if !reduceMotion { flight = Flight(card: finding, direction: direction, from: from) }
+        withAnimation(spring) {
             gone.append(finding.id)
-            flying = nil
             drag = .zero
-            armed = 0
-            answered += 1
-            returnEdge = verdict == .yes ? .trailing : .leading
-            last = Answered(finding: finding, verdict: verdict)
-            Haptic.answered()
-            answer(finding, verdict)
-            if verdict == .no { askWhy(finding) }
         }
-        guard !reduceMotion else {
-            withAnimation(.easeOut(duration: 0.15)) { finish() }
-            return
+        armed = 0
+        tick = Tick(count: tick.count + 1, yes: verdict == .yes)
+        last = Answered(finding: finding, verdict: verdict)
+        Haptic.answered()
+        answer(finding, verdict)
+        if verdict == .no { askWhy(finding) }
+        if verdict == .never { showBlocked(finding) }
+        guard !reduceMotion else { return }
+        let id = finding.id
+        // The rest of the way at the speed of the hand: a spring that starts as fast as the release.
+        let distance = max(1, 760 - abs(from.width))
+        let start = max(2.2, abs(velocity) / distance)
+        DispatchQueue.main.async {
+            withAnimation(.interpolatingSpring(mass: 1, stiffness: 140, damping: 22, initialVelocity: start)) { flight?.launched = true }
         }
-        withAnimation(.easeIn(duration: 0.2)) { flying = Flight(id: finding.id, direction: direction) }
         Task {
-            try? await Task.sleep(for: .milliseconds(170))
-            withAnimation(spring) { finish() }
+            try? await Task.sleep(for: .milliseconds(450))
+            if flight?.card.id == id { flight = nil }
         }
     }
 
     private func takeBack() {
         guard let last else { return }
         hideWhy()
+        flight = nil
         withAnimation(spring) {
             gone.removeAll { $0 == last.finding.id }
             self.last = nil
@@ -320,7 +368,7 @@ struct FindingsDeck: View {
                 .help("Yes (Right Arrow)")
             #if os(macOS)
             Spacer(minLength: Space.s)
-            if last != nil { undoButton.textRole(.secondary) }
+            if last != nil, why == nil, blocked == nil { undoButton.textRole(.secondary) }
             #endif
         }
     }
@@ -333,52 +381,79 @@ struct FindingsDeck: View {
 
     // MARK: Why not
 
-    /// One quiet line about the card that just got a no. It opens a field in place, waits a short time, and goes
-    /// with the next answer. The room for it is always there, so the deck does not move.
+    /// One quiet line about the card that just got a no, or about what "No, never again" blocked. It opens a
+    /// field in place, waits a short time, and goes with the next answer. The room for it is always there, so the
+    /// deck does not move. Undo sits at its right.
     private var whyLine: some View {
-        ZStack(alignment: .leading) {
-            if let card = why {
-                if saved {
-                    Label("Saved. The coach reads it before its next review.", systemImage: "checkmark")
-                        .foregroundStyle(Palette.secondary)
+        HStack(spacing: Space.s) {
+            ZStack(alignment: .leading) {
+                if let card = blocked {
+                    Text(blockedText(card)).lineLimit(1).truncationMode(.tail).foregroundStyle(Palette.secondary)
                         .transition(.opacity)
-                } else if writing {
-                    HStack(spacing: Space.s) {
-                        TextField("Why not, in one short line", text: $note)
-                            .textFieldStyle(.plain)
-                            .focused($noteFocused)
-                            .onSubmit { save(card) }
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control + 2, style: .continuous))
-                            .accessibilityLabel("Why you did not agree with \(FindingRules.shortTitle(card.text))")
-                        Button("Save") { save(card) }
-                            .buttonStyle(QuietLinkStyle(color: Palette.accent))
-                            .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button { withAnimation(spring) { hideWhy() } } label: { Image(systemName: "xmark") }
-                            .buttonStyle(QuietLinkStyle())
-                            .accessibilityLabel("Close")
-                    }
-                    .transition(.opacity)
-                } else {
-                    Button {
-                        whyTimer?.cancel()
-                        withAnimation(spring) { writing = true }
-                        noteFocused = true
-                    } label: {
-                        Text("Why didn\u{2019}t you agree with \u{201C}\(FindingRules.shortTitle(card.text))\u{201D}?")
+                } else if let card = why {
+                    if saved {
+                        Label("Saved. The coach reads it before its next review.", systemImage: "checkmark")
                             .lineLimit(1)
+                            .foregroundStyle(Palette.secondary)
+                            .transition(.opacity)
+                    } else if writing {
+                        HStack(spacing: Space.s) {
+                            TextField("Why not, in one short line", text: $note)
+                                .textFieldStyle(.plain)
+                                .focused($noteFocused)
+                                .onSubmit { save(card) }
+                                #if os(macOS)
+                                .onExitCommand { withAnimation(spring) { hideWhy() } }
+                                #endif
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control + 2, style: .continuous))
+                                .accessibilityLabel("Why you did not agree with \(FindingRules.shortTitle(card.text))")
+                            Button("Save") { save(card) }
+                                .buttonStyle(QuietLinkStyle(color: Palette.accent))
+                                .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            Button { withAnimation(spring) { hideWhy() } } label: { Image(systemName: "xmark") }
+                                .buttonStyle(QuietLinkStyle())
+                                .accessibilityLabel("Close")
+                        }
+                        .transition(.opacity)
+                    } else {
+                        Button {
+                            whyTimer?.cancel()
+                            withAnimation(spring) { writing = true }
+                            noteFocused = true
+                        } label: {
+                            Text("Why didn\u{2019}t you agree with \u{201C}\(FindingRules.shortTitle(card.text, words: Self.whyWords))\u{201D}?")
+                                .lineLimit(1).truncationMode(.tail)
+                        }
+                        .buttonStyle(QuietLinkStyle())
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -4)))
                     }
-                    .buttonStyle(QuietLinkStyle())
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -4)))
                 }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if last != nil, !writing, !visible.isEmpty, why != nil || blocked != nil || isPhone {
+                undoButton.fixedSize()
             }
         }
         .textRole(.secondary)
         .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-        #if os(iOS)
-        // On the iPhone the two answers take the row: Undo sits here, at the right.
-        .overlay(alignment: .trailing) { if last != nil, !writing, !visible.isEmpty { undoButton.textRole(.secondary) } }
-        #endif
+    }
+
+    #if os(iOS)
+    private var isPhone: Bool { true }
+    /// Fewer words of the card on the narrow screen, so the line and Undo both fit.
+    private static let whyWords = 3
+    #else
+    private var isPhone: Bool { false }
+    private static let whyWords = 6
+    #endif
+
+    private func blockedText(_ card: CoachFinding) -> String {
+        switch card.kind {
+        case .learning: "Not true, never asked again: \u{201C}\(FindingRules.shortTitle(card.text, words: Self.whyWords))\u{201D}"
+        case .goalOffer: "This goal is not offered again."
+        default: "Never again: \(CoachSkill.subject(of: card.skill))"
+        }
     }
 
     private func askWhy(_ card: CoachFinding) {
@@ -386,17 +461,30 @@ struct FindingsDeck: View {
         writing = false
         saved = false
         note = ""
+        startTimer()
+    }
+
+    private func showBlocked(_ card: CoachFinding) {
+        blocked = card
+        startTimer()
+    }
+
+    private func startTimer() {
         whyTimer?.cancel()
         whyTimer = Task {
             try? await Task.sleep(for: .seconds(Self.whySeconds))
             guard !Task.isCancelled, !writing else { return }
-            withAnimation(.easeOut(duration: 0.3)) { why = nil }
+            withAnimation(.easeOut(duration: 0.3)) {
+                why = nil
+                blocked = nil
+            }
         }
     }
 
     private func hideWhy() {
         whyTimer?.cancel()
         why = nil
+        blocked = nil
         writing = false
         saved = false
         note = ""
@@ -419,6 +507,13 @@ struct FindingsDeck: View {
     }
 }
 
+/// True while the top card of a deck moves to the side: the page around it does not scroll, and a sheet does not
+/// close.
+struct DeckDragging: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
 // MARK: - The card
 
 /// One finding: what it is, the words, the proof (a moment that plays, a number with its usual value), and the
@@ -430,6 +525,8 @@ struct FindingCard: View {
     var play: (() -> Void)?
     var isPlaying = false
     var never: (() -> Void)?
+    /// 0 to 1 while the card is dragged: "No, never again" steps back for the mark of the answer.
+    var quiet: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
@@ -472,10 +569,12 @@ struct FindingCard: View {
                         .buttonStyle(QuietLinkStyle(color: Palette.tertiary))
                         .textRole(.secondary)
                         #if os(iOS)
-                        .frame(minHeight: 36)
+                        .frame(minHeight: 44)
                         #endif
-                        .help(finding.kind == .learning ? "The coach never asks this again" : finding.kind == .goalOffer ? "The coach never offers this goal again"
-                              : "The coach never brings this up again. You can allow it again in Settings.")
+                        .opacity(1 - Double(min(1, quiet * 2)))
+                        .help(finding.kind == .learning ? "Marks this not true, and the coach never asks it again. You can undo it in Coach \u{203A} Knowledge."
+                              : finding.kind == .goalOffer ? "The coach never offers this goal again. You can undo it in Coach \u{203A} Knowledge."
+                              : "The coach never brings this up again. You can undo it in Coach \u{203A} Knowledge.")
                 }
                 Spacer()
             }
@@ -633,21 +732,27 @@ private struct TrailingIconStyle: LabelStyle {
 }
 
 /// The drag of the top card: the mouse on the Mac, the finger on the iPhone. On the iPhone it runs next to the
-/// page's scroll, and moves the card only when the finger first went sideways.
+/// page's scroll, and moves the card only when the finger first went sideways. On the Mac there is no scroll to
+/// keep: the card follows the mouse from the start.
 private struct Dragging: ViewModifier {
     let on: Bool
     let changed: (CGSize) -> Void
-    let ended: (CGSize, CGSize) -> Void
+    /// The translation, the predicted end, and the speed to the side in points a second.
+    let ended: (CGSize, CGSize, CGFloat) -> Void
     @State private var sideways: Bool?
 
     private var gesture: some Gesture {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
+                #if os(iOS)
                 if sideways == nil { sideways = abs(value.translation.width) > abs(value.translation.height) }
+                #else
+                sideways = true
+                #endif
                 if sideways == true { changed(value.translation) }
             }
             .onEnded { value in
-                if sideways == true { ended(value.translation, value.predictedEndTranslation) }
+                if sideways == true { ended(value.translation, value.predictedEndTranslation, value.velocity.width) }
                 sideways = nil
             }
     }
@@ -677,11 +782,13 @@ enum Haptic {
 }
 
 #if os(macOS)
-/// A two-finger swipe on the trackpad over the deck moves the top card. Only a swipe that starts sideways is
-/// taken; a scroll up or down goes to the page as before.
+/// A two-finger swipe on the trackpad over the deck moves the top card. The rules are `ScrollSwipe`: only a
+/// swipe that starts sideways over the part of the deck that shows is taken, and a scroll up or down goes to the
+/// page as before, each of its events.
 private struct SwipeScroll: NSViewRepresentable {
     let moved: (CGFloat) -> Void
     let ended: (CGFloat, CGFloat) -> Void
+    let cancelled: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -695,6 +802,7 @@ private struct SwipeScroll: NSViewRepresentable {
     func updateNSView(_ view: NSView, context: Context) {
         context.coordinator.moved = moved
         context.coordinator.ended = ended
+        context.coordinator.cancelled = cancelled
     }
 
     static func dismantleNSView(_ view: NSView, coordinator: Coordinator) { coordinator.stop() }
@@ -704,13 +812,9 @@ private struct SwipeScroll: NSViewRepresentable {
         weak var view: NSView?
         var moved: (CGFloat) -> Void = { _ in }
         var ended: (CGFloat, CGFloat) -> Void = { _, _ in }
+        var cancelled: () -> Void = {}
         private var monitor: Any?
-        /// Nil until the swipe shows its direction; then true for sideways.
-        private var sideways: Bool?
-        private var total = CGPoint.zero
-        private var speed: CGFloat = 0
-        /// The glide after a swipe that was taken: it must not scroll the page.
-        private var swallowGlide = false
+        private var swipe = ScrollSwipe()
 
         func start() {
             // A local monitor runs on the main thread.
@@ -725,55 +829,36 @@ private struct SwipeScroll: NSViewRepresentable {
             monitor = nil
         }
 
+        /// Over the part of the deck that shows: a deck that scrolled under the band of a meeting is not there.
         private func inside(_ event: NSEvent) -> Bool {
             guard let view, let window = view.window, event.window === window else { return false }
-            return view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+            return view.visibleRect.contains(view.convert(event.locationInWindow, from: nil))
+        }
+
+        private static func phase(_ p: NSEvent.Phase) -> ScrollSwipe.Phase {
+            if p.contains(.began) { return .began }
+            if p.contains(.ended) { return .ended }
+            if p.contains(.cancelled) { return .cancelled }
+            if p.contains(.changed) || p.contains(.stationary) || p.contains(.mayBegin) { return p.contains(.mayBegin) ? .none : .changed }
+            return .none
         }
 
         /// True when the event belongs to a swipe of the card: the page does not get it.
         private func take(_ event: NSEvent) -> Bool {
             // A mouse wheel has no phases: it is never a swipe.
             guard event.hasPreciseScrollingDeltas else { return false }
-            if !event.momentumPhase.isEmpty {
-                if event.momentumPhase.contains(.ended) || event.momentumPhase.contains(.cancelled) {
-                    let was = swallowGlide
-                    swallowGlide = false
-                    return was
-                }
-                return swallowGlide
-            }
-            let done = event.phase.contains(.ended) || event.phase.contains(.cancelled)
-            if event.phase.contains(.began) {
-                sideways = nil
-                total = .zero
-                speed = 0
-                swallowGlide = false
-            }
-            // A swipe that does not start over the deck is the page's.
-            if sideways == nil, total == .zero, !inside(event) { sideways = false }
-            if sideways == false {
-                if done { sideways = nil }
-                return false
-            }
+            let phase = Self.phase(event.phase)
             // The card follows the fingers, with natural scrolling on or off.
             let dx = event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX
-            let dy = event.scrollingDeltaY
-            total.x += dx
-            total.y += dy
-            if sideways == nil {
-                guard abs(total.x) + abs(total.y) > 3 else { return true }
-                sideways = abs(total.x) > abs(total.y) * 1.3
-                if sideways == false { return false }
+            let outcome = swipe.handle(ScrollSwipe.Event(phase: phase, momentum: Self.phase(event.momentumPhase), dx: Double(dx), dy: Double(event.scrollingDeltaY),
+                                                         inside: phase == .began ? inside(event) : true))
+            switch outcome.effect {
+            case .move(let x): moved(CGFloat(x))
+            case .release(let x, let speed): ended(CGFloat(x), CGFloat(speed))
+            case .cancel: cancelled()
+            case nil: break
             }
-            if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
-                ended(total.x, speed)
-                sideways = nil
-                swallowGlide = true
-                return true
-            }
-            speed = dx
-            moved(total.x)
-            return true
+            return outcome.taken
         }
     }
 }

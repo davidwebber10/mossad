@@ -16,9 +16,9 @@ struct MossadCommands: Commands {
         CommandMenu("Go") {
             Button("Search Everything…") { controller.toggleSearch() }.keyboardShortcut("k")
             Divider()
-            ForEach(Array(AppController.Section.allCases.enumerated()), id: \.element) { i, section in
+            ForEach(AppController.Section.allCases) { section in
                 Button(section.rawValue) { controller.open(section) }
-                    .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")))
+                    .keyboardShortcut(KeyEquivalent(section.shortcut))
             }
         }
         CommandMenu("Meeting") {

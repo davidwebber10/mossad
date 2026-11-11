@@ -10,8 +10,10 @@ struct CoachTab: View {
     let people: MeetingPeople
     @ObservedObject var player: AudioPlayer
     @State private var more = CoachTab.previewOpen
-    /// A card was answered on this page: the deck stays for Undo and for the line about a no.
-    @State private var answeredHere = false
+    /// The cards answered on this page: the deck stays for Undo and for the line about a no, and the line of the
+    /// call stays hidden when its card was one of them, so the page does not move during the answers.
+    @State private var answered: [CoachFinding] = []
+    private var answeredHere: Bool { !answered.isEmpty }
 
     /// Development hook, in a preview only: `MOSSAD_COACH_FULL=1` opens the full review for a screenshot.
     private static var previewOpen: Bool {
@@ -46,7 +48,10 @@ struct CoachTab: View {
         let questions = profile.openQuestions.filter { $0.callID == record.id && !asked.contains($0.id) }
         let offered = cards.contains { $0.kind == .goalOffer }
         // While the line waits as the top card, the card is the line: the same words are not shown two times.
-        let lineIsTopCard = line.map { l in cards.first.map { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text } ?? false } ?? false
+        let lineIsTopCard = line.map { l in
+            (cards.first.map { [$0] } ?? []).contains { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text }
+                || answered.contains { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text }
+        } ?? false
         return LabelColumnStack(spacing: 18) {
             if let line {
                 if !lineIsTopCard { LabelColumn(label: line.heading) { LineRow(line: line, strong: true, long: record.isLong, player: player) } }
@@ -56,8 +61,8 @@ struct CoachTab: View {
             if !cards.isEmpty || answeredHere {
                 LabelColumn(label: cards.isEmpty ? "Findings" : "Findings \u{00B7} \(cards.count)", labelTopPadding: 4) {
                     FindingsDeck(cards: cards, play: player.isAvailable ? { f in f.at.map { player.play(from: max(0, $0 - 1)) } } : nil,
-                                 showsEmpty: false, preview: CoachView.deckPreview,
-                                 answer: { controller.answerFinding($0, $1); answeredHere = true }, undo: { controller.takeBackFinding($0) },
+                                 offersNever: { FindingRules.offersNever($0, profile: profile) }, showsEmpty: false, preview: CoachView.deckPreview,
+                                 answer: { controller.answerFinding($0, $1); answered.append($0) }, undo: { controller.takeBackFinding($0) },
                                  explain: { controller.explainFinding($0, note: $1) })
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

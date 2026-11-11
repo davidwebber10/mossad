@@ -10,7 +10,11 @@ extension AppController {
         runCoach()
     }
 
-    var coachProfile: CoachProfile { (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile() }
+    var coachProfile: CoachProfile {
+        // An answer to a card that is on its way to the disk is in it.
+        Self.answerWriter.sync {}
+        return (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile()
+    }
 
     /// Loads the profile, changes it, and saves it. A profile that cannot be read throws, and nothing is saved:
     /// an empty profile saved in its place would be the end of the coach's memory. Each change of the memory
@@ -18,6 +22,7 @@ extension AppController {
     /// same time would save over each other. A change that changes nothing writes nothing. True when it saved.
     @discardableResult
     func changeCoachProfile(_ change: (inout CoachProfile) -> Void) throws -> Bool {
+        Self.answerWriter.sync {}
         var profile = try CoachProfile.load(from: paths.coach)
         let before = profile
         change(&profile)

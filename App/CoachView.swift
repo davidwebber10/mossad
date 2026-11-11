@@ -1,11 +1,27 @@
 import MossadCore
 import SwiftUI
 
-/// The Coach page: the findings of all calls as one deck, the newest call first. Each card has a moment to play
-/// or a number with its usual value. The owner's answers train the coach.
+/// The pages of Coach. They show under Coach in the sidebar while Coach is open.
+enum CoachPage: String, CaseIterable, Identifiable {
+    case findings, goals, weekly, knowledge, settings
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .findings: "Findings"
+        case .goals: "Goals"
+        case .weekly: "Weekly review"
+        case .knowledge: "Knowledge"
+        case .settings: "Settings"
+        }
+    }
+}
+
+/// Coach: the findings of all calls as one deck, the goal and how it goes, the weekly review, what the coach
+/// knows, and the coach's settings.
 struct CoachView: View {
     @EnvironmentObject var controller: AppController
-    @StateObject private var moments = CardMomentPlayer()
 
     /// Development hooks, in a preview only: `MOSSAD_DECK_DRAG=<points>` holds the top card mid-drag,
     /// `MOSSAD_DECK_WHY=line|open` answers no to the first card and shows the line about it.
@@ -18,54 +34,89 @@ struct CoachView: View {
     }
 
     var body: some View {
-        DetailColumn {
-            PageToolbar(title: "Coach") {
-                Button("Coach settings", action: openSettings)
-                    .buttonStyle(.mossadFill)
-            }
-        } content: {
-            if !controller.coachEnabled {
-                EmptyState(symbol: "person.wave.2", title: "The coach is off",
-                           message: "Turn on the communication coach in Settings. After a call it leaves one line with its proof, and a few cards here.",
-                           action: ("Open Settings", openSettings))
-                    .pageCentered()
-            } else {
-                ScrollView {
-                    // One column, as wide as a card: the heading, the deck, and the note share its left edge.
-                    VStack(alignment: .leading, spacing: Space.l) {
-                        HStack(alignment: .firstTextBaseline, spacing: Space.s) {
-                            Text("Findings").textRole(.lede).foregroundStyle(Palette.ink)
-                            // The empty deck says it itself.
-                            if !controller.findings.isEmpty { Text(subtitle).textRole(.secondary).foregroundStyle(Palette.secondary) }
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityAddTraits(.isHeader)
-                        FindingsDeck(cards: controller.findings, source: source, openSource: { controller.openMeeting($0.callID) },
-                                     play: { moments.toggle($0, paths: controller.paths) }, playing: moments.playing, focusOnAppear: true, preview: Self.deckPreview,
-                                     answer: { controller.answerFinding($0, $1) }, undo: { controller.takeBackFinding($0) },
-                                     explain: { controller.explainFinding($0, note: $1) })
-                        Text("Yes and no teach the coach what is useful to you. \u{201C}No, never again\u{201D} stops a subject for good; you can allow it again in Settings \u{203A} Coach. A card with no answer goes after two weeks.")
-                            .textRole(.secondary).foregroundStyle(Palette.tertiary).lineSpacing(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .frame(maxWidth: FindingsDeck.cardWidth, alignment: .leading)
-                    .padding(.horizontal, Detail.gutter)
-                    .padding(.top, Space.xl)
-                    .padding(.bottom, Space.xxl)
-                    .frame(maxWidth: .infinity)
+        Group {
+            if !controller.coachEnabled, controller.coachPage != .settings {
+                DetailColumn {
+                    PageToolbar(title: controller.coachPage.title) { EmptyView() }
+                } content: {
+                    EmptyState(symbol: "person.wave.2", title: "The coach is off",
+                               message: "Turn on the communication coach. After a call it leaves one line with its proof, and a few cards in Findings.",
+                               action: ("Open Settings", { controller.coachPage = .settings }))
+                        .pageCentered()
                 }
+            } else {
+                switch controller.coachPage {
+                case .findings: FindingsPage()
+                case .goals: CoachGoalsPage()
+                case .weekly: WeeklyReviewPage()
+                case .knowledge: CoachKnowledgePage()
+                case .settings: CoachPageColumn(page: .settings) { CoachSettings(showsPagesLink: false) }
+                }
+            }
+        }
+        .onAppear {
+            // Development hook for screenshots: MOSSAD_COACH_PAGE names a page.
+            if CommandLine.arguments.contains("--ui-preview"),
+               let page = ProcessInfo.processInfo.environment["MOSSAD_COACH_PAGE"].flatMap(CoachPage.init(rawValue:)) {
+                controller.coachPage = page
+            }
+        }
+    }
+}
+
+/// A page of Coach: the toolbar with its name, and the page in the label column, as in Settings.
+struct CoachPageColumn<Content: View>: View {
+    let page: CoachPage
+    var subtitle: String?
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        DetailColumn {
+            PageToolbar(title: page.title, subtitle: subtitle) { EmptyView() }
+        } content: {
+            ScrollView {
+                content
+                    .padding(EdgeInsets(top: 10, leading: 36, bottom: 40, trailing: 36))
+                    .frame(maxWidth: 760 + 72, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+/// Coach › Findings: the cards of all calls as one deck, the newest call first. Each card has a moment to play
+/// or a number with its usual value. The owner's answers train the coach.
+private struct FindingsPage: View {
+    @EnvironmentObject var controller: AppController
+    @StateObject private var moments = CardMomentPlayer()
+
+    var body: some View {
+        let profile = controller.shownCoachProfile
+        DetailColumn {
+            PageToolbar(title: "Findings", subtitle: controller.findings.isEmpty ? nil : "\(controller.findings.count) to review") { EmptyView() }
+        } content: {
+            ScrollView {
+                // One column, as wide as a card: the deck and the note share its left edge.
+                VStack(alignment: .leading, spacing: Space.l) {
+                    FindingsDeck(cards: controller.findings, source: source, openSource: { controller.openMeeting($0.callID) },
+                                 play: { moments.toggle($0, paths: controller.paths) }, playing: moments.playing,
+                                 offersNever: { FindingRules.offersNever($0, profile: profile) }, focusOnAppear: true, preview: CoachView.deckPreview,
+                                 answer: { controller.answerFinding($0, $1) }, undo: { controller.takeBackFinding($0) },
+                                 explain: { controller.explainFinding($0, note: $1) })
+                    Text("Yes and no teach the coach what is useful to you. \u{201C}No, never again\u{201D} stops a subject for good; you can undo it in Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
+                        .textRole(.secondary).foregroundStyle(Palette.tertiary).lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: FindingsDeck.cardWidth, alignment: .leading)
+                .padding(.horizontal, Detail.gutter)
+                .padding(.top, Space.xl)
+                .padding(.bottom, Space.xxl)
+                .frame(maxWidth: .infinity)
             }
         }
         .onAppear { controller.refreshFindings() }
         .onDisappear { moments.stop() }
     }
-
-    private func openSettings() {
-        UserDefaults.standard.set(SettingsPage.coach.rawValue, forKey: "settingsPage")
-        controller.open(.settings)
-    }
-
-    private var subtitle: String { controller.findings.isEmpty ? "Nothing to review" : "\(controller.findings.count) to review" }
 
     /// "Budget review · Nov 9": where the card is from.
     private func source(_ finding: CoachFinding) -> String? {

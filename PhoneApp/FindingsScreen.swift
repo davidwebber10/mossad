@@ -8,6 +8,10 @@ struct FindingsScreen: View {
     @Environment(PhoneStore.self) private var store
     /// Closes the sheet this screen is in, before a meeting opens.
     var close: () -> Void = {}
+    /// The page does not scroll, and the sheet does not close, while a card moves to the side.
+    @State private var dragging = false
+    /// The cards the owner saw in the deck: the row above the meetings shows again only for a new card.
+    @AppStorage("findingsSeen") private var seen = ""
 
     /// Development hooks for screenshots: `MOSSAD_DECK_DRAG=<points>` holds the top card mid-drag,
     /// `MOSSAD_DECK_WHY=line|open` answers no to the first card and shows the line about it.
@@ -24,31 +28,42 @@ struct FindingsScreen: View {
                 if !store.findings.isEmpty {
                     Text("\(store.findings.count) to review").textRole(.secondary).foregroundStyle(Palette.secondary)
                 }
-                FindingsDeck(cards: store.findings, source: source,
-                             openSource: { finding in
-                                 close()
-                                 store.openMeeting(finding.callID)
-                             },
-                             play: { finding in
-                                 close()
-                                 store.showMoment(finding.callID, at: finding.at)
-                             },
+                FindingsDeck(cards: store.findings, source: source, openSource: open, play: play, offersNever: offersNever,
                              preview: Self.deckPreview,
                              answer: { store.answerFinding($0, $1) }, undo: { store.takeBackFinding($0) },
                              explain: { store.explainFinding($0, note: $1) })
                     .frame(maxWidth: .infinity)
-                Text("Yes and no teach the coach what is useful to you. \u{201C}No, never again\u{201D} stops a subject for good; you can allow it again in the Mac\u{2019}s Settings. A card with no answer goes after two weeks.")
+                Text("Yes and no teach the coach what is useful to you. \u{201C}No, never again\u{201D} stops a subject for good; you can undo it in Coach \u{203A} Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
                     .textRole(.secondary).foregroundStyle(Palette.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, Space.l)
             .padding(.bottom, Space.xxl)
         }
+        .scrollDisabled(dragging)
+        .onPreferenceChange(DeckDragging.self) { dragging = $0 }
+        .interactiveDismissDisabled(dragging)
         .phonePage()
         .navigationTitle("Findings")
         .navigationBarTitleDisplayMode(.large)
-        .onAppear { store.refreshFindings() }
+        .onAppear {
+            store.refreshFindings()
+            seen = store.findings.map(\.id).joined(separator: "\n")
+        }
+        .onChange(of: store.findings.map(\.id)) { _, ids in seen = (seen.split(separator: "\n").map(String.init) + ids).suffix(60).joined(separator: "\n") }
     }
+
+    private func open(_ finding: CoachFinding) {
+        close()
+        store.openMeeting(finding.callID)
+    }
+
+    private func play(_ finding: CoachFinding) {
+        close()
+        store.showMoment(finding.callID, at: finding.at)
+    }
+
+    private func offersNever(_ finding: CoachFinding) -> Bool { FindingRules.offersNever(finding, profile: store.profile) }
 
     /// "Budget review · Nov 9": where the card is from.
     private func source(_ finding: CoachFinding) -> String? {

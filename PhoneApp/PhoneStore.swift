@@ -852,28 +852,36 @@ final class PhoneStore {
     /// Saves the owner's answer to a card: in the coach's memory, which goes to the Mac, and next to the call's review.
     func answerFinding(_ finding: CoachFinding, _ verdict: FindingVerdict) {
         let now = Date()
-        changeFindings { $0.answer(finding, verdict, at: now) }
+        changeFindings(callID: finding.callID) { $0.answer(finding, verdict, at: now) }
     }
 
     func takeBackFinding(_ id: String) {
         let now = Date()
-        changeFindings { $0.takeBack(id, at: now) }
+        changeFindings(callID: callID(ofAnswer: id)) { $0.takeBack(id, at: now) }
+    }
+
+    /// Undo in the list of what was blocked for good: on a goal it only takes the block away.
+    func allowFindingAgain(_ id: String) {
+        let now = Date()
+        changeFindings(callID: callID(ofAnswer: id)) { $0.allowAgain(id, at: now) }
     }
 
     /// Why the owner said no to a card: guidance for that card.
     func explainFinding(_ id: String, note: String) {
         let now = Date()
-        changeFindings { $0.explain(id, note: note, at: now) }
+        changeFindings(callID: callID(ofAnswer: id)) { $0.explain(id, note: note, at: now) }
     }
 
-    private func changeFindings(_ change: @escaping @Sendable (inout CoachProfile) -> Void) {
+    private func callID(ofAnswer id: String) -> String? { profile.answers.first { $0.id == id }?.callID }
+
+    private func changeFindings(callID: String?, _ change: @escaping @Sendable (inout CoachProfile) -> Void) {
         change(&profile)
         let file = paths.coach, paths = paths
         write("the coach's memory") {
             var p = (try? CoachProfile.load(from: file)) ?? CoachProfile()
             change(&p)
             try p.save(to: file)
-            FindingStore.mirror(p.answers, paths: paths)
+            if let callID { FindingStore.mirror(p.answers, callID: callID, paths: paths) }
         }
         refreshFindings()
     }

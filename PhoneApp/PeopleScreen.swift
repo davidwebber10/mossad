@@ -147,6 +147,21 @@ struct PersonView: View {
                 header
                 PersonBriefCard(name: name, brief: store.profile.people[name]?.brief, calls: stats.meetings.count)
                 LabelColumn(label: "By the numbers") { numbers }
+                // What the owner confirmed on a card about this person. The iPhone has no people store: the label of
+                // the coach's note, which the Mac keeps at the person's name of now, gives the person's id.
+                let confirmed = isOwner ? [] : store.profile.learnings(named: name)
+                if !confirmed.isEmpty {
+                    LabelColumn(label: "You confirmed") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(confirmed) { fact in
+                                Label { Text(fact.text).fixedSize(horizontal: false, vertical: true) } icon: {
+                                    Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.okText)
+                                }
+                                .textRole(.body).foregroundStyle(Palette.ink)
+                            }
+                        }
+                    }
+                }
                 if let note = store.profile.people[name]?.note {
                     LabelColumn(label: "The coach’s note") {
                         Text(note).textRole(.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)

@@ -11,6 +11,7 @@ struct MeetingView: View {
     /// A moment to open the transcript at, from a Search result.
     var at: TimeInterval?
     @State private var query = ""
+    @State private var deckDragging = false
     /// The moment being read: from a lane, a decision, or a commitment. The lanes draw it as the playhead.
     @State private var moment: TimeInterval?
     // Development hook for screenshots: `MOSSAD_SECTION=coach`.
@@ -62,6 +63,9 @@ struct MeetingView: View {
                 .padding(.bottom, Space.xxl)
             }
             .scrollDismissesKeyboard(.interactively)
+            // The page does not scroll while a card of the coach's deck moves to the side.
+            .scrollDisabled(deckDragging)
+            .onPreferenceChange(DeckDragging.self) { deckDragging = $0 }
             .task(id: tab == .transcript ? "\(moment ?? -1) \(jumps)" : "") {
                 guard tab == .transcript, let moment,
                       let block = TranscriptBlock.blocks(record).last(where: { $0.start <= moment + 0.5 }) else { return }

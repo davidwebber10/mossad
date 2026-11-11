@@ -52,7 +52,7 @@ struct ChatScreen: View {
             Button("Chats", systemImage: "clock.arrow.circlepath") { showChats = true }.tint(Palette.ink)
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Button("The coach's memory", systemImage: "brain") { showMemory = true }.tint(Palette.ink)
+            Button("Coach", systemImage: "brain") { showMemory = true }.tint(Palette.ink)
             Button("New chat", systemImage: "square.and.pencil") { newChat() }.disabled(running).tint(Palette.ink)
         }
     }
