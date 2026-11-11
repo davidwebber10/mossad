@@ -16,6 +16,8 @@ public enum APIKey: String, CaseIterable, Sendable {
     case sesSecret
     /// The owner secret of the owner's own Mossad server.
     case serverSecret
+    /// The owner's own Google app (a "Desktop app" OAuth client) and what its sign-in gave, as JSON.
+    case googleClientID, googleClientSecret, googleTokens
 
     /// Finds the key in an environment: the standard name first, then a common variant
     /// (`ASSEMBLYAI`, or a named Anthropic key such as `ANTHROPIC_API_KEY_TEAM`).
@@ -36,6 +38,10 @@ public enum APIKey: String, CaseIterable, Sendable {
         case .brevo: env["BREVO_API_KEY"]
         case .sesSecret: env["AWS_SECRET_ACCESS_KEY"]
         case .serverSecret: env["MOSSAD_SERVER_SECRET"]
+        case .googleClientID: env["MOSSAD_GOOGLE_CLIENT_ID"]
+        case .googleClientSecret: env["MOSSAD_GOOGLE_CLIENT_SECRET"]
+        // Tokens come only from a sign-in.
+        case .googleTokens: nil
         }
         return found?.isEmpty == false ? found : nil
     }

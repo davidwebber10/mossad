@@ -217,7 +217,8 @@ final class AppController: ObservableObject {
     @Published var chosenCalendars: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "calendarIDs") ?? []) {
         didSet {
             UserDefaults.standard.set(Array(chosenCalendars), forKey: "calendarIDs")
-            calendar.choose(chosenCalendars)
+            macCalendar.choose(chosenCalendars)
+            calendar.forget()
             refreshUpcoming()
         }
     }
@@ -313,7 +314,13 @@ final class AppController: ObservableObject {
     let permissions = PermissionsMonitor()
     private let detection = DetectionService(mic: MicUsageProbe(), tabs: BrowserTabProbe(), windows: WindowTitleProbe(),
                                              mute: AccessibilityMuteProbe())
-    private let calendar = EventKitCalendarSource()
+    /// The Mac's calendars (EventKit), for the choice in Settings and for every account that is not the Google one.
+    private let macCalendar = EventKitCalendarSource()
+    /// The owner's own Google app and its sign-in (+Google). Optional: without it, nothing changes.
+    let google = GoogleSession(secrets: Keychain.app)
+    let googleConnector = GoogleConnector()
+    /// The calendar the app and the pipeline read: Google for the Google calendar, the Mac for the rest.
+    let calendar: MergedCalendarSource
     let notifier = Notifier()
     private var pipeline: Pipeline!
     /// Used only on `CaptureQueue.queue`, except its meters, sinks, and track durations, which any thread can read.
@@ -459,6 +466,10 @@ final class AppController: ObservableObject {
         Log.writesFile = !CommandLine.arguments.contains("--ui-preview")
         library = VoiceLibrary(directory: paths.voices)
         recorder = Self.makeRecorder(paths: paths)
+        // A preview never reads Google: it shows the folder it was given and asks no service.
+        let googleCalendar = GoogleCalendarSource(session: google)
+        let googleAllowed = !CommandLine.arguments.contains("--ui-preview")
+        calendar = MergedCalendarSource(mac: macCalendar, google: { googleAllowed ? googleCalendar : nil })
         Self.current = self
         // Before the sync choice existed, turning iCloud sync off was its own switch.
         if UserDefaults.standard.object(forKey: "syncWith") == nil, UserDefaults.standard.object(forKey: "iCloudSync") as? Bool == false {
@@ -470,9 +481,11 @@ final class AppController: ObservableObject {
         noRecordGate.update(book: noRecord)
         noRecordGate.persistSession(in: paths.noRecord)
         // The chosen calendars apply before anything matches a call to an invite.
-        calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
+        macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
         observeForSearch()
+        // The Google step's state is drawn by views that watch the controller.
+        searchObservers.append(googleConnector.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
         meetingFilter.attach(self)
 
         // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
@@ -1787,7 +1800,7 @@ final class AppController: ObservableObject {
             if !granted { Log.error("Microphone access denied") }
         }
         Task {
-            if !(await calendar.requestAccess()) { Log.error("Calendar access denied") }
+            if !(await macCalendar.requestAccess()) { Log.error("Calendar access denied") }
         }
         notifier.requestAuthorization()
 
@@ -1822,7 +1835,7 @@ final class AppController: ObservableObject {
 
     func refreshUpcoming() {
         let calendar = calendar
-        calendars = calendar.calendars()
+        calendars = macCalendar.calendars()
         if UserDefaults.standard.stringArray(forKey: "calendarIDs") == nil, !calendars.isEmpty {
             // The first time, read only the owner's own calendars, not shared or subscribed ones.
             chosenCalendars = CalendarInfo.defaults(calendars, ownerName: ownerName,
@@ -1830,7 +1843,7 @@ final class AppController: ObservableObject {
             Log.info("Calendars: \(calendars.map { "\($0.title) [\($0.account)]\(chosenCalendars.contains($0.id) ? " *" : "")" }.joined(separator: "; "))")
             return
         }
-        calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
+        macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         Task {
             let now = Date()
             var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))

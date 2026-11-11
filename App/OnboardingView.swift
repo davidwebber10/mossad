@@ -74,6 +74,7 @@ struct OnboardingView: View {
         case .permissions: PermissionsStep()
         case .ai: AIStep(model: model)
         case .calendars: CalendarsStep()
+        case .google: GoogleStep()
         case .check: CheckStep(model: model)
         case .sync: SyncStep()
         case .done: DoneStep()
@@ -87,6 +88,7 @@ struct OnboardingView: View {
         case .permissions: "Let Mossad hear the call"
         case .ai: "The services that write your notes"
         case .calendars: "Your calendars"
+        case .google: "Connect Google"
         case .check: "Check that recording works"
         case .sync: "Your iPhone and sync"
         case .done: "You're all set"
@@ -100,6 +102,7 @@ struct OnboardingView: View {
         case .permissions: "macOS asks you for each one. Microphone and System audio recording are required; the others make the notes better."
         case .ai: "Mossad uses your own accounts with these services. Each one bills you directly, and you can change them later in Settings."
         case .calendars: "Mossad reads the calendars you choose, to name each call from its invite and list who was there."
+        case .google: "Optional. With your own Google app, Mossad reads each invite's answers and attached Gemini notes, and fills names and job titles from your directory."
         case .check: "A quick test of both sides of a call, so your first meeting is not the test."
         case .sync: "Optional. Read your meetings on your iPhone, or keep everything on this Mac."
         case .done: "Mossad now waits quietly for your next call."

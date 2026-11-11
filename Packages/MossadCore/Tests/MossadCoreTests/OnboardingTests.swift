@@ -8,9 +8,19 @@ final class OnboardingTests: XCTestCase {
     }
 
     func testTheStepsComeInTheSpecOrder() {
-        XCTAssertEqual(OnboardingStep.allCases, [.welcome, .you, .permissions, .ai, .calendars, .check, .sync, .done])
-        XCTAssertEqual(OnboardingStep.allCases.map(\.number), Array(1...8))
+        XCTAssertEqual(OnboardingStep.allCases, [.welcome, .you, .permissions, .ai, .calendars, .google, .check, .sync, .done])
+        XCTAssertEqual(OnboardingStep.allCases.map(\.number), Array(1...9))
         XCTAssertEqual(OnboardingStep.sync.title, "iPhone and sync")
+        XCTAssertEqual(OnboardingStep.google.title, "Google")
+    }
+
+    func testTheGoogleStepIsOptionalAndDoneOnceConnectedOrSeen() {
+        XCTAssertTrue(OnboardingStep.google.isSkippable)
+        XCTAssertTrue(OnboardingStep.google.isSatisfied(by: OnboardingFacts(googleConnected: true)))
+        XCTAssertFalse(OnboardingStep.google.isSatisfied(by: OnboardingFacts()))
+        var p = OnboardingProgress(current: .google)
+        p.advance()
+        XCTAssertEqual(p.state(of: .google, facts: OnboardingFacts()), .done, "Mossad works without Google, so seen is done")
     }
 
     func testOnlyYouCannotBeSkipped() {

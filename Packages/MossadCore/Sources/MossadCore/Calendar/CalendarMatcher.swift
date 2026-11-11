@@ -10,13 +10,19 @@ public struct Invitee: Codable, Equatable, Sendable, Hashable {
     public var isSelf: Bool?
     /// The saved person this entry surely is, by the id in `people.json`. Nil when no saved person surely is.
     public var personID: String?
+    /// Their answer to the invite as Google gives it: "accepted", "declined", "tentative", or "needsAction". Nil from
+    /// a source that does not say.
+    public var response: String?
 
-    public init(name: String?, email: String?, isSelf: Bool? = nil, personID: String? = nil) {
+    public init(name: String?, email: String?, isSelf: Bool? = nil, personID: String? = nil, response: String? = nil) {
         self.name = name
         self.email = email
         self.isSelf = isSelf
         self.personID = personID
+        self.response = response
     }
+
+    public var declined: Bool { response == "declined" }
 
     /// From what the calendar gives for a participant. `address` is its URL as text: "mailto:sam@example.com" for
     /// most accounts. An Exchange account can give a directory path there; that is not an address, so the email
@@ -69,6 +75,20 @@ public struct CalendarEventInfo: Sendable, Equatable {
     /// Location, notes, and URL together, for finding meeting links.
     public var text: String
     public var isAllDay: Bool
+    /// Where the event was read. Google gives more: the series, the organizer, each answer, and the attachments.
+    public var source: EventSource = .eventKit
+    /// The invite's id across calendars: the same meeting in two calendars has one. Nil when the source hides it.
+    public var iCalUID: String?
+    /// The id of the event in its source (Google's event id).
+    public var eventID: String?
+    /// The id of the series a repeated event belongs to; nil for a single event or a source that does not say.
+    public var seriesID: String?
+    public var organizer: Invitee?
+    /// The call link the invite names, when the source gives it apart from the text.
+    public var meetingLink: URL?
+    public var attachments: [EventAttachment] = []
+    /// The account of the calendar, such as an email address, to tell a Google calendar on the Mac.
+    public var calendarAccount: String?
 
     public init(title: String, start: Date, end: Date, attendees: [String], text: String, isAllDay: Bool, participants: [Invitee] = []) {
         self.title = title
@@ -78,6 +98,40 @@ public struct CalendarEventInfo: Sendable, Equatable {
         self.participants = participants
         self.text = text
         self.isAllDay = isAllDay
+    }
+
+    /// The owner's own entry in the invite.
+    public var ownEntry: Invitee? { participants.first { $0.isSelf == true } }
+    /// True when the owner said no. A source that does not say is not a no.
+    public var declinedByOwner: Bool { ownEntry?.declined == true }
+}
+
+public enum EventSource: String, Codable, Sendable {
+    case eventKit, google
+}
+
+/// A file attached to a calendar event, as Google gives it.
+public struct EventAttachment: Codable, Equatable, Sendable, Hashable {
+    /// The Drive id, which is also the document's id for a Google Doc.
+    public var fileID: String?
+    public var title: String
+    public var mimeType: String?
+    public var url: URL?
+
+    public init(fileID: String?, title: String, mimeType: String?, url: URL?) {
+        self.fileID = fileID
+        self.title = title
+        self.mimeType = mimeType
+        self.url = url
+    }
+}
+
+extension CalendarEventInfo {
+    func from(eventKit uid: String?, account: String?) -> CalendarEventInfo {
+        var e = self
+        e.iCalUID = uid?.nonBlank
+        e.calendarAccount = account?.nonBlank
+        return e
     }
 }
 
@@ -218,6 +272,7 @@ public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
                 text: [e.location, e.notes, e.url?.absoluteString].compactMap { $0 }.joined(separator: "\n"),
                 isAllDay: e.isAllDay,
                 participants: (e.attendees ?? []).compactMap { Invitee.make(name: $0.name, address: $0.url.absoluteString, isCurrentUser: $0.isCurrentUser) })
+                .from(eventKit: e.calendarItemExternalIdentifier, account: e.calendar?.source?.title)
         }
     }
 }

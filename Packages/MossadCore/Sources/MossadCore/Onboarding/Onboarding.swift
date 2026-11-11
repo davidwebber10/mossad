@@ -2,7 +2,7 @@ import Foundation
 
 /// The setup steps a new owner walks through, in order.
 public enum OnboardingStep: String, CaseIterable, Codable, Sendable, Identifiable {
-    case welcome, you, permissions, ai, calendars, check, sync, done
+    case welcome, you, permissions, ai, calendars, google, check, sync, done
 
     public var id: String { rawValue }
     public var number: Int { (Self.allCases.firstIndex(of: self) ?? 0) + 1 }
@@ -14,6 +14,7 @@ public enum OnboardingStep: String, CaseIterable, Codable, Sendable, Identifiabl
         case .permissions: "Permissions"
         case .ai: "AI"
         case .calendars: "Calendars"
+        case .google: "Google"
         case .check: "Check"
         case .sync: "iPhone and sync"
         case .done: "Done"
@@ -32,6 +33,7 @@ public enum OnboardingStep: String, CaseIterable, Codable, Sendable, Identifiabl
     public func isSatisfied(by facts: OnboardingFacts) -> Bool {
         switch self {
         case .welcome, .sync, .done: false
+        case .google: facts.googleConnected
         case .you: !facts.ownerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .permissions: OnboardingPermissions.required.allSatisfy(facts.granted.contains)
         case .ai: facts.transcriptionKeySet != false && facts.aiKeySet
@@ -64,9 +66,12 @@ public struct OnboardingFacts: Equatable, Sendable {
     /// Nil until the check ran.
     public var micHeard: Bool?
     public var systemAudioHeard: Bool?
+    /// A Google sign-in is saved. Optional: Mossad works without it.
+    public var googleConnected: Bool
 
     public init(ownerName: String = "", granted: Set<PermissionKind> = [], transcriptionKeySet: Bool? = false, aiKeySet: Bool = false,
-                chosenCalendars: Int = 0, micHeard: Bool? = nil, systemAudioHeard: Bool? = nil) {
+                chosenCalendars: Int = 0, micHeard: Bool? = nil, systemAudioHeard: Bool? = nil, googleConnected: Bool = false) {
+        self.googleConnected = googleConnected
         self.ownerName = ownerName
         self.granted = granted
         self.transcriptionKeySet = transcriptionKeySet
@@ -148,7 +153,8 @@ public struct OnboardingProgress: Codable, Equatable, Sendable {
 
 extension OnboardingStep {
     /// Steps with nothing to set: seen is done.
-    var onlyInforms: Bool { self == .welcome || self == .sync }
+    /// The Google step is optional too: seen is done.
+    var onlyInforms: Bool { self == .welcome || self == .sync || self == .google }
 }
 
 public enum Onboarding {

@@ -51,6 +51,7 @@ struct SettingsView: View {
         switch page {
         case .general: GeneralSettings()
         case .recording: RecordingSettings()
+        case .google: GoogleSettings()
         case .ai: AISettings()
         case .sync: StorageSyncSettings()
         case .coach: CoachSettings()
@@ -147,7 +148,7 @@ private struct SettingsListRow: View {
 
 /// The pages of Settings, in the order of the list.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, recording, ai, sync, coach
+    case general, recording, google, ai, sync, coach
 
     var id: String { rawValue }
 
@@ -155,6 +156,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .recording: "Recording"
+        case .google: "Google"
         case .ai: "AI"
         case .sync: "Storage & Sync"
         case .coach: "Coach"
@@ -166,6 +168,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: "On/off, you, permissions, org chart"
         case .recording: "Recording, voices, calendars, folders"
+        case .google: "Calendar, Gemini notes, directory"
         case .ai: "Providers and other AI apps"
         case .sync: "This Mac, iPhone, backup, your server"
         case .coach: "Reviews, voice, emails"
@@ -176,6 +179,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: "Turn Mossad on or off, and what it needs from you and from macOS."
         case .recording: "How Mossad records, names voices, and reads your calendars."
+        case .google: "Optional. Your own Google app reads your Google Calendar, the Gemini notes of meetings, and your company directory. Read-only."
         case .ai: "The services that transcribe and summarize your calls, and other apps that read them."
         case .sync: "Where your meetings live: on this Mac, on your iPhone, in a backup of the recordings, and on your own server."
         case .coach: "Reviews of how you communicate, and the coach’s emails."
@@ -186,6 +190,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: .settings
         case .recording: .mic
+        case .google: .link
         case .ai: .sparkle
         case .sync: .cloud
         case .coach: .coach
@@ -255,6 +260,9 @@ extension APIKey {
         case .sesSecret: "Amazon SES secret access key"
         case .cloudSecret: "Secret access key"
         case .serverSecret: "Server secret"
+        case .googleClientID: "Google client ID"
+        case .googleClientSecret: "Google client secret"
+        case .googleTokens: "Google sign-in"
         }
     }
 }

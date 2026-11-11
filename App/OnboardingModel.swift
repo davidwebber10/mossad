@@ -91,7 +91,8 @@ final class OnboardingModel: ObservableObject {
                         aiKeySet: controller.aiProvider.key.map(controller.hasKey) ?? false || !controller.aiProvider.requiresKey,
                         chosenCalendars: controller.chosenCalendars.count,
                         micHeard: micHeard,
-                        systemAudioHeard: tone == .heard ? true : tone == .silent ? false : nil)
+                        systemAudioHeard: tone == .heard ? true : tone == .silent ? false : nil,
+                        googleConnected: controller.googleConnected)
     }
 
     // MARK: The audio check
