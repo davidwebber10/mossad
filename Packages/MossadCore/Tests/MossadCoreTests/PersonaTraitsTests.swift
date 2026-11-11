@@ -282,6 +282,35 @@ final class PersonaTraitsTests: XCTestCase {
         }
     }
 
+    /// Found by the property test above: a contradiction on a day that also had support moved the start of the newest
+    /// run later, and the change rule then forgave the older contradiction. One more contradiction raised the number.
+    func testAContradictionOnADayWithSupportNeverForgivesAnOlderOne() throws {
+        func m(_ d: Int, _ v: String, _ c: String, _ strength: PersonaEvidence.Strength = .clear, series: String) -> PersonaEvidence {
+            Self.moment(d, "order", v, call: c, strength: strength, setting: .oneOnOne, series: series)
+        }
+        let ev = [m(54, "answer_first", "x2", series: "a"), m(96, "answer_first", "x0", series: "b"), m(102, "answer_first", "x1", series: "b"),
+                  m(386, "answer_first", "x3", series: "b"), m(75, "path_first", "x4", .weak, series: "a"), m(77, "material_before", "x5", series: "a")]
+        let before = try XCTUnwrap(PersonaTraits.number(for: id, in: persona(ev, texts: [id: text()])))
+        for setting in [PersonaSetting.group, .oneOnOne] {
+            let after = try XCTUnwrap(PersonaTraits.number(for: id, in: persona(ev + [Self.moment(54, "order", "path_first", call: "new", setting: setting)], texts: [id: text()])))
+            XCTAssertLessThanOrEqual(after, before + 1e-9, "\(setting)")
+        }
+        // The second case it found: weak support, and a clear contradiction late enough to pass an older weak one.
+        func w(_ d: Int, _ v: String, _ c: String, _ setting: PersonaSetting = .group, series: String) -> PersonaEvidence {
+            Self.moment(d, "order", v, call: c, strength: v == "material_before" ? .clear : .weak, setting: setting, series: series)
+        }
+        let weak = [w(81, "path_first", "x0", series: "c"), w(127, "answer_first", "x1", series: "b"), w(26, "material_before", "x2", series: "c"),
+                    w(297, "answer_first", "x3", .oneOnOne, series: "a"), w(378, "answer_first", "x4", series: "b"), w(54, "answer_first", "x5", series: "b")]
+        let weakBefore = PersonaTraits.number(for: id, in: persona(weak, texts: [id: text()])) ?? 0
+        for day in 0...500 {
+            for setting in [PersonaSetting.group, .oneOnOne] {
+                guard let after = PersonaTraits.number(for: id, in: persona(weak + [Self.moment(day, "order", "path_first", call: "new", setting: setting)], texts: [id: text()]))
+                else { continue }
+                XCTAssertLessThanOrEqual(after, weakBefore + 1e-9, "day \(day), \(setting)")
+            }
+        }
+    }
+
     func testTheSameEvidenceAndAnswersGiveTheSameNumberInAnyOrder() {
         let ev = (1...6).map { Self.moment($0 * 7, $0 % 2 == 0 ? "order" : "evidence", $0 % 2 == 0 ? "answer_first" : "numbers") }
         let a = PersonaTraits.build(persona(ev, texts: [id: text()]), answers: [answer(.no)])

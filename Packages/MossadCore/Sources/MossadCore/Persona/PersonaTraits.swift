@@ -212,31 +212,21 @@ public enum PersonaTraits {
         (a.date, a.callID, a.pointer.at, a.value) < (b.date, b.callID, b.pointer.at, b.value)
     }
 
-    /// People change. When the newest days of this dimension show this value only, at least `changeRun` of them and
-    /// at least as many as the days of opposite values before them, those older opposite moments are no
-    /// counter-evidence: they are the person of before. A rule by these two counts keeps the number monotone: one
-    /// more contradiction can only end the rule, and one more call of support can only start it.
+    /// People change. When at least `changeRun` days of this value come after the last clear opposite moment, and
+    /// they are at least as many as the days of clear opposite moments, and the newest of them is 60 days or more
+    /// after that last opposite moment, the clear opposite moments are the person of before and do not count.
+    /// The rule is monotone by its counts: one more contradiction can only move "the last" later or add a day
+    /// against, so it can only end the rule; one more call of support can only start it.
     static func afterChange(value: String, dimension: String, moments: [PersonaEvidence], counter: [PersonaEvidence]) -> [PersonaEvidence] {
-        let relevant = moments.filter { $0.strength == .clear && ($0.value == value || PersonaDimension.contradicts(dimension, value, $0.value)) }
-        let days = Dictionary(grouping: relevant, by: \.day).sorted { $0.key < $1.key }
-        var run = 0, start: Int?
-        for (day, ms) in days.reversed() {
-            guard ms.allSatisfy({ $0.value == value }) else { break }
-            run += 1
-            start = day
-        }
-        guard run >= PersonaConfidence.changeRun, let start else { return counter }
-        let older = counter.filter { $0.day < start }
-        let before = Set(older.map(\.day)).count
-        guard run >= before else { return counter }
-        // Time, not only order: the newest support at least 60 days after the newest older contradiction. Four
-        // moments in a row cannot show a change; a later call of support can only start the rule, a later
-        // contradiction only end it.
-        if let lastAgainst = older.map(\.date).max(), let lastFor = moments.filter({ $0.value == value }).map(\.date).max(),
-           lastFor.timeIntervalSince(lastAgainst) < PersonaConfidence.changeGapDays * 86_400 {
-            return counter
-        }
-        return counter.filter { $0.day >= start }
+        let clearAgainst = counter.filter { $0.strength == .clear }
+        guard let lastAgainstDay = clearAgainst.map(\.day).max(), let lastAgainst = clearAgainst.map(\.date).max() else { return counter }
+        let supportDays = Set(moments.filter { $0.value == value && $0.day > lastAgainstDay }.map(\.day))
+        guard supportDays.count >= PersonaConfidence.changeRun, supportDays.count >= Set(clearAgainst.map(\.day)).count,
+              let lastFor = moments.filter({ $0.value == value }).map(\.date).max(),
+              lastFor.timeIntervalSince(lastAgainst) >= PersonaConfidence.changeGapDays * 86_400 else { return counter }
+        // Only the clear opposite moments are the person of before. A weak one always counts (at half, and less with
+        // age): if the rule forgave it by its day, one more clear contradiction later would forgive it and raise the number.
+        return counter.filter { $0.strength != .clear }
     }
 
     static func score(id: String, person: String, dimension: String, value: String, condition: PersonaSetting?, support: [PersonaEvidence],
