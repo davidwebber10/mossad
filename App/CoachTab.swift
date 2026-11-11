@@ -54,7 +54,7 @@ struct CoachTab: View {
                                    openMoment: { controller.showMoment($0, at: $1) })
                 }
             }
-            if profile.activeFocus != nil || profile.proposedFocus != nil {
+            if FocusPanel.belongs(to: record, profile: profile) {
                 LabelColumn(label: "Focus") {
                     // The line already says how this call went on the focus.
                     FocusPanel(profile: profile, callID: record.id, result: line?.kind == .focus ? nil : review.focusResult, compact: true,
@@ -126,7 +126,9 @@ struct CoachTab: View {
         if let value = review.value { ValueCard(value: value) }
         if let card = review.scorecard { ScorecardView(card: card) }
         CoachThread(callID: record.id, thread: review.thread)
-        if review.version < CoachReview.currentVersion {
+        // Only for a review from before the lines, as before: the new review replaces the old file, and an
+        // older review that has lines would lose its second points, its ratings, and its conversation.
+        if review.version < CoachReview.currentVersion, review.didWell == nil, review.tryNext == nil, !review.quiet {
             LabelColumn(label: "") {
                 Button("Review this call again with the new coach") { controller.reviewAgain(record.id) }
                     .controlSize(.small).disabled(controller.coaching)

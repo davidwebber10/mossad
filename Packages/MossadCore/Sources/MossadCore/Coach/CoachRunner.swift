@@ -9,9 +9,14 @@ public actor CoachRunner {
     /// "Name, Title" lines for the names in a call; empty without an org chart.
     private let titles: @Sendable ([String]) -> [String]
 
+    /// The meetings as rows of history. The app gives the cache of its Analytics tab, so a run reads only the
+    /// meetings that changed.
+    private let facts: MeetingFactsCache
+
     public init(paths: Paths, coach: any Coaching, owner: String, since: Date, titles: @escaping @Sendable ([String]) -> [String] = { _ in [] },
-                now: @escaping @Sendable () -> Date = Date.init) {
+                facts: MeetingFactsCache = MeetingFactsCache(), now: @escaping @Sendable () -> Date = Date.init) {
         self.now = now
+        self.facts = facts
         self.titles = titles
         self.paths = paths
         self.coach = coach
@@ -66,26 +71,27 @@ public actor CoachRunner {
         var done = 0
         let pending = Self.pending(records, owner: owner, since: since, reviewed: reviewed)
         guard !pending.isEmpty else { return 0 }
-        // A memory from before the advice log starts with what the owner saw in the last 30 days, so the first
-        // review after the update does not say it once more. It is saved with the first review.
-        let seed = profile.advice.isEmpty ? AdviceRules.seed(from: reviews, now: now()) : []
-        profile.advice = seed
-        // Each written meeting as a row of history, for what is usual: read once for the run.
-        let history = MeetingFactsCache().facts(for: records, owner: owner)
+        // A memory from before the advice log gets it one time, from what the reviews of the last 30 days
+        // showed, so the first review after the update does not say it once more. It is saved with that review.
+        let seed = profile.adviceVersion < CoachSkill.version ? AdviceRules.seed(from: reviews, now: now()) : nil
+        if let seed { profile.seed(seed) }
+        // Each written meeting as a row of history, for what is usual: read when the first call is ready.
+        var history: [MeetingFacts]?
         for r in pending {
             switch ledger.state(r.id, now: now()) {
             case .gaveUp: continue
             case .waiting: return done
             case .ready: break
             }
+            if history == nil { history = facts.facts(for: records, owner: owner) }
             do {
                 let current = profile, tone = measureTone(r)
-                let measured = CoachMeasured(record: r, owner: owner, history: history, commitments: CommitmentBook.peek(in: paths.commitments)?.visible ?? [])
+                let measured = CoachMeasured(record: r, owner: owner, history: history ?? [], commitments: CommitmentBook.peek(in: paths.commitments)?.visible ?? [])
                 let written = try await UsageContext.$callID.withValue(r.id) {
                     try await coach.review(record: r, profile: current, tone: tone, people: titles(Array(Set(r.speakerNames.values)).sorted()), measured: measured)
                 }
                 let result = CoachLineRules.settle(written, record: r, owner: owner, profile: current, measured: measured)
-                if result.unproven > 0 { Log.info("The coach's review of \(r.id) lost \(result.unproven) notes: their quotes are not in the owner's lines") }
+                if !result.dropped.isEmpty { Log.info("The coach's review of \(r.id) lost \(result.dropped.count) notes. \(result.dropped.joined(separator: "; "))") }
                 // Deleted or merged away during the review: no review file, and nothing learned from it.
                 guard FileManager.default.fileExists(atPath: paths.callDirectory(r.id).appendingPathComponent(CallRecord.fileName).path) else {
                     Log.info("\(r.id) was removed during its review; the review is dropped")
@@ -95,7 +101,7 @@ public actor CoachRunner {
                 // Read again before saving: the owner may have added guidance while the review ran. A profile that
                 // cannot be read now stops the run; saving the older copy would write the owner's changes away.
                 var fresh = try CoachProfile.load(from: paths.coach)
-                if fresh.advice.isEmpty { fresh.advice = seed }
+                if let seed, fresh.adviceVersion < CoachSkill.version { fresh.seed(seed) }
                 fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start, proposal: result.proposal, advice: result.advice)
                 fresh.ask(result.questions)
                 try fresh.save(to: paths.coach)

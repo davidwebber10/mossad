@@ -54,6 +54,14 @@ struct FocusPanel: View {
     /// On a review's page: the proposal is its plan and the three answers. The reason is in Settings and in the
     /// memory, so the same sentences do not stand under each call.
     var compact = false
+
+    /// True when a review's page shows the panel: an accepted focus on each review, and a proposal only on the
+    /// review of the call that made it. A proposal is advice that waits for an answer; under each call it would
+    /// be the same advice after each call.
+    static func belongs(to record: CallRecord, profile: CoachProfile) -> Bool {
+        if profile.activeFocus != nil { return true }
+        return profile.proposedFocus.map { abs($0.proposed.timeIntervalSince(record.start)) < 1 } ?? false
+    }
     let accept: (UUID, String?) -> Void
     let dismiss: (UUID) -> Void
     @State private var editing = false

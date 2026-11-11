@@ -111,7 +111,6 @@ extension ChatTools {
             parts.append("\(kind.title):\n" + p.facts(kind).map { "- \($0.text)" }.joined(separator: "\n"))
         }
         if !p.guidance.isEmpty { parts.append("Coaching preferences:\n" + p.guidance.map { "- \($0.text)" }.joined(separator: "\n")) }
-        if let s = p.summary.nonBlank { parts.append("How they communicate: \(s)") }
         if let f = p.activeFocus {
             let hits = f.chances.filter { $0.outcome == .hit }.count
             parts.append("Current focus, agreed by the owner: \(f.plan) (why: \(f.why)). \(hits) hits in \(f.chances.count) chances so far.")
@@ -123,7 +122,8 @@ extension ChatTools {
         let learned = p.foci.filter { $0.status == .learned }.map(\.plan)
         if !learned.isEmpty { parts.append("Learned habits: " + learned.joined(separator: "; ")) }
         if !p.patterns.isEmpty {
-            parts.append("Patterns:\n" + p.patterns.map { "- \($0.name) (\($0.kind.rawValue)): \($0.note) \(p.standing($0))" }.joined(separator: "\n"))
+            let standings = p.standings()
+            parts.append("Patterns:\n" + p.patterns.map { "- \($0.name) (\($0.kind.rawValue)): \($0.note) \(standings[$0.name] ?? "")" }.joined(separator: "\n"))
         }
         if !p.people.isEmpty {
             parts.append("Notes on people:\n" + p.people.sorted { $0.key < $1.key }.map { "- \($0.key): \($0.value.note)" }.joined(separator: "\n"))

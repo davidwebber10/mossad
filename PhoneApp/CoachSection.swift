@@ -18,7 +18,7 @@ struct CoachSection: View {
             QuestionsPanel(questions: profile.openQuestions.filter { $0.callID == record.id },
                            answer: { store.answerQuestion($0, $1, note: $2) })
             Card { CoachLineView(review: review) }
-            if profile.activeFocus != nil || profile.proposedFocus != nil {
+            if FocusPanel.belongs(to: record, profile: profile) {
                 Card {
                     // The line already says how this call went on the focus.
                     FocusPanel(profile: profile, callID: record.id, result: line?.kind == .focus ? nil : review.focusResult, compact: true,

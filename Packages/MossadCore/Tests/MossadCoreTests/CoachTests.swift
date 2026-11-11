@@ -240,12 +240,12 @@ final class CoachTests: XCTestCase {
         let output: [String: Any] = [
             "quiet": false,
             "headline": "Your idea set the plan; date your own items",
-            "did_well": ["text": "Your delta idea became the plan.", "quote": "Just apply the percentage.", "at_seconds": 535, "skill": "Offer the simple method",
-                         "measure": "none"],
+            "did_well": ["text": "Your delta idea became the plan.", "quote": "Just apply the percentage.", "at_seconds": 535, "skill": "other",
+                         "skill_label": "Offer the simple method"],
             "try_next": ["text": "When asked what's next, say yours first with a day.", "quote": "Let you know when I have it.", "at_seconds": 2900,
-                         "say": "My piece: the side forecast by Tuesday.", "skill": "Give a day with each commitment", "measure": "commitment_day"],
-            "seen_again": ["advice_id": "a1", "quote": "Let me walk through the plan.", "at_seconds": 0],
-            "focus_result": ["outcome": "missed", "evidence": "Four items left without dates.", "at_seconds": 2900],
+                         "say": "My piece: the side forecast by Tuesday.", "skill": "commitment-dates", "skill_label": ""],
+            "seen_again": ["skill": "answer-first", "skill_label": "", "quote": "Let me walk through the plan.", "at_seconds": 0],
+            "focus_result": ["outcome": "missed", "evidence": "Four items left without dates.", "quote": "Let you know when I have it.", "at_seconds": 2900],
             "focus_proposal": NSNull(),
             "strengths": [["title": "Goal first", "observation": "O", "quote": "Q", "at_seconds": 3, "principle": "P", "try_instead": NSNull()],
                           ["title": "A second point", "observation": "O", "quote": "Q", "at_seconds": 3, "principle": "P", "try_instead": NSNull()]],
@@ -259,18 +259,18 @@ final class CoachTests: XCTestCase {
         var profile = CoachProfile()
         profile.propose(CoachFocus(plan: "Date every commitment.", why: "W", metric: nil, proposed: Date()), at: Date())
         profile.acceptFocus(profile.proposedFocus!.id, plan: nil, at: Date())
-        profile.advice = [CoachAdvice(callID: "old", date: Date().addingTimeInterval(-3 * day), kind: .tryNext, skill: "Lead with the answer", text: "T", at: 1,
-                                      measure: nil, held: false)]
         let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
         let result = try await coach.review(record: record("c", start: Date()), profile: profile, tone: nil)
         XCTAssertEqual(result.review.headline, "Your idea set the plan; date your own items")
         XCTAssertEqual(result.review.didWell?.at, 535)
-        XCTAssertEqual(result.review.didWell?.skill, "Offer the simple method")
+        XCTAssertEqual(result.review.didWell?.skill, "other:offer the simple method")
         XCTAssertNil(result.review.didWell?.measure)
         XCTAssertNil(result.review.improving, "the model is not asked what improved")
         XCTAssertEqual(result.review.tryNext?.say, "My piece: the side forecast by Tuesday.")
-        XCTAssertEqual(result.review.tryNext?.measure, .commitmentDay)
-        XCTAssertEqual(result.review.seenAgain?.skill, "Lead with the answer", "the id is the earlier advice's, whatever its case")
+        XCTAssertEqual(result.review.tryNext?.skill, "commitment-dates")
+        XCTAssertEqual(result.review.tryNext?.measure, .commitmentDay, "the measure is the skill's, not the model's")
+        XCTAssertEqual(result.review.seenAgain?.skill, "answer-first")
+        XCTAssertEqual(result.review.focusResult?.quote, "Let you know when I have it.")
         XCTAssertEqual(result.review.focusID, profile.activeFocus?.id)
         XCTAssertEqual(result.review.focusResult?.outcome, .missed)
         XCTAssertEqual(result.review.focusResult?.callID, "c")
@@ -289,8 +289,16 @@ final class CoachTests: XCTestCase {
         XCTAssertEqual(Set(schema?["required"] as? [String] ?? []),
                        ["quiet", "headline", "did_well", "try_next", "seen_again", "focus_result", "focus_proposal", "questions",
                         "strengths", "improvements", "meeting_value", "profile"])
-        let notes = ((schema?["properties"] as? [String: Any])?["profile"] as? [String: Any])?["properties"] as? [String: Any]
+        let properties = schema?["properties"] as? [String: Any]
+        let notes = (properties?["profile"] as? [String: Any])?["properties"] as? [String: Any]
         XCTAssertEqual(Set(notes?.keys.map { $0 } ?? []), ["patterns", "people"], "no summary and no trend from the model")
+        // Each piece of advice has one key of the fixed list: the schema allows no other.
+        let advice = ((properties?["try_next"] as? [String: Any])?["anyOf"] as? [[String: Any]])?.first?["properties"] as? [String: Any]
+        XCTAssertEqual((advice?["skill"] as? [String: Any])?["enum"] as? [String], CoachSkill.allCases.map(\.rawValue))
+        XCTAssertEqual(CoachSkill.allCases.map(\.rawValue), ["commitment-dates", "answer-first", "room-in-1on1s", "long-turns", "questions", "interruptions",
+                                                             "closing-with-next-steps", "pace", "filler-words", "other"],
+                       "version \(CoachSkill.version) of the list: add a key at the end and raise the version")
+        XCTAssertEqual(CoachSkill.version, 1)
     }
 
     func testTheSchemaStaysUnderTheLimitOfUnionTypes() throws {
@@ -308,37 +316,43 @@ final class CoachTests: XCTestCase {
         profile.summary = "About the last call only."
         profile.patterns = [CoachPattern(name: "Leaves items without a day", kind: .growth, note: "Takes work with no date.", seen: 25,
                                          firstSeen: Date().addingTimeInterval(-20 * day), lastSeen: Date().addingTimeInterval(-day), trend: .improving)]
-        profile.advice = [
-            CoachAdvice(callID: "a", date: Date().addingTimeInterval(-40 * day), kind: .tryNext, skill: "Too old", text: "T", at: 1, measure: nil, held: false),
-            CoachAdvice(callID: "b", date: Date().addingTimeInterval(-9 * day), kind: .tryNext, skill: "Give a day with each commitment",
-                        text: "When you take an item, say the day.", at: 1, measure: .commitmentDay, held: false),
-            CoachAdvice(callID: "d", date: Date().addingTimeInterval(-2 * day), kind: .again, skill: "Give a day with each commitment", text: "T", at: 1,
-                        measure: nil, held: true),
-            CoachAdvice(callID: "e", date: Date().addingTimeInterval(-2 * day), kind: .didWell, skill: "Name the risk", text: "T", at: 1, measure: nil, held: false),
-        ]
+        func said(_ id: String, _ daysAgo: Double, _ kind: CoachLine.Kind, _ skill: String, held: Bool = false, shown: Bool = true) -> CoachAdvice {
+            CoachAdvice(callID: id, date: Date().addingTimeInterval(-daysAgo * day), kind: kind, skill: skill, text: "T", at: 1, held: held, shown: shown)
+        }
+        profile.advice = [said("a", 40, .tryNext, "long-turns"), said("b", 9, .tryNext, "commitment-dates"), said("b2", 5, .again, "commitment-dates"),
+                          said("d", 2, .again, "interruptions", held: true), said("e", 2, .didWell, "other:name the risk"),
+                          said("f", 2, .tryNext, "questions", shown: false), said("g", 4, .tryNext, "other:offer the simple method")]
+        profile.propose(CoachFocus(plan: "Lead with the answer.", why: "W", metric: nil, proposed: Date().addingTimeInterval(-12 * day), skill: "answer-first"),
+                        at: Date())
         profile.apply(CoachProfileUpdate(summary: "", focus: "", patterns: [], people: []), review: review(), callID: "x", title: "Weekly Sync",
                       at: Date().addingTimeInterval(-day))
         let measured = CoachMeasured(standouts: [CoachMeasured.Standout(id: "talkShare", text: "talked 81% of the time; usually 62 to 70% in your 1:1s with Mitch", at: nil)],
                                      commitments: CommitmentShare(withDay: 4, total: 33))
         let text = CoachPrompt.user(record: record("c", start: Date(), ownerSeconds: 300), owner: "David Webber", profile: profile, measured: measured)
-        XCTAssertTrue(text.contains("- A1, "), text)
-        XCTAssertTrue(text.contains("Give a day with each commitment: When you take an item, say the day."))
-        XCTAssertFalse(text.contains("Too old"))
-        XCTAssertFalse(text.contains("A2"), "one row for a skill, and a call that was only counted is not a row")
-        XCTAssertTrue(text.contains("Praise you already gave: Name the risk"))
+        XCTAssertTrue(text.contains("- commitment-dates, last said "), text)
+        XCTAssertTrue(text.contains("- other, skill_label \"offer the simple method\", last said "), text)
+        XCTAssertTrue(text.contains("- answer-first, last said "), "the focus that waits for an answer is advice that was said")
+        XCTAssertFalse(text.contains("long-turns, last said"), "40 days ago")
+        XCTAssertFalse(text.contains("interruptions, last said"), "a call that was only counted")
+        XCTAssertFalse(text.contains("questions, last said"), "a note in a full review was not the line")
+        XCTAssertTrue(text.contains("Praise you already gave: other, skill_label \"name the risk\""))
         XCTAssertTrue(text.contains("David Webber talked 81% of the time; usually 62 to 70% in your 1:1s with Mitch"))
-        XCTAssertTrue(text.contains("4 of your 33 commitments"))
+        XCTAssertTrue(text.contains("4 of 33 commitments with a day"))
         XCTAssertFalse(text.contains("About the last call only."), "a summary that one call wrote is not sent back")
         XCTAssertFalse(text.contains("seen in 25"), "the old count is not sent back")
         XCTAssertFalse(text.lowercased().contains("improving"), text)
         XCTAssertFalse(text.contains("goal:"), "no fixed goals from other people's research")
         XCTAssertFalse(text.contains("fillers"))
-        XCTAssertFalse(text.contains("questions,"))
-        XCTAssertEqual(CoachPrompt.earlierAdvice(profile, record: record("c", start: Date())).map(\.id), ["A1"])
+        XCTAssertFalse(text.contains(" questions,"))
+        XCTAssertFalse(text.contains("words per minute"), "pace is not coached, so it is not sent")
+        XCTAssertEqual(text.components(separatedBy: "longest turn").count, 2, "one value for the longest turn")
+        XCTAssertEqual(CoachPrompt.earlierAdvice(profile, record: record("c", start: Date())).map(\.skill),
+                       ["other:offer the simple method", "commitment-dates", "answer-first"], "one row for a skill, the newest first")
         let system = CoachPrompt.system(owner: "David Webber")
         XCTAssertTrue(system.contains("Never judge a trend"))
         XCTAssertTrue(system.contains("seen_again"))
-        XCTAssertLessThan(system.count, 5415, "shorter than the instructions for three lines")
+        XCTAssertTrue(system.contains("Do not coach filler words or pace."))
+        for skill in CoachSkill.allCases { XCTAssertTrue(system.contains(skill.rawValue + " ("), skill.rawValue) }
     }
 
     func testAFocusProposalIsReturnedWhenThereIsNoFocus() async throws {
@@ -346,7 +360,7 @@ final class CoachTests: XCTestCase {
             "quiet": true, "headline": "You listened; nothing to coach", "did_well": NSNull(), "seen_again": NSNull(), "try_next": NSNull(),
             "focus_result": ["outcome": "hit", "evidence": "Ignored without an active focus", "at_seconds": NSNull()],
             "focus_proposal": ["plan": "When a topic closes, name the owner and the day.", "why": "Eight calls ended without dates.", "metric": NSNull(),
-                               "measure": "commitment_day"],
+                               "skill": "commitment-dates", "skill_label": ""],
             "strengths": [], "improvements": [],
             "meeting_value": ["rating": "medium", "reason": "R", "action": "keep", "suggestion": ""],
             "profile": ["patterns": [], "people": []],
@@ -357,6 +371,7 @@ final class CoachTests: XCTestCase {
         XCTAssertTrue(result.review.quiet)
         XCTAssertNil(result.review.focusResult, "No active focus, so no result")
         XCTAssertEqual(result.proposal?.plan, "When a topic closes, name the owner and the day.")
+        XCTAssertEqual(result.proposal?.skill, "commitment-dates")
         XCTAssertEqual(result.proposal?.measure, .commitmentDay, "the app can count this focus")
     }
 

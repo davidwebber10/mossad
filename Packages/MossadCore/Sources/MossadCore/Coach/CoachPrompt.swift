@@ -18,17 +18,16 @@ enum CoachPrompt {
         - try_next: one plan for the next meeting as when-then ("When someone asks what's next, say your items \
         first, each with a day"), at most 16 words, on any skill, with the words \(owner) could say in "say" (at \
         most 10 words, their voice, "" for none). Null when nothing is worth it.
-        - Proof: quote is \(owner)'s own words, copied exactly from one of their lines, at most 12 words; \
+        - Proof: quote is \(owner)'s own words, copied exactly from one of their lines, 3 to 12 words; \
         at_seconds is the time of that line ([00:12:40] is 760). The app looks for the quote in \(owner)'s lines \
         and drops a note it cannot prove. Never quote another person.
-        - skill: 2 to 5 words that name the behavior ("Give a day with each commitment"). Reuse the exact name of \
-        a known pattern or of earlier advice for the same behavior.
-        - measure: commitment_day when the note is about a day or a date for what \(owner) promises, takes, or \
-        hands over; else none.
+        - skill: the one key that fits the behavior. \(skills) Use the same key each time for the same behavior. \
+        skill_label is "" unless the key is other; then it names the behavior in 2 to 5 words, the same words \
+        each time.
 
-        Never say a thing twice. Do not give advice from "Advice you already gave" again, in any words, and do \
-        not repeat praise. When this call shows that advice again, put its id in seen_again with \(owner)'s quote \
-        and its time; the app counts it. Then write try_next about something else, or null.
+        Never say a thing twice. Do not give advice with a skill from "Advice you already gave", in any words, and \
+        do not repeat praise. When this call shows that skill again, put it in seen_again with \(owner)'s quote \
+        and its time; the app counts it. Then write try_next about another skill, or null.
 
         Never judge a trend. Do not write that something improved, got worse, happened again, or changed against \
         earlier calls. The app measures what is usual and each trend, and shows them itself.
@@ -39,14 +38,15 @@ enum CoachPrompt {
 
         The focus. \(owner) works on one thing at a time, and only on a focus they accepted.
         - With an active focus, set focus_result: hit when the call shows the plan carried out, missed when a clear \
-        chance came and passed, no_chance otherwise. evidence is one sentence of at most 20 words about this call, \
-        with its time. Do not restate the focus.
+        chance came and passed, no_chance otherwise. evidence is one sentence of at most 20 words about this call. \
+        quote and at_seconds are \(owner)'s own line that shows it, as above, or "" and null for no_chance. Do not \
+        restate the focus, and do not give try_next for the focus's skill.
         - With no focus and none proposed, propose one in focus_proposal: the most valuable habit from the patterns, \
         as a when-then plan of at most 20 words, a why of at most 25 words, a metric when talk_share, longest_turn, \
-        questions, or pace measures it, and a measure as above. Otherwise null.
+        questions, or pace measures it, and its skill as above. Otherwise null.
         - Never claim progress on something \(owner) never agreed to work on.
 
-        Use a number only when it explains something in the transcript. Judge against what this meeting needed: a \
+        Use a number only when it explains something in the transcript. Do not coach filler words or pace. Judge against what this meeting needed: a \
         1:1, a working session, a monthly update, and a negotiation need different behavior. You know \(owner)'s \
         role, responsibilities, goals, and relationships: something unowned or at risk in their area is theirs to \
         act on. Advice about another person is how \(owner) can work with them better, never a judgment of character.
@@ -78,6 +78,9 @@ enum CoachPrompt {
         """
     }
 
+    /// "commitment-dates (a day or a date for ...); answer-first (...); ..."
+    static var skills: String { CoachSkill.allCases.map { "\($0.rawValue) (\($0.hint))" }.joined(separator: "; ") + "." }
+
     static func voiceRules(_ voice: CoachVoice, owner: String) -> String {
         switch voice {
         case .direct:
@@ -93,29 +96,24 @@ enum CoachPrompt {
     static let knownPatterns = 8
     static let earlierAdviceRows = 12
 
-    /// What the owner saw in the 30 days up to this call, one row for each skill, the newest first, with the id
-    /// the model uses to say "this call showed it again".
-    static func earlierAdvice(_ p: CoachProfile, record r: CallRecord) -> [(id: String, advice: CoachAdvice)] {
+    /// The skills that got a line in the 30 days around this call, one row for each, the newest first: what
+    /// the model must not give again. The focus that waits for an answer is one of them.
+    static func earlierAdvice(_ p: CoachProfile, record r: CallRecord, kinds: Set<CoachLine.Kind> = [.tryNext, .again]) -> [CoachAdvice] {
         var seen = Set<String>()
-        let rows = p.advice.sorted { $0.date > $1.date }.filter { a in
-            guard !a.held, a.kind == .tryNext || a.kind == .again, a.callID != r.id, abs(a.date.timeIntervalSince(r.start)) <= AdviceRules.repeatDays * 86_400 else { return false }
+        return AdviceRules.said(p).sorted { $0.date > $1.date }.filter { a in
+            guard !a.held, a.shown, kinds.contains(a.kind), a.callID != r.id, abs(a.date.timeIntervalSince(r.start)) <= AdviceRules.repeatDays * 86_400 else { return false }
             return seen.insert(AdviceRules.key(a.skill)).inserted
         }
-        return rows.prefix(earlierAdviceRows).enumerated().map { ("A\($0.offset + 1)", $0.element) }
+    }
+
+    private static func named(_ a: CoachAdvice) -> String {
+        a.skill.hasPrefix("other:") ? "other, skill_label \"\(a.skill.dropFirst(6))\"" : a.skill
     }
 
     static func earlierAdviceText(_ p: CoachProfile, record r: CallRecord) -> String {
-        var parts = earlierAdvice(p, record: r).map { row -> String in
-            let a = row.advice
-            // An older review has no skill name: its advice is its own name.
-            return "- \(row.id), \(day(a.date)), \(a.skill)" + (a.kind == .tryNext && a.text != a.skill ? ": \(a.text)" : "")
-        }
-        var praised = Set<String>()
-        let praise = p.advice.filter { a in
-            a.kind == .didWell && !a.held && a.callID != r.id && abs(a.date.timeIntervalSince(r.start)) <= AdviceRules.repeatDays * 86_400
-                && praised.insert(AdviceRules.key(a.skill)).inserted
-        }
-        if !praise.isEmpty { parts.append("Praise you already gave: " + praise.suffix(earlierAdviceRows).map(\.skill).joined(separator: "; ")) }
+        var parts = earlierAdvice(p, record: r).prefix(earlierAdviceRows).map { "- \(named($0)), last said \(day($0.date))" }
+        let praise = earlierAdvice(p, record: r, kinds: [.didWell]).prefix(earlierAdviceRows)
+        if !praise.isEmpty { parts.append("Praise you already gave: " + praise.map(named).joined(separator: "; ")) }
         return parts.joined(separator: "\n")
     }
 
@@ -183,8 +181,7 @@ enum CoachPrompt {
         if CoachReview.isListener(delivery) {
             parts.append("## Listener mode\n\(owner) spoke for under a minute in this call. Review listening, missed chances to speak up, follow-ups, and the meeting's value, not delivery.")
         } else {
-            parts.append("## Numbers the app measured in this call\n" + callNumbers(delivery, metrics: CallMetrics(record: r, owner: owner, history: []),
-                                                                                    voice: profile.activeFocus?.metric == .pace))
+            parts.append("## Numbers the app measured in this call\n" + callNumbers(delivery, longestTurn: measured.longestTurn, voice: profile.activeFocus?.metric == .pace))
         }
         var unusual = measured.standouts.map { "- \(owner) \($0.text)" }
         if let trend = measured.trend { unusual.append("- Over the last calls: \(trend.text) \(trend.proof)") }
@@ -220,17 +217,17 @@ enum CoachPrompt {
     }
 
     /// This call's numbers for the model: no goals from other people's research, and nothing to compare with.
-    /// Fillers are not coached, and a count of lines with "?" counts "right?". The voice goes along only when
-    /// the focus is about pace.
-    static func callNumbers(_ d: DeliveryStats, metrics m: CallMetrics, voice: Bool) -> String {
-        var parts = [String(format: "talk share %.0f%%", d.talkShare * 100), String(format: "%.0f words per minute", d.wordsPerMinute),
-                     "longest turn \(Int(m.longestTurn?.seconds ?? d.longestTurnSeconds)) s",
+    /// Fillers are not coached, and a count of lines with "?" counts "right?". The longest turn is the one of
+    /// the Analytics baselines when the app measured it, so the model gets one value for it. Pace and the voice
+    /// go along only when the focus is about pace.
+    static func callNumbers(_ d: DeliveryStats, longestTurn: TimeInterval?, voice: Bool) -> String {
+        var parts = [String(format: "talk share %.0f%%", d.talkShare * 100), "longest turn \(Int(longestTurn ?? d.longestTurnSeconds)) s",
                      "interrupted others \(d.interruptions) times", "was interrupted \(d.interrupted) times"]
-        if voice, let t = d.tone {
-            parts.append(String(format: "voice: pitch variation %.1f semitones, turn ends %.1f dB quieter", t.pitchVariation, t.endDrop))
+        if voice {
+            parts.append(String(format: "%.0f words per minute", d.wordsPerMinute))
+            if let t = d.tone { parts.append(String(format: "voice: pitch variation %.1f semitones, turn ends %.1f dB quieter", t.pitchVariation, t.endDrop)) }
         }
         return parts.joined(separator: ", ")
-            + (m.longTurns.isEmpty ? "" : "\nTurns over 2 min at: " + m.longTurns.map { clock($0.start) + " (\(Int($0.seconds)) s)" }.joined(separator: ", "))
     }
 
     private static func clock(_ t: TimeInterval) -> String {

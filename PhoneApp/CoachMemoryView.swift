@@ -28,8 +28,11 @@ struct CoachMemoryView: View {
                 }
                 let learned = p.foci.filter { $0.status == .learned }
                 if !learned.isEmpty { Section("Learned") { ForEach(learned) { Label($0.plan, systemImage: "checkmark.seal.fill") } } }
-                if !p.summary.isEmpty { Section("How you communicate") { Text(p.summary) } }
+                // No "How you communicate": the stored summary is what the last call before the log wrote, and no
+                // call writes it now. It comes back when the weekly review writes one across calls.
                 if !p.patterns.isEmpty {
+                    // One pass over the log for all rows, not one for each row.
+                    let standings = p.standings()
                     Section("Patterns") {
                         ForEach(p.patterns, id: \.self) { pattern in
                             VStack(alignment: .leading, spacing: 3) {
@@ -40,7 +43,7 @@ struct CoachMemoryView: View {
                                 }
                                 Text(pattern.note).font(.subheadline).foregroundStyle(.secondary)
                                 // What the log counted. The model's own trend and its old count are not shown.
-                                Text(p.standing(pattern)).font(.caption).foregroundStyle(.tertiary)
+                                Text(standings[pattern.name] ?? "").font(.caption).foregroundStyle(.tertiary)
                             }
                         }
                     }

@@ -22,18 +22,25 @@ extension AppController {
 
     func coachReview(_ callID: String) -> CoachReview? { CoachReview.load(in: paths.callDirectory(callID)) }
 
-    /// The coach's memory keeps nothing of a meeting that is gone: not its lines, and not its moments. Saved only
-    /// when the memory held something of it.
+    /// Takes a meeting that is gone out of the coach's memory: its lines, its moments, its results on the focus,
+    /// and its open questions. Off the main thread, and saved only when the memory held something of it.
     func forgetCoaching(of callID: String) {
-        do {
-            var profile = try CoachProfile.load(from: paths.coach)
-            let before = profile
-            profile.forget(callID: callID)
-            guard profile != before else { return }
-            try profile.save(to: paths.coach)
-            coachVersion += 1
-        } catch {
-            Log.error("The coach's memory still has \(callID): \(error)")
+        let dir = paths.coach
+        Task {
+            let changed = await Task.detached(priority: .utility) { () -> Bool in
+                do {
+                    var profile = try CoachProfile.load(from: dir)
+                    let before = profile
+                    profile.forget(callID: callID)
+                    guard profile != before else { return false }
+                    try profile.save(to: dir)
+                    return true
+                } catch {
+                    Log.error("The coach's memory still has \(callID): \(error)")
+                    return false
+                }
+            }.value
+            if changed { coachVersion += 1 }
         }
     }
 
@@ -44,7 +51,7 @@ extension AppController {
         coaching = true
         let runner = CoachRunner(paths: paths, coach: LLMCoach(llm: llm, ownerName: ownerName), owner: ownerName,
                                  since: Date(timeIntervalSince1970: coachSince),
-                                 titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) })
+                                 titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) }, facts: MeetingAnalyticsStore.shared.facts)
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
             await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName))

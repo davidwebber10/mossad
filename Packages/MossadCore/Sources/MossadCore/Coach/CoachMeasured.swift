@@ -32,14 +32,17 @@ public struct CoachTrend: Equatable, Sendable {
         return (recent, before)
     }
 
-    /// The owner talks less in 1:1s than before, with anyone: room for the other person. Only after a 1:1.
+    /// The owner talks less than before in the 1:1s with this call's other person: room for them. Only after
+    /// a 1:1, and only against 1:1s with the same person: the owner's share with a manager and with a direct
+    /// report are different numbers, so a change of who the 1:1s are with must not read as a change of behavior.
     public static func oneOnOneShare(this: MeetingFacts, history: [MeetingFacts]) -> CoachTrend? {
-        guard this.partner != nil, let now = this.owner?.values[.talkShare] else { return nil }
-        let earlier = history.filter { $0.id != this.id && $0.start < this.start && $0.partner != nil }.sorted { $0.start < $1.start }
+        guard let partner = this.partner, let now = this.owner?.values[.talkShare] else { return nil }
+        let earlier = history.filter { $0.id != this.id && $0.start < this.start && $0.partner?.name == partner.name }.sorted { $0.start < $1.start }
             .compactMap { $0.owner?.values[.talkShare] }
         guard let change = shift(earlier + [now], margin: 0.08), change.recent < change.before.median else { return nil }
-        return CoachTrend(id: "oneOnOneShare", text: "You leave more room in your 1:1s.",
-                          proof: "You talked \(MeetingFindings.percent(change.recent)) in your last \(recentCalls); "
+        let first = partner.name.split(separator: " ").first.map(String.init) ?? partner.name
+        return CoachTrend(id: "oneOnOneShare", text: "You leave more room in your 1:1s with \(first).",
+                          proof: "You talked \(MeetingFindings.percent(change.recent)) in your last \(recentCalls) with \(first); "
                             + "\(MeetingFindings.range(.talkShare, change.before)) in the \(change.before.samples) before.")
     }
 }
@@ -68,7 +71,7 @@ public struct CommitmentShare: Equatable, Sendable {
     }
 
     public var text: String {
-        "\(withDay) of your \(total) commitments in the last \(Int(Self.days)) days have a day (\(Int((Double(withDay) / Double(max(1, total)) * 100).rounded()))%)"
+        "\(withDay) of \(total) commitments with a day (\(Int((Double(withDay) / Double(max(1, total)) * 100).rounded()))%), last \(Int(Self.days)) days"
     }
 }
 
@@ -93,24 +96,32 @@ public struct CoachMeasured: Equatable, Sendable {
     public var standouts: [Standout]
     public var trend: CoachTrend?
     public var commitments: CommitmentShare?
+    /// The owner's longest turn, by the definition of a turn that the baselines use.
+    public var longestTurn: TimeInterval?
 
-    public init(standouts: [Standout] = [], trend: CoachTrend? = nil, commitments: CommitmentShare? = nil) {
+    public init(standouts: [Standout] = [], trend: CoachTrend? = nil, commitments: CommitmentShare? = nil, longestTurn: TimeInterval? = nil) {
         self.standouts = standouts
         self.trend = trend
         self.commitments = commitments
+        self.longestTurn = longestTurn
     }
+
+    /// Numbers the coach does not make a line of: filler words are not coached, the count of questions counts
+    /// each line with "?" ("right?"), and how often other people cut the owner off is not the owner's to change.
+    static let notALine: Set<PersonMetric> = [.fillersPerMinute, .questionsPerHour, .cutOffsPerHour]
 
     /// From the same numbers and the same history as the meeting's Analytics tab, so the coach and the tab
     /// cannot say different things about one call.
     public init(record: CallRecord, owner: String, history: [MeetingFacts], commitments: [Commitment]) {
         let analytics = MeetingAnalytics(record: record, owner: owner, history: history)
         let me = analytics.owner?.id
-        // Filler words are not coached, so a number about them is not a line.
-        standouts = analytics.baselines.standouts.filter { $0.subject != nil && $0.subject == me && !$0.id.hasSuffix(".\(PersonMetric.fillersPerMinute.rawValue)") }.map { s in
+        let left = Self.notALine.map { ".\($0.rawValue)" }
+        standouts = analytics.baselines.standouts.filter { s in s.subject != nil && s.subject == me && !left.contains { s.id.hasSuffix($0) } }.map { s in
             var at: TimeInterval?
             if case .moment(let t) = s.evidence { at = t }
             return Standout(id: s.id.hasPrefix("with.") ? "talkShare" : String(s.id.split(separator: ".").last ?? ""), text: s.text, at: at)
         }
+        longestTurn = analytics.owner?.longestTurn?.seconds
         trend = CoachTrend.oneOnOneShare(this: analytics.facts, history: history)
         self.commitments = CommitmentShare(commitments, asOf: record.end)
     }

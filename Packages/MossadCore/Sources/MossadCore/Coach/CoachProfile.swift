@@ -209,18 +209,24 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     /// What each call showed of each pattern, oldest first. Entries are added and never rewritten.
     public var observations: [CoachObservation] = []
 
+    /// The version of `CoachSkill` that the advice log was last read against. 0 for a memory from before the
+    /// log: the runner then fills the log one time from the review files.
+    public var adviceVersion = 0
+
     public static let ratedLimit = 30
     public static let guidanceLimit = 25
-    /// About a year of calls. The rules read the last 30 days.
-    public static let adviceLimit = 400
+    /// The newest entries stay. The rules read the last 30 days; at 5 calls a day this is some months.
+    public static let adviceLimit = 600
     public static let observationLimit = 1000
+    /// Past this many, the pattern that was seen longest ago goes. The model is told the newest ones only.
+    public static let patternLimit = 30
     /// A pattern that no call showed for this long is not a pattern of now.
     public static let patternDays = 30.0
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
-        case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice, questions, advice, observations
+        case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice, questions, advice, observations, adviceVersion
     }
 
     /// Profiles from before feedback existed have no guidance or ratings.
@@ -238,9 +244,11 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         foci = try c.decodeIfPresent([CoachFocus].self, forKey: .foci) ?? []
         voice = try c.decodeIfPresent(CoachVoice.self, forKey: .voice) ?? .direct
         questions = try c.decodeIfPresent([CoachQuestion].self, forKey: .questions) ?? []
-        // A log that a later build wrote in another shape is an empty log here, not a memory that cannot be read.
-        advice = (try? c.decodeIfPresent([CoachAdvice].self, forKey: .advice)) ?? []
-        observations = (try? c.decodeIfPresent([CoachObservation].self, forKey: .observations)) ?? []
+        // An entry that a later build wrote in another shape is left out. The other entries stay: one entry
+        // must not empty a log that the next save would then write.
+        advice = try c.decodeIfPresent(LossyArray<CoachAdvice>.self, forKey: .advice)?.values ?? []
+        observations = try c.decodeIfPresent(LossyArray<CoachObservation>.self, forKey: .observations)?.values ?? []
+        adviceVersion = try c.decodeIfPresent(Int.self, forKey: .adviceVersion) ?? 0
     }
 
     public func facts(_ kind: CoachFact.Kind) -> [CoachFact] { facts.filter { $0.kind == kind } }
@@ -339,6 +347,10 @@ public struct CoachProfile: Codable, Equatable, Sendable {
             observations.append(CoachObservation(callID: callID, date: at, pattern: name, result: p.shown, note: p.note, quote: p.quote, at: p.at))
         }
         observations = Array(observations.sorted { $0.date < $1.date }.suffix(Self.observationLimit))
+        if patterns.count > Self.patternLimit {
+            let gone = Set(patterns.sorted { $0.lastSeen < $1.lastSeen }.prefix(patterns.count - Self.patternLimit).map(\.name))
+            patterns.removeAll { gone.contains($0.name) }
+        }
         advice.removeAll { $0.callID == callID }
         advice = Array((advice + said).sorted { $0.date < $1.date }.suffix(Self.adviceLimit))
         for p in update.people {
@@ -355,11 +367,23 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         history = Array(history.suffix(Self.historyLimit))
     }
 
-    /// Removes what the memory holds of a deleted meeting: its lines, its moments, and its place in the history.
+    /// Fills the advice log one time from what the reviews showed before the log existed. Entries that a
+    /// review of this build already wrote stay; an older entry of the same call does not come twice.
+    public mutating func seed(_ entries: [CoachAdvice]) {
+        let have = Set(advice.map(\.callID))
+        advice = Array((advice + entries.filter { !have.contains($0.callID) }).sorted { $0.date < $1.date }.suffix(Self.adviceLimit))
+        adviceVersion = CoachSkill.version
+    }
+
+    /// Removes what the memory holds of a deleted meeting: its lines, its moments, its place in the history,
+    /// its results on a focus, and the questions from it that wait for an answer. What the owner confirmed is a
+    /// fact of its own and stays, and so do the names of patterns and the notes on people.
     public mutating func forget(callID: String) {
         advice.removeAll { $0.callID == callID }
         observations.removeAll { $0.callID == callID }
         history.removeAll { $0.callID == callID }
+        for i in foci.indices { foci[i].results.removeAll { $0.callID == callID } }
+        questions.removeAll { $0.callID == callID && $0.status == .open }
     }
 
     /// What the log holds of one pattern, the newest first.
@@ -379,11 +403,22 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     /// pattern from before the log has only the day it was last seen: its old count grew each time the model
     /// used its name, and the model's own "improving" was one call's opinion.
     public func standing(_ pattern: CoachPattern, now: Date = Date()) -> String {
+        standing(pattern, evidence: evidence(for: pattern), now: now)
+    }
+
+    /// The standing of each pattern by its name, with one pass over the log: for a list of all patterns.
+    public func standings(now: Date = Date()) -> [String: String] {
+        let byName = Dictionary(grouping: observations) { $0.pattern.lowercased() }
+        return Dictionary(patterns.map { ($0.name, standing($0, evidence: byName[$0.name.lowercased()] ?? [], now: now)) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    private func standing(_ pattern: CoachPattern, evidence all: [CoachObservation], now: Date) -> String {
         let day = Date.FormatStyle().month(.abbreviated).day()
         guard now.timeIntervalSince(pattern.lastSeen) <= Self.patternDays * 86_400 else { return "Not seen since \(pattern.lastSeen.formatted(day))." }
-        let n = count(pattern)
-        guard n.calls > 0, let first = evidence(for: pattern).last else { return "Last seen on \(pattern.lastSeen.formatted(day))." }
-        return "In \(n.showed) of \(n.calls) calls since \(first.date.formatted(day)). Last on \(pattern.lastSeen.formatted(day))."
+        guard let first = all.map(\.date).min() else { return "Last seen on \(pattern.lastSeen.formatted(day))." }
+        let own: CoachObservation.Result = pattern.kind == .strength ? .did : .missed
+        let calls = Set(all.map(\.callID)).count, showed = Set(all.filter { $0.result == own }.map(\.callID)).count
+        return "In \(showed) of \(calls) calls since \(first.formatted(day)). Last on \(pattern.lastSeen.formatted(day))."
     }
 
     public static func load(from dir: URL) throws -> CoachProfile {

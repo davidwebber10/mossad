@@ -28,12 +28,14 @@ struct CoachMoment: View {
                         .accessibilityLabel("Dismiss")
                     }
                     Text(m.line.text).font(compact ? .callout : .body).fixedSize(horizontal: false, vertical: true)
-                    if let say = m.line.say {
-                        Text("“\(say)”").font(compact ? .callout : .body).italic().foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    // The proof: the time of the owner's words, and the measured number. The tap opens the review, which plays it.
+                    if let proof = [m.line.at.map { "At \(coachClock($0))" }, m.line.number].compactMap({ $0 }).joined(separator: " · ").nonEmpty {
+                        Text(proof).font(.caption).monospacedDigit().foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
-                    if let number = m.line.number {
-                        Text(number).font(.caption).monospacedDigit().foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    // Marked as words to say: in quote marks alone they read as words that the owner said.
+                    if let say = m.line.say {
+                        Text("Say: “\(say)”").font(compact ? .callout : .body).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(compact ? 12 : 14)
