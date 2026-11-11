@@ -177,18 +177,20 @@ final class MeetingFilterTests: XCTestCase {
     // MARK: Number of people
 
     func testTheNumberOfPeopleIsTheVoicesThatCount() {
-        let two = record("two", voices: [("me:A", 300), ("them:A", 280)])
+        let owner = ["me:A": "Dana Lee"]
+        let two = record("two", voices: [("me:A", 300), ("them:A", 280)], names: owner)
         // A third voice of three seconds does not turn a 1:1 into a group.
-        let twoAndANoise = record("noise", voices: [("me:A", 300), ("them:A", 280), ("them:B", 3)])
-        let four = record("four", voices: [("me:A", 200), ("them:A", 200), ("them:B", 200), ("them:C", 200)])
+        let twoAndANoise = record("noise", voices: [("me:A", 300), ("them:A", 280), ("them:B", 3)], names: owner)
+        let four = record("four", voices: [("me:A", 200), ("them:A", 200), ("them:B", 200), ("them:C", 200)], names: owner)
         let seven = record("seven", voices: (0..<7).map { ("them:\($0)", 100.0) })
-        let alone = record("alone", voices: [("me:A", 200)])
+        let alone = record("alone", voices: [("me:A", 200)], names: owner)
         let all = rows([two, twoAndANoise, four, seven, alone])
         XCTAssertEqual(all.map(\.voices), [2, 2, 4, 7, 1])
         for r in [two, twoAndANoise, four, seven] {
             XCTAssertEqual(MeetingFilterRow(record: r, people: MeetingFilterPeople(owner: "Dana Lee"), rating: nil)?.voices,
                            MeetingFacts(record: r, owner: "Dana Lee").mainVoices, "the same number as the Analytics tab")
         }
+        XCTAssertEqual(all.map(\.size), [.oneOnOne, .oneOnOne, .small, .large, .alone], "seven voices and the silent owner are eight people")
         var f = MeetingFilter()
         f.sizes = [.oneOnOne]
         XCTAssertEqual(ids(all, f), ["noise", "two"])
@@ -198,16 +200,80 @@ final class MeetingFilterTests: XCTestCase {
         XCTAssertEqual(ids(all, f), ["alone", "seven"])
     }
 
-    func testAMeetingWithNoTranscriptHasNoNumberOfPeople() {
-        let all = rows([record("spoken", voices: [("me:A", 300), ("them:A", 280)]), record("silent", summary: false, status: .failed)])
+    func testAMeetingWithNoTranscriptHasAnUnknownNumberOfPeople() {
+        let all = rows([record("spoken", voices: [("me:A", 300), ("them:A", 280)], names: ["me:A": "Dana Lee"]), record("silent", summary: false, status: .failed)])
         XCTAssertNil(all[1].voices)
+        XCTAssertEqual(all[1].size, .unknown)
         let f = facets(all)
-        XCTAssertEqual(MeetingFilter.Size.allCases.map { f.sizes.count($0) }.reduce(0, +), 1, "the unknown one is in no count")
-        for size in MeetingFilter.Size.allCases {
+        XCTAssertEqual(f.sizes.count(.unknown), 1)
+        XCTAssertEqual(f.sizes.count(.oneOnOne), 1)
+        for size in MeetingFilter.Size.allCases where size != .unknown {
             var filter = MeetingFilter()
             filter.sizes = [size]
             XCTAssertFalse(ids(all, filter).contains("silent"))
         }
+        var filter = MeetingFilter()
+        filter.sizes = [.unknown]
+        XCTAssertEqual(ids(all, filter), ["silent"])
+    }
+
+    // The owner listens to a talk of one speaker and says nothing: maybe two people, maybe two hundred.
+    func testASilentOwnerAndOneSpeakerIsNotJustMeOrAOneOnOne() {
+        let all = rows([record("talk", voices: [("them:A", 1200)], names: ["them:A": "Sam Carter"])], people: people)
+        XCTAssertEqual(all[0].size, .unknown)
+        for size in [MeetingFilter.Size.alone, .oneOnOne] {
+            var f = MeetingFilter()
+            f.sizes = [size]
+            XCTAssertEqual(ids(all, f), [])
+        }
+    }
+
+    // Two others talk and the owner is silent: the owner is one more person.
+    func testASilentOwnerAndTwoSpeakersIsAGroup() {
+        let all = rows([record("pair", voices: [("them:A", 600), ("them:B", 600)], names: ["them:A": "Sam Carter", "them:B": "Riley Park"])], people: people)
+        XCTAssertEqual(all[0].size, .small)
+    }
+
+    // A transcript in which no voice has enough of the talk to count says nothing about the number.
+    func testATranscriptWithNoVoiceThatCountsIsUnknown() {
+        let all = rows([record("murmur", voices: [("me:A", 3), ("them:A", 4)], names: ["me:A": "Dana Lee"])], people: people)
+        XCTAssertEqual(all[0].voices, 0)
+        XCTAssertEqual(all[0].size, .unknown)
+    }
+
+    func testJustMeNeedsTheOwnerAloneAndNoOneElseInvited() {
+        let owner = ["me:A": "Dana Lee"]
+        let all = rows([record("memo", voices: [("me:A", 600)], names: owner),
+                        record("waited", voices: [("me:A", 600)], names: owner, attendees: ["Sam Carter"]),
+                        record("unsaved", voices: [("me:A", 600)], names: owner, attendees: ["Jo Quinn"]),
+                        record("someone", voices: [("me:A", 600), ("them:A", 4)], names: owner)], people: people)
+        XCTAssertEqual(all.map(\.size), [.alone, .unknown, .unknown, .unknown])
+    }
+
+    func testAOneOnOneNeedsTheOwnerToSpeakAndNoOneElseInvited() {
+        let owner = ["me:A": "Dana Lee"]
+        let all = rows([record("pair", voices: [("me:A", 600), ("them:A", 600)], names: ["me:A": "Dana Lee", "them:A": "Sam Carter"], attendees: ["Sam Carter"]),
+                        // The unnamed voice can be the one invited person.
+                        record("unnamed", voices: [("me:A", 600), ("them:A", 600)], names: owner, attendees: ["Sam Carter"]),
+                        // Riley was invited and said nothing: two people or three.
+                        record("silentGuest", voices: [("me:A", 600), ("them:A", 600)], names: ["me:A": "Dana Lee", "them:A": "Sam Carter"],
+                               attendees: ["Sam Carter", "Riley Park"]),
+                        record("pairWithMyself", voices: [("me:A", 600), ("them:A", 600)], names: ["me:A": "Dana Lee", "them:A": "Sam Carter"],
+                               attendees: ["Dana Lee", "Sam Carter"])], people: people)
+        XCTAssertEqual(all.map(\.size), [.oneOnOne, .oneOnOne, .unknown, .oneOnOne])
+    }
+
+    func testAGroupWithSilentGuestsIsKnownOnlyWhenBothCountsAgree() {
+        let names = ["me:A": "Dana Lee", "them:A": "Sam Carter", "them:B": "Riley Park"]
+        let directory = PersonDirectory([.init(name: "Sam Carter", email: nil), .init(name: "Riley Park", email: nil), .init(name: "Avery Stone", email: nil),
+                                         .init(name: "Jo Quinn", email: nil), .init(name: "Kim Lane", email: nil), .init(name: "Lee Ford", email: nil)])
+        let many = MeetingFilterPeople(directory: directory, owner: "Dana Lee")
+        let voices = [("me:A", 600.0), ("them:A", 600.0), ("them:B", 600.0)]
+        let all = rows([record("three", voices: voices, names: names, attendees: ["Sam Carter", "Riley Park"]),
+                        record("fiveAtMost", voices: voices, names: names, attendees: ["Sam Carter", "Riley Park", "Avery Stone", "Jo Quinn"]),
+                        record("threeOrSeven", voices: voices, names: names, attendees: ["Sam Carter", "Riley Park", "Avery Stone", "Jo Quinn", "Kim Lane", "Lee Ford"])],
+                       people: many)
+        XCTAssertEqual(all.map(\.size), [.small, .small, .unknown])
     }
 
     // MARK: Value
@@ -257,8 +323,8 @@ final class MeetingFilterTests: XCTestCase {
         let r = record("a", voices: [("me:A", 100), ("them:A", 100), ("them:B", 100)], names: ["me:A": "Dana Lee", "them:A": "Sam Carter"],
                        attendees: ["Dana Lee", "Carter, Sam", "riley.park@example.com", "Jo Quinn", "someone@example.com"])
         let row = MeetingFilterRow(record: r, people: people, rating: nil)!
-        XCTAssertEqual(row.people.map(\.id), ["id-sam", nil], "the email of nobody saved is no person; Riley has no saved email, so that address is nobody")
-        XCTAssertEqual(row.people.map(\.name), ["Sam Carter", "Jo Quinn"])
+        XCTAssertEqual(row.people.map(\.id), ["id-sam"], "the email of nobody saved is no person; Riley has no saved email, so that address is nobody")
+        XCTAssertEqual(row.people.map(\.name), ["Sam Carter"], "an invited name that is surely nobody saved is no person")
     }
 
     func testAnInvitedPersonWithASavedEmailIsThatPerson() {
@@ -400,8 +466,8 @@ final class MeetingFilterTests: XCTestCase {
     func testPeopleAreListedByMeetingsThenByName() {
         let all = rows([record("a", voices: [("them:A", 100), ("them:B", 100)], names: ["them:A": "Sam Carter", "them:B": "Riley Park"]),
                         record("b", voices: [("them:A", 100)], names: ["them:A": "Riley Park"]),
-                        record("c", attendees: ["Avery Stone", "Jo Quinn"])], people: people)
-        XCTAssertEqual(facets(all).people.map(\.who.name), ["Riley Park", "Avery Stone", "Jo Quinn", "Sam Carter"])
+                        record("c", attendees: ["Sam Carter", "Avery Stone"]), record("d", attendees: ["Carter, Sam"])], people: people)
+        XCTAssertEqual(facets(all).people.map(\.who.name), ["Sam Carter", "Riley Park"])
     }
 
     // MARK: Chips
@@ -422,7 +488,7 @@ final class MeetingFilterTests: XCTestCase {
         XCTAssertEqual(f.active.count, 10)
         XCTAssertFalse(f.isEmpty)
         XCTAssertEqual(f.active.map { $0.label(calendar: calendar, now: now) },
-                       ["Sam Carter", "Last 7 days", "Mon", "Under 15 min", "1:1", "Budget", "Monthly update", "Not rated", "Zoom", "Has decisions"])
+                       ["Sam Carter", "Last 7 days", "Mon", "Under 15 min", "2 people", "Budget", "Monthly update", "Not rated", "Zoom", "Has decisions"])
         for chip in f.active { XCTAssertTrue(f.contains(chip)) }
         f.remove(.tag("budget"))
         XCTAssertEqual(f.tags, [])
@@ -469,6 +535,10 @@ final class MeetingFilterTests: XCTestCase {
         XCTAssertEqual(label(.length(.to60)), "30–60 min")
         XCTAssertEqual(label(.size(.small)), "3–5 people")
         XCTAssertEqual(label(.size(.large)), "6+ people")
+        XCTAssertEqual(label(.size(.oneOnOne)), "2 people", "not the words of the kind 1:1")
+        XCTAssertEqual(label(.size(.alone)), "Just me")
+        XCTAssertEqual(label(.size(.unknown)), "People not known")
+        XCTAssertEqual(MeetingFilter.Size.unknown.option, "Not known")
         XCTAssertEqual(label(.value(.high)), "High value")
         XCTAssertEqual(label(.flag(.screens)), "Has screens")
         XCTAssertEqual(label(.platform(.inPerson)), "In person")
@@ -493,7 +563,7 @@ final class MeetingFilterTests: XCTestCase {
         _ = cache.rows(for: [a, b], people: people, ratings: [:])
         let other = MeetingFilterPeople(directory: PersonDirectory(), ids: [:], owner: "Dana Lee")
         let renamed = cache.rows(for: [a, b], people: other, ratings: [:])
-        XCTAssertEqual(renamed[1].people.map(\.name), ["Carter, Sam"])
+        XCTAssertEqual(renamed[1].people.map(\.name), [], "with no saved people an invited name is surely no one")
         XCTAssertEqual(cache.rows(for: [a, record("live", status: .recording)], people: other, ratings: [:]).map(\.id), ["a"])
     }
 
@@ -516,5 +586,178 @@ final class MeetingFilterTests: XCTestCase {
         try review(.high).save(in: dir("c"))
         XCTAssertEqual(cache.read(ids: ["a", "b", "c"], directory: dir), ["a": .low, "c": .high])
         XCTAssertEqual(cache.decodeCount, 3)
+    }
+
+    // MARK: A person: spoke or invited
+
+    func testAPersonMatchesAMeetingWhereTheySpokeOrWereInvited() {
+        let sam = MeetingFilter.Who(id: "id-sam", name: "Sam Carter")
+        let all = rows([record("spoke", voices: [("them:A", 100)], names: ["them:A": "Sam Carter"]),
+                        record("invited", attendees: ["sam@example.com"]),
+                        record("byName", attendees: ["Carter, Sam"]),
+                        record("unsure", attendees: ["Sam"]),
+                        record("neither", voices: [("them:A", 100)], names: ["them:A": "Riley Park"])], people: people)
+        var f = MeetingFilter()
+        f.people = [sam]
+        XCTAssertEqual(ids(all, f), ["byName", "invited", "spoke"], "a first name alone is not a sure match")
+    }
+
+    func testAPersonsCountIsWhatTheFilterWouldShow() {
+        let all = rows([record("a", platform: .zoom, voices: [("them:A", 100)], names: ["them:A": "Sam Carter"]),
+                        record("b", platform: .meet, attendees: ["Sam Carter", "Riley Park"]),
+                        record("c", platform: .zoom, voices: [("them:A", 100)], names: ["them:A": "Riley Park"], attendees: ["Sam Carter"]),
+                        record("d", platform: .teams, voices: [("them:A", 100)], names: ["them:A": "Riley Park"])], people: people)
+        for base in [MeetingFilter(), { var f = MeetingFilter(); f.platforms = [.zoom]; return f }()] {
+            for person in facets(all, base).people {
+                var chosen = base
+                chosen.people = [person.who]
+                XCTAssertEqual(person.count, ids(all, chosen).count, "\(person.who.name) with \(base.platforms)")
+            }
+        }
+    }
+
+    // MARK: The date choices follow the clock
+
+    func testTodayIsAlwaysTheDayOfTheClock() {
+        let all = rows([record("late", start: at(11, 11, 23, minute: 30)), record("early", start: at(11, 12, 0, minute: 10))])
+        var f = MeetingFilter()
+        f.period = .today
+        let before = MeetingFacets(rows: all, filter: f, now: at(11, 11, 23, minute: 59), calendar: calendar)
+        let after = MeetingFacets(rows: all, filter: f, now: at(11, 12, 0, minute: 20), calendar: calendar)
+        XCTAssertEqual(before.matches, ["late"])
+        XCTAssertEqual(after.matches, ["early"])
+        XCTAssertEqual(after.periods.count(.last7), 2)
+    }
+
+    func testTheCountsAreOldOnceTheDayChanges() {
+        var day = MeetingFilterDay(calendar: calendar)
+        XCTAssertTrue(day.isStale(now: at(11, 11, 9)), "nothing counted yet")
+        day.counted(at: at(11, 11, 9))
+        XCTAssertFalse(day.isStale(now: at(11, 11, 23, minute: 59)))
+        XCTAssertTrue(day.isStale(now: at(11, 12, 0, minute: 1)))
+        XCTAssertEqual(day.nextChange, at(11, 12, 0))
+        // Back from a sleep of three days.
+        XCTAssertTrue(day.isStale(now: at(11, 14, 8)))
+        // A new time zone moves the day.
+        var london = calendar
+        london.timeZone = TimeZone(identifier: "Europe/London")!
+        var moved = MeetingFilterDay(calendar: calendar)
+        moved.counted(at: at(11, 11, 23))
+        XCTAssertFalse(moved.isStale(now: at(11, 11, 23, minute: 10)))
+        XCTAssertTrue(moved.isStale(now: at(11, 11, 23, minute: 10), calendar: london), "it is November 12 in London")
+    }
+
+    // MARK: The controls, without the window
+
+    func testTheFlyoutDoesNotOpenAgainOnTheClickThatClosedIt() {
+        var gate = MeetingFilterFlyoutGate()
+        XCTAssertTrue(gate.mayOpen(at: at(11, 11, 9)))
+        gate.closed(at: at(11, 11, 9))
+        XCTAssertFalse(gate.mayOpen(at: at(11, 11, 9).addingTimeInterval(0.1)))
+        XCTAssertTrue(gate.mayOpen(at: at(11, 11, 9).addingTimeInterval(0.5)))
+    }
+
+    func testThePeopleSearchAndReturn() {
+        let all = rows([record("a", platform: .zoom, voices: [("them:A", 100)], names: ["them:A": "Sam Carter"]),
+                        record("b", platform: .meet, voices: [("them:A", 100)], names: ["them:A": "Riley Park"])], people: people)
+        var f = MeetingFilter()
+        f.platforms = [.zoom]
+        let seen = facets(all, f)
+        XCTAssertEqual(seen.people(matching: " riley ").map(\.who.name), ["Riley Park"])
+        XCTAssertEqual(seen.people(matching: "").count, 2)
+        // Riley has no meeting on Zoom: Return does not choose a row that the pointer cannot choose.
+        XCTAssertNil(seen.choiceOnReturn(query: "riley", highlighted: nil, filter: f))
+        XCTAssertEqual(seen.choiceOnReturn(query: "sam", highlighted: nil, filter: f)?.name, "Sam Carter")
+        XCTAssertNil(seen.choiceOnReturn(query: "", highlighted: nil, filter: f), "no text and no row in the light")
+        let riley = seen.people.first { $0.who.name == "Riley Park" }!
+        XCTAssertNil(seen.choiceOnReturn(query: "", highlighted: riley.id, filter: f))
+        // A chosen person with no meeting can always be turned off.
+        f.people = [riley.who]
+        XCTAssertEqual(facets(all, f).choiceOnReturn(query: "", highlighted: riley.id, filter: f)?.name, "Riley Park")
+    }
+
+    func testTheCustomChipsAndTheDateFields() {
+        var f = MeetingFilter()
+        f.toggleCustomPeriod(now: now, calendar: calendar)
+        XCTAssertEqual(f.period, .custom(from: at(11, 5, 0), to: at(11, 11, 0)), "the last seven days to start with")
+        f.setRange(from: at(11, 1, 0))
+        XCTAssertEqual(f.period, .custom(from: at(11, 1, 0), to: at(11, 11, 0)))
+        f.setRange(to: at(10, 20, 0))
+        XCTAssertEqual(f.period, .custom(from: at(10, 20, 0), to: at(10, 20, 0)), "a last day before the first day moves the first day too")
+        f.setRange(from: at(10, 25, 0))
+        XCTAssertEqual(f.period, .custom(from: at(10, 25, 0), to: at(10, 25, 0)))
+        f.toggleCustomPeriod(now: now, calendar: calendar)
+        XCTAssertNil(f.period)
+        f.period = .last7
+        f.toggleCustomPeriod(now: now, calendar: calendar)
+        XCTAssertTrue(f.period?.isCustom == true, "Custom takes the place of a preset")
+
+        f.lengths = [.to30]
+        f.toggleCustomLength()
+        XCTAssertEqual(f.customLength, .init(min: 15, max: 45))
+        XCTAssertEqual(f.lengths, [])
+        f.toggleCustomLength()
+        XCTAssertNil(f.customLength)
+    }
+
+    func testTheWeekdayBarFollowsTheCalendar() {
+        XCTAssertEqual(MeetingFilter.weekdayOrder(calendar), [2, 3, 4, 5, 6, 7, 1])
+        var sunday = calendar
+        sunday.firstWeekday = 1
+        XCTAssertEqual(MeetingFilter.weekdayOrder(sunday), [1, 2, 3, 4, 5, 6, 7])
+    }
+
+    func testTheLengthSliderThumbs() {
+        typealias R = MeetingFilter.MinuteRange
+        let r = R(min: 20, max: 45)
+        XCTAssertEqual(r.moving(.lower, to: 30), R(min: 30, max: 45))
+        XCTAssertEqual(r.moving(.lower, to: 60), R(min: 45, max: 45), "the shortest never passes the longest")
+        XCTAssertEqual(r.moving(.upper, to: 10), R(min: 20, max: 20))
+        XCTAssertEqual(r.moving(.upper, to: 120), R(min: 20, max: nil), "the end is \"or more\"")
+        XCTAssertEqual(r.moving(.lower, to: -5), R(min: 0, max: 45))
+        XCTAssertEqual(R.snap(minutes: 22.4), 20)
+        XCTAssertEqual(R.snap(minutes: 23), 25)
+        // Both thumbs at the end: the one on top is "Longest", and a drag to the left must still move a thumb.
+        let end = R(min: 120, max: nil)
+        XCTAssertEqual(end.grab(.upper, toward: 100), .lower)
+        XCTAssertEqual(end.grab(.upper, toward: 120), .upper)
+        XCTAssertEqual(end.moving(end.grab(.upper, toward: 100), to: 100), R(min: 100, max: nil))
+        let start = R(min: 0, max: 0)
+        XCTAssertEqual(start.grab(.upper, toward: 30), .upper)
+        XCTAssertEqual(start.grab(.lower, toward: 30), .upper)
+        XCTAssertEqual(r.grab(.upper, toward: 10), .upper, "apart, a thumb stays the one that was touched")
+    }
+
+    // MARK: Small fixes
+
+    func testANewNameIsAChange() {
+        let before = rows([record("a", voices: [("them:A", 100)], names: ["them:A": "Sam Carter"])], people: people)
+        var after = before
+        after[0].people = [.init(id: "id-sam", name: "Samuel Carter")]
+        XCTAssertEqual(before, after, "the same person")
+        XCTAssertFalse(MeetingFilterRow.same(before, after), "under a new name")
+        XCTAssertTrue(MeetingFilterRow.same(before, before))
+        let a = facets(before), b = facets(after)
+        XCTAssertFalse(a.isSame(as: b))
+        XCTAssertTrue(a.isSame(as: facets(before)))
+    }
+
+    func testAScreenBackfillIsAChangeOfTheRow() {
+        let cache = MeetingFilterRows()
+        var r = record("a", screens: nil)
+        _ = cache.rows(for: [r], people: people, ratings: [:])
+        r.screens = [SharedScreen(offset: 1, file: "1.heic", text: "")]
+        XCTAssertEqual(cache.rows(for: [r], people: people, ratings: [:])[0].screens, 1)
+        r.platform = .zoom
+        XCTAssertEqual(cache.rows(for: [r], people: people, ratings: [:])[0].platform, .zoom)
+    }
+
+    func testTheFilterAloneKeepsItsMatchesWhenTheSearchTextChanges() {
+        let all = rows([record("a", tags: ["Budget"]), record("b", tags: ["Budget"]), record("c")])
+        var f = MeetingFilter()
+        f.tags = ["Budget"]
+        let narrow = facets(all, f, within: ["a"])
+        XCTAssertEqual(narrow.matches, ["a"])
+        XCTAssertEqual(narrow.filterMatches, ["a", "b"], "the list meets the newest search text with these")
     }
 }

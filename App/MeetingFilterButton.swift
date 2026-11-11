@@ -33,7 +33,8 @@ struct MeetingFilterButton: View {
         .help(count == 0 ? "Filter meetings (⌥⌘F)" : "\(count) \(count == 1 ? "filter" : "filters") on (⌥⌘F)")
         .accessibilityLabel("Filter meetings")
         .accessibilityValue(count == 0 ? "No filters" : "\(count) \(count == 1 ? "filter" : "filters") on")
-        .popover(isPresented: $filters.isOpen, arrowEdge: .bottom) {
+        // Beside the list in its title row, so the list it filters stays in view; below the toolbar in Calendar mode.
+        .popover(isPresented: $filters.isOpen, arrowEdge: place == .title ? .trailing : .bottom) {
             MeetingFilterPanel().environmentObject(filters)
         }
         .animation(.snappy(duration: 0.2), value: count)
@@ -62,7 +63,11 @@ struct MeetingFilterChips: View {
         let choices = filters.filter.active
         if !choices.isEmpty {
             FlowLayout(spacing: 6) {
-                ForEach(choices, id: \.self) { choice in
+                ForEach(Array(choices.enumerated()), id: \.element) { i, choice in
+                    // With "All", "and" between the people says what the chips alone do not.
+                    if i > 0, filters.filter.peopleMode == .all, case .person = choice {
+                        Text("and").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary).frame(height: 22)
+                    }
                     ActiveChip(choice: choice, text: filters.label(choice, calendar: calendar)) {
                         withAnimation(.snappy(duration: 0.2)) { filters.filter.remove(choice) }
                     }

@@ -42,7 +42,7 @@ struct MeetingFilterPanel: View {
         .background {
             // The same shortcut closes it, since the button behind does not get keys while the flyout has them.
             Button("Close") { filters.isOpen = false }.keyboardShortcut("f", modifiers: [.command, .option])
-                .opacity(0).accessibilityHidden(true)
+                .focusable(false).opacity(0).accessibilityHidden(true)
         }
     }
 
@@ -105,11 +105,11 @@ struct MeetingFilterPanel: View {
                     chip(.period(p), p.label(calendar: calendar), count: facets.periods.count(p))
                 }
                 FilterChip(text: "Custom", count: nil, on: filters.filter.period?.isCustom == true) {
-                    change { filters.filter.period = filters.filter.period?.isCustom == true ? nil : defaultRange }
+                    change { filters.filter.toggleCustomPeriod(now: Date(), calendar: calendar) }
                 }
             }
             if case .custom(let from, let to) = filters.filter.period {
-                FilterDateRange(from: from, to: to) { a, b in filters.filter.period = .custom(from: a, to: b) }
+                FilterDateRange(from: from, to: to, setFrom: { filters.filter.setRange(from: $0) }, setTo: { filters.filter.setRange(to: $0) })
                     .transition(.opacity)
             }
             FilterWeekdays(chosen: filters.filter.weekdays, counts: facets.weekdays) { toggle(.weekday($0)) }
@@ -121,9 +121,7 @@ struct MeetingFilterPanel: View {
                     chip(.length(l), l.option, count: facets.lengths.count(l))
                 }
                 FilterChip(text: "Custom", count: nil, on: filters.filter.customLength != nil) {
-                    change {
-                        if filters.filter.customLength != nil { filters.filter.customLength = nil } else { filters.filter.toggle(.customLength(.init(min: 15, max: 45))) }
-                    }
+                    change { filters.filter.toggleCustomLength() }
                 }
             }
             if let range = filters.filter.customLength {
@@ -131,7 +129,8 @@ struct MeetingFilterPanel: View {
                     .transition(.opacity)
             }
         }
-        let sizes = MeetingFilter.Size.allCases.filter { $0 != .alone || facets.sizes.exists(.alone) || filters.filter.sizes.contains(.alone) }
+        // "Just me" and "Not known" only where a meeting has them.
+        let sizes = MeetingFilter.Size.allCases.filter { ![.alone, .unknown].contains($0) || facets.sizes.exists($0) || filters.filter.sizes.contains($0) }
         FilterGroup("People in the meeting") {
             FlowLayout(spacing: 6) {
                 ForEach(sizes, id: \.self) { s in chip(.size(s), s.option, count: facets.sizes.count(s)) }
@@ -195,12 +194,6 @@ struct MeetingFilterPanel: View {
         guard !all, list.count > limit else { return list }
         let keys = Set(chosen.map { $0.lowercased() })
         return Array(list.prefix(limit)) + list.dropFirst(limit).filter { keys.contains($0.id) }
-    }
-
-    /// The last seven days, as a start for a range of the owner's own.
-    private var defaultRange: MeetingFilter.Period {
-        let today = calendar.startOfDay(for: Date())
-        return .custom(from: calendar.date(byAdding: .day, value: -6, to: today) ?? today, to: today)
     }
 }
 

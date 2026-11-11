@@ -31,6 +31,9 @@ public struct MeetingFacets: Sendable, Equatable {
     public var total = 0
     /// The meetings that match the filter and the search text.
     public var matches: Set<String> = []
+    /// The meetings that match the filter, whatever the search text. The list meets these with the newest search
+    /// text, so a wider text never shows the older, narrower set while the count runs.
+    public var filterMatches: Set<String> = []
     /// Everyone in the meetings looked at, the one in the most meetings first. The order does not change with
     /// the filter, so a row stays where it is while the owner chooses.
     public var people: [Person] = []
@@ -73,8 +76,7 @@ public struct MeetingFacets: Sendable, Equatable {
         var tags: [String: (name: String, count: Int, overall: Int)] = [:]
         var kinds: [String: (name: String, count: Int, overall: Int)] = [:]
 
-        for row in rows where within?.contains(row.id) ?? true {
-            total += 1
+        for row in rows {
             // What this meeting has, group by group. An unknown number gives no choice.
             let rowPeople = Set(row.people.map(\.key))
             var rowTags: [String: String] = [:]
@@ -83,7 +85,6 @@ public struct MeetingFacets: Sendable, Equatable {
             let length = MeetingFilter.Length.allCases.first { $0.contains(seconds: row.seconds) }
             let rowPeriods = presets.filter { inside(row.start, $0.1) }.map(\.0)
             let weekday = calendar.component(.weekday, from: row.start)
-            let size = row.voices.map(MeetingFilter.Size.init(voices:))
             let value = MeetingFilter.Value(row.value)
             var rowFlags: [MeetingFilter.Flag] = []
             if let n = row.actionItems, n > 0 { rowFlags.append(.actionItems) }
@@ -105,11 +106,14 @@ public struct MeetingFacets: Sendable, Equatable {
             if !filter.weekdays.isEmpty, !filter.weekdays.contains(weekday) { failed.insert(.weekday) }
             if !chosenTags.isEmpty, chosenTags.isDisjoint(with: rowTags.keys) { failed.insert(.tags) }
             if !chosenKinds.isEmpty, !(kindKey.map(chosenKinds.contains) ?? false) { failed.insert(.kinds) }
-            if !filter.sizes.isEmpty, !(size.map(filter.sizes.contains) ?? false) { failed.insert(.size) }
+            if !filter.sizes.isEmpty, !filter.sizes.contains(row.size) { failed.insert(.size) }
             if !filter.values.isEmpty, !filter.values.contains(value) { failed.insert(.value) }
             if !filter.platforms.isEmpty, !filter.platforms.contains(row.platform) { failed.insert(.platform) }
             for flag in filter.flags where !rowFlags.contains(flag) { failed.insert(.flag(flag)) }
 
+            if failed.isEmpty { filterMatches.insert(row.id) }
+            guard within?.contains(row.id) ?? true else { continue }
+            total += 1
             if failed.isEmpty { matches.insert(row.id) }
             // A choice counts this meeting when every other group lets it through.
             func counts(_ group: Group) -> Bool { failed.isEmpty || failed == group }
@@ -137,7 +141,7 @@ public struct MeetingFacets: Sendable, Equatable {
             if let length { lengths.add(length, counted: counts(.length)) }
             for period in rowPeriods { periods.add(period, counted: counts(.period)) }
             weekdays.add(weekday, counted: counts(.weekday))
-            if let size { sizes.add(size, counted: counts(.size)) }
+            sizes.add(row.size, counted: counts(.size))
             values.add(value, counted: counts(.value))
             platforms.add(row.platform, counted: counts(.platform))
             for flag in rowFlags { flags.add(flag, counted: counts(.flag(flag))) }
@@ -155,6 +159,26 @@ public struct MeetingFacets: Sendable, Equatable {
             .map { Named(name: $0.name, count: $0.count) }
         self.kinds = kinds.values.sorted { $0.overall != $1.overall ? $0.overall > $1.overall : byName($0.name, $1.name) }
             .map { Named(name: $0.name, count: $0.count) }
+    }
+}
+
+extension MeetingFacets {
+    /// Equal, and each person under the same name (see `MeetingFilterRow.same`).
+    public func isSame(as other: MeetingFacets) -> Bool { self == other && people.map(\.who.name) == other.people.map(\.who.name) }
+
+    /// The people list under the search text of the flyout.
+    public func people(matching query: String) -> [Person] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        return q.isEmpty ? people : people.filter { $0.who.name.localizedCaseInsensitiveContains(q) }
+    }
+
+    /// Whom Return in the people search turns on or off: the row in the light, else the first that the text
+    /// finds. Never a row that the pointer cannot choose either: one with no meeting that is not on.
+    public func choiceOnReturn(query: String, highlighted: String?, filter: MeetingFilter) -> MeetingFilter.Who? {
+        let shown = people(matching: query)
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard let p = shown.first(where: { $0.id == highlighted }) ?? (q.isEmpty ? nil : shown.first) else { return nil }
+        return p.count > 0 || filter.people.contains(p.who) ? p.who : nil
     }
 }
 

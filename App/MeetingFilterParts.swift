@@ -58,17 +58,19 @@ struct FilterPeoplePicker: View {
     @State private var highlighted: String?
     @FocusState private var searching: Bool
 
-    private var shown: [MeetingFacets.Person] {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        return q.isEmpty ? filters.facets.people : filters.facets.people.filter { $0.who.name.localizedCaseInsensitiveContains(q) }
-    }
+    private var shown: [MeetingFacets.Person] { filters.facets.people(matching: query) }
 
     var body: some View {
         let people = shown
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Text("People").textRole(.label).foregroundStyle(Palette.secondary)
-                    .accessibilityAddTraits(.isHeader)
+                // Not the People page's count, which has only the meetings where the person spoke.
+                HStack(spacing: 6) {
+                    Text("People").textRole(.label).foregroundStyle(Palette.secondary)
+                    Text("spoke or invited").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
                 if filters.filter.people.count > 1 { modePicker.transition(.opacity) }
             }
@@ -118,9 +120,14 @@ struct FilterPeoplePicker: View {
                 .focused($searching)
                 .onKeyPress(.downArrow) { move(1) }
                 .onKeyPress(.upArrow) { move(-1) }
+                // Escape first clears the text; with no text it closes the flyout.
+                .onKeyPress(.escape) {
+                    guard !query.isEmpty else { return .ignored }
+                    query = ""
+                    return .handled
+                }
                 .onSubmit {
-                    let people = shown
-                    if let p = people.first(where: { $0.id == highlighted }) ?? (query.isEmpty ? nil : people.first) { toggle(p.who) }
+                    if let who = filters.facets.choiceOnReturn(query: query, highlighted: highlighted, filter: filters.filter) { toggle(who) }
                 }
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.tertiaryMark) }
@@ -216,7 +223,7 @@ struct FilterWeekdays: View {
     @Environment(\.calendar) private var calendar
 
     var body: some View {
-        let days = (0..<7).map { (calendar.firstWeekday - 1 + $0) % 7 + 1 }
+        let days = MeetingFilter.weekdayOrder(calendar)
         HStack(spacing: 2) {
             ForEach(days, id: \.self) { day in
                 let on = chosen.contains(day), n = counts.count(day), empty = n == 0 && !on
@@ -250,13 +257,14 @@ struct FilterWeekdays: View {
 struct FilterDateRange: View {
     let from: Date
     let to: Date
-    let set: (Date, Date) -> Void
+    let setFrom: (Date) -> Void
+    let setTo: (Date) -> Void
 
     var body: some View {
         HStack(spacing: 6) {
-            field("From", Binding(get: { min(from, to) }, set: { set($0, max($0, max(from, to))) }))
+            field("From", Binding(get: { min(from, to) }, set: setFrom))
             Text("to").foregroundStyle(Palette.secondary)
-            field("To", Binding(get: { max(from, to) }, set: { set(min($0, min(from, to)), $0) }))
+            field("To", Binding(get: { max(from, to) }, set: setTo))
         }
     }
 
@@ -311,15 +319,17 @@ private struct PlainDateField: NSViewRepresentable {
 struct FilterMinuteSlider: View {
     let range: MeetingFilter.MinuteRange
     let set: (MeetingFilter.MinuteRange) -> Void
+    /// The thumb a drag moves, from its start to its end: two thumbs at one place go by the drag's direction.
+    @State private var grabbed: MeetingFilter.MinuteRange.Thumb?
 
-    private static let top = 120
-    private static let step = 5
+    private static let top = MeetingFilter.MinuteRange.top
+    private static let step = MeetingFilter.MinuteRange.step
     private static let thumb: CGFloat = 16
     /// As the system's sliders: white, and a light gray in dark mode, so the thumb reads on the flyout's glass.
     private static let knob = Color(light: 0xFFFFFF, dark: 0xD6D1C9)
 
-    private var upper: Int { min(range.max ?? Self.top, Self.top) }
-    private var lower: Int { min(range.min, upper) }
+    private var upper: Int { range.upper }
+    private var lower: Int { range.lower }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -329,8 +339,8 @@ struct FilterMinuteSlider: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Palette.fill).frame(height: 4).padding(.horizontal, Self.thumb / 2)
                     Capsule().fill(Palette.accentFill).frame(width: max(0, high - low), height: 4).offset(x: low + Self.thumb / 2)
-                    thumb("Shortest", value: lower, at: low, span: span) { move(lower: $0) }
-                    thumb("Longest", value: upper, at: high, span: span) { move(upper: $0) }
+                    thumb("Shortest", .lower, value: lower, at: low, span: span)
+                    thumb("Longest", .upper, value: upper, at: high, span: span)
                 }
                 .frame(height: Self.thumb)
                 .coordinateSpace(.named("minutes"))
@@ -344,17 +354,9 @@ struct FilterMinuteSlider: View {
         .padding(.top, 2)
     }
 
-    private func move(lower value: Int) {
-        set(.init(min: min(max(0, value), upper), max: range.max))
-    }
-
-    private func move(upper value: Int) {
-        let value = min(max(value, lower), Self.top)
-        set(.init(min: lower, max: value >= Self.top ? nil : value))
-    }
-
-    private func thumb(_ label: String, value: Int, at x: CGFloat, span: CGFloat, move: @escaping (Int) -> Void) -> some View {
-        Circle()
+    private func thumb(_ label: String, _ which: MeetingFilter.MinuteRange.Thumb, value: Int, at x: CGFloat, span: CGFloat) -> some View {
+        let move = { (minutes: Int) in set(range.moving(which, to: minutes)) }
+        return Circle()
             .fill(Self.knob)
             .overlay { Circle().strokeBorder(.black.opacity(0.08), lineWidth: 0.5) }
             .shadow(color: .black.opacity(0.22), radius: 1.5, y: 1)
@@ -364,9 +366,12 @@ struct FilterMinuteSlider: View {
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("minutes"))
                     .onChanged { drag in
-                        let minutes = Double(drag.location.x - Self.thumb / 2) / Double(span) * Double(Self.top)
-                        move(Int((minutes / Double(Self.step)).rounded()) * Self.step)
+                        let minutes = MeetingFilter.MinuteRange.snap(minutes: Double(drag.location.x - Self.thumb / 2) / Double(span) * Double(Self.top))
+                        let moving = grabbed ?? range.grab(which, toward: minutes)
+                        if grabbed == nil, minutes != value { grabbed = moving }
+                        set(range.moving(moving, to: minutes))
                     }
+                    .onEnded { _ in grabbed = nil }
             )
             .focusable()
             .onKeyPress(.leftArrow) { move(value - Self.step); return .handled }

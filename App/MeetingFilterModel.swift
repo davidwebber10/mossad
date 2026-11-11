@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import MossadCore
@@ -19,12 +20,16 @@ final class MeetingFilterModel: ObservableObject {
     /// The filter that `facets` answers, so the list never shows one filter's meetings under another's chips.
     @Published private(set) var answered = MeetingFilter()
     @Published var isOpen = false {
-        didSet { if oldValue, !isOpen { closed = Date() } }
+        didSet { if oldValue, !isOpen { gate.closed(at: Date()) } }
     }
-    private var closed = Date.distantPast
+    private var gate = MeetingFilterFlyoutGate()
+    /// The day the counts are for: "Today" and "Last 7 days" move with the clock.
+    private var day = MeetingFilterDay()
+    private var midnight: Task<Void, Never>?
 
-    /// The meetings the filter leaves; nil while it is empty, when every meeting matches.
-    var matches: Set<String>? { answered.isEmpty ? nil : facets.matches }
+    /// The meetings the filter leaves, whatever the search text (the list meets them with the newest text); nil
+    /// while the filter is empty, when every meeting matches.
+    var matches: Set<String>? { answered.isEmpty ? nil : facets.filterMatches }
     var isActive: Bool { !filter.isEmpty }
 
     private weak var controller: AppController?
@@ -56,19 +61,43 @@ final class MeetingFilterModel: ObservableObject {
                     }
                 },
         ]
+        // A new day, a wake from sleep, or a new time zone can change what "Today" holds.
+        let center = NotificationCenter.default
+        for name in [Notification.Name.NSCalendarDayChanged, .NSSystemTimeZoneDidChange] {
+            observers.append(center.publisher(for: name).receive(on: RunLoop.main)
+                .sink { [weak self] _ in MainActor.assumeIsolated { self?.countIfNewDay() } })
+        }
+        observers.append(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification).receive(on: RunLoop.main)
+            .sink { [weak self] _ in MainActor.assumeIsolated { self?.countIfNewDay() } })
         applyPreview()
+    }
+
+    private func countIfNewDay() {
+        if day.isStale(now: Date(), calendar: .current) { count() }
+    }
+
+    /// Counts again at the start of the next day, in case the system's notice of it does not come.
+    private func waitForMidnight() {
+        midnight?.cancel()
+        guard let next = day.nextChange else { return }
+        midnight = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(1, next.timeIntervalSinceNow + 1)))
+            guard !Task.isCancelled else { return }
+            self?.countIfNewDay()
+        }
     }
 
     func clear() { filter = MeetingFilter() }
 
     /// Opens or closes the flyout. The saved people can change without a signal (a new name in People), so an
-    /// open reads them again.
+    /// open reads them again, and the date choices are counted for this moment.
     func toggleOpen() {
-        // A click on the button while the flyout is open first closes the flyout, as any click outside it does;
-        // the same click must not open it again.
-        if !isOpen, Date().timeIntervalSince(closed) < 0.3 { return }
+        if !isOpen, !gate.mayOpen(at: Date()) { return }
         isOpen.toggle()
-        if isOpen { read() }
+        if isOpen {
+            count()
+            read()
+        }
     }
 
     /// Reads the rows again. A call that arrives while a read runs is folded into one more read after it.
@@ -80,7 +109,7 @@ final class MeetingFilterModel: ObservableObject {
         reading = Task(priority: .utility) {
             let made = await Self.rows(records, profiles: profiles, store: store, owner: owner, paths: paths, kept: kept, ratings: ratings)
             reading = nil
-            if rows != made {
+            if !MeetingFilterRow.same(rows, made) {
                 rows = made
                 count()
             }
@@ -102,18 +131,22 @@ final class MeetingFilterModel: ObservableObject {
     /// Counts for the newest filter and search text; an answer for an older pair is dropped.
     private func count() {
         counting?.cancel()
-        let rows = rows, filter = filter, within = within
+        let rows = rows, filter = filter, within = within, now = Date(), calendar = Calendar.current
         counting = Task {
-            let made = await Self.facets(rows, filter, within)
+            let made = await Self.facets(rows, filter, within, now: now, calendar: calendar)
             guard !Task.isCancelled else { return }
-            if facets != made { facets = made }
+            if !facets.isSame(as: made) { facets = made }
             if answered != filter { answered = filter }
+            day = MeetingFilterDay(calendar: calendar)
+            day.counted(at: now)
+            waitForMidnight()
         }
     }
 
     @concurrent
-    nonisolated private static func facets(_ rows: [MeetingFilterRow], _ filter: MeetingFilter, _ within: Set<String>?) async -> MeetingFacets {
-        MeetingFacets(rows: rows, filter: filter, within: within)
+    nonisolated private static func facets(_ rows: [MeetingFilterRow], _ filter: MeetingFilter, _ within: Set<String>?, now: Date,
+                                           calendar: Calendar) async -> MeetingFacets {
+        MeetingFacets(rows: rows, filter: filter, within: within, now: now, calendar: calendar)
     }
 
     // MARK: Screenshots
@@ -147,7 +180,7 @@ final class MeetingFilterModel: ObservableObject {
     private static func choice(_ group: String, _ value: String) -> MeetingFilter.Active? {
         let lengths: [String: MeetingFilter.Length] = ["under15": .under15, "to30": .to30, "to60": .to60, "over60": .over60]
         let periods: [String: MeetingFilter.Period] = ["today": .today, "week": .thisWeek, "last7": .last7, "last30": .last30, "last90": .last90]
-        let sizes: [String: MeetingFilter.Size] = ["alone": .alone, "1:1": .oneOnOne, "small": .small, "large": .large]
+        let sizes: [String: MeetingFilter.Size] = ["alone": .alone, "1:1": .oneOnOne, "small": .small, "large": .large, "unknown": .unknown]
         let values: [String: MeetingFilter.Value] = ["high": .high, "medium": .medium, "low": .low, "none": .notRated]
         let flags: [String: MeetingFilter.Flag] = ["items": .actionItems, "decisions": .decisions, "screens": .screens]
         switch group {

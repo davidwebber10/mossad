@@ -42,8 +42,14 @@ public struct MeetingFilter: Equatable, Sendable {
         }
     }
 
-    /// Whole minutes as the list shows them, both ends in; no `max` is "or more".
+    /// Whole minutes of the recorded length, both ends in; no `max` is "or more". For a joined meeting the length is
+    /// that of its audio, which can be less than the list's end minus start.
     public struct MinuteRange: Hashable, Sendable {
+        /// The slider's track: 0 to 2 hours in steps of 5 minutes; its end means "or more".
+        public static let top = 120
+        public static let step = 5
+
+        public enum Thumb: Sendable { case lower, upper }
         public var min: Int
         public var max: Int?
 
@@ -55,6 +61,30 @@ public struct MeetingFilter: Equatable, Sendable {
         public func contains(seconds: TimeInterval) -> Bool {
             let minutes = Int(seconds / 60)
             return minutes >= min && (max.map { minutes <= $0 } ?? true)
+        }
+
+        /// The two thumbs where the slider draws them.
+        public var upper: Int { Swift.min(max ?? Self.top, Self.top) }
+        public var lower: Int { Swift.min(min, upper) }
+
+        /// The nearest step of the track.
+        public static func snap(minutes: Double) -> Int { Int((minutes / Double(step)).rounded()) * step }
+
+        /// The thumb that a drag toward `minutes` moves. Two thumbs at one place cover each other, so there the
+        /// direction decides: to the left the shorter end, to the right the longer one.
+        public func grab(_ touched: Thumb, toward minutes: Int) -> Thumb {
+            guard lower == upper, minutes != lower else { return touched }
+            return minutes < lower ? .lower : .upper
+        }
+
+        /// The range with one thumb at `minutes`; a thumb never passes the other one.
+        public func moving(_ thumb: Thumb, to minutes: Int) -> MinuteRange {
+            switch thumb {
+            case .lower: return MinuteRange(min: Swift.min(Swift.max(0, minutes), upper), max: max)
+            case .upper:
+                let value = Swift.min(Swift.max(minutes, lower), Self.top)
+                return MinuteRange(min: lower, max: value >= Self.top ? nil : value)
+            }
         }
     }
 
@@ -87,12 +117,13 @@ public struct MeetingFilter: Equatable, Sendable {
         public var isCustom: Bool { if case .custom = self { true } else { false } }
     }
 
-    /// How many people, by the voices that count (`MeetingFacts.mainVoices`).
+    /// How many people were in the meeting: the owner, the voices that count (`MeetingFacts.mainVoices`), and the
+    /// invited people on a sure match. "Unknown" when the meeting cannot say, which is never "Just me" or "1:1".
     public enum Size: Int, CaseIterable, Sendable {
-        case alone, oneOnOne, small, large
+        case alone, oneOnOne, small, large, unknown
 
-        public init(voices: Int) {
-            self = voices <= 1 ? .alone : voices == 2 ? .oneOnOne : voices <= 5 ? .small : .large
+        init(people: Int) {
+            self = people <= 1 ? .alone : people == 2 ? .oneOnOne : people <= 5 ? .small : .large
         }
     }
 
@@ -131,6 +162,35 @@ public struct MeetingFilter: Equatable, Sendable {
     public init() {}
 
     public var isEmpty: Bool { active.isEmpty }
+
+    /// The weekday bar's order: the calendar's first day of the week first.
+    public static func weekdayOrder(_ calendar: Calendar) -> [Int] { (0..<7).map { (calendar.firstWeekday - 1 + $0) % 7 + 1 } }
+
+    // MARK: The flyout's controls
+
+    /// "Custom" in Date: on with the last seven days, to change from there; off again.
+    public mutating func toggleCustomPeriod(now: Date, calendar: Calendar) {
+        if period?.isCustom == true { period = nil; return }
+        let today = calendar.startOfDay(for: now)
+        period = .custom(from: calendar.date(byAdding: .day, value: -6, to: today) ?? today, to: today)
+    }
+
+    /// The first day of the custom range; a first day after the last day moves the last day with it.
+    public mutating func setRange(from day: Date) {
+        guard case .custom(let a, let b) = period else { return }
+        period = .custom(from: day, to: Swift.max(day, Swift.max(a, b)))
+    }
+
+    /// The last day of the custom range; a last day before the first day moves the first day with it.
+    public mutating func setRange(to day: Date) {
+        guard case .custom(let a, let b) = period else { return }
+        period = .custom(from: Swift.min(day, Swift.min(a, b)), to: day)
+    }
+
+    /// "Custom" in Length: on with 15 to 45 minutes, in place of the ranges; off again.
+    public mutating func toggleCustomLength() {
+        if customLength != nil { customLength = nil } else { toggle(.customLength(.init(min: 15, max: 45))) }
+    }
 
     // MARK: Choices
 
@@ -273,13 +333,17 @@ extension MeetingFilter.Size {
         case .oneOnOne: "1:1"
         case .small: "3–5"
         case .large: "6+"
+        case .unknown: "Not known"
         }
     }
 
+    /// Not "1:1" on a chip: a kind can have those words too.
     public var label: String {
         switch self {
-        case .alone, .oneOnOne: option
+        case .alone: option
+        case .oneOnOne: "2 people"
         case .small, .large: option + " people"
+        case .unknown: "People not known"
         }
     }
 }

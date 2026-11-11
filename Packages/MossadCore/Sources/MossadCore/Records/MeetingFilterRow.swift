@@ -41,37 +41,74 @@ public struct MeetingFilterPeople: Sendable {
 
     private func who(saved name: String) -> MeetingFilter.Who { MeetingFilter.Who(id: ids[name], name: name) }
 
-    /// The people of one meeting, the ones who spoke first: each named voice, then each invited person. A named
-    /// voice is the saved person of that name. An invited name or address is a saved person only on a sure match
-    /// (`PersonDirectory.link`); any other invited name is a person by that name, and an address of nobody saved
+    /// Who a meeting names besides the owner.
+    struct Seen {
+        /// Each named voice, in the order they first spoke.
+        var spoke: [MeetingFilter.Who] = []
+        /// Each invited person on a sure match: a saved person by the address or the whole name.
+        var invited: [MeetingFilter.Who] = []
+        /// Whether the invite names anyone else at all, sure or not.
+        var othersInvited = false
+
+        /// The people of the meeting for the filter: who spoke, then who was invited, each one time.
+        var people: [MeetingFilter.Who] {
+            var seen: Set<String> = []
+            return (spoke + invited).filter { seen.insert($0.key).inserted }
+        }
+    }
+
+    /// A named voice is the saved person of that name. An invited name or address is a saved person only on a
+    /// sure match (`PersonDirectory.link`); an invite does not say more than that, so any other name or address
     /// is nobody. Unnamed voices and the owner are left out.
-    func people(of r: CallRecord) -> [MeetingFilter.Who] {
-        var out: [MeetingFilter.Who] = [], seen: Set<String> = []
-        func add(_ who: MeetingFilter.Who) {
-            guard !ownerKeys.contains(PersonNames.key(who.name)), seen.insert(who.key).inserted else { return }
-            out.append(who)
-        }
-        var spoke: [String] = []
+    func seen(in r: CallRecord) -> Seen {
+        var out = Seen()
+        func isOwner(_ name: String) -> Bool { ownerKeys.contains(PersonNames.key(name)) }
         for u in r.utterances {
-            if let name = r.speakerNames[u.speakerKey], !spoke.contains(name) { spoke.append(name) }
+            if let name = r.speakerNames[u.speakerKey], !isOwner(name), !out.spoke.contains(where: { $0.name == name }) { out.spoke.append(who(saved: name)) }
         }
-        for name in spoke { add(who(saved: name)) }
         guard !r.attendees.isEmpty else { return out }
 
-        let meeting = spoke + r.attendees.filter { !$0.contains("@") }
+        let meeting = r.utterances.compactMap { r.speakerNames[$0.speakerKey] } + r.attendees.filter { !$0.contains("@") }
         let invited = directory.with(invitees: r.invitees)
         let own = (r.invitees ?? []).filter { $0.isSelf == true }
         let ownNames = Set(own.compactMap { $0.name.map(PersonNames.nameKey) }), ownEmails = Set(own.compactMap(\.email))
         for text in r.attendees {
-            let written = PersonNames.plain(text)
-            if ownNames.contains(PersonNames.nameKey(text)) || ownEmails.contains(text.lowercased()) { continue }
+            if ownNames.contains(PersonNames.nameKey(text)) || ownEmails.contains(text.lowercased()) || isOwner(PersonNames.plain(text)) { continue }
             if let saved = invited.link(for: text, in: meeting) {
-                add(who(saved: saved))
-            } else if !written.isEmpty, !written.contains("@") {
-                add(MeetingFilter.Who(name: written))
+                if !isOwner(saved), !out.invited.contains(where: { $0.name == saved }) { out.invited.append(who(saved: saved)) }
+            } else if !PersonNames.plain(text).isEmpty {
+                out.othersInvited = true
             }
         }
+        if !out.invited.isEmpty { out.othersInvited = true }
         return out
+    }
+
+    /// How many people were in the meeting. The owner is there (Mossad recorded it on their Mac), each voice that
+    /// counts is one more, and each sure invitee who did not speak may be one more: an unnamed voice can be that
+    /// person, and an invite does not prove that they came. A size is given only when the fewest and the most
+    /// people agree on it. "Just me" also needs the owner to speak with no other voice and nobody else invited;
+    /// "1:1" needs the owner to speak, as the Analytics tab's partner does. A talk where the owner only listens
+    /// can have any number of silent listeners.
+    func size(of r: CallRecord, seen: Seen, lanes: [SpeakerLanes.Lane]) -> MeetingFilter.Size {
+        let speech = lanes.reduce(0) { $0 + $1.seconds }
+        let main = lanes.filter { MeetingFacts.isMain(seconds: $0.seconds, share: speech > 0 ? $0.seconds / speech : 0) }
+        guard !main.isEmpty else { return .unknown }
+        func named(_ lane: SpeakerLanes.Lane) -> Bool { r.speakerNames[lane.key] != nil }
+        func isOwner(_ lane: SpeakerLanes.Lane) -> Bool { named(lane) && ownerKeys.contains(PersonNames.key(lane.name)) }
+        let others = main.filter { !isOwner($0) }
+        let spoke = Set(others.filter(named).map { who(saved: $0.name).key })
+        let unnamed = others.filter { !named($0) }.count
+        let silent = Set(seen.invited.map(\.key)).subtracting(spoke).count
+        let fewest = 1 + spoke.count + unnamed, most = 1 + spoke.count + max(unnamed, silent)
+        let size = MeetingFilter.Size(people: fewest)
+        guard MeetingFilter.Size(people: most) == size else { return .unknown }
+        let ownerSpoke = main.contains(where: isOwner)
+        switch size {
+        case .alone: return ownerSpoke && lanes.count == 1 && !seen.othersInvited ? .alone : .unknown
+        case .oneOnOne: return ownerSpoke ? .oneOnOne : .unknown
+        default: return size
+        }
     }
 }
 
@@ -83,11 +120,14 @@ public struct MeetingFilterRow: Sendable, Equatable {
     /// The recorded length; for a joined meeting the length of its audio, without the time between its parts.
     public var seconds: TimeInterval
     public var platform: Platform
+    /// Who spoke or was invited (on a sure match).
     public var people: [MeetingFilter.Who]
     public var tags: [String]
     public var kind: String?
     /// The voices that count, as the Analytics tab counts them; nil with no transcript.
     public var voices: Int?
+    /// How many people were in it; `.unknown` when the meeting cannot say.
+    public var size: MeetingFilter.Size
     /// Nil without a summary.
     public var actionItems: Int?
     public var decisions: Int?
@@ -103,15 +143,18 @@ public struct MeetingFilterRow: Sendable, Equatable {
         start = r.start
         seconds = r.parts.last.map { $0.offset + max(0, $0.end.timeIntervalSince($0.start)) } ?? max(0, r.end.timeIntervalSince(r.start))
         platform = r.platform
-        self.people = people.people(of: r)
+        let seen = people.seen(in: r)
+        self.people = seen.people
         tags = r.tags
         kind = r.kind?.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank
         if r.utterances.isEmpty {
             voices = nil
+            size = .unknown
         } else {
             let lanes = SpeakerLanes.make(r, names: MarkdownWriter.displayNames(r), ownerName: people.owner)
             let speech = lanes.reduce(0) { $0 + $1.seconds }
             voices = lanes.filter { MeetingFacts.isMain(seconds: $0.seconds, share: speech > 0 ? $0.seconds / speech : 0) }.count
+            size = people.size(of: r, seen: seen, lanes: lanes)
         }
         if r.summary != nil {
             actionItems = r.actionItems.count
@@ -119,6 +162,21 @@ public struct MeetingFilterRow: Sendable, Equatable {
         }
         screens = r.screens?.count
         value = rating
+    }
+
+    /// Equal, and each person under the same name. `Who` is equal on its key alone, so a new name of a saved
+    /// person is no change to `==`; the flyout and the chips must still show it.
+    public static func same(_ a: [MeetingFilterRow], _ b: [MeetingFilterRow]) -> Bool {
+        a == b && a.map { $0.people.map(\.name) } == b.map { $0.people.map(\.name) }
+    }
+
+    /// Changes when anything the row reads changes: the Analytics stamp has no screens and no platform.
+    static func stamp(_ r: CallRecord) -> Int {
+        var h = Hasher()
+        h.combine(MeetingAnalytics.stamp(r))
+        h.combine(r.screens?.count)
+        h.combine(r.platform)
+        return h.finalize()
     }
 }
 
@@ -142,7 +200,7 @@ public final class MeetingFilterRows: @unchecked Sendable {
         var out: [MeetingFilterRow] = []
         var read = 0
         for r in records where r.status != .recording {
-            let stamp = MeetingAnalytics.stamp(r)
+            let stamp = MeetingFilterRow.stamp(r)
             var row: MeetingFilterRow
             if let hit = known[r.id], hit.stamp == stamp {
                 row = hit.row

@@ -312,14 +312,7 @@ func durationLabel(_ seconds: TimeInterval) -> String {
 
 extension Platform {
     /// "Meet", "Teams": the list's short name; the dot carries the color.
-    var shortName: String {
-        switch self {
-        case .zoom: "Zoom"
-        case .meet: "Meet"
-        case .teams: "Teams"
-        case .inPerson: "In person"
-        }
-    }
+    var shortName: String { filterName }
 }
 
 /// The length, or the live elapsed time of a call being recorded.
