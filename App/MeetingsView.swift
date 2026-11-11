@@ -136,6 +136,8 @@ struct MeetingsView: View {
             }
         }
         .onChange(of: mode) { _, _ in opened = nil; openedUpcoming = nil; filters.isOpen = false }
+        .onAppear(perform: takeOpenRequest)
+        .onChange(of: controller.meetingToOpen) { _, _ in takeOpenRequest() }
         // The flyout belongs to this page's button; it must not come back by itself with the page.
         .onDisappear { filters.isOpen = false }
     }
@@ -208,6 +210,17 @@ struct MeetingsView: View {
     }
 
     // MARK: Calendar
+
+    /// Opens the meeting that another page asked for, in either mode.
+    private func takeOpenRequest() {
+        guard let id = controller.meetingToOpen else { return }
+        controller.meetingToOpen = nil
+        if let shown = MeetingOpenRoute.fullPane(calendarMode: mode == .calendar, request: id, shown: opened), shown != opened {
+            opened = shown
+            openedUpcoming = nil
+            openedFrom = "Meetings"
+        }
+    }
 
     private func open(_ r: CallRecord, from crumb: String) {
         controller.selectedMeetingID = r.id

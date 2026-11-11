@@ -257,6 +257,8 @@ final class AppController: ObservableObject {
     lazy var chats = ChatStore(directory: paths.chats)
     /// A meeting to open and play from a time; the meeting view takes it when it appears.
     @Published var seekRequest: SeekRequest?
+    /// A meeting asked to open that the Meetings page has not taken yet; Calendar mode opens it full-pane.
+    @Published var meetingToOpen: String?
 
     struct SeekRequest: Equatable {
         let callID: String
@@ -1251,17 +1253,18 @@ final class AppController: ObservableObject {
         open(.people)
     }
 
+    /// Every way to open a meeting comes here, so Calendar mode opens it too (see `MeetingsView`).
     func openMeeting(_ callID: String) {
+        if !MeetingOpenRoute.keepsSeek(for: seekRequest?.callID, opening: callID) { seekRequest = nil }
         section = .meetings
         selectedMeetingID = callID
+        meetingToOpen = callID
         showWindow()
     }
 
     func openNaming(_ callID: String) {
-        section = .meetings
-        selectedMeetingID = callID
+        openMeeting(callID)
         namingCallID = callID
-        showWindow()
     }
 
     func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) {
