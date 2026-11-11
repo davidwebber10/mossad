@@ -276,6 +276,19 @@ final class MeetingFilterTests: XCTestCase {
         XCTAssertEqual(spokeAndInvited.map(\.size), [.oneOnOne], "the invited name that spoke is the same person")
     }
 
+    /// The usual 1:1 invite: the other person's address is on it, and no saved person has that address. The address
+    /// can be the person who spoke, so the meeting is a 1:1, not "Not known".
+    func testAnUnsavedAddressCanBeThePersonWhoSpoke() {
+        let voices = [("me:A", 600.0), ("them:A", 600.0)]
+        let named = rows([record("named", voices: voices, names: ["me:A": "Dana Lee", "them:A": "Jordan Vale"], attendees: ["jordan@example.com"])], people: people)
+        XCTAssertEqual(named.map(\.size), [.oneOnOne])
+        let unnamed = rows([record("unnamed", voices: voices, names: ["me:A": "Dana Lee"], attendees: ["jordan@example.com"])], people: people)
+        XCTAssertEqual(unnamed.map(\.size), [.oneOnOne])
+        let twoAddresses = rows([record("two", voices: voices, names: ["me:A": "Dana Lee", "them:A": "Jordan Vale"],
+                                        attendees: ["jordan@example.com", "kim@example.com"])], people: people)
+        XCTAssertEqual(twoAddresses.map(\.size), [.unknown], "one address can be the speaker; the other may have listened")
+    }
+
     func testAGroupWithSilentGuestsIsKnownOnlyWhenBothCountsAgree() {
         let names = ["me:A": "Dana Lee", "them:A": "Sam Carter", "them:B": "Riley Park"]
         let directory = PersonDirectory([.init(name: "Sam Carter", email: nil), .init(name: "Riley Park", email: nil), .init(name: "Avery Stone", email: nil),

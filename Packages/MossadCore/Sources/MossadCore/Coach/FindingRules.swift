@@ -42,8 +42,10 @@ public enum FindingRules {
 
     /// The cards one review gives about how the owner acted, the line's card first. `measured` and `observations`
     /// are there when the review is made; a review from before the cards gives only what its file holds.
+    /// `measuredFocus`: the focus is a goal that the app measures, so a miss on it is a number over the target, a
+    /// thing to do better, and not a thing the owner did not do.
     static func cards(review: CoachReview, callID: String, date: Date, measured: CoachMeasured?, observations: [CoachObservation] = [],
-                      training: CoachTraining = CoachTraining()) -> [CoachFinding] {
+                      training: CoachTraining = CoachTraining(), measuredFocus: Bool = false) -> [CoachFinding] {
         var out: [CoachFinding] = []
         func add(_ kind: CoachFinding.Kind?, text: String, skill: String, quote: String? = nil, at: TimeInterval? = nil, number: String? = nil,
                  usual: String? = nil, say: String? = nil) {
@@ -60,8 +62,10 @@ public enum FindingRules {
         func add(_ line: CoachLine) {
             switch line.kind {
             case .focus:
-                add(line.outcome == .hit ? .didWell : line.outcome == .missed ? .missed : nil, text: line.text, skill: line.skill, quote: line.quote, at: line.at,
-                    number: line.number)
+                // A goal's line: "Target 56% or less; 64% in a typical 1:1 before the goal".
+                let parts = (line.number ?? "").components(separatedBy: "; ")
+                add(line.outcome == .hit ? .didWell : line.outcome == .missed ? (measuredFocus ? .couldBeBetter : .missed) : nil, text: line.text, skill: line.skill,
+                    quote: line.quote, at: line.at, number: parts.count > 1 ? parts[0] : line.number, usual: parts.count > 1 ? parts.dropFirst().joined(separator: "; ") : nil)
             case .progress:
                 // "You talked 48% in your last 5 with Sam; 62 to 70% in the 10 before."
                 let parts = (line.number ?? "").components(separatedBy: "; ")
@@ -108,13 +112,19 @@ public enum FindingRules {
             .filter { $0.kind.isKnown && $0.hasProof && !training.isBlocked($0.skill) }
 
         var head: [CoachFinding] = []
-        // The focus that the coach proposed from this call, with the moment of this call that shows its skill.
-        if let focus = profile.proposedFocus, abs(focus.proposed.timeIntervalSince(date)) < 1, !training.isGoalBlocked(focus.skillID),
-           let proof = base.first(where: { $0.at != nil && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) }) {
-            head.append(CoachFinding(id: "\(callID)|\(CoachFinding.Kind.goalOffer.rawValue)|\(focus.id.uuidString)", callID: callID, date: date, kind: .goalOffer, text: focus.plan,
-                                skill: focus.skillID, detail: focus.why.nonBlank, quote: proof.quote, at: proof.at, focusID: focus.id))
+        // The focus that the coach proposed from this call: a goal with its number and what was usual, or a focus
+        // with the moment of this call that shows its skill.
+        if let focus = profile.proposedFocus, abs(focus.proposed.timeIntervalSince(date)) < 1, !training.isGoalBlocked(focus.skillID) {
+            let id = "\(callID)|\(CoachFinding.Kind.goalOffer.rawValue)|\(focus.id.uuidString)"
+            if let goal = focus.goal {
+                head.append(CoachFinding(id: id, callID: callID, date: date, kind: .goalOffer, text: focus.plan, skill: focus.skillID, detail: focus.why.nonBlank,
+                                         number: goal.typicalText, usual: goal.usualText, focusID: focus.id))
+            } else if let proof = base.first(where: { $0.at != nil && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) }) {
+                head.append(CoachFinding(id: id, callID: callID, date: date, kind: .goalOffer, text: focus.plan, skill: focus.skillID, detail: focus.why.nonBlank,
+                                         quote: proof.quote, at: proof.at, focusID: focus.id))
+            }
             // The offer stands for the advice about its skill.
-            base.removeAll { $0.kind != .didWell && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) }
+            if head.last?.kind == .goalOffer { base.removeAll { $0.kind != .didWell && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) } }
         }
         if let line = review.shownLine, let first = base.first, first.skill == line.skill { head.append(base.removeFirst()) }
         for q in profile.questions where q.status == .open && q.callID == callID {
@@ -140,7 +150,9 @@ public enum FindingRules {
     }
 
     /// The cards of all calls that wait for an answer, the newest call first.
+    /// A goal that waits for an answer comes first, so newer calls do not push it out of the deck.
     public static func deck(reviews: [(callID: String, date: Date, review: CoachReview)], profile: CoachProfile, now: Date = Date()) -> [CoachFinding] {
-        Array(reviews.sorted { $0.date > $1.date }.flatMap { deck(callID: $0.callID, date: $0.date, review: $0.review, profile: profile, now: now) }.prefix(deckLimit))
+        let all = reviews.sorted { $0.date > $1.date }.flatMap { deck(callID: $0.callID, date: $0.date, review: $0.review, profile: profile, now: now) }
+        return Array((all.filter { $0.kind == .goalOffer } + all.filter { $0.kind != .goalOffer }).prefix(deckLimit))
     }
 }

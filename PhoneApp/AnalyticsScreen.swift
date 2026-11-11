@@ -18,7 +18,8 @@ struct AnalyticsScreen: View {
     @State private var customizing = false
 
     /// Each meeting's numbers, kept while the app runs: only a new or changed meeting is read again.
-    private static let facts = MeetingFactsCache()
+    /// Shared with Coach › Goals, so a meeting is read for its facts one time.
+    static let facts = MeetingFactsCache()
 
     private var choice: PeriodChoice {
         PeriodChoice(preset: PeriodChoice.Preset(rawValue: presetRaw) ?? .last30Days,

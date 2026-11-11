@@ -74,6 +74,29 @@ public enum CoachLineRules {
             out.proposal = nil
             dropped.append("focus_proposal: the owner said never again")
         }
+        // Room in 1:1s is offered by code, with its numbers. A skill whose goal the owner declined or ended in the
+        // last 30 days, or learned, is not offered again in other words.
+        if let p = out.proposal, AdviceRules.key(p.skillID) == AdviceRules.key(GoalOffers.skill) || GoalOffers.rests(p.skillID, profile: profile, at: r.start) {
+            out.proposal = nil
+            dropped.append("focus_proposal: the goal of this skill is the app's, or it rests")
+        }
+
+        // A goal that the app measures: its number decides how the call went, and the model's moment stays only
+        // when it says the same.
+        if let focus, focus.goal != nil {
+            if var code = measured.goalResult {
+                if let model = review.focusResult, review.focusID == focus.id, model.outcome == code.outcome, code.outcome != .noChance,
+                   let moment = ownerMoment(quote: model.quote ?? "", in: r, owner: owner) {
+                    code.quote = moment.quote
+                    code.at = moment.at
+                }
+                review.focusID = focus.id
+                review.focusResult = code
+            } else {
+                review.focusID = nil
+                review.focusResult = nil
+            }
+        }
 
         review.didWell = checked(review.didWell, "did_well")
         review.tryNext = checked(review.tryNext, "try_next")
@@ -112,7 +135,13 @@ public enum CoachLineRules {
         }
 
         var candidates: [CoachLine] = []
-        if let focus, review.focusID == focus.id, let result = review.focusResult, result.outcome != .noChance {
+        if let focus, let goal = focus.goal, review.focusID == focus.id, let result = review.focusResult, result.outcome != .noChance {
+            // The number of the call against the target and what was usual. The progress only when the app can say it.
+            var number = "Target \(goal.targetText); \(goal.typicalText) before the goal"
+            if let progress = measured.goal, !progress.isEarly { number += ". \(progress.sentence)." }
+            candidates.append(CoachLine(kind: .focus, text: result.evidence, skill: focus.skillID, quote: result.quote, at: result.at, number: number,
+                                        outcome: result.outcome))
+        } else if let focus, focus.goal == nil, review.focusID == focus.id, let result = review.focusResult, result.outcome != .noChance {
             if let moment = ownerMoment(quote: result.quote ?? "", in: r, owner: owner), !judgesTrend(result.evidence), count(result.evidence) <= textWords {
                 let chances = focus.chances.filter { $0.callID != r.id } + [result]
                 var number = "\(chances.filter { $0.outcome == .hit }.count) of \(chances.count) chances"
@@ -189,7 +218,8 @@ public enum CoachLineRules {
         }
         // The cards of this call, from what stayed: the line, the notes, the numbers, and the patterns.
         let shown = out.update.patterns.map { CoachObservation(callID: r.id, date: r.start, pattern: $0.name, result: $0.shown, note: $0.note, quote: $0.quote, at: $0.at) }
-        review.findings = FindingRules.cards(review: review, callID: r.id, date: r.start, measured: measured, observations: shown, training: training)
+        review.findings = FindingRules.cards(review: review, callID: r.id, date: r.start, measured: measured, observations: shown, training: training,
+                                             measuredFocus: focus?.goal != nil)
         out.review = review
         out.advice = said
         out.dropped = dropped

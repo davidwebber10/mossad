@@ -152,7 +152,22 @@ struct TrendChart: View {
 
     let series: T.Series
     let interval: DateInterval
+    /// For a goal's chart: the day it was taken and its target. Nil in Analytics.
+    var goal: Goal? = nil
     let open: (String) -> Void
+
+    /// The marks of a goal over the chart, and what VoiceOver says of the chart in place of the period's sentence.
+    struct Goal: Equatable {
+        var start: Date
+        var target: Double
+        var spoken: String
+        /// The labels on the chart: "Target 58%", "Goal taken Oct 19".
+        var targetLabel: String
+        var startLabel: String
+    }
+
+    /// The target: a dashed line in the color of good news.
+    static let targetColor = Palette.okText
 
     @State private var picked: T.Point?
     #if os(iOS)
@@ -175,7 +190,7 @@ struct TrendChart: View {
     }
 
     var body: some View {
-        let chart = TrendPlot(series: series, interval: interval)
+        let chart = TrendPlot(series: series, interval: interval, goal: goal)
             .equatable()
             .chartOverlay { proxy in
                 GeometryReader { geometry in
@@ -252,6 +267,7 @@ private struct TrendPlot: View, Equatable {
 
     let series: T.Series
     let interval: DateInterval
+    let goal: TrendChart.Goal?
 
     private var scale: T.Scale { series.scale }
     private func inside(_ value: Double) -> Double { min(max(value, scale.lower), scale.upper) }
@@ -274,6 +290,21 @@ private struct TrendPlot: View, Equatable {
                     .symbol {
                         Image(systemName: p.value > scale.upper ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
                             .font(.system(size: 7)).foregroundStyle(TrendChart.pointColor)
+                    }
+            }
+            if let goal {
+                // The day the goal was taken, and the target: what the points since are read against.
+                RuleMark(x: .value("Goal taken", goal.start))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                    .foregroundStyle(Palette.secondary.opacity(0.7))
+                    .annotation(position: .top, alignment: .center, spacing: 2) {
+                        Text(goal.startLabel).font(Self.axisFont).foregroundStyle(Palette.secondary)
+                    }
+                RuleMark(y: .value("Target", inside(goal.target)))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 4]))
+                    .foregroundStyle(TrendChart.targetColor)
+                    .annotation(position: .bottom, alignment: .leading, spacing: 3) {
+                        Text(goal.targetLabel).font(Self.axisFont).fontWeight(.medium).foregroundStyle(TrendChart.targetColor)
                     }
             }
             lineMarks(series.line, name: "all", color: Palette.accentFill, dash: [])
@@ -306,8 +337,8 @@ private struct TrendPlot: View, Equatable {
         .chartLegend(.hidden)
         .animation(.smooth, value: series.points.count)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(series.spoken)
-        .accessibilityChartDescriptor(TrendDescriptor(series: series))
+        .accessibilityLabel(goal?.spoken ?? series.spoken)
+        .accessibilityChartDescriptor(TrendDescriptor(series: series, summary: goal?.spoken))
     }
 
     /// A line in pieces: it breaks where a step was left out, and a piece of one step is a dot.
@@ -460,6 +491,8 @@ private struct TrendTip: View {
 /// VoiceOver's audio graph and table: each meeting's value, the line's values, and the sentence as the summary.
 private struct TrendDescriptor: AXChartDescriptorRepresentable {
     let series: CommunicationTrends.Series
+    /// In place of the period's sentence, for a goal's chart.
+    var summary: String?
 
     func makeChartDescriptor() -> AXChartDescriptor {
         typealias T = CommunicationTrends
@@ -486,7 +519,7 @@ private struct TrendDescriptor: AXChartDescriptorRepresentable {
         for part in series.parts where !part.line.isEmpty {
             lines.append(line(T.Series.lineName(days: part.lineDays, split: part.split, held: part.held), part.line))
         }
-        return AXChartDescriptor(title: T.title(metric), summary: series.sentence, xAxis: x, yAxis: y, additionalAxes: [],
+        return AXChartDescriptor(title: T.title(metric), summary: summary ?? series.sentence, xAxis: x, yAxis: y, additionalAxes: [],
                                  series: [meetings] + lines)
     }
 }

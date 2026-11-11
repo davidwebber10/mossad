@@ -104,6 +104,12 @@ public struct CoachMeasured: Equatable, Sendable {
     public var longestTurn: TimeInterval?
     /// The owner and one other person: more talk of the owner is then less room for that person.
     public var oneOnOne: Bool
+    /// This call as a row of history: what a goal is offered from.
+    public var facts: MeetingFacts?
+    /// How the active goal goes, from the meetings' numbers up to this call.
+    public var goal: GoalProgress?
+    /// How this call went on the active goal, from its own number.
+    public var goalResult: FocusResult?
 
     public init(standouts: [Standout] = [], trend: CoachTrend? = nil, commitments: CommitmentShare? = nil, longestTurn: TimeInterval? = nil,
                 oneOnOne: Bool = false) {
@@ -120,7 +126,10 @@ public struct CoachMeasured: Equatable, Sendable {
 
     /// From the same numbers and the same history as the meeting's Analytics tab, so the coach and the tab
     /// cannot say different things about one call.
-    public init(record: CallRecord, owner: String, history: [MeetingFacts], commitments: [Commitment]) {
+    /// `focus` is the owner's active focus: with a goal, its progress and this call's result are measured here.
+    /// `people` are the saved people, for the size rule of a 1:1; without them an invited person is nobody known.
+    public init(record: CallRecord, owner: String, history: [MeetingFacts], commitments: [Commitment], focus: CoachFocus? = nil,
+                people: MeetingFilterPeople? = nil) {
         let analytics = MeetingAnalytics(record: record, owner: owner, history: history)
         let me = analytics.owner?.id
         let left = Self.notALine.map { ".\($0.rawValue)" }
@@ -137,5 +146,19 @@ public struct CoachMeasured: Equatable, Sendable {
         longestTurn = analytics.owner?.longestTurn?.seconds
         trend = CoachTrend.oneOnOneShare(this: analytics.facts, history: history)
         self.commitments = CommitmentShare(commitments, asOf: record.end)
+        facts = analytics.facts
+        if let focus, let goal = focus.goal {
+            let people = people ?? MeetingFilterPeople(owner: owner)
+            goalResult = goal.result(of: analytics.facts, callID: record.id, people: people, since: focus.accepted)
+            // As of this call: a call reviewed later does not see the meetings after it.
+            let upTo = history.filter { $0.id != record.id && $0.start <= record.start } + [analytics.facts]
+            self.goal = GoalProgress(focus: focus, facts: upTo, now: record.end, people: people)
+            // The goal's line says the talk share against the target, and its progress is the goal's own: the
+            // same number as a standout or as a trend of another rule would be said two times, or two ways.
+            if goal.measure?.metric == .talkShare {
+                standouts.removeAll { $0.id == PersonMetric.talkShare.rawValue }
+                trend = nil
+            }
+        }
     }
 }

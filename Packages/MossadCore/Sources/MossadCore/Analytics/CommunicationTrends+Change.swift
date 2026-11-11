@@ -84,6 +84,47 @@ extension CommunicationTrends {
         return .moved(from: from, to: to)
     }
 
+    /// The meetings after a date against the ones before it, by the rules of `change`: a goal starts on a day,
+    /// not in the middle of a period. A kind of meeting is compared only with itself, and a kind that is only on
+    /// one side (a new 1:1, a series that ended) is not compared: a change of who the meetings are with is not a
+    /// change of the owner. `.tooFew` when either side has fewer than `Usual.firmSamples` compared meetings.
+    static func change(_ metric: PersonMetric, before: [Row], after: [Row]) -> Change {
+        let compared = pools(before: before, after: after)
+        let (first, last) = held(compared)
+        let firm = MeetingAnalytics.Usual.firmSamples
+        guard first.count >= firm, last.count >= firm, let from = median(of: first), let to = median(of: last) else { return .tooFew }
+        guard abs(to - from) >= metric.margin(median: from), let (rise, chance) = chance(compared),
+              rise == (to > from), chance <= chanceLimit else { return .steady }
+        return .moved(from: from, to: to)
+    }
+
+    /// The values of both sides with the mix held: each kind moved to the median of all, as the line of a period
+    /// is, so the medians of the two sides move with the owner and not with the mix of kinds.
+    static func held(_ pools: [(first: [Double], last: [Double])]) -> (first: [Double], last: [Double]) {
+        let all = median(of: pools.flatMap { $0.first + $0.last }) ?? 0
+        var first: [Double] = [], last: [Double] = []
+        for pool in pools {
+            let shift = all - (median(of: pool.first + pool.last) ?? all)
+            first += pool.first.map { $0 + shift }
+            last += pool.last.map { $0 + shift }
+        }
+        return (first, last)
+    }
+
+    /// The values of each kind of meeting that is on both sides of the date, before and after. As in `Mix`, a
+    /// meeting that is the only one of its kind is compared within its size.
+    static func pools(before: [Row], after: [Row]) -> [(first: [Double], last: [Double])] {
+        var sides: [String: (first: Bool, last: Bool)] = [:]
+        var counts: [String: Int] = [:]
+        for r in before { sides[r.kind, default: (false, false)].first = true; counts[r.kind, default: 0] += 1 }
+        for r in after { sides[r.kind, default: (false, false)].last = true; counts[r.kind, default: 0] += 1 }
+        func kind(_ r: Row) -> String { sides[r.kind].map { $0.first && $0.last } == true || counts[r.kind, default: 0] > 1 ? r.kind : r.sizeKind }
+        var pools: [String: (first: [Double], last: [Double])] = [:]
+        for r in before { pools[kind(r), default: ([], [])].first.append(r.point.value) }
+        for r in after { pools[kind(r), default: ([], [])].last.append(r.point.value) }
+        return pools.keys.sorted().compactMap { k in pools[k].flatMap { !$0.first.isEmpty && !$0.last.isEmpty ? $0 : nil } }
+    }
+
     /// How far the last third ranks from the first, each meeting ranked among its own kind (the rank-sum test of
     /// van Elteren), and the share of shuffles that rank as far, when each kind's meetings of the two thirds are
     /// dealt between them again at random. Nil when the ranks do not lean either way. Stops as soon as the share
