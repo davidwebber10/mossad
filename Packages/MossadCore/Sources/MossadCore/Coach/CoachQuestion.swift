@@ -91,6 +91,8 @@ extension CoachProfile {
         questions[i].note = note?.nonBlank
         questions[i].updated = date
         let q = questions[i]
+        // A conclusion about one call is true of that call only: no fact for the calls after it.
+        guard q.kind != .thisCall else { return }
         switch status {
         case .confirmed: updateFacts(add: [CoachFact(kind: q.kind.factKind, text: q.statement)], remove: [], at: date)
         case .corrected:

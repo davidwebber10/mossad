@@ -98,7 +98,7 @@ public actor CoachRunner {
                 let saved = CoachPeople.read(paths: paths)
                 result.questions = result.questions.map { q in
                     var q = q
-                    if let subject = saved.subject(of: q.statement, about: q.about, in: r) {
+                    if let subject = saved.subject(of: q.statement, about: q.about, in: r, firstName: CoachPeople.isCard(q)) {
                         q.person = subject.id
                         q.personName = subject.name
                     }

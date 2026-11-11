@@ -67,9 +67,8 @@ extension CoachProfile {
     public mutating func answer(_ finding: CoachFinding, _ verdict: FindingVerdict, at date: Date) {
         // A card answered again: first as it was before the earlier answer.
         if answer(to: finding.id) != nil { takeBack(finding.id, at: date) }
-        let note = answers.first { $0.id == finding.id }?.note
         var entry = FindingAnswer(finding, verdict: verdict, date: date)
-        entry.note = verdict == .yes ? nil : note
+        if finding.kind == .goalOffer, verdict == .yes, let active = activeFocus, active.id != finding.focusID { entry.replaced = active.id }
         answers.removeAll { $0.id == finding.id }
         answers.append(entry)
         trimAnswers()
@@ -104,7 +103,9 @@ extension CoachProfile {
         if !reasons.isEmpty { updateGuidance(add: [], remove: reasons, at: date) }
 
         if entry.kind == .learning, let qid = entry.questionID, let i = questions.firstIndex(where: { $0.id == qid }) {
-            if verdict == .yes { updateFacts(add: [], remove: [questions[i].statement], at: date) }
+            if verdict == .yes, facts.contains(where: { $0.text.caseInsensitiveCompare(questions[i].statement) == .orderedSame }) {
+                updateFacts(add: [], remove: [questions[i].statement], at: date)
+            }
             questions[i].status = .open
             questions[i].dismissed = nil
             questions[i].updated = date
@@ -113,8 +114,23 @@ extension CoachProfile {
             foci[i].status = .proposed
             foci[i].accepted = nil
             foci[i].updated = date
+            // The focus that the yes replaced is the owner's focus again.
+            if verdict == .yes, let old = entry.replaced, let j = foci.firstIndex(where: { $0.id == old }), foci[j].status == .dismissed {
+                foci[j].status = .active
+                foci[j].updated = date
+            }
             focus = activeFocus?.plan ?? ""
         }
+    }
+
+    /// "Undo" in the list of what the owner blocked for good. On a goal it only takes the block away: the focus
+    /// stays as it is now, months later. On a conclusion or a subject it is the same as taking the answer back.
+    public mutating func allowAgain(_ id: String, at date: Date) {
+        guard let a = answers.firstIndex(where: { $0.id == id }), answers[a].verdict == .never else { return }
+        guard answers[a].kind == .goalOffer else { return takeBack(id, at: date) }
+        answers[a].verdict = nil
+        answers[a].note = nil
+        answers[a].date = date
     }
 
     /// Why the owner said no to a card, as guidance for that card: its skill, and its person when it is about one.
@@ -126,11 +142,20 @@ extension CoachProfile {
         let earlier = guidance.filter { $0.finding == id }.map(\.text)
         if !earlier.isEmpty { updateGuidance(add: [], remove: earlier, at: date) }
         let text = "About \u{201C}\(answers[a].text)\u{201D}: \(words)"
-        updateGuidance(add: [text], remove: [], at: date)
-        guard let g = guidance.firstIndex(where: { $0.text == text }) else { return }
-        guidance[g].finding = id
-        guidance[g].skill = answers[a].skill.nonBlank
-        guidance[g].person = answers[a].person
+        guidance.removeAll { $0.text.caseInsensitiveCompare(text) == .orderedSame }
+        guidance.append(CoachGuidance(text: text, date: date, finding: id, skill: answers[a].skill.nonBlank, person: answers[a].person))
+        forgotten[text.lowercased()] = nil
+        trimGuidance()
+    }
+
+    /// Makes what is stored agree with the answer that won between two devices: a conclusion that got a no or
+    /// "never again" after a yes on the other device is no fact.
+    mutating func settleAnswers() {
+        for a in answers where a.kind == .learning && (a.verdict == .no || a.verdict == .never) {
+            guard let q = questions.first(where: { $0.id == a.questionID }),
+                  facts.contains(where: { $0.text.caseInsensitiveCompare(q.statement) == .orderedSame && ($0.date ?? .distantPast) <= a.date }) else { continue }
+            updateFacts(add: [], remove: [q.statement], at: a.date)
+        }
     }
 
     mutating func trimAnswers() {

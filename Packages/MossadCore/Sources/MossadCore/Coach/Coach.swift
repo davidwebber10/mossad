@@ -81,7 +81,7 @@ public struct LLMCoach: Coaching {
                                                       "skill_label": Schema.string])),
             "questions": Schema.array(Schema.object([
                 "statement": Schema.string, "kind": Schema.oneOf(CoachQuestion.Kind.allCases.map(\.rawValue)),
-                "evidence": Schema.string, "at_seconds": Schema.nullableNumber, "person": Schema.string,
+                "evidence": Schema.string, "at_seconds": Schema.nullableNumber, "person": Schema.nullableString,
             ])),
             "strengths": Schema.array(point),
             "improvements": Schema.array(point),

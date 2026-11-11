@@ -51,7 +51,7 @@ final class CoachQuestionTests: XCTestCase {
         var p = CoachProfile()
         p.ask([question("Mitch reports to you."), question("Jo leads Finance.")])
         p.answer(p.questions[1].id, .rejected, note: nil, at: t0)
-        let text = CoachPrompt.questionsText(p)
+        let text = CoachPrompt.questionsText(p, now: Date())
         XCTAssertTrue(text.contains("Waiting for an answer:\n- Mitch reports to you."), text)
         XCTAssertTrue(text.contains("Not true:\n- Jo leads Finance."), text)
     }

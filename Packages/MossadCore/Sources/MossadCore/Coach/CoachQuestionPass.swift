@@ -46,7 +46,7 @@ public struct CoachQuestionPass: Sendable {
         var parts: [String] = []
         let known = profile.facts.map { "- \($0.text)" }
         if !known.isEmpty { parts.append("## Already known\n" + known.joined(separator: "\n")) }
-        let asked = CoachPrompt.questionsText(profile)
+        let asked = CoachPrompt.questionsText(profile, now: Date())
         if !asked.isEmpty { parts.append("## Already asked\n" + asked) }
         parts.append("## Calls in the last \(Self.days) days\n" + recent.map { r in
             let people = Set(r.speakerNames.values).subtracting([ownerName]).sorted().joined(separator: ", ")

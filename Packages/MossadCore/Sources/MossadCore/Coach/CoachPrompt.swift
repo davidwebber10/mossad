@@ -55,7 +55,7 @@ enum CoachPrompt {
         material does not say it, ask: at most 2, often none. A plain claim to answer yes or no, at most 15 words \
         ("Sam reports to you."). kind is relationship, role, meeting_purpose, preference, or this_call. evidence \
         is the quote behind it, with its time. person is the full name of the one person the claim is about, \
-        exactly as their lines are labeled in the transcript, or "" when it is about no one person. Never ask what \
+        exactly as their lines are labeled in the transcript, or null when it is about no one person. Never ask what \
         is a fact, waiting for an answer, not confirmed, or marked not true, and do not treat an open question as true.
 
         \(owner)'s guidance is standing instruction: follow it. Do not repeat advice they rejected. \(owner) also \
@@ -133,6 +133,12 @@ enum CoachPrompt {
         if !less.isEmpty { parts.append("Less useful to them, only for a clear moment: \(list(less)).") }
         if !training.blocked.isEmpty { parts.append("Never again, do not coach, praise, or mention: \(list(training.blocked)).") }
         if !training.blockedGoals.isEmpty { parts.append("Never offer as a focus: \(list(training.blockedGoals)).") }
+        // The reasons for a no, each with its subject. A reason about a person goes with that person.
+        let reasons = p.whyRules.filter { $0.person == nil }
+        if !reasons.isEmpty {
+            parts.append("Their reasons for a no to a card (for that subject only):\n"
+                         + reasons.map { "- " + ($0.skill.map { "\(named($0)): " } ?? "") + $0.text }.joined(separator: "\n"))
+        }
         return parts.joined(separator: "\n")
     }
 
@@ -176,10 +182,15 @@ enum CoachPrompt {
         parts.append("## The focus\n" + focusText(profile))
         let said = earlierAdviceText(profile, record: r)
         if !said.isEmpty { parts.append("## Advice you already gave (do not give it again)\n" + said) }
-        let asked = questionsText(profile)
+        let asked = questionsText(profile, now: r.start)
         if !asked.isEmpty { parts.append("## Your questions to \(owner)\n" + asked) }
-        if !profile.guidance.isEmpty {
-            parts.append("## What \(owner) told you about your coaching (follow this)\n" + profile.guidance.map { "- \($0.text)" }.joined(separator: "\n"))
+        // A conclusion about this one call that the owner confirmed: for a new review of the same call only.
+        let thisCall = profile.questions.filter { $0.kind == .thisCall && $0.callID == r.id && ($0.status == .confirmed || $0.status == .corrected) }
+        if !thisCall.isEmpty {
+            parts.append("## What \(owner) confirmed about this call\n" + thisCall.map { "- " + ($0.status == .corrected ? $0.note ?? $0.statement : $0.statement) }.joined(separator: "\n"))
+        }
+        if !profile.ownGuidance.isEmpty {
+            parts.append("## What \(owner) told you about your coaching (follow this)\n" + profile.ownGuidance.map { "- \($0.text)" }.joined(separator: "\n"))
         }
         let answered = trainingText(profile, record: r)
         if !answered.isEmpty { parts.append("## How \(owner) answered your findings (follow this)\n" + answered) }
@@ -236,12 +247,15 @@ enum CoachPrompt {
 
     /// What the coach asked: the ones still open, and the ones the owner said are not true. Answered ones are
     /// facts by now, so they are not repeated here.
-    static func questionsText(_ p: CoachProfile) -> String {
+    static func questionsText(_ p: CoachProfile, now: Date) -> String {
         var parts: [String] = []
         let open = p.openQuestions
         if !open.isEmpty { parts.append("Waiting for an answer:\n" + open.map { "- \($0.statement)" }.joined(separator: "\n")) }
-        // A plain no to a card: one signal. It is not "not true", and it is not to be asked again now.
-        let unsure = p.questions.filter { $0.status == .open && $0.dismissed != nil }.suffix(10)
+        // A plain no to a card: one signal. It is not "not true", and it is not to be asked again for the days of
+        // the repeat rule. After them the coach may ask it again.
+        let unsure = p.questions.filter { q in
+            q.status == .open && q.dismissed.map { now.timeIntervalSince($0) < AdviceRules.repeatDays * 86_400 } == true
+        }.suffix(10)
         if !unsure.isEmpty { parts.append("Not confirmed (do not treat as true, and do not ask again now):\n" + unsure.map { "- \($0.statement)" }.joined(separator: "\n")) }
         let denied = p.questions.filter { $0.status == .rejected }.suffix(15)
         if !denied.isEmpty { parts.append("Not true:\n" + denied.map { "- \($0.statement)" }.joined(separator: "\n")) }

@@ -18,7 +18,13 @@ public struct CoachPeople: Sendable {
     private let byName: [String: [Person]]
 
     public init(people: [Person]) {
-        resolver = PersonResolver(people: people)
+        // A name that a person had before can be another person's name now (a voice named wrongly, then
+        // corrected): it is no sure match. The id keeps a renamed person's learnings, not the old name.
+        resolver = PersonResolver(people: people.map { p in
+            var p = p
+            p.forms.removeAll { $0.kind == .former }
+            return p
+        })
         all = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         byName = Dictionary(grouping: people.filter(\.isLive), by: \.displayName)
     }
@@ -27,6 +33,10 @@ public struct CoachPeople: Sendable {
     public static func read(paths: Paths) -> CoachPeople { CoachPeople(people: PeopleStore.peek(in: paths.people) ?? []) }
 
     public var isEmpty: Bool { all.isEmpty }
+
+    /// An id of a person in this store, also one that another record took in. An id from before the store started
+    /// again points to nobody.
+    public func knows(_ id: String) -> Bool { all[PersonID(rawValue: id)] != nil }
 
     /// The person an id stands for now: a merged record points to the one that took it in.
     public func canonical(_ id: String) -> String {
@@ -62,14 +72,20 @@ public struct CoachPeople: Sendable {
     }
 
     /// The one saved person a conclusion of the coach is about. `about` is the name the model gave: it counts
-    /// only as the whole name of someone in the call. With none, the claim itself must hold the whole name of
-    /// exactly one person of the call. A first name alone is a guess, and gives nobody.
-    public func subject(of statement: String, about: String?, in r: CallRecord) -> (id: String, name: String)? {
+    /// as the whole name of someone in the call. With none, the claim itself must hold the whole name of
+    /// exactly one person of the call. A first name in the claim is a guess, and gives nobody.
+    ///
+    /// `firstName`, for a new conclusion that is a card: the model's `about` may be a first name alone, when
+    /// exactly one person who spoke has it, no other speaker or invited person has it, and that speaker is a
+    /// saved person on a sure match of the whole name. The owner confirms the person with the sentence, because
+    /// the card shows "About <name>". No nicknames.
+    public func subject(of statement: String, about: String?, in r: CallRecord, firstName: Bool = false) -> (id: String, name: String)? {
         let people = names(in: r)
         var hits: [(name: String, email: String?)] = []
         if let about = about?.nonBlank {
             let key = PersonNames.nameKey(about)
             hits = people.filter { PersonNames.nameKey($0.name) == key }
+            if hits.isEmpty, firstName { hits = speaker(firstNamed: about, in: r) }
         } else {
             let plain = " " + AdviceRules.key(statement) + " "
             hits = people.filter { p in
@@ -81,6 +97,24 @@ public struct CoachPeople: Sendable {
         guard ids.count == 1, let id = ids.first, let name = name(of: id) else { return nil }
         return (id, name)
     }
+
+    /// The one person who spoke with this first name, when nobody else in the call has it.
+    private func speaker(firstNamed first: String, in r: CallRecord) -> [(name: String, email: String?)] {
+        let word = AdviceRules.key(first)
+        guard !word.isEmpty, !word.contains(" ") else { return [] }
+        func firstWord(_ name: String) -> String { AdviceRules.key(name).split(separator: " ").first.map(String.init) ?? "" }
+        let spoke = Set(r.speakerNames.values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }).filter { !$0.hasPrefix("Speaker ") }
+        let same = spoke.filter { firstWord($0) == word }
+        guard same.count == 1, let one = same.first, AdviceRules.key(one).split(separator: " ").count >= 2 else { return [] }
+        // Another invited person with that first name: the name could be either.
+        let invited = (r.invitees ?? []).compactMap { $0.name?.nonBlank.map(PersonNames.plain) }
+        guard !invited.contains(where: { firstWord($0) == word && PersonNames.nameKey($0) != PersonNames.nameKey(one) }) else { return [] }
+        return [(one, nil)]
+    }
+
+    /// A conclusion that is a card in the deck: it has a moment and its words. Only such a conclusion may use a
+    /// first name, because the owner sees the person on the card.
+    public static func isCard(_ q: CoachQuestion) -> Bool { q.at != nil && q.evidence.nonBlank != nil && q.statement.nonBlank != nil }
 
     /// The one saved person whose whole name a text holds, among all saved people. For a fact that the owner
     /// typed ("Sam Carter is my direct report"). Two names in the text are about no one person.
@@ -109,6 +143,13 @@ extension CoachProfile {
     public func learnings(about id: String, people: CoachPeople = .none) -> [CoachFact] {
         let id = people.canonical(id)
         return facts.filter { $0.person.map(people.canonical) == id }
+    }
+
+    /// What the owner confirmed about a person, by the label of the coach's note on them: for a device with no
+    /// people store, where the Mac keeps the label the person's name of now.
+    public func learnings(named name: String) -> [CoachFact] {
+        guard let id = people[name]?.person else { return [] }
+        return facts.filter { $0.person == id }
     }
 
     /// What the owner told the coach about its cards on a person, by the person's id.
@@ -142,11 +183,21 @@ extension CoachProfile {
         var changed = 0
         let calls = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
 
-        // The notes on people.
+        // An id that is not in the store (it started again, and each person has a new id) is no id.
+        func known(_ id: String?) -> String? { id.flatMap { saved.knows($0) ? saved.canonical($0) : nil } }
+
+        // The notes on people. A note that is no person keeps its name first: a note of a person under another
+        // name must not take that name and then lose it to this one.
         var notes: [String: CoachPerson] = [:]
-        for (key, note) in people.sorted(by: { ($0.value.lastSeen, $0.key) < ($1.value.lastSeen, $1.key) }) {
-            let id = note.person.map(saved.canonical) ?? saved.id(of: key)
-            guard let id, let name = saved.name(of: id) else { notes[key] = note; continue }
+        let sorted = people.sorted(by: { ($0.value.lastSeen, $0.key) < ($1.value.lastSeen, $1.key) })
+        let resolved = sorted.map { ($0.key, $0.value, known($0.value.person) ?? saved.id(of: $0.key)) }
+        for (key, note, id) in resolved where id.flatMap(saved.name(of:)) == nil {
+            var note = note
+            if note.person != nil, known(note.person) == nil { note.person = nil }
+            notes[key] = note
+        }
+        for (key, note, id) in resolved {
+            guard let id, let name = saved.name(of: id) else { continue }
             var note = note
             note.person = id
             if var old = notes[name], old.person == id {
@@ -171,11 +222,17 @@ extension CoachProfile {
         // The conclusions: who each is about, from the people of its call.
         for i in questions.indices {
             let before = questions[i]
-            if let id = before.person {
-                questions[i].person = saved.canonical(id)
+            if let id = known(before.person) {
+                questions[i].person = id
+            } else if before.person != nil, before.callID.flatMap({ calls[$0] }) == nil {
+                questions[i].person = nil
+                questions[i].personName = nil
             } else if let call = before.callID.flatMap({ calls[$0] }), let subject = saved.subject(of: before.statement, about: before.about, in: call) {
                 questions[i].person = subject.id
                 questions[i].personName = subject.name
+            } else if before.person != nil {
+                questions[i].person = nil
+                questions[i].personName = nil
             }
             if questions[i] != before { changed += 1 }
         }
@@ -183,20 +240,34 @@ extension CoachProfile {
         // The facts: a confirmed conclusion's person, or the one saved person whose whole name the fact holds.
         for i in facts.indices {
             let before = facts[i]
-            if let id = before.person {
-                facts[i].person = saved.canonical(id)
+            if let id = known(before.person) {
+                facts[i].person = id
             } else if before.kind != .role, before.kind != .goal, before.kind != .responsibility {
                 let asked = questions.first { q in
                     (q.status == .confirmed && q.statement.caseInsensitiveCompare(before.text) == .orderedSame)
                         || (q.status == .corrected && q.note?.caseInsensitiveCompare(before.text) == .orderedSame)
                 }
                 facts[i].person = asked.map(\.person) ?? saved.onlyPerson(namedIn: before.text)
+            } else {
+                facts[i].person = nil
             }
             if facts[i] != before { changed += 1 }
         }
-        for i in guidance.indices {
-            guard let id = guidance[i].person, saved.canonical(id) != id else { continue }
-            guidance[i].person = saved.canonical(id)
+        // A reason about a person: the person of its card's conclusion when its own id points to nobody.
+        func asked(_ finding: String?) -> CoachQuestion? {
+            guard let qid = answers.first(where: { $0.id == finding })?.questionID else { return nil }
+            return questions.first { $0.id == qid }
+        }
+        for i in guidance.indices where guidance[i].person != nil {
+            let now = known(guidance[i].person) ?? asked(guidance[i].finding)?.person
+            guard now != guidance[i].person else { continue }
+            guidance[i].person = now
+            changed += 1
+        }
+        for i in answers.indices where answers[i].person != nil {
+            let now = known(answers[i].person) ?? answers[i].questionID.flatMap { qid in questions.first { $0.id == qid }?.person }
+            guard now != answers[i].person else { continue }
+            answers[i].person = now
             changed += 1
         }
         return changed

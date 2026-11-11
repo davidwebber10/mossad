@@ -99,7 +99,21 @@ public enum CoachVoice: String, Codable, Sendable, CaseIterable, Identifiable {
     }
 }
 
+/// The goals for the Coach page: the one of now (active, or offered and waiting), the ones the owner did not
+/// take, and the ones the owner learned. The newest first.
+public struct GoalHistory: Equatable, Sendable {
+    public var current: CoachFocus?
+    public var offered: [CoachFocus]
+    public var finished: [CoachFocus]
+}
+
 extension CoachProfile {
+    public var goalHistory: GoalHistory {
+        GoalHistory(current: activeFocus ?? proposedFocus,
+                    offered: foci.filter { $0.status == .dismissed }.sorted { $0.updated > $1.updated },
+                    finished: foci.filter { $0.status == .learned }.sorted { $0.updated > $1.updated })
+    }
+
     public var activeFocus: CoachFocus? { foci.last { $0.status == .active } }
     public var proposedFocus: CoachFocus? { foci.last { $0.status == .proposed } }
 

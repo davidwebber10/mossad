@@ -473,7 +473,11 @@ public actor CloudSync {
             guard merged != local else { return false }
             try merged.save(to: paths.coach)
             // The answers to the cards that came from the other device are kept with their calls too.
-            if merged.answers != local.answers { FindingStore.mirror(merged.answers, paths: paths) }
+            // Only the calls whose answers changed: their folders, and no other.
+            let before = Set(local.answers)
+            for callID in Set(merged.answers.filter { !before.contains($0) }.map(\.callID)) {
+                FindingStore.mirror(merged.answers, callID: callID, paths: paths)
+            }
         case Self.chatType:
             let remote = try await decoded(Chat.self)
             let chats = ChatStore(directory: paths.chats)

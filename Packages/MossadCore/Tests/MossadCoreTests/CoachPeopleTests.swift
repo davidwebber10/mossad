@@ -293,4 +293,109 @@ final class CoachPeopleTests: XCTestCase {
         XCTAssertEqual(old.people["Sam Carter"]?.calls, 4)
         XCTAssertEqual(try JSONDecoder.coach.decode(CoachProfile.self, from: JSONEncoder.coach.encode(mac)), mac)
     }
+
+    // MARK: A first name among the people who spoke
+
+    /// A call where the owner spoke with the given people, and where the invite names the others.
+    private func call(speakers: [String], invited: [String] = []) -> CallRecord {
+        var r = call()
+        r.speakerNames = ["me:A": owner]
+        for (i, name) in speakers.enumerated() { r.speakerNames["them:\(Character(UnicodeScalar(65 + i)!))"] = name }
+        r.invitees = invited.isEmpty ? nil : invited.map { Invitee(name: $0, email: nil) }
+        return r
+    }
+
+    func testAFirstNameFromTheModelIsThePersonOnlyUnderAllFiveConditions() {
+        let r = call(speakers: ["Sam Carter"])
+        // The rule: the model gave "Sam", one speaker has that first name, and that speaker is a saved person.
+        XCTAssertEqual(saved.subject(of: "Sam reports to you.", about: "Sam", in: r, firstName: true)?.id, sam.id.rawValue)
+        // 1. Only the model's own person field: a first name in the claim is still a guess.
+        XCTAssertNil(saved.subject(of: "Sam reports to you.", about: nil, in: r, firstName: true))
+        // 2. Only among the people who spoke: an invited person who did not speak does not count.
+        XCTAssertNil(saved.subject(of: "Sam reports to you.", about: "Sam", in: call(speakers: ["Riley Chen"], invited: ["Sam Carter"]), firstName: true))
+        // 3. Exactly one speaker with that first name, and no other speaker or invited person with it.
+        XCTAssertNil(saved.subject(of: "Sam reports to you.", about: "Sam", in: call(speakers: ["Sam Carter", "Sam Ortiz"]), firstName: true))
+        XCTAssertNil(saved.subject(of: "Sam reports to you.", about: "Sam", in: call(speakers: ["Sam Carter"], invited: ["Sam Ortiz"]), firstName: true))
+        XCTAssertEqual(saved.subject(of: "Sam reports to you.", about: "Sam", in: call(speakers: ["Sam Carter"], invited: ["Sam Carter"]), firstName: true)?.id,
+                       sam.id.rawValue, "the invite of the same person is not another person")
+        //    The owner's own first name gives nobody.
+        XCTAssertNil(saved.subject(of: "Dana owns the budget.", about: "Dana", in: r, firstName: true))
+        XCTAssertNil(saved.subject(of: "Dana owns the budget.", about: "Dana", in: call(speakers: ["Dana Ruiz"]), firstName: true), "a speaker who shares the owner's first name")
+        // 4. That speaker is a saved person on a sure match of the whole name.
+        XCTAssertNil(saved.subject(of: "Pat decides the budget.", about: "Pat", in: call(speakers: ["Pat Moreno"]), firstName: true))
+        XCTAssertNil(CoachPeople(people: [dana, sam, person("Sam Carter")]).subject(of: "Sam reports to you.", about: "Sam", in: r, firstName: true))
+        // 5. Only for a conclusion that is still a card: older data keeps the whole-name rule.
+        XCTAssertNil(saved.subject(of: "Sam reports to you.", about: "Sam", in: r))
+        XCTAssertNil(saved.subject(of: "Sam reports to you.", about: "Sam", in: r, firstName: false))
+        // No nicknames, and a first name that is only almost right gives nobody.
+        XCTAssertNil(saved.subject(of: "Sammy reports to you.", about: "Sammy", in: r, firstName: true))
+        XCTAssertNil(saved.subject(of: "Sa reports to you.", about: "Sa", in: r, firstName: true))
+    }
+
+    func testOnlyANewConclusionThatIsACardUsesTheFirstNameAndTheMoveOfOlderDataDoesNot() {
+        var profile = CoachProfile()
+        var q = question(about: "Sam")
+        profile.ask([q])
+        XCTAssertEqual(profile.linkPeople(saved, records: [call()]), 0, "an older conclusion keeps the whole-name rule")
+        XCTAssertNil(profile.questions[0].person)
+        q.at = nil
+        XCTAssertFalse(CoachPeople.isCard(q), "a conclusion with no moment is no card")
+        XCTAssertTrue(CoachPeople.isCard(question(about: "Sam")))
+    }
+
+    // MARK: Ids that point to nobody, and former names
+
+    func testAnIDThatIsNotInThePeopleStoreIsNoIDAndIsLinkedAgain() {
+        var profile = learned()
+        profile.questions = [question()]
+        profile.questions[0].status = .confirmed
+        profile.questions[0].person = "gone-id"
+        profile.questions[0].personName = "Sam Carter"
+        for i in profile.facts.indices { profile.facts[i].person = "gone-id" }
+        profile.people["Sam Carter"]?.person = "gone-id"
+        // The people store started again: each person has a new id.
+        XCTAssertGreaterThan(profile.linkPeople(saved, records: [call()]), 0)
+        XCTAssertEqual(profile.people["Sam Carter"]?.person, sam.id.rawValue)
+        XCTAssertEqual(profile.questions[0].person, sam.id.rawValue)
+        XCTAssertTrue(profile.facts.filter { $0.text == "Sam reports to you." }.allSatisfy { $0.person == sam.id.rawValue })
+        // A stale id with no sure match is cleared, not kept.
+        var lone = CoachProfile()
+        lone.updateFacts(add: [CoachFact(kind: .context, text: "The Monday call is for decisions.", person: "gone-id")], remove: [], at: base)
+        lone.linkPeople(saved, records: [])
+        XCTAssertNil(lone.facts[0].person)
+    }
+
+    func testANameThatAnotherPersonHadBeforeIsNotThatPerson() {
+        var jordan = person("Jordan Blake")
+        _ = jordan.addForm("Sam Carter", kind: .former, source: .owner, confirmed: true, at: base)
+        // Nobody has the name now: a former name of another person is not a sure match.
+        XCTAssertNil(CoachPeople(people: [dana, jordan, riley]).id(of: "Sam Carter"))
+        XCTAssertNil(CoachPeople(people: [dana, jordan, riley]).subject(of: "Sam Carter reports to you.", about: "Sam Carter", in: call()))
+        // The person who has the name now is still found.
+        XCTAssertEqual(CoachPeople(people: [dana, jordan, sam]).id(of: "Sam Carter"), sam.id.rawValue)
+    }
+
+    func testANoteWithNoIDDoesNotReplaceTheNoteOfAPersonUnderTheSameName() {
+        var profile = CoachProfile()
+        var known = CoachPerson(note: "Sam wants the answer first.", calls: 3, lastSeen: base)
+        known.person = sam.id.rawValue
+        profile.people["S. Carter"] = known
+        profile.people["Sam Carter"] = CoachPerson(note: "An older note.", calls: 1, lastSeen: base.addingTimeInterval(day))
+        // Two saved people have the name "Sam Carter": the note under that name has no id.
+        let other = person("Sam Carter")
+        profile.linkPeople(CoachPeople(people: [dana, sam, other, riley]), records: [])
+        XCTAssertEqual(profile.people.count, 2)
+        XCTAssertEqual(profile.people.values.filter { $0.person == sam.id.rawValue }.map(\.note), ["Sam wants the answer first."])
+        XCTAssertEqual(profile.people.values.filter { $0.person == nil }.map(\.note), ["An older note."])
+    }
+
+    // MARK: On the person page
+
+    func testWhatTheOwnerConfirmedAboutAPersonIsFoundByIDAndByTheLabelOnTheIPhone() {
+        let profile = learned()
+        XCTAssertEqual(profile.learnings(about: sam.id.rawValue, people: saved).map(\.text), ["Sam reports to you."])
+        // The iPhone has no people store: the label of the note gives the id.
+        XCTAssertEqual(profile.learnings(named: "Sam Carter").map(\.text), ["Sam reports to you."])
+        XCTAssertEqual(profile.learnings(named: "Riley Chen"), [])
+    }
 }

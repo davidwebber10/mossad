@@ -226,7 +226,9 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     public var adviceVersion = 0
 
     public static let ratedLimit = 30
+    /// The owner's own guidance. The reasons for a no to a card have their own limit, so they never push it out.
     public static let guidanceLimit = 25
+    public static let reasonLimit = 10
     /// The newest entries stay. The rules read the last 30 days; at 5 calls a day this is some months.
     public static let adviceLimit = 600
     public static let observationLimit = 1000
@@ -321,6 +323,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         out.questions = Self.mergedQuestions(questions, other.questions)
         // The owner answers cards on either device.
         out.answers = Self.mergedAnswers(answers, other.answers)
+        out.settleAnswers()
         out.focus = out.activeFocus?.plan ?? (out.foci.isEmpty ? out.focus : "")
         return out
     }
@@ -341,8 +344,21 @@ public struct CoachProfile: Codable, Equatable, Sendable {
             guidance.append(CoachGuidance(text: text, date: date))
             forgotten[text.lowercased()] = nil
         }
-        guidance = Array(guidance.suffix(Self.guidanceLimit))
+        trimGuidance()
     }
+
+    /// The newest of the owner's own guidance, and the newest reasons for a no, each within its limit.
+    mutating func trimGuidance() {
+        let own = Set(guidance.filter { $0.finding == nil }.suffix(Self.guidanceLimit).map(\.text))
+        let reasons = Set(guidance.filter { $0.finding != nil }.sorted { $0.date < $1.date }.suffix(Self.reasonLimit).map(\.text))
+        guidance.removeAll { $0.finding == nil ? !own.contains($0.text) : !reasons.contains($0.text) }
+    }
+
+    /// What the owner told the coach about its coaching, in Settings or a reply: a rule for each review.
+    public var ownGuidance: [CoachGuidance] { guidance.filter { $0.finding == nil } }
+
+    /// The reasons the owner gave for a no to a card, the newest first: each is about that card's subject only.
+    public var whyRules: [CoachGuidance] { guidance.filter { $0.finding != nil }.sorted { $0.date > $1.date } }
 
     /// Folds one review in. The focus changes only through the owner: a proposal waits for them, and a result
     /// counts only for the focus they accepted. The memory adds: a call gives each pattern one observation and
@@ -411,15 +427,15 @@ public struct CoachProfile: Codable, Equatable, Sendable {
 
     /// Removes what the memory holds of a deleted meeting: its lines, its moments, its place in the history,
     /// its results on a focus, and the questions from it that wait for an answer. What the owner confirmed is a
-    /// fact of its own and stays, and so do the names of patterns and the notes on people.
+    /// fact of its own and stays, and so do the names of patterns, the notes on people, and the answers to cards.
     public mutating func forget(callID: String) {
         advice.removeAll { $0.callID == callID }
         observations.removeAll { $0.callID == callID }
         history.removeAll { $0.callID == callID }
         for i in foci.indices { foci[i].results.removeAll { $0.callID == callID } }
         questions.removeAll { $0.callID == callID && $0.status == .open }
-        // What the owner blocked for good is the owner's decision, like a fact: it stays.
-        answers.removeAll { $0.callID == callID && $0.verdict != .never }
+        // The owner's answers to the cards stay: each is a signal about the coaching, not about the meeting, and
+        // the other device keeps them too.
     }
 
     /// What the log holds of one pattern, the newest first.

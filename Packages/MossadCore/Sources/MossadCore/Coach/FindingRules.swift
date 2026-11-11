@@ -5,14 +5,17 @@ import Foundation
 /// asks the owner to confirm, and the focus it proposes.
 ///
 /// 1. Proof. Each card has a moment to play or a number with its usual value. Without one it is not made.
-/// 2. Few. A call gives `perCall` cards at most, and an answer makes no room for one more.
-/// 3. Not for long. A card with no answer goes `expiryDays` after its call.
+/// 2. Few. A call gives `perCall` cards at most, and an answer makes no room for one more. The deck of all
+///    calls shows `deckLimit` at most: a short deck, never a backlog.
+/// 3. Not for long. A card with no answer goes `expiryDays` after its call. A review from before the cards
+///    gives cards only for `seedDays`, so the first launch does not start with weeks of cards.
 /// 4. What the owner blocked is not made, and what the owner said no to a few times comes last.
 public enum FindingRules {
-    public static let perCall = 5
+    public static let perCall = 2
     public static let expiryDays = 14.0
-    /// The most cards the deck of all calls holds. The newest calls come first; the others wait their turn or go.
-    public static let deckLimit = 30
+    public static let seedDays = 7.0
+    /// The most cards the deck of all calls shows. The newest calls come first; the others wait their turn or go.
+    public static let deckLimit = 10
 
     public static func expires(_ finding: CoachFinding) -> Date { finding.date.addingTimeInterval(expiryDays * 86_400) }
 
@@ -98,7 +101,7 @@ public enum FindingRules {
     /// card, what the coach asks the owner to confirm, then the rest, with a skill the owner said no to a few
     /// times last.
     public static func deck(callID: String, date: Date, review: CoachReview, profile: CoachProfile, now: Date = Date()) -> [CoachFinding] {
-        guard now.timeIntervalSince(date) <= expiryDays * 86_400 else { return [] }
+        guard now.timeIntervalSince(date) <= (review.findings == nil ? seedDays : expiryDays) * 86_400 else { return [] }
         let training = profile.training(asOf: now)
         var base = (review.findings ?? cards(review: review, callID: callID, date: date, measured: nil,
                                              observations: profile.observations.filter { $0.callID == callID }))
@@ -124,6 +127,13 @@ public enum FindingRules {
             if card.kind == .learning, let q = profile.questions.first(where: { $0.id == card.questionID }), q.dismissed != nil { return false }
             return profile.answer(to: card.id) == nil
         }
+    }
+
+    /// "No, never again" is not offered on a card of the active focus: the owner would block the skill they
+    /// chose to work on, and the coach would get two orders. Ending the focus is the way.
+    public static func offersNever(_ card: CoachFinding, profile: CoachProfile) -> Bool {
+        guard let focus = profile.activeFocus else { return true }
+        return card.skill != "focus:\(focus.id.uuidString)" && AdviceRules.key(card.skill) != AdviceRules.key(focus.skillID)
     }
 
     /// The cards of all calls that wait for an answer, the newest call first.

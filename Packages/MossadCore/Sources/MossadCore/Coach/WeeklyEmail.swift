@@ -46,6 +46,17 @@ public struct WeeklyDigest: Codable, Equatable, Sendable {
         self.focus = focus
     }
 
+    /// The emails that are written and not sent yet, in the coach's folder: a sent email is not kept.
+    public static func waiting(in dir: URL) -> [(weekly: Bool, start: Date, digest: WeeklyDigest)] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return files.compactMap { url -> (Bool, Date, WeeklyDigest)? in
+            let parts = url.deletingPathExtension().lastPathComponent.split(separator: "-")
+            guard parts.count == 3, parts[0] == "email", let seconds = Double(parts[2]),
+                  let digest = (try? Data(contentsOf: url)).flatMap({ try? JSONDecoder.coach.decode(WeeklyDigest.self, from: $0) }) else { return nil }
+            return (parts[1] == "weekly", Date(timeIntervalSince1970: seconds), digest)
+        }.sorted { $0.1 > $1.1 }
+    }
+
     public var text: String { CoachEmailDesign.text(kind: .weekly, period: "", digest: self, facts: nil) }
     public var html: String { CoachEmailDesign.html(kind: .weekly, period: "", digest: self, facts: nil) }
 }

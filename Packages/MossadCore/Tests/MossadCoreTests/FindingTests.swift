@@ -125,7 +125,7 @@ final class FindingTests: XCTestCase {
         XCTAssertEqual(cards[1].skill, "pattern:long history first")
     }
 
-    func testACallGivesFiveCardsAtMostAndAnAnswerMakesNoRoomForASixth() {
+    func testACallGivesTwoCardsAtMostAndAnAnswerMakesNoRoomForAThird() {
         let patterns = (0..<6).map { i in
             CoachPatternUpdate(name: "P\(i)", kind: .growth, note: "Note \(i).", result: .missed,
                                quote: ["I will send the forecast to finance.", "So what I am hearing is that the date moved.", "I went on for a long time about the history there.",
@@ -136,11 +136,11 @@ final class FindingTests: XCTestCase {
         profile.ask([question()])
         let cards = deck(made, profile)
         XCTAssertEqual(cards.count, FindingRules.perCall)
-        XCTAssertEqual(FindingRules.perCall, 5)
-        XCTAssertEqual(cards.prefix(2).map(\.kind), [.couldBeBetter, .learning], "the line, then what the coach asks")
+        XCTAssertEqual(FindingRules.perCall, 2)
+        XCTAssertEqual(cards.map(\.kind), [.couldBeBetter, .learning], "the line, then what the coach asks")
         profile.answer(cards[0], .yes, at: base.addingTimeInterval(day))
         let left = deck(made, profile)
-        XCTAssertEqual(left.map(\.id), Array(cards.dropFirst().map(\.id)), "the sixth card does not move up")
+        XCTAssertEqual(left.map(\.id), Array(cards.dropFirst().map(\.id)), "the third card does not move up")
     }
 
     func testUnansweredCardsGoAfterTwoWeeks() {
@@ -148,7 +148,7 @@ final class FindingTests: XCTestCase {
         XCTAssertEqual(deck(made, now: 13.9).count, 1)
         XCTAssertEqual(deck(made, now: 14.1).count, 0)
         XCTAssertEqual(FindingRules.expiryDays, 14)
-        // An older review, from before the cards, gives its line as a card for the same two weeks.
+        // An older review, from before the cards, gives its line as a card.
         var old = review(tryNext: advice)
         old.version = CoachReview.currentVersion
         old.line = CoachLine(kind: .tryNext, note: advice)
@@ -189,8 +189,8 @@ final class FindingTests: XCTestCase {
         XCTAssertTrue(profile.facts.isEmpty)
         XCTAssertTrue(profile.openQuestions.isEmpty, "it does not wait for an answer")
         XCTAssertNotEqual(profile.questions[0].status, .rejected, "a plain no is not \"not true for good\"")
-        XCTAssertTrue(CoachPrompt.questionsText(profile).contains("Not confirmed"))
-        XCTAssertFalse(CoachPrompt.questionsText(profile).contains("Not true"))
+        XCTAssertTrue(CoachPrompt.questionsText(profile, now: base.addingTimeInterval(2 * day)).contains("Not confirmed"))
+        XCTAssertFalse(CoachPrompt.questionsText(profile, now: base.addingTimeInterval(2 * day)).contains("Not true"))
         // The coach does not ask it again at once.
         var again = question(callID: "d")
         again.asked = base.addingTimeInterval(5 * day)
@@ -210,7 +210,7 @@ final class FindingTests: XCTestCase {
         let card = deck(review(), profile)[0]
         profile.answer(card, .never, at: base.addingTimeInterval(day))
         XCTAssertEqual(profile.questions[0].status, .rejected)
-        XCTAssertTrue(CoachPrompt.questionsText(profile).contains("Not true:\n- Sam reports to you."))
+        XCTAssertTrue(CoachPrompt.questionsText(profile, now: base.addingTimeInterval(2 * day)).contains("Not true:\n- Sam reports to you."))
         var again = question(callID: "d")
         again.asked = base.addingTimeInterval(400 * day)
         profile.ask([again])
@@ -348,14 +348,18 @@ final class FindingTests: XCTestCase {
         let made = settle(review(tryNext: advice, didWell: praise)).review
         let before = profile
         let cards = deck(made, profile)
-        XCTAssertEqual(cards.map(\.kind), [.goalOffer, .learning, .didWell])
-        for (card, verdict) in zip(cards, [FindingVerdict.yes, .yes, .no]) {
-            var p = profile
+        XCTAssertEqual(cards.map(\.kind), [.goalOffer, .learning], "two cards for a call")
+        let praised = deck(settle(review(didWell: praise)).review)
+        XCTAssertEqual(praised.map(\.kind), [.didWell])
+        for (card, verdict) in zip(cards + praised, [FindingVerdict.yes, .yes, .no]) {
+            let made = card.kind == .didWell ? settle(review(didWell: praise)).review : made
+            let cards = card.kind == .didWell ? praised : cards
+            var p = card.kind == .didWell ? CoachProfile() : profile
             p.answer(card, verdict, at: base.addingTimeInterval(day))
             XCTAssertFalse(deck(made, p).contains(card))
             p.takeBack(card.id, at: base.addingTimeInterval(day + 5))
             XCTAssertEqual(deck(made, p, now: 2), cards, "\(card.kind.rawValue)")
-            XCTAssertEqual(p.facts, before.facts)
+            XCTAssertEqual(p.facts, card.kind == .didWell ? [] : before.facts)
             XCTAssertEqual(p.activeFocus, nil)
             XCTAssertEqual(p.training(asOf: base).weight(risk), 0)
             XCTAssertNil(p.answer(to: card.id), "the answer is taken back")
@@ -484,28 +488,254 @@ final class FindingTests: XCTestCase {
     func testTheAnswersOfACallAreSavedNextToItsReview() throws {
         let paths = Paths(root: tempDirectory())
         defer { try? FileManager.default.removeItem(at: paths.root) }
-        try FileManager.default.createDirectory(at: paths.callDirectory("a"), withIntermediateDirectories: true)
+        for id in ["a", "b"] { try FileManager.default.createDirectory(at: paths.callDirectory(id), withIntermediateDirectories: true) }
         var profile = CoachProfile()
         profile.answer(card(callID: "a"), .yes, at: base)
         profile.answer(card(.didWell, skill: risk, callID: "a"), .no, at: base)
+        profile.answer(card(callID: "b"), .no, at: base)
         profile.answer(card(callID: "gone"), .no, at: base)
-        XCTAssertEqual(FindingStore.mirror(profile.answers, paths: paths), 1)
+        XCTAssertTrue(FindingStore.mirror(profile.answers, callID: "a", paths: paths))
         let saved = try XCTUnwrap(CallFindings.load(in: paths.callDirectory("a")))
         XCTAssertEqual(saved.answers.map(\.verdict), [.yes, .no])
+        XCTAssertNil(CallFindings.load(in: paths.callDirectory("b")), "only the call of the answer is written")
+        XCTAssertFalse(FindingStore.mirror(profile.answers, callID: "gone", paths: paths))
         XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory("gone").path), "a deleted meeting's folder does not come back")
-        XCTAssertEqual(FindingStore.mirror(profile.answers, paths: paths), 0, "nothing new, nothing written")
+        XCTAssertFalse(FindingStore.mirror(profile.answers, callID: "a", paths: paths), "nothing new, nothing written")
         profile.takeBack(card(callID: "a").id, at: base.addingTimeInterval(60))
-        XCTAssertEqual(FindingStore.mirror(profile.answers, paths: paths), 1)
+        XCTAssertTrue(FindingStore.mirror(profile.answers, callID: "a", paths: paths))
         XCTAssertEqual(CallFindings.load(in: paths.callDirectory("a"))?.answers.compactMap(\.verdict), [.no])
     }
 
-    func testADeletedMeetingLeavesItsNeverAgainAndNothingElse() {
+    func testADeletedMeetingKeepsTheOwnersAnswersOnEachDevice() {
         var profile = CoachProfile()
         profile.answer(card(callID: "a"), .no, at: base)
         profile.answer(card(.didWell, skill: risk, callID: "a"), .never, at: base)
+        let other = profile
         profile.forget(callID: "a")
-        XCTAssertEqual(profile.answers.map(\.verdict), [.never])
-        XCTAssertEqual(profile.training(asOf: base).weight(dates), 0)
-        XCTAssertTrue(profile.training(asOf: base).isBlocked(risk), "what the owner decided stays")
+        XCTAssertEqual(profile.answers.map(\.verdict), [.no, .never], "an answer is the owner's signal about the coaching")
+        XCTAssertEqual(profile.training(asOf: base).weight(dates), -1)
+        XCTAssertTrue(profile.training(asOf: base).isBlocked(risk))
+        // The other device has the same answers: a merge brings nothing back and takes nothing away.
+        XCTAssertEqual(profile.merged(with: other).answers, profile.answers)
+    }
+
+    // MARK: Review fixes
+
+    func testUndoOfAYesOnAGoalGivesBackTheFocusItReplaced() {
+        var profile = CoachProfile()
+        let old = CoachFocus(plan: "Leave room in your 1:1s.", why: "W", metric: nil, proposed: base.addingTimeInterval(-30 * day), skill: CoachSkill.longTurns.rawValue)
+        profile.propose(old, at: old.proposed)
+        profile.acceptFocus(old.id, plan: nil, at: old.proposed)
+        let offer = CoachFocus(plan: "When you take an item, say the day.", why: "W", metric: nil, proposed: base, skill: dates)
+        profile.propose(offer, at: base)
+        let made = settle(review(tryNext: advice)).review
+        let card = deck(made, profile)[0]
+        XCTAssertEqual(card.kind, .goalOffer)
+        profile.answer(card, .yes, at: base.addingTimeInterval(day))
+        XCTAssertEqual(profile.activeFocus?.id, offer.id)
+        profile.takeBack(card.id, at: base.addingTimeInterval(day + 5))
+        XCTAssertEqual(profile.activeFocus?.id, old.id, "the focus the yes replaced is active again")
+        XCTAssertEqual(profile.focus, old.plan)
+        XCTAssertEqual(profile.proposedFocus?.id, offer.id)
+        // "Undo" in the list of what was blocked only takes the block away: it does not change a focus.
+        var never = profile
+        never.answer(card, .never, at: base.addingTimeInterval(2 * day))
+        XCTAssertTrue(never.training(asOf: base).isGoalBlocked(dates))
+        let foci = never.foci
+        never.allowAgain(card.id, at: base.addingTimeInterval(90 * day))
+        XCTAssertFalse(never.training(asOf: base).isGoalBlocked(dates))
+        XCTAssertEqual(never.foci, foci)
+        XCTAssertEqual(never.neverAgain, [])
+        // For a conclusion or a subject, allowing it again is the same as taking the answer back.
+        var subject = CoachProfile()
+        let first = deck(made, subject)[0]
+        subject.answer(first, .never, at: base)
+        subject.allowAgain(first.id, at: base.addingTimeInterval(day))
+        XCTAssertFalse(subject.training(asOf: base).isBlocked(dates))
+    }
+
+    func testAConclusionWithNoPersonFieldStillGivesAReview() {
+        var reply: Any = ["questions": [["statement": "Sam reports to you.", "kind": "relationship", "evidence": "E", "at_seconds": 40]]]
+        let problems = SchemaCheck.fill(&reply, schema: LLMCoach.schema)
+        XCTAssertFalse(problems.contains { $0.contains("person") }, "\(problems)")
+        let filled = ((reply as? [String: Any])?["questions"] as? [[String: Any]])?.first
+        XCTAssertTrue(filled?["person"] is NSNull)
+    }
+
+    func testTheDeckIsShortTwoCardsACallTenInAllAndOlderReviewsSeedOnlyTheLastWeek() {
+        XCTAssertEqual(FindingRules.deckLimit, 10)
+        XCTAssertEqual(FindingRules.seedDays, 7)
+        let reviews = (0..<8).map { i in
+            (callID: "n\(i)", date: base.addingTimeInterval(Double(i) * day),
+             review: settle(review(tryNext: advice, didWell: praise), call("n\(i)", day: Double(i))).review)
+        }
+        let all = FindingRules.deck(reviews: reviews, profile: CoachProfile(), now: base.addingTimeInterval(8 * day))
+        XCTAssertEqual(all.count, 10, "never a backlog")
+        XCTAssertEqual(Array(Set(all.map(\.callID))).sorted(), ["n3", "n4", "n5", "n6", "n7"], "the newest calls")
+        XCTAssertEqual(all.first?.callID, "n7")
+        // A review from before the cards gives its cards only for the last week at the first launch.
+        var old = review(tryNext: advice)
+        old.version = CoachReview.currentVersion
+        old.line = CoachLine(kind: .tryNext, note: advice)
+        XCTAssertEqual(deck(old, now: 6.9).count, 1)
+        XCTAssertEqual(deck(old, now: 7.1).count, 0)
+        // A card of this build waits two weeks, as before.
+        XCTAssertEqual(deck(settle(review(tryNext: advice)).review, now: 13.9).count, 1)
+    }
+
+    func testALaterNoOrNeverOnAnotherDeviceRemovesTheFactOfAnEarlierYes() {
+        var asked = CoachProfile()
+        asked.ask([question()])
+        let card = deck(review(), asked)[0]
+        for later in [FindingVerdict.no, .never] {
+            var mac = asked, phone = asked
+            mac.answer(card, .yes, at: base.addingTimeInterval(day))
+            phone.answer(card, later, at: base.addingTimeInterval(day + 60))
+            for merged in [mac.merged(with: phone), phone.merged(with: mac, takeCoaching: true)] {
+                XCTAssertEqual(merged.answer(to: card.id)?.verdict, later)
+                XCTAssertEqual(merged.facts, [], "\(later)")
+                XCTAssertFalse(CoachPrompt.user(record: call("d", day: 2), owner: owner, profile: merged).contains("Relationships:"))
+            }
+        }
+        // A later yes keeps its fact.
+        var mac = asked, phone = asked
+        phone.answer(card, .no, at: base.addingTimeInterval(day))
+        mac.answer(card, .yes, at: base.addingTimeInterval(day + 60))
+        XCTAssertEqual(phone.merged(with: mac).facts.map(\.text), ["Sam reports to you."])
+        XCTAssertEqual(mac.merged(with: phone).facts.map(\.text), ["Sam reports to you."])
+    }
+
+    func testReasonsForANoDoNotPushOutTheOwnersOwnGuidance() {
+        var profile = CoachProfile()
+        profile.updateGuidance(add: (1...6).map { "Own rule \($0)." }, remove: [], at: base)
+        for i in 0..<30 {
+            let c = card(callID: "r\(i)")
+            profile.answer(c, .no, at: base.addingTimeInterval(Double(i)))
+            profile.explain(c.id, note: "Reason \(i).", at: base.addingTimeInterval(Double(i)))
+        }
+        XCTAssertEqual(profile.ownGuidance.count, 6)
+        XCTAssertEqual(profile.whyRules.count, CoachProfile.reasonLimit)
+        XCTAssertEqual(CoachProfile.reasonLimit, 10)
+        XCTAssertTrue(profile.whyRules.first?.text.contains("Reason 29.") == true, "the newest first")
+        XCTAssertFalse(profile.guidance.contains { $0.text.contains("Reason 19.") })
+        let text = CoachPrompt.user(record: call("d", day: 1), owner: owner, profile: profile)
+        let own = text.components(separatedBy: "## What \(owner) told you about your coaching (follow this)\n").last?.components(separatedBy: "\n\n").first ?? ""
+        XCTAssertTrue(own.contains("Own rule 1."), own)
+        XCTAssertFalse(own.contains("Reason"), "a reason is about one card, not a rule for each review")
+        // A reason goes with its subject.
+        let training = CoachPrompt.trainingText(profile, record: call("d", day: 1))
+        XCTAssertTrue(training.contains("Reason 29."), training)
+        XCTAssertTrue(training.contains(dates), training)
+    }
+
+    func testANoOnAConclusionKeepsTheModelFromAskingForThirtyDaysOnly() {
+        var profile = CoachProfile()
+        profile.ask([question()])
+        profile.answer(deck(review(), profile)[0], .no, at: base.addingTimeInterval(day))
+        XCTAssertTrue(CoachPrompt.questionsText(profile, now: base.addingTimeInterval(20 * day)).contains("Not confirmed"))
+        XCTAssertFalse(CoachPrompt.questionsText(profile, now: base.addingTimeInterval(40 * day)).contains("Sam reports to you."))
+        XCTAssertFalse(CoachPrompt.user(record: call("d", day: 40), owner: owner, profile: profile).contains("Sam reports to you."))
+        XCTAssertTrue(CoachPrompt.user(record: call("d", day: 20), owner: owner, profile: profile).contains("Sam reports to you."))
+    }
+
+    func testAYesOnAConclusionAboutOneCallIsNoFactForLaterCalls() {
+        var profile = CoachProfile()
+        var q = question("This call was a negotiation.")
+        q.kind = .thisCall
+        profile.ask([q])
+        let card = deck(review(), profile)[0]
+        profile.answer(card, .yes, at: base)
+        XCTAssertEqual(profile.facts, [])
+        XCTAssertEqual(profile.questions[0].status, .confirmed)
+        XCTAssertFalse(CoachPrompt.user(record: call("d", day: 1), owner: owner, profile: profile).contains("This call was a negotiation."))
+        XCTAssertTrue(CoachPrompt.user(record: call("c"), owner: owner, profile: profile).contains("This call was a negotiation."), "a new review of the same call")
+        profile.takeBack(card.id, at: base.addingTimeInterval(60))
+        XCTAssertEqual(profile.questions[0].status, .open)
+        XCTAssertEqual(profile.forgotten, [:], "there was no fact to forget")
+    }
+
+    func testNeverAgainIsNotOfferedOnACardOfTheActiveFocus() {
+        var profile = CoachProfile()
+        let focus = CoachFocus(plan: "When you take an item, say the day.", why: "W", metric: nil, proposed: base, skill: dates)
+        profile.propose(focus, at: base)
+        profile.acceptFocus(focus.id, plan: nil, at: base)
+        XCTAssertFalse(FindingRules.offersNever(card(), profile: profile))
+        XCTAssertFalse(FindingRules.offersNever(card(.didWell, skill: "focus:\(focus.id.uuidString)"), profile: profile))
+        XCTAssertTrue(FindingRules.offersNever(card(.didWell, skill: risk), profile: profile))
+        XCTAssertTrue(FindingRules.offersNever(card(), profile: CoachProfile()))
+    }
+
+    func testAReleaseAnswersPastTheThresholdOrOnAQuickFlick() {
+        XCTAssertEqual(DeckRelease.verdict(x: 120, predicted: 130), .yes)
+        XCTAssertEqual(DeckRelease.verdict(x: -120, predicted: -130), .no)
+        XCTAssertNil(DeckRelease.verdict(x: 60, predicted: 80), "the card springs back")
+        XCTAssertEqual(DeckRelease.verdict(x: 45, predicted: 300), .yes, "a quick flick")
+        XCTAssertEqual(DeckRelease.verdict(x: -45, predicted: -300), .no)
+        XCTAssertNil(DeckRelease.verdict(x: 20, predicted: 300), "too short for a flick")
+        XCTAssertNil(DeckRelease.verdict(x: 60, predicted: -300), "a flick back the other way")
+    }
+
+    func testATwoFingerSwipeIsTakenOnlyOnceItsDirectionIsKnown() {
+        typealias E = ScrollSwipe.Event
+        var s = ScrollSwipe()
+        // A slow start of a scroll down over the deck: the page gets each event, the first one too.
+        XCTAssertEqual(s.handle(E(phase: .began, dx: 0, dy: -1)), .pass)
+        XCTAssertEqual(s.handle(E(phase: .changed, dx: 0.5, dy: -1)), .pass)
+        XCTAssertEqual(s.handle(E(phase: .changed, dx: 0, dy: -4)), .pass)
+        XCTAssertEqual(s.handle(E(phase: .changed, dx: 9, dy: 0)), .pass, "the page's scroll stays the page's")
+        XCTAssertEqual(s.handle(E(phase: .ended)), .pass)
+        XCTAssertEqual(s.handle(E(momentum: .changed, dy: -3)), .pass)
+        // A swipe to the side: the card moves once the direction is known.
+        XCTAssertEqual(s.handle(E(phase: .began, dx: 2)), .pass)
+        XCTAssertEqual(s.handle(E(phase: .changed, dx: 6)), .take(.move(8)))
+        XCTAssertEqual(s.handle(E(phase: .changed, dx: 40, dy: 1)), .take(.move(48)))
+        // The end: the page sees it too, the speed is the mean of the last moves, and the glide is not the page's.
+        XCTAssertEqual(s.handle(E(phase: .ended)), .pass(.release(x: 48, speed: 16)))
+        XCTAssertEqual(s.handle(E(momentum: .changed, dx: 5)), .take(nil))
+        XCTAssertEqual(s.handle(E(momentum: .ended)), .take(nil))
+        XCTAssertEqual(s.handle(E(momentum: .changed, dy: -3)), .pass)
+        // A swipe that the system cancels lets the card go back.
+        _ = s.handle(E(phase: .began, dx: 3))
+        _ = s.handle(E(phase: .changed, dx: 30))
+        XCTAssertEqual(s.handle(E(phase: .cancelled)), .pass(.cancel))
+        // Not over the part of the deck that shows: the page's.
+        XCTAssertEqual(s.handle(E(phase: .began, dx: 3, inside: false)), .pass)
+        XCTAssertEqual(s.handle(E(phase: .changed, dx: 30, inside: false)), .pass)
+        XCTAssertEqual(s.handle(E(phase: .ended, inside: false)), .pass)
+        // A mouse wheel has no phases.
+        XCTAssertEqual(s.handle(E(dx: 30)), .pass)
+    }
+
+    // MARK: The pages of Coach
+
+    func testTheGoalsPageListsTheGoalOfNowWhatWasOfferedAndWhatWasLearned() {
+        var profile = CoachProfile()
+        XCTAssertEqual(profile.goalHistory.offered, [])
+        let a = CoachFocus(plan: "A", why: "W", metric: nil, proposed: base, skill: dates)
+        let b = CoachFocus(plan: "B", why: "W", metric: nil, proposed: base.addingTimeInterval(day), skill: risk)
+        let c = CoachFocus(plan: "C", why: "W", metric: nil, proposed: base.addingTimeInterval(2 * day), skill: CoachSkill.longTurns.rawValue)
+        profile.propose(a, at: a.proposed)
+        profile.acceptFocus(a.id, plan: nil, at: a.proposed)
+        for i in 0..<5 { profile.record(FocusResult(callID: "h\(i)", date: base.addingTimeInterval(Double(i) * 3600), outcome: .hit, evidence: "E"), focus: a.id) }
+        profile.propose(b, at: b.proposed)
+        profile.dismissFocus(b.id, at: b.proposed)
+        profile.propose(c, at: c.proposed)
+        let goals = profile.goalHistory
+        XCTAssertEqual(goals.current?.id, c.id, "a proposal waits for an answer")
+        XCTAssertEqual(goals.offered.map(\.id), [b.id])
+        XCTAssertEqual(goals.finished.map(\.id), [a.id])
+    }
+
+    func testAWeeklyEmailThatIsWrittenAndNotSentYetIsFound() throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        XCTAssertEqual(WeeklyDigest.waiting(in: dir).count, 0)
+        let digest = WeeklyDigest(subject: "Your week", intro: "I", improved: ["a"], toWork: ["b"], focus: "F")
+        try JSONEncoder.coach.encode(digest).write(to: dir.appendingPathComponent("email-weekly-\(Int(base.timeIntervalSince1970)).json"))
+        try Data("{}".utf8).write(to: dir.appendingPathComponent("profile.json"))
+        let found = WeeklyDigest.waiting(in: dir)
+        XCTAssertEqual(found.map(\.digest), [digest])
+        XCTAssertEqual(found.first?.start, base)
+        XCTAssertEqual(found.first?.weekly, true)
     }
 }

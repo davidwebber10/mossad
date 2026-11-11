@@ -17,6 +17,16 @@ public final class VersionedCache<Key: Hashable, Value> {
         return value
     }
 
+    /// Puts a value in for a version that is known before the disk has it: a change the app made in memory,
+    /// which a writer saves off the main thread.
+    public func set(_ key: Key, version: Int, value: Value) {
+        if version != self.version {
+            values = [:]
+            self.version = version
+        }
+        values[key] = value
+    }
+
     /// Reads every value again at the next ask, for a change that has no version.
     public func forget() {
         values = [:]

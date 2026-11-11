@@ -106,6 +106,8 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
     public var questionID: UUID?
     public var focusID: UUID?
     public var person: String?
+    /// The active focus that a yes on a goal offer replaced: Undo makes it active again.
+    public var replaced: UUID?
 
     public init(_ finding: CoachFinding, verdict: FindingVerdict?, date: Date) {
         id = finding.id
@@ -120,7 +122,7 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
         person = finding.person
     }
 
-    enum CodingKeys: String, CodingKey { case id, callID, kind, skill, text, verdict, date, note, questionID, focusID, person }
+    enum CodingKeys: String, CodingKey { case id, callID, kind, skill, text, verdict, date, note, questionID, focusID, person, replaced }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -136,6 +138,7 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
         questionID = try c.decodeIfPresent(UUID.self, forKey: .questionID)
         focusID = try c.decodeIfPresent(UUID.self, forKey: .focusID)
         person = try c.decodeIfPresent(String.self, forKey: .person)
+        replaced = try c.decodeIfPresent(UUID.self, forKey: .replaced)
     }
 }
 
@@ -169,22 +172,20 @@ public struct CallFindings: Codable, Equatable, Sendable {
 }
 
 public enum FindingStore {
-    /// Writes each call's answers next to its review, where they differ from the file. A call whose folder is
-    /// gone gets none. Returns how many files it wrote.
+    /// Writes the answers of one call next to its review, when they differ from the file. Only that call's folder
+    /// is read. A call whose folder is gone gets none. True when it wrote the file.
     @discardableResult
-    public static func mirror(_ answers: [FindingAnswer], paths: Paths) -> Int {
-        var written = 0
-        for (callID, own) in Dictionary(grouping: answers.filter { !$0.callID.isEmpty }, by: \.callID) {
-            let dir = paths.callDirectory(callID)
-            guard FileManager.default.fileExists(atPath: dir.path) else { continue }
-            guard CallFindings.load(in: dir)?.answers != own else { continue }
-            do {
-                try CallFindings(answers: own).save(in: dir)
-                written += 1
-            } catch {
-                Log.error("The answers to the findings of \(callID) could not be saved: \(error)")
-            }
+    public static func mirror(_ answers: [FindingAnswer], callID: String, paths: Paths) -> Bool {
+        guard !callID.isEmpty else { return false }
+        let own = answers.filter { $0.callID == callID }
+        let dir = paths.callDirectory(callID)
+        guard FileManager.default.fileExists(atPath: dir.path), CallFindings.load(in: dir)?.answers ?? [] != own else { return false }
+        do {
+            try CallFindings(answers: own).save(in: dir)
+            return true
+        } catch {
+            Log.error("The answers to the findings of \(callID) could not be saved: \(error)")
+            return false
         }
-        return written
     }
 }
