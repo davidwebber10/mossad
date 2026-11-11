@@ -207,6 +207,25 @@ final class CoachLineTests: XCTestCase {
         XCTAssertNil(settle(review(quiet: true), profile: profile, measured: measured).review.line, "the same number is not news twice in 30 days")
     }
 
+    func testTheMeasuredNumbersAreTheOwnersFromTheAnalyticsBaselinesWithoutFillers() {
+        func facts(_ i: Int, share: Double) -> MeetingFacts {
+            MeetingFacts(id: "h\(i)", stamp: 0, start: base.addingTimeInterval(Double(-i - 1) * 7 * day), title: "Dana / Sam", series: "dana sam", kind: nil, tags: [],
+                         voices: 2, people: [MeetingFacts.Person(name: owner, isOwner: true, values: [.talkShare: share, .fillersPerMinute: 0.5]),
+                                             MeetingFacts.Person(name: "Sam Carter", isOwner: false, values: [.talkShare: 1 - share, .fillersPerMinute: 0.5])], values: [:])
+        }
+        let history = [0.36, 0.34, 0.35, 0.37, 0.33, 0.35].enumerated().map { facts($0.offset, share: $0.element) }
+        // Dana talks 80 of 100 seconds, and says "um" in each second word.
+        var r = call("now", [("me", 0, Array(repeating: "um plan", count: 40).joined(separator: " ")), ("them", 80, "Fine.")])
+        r.utterances[0].end = 80
+        r.utterances[1].end = 100
+        r.calendarTitle = "Dana / Sam"
+        let measured = CoachMeasured(record: r, owner: owner, history: history, commitments: [])
+        XCTAssertEqual(measured.standouts.map(\.id), ["talkShare"], "her share, not Sam's, and not the filler words")
+        XCTAssertEqual(measured.standouts.first?.text, "talked 80% of the time; usually 33 to 37% in your 1:1s with Sam")
+        XCTAssertNil(measured.commitments)
+        XCTAssertEqual(CoachLineRules.number(measured.standouts[0])?.text, "You talked 80% of the time.")
+    }
+
     func testAdviceComesBeforeANumberAndATrendBeforeAdvice() {
         let number = CoachMeasured.Standout(id: "talkShare", text: "talked 81% of the time; usually 62 to 70% in your 1:1s with Sam", at: nil)
         XCTAssertEqual(settle(review(tryNext: advice()), measured: CoachMeasured(standouts: [number])).review.line?.kind, .tryNext)

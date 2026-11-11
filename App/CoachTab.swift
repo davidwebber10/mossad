@@ -57,7 +57,7 @@ struct CoachTab: View {
             if profile.activeFocus != nil || profile.proposedFocus != nil {
                 LabelColumn(label: "Focus") {
                     // The line already says how this call went on the focus.
-                    FocusPanel(profile: profile, callID: record.id, result: line?.kind == .focus ? nil : review.focusResult,
+                    FocusPanel(profile: profile, callID: record.id, result: line?.kind == .focus ? nil : review.focusResult, compact: true,
                                accept: { controller.acceptFocus($0, plan: $1) }, dismiss: { controller.dismissFocus($0) })
                 }
             }

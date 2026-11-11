@@ -105,7 +105,8 @@ public struct CoachMeasured: Equatable, Sendable {
     public init(record: CallRecord, owner: String, history: [MeetingFacts], commitments: [Commitment]) {
         let analytics = MeetingAnalytics(record: record, owner: owner, history: history)
         let me = analytics.owner?.id
-        standouts = analytics.baselines.standouts.filter { $0.subject != nil && $0.subject == me }.map { s in
+        // Filler words are not coached, so a number about them is not a line.
+        standouts = analytics.baselines.standouts.filter { $0.subject != nil && $0.subject == me && !$0.id.hasSuffix(".\(PersonMetric.fillersPerMinute.rawValue)") }.map { s in
             var at: TimeInterval?
             if case .moment(let t) = s.evidence { at = t }
             return Standout(id: s.id.hasPrefix("with.") ? "talkShare" : String(s.id.split(separator: ".").last ?? ""), text: s.text, at: at)

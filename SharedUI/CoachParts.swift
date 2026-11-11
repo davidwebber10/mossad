@@ -51,6 +51,9 @@ struct FocusPanel: View {
     /// The call being shown, to ring its dot and show its result.
     var callID: String?
     var result: FocusResult?
+    /// On a review's page: the proposal is its plan and the three answers. The reason is in Settings and in the
+    /// memory, so the same sentences do not stand under each call.
+    var compact = false
     let accept: (UUID, String?) -> Void
     let dismiss: (UUID) -> Void
     @State private var editing = false
@@ -80,9 +83,11 @@ struct FocusPanel: View {
                 } else {
                     Text(f.plan).font(.headline)
                 }
-                Text(f.why).font(.subheadline).foregroundStyle(.secondary)
-                Text("Nothing counts until you accept it. Each review then reports how the call went on it.")
-                    .font(.caption).foregroundStyle(.tertiary)
+                if !compact {
+                    Text(f.why).font(.subheadline).foregroundStyle(.secondary)
+                    Text("Nothing counts until you accept it. Each review then reports how the call went on it.")
+                        .font(.caption).foregroundStyle(.tertiary)
+                }
                 HStack(spacing: 8) {
                     Button(editing ? "Save" : "Accept") {
                         accept(f.id, editing ? text : nil)
