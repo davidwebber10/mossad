@@ -88,6 +88,21 @@ public struct MeetingFacts: Sendable, Equatable {
     /// line is then speech, and an overlap is counted where the Mac counts none.
     public var hasWordTimes = true
 
+    /// What the size rule of the Meetings filter reads, so a goal of the coach counts a 1:1 by that rule: the
+    /// voices that count (a name, or nil for a voice with no name), the names in the order they first spoke,
+    /// and the invite.
+    var mainNames: [String?] = []
+    var speakerOrder: [String] = []
+    var attendees: [String] = []
+    var invitees: [Invitee]?
+
+    /// How many people were in the meeting, by the rule of the Meetings filter: the owner speaks, and the fewest
+    /// and the most people agree, with each invited person who did not speak as one who may have been there.
+    /// `.unknown` when the meeting cannot say. A talk where the owner only listens is never a 1:1.
+    public func size(people: MeetingFilterPeople) -> MeetingFilter.Size {
+        people.size(seen: people.seen(speakers: speakerOrder, attendees: attendees, invitees: invitees), main: mainNames, voices: voices)
+    }
+
     public var size: Size { Size(voices: mainVoices) }
     public func person(_ name: String) -> Person? { people.first { $0.name == name } }
     public var owner: Person? { people.first(where: \.isOwner) }
@@ -123,6 +138,9 @@ public struct MeetingFacts: Sendable, Equatable {
         self.mainVoices = mainVoices ?? voices
         self.people = people
         self.values = values
+        let named = people.filter(\.isMain).map(\.name)
+        mainNames = named + Array(repeating: nil, count: max(0, self.mainVoices - named.count))
+        speakerOrder = people.map(\.name)
     }
 
     static let minimumTurns = 6
@@ -138,6 +156,14 @@ public struct MeetingFacts: Sendable, Equatable {
         hasWordTimes = r.utterances.contains { $0.words?.isEmpty == false }
         voices = v.speakers.count
         mainVoices = v.speakers.filter { Self.isMain(seconds: $0.seconds, share: $0.share) }.count
+        mainNames = v.speakers.filter { Self.isMain(seconds: $0.seconds, share: $0.share) }.map { $0.isUnknown ? nil : $0.name }
+        var order: [String] = []
+        for u in r.utterances.sorted(by: { $0.start < $1.start }) {
+            if let name = r.speakerNames[u.speakerKey], !order.contains(name) { order.append(name) }
+        }
+        speakerOrder = order
+        attendees = r.attendees
+        invitees = r.invitees
         let hours = max(v.duration / 3600, Self.minimumHours)
         people = v.speakers.filter { !$0.isUnknown && $0.seconds > 0 }.map { s in
             var values: [PersonMetric: Double] = [.talkShare: s.share, .questionsPerHour: Double(s.questions) / hours]

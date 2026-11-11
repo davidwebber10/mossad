@@ -161,6 +161,9 @@ struct TrendChart: View {
         var start: Date
         var target: Double
         var spoken: String
+        /// The labels on the chart: "Target 58%", "Goal taken Oct 19".
+        var targetLabel: String
+        var startLabel: String
     }
 
     /// The target: a dashed line in the color of good news.
@@ -294,9 +297,15 @@ private struct TrendPlot: View, Equatable {
                 RuleMark(x: .value("Goal taken", goal.start))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
                     .foregroundStyle(Palette.secondary.opacity(0.7))
+                    .annotation(position: .top, alignment: .center, spacing: 2) {
+                        Text(goal.startLabel).font(Self.axisFont).foregroundStyle(Palette.secondary)
+                    }
                 RuleMark(y: .value("Target", inside(goal.target)))
                     .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 4]))
                     .foregroundStyle(TrendChart.targetColor)
+                    .annotation(position: .bottom, alignment: .leading, spacing: 3) {
+                        Text(goal.targetLabel).font(Self.axisFont).fontWeight(.medium).foregroundStyle(TrendChart.targetColor)
+                    }
             }
             lineMarks(series.line, name: "all", color: Palette.accentFill, dash: [])
             ForEach(series.parts) { part in

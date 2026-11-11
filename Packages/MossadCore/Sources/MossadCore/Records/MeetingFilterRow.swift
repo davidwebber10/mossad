@@ -63,18 +63,22 @@ public struct MeetingFilterPeople: Sendable {
     /// sure match (`PersonDirectory.link`); an invite does not say more than that, so any other name or address
     /// is nobody. Unnamed voices and the owner are left out.
     func seen(in r: CallRecord) -> Seen {
+        seen(speakers: r.utterances.compactMap { r.speakerNames[$0.speakerKey] }, attendees: r.attendees, invitees: r.invitees)
+    }
+
+    /// The same from the names of the voices in the order they spoke, and the invite. `MeetingFacts` keeps these,
+    /// so the goal of the coach reads the size by the same rule with no transcript.
+    func seen(speakers: [String], attendees: [String], invitees: [Invitee]?) -> Seen {
         var out = Seen()
         func isOwner(_ name: String) -> Bool { ownerKeys.contains(PersonNames.key(name)) }
-        for u in r.utterances {
-            if let name = r.speakerNames[u.speakerKey], !isOwner(name), !out.spoke.contains(where: { $0.name == name }) { out.spoke.append(who(saved: name)) }
-        }
-        guard !r.attendees.isEmpty else { return out }
+        for name in speakers where !isOwner(name) && !out.spoke.contains(where: { $0.name == name }) { out.spoke.append(who(saved: name)) }
+        guard !attendees.isEmpty else { return out }
 
-        let meeting = r.utterances.compactMap { r.speakerNames[$0.speakerKey] } + r.attendees.filter { !$0.contains("@") }
-        let invited = directory.with(invitees: r.invitees)
-        let own = (r.invitees ?? []).filter { $0.isSelf == true }
+        let meeting = speakers + attendees.filter { !$0.contains("@") }
+        let invited = directory.with(invitees: invitees)
+        let own = (invitees ?? []).filter { $0.isSelf == true }
         let ownNames = Set(own.compactMap { $0.name.map(PersonNames.nameKey) }), ownEmails = Set(own.compactMap(\.email))
-        for text in r.attendees {
+        for text in attendees {
             if ownNames.contains(PersonNames.nameKey(text)) || ownEmails.contains(text.lowercased()) || isOwner(PersonNames.plain(text)) { continue }
             if let saved = invited.link(for: text, in: meeting) {
                 if !isOwner(saved), !out.invited.contains(where: { $0.name == saved }) { out.invited.append(who(saved: saved)) }
@@ -98,20 +102,25 @@ public struct MeetingFilterPeople: Sendable {
     func size(of r: CallRecord, seen: Seen, lanes: [SpeakerLanes.Lane]) -> MeetingFilter.Size {
         let speech = lanes.reduce(0) { $0 + $1.seconds }
         let main = lanes.filter { MeetingFacts.isMain(seconds: $0.seconds, share: speech > 0 ? $0.seconds / speech : 0) }
-        guard !main.isEmpty else { return .unknown }
-        func named(_ lane: SpeakerLanes.Lane) -> Bool { r.speakerNames[lane.key] != nil }
-        func isOwner(_ lane: SpeakerLanes.Lane) -> Bool { named(lane) && ownerKeys.contains(PersonNames.key(lane.name)) }
-        let others = main.filter { !isOwner($0) }
-        let spoke = Set(others.filter(named).map { who(saved: $0.name).key })
-        let unnamed = others.filter { !named($0) }.count
+        return size(seen: seen, main: main.map { r.speakerNames[$0.key] != nil ? $0.name : nil }, voices: lanes.count)
+    }
+
+    /// The rule of `size(of:seen:lanes:)` on the voices that count: each one's name, or nil for a voice with no
+    /// name. `voices` is every voice, also the ones that said almost nothing.
+    func size(seen: Seen, main names: [String?], voices: Int) -> MeetingFilter.Size {
+        guard !names.isEmpty else { return .unknown }
+        func isOwner(_ name: String?) -> Bool { name.map { ownerKeys.contains(PersonNames.key($0)) } ?? false }
+        let others = names.filter { !isOwner($0) }
+        let spoke = Set(others.compactMap { $0 }.map { who(saved: $0).key })
+        let unnamed = others.filter { $0 == nil }.count
         // An invited person with no saved record may also have been there, so they widen the most, as a sure one does.
         let silent = Set(seen.invited.map(\.key)).subtracting(spoke).count + seen.unsureInvited.count
         let fewest = 1 + spoke.count + unnamed, most = 1 + spoke.count + max(unnamed, silent)
         let size = MeetingFilter.Size(people: fewest)
         guard MeetingFilter.Size(people: most) == size else { return .unknown }
-        let ownerSpoke = main.contains(where: isOwner)
+        let ownerSpoke = names.contains(where: isOwner)
         switch size {
-        case .alone: return ownerSpoke && lanes.count == 1 && !seen.othersInvited ? .alone : .unknown
+        case .alone: return ownerSpoke && voices == 1 && !seen.othersInvited ? .alone : .unknown
         case .oneOnOne: return ownerSpoke ? .oneOnOne : .unknown
         default: return size
         }

@@ -154,6 +154,15 @@ extension CoachProfile {
         focus = foci[i].plan
     }
 
+    /// "Take it up again": an ended or learned goal is the active one again, with its date and its numbers. Only
+    /// while no other goal is active.
+    public mutating func resumeFocus(_ id: UUID, at date: Date) {
+        guard activeFocus == nil, let i = foci.firstIndex(where: { $0.id == id && $0.accepted != nil && ($0.status == .dismissed || $0.status == .learned) }) else { return }
+        foci[i].status = .active
+        foci[i].updated = date
+        focus = foci[i].plan
+    }
+
     /// The owner says the goal is learned. Only the active one.
     public mutating func learnFocus(_ id: UUID, at date: Date) {
         guard let i = foci.firstIndex(where: { $0.id == id && $0.status == .active }) else { return }
@@ -175,8 +184,10 @@ extension CoachProfile {
         foci[i].results.removeAll { $0.callID == result.callID }
         foci[i].results.append(result)
         foci[i].results.sort { $0.date < $1.date }
-        foci[i].updated = max(foci[i].updated, result.date)
+        // `updated` is the owner's last change: a result must not win a merge over "End this goal" on another device.
+        // The results merge as a union, so they need no date of their own.
         if foci[i].isLearned {
+            foci[i].updated = max(foci[i].updated, result.date)
             foci[i].status = .learned
             focus = ""
         }
@@ -203,5 +214,27 @@ extension CoachProfile {
             byID[f.id] = keep
         }
         return order.compactMap { byID[$0] }
+    }
+}
+
+extension CoachFocus {
+    enum CodingKeys: String, CodingKey { case id, plan, why, metric, status, proposed, accepted, results, updated, measureName, skill, goal }
+
+    /// As the synthesized decoder, but a goal in a shape from a later build is no goal: one focus must not make the
+    /// whole memory unreadable on an older build.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        plan = try c.decode(String.self, forKey: .plan)
+        why = try c.decode(String.self, forKey: .why)
+        metric = try c.decodeIfPresent(FocusMetric.self, forKey: .metric)
+        status = try c.decode(Status.self, forKey: .status)
+        proposed = try c.decode(Date.self, forKey: .proposed)
+        accepted = try c.decodeIfPresent(Date.self, forKey: .accepted)
+        results = try c.decode([FocusResult].self, forKey: .results)
+        updated = try c.decode(Date.self, forKey: .updated)
+        measureName = try c.decodeIfPresent(String.self, forKey: .measureName)
+        skill = try c.decodeIfPresent(String.self, forKey: .skill)
+        goal = (try? c.decodeIfPresent(CoachGoal.self, forKey: .goal)) ?? nil
     }
 }

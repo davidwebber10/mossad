@@ -51,8 +51,6 @@ private struct PhoneGoalsScreen: View {
     /// Closes the coach, to open a meeting.
     let close: () -> Void
     @State private var progress: GoalProgress?
-    /// The meetings as rows of history, read again only when one changed.
-    private static let facts = MeetingFactsCache()
 
     var body: some View {
         let p = store.profile
@@ -86,21 +84,42 @@ private struct PhoneGoalsScreen: View {
                             }
                         }
                         Section {
+                            Button("End this goal") { store.dismissFocus(active.id) }
                             if progress?.reached == true, progress?.goal == active.goal {
                                 Button("Mark as learned") { store.learnFocus(active.id) }
                             }
-                            Button("End this goal", role: .destructive) { store.dismissFocus(active.id) }
                         } footer: {
-                            Text("An ended goal moves to Ended. The coach can offer it again after 30 days.")
+                            Text("An ended goal moves to Ended. You can take it up again there.")
                         }
-                    }
-                    if let active = p.activeFocus, !active.results.isEmpty {
+                        if let progress, let goal = active.goal, progress.goal == goal, !progress.since.isEmpty {
+                            // The 1:1s since the goal from their numbers of now: the same meetings as the chart.
+                            Section("Call by call") {
+                                ForEach(progress.since.reversed()) { point in
+                                    Button {
+                                        close()
+                                        store.openMeeting(point.id)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            HStack {
+                                                Text(goal.meets(point.value) ? "At the target" : "Over the target")
+                                                    .font(.subheadline.weight(.semibold)).foregroundStyle(goal.meets(point.value) ? Palette.okText : Palette.secondary)
+                                                Spacer()
+                                                Text(point.date.formatted(.dateTime.month(.abbreviated).day())).font(.caption).foregroundStyle(.secondary)
+                                            }
+                                            Text("You talked \(CommunicationTrends.short(.talkShare, point.value)) in \u{201C}\(point.title)\u{201D}")
+                                                .font(.subheadline).foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .tint(Palette.ink)
+                                }
+                            }
+                        }
+                    } else if let active = p.activeFocus, !active.results.isEmpty {
                         Section("Call by call") {
                             ForEach(active.results.reversed(), id: \.callID) { r in
                                 VStack(alignment: .leading, spacing: 3) {
                                     HStack {
-                                        Text(active.goal != nil && r.outcome == .hit ? "At the target" : active.goal != nil && r.outcome == .missed ? "Over the target" : r.outcome.label)
-                                            .font(.subheadline.weight(.semibold)).foregroundStyle(r.outcome == .hit ? Palette.okText : Palette.secondary)
+                                        Text(r.outcome.label).font(.subheadline.weight(.semibold)).foregroundStyle(r.outcome == .hit ? Palette.okText : Palette.secondary)
                                         Spacer()
                                         Text(r.date.formatted(.dateTime.month(.abbreviated).day())).font(.caption).foregroundStyle(.secondary)
                                     }
@@ -109,11 +128,23 @@ private struct PhoneGoalsScreen: View {
                             }
                         }
                     }
+                    // "Take it up again" on the newest goal that was taken, while no goal is active.
+                    let again = p.activeFocus == nil ? (goals.finished + goals.ended).max { $0.updated < $1.updated }?.id : nil
                     if !goals.finished.isEmpty {
-                        Section("Learned") { ForEach(goals.finished) { Label($0.plan, systemImage: "checkmark.seal.fill") } }
+                        Section("Learned") {
+                            ForEach(goals.finished) { f in
+                                Label(f.plan, systemImage: "checkmark.seal.fill")
+                                if f.id == again { Button("Take it up again") { store.resumeFocus(f.id) } }
+                            }
+                        }
                     }
                     if !goals.ended.isEmpty {
-                        Section("Ended") { ForEach(goals.ended) { Text($0.plan).foregroundStyle(.secondary) } }
+                        Section("Ended") {
+                            ForEach(goals.ended) { f in
+                                Text(f.plan).foregroundStyle(.secondary)
+                                if f.id == again { Button("Take it up again") { store.resumeFocus(f.id) } }
+                            }
+                        }
                     }
                     if !goals.offered.isEmpty {
                         Section("Not taken") { ForEach(goals.offered) { Text($0.plan).foregroundStyle(.secondary) } }
@@ -122,6 +153,7 @@ private struct PhoneGoalsScreen: View {
             }
         }
         .navigationTitle("Goals")
+        .navigationBarTitleDisplayMode(.inline)
         .task(id: Key(focus: p.activeFocus, meetings: store.meetings.count)) { await load(p.activeFocus) }
     }
 
@@ -135,9 +167,11 @@ private struct PhoneGoalsScreen: View {
             progress = nil
             return
         }
-        let records = store.meetings, owner = store.owner, facts = Self.facts
+        let records = store.meetings, owner = store.owner, facts = AnalyticsScreen.facts, voices = store.paths.voices
         let made = await Task.detached(priority: .userInitiated) {
-            GoalProgress(focus: focus, facts: facts.facts(for: records, owner: owner), now: Date())
+            // The saved people, for the size rule of a 1:1, as the Meetings filter reads it.
+            let people = MeetingFilterPeople(profiles: VoiceLibrary(directory: voices).profiles, store: nil, owner: owner)
+            return GoalProgress(focus: focus, facts: facts.facts(for: records, owner: owner), now: Date(), people: people)
         }.value
         guard !Task.isCancelled else { return }
         withAnimation(.smooth) { progress = made }

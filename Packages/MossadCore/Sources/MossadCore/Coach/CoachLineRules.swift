@@ -74,6 +74,12 @@ public enum CoachLineRules {
             out.proposal = nil
             dropped.append("focus_proposal: the owner said never again")
         }
+        // Room in 1:1s is offered by code, with its numbers. A skill whose goal the owner declined or ended in the
+        // last 30 days, or learned, is not offered again in other words.
+        if let p = out.proposal, AdviceRules.key(p.skillID) == AdviceRules.key(GoalOffers.skill) || GoalOffers.rests(p.skillID, profile: profile, at: r.start) {
+            out.proposal = nil
+            dropped.append("focus_proposal: the goal of this skill is the app's, or it rests")
+        }
 
         // A goal that the app measures: its number decides how the call went, and the model's moment stays only
         // when it says the same.
@@ -212,7 +218,8 @@ public enum CoachLineRules {
         }
         // The cards of this call, from what stayed: the line, the notes, the numbers, and the patterns.
         let shown = out.update.patterns.map { CoachObservation(callID: r.id, date: r.start, pattern: $0.name, result: $0.shown, note: $0.note, quote: $0.quote, at: $0.at) }
-        review.findings = FindingRules.cards(review: review, callID: r.id, date: r.start, measured: measured, observations: shown, training: training)
+        review.findings = FindingRules.cards(review: review, callID: r.id, date: r.start, measured: measured, observations: shown, training: training,
+                                             measuredFocus: focus?.goal != nil)
         out.review = review
         out.advice = said
         out.dropped = dropped

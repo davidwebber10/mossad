@@ -179,7 +179,7 @@ enum CoachPrompt {
             notes.append("Recent calls, oldest first:\n" + recent.map { "- \(day($0.date)) \($0.title): \($0.headline)" }.joined(separator: "\n"))
         }
         if !notes.isEmpty { parts.append("## Your notes on \(owner)\n" + notes.joined(separator: "\n")) }
-        parts.append("## The focus\n" + focusText(profile, measured: measured))
+        parts.append("## The focus\n" + focusText(profile, measured: measured, now: r.start))
         let said = earlierAdviceText(profile, record: r)
         if !said.isEmpty { parts.append("## Advice you already gave (do not give it again)\n" + said) }
         let asked = questionsText(profile, now: r.start)
@@ -262,19 +262,21 @@ enum CoachPrompt {
         return parts.joined(separator: "\n")
     }
 
-    static func focusText(_ p: CoachProfile, measured: CoachMeasured = CoachMeasured()) -> String {
+    static func focusText(_ p: CoachProfile, measured: CoachMeasured = CoachMeasured(), now: Date = Date()) -> String {
         if let f = p.activeFocus, let goal = f.goal, let measure = goal.measure {
             // A goal that the app measures: the numbers are the app's, and the model gives only the moment.
             var lines = ["Active goal" + (f.accepted.map { " (accepted \(day($0)))" } ?? "") + ": \(f.plan)",
                          "The app measures it: \(measure.title.lowercased()). Before the goal: \(goal.typicalText) (\(goal.usualText)). Target: \(goal.targetText)."]
             if let r = measured.goalResult {
-                lines.append(r.outcome == .noChance
-                             ? "This call is not a 1:1, so the goal does not apply: set focus_result to no_chance."
-                             : "In this call: \(r.evidence) The app sets hit or missed from this number.")
+                let outcome = r.outcome == .hit ? "hit" : "missed"
+                lines.append("The app's result for this call: \(outcome). \(r.evidence) The target is \(goal.targetText).")
+                lines.append("In focus_result, use the outcome \(outcome) and give the one moment of the owner's that shows it: "
+                             + (r.outcome == .hit ? "a moment that gave the other person room (a question, a handover, a pause for them)."
+                                                  : "a moment that took the room (a long turn, talking over them, answering for them)."))
+            } else {
+                lines.append("This call is not a 1:1 the app can measure, so the goal does not apply: set focus_result to no_chance.")
             }
             if let progress = measured.goal { lines.append("Progress, measured by the app (do not restate or judge it): \(progress.sentence).") }
-            lines.append("In focus_result, give the one moment of the owner's that shows it best: hit for a moment that gave the other person room "
-                         + "(a question, a handover, a pause for them), missed for one that took it (a long turn, talking over them, answering for them).")
             return lines.joined(separator: "\n")
         }
         if let f = p.activeFocus {
@@ -287,7 +289,10 @@ enum CoachPrompt {
         }
         let learned = p.foci.filter { $0.status == .learned }.map(\.plan)
         let earlier = p.focus.nonBlank.map { " Your earlier note on what to work on, which the owner never agreed to, can be the start: \($0)" } ?? ""
+        // The goal of room in 1:1s is the app's; a goal the owner declined, ended, or learned rests.
+        let resting = Set(p.foci.map(\.skillID).filter { GoalOffers.rests($0, profile: p, at: now) }).union([GoalOffers.skill]).sorted()
         return "No focus and none proposed: propose one." + earlier + (learned.isEmpty ? "" : " Already learned: " + learned.joined(separator: "; "))
+            + " Do not propose a focus with the skill " + resting.joined(separator: ", ") + "."
     }
 
     /// This call's numbers for the model: no goals from other people's research, and nothing to compare with.

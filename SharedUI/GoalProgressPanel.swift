@@ -21,7 +21,10 @@ struct GoalProgressPanel: View {
         VStack(alignment: .leading, spacing: Space.m) {
             header
             TrendChart(series: progress.series, interval: progress.interval,
-                       goal: TrendChart.Goal(start: progress.start, target: progress.goal.target, spoken: progress.spoken), open: open)
+                       goal: TrendChart.Goal(start: progress.start, target: progress.goal.target, spoken: progress.spoken,
+                                             targetLabel: "Target \(CommunicationTrends.short(.talkShare, progress.goal.target))",
+                                             startLabel: "Goal taken \(progress.start.formatted(.dateTime.month(.abbreviated).day()))"),
+                       open: open)
                 .frame(height: height)
             key
         }
@@ -75,6 +78,7 @@ struct GoalProgressPanel: View {
         .accessibilityHidden(true)
     }
 
+    /// Three marks; the target and the day of the goal are labels on the chart.
     @ViewBuilder
     private var keys: some View {
         HStack(spacing: 6) {
@@ -84,24 +88,12 @@ struct GoalProgressPanel: View {
         if !progress.series.line.isEmpty {
             HStack(spacing: 6) {
                 Capsule().fill(Palette.accentFill).frame(width: 14, height: 2.5)
-                Text(CommunicationTrends.Series.lineName(days: progress.series.lineDays, held: progress.series.held))
+                Text(progress.typicalSince == nil ? "Median before the goal" : "Median before and since the goal")
             }
         }
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Palette.accentTint).frame(width: 14, height: 9)
-            Text("Before the goal \(CommunicationTrends.range(.talkShare, progress.goal.low, progress.goal.high))")
-        }
-        HStack(spacing: 6) {
-            Path { p in p.move(to: CGPoint(x: 0, y: 1)); p.addLine(to: CGPoint(x: 14, y: 1)) }
-                .stroke(TrendChart.targetColor, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 4]))
-                .frame(width: 14, height: 2)
-            Text("Target")
-        }
-        HStack(spacing: 6) {
-            Path { p in p.move(to: CGPoint(x: 1, y: 0)); p.addLine(to: CGPoint(x: 1, y: 10)) }
-                .stroke(Palette.secondary.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                .frame(width: 2, height: 10)
-            Text("Goal taken \(progress.start.formatted(.dateTime.month(.abbreviated).day()))")
+            Text("Before the goal \(CommunicationTrends.range(.talkShare, progress.series.usual?.low ?? progress.goal.low, progress.series.usual?.high ?? progress.goal.high))")
         }
     }
 }

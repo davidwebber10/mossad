@@ -42,14 +42,19 @@ struct CoachGoalsPage: View {
                                 }
                             }
                             if current.status == .active {
-                                LabelColumn(label: "Call by call", labelTopPadding: 2) { results(current) }
+                                LabelColumn(label: "Call by call", labelTopPadding: 2) {
+                                    if current.goal != nil { measuredResults(current) } else { results(current) }
+                                }
                             }
                         }
+                        // "Take it up again" on the newest goal that was taken, while no goal is active: an end or a
+                        // "learned" by mistake is not for good.
+                        let again = profile.activeFocus == nil ? (goals.finished + goals.ended).max { $0.updated < $1.updated }?.id : nil
                         if !goals.finished.isEmpty {
-                            LabelColumn(label: "Learned", labelTopPadding: 2) { list(goals.finished) { "Learned \(day($0.updated)), \(hits($0))" } }
+                            LabelColumn(label: "Learned", labelTopPadding: 2) { list(goals.finished, again: again) { "Learned \(day($0.updated)), \(hits($0))" } }
                         }
                         if !goals.ended.isEmpty {
-                            LabelColumn(label: "Ended", labelTopPadding: 2) { list(goals.ended) { "Ended \(day($0.updated)), \(hits($0))" } }
+                            LabelColumn(label: "Ended", labelTopPadding: 2) { list(goals.ended, again: again) { "Ended \(day($0.updated)), \(hits($0))" } }
                         }
                         if !goals.offered.isEmpty {
                             LabelColumn(label: "Not taken", labelTopPadding: 2) { list(goals.offered) { "Offered \(day($0.proposed))" } }
@@ -76,8 +81,11 @@ struct CoachGoalsPage: View {
             return
         }
         let records = controller.meetings, owner = controller.ownerName, facts = MeetingAnalyticsStore.shared.facts
+        let profiles = controller.library.profiles, store = controller.library.identity?.people
         let made = await Task.detached(priority: .userInitiated) {
-            GoalProgress(focus: focus, facts: facts.facts(for: records, owner: owner), now: Date())
+            // The saved people, for the size rule of a 1:1, as the Meetings filter reads it.
+            GoalProgress(focus: focus, facts: facts.facts(for: records, owner: owner), now: Date(),
+                         people: MeetingFilterPeople(profiles: profiles, store: store, owner: owner))
         }.value
         guard !Task.isCancelled else { return }
         withAnimation(.smooth) { progress = made }
@@ -96,11 +104,11 @@ struct CoachGoalsPage: View {
                 .font(.system(size: 12)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
             if focus.status == .active {
                 HStack(spacing: 6) {
+                    Button("End this goal") { controller.dismissFocus(focus.id) }.buttonStyle(.settings)
+                        .help("The goal moves to Ended. You can take it up again there.")
                     if progress?.reached == true, progress?.goal == goal {
                         Button("Mark as learned") { controller.learnFocus(focus.id) }.buttonStyle(.settingsAccent)
                     }
-                    Button("End this goal") { controller.dismissFocus(focus.id) }.buttonStyle(.settings)
-                        .help("The goal moves to Ended. The coach can offer it again after 30 days.")
                 }
                 .padding(.top, 6)
             }
@@ -149,15 +157,58 @@ struct CoachGoalsPage: View {
         }
     }
 
-    private func list(_ foci: [CoachFocus], detail: @escaping (CoachFocus) -> String) -> some View {
+    private func list(_ foci: [CoachFocus], again: UUID? = nil, detail: @escaping (CoachFocus) -> String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(foci) { f in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(f.plan).font(.system(size: 13)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                    Text(detail(f)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(f.plan).font(.system(size: 13)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                        Text(detail(f)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if f.id == again {
+                        Button("Take it up again") { controller.resumeFocus(f.id) }
+                            .buttonStyle(SettingsTextButtonStyle(color: Palette.accent))
+                            .help("This goal is your goal again, with its day and its numbers.")
+                    }
                 }
                 .padding(.vertical, 7)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// The 1:1s since the goal, the newest first, from their numbers of now: the same meetings as the chart. A
+    /// moment that a review found stays with its call.
+    @ViewBuilder
+    private func measuredResults(_ focus: CoachFocus) -> some View {
+        if let progress, let goal = focus.goal, progress.goal == goal {
+            if progress.since.isEmpty {
+                Text("No 1:1 since you took the goal. Each 1:1 shows here with its number.")
+                    .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(progress.since.reversed()) { p in
+                        let at = focus.results.first { $0.callID == p.id }?.at
+                        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                            Text(day(p.date)).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary).frame(width: 52, alignment: .leading)
+                            Text(goal.meets(p.value) ? "At the target" : "Over the target")
+                                .font(.system(size: 12, weight: .medium)).foregroundStyle(goal.meets(p.value) ? Palette.okText : Palette.secondary)
+                                .frame(width: 104, alignment: .leading)
+                            Button("You talked \(CommunicationTrends.short(.talkShare, p.value)) in \u{201C}\(p.title)\u{201D}") { controller.openMeeting(p.id) }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12.5)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .help("Open this meeting")
+                            if let at {
+                                Button { controller.showMoment(p.id, at: at) } label: { Text(coachClock(at)).monospacedDigit() }
+                                    .buttonStyle(SettingsTextButtonStyle(color: Palette.accent))
+                                    .help("Show this moment in the call")
+                            }
+                        }
+                        .padding(.vertical, 6)
+                        .hairline(.bottom)
+                    }
+                }
             }
         }
     }

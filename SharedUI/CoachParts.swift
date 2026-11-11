@@ -70,7 +70,7 @@ struct FocusPanel: View {
     var body: some View {
         if let f = profile.activeFocus {
             VStack(alignment: .leading, spacing: 8) {
-                label("YOUR FOCUS" + (f.accepted.map { " · SINCE \($0.formatted(.dateTime.month(.abbreviated).day()).uppercased())" } ?? ""))
+                label((f.goal == nil ? "YOUR FOCUS" : "YOUR GOAL") + (f.accepted.map { " · SINCE \($0.formatted(.dateTime.month(.abbreviated).day()).uppercased())" } ?? ""))
                 Text(f.plan).font(.headline)
                 if !f.results.isEmpty {
                     HStack(spacing: 10) {
@@ -80,7 +80,7 @@ struct FocusPanel: View {
                     }
                 }
                 if let result {
-                    (Text(result.outcome.label + ". ").foregroundStyle(result.outcome.tint).bold() + Text(result.evidence).foregroundStyle(.secondary))
+                    (Text(label(result.outcome, measured: f.goal != nil) + ". ").foregroundStyle(result.outcome.tint).bold() + Text(result.evidence).foregroundStyle(.secondary))
                         .font(.subheadline)
                 }
             }
@@ -109,6 +109,12 @@ struct FocusPanel: View {
                 .controlSize(.small)
             }
         }
+    }
+
+    /// A goal that the app measures says where the number is, as the Goals page does.
+    private func label(_ outcome: FocusOutcome, measured: Bool) -> String {
+        guard measured else { return outcome.label }
+        return outcome == .hit ? "At the target" : outcome == .missed ? "Over the target" : outcome.label
     }
 
     private func label(_ s: String) -> some View {

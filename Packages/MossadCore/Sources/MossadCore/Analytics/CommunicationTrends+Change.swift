@@ -90,18 +90,25 @@ extension CommunicationTrends {
     /// change of the owner. `.tooFew` when either side has fewer than `Usual.firmSamples` compared meetings.
     static func change(_ metric: PersonMetric, before: [Row], after: [Row]) -> Change {
         let compared = pools(before: before, after: after)
-        // The medians with the mix held: each kind moved to the median of all, as the line of a period is.
-        let all = median(of: compared.flatMap { $0.first + $0.last }) ?? 0
-        let held = compared.map { pool -> (first: [Double], last: [Double]) in
-            let shift = all - (median(of: pool.first + pool.last) ?? all)
-            return (pool.first.map { $0 + shift }, pool.last.map { $0 + shift })
-        }
-        let first = held.flatMap(\.first), last = held.flatMap(\.last)
+        let (first, last) = held(compared)
         let firm = MeetingAnalytics.Usual.firmSamples
         guard first.count >= firm, last.count >= firm, let from = median(of: first), let to = median(of: last) else { return .tooFew }
         guard abs(to - from) >= metric.margin(median: from), let (rise, chance) = chance(compared),
               rise == (to > from), chance <= chanceLimit else { return .steady }
         return .moved(from: from, to: to)
+    }
+
+    /// The values of both sides with the mix held: each kind moved to the median of all, as the line of a period
+    /// is, so the medians of the two sides move with the owner and not with the mix of kinds.
+    static func held(_ pools: [(first: [Double], last: [Double])]) -> (first: [Double], last: [Double]) {
+        let all = median(of: pools.flatMap { $0.first + $0.last }) ?? 0
+        var first: [Double] = [], last: [Double] = []
+        for pool in pools {
+            let shift = all - (median(of: pool.first + pool.last) ?? all)
+            first += pool.first.map { $0 + shift }
+            last += pool.last.map { $0 + shift }
+        }
+        return (first, last)
     }
 
     /// The values of each kind of meeting that is on both sides of the date, before and after. As in `Mix`, a

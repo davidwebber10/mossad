@@ -127,7 +127,9 @@ public struct CoachMeasured: Equatable, Sendable {
     /// From the same numbers and the same history as the meeting's Analytics tab, so the coach and the tab
     /// cannot say different things about one call.
     /// `focus` is the owner's active focus: with a goal, its progress and this call's result are measured here.
-    public init(record: CallRecord, owner: String, history: [MeetingFacts], commitments: [Commitment], focus: CoachFocus? = nil) {
+    /// `people` are the saved people, for the size rule of a 1:1; without them an invited person is nobody known.
+    public init(record: CallRecord, owner: String, history: [MeetingFacts], commitments: [Commitment], focus: CoachFocus? = nil,
+                people: MeetingFilterPeople? = nil) {
         let analytics = MeetingAnalytics(record: record, owner: owner, history: history)
         let me = analytics.owner?.id
         let left = Self.notALine.map { ".\($0.rawValue)" }
@@ -146,10 +148,17 @@ public struct CoachMeasured: Equatable, Sendable {
         self.commitments = CommitmentShare(commitments, asOf: record.end)
         facts = analytics.facts
         if let focus, let goal = focus.goal {
-            goalResult = goal.result(of: analytics.facts, callID: record.id)
+            let people = people ?? MeetingFilterPeople(owner: owner)
+            goalResult = goal.result(of: analytics.facts, callID: record.id, people: people, since: focus.accepted)
             // As of this call: a call reviewed later does not see the meetings after it.
             let upTo = history.filter { $0.id != record.id && $0.start <= record.start } + [analytics.facts]
-            self.goal = GoalProgress(focus: focus, facts: upTo, now: record.end)
+            self.goal = GoalProgress(focus: focus, facts: upTo, now: record.end, people: people)
+            // The goal's line says the talk share against the target, and its progress is the goal's own: the
+            // same number as a standout or as a trend of another rule would be said two times, or two ways.
+            if goal.measure?.metric == .talkShare {
+                standouts.removeAll { $0.id == PersonMetric.talkShare.rawValue }
+                trend = nil
+            }
         }
     }
 }

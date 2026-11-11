@@ -80,6 +80,8 @@ public actor CoachRunner {
         if let seed { profile.seed(seed) }
         // Each written meeting as a row of history, for what is usual: read when the first call is ready.
         var history: [MeetingFacts]?
+        // The saved people, for the size rule of a 1:1: an invited address is a person only on a sure match.
+        var people: MeetingFilterPeople?
         for r in pending {
             switch ledger.state(r.id, now: now()) {
             case .gaveUp: continue
@@ -87,14 +89,16 @@ public actor CoachRunner {
             case .ready: break
             }
             if history == nil { history = facts.facts(for: records, owner: owner) }
+            if people == nil { people = MeetingFilterPeople(profiles: VoiceLibrary(directory: paths.voices).profiles, store: nil, owner: owner) }
+            let sizes = people ?? MeetingFilterPeople(owner: owner)
             do {
                 var current = profile
                 let tone = measureTone(r)
                 let measured = CoachMeasured(record: r, owner: owner, history: history ?? [], commitments: CommitmentBook.peek(in: paths.commitments)?.visible ?? [],
-                                             focus: current.activeFocus)
+                                             focus: current.activeFocus, people: sizes)
                 // The owner's first goal, offered from the numbers when this 1:1 makes the baseline firm. The model is
                 // told that it waits, so it proposes no other.
-                let offer = measured.facts.flatMap { GoalOffers.roomInOneOnOnes(this: $0, history: history ?? [], profile: current, at: r.start) }
+                let offer = measured.facts.flatMap { GoalOffers.roomInOneOnOnes(this: $0, history: history ?? [], profile: current, at: r.start, people: sizes) }
                 if let offer { current.propose(offer, at: r.start) }
                 let written = try await UsageContext.$callID.withValue(r.id) {
                     try await coach.review(record: r, profile: current, tone: tone, people: titles(Array(Set(r.speakerNames.values)).sorted()), measured: measured)
@@ -124,7 +128,7 @@ public actor CoachRunner {
                 var fresh = try CoachProfile.load(from: paths.coach)
                 if let seed, fresh.adviceVersion < CoachSkill.version { fresh.seed(seed) }
                 // The owner may have answered something on another device while the review ran: the offer must still hold.
-                if let offer, let this = measured.facts, GoalOffers.roomInOneOnOnes(this: this, history: history ?? [], profile: fresh, at: r.start) != nil {
+                if let offer, let this = measured.facts, GoalOffers.roomInOneOnOnes(this: this, history: history ?? [], profile: fresh, at: r.start, people: sizes) != nil {
                     fresh.propose(offer, at: r.start)
                 }
                 fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start, proposal: result.proposal, advice: result.advice,
