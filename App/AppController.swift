@@ -391,6 +391,8 @@ final class AppController: ObservableObject {
     @AppStorage("personaSince") var personaSince: Double = 0
     /// One line for Settings > Coach when older calls wait for the owner (`PersonaBudget`). No notification.
     @Published var personaFillNote: String?
+    /// What the owner's yes adds, for the button.
+    @Published var personaFillYesGives: Double?
     /// The references step of this launch is done: the records have their people's ids. The reads wait for it.
     var peopleReferencesReady = false
     /// The reads were made one time since launch: before that, an empty list is not "nobody".

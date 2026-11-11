@@ -59,6 +59,10 @@ public enum PersonaFill {
         }
         let report = await PersonaRunner(paths: paths, llm: llm, owner: owner)
             .run(since: nil, callLimit: calls, newestFirst: true, writeLimit: Int.max, isLive: { false }, canSpend: { spent() + $0 <= cap }, price: price.cost)
+        // The spend counts in the budget of older calls, so the app does not spend the same dollar again.
+        var budget = PersonaBudget.load(from: PersonaStore(paths: paths).directory)
+        budget.record(dollars: spent(), calls: report.handled, model: plan.name, now: Date())
+        budget.save(to: PersonaStore(paths: paths).directory)
         say(String(format: "Read %d calls with %d requests; sentences for %d people; $%.2f spent.", report.calls, report.requests, report.people, spent()))
         if let why = report.stopped { say("Stopped early: \(why). Run it again to go on; each call that was read stays read.") }
         return report.stopped == nil ? 0 : 2

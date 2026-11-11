@@ -60,7 +60,8 @@ extension AppController {
     private func rereadCalls(of id: String) {
         let saved = personaPeople, dir = PersonaStore(paths: paths).directory
         var ledger = PersonaLedger.load(from: dir)
-        for r in meetings where PersonaReads.callsWith([r], saved: saved)[id] != nil { ledger.calls[r.id] = nil }
+        // Due, and older: they draw on the budget of older calls, never as new calls.
+        ledger.markDue(Set(meetings.filter { PersonaReads.callsWith([$0], saved: saved)[id] != nil }.map(\.id)))
         ledger.save(to: dir)
     }
 
@@ -86,6 +87,7 @@ extension AppController {
                                            spent: { from in usage.all().filter { $0.purpose == .persona && $0.date >= from }.reduce(0) { $0 + Pricing.cost($1) } },
                                            isLive: { await MainActor.run { self.isRecording } })
         personaFillNote = out.note
+        personaFillYesGives = out.yesGives
         let calls = out.newCalls.calls + out.olderCalls.calls
         if calls + out.newCalls.people > 0 {
             // Counts only, never words.

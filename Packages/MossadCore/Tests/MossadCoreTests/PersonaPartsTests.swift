@@ -96,7 +96,9 @@ final class PersonaPartsTests: XCTestCase {
         XCTAssertTrue(card.lines.allSatisfy { $0.moment != nil }, "each line has a moment")
         XCTAssertEqual(card.lines[1].confidenceLine, "Established, seen in 3 of 3 calls")
         XCTAssertFalse(card.lines.contains { $0.kind == .ask }, "a line with no trait is left out")
-        XCTAssertEqual(PersonaCard.needsMore(first: "Sam", calls: 2), "The coach needs more calls with Sam. It has 2. It needs 3.")
+        XCTAssertEqual(PersonaCard.needsMore(first: "Sam", calls: 2),
+                       "No habit of Sam shows yet (2 calls so far). A habit shows after about 6 calls that agree, or after your yes to its question in Findings.")
+        XCTAssertFalse(PersonaCard.needsMore(first: "Sam", calls: 4).contains("It needs 3"), "no fixed count that the code does not keep")
     }
 
     func testTheSummaryShowsOnlyShownTraitsAndCountsTheOneCallOnes() {

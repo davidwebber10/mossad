@@ -66,8 +66,19 @@ public struct PersonaBudget: Codable, Equatable, Sendable {
 
     public var spends: [Spend] = []
     public var approval: Approval?
-    /// The first fill passed its estimate once: later older calls only need room in the budget.
+    /// The first fill passed its estimate once, with this model: later older calls only need room in the budget.
+    /// Another model starts again from its estimate.
     public var started = false
+    public var startedModel: String?
+
+    /// A new call is one that ended in the last 7 days: a lost ledger, a time with the reads off, or a switch on again
+    /// never makes a year of calls new. Older calls draw on the budget.
+    public static let newDays = 7.0
+
+    /// What one yes adds on top of the spend of 30 days: the estimate and a quarter, $1 at least and $5 at most.
+    public static func yesGives(estimate: Double) -> Double {
+        min(maxApprovedCap, max(cap, (estimate * 1.25 * 100).rounded(.up) / 100))
+    }
 
     public init() {}
 
@@ -86,7 +97,8 @@ public struct PersonaBudget: Codable, Equatable, Sendable {
 
     /// What to do about older calls. `price` is nil when the model is free (on the Mac or the owner's server); `known`
     /// is false when a cloud model has no list price.
-    public func decide(backlog: Int, estimate: Double, priceKnown: Bool, free: Bool, model: String, referencesReady: Bool, now: Date) -> Decision {
+    /// `request` is the worst cost of one request: a room smaller than that is no room.
+    public func decide(backlog: Int, estimate: Double, priceKnown: Bool, free: Bool, model: String, referencesReady: Bool, now: Date, request: Double = 0) -> Decision {
         guard backlog > 0 else { return .done }
         guard referencesReady else { return .wait(.people) }
         if free { return .read(dollars: nil, calls: nil) }
@@ -96,27 +108,30 @@ public struct PersonaBudget: Codable, Equatable, Sendable {
             return .wait(.unknownPrice(calls: backlog, model: model))
         }
         let cap = max(Self.cap, yes?.cap ?? 0)
-        if !started, estimate > cap { return .wait(.overEstimate(calls: backlog, dollars: estimate)) }
+        if !(started && startedModel == model) && yes == nil, estimate > cap { return .wait(.overEstimate(calls: backlog, dollars: estimate)) }
         // In cents of a cent, so the same spends give the same room on each launch.
         let left = ((cap - spent(now: now)) * 10_000).rounded(.down) / 10_000
-        guard left > 0 else { return .wait(.capReached(calls: backlog, spent: spent(now: now), cap: cap)) }
+        guard left > 0, left >= request else { return .wait(.capReached(calls: backlog, spent: spent(now: now), cap: cap)) }
         return .read(dollars: left, calls: nil)
     }
 
     /// A round of older calls cost this much.
-    public mutating func record(dollars: Double, calls: Int, now: Date) {
+    public mutating func record(dollars: Double, calls: Int, model: String, now: Date) {
         started = true
+        startedModel = model
         if dollars > 0 || calls > 0 { spends.append(Spend(date: now, dollars: dollars, calls: calls)) }
         spends.removeAll { now.timeIntervalSince($0.date) >= Self.windowDays * 86_400 * 2 }
         if let left = approval?.calls { approval?.calls = max(0, left - calls) }
     }
 
     /// The owner's yes in Settings > Coach.
+    /// The yes adds its room on top of what was spent in 30 days, so it always reads more.
     public mutating func approve(model: String, estimate: Double, priceKnown: Bool, backlog: Int, now: Date) {
         approval = priceKnown
-            ? Approval(date: now, model: model, cap: min(Self.maxApprovedCap, max(Self.cap, (estimate * 1.25 * 100).rounded(.up) / 100)), calls: nil)
+            ? Approval(date: now, model: model, cap: spent(now: now) + Self.yesGives(estimate: estimate), calls: nil)
             : Approval(date: now, model: model, cap: nil, calls: backlog)
         started = true
+        startedModel = model
     }
 
     public static func load(from dir: URL) -> PersonaBudget {
@@ -134,7 +149,7 @@ public struct PersonaBudget: Codable, Equatable, Sendable {
 }
 
 /// One run of the persona step in the app: new calls first, with the usual step; then older calls within the
-/// budget, newest first; then the sentences, within the room that is left. Never while a call is recorded.
+/// budget, newest first; then the sentences, the usual step. Never while a call is recorded.
 public enum PersonaBacklog {
     public struct Outcome: Sendable, Equatable {
         public var newCalls = PersonaRunner.Report()
@@ -142,12 +157,17 @@ public enum PersonaBacklog {
         public var decision: PersonaBudget.Decision = .done
         /// The line for Settings > Coach, or nil.
         public var note: String?
+        /// What the owner's yes would add, for the button.
+        public var yesGives: Double?
     }
 
     /// The due calls in two groups: new (from `since`, never read) and older (the rest that is due).
-    public static func split(_ records: [CallRecord], ledger: PersonaLedger, since: Date, saved: CoachPeople, owner: String) -> (new: [CallRecord], older: [CallRecord]) {
+    /// The due calls in two groups: new (never read, ended in the last 7 days and from `since` on) and older (the rest
+    /// that is due).
+    public static func split(_ records: [CallRecord], ledger: PersonaLedger, since: Date, saved: CoachPeople, owner: String, now: Date) -> (new: [CallRecord], older: [CallRecord]) {
         let due = PersonaRunner.due(records, ledger: ledger, since: nil, saved: saved, owner: owner)
-        let new = due.filter { $0.start >= since && !ledger.wasRead($0.id) }
+        let from = max(since, now.addingTimeInterval(-PersonaBudget.newDays * 86_400))
+        let new = due.filter { $0.start >= since && $0.end >= from && !ledger.wasRead($0.id) }
         let ids = Set(new.map(\.id))
         return (new, due.filter { !ids.contains($0.id) })
     }
@@ -163,7 +183,8 @@ public enum PersonaBacklog {
         let dir = PersonaStore(paths: paths).directory
         let owner = owner
         func groups() -> (new: [CallRecord], older: [CallRecord]) {
-            split(PersonaRunner.records(paths: paths, owner: owner), ledger: PersonaLedger.load(from: dir), since: since, saved: CoachPeople.read(paths: paths), owner: owner)
+            split(PersonaRunner.records(paths: paths, owner: owner), ledger: PersonaLedger.load(from: dir), since: since, saved: CoachPeople.read(paths: paths), owner: owner,
+                  now: now())
         }
 
         // New calls: the usual step, a cent each, never stopped by the budget of older calls.
@@ -175,9 +196,11 @@ public enum PersonaBacklog {
         var budget = PersonaBudget.load(from: dir)
         var older = groups().older
         let estimate = PersonaRunner.estimate(paths: paths, owner: owner, since: nil, only: Set(older.map(\.id)), price: price.cost).dollars
+        // The worst cost of one call's request: a room under it is used up, for older calls only.
+        let request = price.cost(PersonaRunner.writeInputTokens * 2, PersonaRunner.worstOutputTokens)
+        out.yesGives = PersonaBudget.yesGives(estimate: estimate)
         out.decision = budget.decide(backlog: older.count, estimate: estimate, priceKnown: price.known, free: service == .local, model: model,
-                                     referencesReady: referencesReady, now: now())
-        var room: Double? = nil
+                                     referencesReady: referencesReady, now: now(), request: request)
         var round = 0
         let phase = PersonaBudget.second(now())
         while case .read(let dollars, let calls) = out.decision, round < rounds, !older.isEmpty {
@@ -185,7 +208,6 @@ public enum PersonaBacklog {
             if await isLive() { break }
             // Each round's cost is the growth of the log from one start of the phase: rounds in one second count once.
             let base = spent(phase)
-            room = dollars
             let limit = min(callsPerRound, calls ?? callsPerRound)
             let report = await runner.run(since: nil, only: Set(older.map(\.id)), callLimit: limit, newestFirst: true, writeLimit: 0, isLive: isLive,
                                           canSpend: { cost in dollars.map { spent(phase) - base + cost <= $0 } ?? true }, price: price.cost)
@@ -193,11 +215,13 @@ public enum PersonaBacklog {
             out.olderCalls.handled += report.handled
             out.olderCalls.requests += report.requests
             out.olderCalls.stopped = report.stopped
-            budget.record(dollars: spent(phase) - base, calls: report.handled, now: now())
+            // Read again before the save: a yes in Settings during the round must not be lost.
+            budget = PersonaBudget.load(from: dir)
+            budget.record(dollars: spent(phase) - base, calls: report.handled, model: model, now: now())
             budget.save(to: dir)
             older = groups().older
             out.decision = budget.decide(backlog: older.count, estimate: 0, priceKnown: price.known, free: service == .local, model: model,
-                                         referencesReady: referencesReady, now: now())
+                                         referencesReady: referencesReady, now: now(), request: request)
             // A run that took up no call stops: the cap, an error, or a call that started.
             if report.stopped != nil || report.handled == 0 { break }
         }
@@ -207,19 +231,12 @@ public enum PersonaBacklog {
             out.decision = .wait(.capReached(calls: older.count, spent: budget.spent(now: now()), cap: cap))
         }
 
-        // The sentences of each person whose evidence changed, 5 people at most. After a round of older calls they
-        // count against the room that the budget has left.
+        // The sentences of each person whose evidence changed: the usual step, 5 people at most and one person once
+        // in 20 hours. Never stopped by the budget of older calls.
         if !(await isLive()) {
-            let base = spent(phase)
-            let left = room == nil ? nil : max(0, cap - budget.spent(now: now()))
-            let write = await runner.run(since: nil, only: [], isLive: isLive, canSpend: { cost in left.map { spent(phase) - base + cost <= $0 } ?? true },
-                                         price: price.cost)
+            let write = await runner.run(since: nil, only: [], isLive: isLive, price: price.cost)
             out.newCalls.people += write.people
             out.newCalls.requests += write.requests
-            if left != nil {
-                budget.record(dollars: spent(phase) - base, calls: 0, now: now())
-                budget.save(to: dir)
-            }
         }
         if case .wait(let w) = out.decision { out.note = w.text }
         return out
@@ -230,7 +247,7 @@ public enum PersonaBacklog {
         let dir = PersonaStore(paths: paths).directory
         let price = PersonaFill.price(service: service, model: model)
         let older = split(PersonaRunner.records(paths: paths, owner: owner), ledger: PersonaLedger.load(from: dir), since: since, saved: CoachPeople.read(paths: paths),
-                          owner: owner).older
+                          owner: owner, now: now).older
         let estimate = PersonaRunner.estimate(paths: paths, owner: owner, since: nil, only: Set(older.map(\.id)), price: price.cost).dollars
         var budget = PersonaBudget.load(from: dir)
         budget.approve(model: model, estimate: estimate, priceKnown: price.known, backlog: older.count, now: now)

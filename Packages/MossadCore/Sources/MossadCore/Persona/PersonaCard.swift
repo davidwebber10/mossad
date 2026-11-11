@@ -47,7 +47,7 @@ public struct ShownTrait: Codable, Equatable, Sendable, Identifiable {
     }
     /// "Likely, seen in 3 of 4 calls".
     public var confidenceLine: String { "\(label), \(countLine)" }
-    /// The number, for the trait's detail: "0.62".
+    /// The number, for the trait's detail: "0.74".
     public var numberText: String { String(format: "%.2f", confidence) }
 }
 
@@ -121,12 +121,10 @@ public struct PersonaCard: Codable, Equatable, Sendable {
         return ".!?".contains(last) ? t : t + "."
     }
 
-    /// The calls a person needs before a card can show, by the show rule.
-    public static let callsNeeded = 3
-
-    /// "The coach needs more calls with Sam. It has 2. It needs 3." The count is true to the rule.
+    /// What is true of the rule, with no fixed count that the code does not keep: a habit shows at a confidence of
+    /// 0.70, which takes about 6 calls that agree, or after the owner's yes to its question in Findings.
     public static func needsMore(first: String, calls: Int) -> String {
-        "The coach needs more calls with \(first). It has \(calls). It needs \(callsNeeded)."
+        "No habit of \(first) shows yet (\(calls) \(calls == 1 ? "call" : "calls") so far). A habit shows after about 6 calls that agree, or after your yes to its question in Findings."
     }
 }
 

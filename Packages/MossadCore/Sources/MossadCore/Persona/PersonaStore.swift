@@ -159,6 +159,11 @@ public struct PersonaLedger: Codable, Equatable, Sendable {
     /// Read once, maybe as it was before a change.
     public func wasRead(_ id: String) -> Bool { calls[id] != nil }
 
+    /// Due again and read before: an older call, on the budget of older calls, never a new one.
+    public mutating func markDue(_ ids: Set<String>) {
+        for id in ids { calls[id] = "" }
+    }
+
     public mutating func markRead(_ r: CallRecord, saved: CoachPeople, owner: String) {
         calls[r.id] = Self.stamp(r, saved: saved, owner: owner)
         failures[r.id] = nil

@@ -85,7 +85,7 @@ struct PersonaTraitsView: View {
                             Text("·").accessibilityHidden(true)
                             // The number lives here, in the trait's detail; the card says it in words.
                             Text("confidence \(trait.numberText)").monospacedDigit()
-                                .help("Computed by code from the calls for and against, the topics, and your answers. A trait shows at \(String(format: "%.2f", PersonaConfidence.threshold)).")
+                                .help("Computed by code from the calls for and against, the topics, and your answers. A trait shows at 0.70 or more until your answers in Findings move that bound.")
                             if let c = trait.condition { Text("·").accessibilityHidden(true); Text(c.words) }
                         }
                         .textRole(.secondary).foregroundStyle(Palette.tertiary)

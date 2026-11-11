@@ -151,7 +151,7 @@ struct PersonView: View {
                     PersonaTraitsView(read: read, date: { id in store.meetings.first { $0.id == id }?.start })
                 } else {
                     PersonBriefCard(name: name, brief: store.profile.people[name]?.brief, calls: stats.meetings.count)
-                    if !isOwner, stats.meetings.count < PersonaCard.callsNeeded {
+                    if !isOwner {
                         Text(PersonaCard.needsMore(first: name.split(separator: " ").first.map(String.init) ?? name, calls: stats.meetings.count))
                             .textRole(.secondary).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                     }
