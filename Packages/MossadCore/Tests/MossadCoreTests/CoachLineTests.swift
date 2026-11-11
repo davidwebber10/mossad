@@ -778,6 +778,28 @@ final class CoachLineTests: XCTestCase {
         try r.save(to: paths.callDirectory(r.id))
     }
 
+    /// "Your name" changed after the call: the record and the voice profile keep the old name. The coach must still
+    /// find the owner's lines, as commitments do, or it drops every note and says nothing.
+    func testTheCoachFindsTheOwnerUnderAnOlderNameOfTheOwner() async throws {
+        var old = call("a", day: 0)
+        old.speakerNames["me:A"] = "Dana L"
+        let paths = try paths([old])
+        try PeopleStore(directory: paths.people).setOwnerName("Dana L")
+        try PeopleStore(directory: paths.people).setOwnerName(owner)
+        let now = base.addingTimeInterval(1 * day)
+        let done = await CoachRunner(paths: paths, coach: SameAdvice(), owner: owner, since: .distantPast, now: { now }).run()
+        XCTAssertEqual(done, 1)
+        XCTAssertEqual(CoachReview.load(in: paths.callDirectory("a"))?.line?.kind, .tryNext, "the owner's own words under the old name are proof")
+    }
+
+    func testTheOwnersOlderNameReadsAsTheNameInSettings() {
+        var r = call("a")
+        r.speakerNames["me:A"] = "Dana L"
+        let identity = OwnerIdentity(name: owner, also: ["Dana L"])
+        XCTAssertEqual(identity.withCurrentName(r).speakerNames, ["me:A": owner, "them:A": "Sam Carter"])
+        XCTAssertEqual(OwnerIdentity(name: owner).withCurrentName(r).speakerNames["me:A"], "Dana L", "a name that is not the owner's stays")
+    }
+
     func testTheRunnerShowsAdviceOnceAndCountsTheCallsAfter() async throws {
         let paths = try paths([call("a", day: 0), call("b", day: 1), call("c", day: 2)])
         var book = CommitmentBook()

@@ -24,6 +24,14 @@ public struct OwnerIdentity: Sendable, Equatable, ExpressibleByStringLiteral {
         r.speakerNames.sorted { $0.key < $1.key }.first { isOwner($0.value) }?.value ?? name
     }
 
+    /// The record with each of the owner's names as the name in Settings, for code that knows the owner by that one
+    /// name (the coach). The file on disk does not change.
+    public func withCurrentName(_ r: CallRecord) -> CallRecord {
+        var r = r
+        for (key, value) in r.speakerNames where value != name && isOwner(value) { r.speakerNames[key] = name }
+        return r
+    }
+
     /// The identity from what is on disk: the owner's names in the people store and the name of the owner's voice
     /// profile. It only reads; a file that does not decode stays where it is and adds nothing.
     public static func read(name: String, paths: Paths) -> OwnerIdentity {

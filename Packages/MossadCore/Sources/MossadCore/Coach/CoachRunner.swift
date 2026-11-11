@@ -59,7 +59,10 @@ public actor CoachRunner {
     public func run(onReview: @Sendable (String) async -> Void = { _ in }) async -> Int {
         // A profile that was set aside starts empty; reviews wait until the other device's copy is merged in.
         guard !StoredFile.awaitsMerge(paths.coach.appendingPathComponent(CoachProfile.fileName)) else { return 0 }
-        let records = ProcessingQueue(paths: paths).allRecords()
+        // The coach knows the owner by the name in Settings. A record from before a change of "Your name" has an older
+        // name of the owner, and without this the coach would find no line of the owner's in it.
+        let identity = OwnerIdentity.read(name: owner, paths: paths)
+        let records = ProcessingQueue(paths: paths).allRecords().map(identity.withCurrentName)
         let reviews = records.compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (callID: r.id, date: r.start, review: $0) } }
         let reviewed = Set(reviews.map(\.callID))
         var profile: CoachProfile
