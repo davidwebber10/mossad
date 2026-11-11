@@ -96,6 +96,17 @@ final class CoachLineTests: XCTestCase {
         XCTAssertEqual(CoachLineRules.ownerMoment(quote: "w51 w52 w53", in: r, owner: owner)?.at, 250)
     }
 
+    func testTheShownQuoteEndsAtTheLastWordThatWasChecked() {
+        // "follow-up" and "3.5" are two words each for the check, so 12 checked words are 10 words between spaces.
+        let said = "The follow-up on the 3.5 percent price holds until the vendor signs the new contract in March."
+        let moment = CoachLineRules.ownerMoment(quote: said, in: call("c", [("me", 5, said)]), owner: owner)
+        XCTAssertEqual(moment?.quote, "The follow-up on the 3.5 percent price holds until the…")
+        // The words after the cut are not what the owner said: no word that is shown is one of them.
+        let other = "The follow-up on the 3.5 percent price holds until the board agrees to everything."
+        XCTAssertEqual(CoachLineRules.ownerMoment(quote: other, in: call("c", [("me", 5, said)]), owner: owner)?.quote, moment?.quote)
+        XCTAssertEqual(CoachLineRules.ownerMoment(quote: "Let me look at it", in: call(), owner: owner)?.quote, "Let me look at it", "a short quote stays whole")
+    }
+
     func testAQuietReviewHasNoLine() {
         let out = settle(review(quiet: true))
         XCTAssertNil(out.review.line)
@@ -205,14 +216,50 @@ final class CoachLineTests: XCTestCase {
         XCTAssertEqual(CoachSkill.id(key: " Answer-First ", label: nil), "answer-first")
         XCTAssertEqual(CoachSkill.id(key: "other", label: "Name the risk!"), risk)
         XCTAssertEqual(CoachSkill.id(key: "other", label: "name  the RISK"), risk, "a label is the same without case, spaces, and punctuation")
-        XCTAssertEqual(CoachSkill.id(key: "other", label: "Date your items"), dates, "a label that the list has a key for is that key")
-        XCTAssertEqual(CoachSkill.id(key: "not-a-key", label: "", text: "Offer the simple method"), "other:offer the simple method")
         XCTAssertEqual(CoachSkill.title(of: dates), "Give a day with each commitment")
         XCTAssertEqual(CoachSkill.title(of: risk), "Name the risk")
         XCTAssertEqual(CoachSkill(id: risk), .other)
         XCTAssertNil(CoachSkill(id: "number:talkShare"))
         XCTAssertEqual(CoachSkill.commitmentDates.measure, .commitmentDay)
         XCTAssertEqual(Set(CoachSkill.allCases.map(\.rawValue)).count, CoachSkill.allCases.count)
+    }
+
+    func testAnUnknownOrMissingKeyIsOtherAndNeverAnError() {
+        XCTAssertEqual(CoachSkill.id(key: " Delegation ", label: ""), "other:delegation", "a key that is not in the list is the label of an other")
+        XCTAssertEqual(CoachSkill.id(key: "delegation", label: "Hand work over"), "other:hand work over", "a label that the model gave stays")
+        XCTAssertEqual(CoachSkill.id(key: nil, label: "Name the risk"), risk, "no key, with a label")
+        XCTAssertEqual(CoachSkill.id(key: nil, label: nil), "other:")
+        XCTAssertEqual(CoachSkill.id(key: "other", label: "  "), "other:")
+        XCTAssertTrue(CoachSkill.isNamed(dates))
+        XCTAssertTrue(CoachSkill.isNamed(risk))
+        XCTAssertFalse(CoachSkill.isNamed("other:"), "an other with no label cannot be found again")
+        XCTAssertFalse(CoachSkill.isNamed(""))
+    }
+
+    func testTheWordRulesNeverRunOnALabelOfTheModel() {
+        // Each of these labels has a word that a seed rule knows. A wrong key would hold new advice as a repeat,
+        // put the share of commitments next to it, or drop it as "not coached".
+        for label in ["Date your items", "Keep the team up to date", "Due diligence on vendors", "Pace the agenda", "Answer the question asked"] {
+            XCTAssertEqual(CoachSkill.id(key: "other", label: label), "other:" + label.lowercased(), label)
+        }
+        var profile = CoachProfile()
+        profile.advice = [said(CoachSkill.questions.rawValue, daysAgo: 3)]
+        let out = settle(review(tryNext: advice(skill: CoachSkill.id(key: "other", label: "Answer the question asked"))), profile: profile,
+                         measured: CoachMeasured(commitments: CommitmentShare(withDay: 4, total: 33)))
+        XCTAssertEqual(out.review.line?.kind, .tryNext, "it is not the advice about questions")
+        XCTAssertNil(out.review.line?.number)
+        // For the seed, a line about an answer is not a line about questions.
+        XCTAssertNil(CoachSkill.infer("Answer the question that Sam asked before you add the context."))
+    }
+
+    func testANoteWithNoSkillNameIsDroppedAndTheReviewGoesOn() {
+        let out = settle(review(tryNext: advice(skill: "other:"), didWell: praise))
+        XCTAssertNil(out.review.tryNext, "the log could not find it again, so it could come after each call")
+        XCTAssertEqual(out.review.line?.kind, .didWell)
+        XCTAssertEqual(out.dropped.count, 1)
+        var none = advice()
+        none.skill = nil
+        XCTAssertNil(settle(review(tryNext: none)).review.line)
     }
 
     func testPraiseForTheAdvisedSkillIsNotARepeatButTheSamePraiseIs() {
@@ -610,6 +657,7 @@ final class CoachLineTests: XCTestCase {
         XCTAssertEqual(CoachPrompt.earlierAdvice(profile, record: call()).map(\.skill), [dates], "the model gets one row, not 14")
         // Advice that no rule has a key for is a skill of its own.
         let other = AdviceRules.seed(from: [("x", base, review(tryNext: CoachNote(text: "Offer the simple method before the full model.")))], now: base)
+        XCTAssertEqual(CoachSkill.seedID("Give each action a date"), dates)
         XCTAssertEqual(other.map(\.skill), ["other:offer the simple method before the full model"])
     }
 

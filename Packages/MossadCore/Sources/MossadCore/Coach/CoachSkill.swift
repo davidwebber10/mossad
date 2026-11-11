@@ -4,7 +4,9 @@ import Foundation
 /// key, the schema allows no other, and the same key is the same advice whatever the words are. A behavior that
 /// no key fits is `other` with a short label.
 ///
-/// Add a key at the end and raise `version`: a memory with an older version is read against the list again.
+/// Add a key at the end and raise `version`. A memory with an older version then gets the log entries of the
+/// calls that have none, from the review files. An entry that is in the log keeps its id: an `other` that a new
+/// key fits is not moved to that key.
 public enum CoachSkill: String, Codable, Sendable, CaseIterable {
     case commitmentDates = "commitment-dates"
     case answerFirst = "answer-first"
@@ -63,15 +65,26 @@ public enum CoachSkill: String, Codable, Sendable, CaseIterable {
         if let known = CoachSkill(rawValue: id) { self = known } else if id.hasPrefix("other:") { self = .other } else { return nil }
     }
 
-    /// One text for a skill, as the log compares it: the key, or "other:" and the label without case and
-    /// punctuation. A label that the list has a key for becomes that key, so "other: date your items" is
-    /// "commitment-dates". An unknown key is `other`.
-    public static func id(key: String?, label: String?, text: String = "") -> String {
-        if let key, let known = CoachSkill(rawValue: key.trimmingCharacters(in: .whitespaces).lowercased()), known != .other { return known.rawValue }
-        let name = label?.nonBlank ?? text
-        if let known = infer(name) { return known.rawValue }
-        return "other:" + AdviceRules.key(name)
+    /// One text for a skill of the model, as the log compares it: the key, or "other:" and the label without
+    /// case and punctuation. A key that is not in the list, or no key, is never an error: it is an `other`, with
+    /// the model's label, or else with the unknown key as its label. No word rule reads a label: a wrong key
+    /// would hold new advice as a repeat, and no key does not.
+    public static func id(key: String?, label: String?) -> String {
+        let key = key?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let known = CoachSkill(rawValue: key.lowercased()), known != .other { return known.rawValue }
+        return "other:" + AdviceRules.key(label?.nonBlank ?? (key.lowercased() == CoachSkill.other.rawValue ? "" : key))
     }
+
+    /// False for an `other` with no label, and for no id. The log cannot find such advice again, so it could
+    /// come after each call: a note without a name is dropped.
+    public static func isNamed(_ id: String) -> Bool {
+        if let known = CoachSkill(rawValue: id) { return known != .other }
+        return id.hasPrefix("other:") && id.count > 6
+    }
+
+    /// The id for advice from before the list (the one-time seed, and a focus that was proposed then): the key
+    /// that its words give by the fixed rules of `infer`, or an `other` of its own.
+    static func seedID(_ text: String) -> String { infer(text)?.rawValue ?? "other:" + AdviceRules.key(text) }
 
     /// The name of an id for the owner: the key's title, or the label of an `other`.
     public static func title(of id: String) -> String {
@@ -93,8 +106,8 @@ public enum CoachSkill: String, Codable, Sendable, CaseIterable {
         "say", "name", "state", "tell", "add", "attach", "put",
     ]
 
-    /// The key for advice that was written before the list, from its words, by fixed rules. Nil when no rule
-    /// fits; such advice is an `other` of its own. The rules are in order: a day for an item is
+    /// The key for advice that was written before the list, from its words, by fixed rules. Only `seedID`
+    /// uses it, never a label of the model. Nil when no rule fits; such advice is an `other` of its own. The rules are in order: a day for an item is
     /// `commitmentDates` also when the sentence speaks of the end of the meeting.
     static func infer(_ text: String) -> CoachSkill? {
         let plain = " " + AdviceRules.key(text) + " "
@@ -112,7 +125,8 @@ public enum CoachSkill: String, Codable, Sendable, CaseIterable {
         if has("shorter turn", "long turn", "monologue", "two minutes", "2 minutes", "stop after", "pause after") { return .longTurns }
         if has("slow down", "slower", "pace", "words per minute") { return .pace }
         if has("filler", "um", "uh") { return .fillerWords }
-        if has("ask", "asking", "question") { return .questions }
+        // "Answer the question" is about the answer.
+        if has("ask", "asking", "question"), !has("answer", "answering", "answered") { return .questions }
         return nil
     }
 }

@@ -54,7 +54,7 @@ public struct CoachFocus: Codable, Equatable, Sendable, Identifiable, Hashable {
     public var measure: CoachMeasure? { measureName.flatMap(CoachMeasure.init(rawValue:)) ?? CoachSkill(id: skillID)?.measure }
 
     /// The skill's id; for a focus from before the skill list, the one that its plan's words give.
-    public var skillID: String { skill ?? CoachSkill.id(key: nil, label: nil, text: plan) }
+    public var skillID: String { skill ?? CoachSkill.seedID(plan) }
 
     public init(plan: String, why: String, metric: FocusMetric?, proposed: Date, skill: String? = nil) {
         self.plan = plan

@@ -49,7 +49,9 @@ public enum CoachLineRules {
             }
             guard count(note.text) <= textWords else { dropped.append("\(name): \(count(note.text)) words"); return nil }
             guard !judgesTrend(note.text) else { dropped.append("\(name): it judges a trend"); return nil }
-            let id = note.skill?.nonBlank ?? CoachSkill.id(key: nil, label: nil, text: note.text)
+            let id = note.skill ?? ""
+            // The count of calls for earlier advice has no text of its own; advice and praise need a skill with a name.
+            guard CoachSkill.isNamed(id) else { dropped.append("\(name): no skill name"); return nil }
             if let skill = CoachSkill(id: id), !skill.isCoached, !(skill == .pace && focus?.metric == .pace) {
                 dropped.append("\(name): \(skill.rawValue) is not coached")
                 return nil
@@ -195,17 +197,30 @@ public enum CoachLineRules {
         return line
     }
 
-    static func clip(_ quote: String) -> String {
-        let words = quote.split(whereSeparator: \.isWhitespace)
-        return words.count <= quoteWords ? quote : words.prefix(quoteWords).joined(separator: " ") + "…"
+    private static func plain(_ s: String) -> [String] {
+        AdviceRules.key(s.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")).split(separator: " ").map(String.init)
+    }
+
+    /// The first words of a quote, as they are shown, and the same words as code compares them. The shown text
+    /// ends at the last word that is compared: "follow-up" is two words for the check, so a cut by spaces alone
+    /// could show a word that nobody checked.
+    static func shown(_ quote: String) -> (text: String, words: [String]) {
+        let tokens = quote.split(whereSeparator: \.isWhitespace).map(String.init)
+        var words: [String] = [], kept = 0
+        for token in tokens {
+            let next = plain(token)
+            guard words.count + next.count <= quoteWords else { break }
+            words += next
+            kept += 1
+        }
+        return (tokens.prefix(kept).joined(separator: " ") + (kept < tokens.count ? "\u{2026}" : ""), words)
     }
 
     /// Where the owner said the quote: the words as they are shown, and the time of their first word. Nil when
     /// the quote is under `minimumQuoteWords` words, or when no single line of the owner holds every word that
     /// is shown, in order. A paraphrase and another person's words are not proof.
     static func ownerMoment(quote: String, in r: CallRecord, owner: String) -> (quote: String, at: TimeInterval)? {
-        func plain(_ s: String) -> [String] { AdviceRules.key(s.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")).split(separator: " ").map(String.init) }
-        let wanted = Array(plain(quote).prefix(quoteWords))
+        let (text, wanted) = shown(quote)
         guard wanted.count >= minimumQuoteWords else { return nil }
         let keys = Set(r.speakerNames.filter { $0.value == owner }.keys)
         for u in r.utterances.sorted(by: { $0.start < $1.start }) where keys.contains(u.speakerKey) {
@@ -221,7 +236,7 @@ public enum CoachLineRules {
             }
             guard said.count >= wanted.count else { continue }
             for i in 0...(said.count - wanted.count) where said[i].word == wanted[0] && (0..<wanted.count).allSatisfy({ said[i + $0].word == wanted[$0] }) {
-                return (clip(quote), said[i].at)
+                return (text, said[i].at)
             }
         }
         return nil

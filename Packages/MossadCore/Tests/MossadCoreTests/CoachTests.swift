@@ -355,6 +355,60 @@ final class CoachTests: XCTestCase {
         for skill in CoachSkill.allCases { XCTAssertTrue(system.contains(skill.rawValue + " ("), skill.rawValue) }
     }
 
+    /// A coach reply as a local server without schema support gives it: the app checks it against the schema itself.
+    private func localReply(_ output: [String: Any]) -> Data {
+        json(["model": "m", "choices": [["finish_reason": "stop", "message": ["role": "assistant", "content": String(decoding: json(output), as: UTF8.self)]]],
+              "usage": ["prompt_tokens": 1, "completion_tokens": 1]])
+    }
+
+    func testAnUnknownOrMissingSkillKeyDoesNotStopAReviewOnALocalModel() async throws {
+        LocalServerModel.resetSchemaSupport()
+        let output: [String: Any] = [
+            "quiet": false, "headline": "H",
+            // A key that is not in the list, and no label.
+            "try_next": ["text": "When you hand work to Mitch, say what done looks like.", "quote": "Let me walk through the plan.", "at_seconds": 0,
+                         "say": "Done is the draft, reviewed.", "skill": "delegation"],
+            // No key at all, and an empty label.
+            "did_well": ["text": "You opened with the plan.", "quote": "Let me walk through the plan.", "at_seconds": 0, "skill_label": ""],
+            "seen_again": NSNull(), "focus_result": NSNull(),
+            "focus_proposal": ["plan": "When you hand work over, say what done looks like.", "why": "W", "metric": NSNull()],
+            "strengths": [], "improvements": [],
+            "meeting_value": ["rating": "medium", "reason": "R", "action": "keep", "suggestion": ""],
+            "profile": ["patterns": [], "people": []], "questions": [],
+        ]
+        StubURLProtocol.handler = { r in
+            let b = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] ?? [:]
+            if b["response_format"] != nil { return (400, Data(#"{"error":{"message":"response_format json_schema is not supported"}}"#.utf8)) }
+            return (200, self.localReply(output))
+        }
+        let llm = LocalServerModel(baseURL: URL(string: "http://localhost:11434/v1")!, model: "m", apiKey: nil, session: StubURLProtocol.session())
+        let r = record("c", start: Date())
+        let written = try await LLMCoach(llm: llm, ownerName: "David Webber").review(record: r, profile: CoachProfile(), tone: nil)
+        XCTAssertEqual(StubURLProtocol.requests.count, 2, "the refused schema request, then one reply: the model is not asked again for a key")
+        XCTAssertEqual(written.review.tryNext?.skill, "other:delegation")
+        XCTAssertEqual(written.review.didWell?.skill, "other:", "no key and no label: an other with no name")
+        XCTAssertEqual(written.proposal?.skill, "other:when you hand work over say what done looks like", "a focus with no name is named by its plan")
+        let settled = CoachLineRules.settle(written, record: r, owner: "David Webber", profile: CoachProfile(), measured: CoachMeasured())
+        XCTAssertEqual(settled.review.line?.kind, .tryNext, "the review goes on, and the advice with a name is its line")
+        XCTAssertNil(settled.review.didWell, "a note that the log cannot find again is not kept")
+    }
+
+    func testAnUnknownSkillKeyDecodesOnAProviderThatDidNotEnforceTheSchema() async throws {
+        let output: [String: Any] = [
+            "quiet": false, "headline": "H",
+            "try_next": ["text": "T", "quote": "Let me walk through the plan.", "at_seconds": 0, "say": "", "skill": "Delegation", "skill_label": ""],
+            "did_well": NSNull(), "seen_again": ["quote": "Let me walk through the plan.", "at_seconds": 0], "focus_result": NSNull(), "focus_proposal": NSNull(),
+            "strengths": [], "improvements": [],
+            "meeting_value": ["rating": "medium", "reason": "R", "action": "keep", "suggestion": ""],
+            "profile": ["patterns": [], "people": []],
+        ]
+        StubURLProtocol.handler = { _ in (200, self.reply(String(decoding: json(output), as: UTF8.self))) }
+        let coach = LLMCoach(apiKey: "ant", session: StubURLProtocol.session(), ownerName: "David Webber")
+        let result = try await coach.review(record: record("c", start: Date()), profile: CoachProfile(), tone: nil)
+        XCTAssertEqual(result.review.tryNext?.skill, "other:delegation")
+        XCTAssertEqual(result.review.seenAgain?.skill, "other:")
+    }
+
     func testAFocusProposalIsReturnedWhenThereIsNoFocus() async throws {
         let output: [String: Any] = [
             "quiet": true, "headline": "You listened; nothing to coach", "did_well": NSNull(), "seen_again": NSNull(), "try_next": NSNull(),

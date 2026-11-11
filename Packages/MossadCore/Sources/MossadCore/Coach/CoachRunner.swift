@@ -108,7 +108,10 @@ public actor CoachRunner {
                 profile = fresh
                 done += 1
                 if ledger.entries[r.id] != nil { ledger.clear(r.id); ledger.save(to: paths.coach) }
-                Log.info("Coached \(r.id)")
+                // The kinds and the skill keys only, never the words: how often the model uses "other" says
+                // whether the list needs a key.
+                let keys = result.advice.map { "\($0.held ? "counted" : $0.shown ? "line" : "full review") \($0.kind.rawValue) \($0.skill.hasPrefix("other:") ? "other" : $0.skill)" }
+                Log.info("Coached \(r.id)" + (keys.isEmpty ? ": no line" : ": " + keys.joined(separator: ", ")))
                 await onReview(r.id)
             } catch {
                 guard !RetryLedger.isUnbilled(error), !(error is UnreadableFile) else {

@@ -67,7 +67,8 @@ enum JSONRepair {
 }
 
 /// Checks a decoded JSON value against the subset of JSON Schema Mossad uses, and fills what a model may leave
-/// out: a missing nullable field becomes null, a missing list becomes empty.
+/// out: a missing nullable field becomes null, a missing list becomes empty, and a value outside an open list
+/// becomes "other".
 enum SchemaCheck {
     static func fill(_ value: inout Any, schema: [String: Any], path: String = "") -> [String] {
         if let choices = schema["anyOf"] as? [[String: Any]] {
@@ -86,6 +87,20 @@ enum SchemaCheck {
             var problems: [String] = []
             let properties = schema["properties"] as? [String: [String: Any]] ?? [:]
             let required = Set(schema["required"] as? [String] ?? Array(properties.keys))
+            // An open list: a field whose values include "other", with a text field `<name>_label` next to it.
+            // A value outside the list, or none, is an "other" with the raw text as its label, and a missing
+            // label is "". A model that names a behavior in its own word must not lose the whole reply for it.
+            for (key, sub) in properties {
+                guard let options = sub["enum"] as? [String], options.contains("other"), properties["\(key)_label"]?["type"] as? String == "string" else { continue }
+                let label = (object["\(key)_label"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if let value = object[key] as? String, options.contains(value) {
+                    object["\(key)_label"] = object["\(key)_label"] as? String ?? ""
+                } else {
+                    let raw = (object[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    object[key] = "other"
+                    object["\(key)_label"] = label.isEmpty ? raw : label
+                }
+            }
             for key in properties.keys.sorted() {
                 let sub = properties[key]!
                 let subPath = path.isEmpty ? key : "\(path).\(key)"

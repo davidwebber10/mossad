@@ -124,7 +124,7 @@ public enum AdviceRules {
             }
             // An older review showed its advice below the call.
             guard let line = r.shownLine, line.kind == .tryNext else { return [] }
-            return [CoachAdvice(callID: item.callID, date: item.date, kind: .tryNext, skill: CoachSkill.id(key: nil, label: nil, text: line.text), text: line.text, at: line.at)]
+            return [CoachAdvice(callID: item.callID, date: item.date, kind: .tryNext, skill: CoachSkill.seedID(line.text), text: line.text, at: line.at)]
         }
     }
 }

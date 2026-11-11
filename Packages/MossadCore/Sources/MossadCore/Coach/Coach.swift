@@ -135,8 +135,10 @@ public struct LLMCoach: Coaching {
             review.focusResult = FocusResult(callID: record.id, date: record.start, outcome: r.outcome, evidence: r.evidence, at: r.at_seconds,
                                              quote: r.quote?.nonBlank)
         }
-        let proposal = out.focus_proposal.map {
-            CoachFocus(plan: $0.plan, why: $0.why, metric: $0.metric, proposed: record.start, skill: CoachSkill.id(key: $0.skill, label: $0.skill_label, text: $0.plan))
+        let proposal = out.focus_proposal.map { p -> CoachFocus in
+            // A focus that the model gave no name is named by its plan: it is one piece of advice, in one wording.
+            let id = CoachSkill.id(key: p.skill, label: p.skill_label)
+            return CoachFocus(plan: p.plan, why: p.why, metric: p.metric, proposed: record.start, skill: CoachSkill.isNamed(id) ? id : "other:" + AdviceRules.key(p.plan))
         }
         let patterns = out.profile.patterns.prefix(Self.patternsPerCall).map {
             CoachPatternUpdate(name: $0.name, kind: $0.kind, note: $0.note, result: $0.result, quote: $0.quote?.nonBlank, at: $0.at_seconds)
@@ -153,7 +155,7 @@ public struct LLMCoach: Coaching {
         let quote, say, skill, skill_label: String?
         let at_seconds: Double?
         var note: CoachNote {
-            let id = CoachSkill.id(key: skill, label: skill_label, text: text)
+            let id = CoachSkill.id(key: skill, label: skill_label)
             return CoachNote(text: text, quote: quote?.nonBlank, at: at_seconds, say: say?.nonBlank, skill: id, measure: CoachSkill(id: id)?.measure)
         }
     }
