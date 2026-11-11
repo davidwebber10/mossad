@@ -35,7 +35,8 @@ struct CoachView: View {
                     VStack(alignment: .leading, spacing: Space.l) {
                         HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                             Text("Findings").textRole(.lede).foregroundStyle(Palette.ink)
-                            Text(subtitle).textRole(.secondary).foregroundStyle(Palette.secondary)
+                            // The empty deck says it itself.
+                            if !controller.findings.isEmpty { Text(subtitle).textRole(.secondary).foregroundStyle(Palette.secondary) }
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityAddTraits(.isHeader)

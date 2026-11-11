@@ -20,8 +20,10 @@ struct FindingsScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.l) {
-                Text(store.findings.isEmpty ? "Nothing to review" : "\(store.findings.count) to review")
-                    .textRole(.secondary).foregroundStyle(Palette.secondary)
+                // The empty deck says it itself.
+                if !store.findings.isEmpty {
+                    Text("\(store.findings.count) to review").textRole(.secondary).foregroundStyle(Palette.secondary)
+                }
                 FindingsDeck(cards: store.findings, source: source,
                              openSource: { finding in
                                  close()

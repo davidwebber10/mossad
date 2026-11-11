@@ -59,6 +59,7 @@ struct FindingsDeck: View {
     @State private var note = ""
     @State private var saved = false
     @State private var whyTimer: Task<Void, Never>?
+    @State private var previewed = false
     @FocusState private var deckFocused: Bool
     @FocusState private var noteFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -82,7 +83,9 @@ struct FindingsDeck: View {
 
     var body: some View {
         feedback(content)
-            .onAppear(perform: startPreview)
+            .onAppear { if focusOnAppear { deckFocused = true } }
+            // When the cards are there: a view that waits in a task would keep the cards of its start.
+            .onChange(of: cards.isEmpty, initial: true) { _, empty in if !empty { startPreview() } }
             .onDisappear { whyTimer?.cancel() }
     }
 
@@ -127,14 +130,14 @@ struct FindingsDeck: View {
     }
 
     private func startPreview() {
-        if focusOnAppear { deckFocused = true }
-        guard let preview else { return }
+        guard let preview, !previewed else { return }
+        previewed = true
         drag = CGSize(width: preview.drag, height: 0)
-        guard let state = preview.why else { return }
+        guard let state = preview.why, let first = visible.first else { return }
         // As the owner does it: a no to the first card, then the line about it, then its field.
         Task {
-            try? await Task.sleep(for: .milliseconds(900))
-            if let first = visible.first { commit(first, .no) }
+            try? await Task.sleep(for: .milliseconds(700))
+            commit(first, .no)
             guard state == .open else { return }
             try? await Task.sleep(for: .milliseconds(900))
             whyTimer?.cancel()
@@ -552,7 +555,7 @@ struct FindingsEmpty: View {
                 ForEach((0..<3).reversed(), id: \.self) { i in
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(Palette.tertiaryMark.opacity(0.55 - 0.16 * Double(i)), style: StrokeStyle(lineWidth: 1, dash: i == 0 ? [] : [3, 3]))
-                        .background(i == 0 ? Palette.raised.opacity(0.7) : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(i == 0 ? Palette.raised : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .frame(width: 112 - CGFloat(i) * 10, height: 72)
                         .offset(y: CGFloat(i) * 8)
                 }
