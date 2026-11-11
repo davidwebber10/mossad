@@ -263,6 +263,19 @@ final class MeetingFilterTests: XCTestCase {
         XCTAssertEqual(all.map(\.size), [.oneOnOne, .oneOnOne, .unknown, .oneOnOne])
     }
 
+    /// Invited people with no saved record are people too: the owner and Sam talk, and five more addresses are on the
+    /// invite. That is two people or seven, not a 1:1.
+    func testInvitedPeopleWithNoSavedRecordStillCountTowardTheSize() {
+        let names = ["me:A": "Dana Lee", "them:A": "Sam Carter"]
+        let voices = [("me:A", 600.0), ("them:A", 600.0)]
+        let guests = (1...5).map { "guest\($0)@example.com" }
+        let all = rows([record("unsure", voices: voices, names: names, attendees: ["Sam Carter"] + guests),
+                        record("oneUnsure", voices: voices, names: names, attendees: ["Sam Carter", "guest@example.com"])], people: people)
+        XCTAssertEqual(all.map(\.size), [.unknown, .unknown])
+        let spokeAndInvited = rows([record("same", voices: voices, names: ["me:A": "Dana Lee", "them:A": "Jordan Vale"], attendees: ["Jordan Vale"])], people: people)
+        XCTAssertEqual(spokeAndInvited.map(\.size), [.oneOnOne], "the invited name that spoke is the same person")
+    }
+
     func testAGroupWithSilentGuestsIsKnownOnlyWhenBothCountsAgree() {
         let names = ["me:A": "Dana Lee", "them:A": "Sam Carter", "them:B": "Riley Park"]
         let directory = PersonDirectory([.init(name: "Sam Carter", email: nil), .init(name: "Riley Park", email: nil), .init(name: "Avery Stone", email: nil),
