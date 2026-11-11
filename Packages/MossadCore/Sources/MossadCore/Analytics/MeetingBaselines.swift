@@ -44,11 +44,13 @@ extension MeetingAnalytics {
 
         /// The 97.5% point of Student's t for the history's size over the normal one: a short history knows its
         /// own spread badly, so a value must be further out before it counts.
-        var smallSample: Double {
+        var smallSample: Double { Self.student(samples - 1) / 1.96 * (1 + 1 / Double(samples)).squareRoot() }
+
+        /// The 97.5% point of Student's t for `degrees` of freedom, from the nearest row below.
+        static func student(_ degrees: Int) -> Double {
             let table: [(df: Int, t: Double)] = [(4, 2.776), (5, 2.571), (6, 2.447), (7, 2.365), (8, 2.306), (9, 2.262), (10, 2.228), (12, 2.179),
                                                  (15, 2.131), (20, 2.086), (25, 2.060), (30, 2.042), (60, 2.000)]
-            let t = table.last { $0.df <= samples - 1 }?.t ?? 3.182
-            return t / 1.96 * (1 + 1 / Double(samples)).squareRoot()
+            return table.last { $0.df <= degrees }?.t ?? 3.182
         }
 
         /// How far `value` is from the median, in spreads. `floor` is half the least difference that matters for
@@ -238,15 +240,18 @@ extension MeetingAnalytics {
 
 extension PersonMetric {
     /// The least difference from the median that matters for this number.
-    func margin(_ u: MeetingAnalytics.Usual) -> Double {
+    func margin(_ u: MeetingAnalytics.Usual) -> Double { margin(median: u.median) }
+
+    /// The same, for a caller that has the median and no range.
+    func margin(median: Double) -> Double {
         switch self {
         case .talkShare: 0.08
         case .wordsPerMinute: 20
         case .fillersPerMinute: 1
         case .questionsPerHour: 3
         // The typical turn is a median of a few seconds: a fixed 8 s could never be reached below the usual.
-        case .averageTurn: max(2, u.median * 0.4)
-        case .longestTurn: max(20, u.median * 0.25)
+        case .averageTurn: max(2, median * 0.4)
+        case .longestTurn: max(20, median * 0.25)
         case .cutInsPerHour, .cutOffsPerHour: 2
         case .responseGap: 0.7
         }
