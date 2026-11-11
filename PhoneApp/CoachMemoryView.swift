@@ -7,7 +7,8 @@ struct CoachMemoryView: View {
     @Environment(PhoneStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     /// Development hook for screenshots: `MOSSAD_COACH_PAGE` opens a page.
-    @State private var path: [String] = PhoneStore.hook("MOSSAD_COACH_PAGE").map { [$0] } ?? []
+    @State private var path: [String] = PhoneStore.hook("MOSSAD_COACH_PAGE").flatMap { CoachMemoryView.pages.contains($0) ? [$0] : nil } ?? []
+    private static let pages = ["findings", "goals", "weekly", "knowledge", "settings"]
 
     var body: some View {
         NavigationStack(path: $path) {

@@ -55,12 +55,8 @@ struct CoachGoalsPage: View {
             Text("No call had a chance for it yet. Each review says how the call went on it.")
                 .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
         } else {
+            // The dots and the count are in the goal above: here each call, the newest first.
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 10) {
-                    FocusDots(results: focus.results)
-                    Text(hits(focus)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                }
-                .padding(.bottom, Space.s)
                 ForEach(focus.results.reversed(), id: \.callID) { r in
                     HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                         Text(day(r.date)).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary).frame(width: 52, alignment: .leading)

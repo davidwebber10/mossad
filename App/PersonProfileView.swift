@@ -27,8 +27,8 @@ struct PersonProfileView: View {
     /// note when the people store is off.
     private var confirmed: [CoachFact] {
         let coach = controller.shownCoachProfile, saved = controller.shownCoachPeople
-        if let id = saved.id(of: profile.name) { return coach.learnings(about: id, people: saved) }
-        return coach.learnings(named: profile.name)
+        let byID = saved.id(of: profile.name).map { coach.learnings(about: $0, people: saved) } ?? []
+        return byID.isEmpty ? coach.learnings(named: profile.name) : byID
     }
 
     var body: some View {

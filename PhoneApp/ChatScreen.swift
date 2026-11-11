@@ -12,7 +12,8 @@ struct ChatScreen: View {
     @State private var steps: [String] = []
     @State private var error: FriendlyError? = PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample)
     @State private var showChats = false
-    @State private var showMemory = false
+    /// Development hook for screenshots: `MOSSAD_COACH_PAGE` (with `MOSSAD_TAB=chat`) opens Coach on that page.
+    @State private var showMemory = PhoneStore.hook("MOSSAD_COACH_PAGE") != nil
     @FocusState private var focused: Bool
 
     private var chat: Chat { chatID.flatMap { id in store.chats.first { $0.id == id } } ?? draft }
