@@ -84,7 +84,7 @@ async function gate(env: Env, id: string): Promise<Gate> {
   try {
     row = await env.DB.prepare('SELECT pin_hash, pin_set FROM shares WHERE id = ?').bind(id).first();
   } catch (error) {
-    if (/no such column/i.test(error instanceof Error ? error.message : String(error))) return { hash: null, set: 0, locked: false };
+    if (/no such column: pin_hash/i.test(error instanceof Error ? error.message : String(error))) return { hash: null, set: 0, locked: false };
     throw error;
   }
   if (!row?.pin_hash) return { hash: null, set: 0, locked: false };
@@ -134,8 +134,11 @@ async function sharePath(request: Request, env: Env, ctx: ExecutionContext, url:
   if (!action && (method === 'GET' || method === 'HEAD')) {
     // The owner's app opens a link with a mark, so the owner's own visits stay out of the count.
     const mark = url.searchParams.get('owner');
-    const owner = mark ? await ownerCookie(env, mark, id) : null;
-    if (owner) return new Response(null, { status: 302, headers: privateHeaders({ Location: `/${token}`, 'Set-Cookie': owner }) });
+    // A mark leaves the address in each case, also one that is refused, so it stays out of the history.
+    if (mark !== null) {
+      const owner = await ownerCookie(env, mark, id);
+      return new Response(null, { status: 302, headers: privateHeaders({ Location: `/${token}`, ...(owner ? { 'Set-Cookie': owner } : {}) }) });
+    }
     if (!open) return pin.locked ? html((n) => lockedPage(n), 403) : html((n) => pinPage(n, token), 401);
     const extra = new Headers();
     if (method === 'GET' && !isPreview(request.headers.get('User-Agent') ?? '') && !isPrefetch(request)) {

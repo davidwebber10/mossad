@@ -246,7 +246,7 @@ struct ShareDetailPane: View {
                         Button("Remove PIN") { setPIN(nil) }.buttonStyle(SettingsTextButtonStyle(color: Palette.secondary, weight: .medium))
                     }
                     if let locked = row.lockedText() { note("\(locked). A new PIN opens it again.", color: Palette.recording) }
-                    else if let wrongText { note(wrongText) }
+                    if let wrongText { note(wrongText) }
                 }
             }
             .disabled(working)
@@ -254,8 +254,11 @@ struct ShareDetailPane: View {
     }
 
     private var wrongText: String? {
-        guard let wrong = row.remote?.wrongPins, wrong > 0 else { return nil }
-        return "\(wrong == 1 ? "1 wrong PIN counts" : "\(wrong) wrong PINs count") against this PIN. 30 lock the page; one is forgotten each day."
+        let wrong = row.remote?.wrongPins ?? 0, total = row.remote?.wrongPinsTotal ?? 0
+        guard wrong > 0 || total > 0 else { return nil }
+        var text = "\(wrong == 1 ? "1 wrong PIN counts" : "\(wrong) wrong PINs count") against this PIN now. 30 lock the page; one is forgotten each day."
+        if total > 0 { text += " \(total) in all since this PIN was made; 100 lock it for good." }
+        return text
     }
 
     // MARK: Expiry

@@ -22,9 +22,12 @@ public struct ServerShare: Equatable, Identifiable, Sendable {
     public var pinSet: Int64?
     /// When too many wrong PINs locked the share.
     public var lockedAt: Date?
+    /// Wrong PINs over the life of this PIN, which never fade. 100 lock it for good.
+    public var wrongPinsTotal: Int?
 
     public init(id: String, title: String, created: Date, expires: Date?, views: Int, questions: Int, viewers: Int?, firstView: Date?, lastView: Date?,
-                pin: Bool?, pinLocked: Bool?, wrongPins: Int?, gone: Bool?, earlierViews: Int? = nil, pinSet: Int64? = nil, lockedAt: Date? = nil) {
+                pin: Bool?, pinLocked: Bool?, wrongPins: Int?, gone: Bool?, earlierViews: Int? = nil, pinSet: Int64? = nil, lockedAt: Date? = nil,
+                wrongPinsTotal: Int? = nil) {
         self.id = id
         self.title = title
         self.created = created
@@ -41,6 +44,7 @@ public struct ServerShare: Equatable, Identifiable, Sendable {
         self.earlierViews = earlierViews
         self.pinSet = pinSet
         self.lockedAt = lockedAt
+        self.wrongPinsTotal = wrongPinsTotal
     }
 
     init?(_ json: [String: Any]) {
@@ -49,7 +53,8 @@ public struct ServerShare: Equatable, Identifiable, Sendable {
                   views: (json["views"] as? NSNumber)?.intValue ?? 0, questions: (json["questions"] as? NSNumber)?.intValue ?? 0,
                   viewers: (json["viewers"] as? NSNumber)?.intValue, firstView: Self.date(json["firstView"]), lastView: Self.date(json["lastView"]),
                   pin: json["pin"] as? Bool, pinLocked: json["pinLocked"] as? Bool, wrongPins: (json["wrongPins"] as? NSNumber)?.intValue, gone: json["gone"] as? Bool,
-                  earlierViews: (json["earlierViews"] as? NSNumber)?.intValue, pinSet: (json["pinSet"] as? NSNumber)?.int64Value, lockedAt: Self.date(json["lockedAt"]))
+                  earlierViews: (json["earlierViews"] as? NSNumber)?.intValue, pinSet: (json["pinSet"] as? NSNumber)?.int64Value, lockedAt: Self.date(json["lockedAt"]),
+                  wrongPinsTotal: (json["wrongPinsTotal"] as? NSNumber)?.intValue)
     }
 
     /// The server writes its own times with milliseconds, and keeps an expiry as the app sent it, without.

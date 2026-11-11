@@ -328,11 +328,15 @@ describe('views of a share', () => {
     await visit(w, `/${token}`, { cookie: jar });
     await visit(w, `/${token}.md`, { cookie: jar });
     expect((await row(w)).views).toBe(0);
-    // A mark made with another secret, or an old one, is no mark: the visit counts.
-    const wrong = await visit(w, `/${token}?owner=${await ownerMark('guess', id, Math.floor(Date.now() / 1000) + 300)}`);
-    expect(wrong.status).toBe(200);
-    const old = await visit(w, `/${token}?owner=${await ownerMark('owner-secret', id, Math.floor(Date.now() / 1000) - 5)}`);
-    expect(old.status).toBe(200);
+    // A mark made with another secret, or an old one, is no mark: it goes from the address, gives no cookie, and the
+    // visit that follows counts.
+    for (const bad of [await ownerMark('guess', id, Math.floor(Date.now() / 1000) + 300), await ownerMark('owner-secret', id, Math.floor(Date.now() / 1000) - 5)]) {
+      const r = await visit(w, `/${token}?owner=${bad}`);
+      expect(r.status).toBe(302);
+      expect(r.headers.get('Location')).toBe(`/${token}`);
+      expect(r.headers.getSetCookie()).toEqual([]);
+      await visit(w, `/${token}`);
+    }
     expect((await row(w)).views).toBe(2);
   });
 });
@@ -404,7 +408,7 @@ describe('the owner API for shares', () => {
     const body = (await (await api(w, 'GET', 'shares')).json()) as { shares: unknown[] };
     expect(body.shares).toEqual([{ id, title: 'Budget review', created: '2026-11-05T18:00:00.000Z', expires: '2026-12-01T00:00:00Z', audio: 0, chat: 0,
       views: 0, questions: 0, viewers: 0, earlierViews: 0, firstView: null, lastView: null, pin: true, pinSet: Date.parse('2026-11-05T18:00:00Z'),
-      pinLocked: false, lockedAt: null, wrongPins: 0, gone: false }]);
+      pinLocked: false, lockedAt: null, wrongPins: 0, wrongPinsTotal: 0, gone: false }]);
   });
 
   it('changes the expiry on the row and in the copy, so the link stops or goes on', async () => {
@@ -614,7 +618,9 @@ describe('review fixes', () => {
     await share(w, otherID);
     const at = Math.floor(Date.now() / 1000) + 300;
     expect((await visit(w, `/${other}?owner=${await ownerMark('owner-secret', otherID, at)}`)).status).toBe(302);
-    expect((await visit(w, `/${token}?owner=${await ownerMark('owner-secret', otherID, at)}`)).status).toBe(200);
+    const refused = await visit(w, `/${token}?owner=${await ownerMark('owner-secret', otherID, at)}`);
+    expect(refused.status).toBe(302);
+    expect(refused.headers.getSetCookie()).toEqual([]);
   });
 
   it('keeps no address in the count of wrong secrets', async () => {
@@ -627,5 +633,58 @@ describe('review fixes', () => {
   it('answers HEAD on the home page as GET does', async () => {
     const w = world();
     expect((await handleShareHost(new Request(`${host}/`, { method: 'HEAD' }), w.env, w.ctx))!.status).toBe(200);
+  });
+});
+
+describe('second review fixes', () => {
+  const list = async (w: World) => ((await (await api(w, 'GET', 'shares')).json()) as { shares: Record<string, unknown>[] }).shares;
+  const hours = (n: number) => vi.setSystemTime(Date.now() + n * 3_600_000);
+
+  it('lets wrong PINs that come more often than once a day still fade one a day', async () => {
+    const w = world();
+    await share(w);
+    await setPIN(w, '4821');
+    for (let i = 0; i < 20; i++) await enter(w, '0000', { ip: `198.51.100.${i}` });
+    for (let k = 1; k <= 8; k++) {
+      hours(12);
+      expect((await enter(w, '0000', { ip: `192.0.2.${k}` })).status).toBe(401);
+    }
+    // 28 wrong PINs in 4 days, less 4 forgotten.
+    expect((await list(w))[0]).toMatchObject({ wrongPins: 24, wrongPinsTotal: 28, pinLocked: false });
+  });
+
+  it('locks a PIN for good after a lifetime of wrong tries that never fades, and counts a reader who then got it right out', async () => {
+    const w = world();
+    await share(w);
+    await setPIN(w, '4821');
+    const before = pinPolicy.lifetimeTries;
+    pinPolicy.lifetimeTries = 12;
+    try {
+      // A reader who mistypes and then enters the right PIN does not count.
+      await enter(w, '0000', { ip: '203.0.113.50' });
+      expect((await enter(w, '4821', { ip: '203.0.113.50' })).status).toBe(303);
+      for (let i = 0; i < 10; i++) await enter(w, '0000', { ip: `198.51.100.${i}` });
+      hours(24 * 20);
+      expect((await list(w))[0]).toMatchObject({ wrongPins: 0, wrongPinsTotal: 10, pinLocked: false });
+      expect((await enter(w, '0000', { ip: '192.0.2.1' })).status).toBe(401);
+      expect((await enter(w, '0000', { ip: '192.0.2.2' })).status).toBe(403);
+      expect((await enter(w, '4821', { ip: '192.0.2.3' })).status).toBe(403);
+      hours(24 * 300);
+      expect((await list(w))[0]).toMatchObject({ pinLocked: true, wrongPinsTotal: 12 });
+      // A new PIN starts again.
+      const fresh = await setPIN(w);
+      expect((await list(w))[0]).toMatchObject({ pinLocked: false, wrongPinsTotal: 0 });
+      expect((await enter(w, fresh, { ip: '192.0.2.3' })).status).toBe(303);
+    } finally { pinPolicy.lifetimeTries = before; }
+  });
+
+  it('opens a database with no PIN column, and refuses one that has the PIN but lacks another column the gate reads', async () => {
+    const w = world();
+    await share(w);
+    await setPIN(w, '4821');
+    w.db.raw.exec('ALTER TABLE shares DROP COLUMN pin_set');
+    const r = await visit(w, `/${token}`);
+    expect(r.status).toBe(503);
+    expect(await r.text()).not.toContain('Budget review');
   });
 });

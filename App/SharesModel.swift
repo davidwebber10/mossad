@@ -84,7 +84,7 @@ enum ShareSample {
         ServerShare(id: l.id, title: l.title, created: l.created, expires: l.expires, views: views, questions: questions, viewers: viewers,
                     firstView: first.map { now.addingTimeInterval($0 * day) }, lastView: last.map { now.addingTimeInterval($0 * day) },
                     pin: pin, pinLocked: locked != nil, wrongPins: wrong, gone: gone, earlierViews: earlier,
-                    lockedAt: locked.map { now.addingTimeInterval($0 * day) })
+                    lockedAt: locked.map { now.addingTimeInterval($0 * day) }, wrongPinsTotal: pin ? max(wrong, wrong * 3) : nil)
     }
 
     static let remote: [ServerShare] = [

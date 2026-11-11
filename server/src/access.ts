@@ -18,6 +18,11 @@ export const pinPolicy = {
    * months. A lock does not wear off. Slow on purpose: someone with many addresses gains one guess a day.
    */
   shareForgetHours: 24,
+  /**
+   * Wrong PINs over the life of one PIN, from all visitors, that never fade: at this count the PIN is locked for
+   * good, until the owner makes a new one. It bounds a slow guesser with many addresses at 1% of the PINs.
+   */
+  lifetimeTries: 100,
   /** How long a pass lasts after the right PIN. */
   passSeconds: 12 * 3600,
   /**
@@ -116,13 +121,27 @@ export async function takeTry(env: Env, id: string, client: string, now = Date.n
     const row = await env.DB.prepare('SELECT locked_until FROM share_pin_tries WHERE share_id = ? AND client = ?').bind(id, client).first<{ locked_until: number }>();
     return { allowed: false, locked: false, seconds: Math.max(1, Math.ceil(((row?.locked_until ?? now) - now) / 1000)) };
   }
-  const kept = `max(0, fails - CAST((? - updated) / ? AS INTEGER))`;
+  // The share's count fades one a day. `updated` moves on by whole days only, so wrong PINs that come more often
+  // than once a day still fade; at a lock it is the time of the lock, which the owner sees.
+  const days = `CAST((? - updated) / ? AS INTEGER)`;
+  const kept = `max(0, fails - ${days})`;
   const all = await env.DB.prepare(`INSERT INTO share_pin_tries (share_id, client, fails, locked_until, updated) VALUES (?, '', 1, 0, ?)
-      ON CONFLICT(share_id, client) DO UPDATE SET fails = ${kept} + 1, locked_until = CASE WHEN ${kept} + 1 >= ? THEN ? ELSE 0 END, updated = ?
+      ON CONFLICT(share_id, client) DO UPDATE SET fails = ${kept} + 1,
+        locked_until = CASE WHEN ${kept} + 1 >= ? THEN ? ELSE 0 END,
+        updated = CASE WHEN ${kept} + 1 >= ? THEN ? ELSE updated + ${days} * ? END
       WHERE locked_until <= ?
       RETURNING fails`)
-    .bind(id, now, now, forgetMs(), now, forgetMs(), p.shareTries, forever, now, now).first<{ fails: number }>();
+    .bind(id, now, now, forgetMs(), now, forgetMs(), p.shareTries, forever, now, forgetMs(), p.shareTries, now, now, forgetMs(), forgetMs(), now)
+    .first<{ fails: number }>();
   if (!all) return { allowed: false, locked: true };
+  // The count over the life of the PIN, in its own row ('*' is never a client key): it never fades.
+  const life = await env.DB.prepare(`INSERT INTO share_pin_tries (share_id, client, fails, locked_until, updated) VALUES (?, '*', 1, 0, ?)
+      ON CONFLICT(share_id, client) DO UPDATE SET fails = fails + 1, updated = ?
+      RETURNING fails`).bind(id, now, now).first<{ fails: number }>();
+  if ((life?.fails ?? 0) >= p.lifetimeTries) {
+    await env.DB.prepare(`UPDATE share_pin_tries SET locked_until = ?, updated = ? WHERE share_id = ? AND client = ''`).bind(forever, now, id).run();
+    return { allowed: true, left: 0 };
+  }
   return { allowed: true, left: Math.max(0, p.freeTries - mine.fails) };
 }
 
@@ -146,7 +165,9 @@ export async function afterWrong(env: Env, id: string, client: string, now = Dat
 /** After the right PIN: the visitor's wrong tries are forgotten, and no longer count against the share. */
 export async function afterRight(env: Env, id: string, client: string): Promise<void> {
   const mine = await env.DB.prepare('DELETE FROM share_pin_tries WHERE share_id = ? AND client = ? RETURNING fails').bind(id, client).first<{ fails: number }>();
-  await env.DB.prepare(`UPDATE share_pin_tries SET fails = max(0, fails - ?), locked_until = 0 WHERE share_id = ? AND client = ''`).bind(mine?.fails ?? 1, id).run();
+  const n = mine?.fails ?? 1;
+  await env.DB.prepare(`UPDATE share_pin_tries SET fails = max(0, fails - ?), locked_until = 0 WHERE share_id = ? AND client = ''`).bind(n, id).run();
+  await env.DB.prepare(`UPDATE share_pin_tries SET fails = max(0, fails - ?) WHERE share_id = ? AND client = '*'`).bind(n, id).run();
 }
 
 // MARK: Cookies

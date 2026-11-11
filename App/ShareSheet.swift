@@ -27,6 +27,11 @@ struct ShareSheet: View {
     @State private var closed = false
     @State private var error: FriendlyError?
     @State private var copied: String?
+    /// The server's word on the link's PIN: the sheet shows the PIN only when the server confirms it.
+    @State private var remote: ServerShare?
+    @State private var answered = false
+    /// The PIN call of the Share in this sheet just answered, which confirms the PIN.
+    @State private var justSet = false
     @State private var confirmStop = false
 
     /// Development hook for screenshots, in a preview: MOSSAD_SHARE=none is the state with no server, =new the
@@ -81,6 +86,36 @@ struct ShareSheet: View {
         draft = ShareDraft(existing: link, hasRecording: controller.hasRecording(record))
         if Self.preview == "pin" { draft.pinOn = true }
         phase = link != nil && !startInSettings ? .result : .settings
+        if link != nil { Task { await askServer() } }
+    }
+
+    private var pinCheck: SharePINCheck {
+        guard let link else { return .none }
+        if Self.preview != nil { return link.pin.map { .confirmed($0) } ?? .none }
+        return SharePINCheck.state(link: link, remote: remote, answered: answered, justSet: justSet)
+    }
+
+    /// The PIN to show and to copy: only one that the server confirmed.
+    private var shownPIN: String? { if case .confirmed(let pin) = pinCheck { pin } else { nil } }
+
+    private func askServer() async {
+        guard Self.preview == nil, let link else { return }
+        answered = false
+        remote = nil
+        if controller.serverHasShareNumbers, let c = controller.serverConnection {
+            remote = try? await ServerClient(c).shareDetail(shareID: link.id).share
+        }
+        answered = true
+    }
+
+    private var pinNote: String? {
+        switch pinCheck {
+        case .checking: "Checking the PIN with your server…"
+        case .changed: "This link has a PIN that this Mac does not know. Make a new PIN on the Shares page to copy it."
+        case .locked: "The link is locked by too many wrong PINs. Make a new PIN on the Shares page."
+        case .unanswered: "Your server did not answer, so the PIN cannot be shown. The Shares page shows it when the server answers."
+        case .none, .confirmed: nil
+        }
     }
 
     // MARK: No server
@@ -188,7 +223,7 @@ struct ShareSheet: View {
                 if let url = url(link) {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(url.absoluteString).lineLimit(1).truncationMode(.middle)
-                        if let pin = link.pin { Text("PIN: \(pin)") }
+                        if let pin = shownPIN { Text("PIN: \(pin)") }
                     }
                     .font(.system(size: 12, design: .monospaced))
                     .textSelection(.enabled)
@@ -196,22 +231,28 @@ struct ShareSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel(link.pin == nil ? "The link" : "The link and the PIN, as they are copied")
+                    .accessibilityLabel(shownPIN == nil ? "The link" : "The link and the PIN, as they are copied")
 
                     HStack(spacing: 8) {
-                        Button { put(ShareMessage.text(url: url, pin: link.pin), as: "all") } label: {
-                            Label { Text(copied == "all" ? "Copied" : link.pin == nil ? "Copy link" : "Copy link and PIN") }
+                        Button { put(ShareMessage.text(url: url, pin: shownPIN), as: "all") } label: {
+                            Label { Text(copied == "all" ? "Copied" : shownPIN == nil ? "Copy link" : "Copy link and PIN") }
                                 icon: { IconImage(copied == "all" ? .checkSmall : .link, size: 13) }
                                 .labelStyle(.titleAndIcon)
                         }
                         .buttonStyle(.sheetPrimary)
-                        if link.pin != nil {
+                        if shownPIN != nil {
                             Button(copied == "link" ? "Copied" : "Copy link only") { put(url.absoluteString, as: "link") }
                                 .buttonStyle(.sheetSecondary)
                                 .help("To send the PIN another way")
                         }
                     }
                     .padding(.top, 10)
+                }
+                if let pinNote {
+                    Text(pinNote)
+                        .font(.system(size: 11.5)).foregroundStyle(pinCheck == .locked ? Palette.recording : Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 12)
                 }
                 Text(facts(link))
                     .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
@@ -235,7 +276,7 @@ struct ShareSheet: View {
         let parts = [o.summary ? "the summary" : nil, o.transcript ? "the transcript" : nil, o.recording ? "the recording" : nil].compactMap { $0 }
         let shows = "Shows \(ListFormatter.localizedString(byJoining: parts))."
         let until = link.expires.map { "Works until \($0.formatted(date: .long, time: .omitted))." } ?? "Works until you stop it."
-        let pin = link.pin == nil ? "" : " The PIN is not part of the link: send it with the link, or another way."
+        let pin = shownPIN == nil ? "" : " The PIN is not part of the link: send it with the link, or another way."
         return "\(shows) \(until)\(pin)"
     }
 
@@ -257,6 +298,7 @@ struct ShareSheet: View {
         error = nil
         closed = false
         let first = link == nil
+        let before = link?.pinSet
         sharing = Task {
             defer { working = false; sharing = nil }
             do {
@@ -267,11 +309,13 @@ struct ShareSheet: View {
                     return
                 }
                 link = made
+                justSet = made.pinSet != nil && made.pinSet != before
+                if !justSet { Task { await askServer() } }
                 draft = ShareDraft(existing: made, hasRecording: controller.hasRecording(record))
                 done = first ? "Link created" : "Changes saved"
                 phase = .result
                 // A new link goes to the clipboard at once, with its PIN when it has one.
-                if first, let url = controller.shareURL(made) { put(ShareMessage.text(url: url, pin: made.pin), as: "all") }
+                if first, let url = controller.shareURL(made) { put(ShareMessage.text(url: url, pin: shownPIN), as: "all") }
             } catch {
                 if closed || error is CancellationError || (error as? URLError)?.code == .cancelled {
                     Log.info("A share was cancelled when its sheet closed")

@@ -24,8 +24,8 @@ extension AppController {
     /// Makes or updates the link for a meeting with these options and this PIN (nil for none), and returns it.
     /// Nothing is kept on this Mac until the server has the meeting and, when asked for, the PIN.
     /// `fromNow` counts the days from today also when the choice of days is the one the link had.
-    /// A new link that fails or is cancelled part way is taken off the server again, so nothing stays open there
-    /// that this Mac does not list.
+    /// A share that fails or is cancelled part way follows `ShareAttempt`: a new link is taken off the server
+    /// again, and an existing one keeps the larger set of what it showed and what was sent.
     func share(_ record: CallRecord, options: ShareOptions, pin: String?, existing: MeetingLink?, fromNow: Bool = false) async throws -> MeetingLink {
         guard let c = serverConnection else { throw ServerError.wrongSecret }
         let now = Date()
@@ -40,10 +40,11 @@ extension AppController {
         let audio = options.recording ? try await recordingFile(record) : nil
         try Task.checkCancellation()
         let client = ServerClient(c)
-        var sent = false
+        var started = false
         do {
+            // From here the server may have the new copy, also when the upload of the recording then stops.
+            started = true
             let serverHasPIN = try await client.putShare(link, meeting: meeting, audio: audio)
-            sent = true
             try Task.checkCancellation()
             // Also when the PIN is the one this Mac holds: a row that the server lost comes back with no PIN.
             if SharePINStep.needed(wanted: pin, held: existing?.pin, serverHasPIN: serverHasPIN) {
@@ -57,34 +58,35 @@ extension AppController {
             }
             try Task.checkCancellation()
         } catch {
-            // A new link must not stay open without the PIN that its owner asked for, or after its sheet closed.
-            // An existing one keeps what the server now has.
-            if existing == nil { abandon(link) } else if sent { keep(link) }
+            // A request that was stopped here, or that got no answer, may still land on the server.
+            let cancelled = Task.isCancelled || error is CancellationError || error is URLError
+            switch ShareAttempt.outcome(isNew: existing == nil, started: started, cancelled: cancelled) {
+            case .nothing: break
+            case .keep: if let existing { keep(ShareAttempt.kept(old: existing, attempted: link)) }
+            case .abandon(let after): abandon(link, after: after)
+            }
             throw error
         }
         keep(link)
         return link
     }
 
-    /// Takes a new link off the server, in its own task so a cancelled share can still do it. If the server cannot
-    /// be told now, the link is kept marked to stop, and the next sync tries again; it is never listed as a share.
-    func abandon(_ link: MeetingLink) {
-        guard let c = serverConnection else { return }
+    /// Takes a new link off the server again. It is kept marked to stop, so it is never listed, and the stop goes
+    /// through the same retries as any other: after `after` seconds (so a cancelled request cannot land after the
+    /// delete), then after each sync until the server confirms.
+    func abandon(_ link: MeetingLink, after: TimeInterval) {
+        keep(link)
+        shareBook.markStopping(token: link.token, after: Date().addingTimeInterval(after))
+        saveShares()
         Task {
-            do { try await ServerClient(c).deleteShare(link) } catch {
-                Log.error("A new share link could not be taken off the server yet; it is tried again after the next sync: \(error)")
-                keep(link)
-                shareBook.markStopping(token: link.token, after: Date())
-                saveShares()
-            }
+            try? await Task.sleep(for: .seconds(after + 0.2))
+            retryShareStops()
         }
     }
 
     /// A new link that this Mac kept just as its sheet closed: off the list and off the server, as if never made.
     func abandonKept(_ link: MeetingLink) {
-        shareBook.remove(link.token)
-        saveShares()
-        abandon(link)
+        if case .abandon(let after) = ShareAttempt.outcome(isNew: true, started: true, cancelled: false) { abandon(link, after: after) }
     }
 
     /// Sets a new PIN on a link, or removes it with nil. The server keeps a hash; this Mac keeps the PIN for its owner.
