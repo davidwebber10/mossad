@@ -25,6 +25,13 @@ final class GoogleConnector: ObservableObject {
     }
     /// Counts sign-ins and sign-outs, so views read the session again.
     @Published private(set) var version = 0
+    /// Old notes: how far back to look, the plan that was found, its cap in dollars, and the import's progress.
+    @Published var pastDays = 90
+    @Published var pastPlan: [GeminiImport.Item]?
+    @Published var pastCap = 2.0
+    @Published var pastSearching = false
+    @Published var pastImport: (done: Int, total: Int)?
+    @Published var pastResult: String?
 
     init() {
         let saved = UserDefaults.standard.stringArray(forKey: "googleScopes")
@@ -39,6 +46,9 @@ final class GoogleConnector: ObservableObject {
     }
 
     var busy: Bool { phase == .signingIn || phase == .checking }
+
+    /// The line about the plan, with its cost and the cap, as the step shows it and the log keeps it.
+    var pastLine: String? { pastPlan.map { GeminiImport.estimateLine($0, cap: pastCap) } }
 
     func changed() { version += 1 }
 }
@@ -158,6 +168,80 @@ extension AppController {
                 UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "googleDirectoryRead")
                 if changed > 0 { self.refreshPeopleReferences() }
             }
+        }
+    }
+
+    // MARK: Gemini notes
+
+    /// Every 15 minutes, for the last 2 days: the notes of meetings that ended become notes-only meetings, or the
+    /// second source of a recorded one. Never while a call records; nothing without Calendar and Docs.
+    func runGeminiCheck() {
+        guard !isInert, google.has(.calendar), google.has(.docs), !googleRunning, let pipeline else { return }
+        let lastSeconds = UserDefaults.standard.object(forKey: "geminiLastCheck") as? Double
+        guard GeminiImport.isDue(last: lastSeconds.map(Date.init(timeIntervalSince1970:)), now: Date(), recording: isRecording) else { return }
+        googleRunning = true
+        let runner = GeminiRunner(session: google, pipeline: pipeline, paths: paths)
+        let owner = ownerName, ownerNames = library.identity?.people.ownerNames ?? []
+        Task {
+            defer { googleRunning = false }
+            let now = Date()
+            guard let events = await runner.events(from: now.addingTimeInterval(-GeminiImport.recentWindow), to: now) else { return }
+            UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "geminiLastCheck")
+            let items = GeminiImport.plan(events: events, records: meetings, now: now)
+            guard !items.isEmpty, !isRecording else { return }
+            let outcome = await runner.run(items, ownerName: owner, ownerNames: ownerNames)
+            Log.info("Gemini notes: \(outcome.made) made, \(outcome.attached) added to recordings, \(outcome.failed) to try again")
+            refresh()
+        }
+    }
+
+    /// Finds the past meetings with notes in the chosen days, and says what an import would cost.
+    func findPastNotes() {
+        let connector = googleConnector
+        guard !isInert, google.has(.calendar), google.has(.docs), !connector.pastSearching, let pipeline else { return }
+        connector.pastSearching = true
+        connector.pastResult = nil
+        let runner = GeminiRunner(session: google, pipeline: pipeline, paths: paths), days = connector.pastDays
+        Task {
+            let now = Date()
+            let events = await runner.events(from: now.addingTimeInterval(-Double(days) * 86_400), to: now)
+            connector.pastSearching = false
+            guard let events else {
+                connector.pastResult = "Mossad could not read your Google calendar. Press Check above."
+                return
+            }
+            connector.pastPlan = GeminiImport.plan(events: events, records: meetings, now: now)
+            if let line = connector.pastLine { Log.info("Gemini notes, last \(days) days: \(line)") }
+        }
+    }
+
+    /// Imports the plan within the cap, the newest first, one meeting at a time. Not while a call records.
+    func importPastNotes() {
+        let connector = googleConnector
+        guard let plan = connector.pastPlan, connector.pastImport == nil, !isRecording, let pipeline else { return }
+        let items = GeminiImport.capped(plan, dollars: connector.pastCap)
+        guard !items.isEmpty else { return }
+        Log.info("Gemini notes: importing \(items.count) of \(plan.count), about \(String(format: "$%.2f", GeminiImport.estimate(items)))")
+        let runner = GeminiRunner(session: google, pipeline: pipeline, paths: paths)
+        let owner = ownerName, ownerNames = library.identity?.people.ownerNames ?? []
+        connector.pastImport = (0, items.count)
+        Task {
+            var total = GeminiRunner.Outcome()
+            for (i, item) in items.enumerated() {
+                // A call that starts waits for nothing: the rest goes on after it.
+                while isRecording { try? await Task.sleep(for: .seconds(30)) }
+                let o = await runner.run([item], ownerName: owner, ownerNames: ownerNames)
+                total.made += o.made
+                total.attached += o.attached
+                total.failed += o.failed
+                connector.pastImport = (i + 1, items.count)
+                refresh()
+            }
+            connector.pastImport = nil
+            connector.pastPlan = nil
+            connector.pastResult = "Imported \(total.made) \(total.made == 1 ? "meeting" : "meetings") and added notes to \(total.attached) recorded."
+                + (total.failed > 0 ? " \(total.failed) could not be read now." : "")
+            Log.info("Gemini notes: \(connector.pastResult ?? "")")
         }
     }
 

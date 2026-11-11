@@ -36,6 +36,11 @@ struct GoogleSettings: View {
             SettingsGroup(label: "What Mossad reads", footer: "A part you turn off is asked for no more at the next Check.") {
                 GooglePartRows()
             }
+            if controller.googleConnected, connector.scopes.contains(.calendar), connector.scopes.contains(.docs) {
+                SettingsGroup(label: "Gemini notes", footer: "Every 15 minutes Mossad looks at the meetings of the last 2 days. A meeting you did not record becomes a meeting with Gemini's transcript and Mossad's own summary, marked \"Gemini notes\". A recorded meeting keeps its own transcript and gets the link. Meetings you declined are left out. The coach does not review these meetings.") {
+                    GooglePastNotesRows()
+                }
+            }
             if !controller.googleConnected || connector.phase != .idle {
                 SettingsGroup(label: "Your account") { GoogleAudienceRow() }
                 SettingsGroup(label: "In Google Cloud") { GoogleGuideRows() }
@@ -272,5 +277,56 @@ struct GooglePartRows: View {
     private func detail(_ scope: GoogleScope) -> String {
         let pending = controller.googleConnected && controller.google.scopes.contains(scope) != controller.googleConnector.scopes.contains(scope)
         return scope.detail + (pending ? " Press Check to apply." : "")
+    }
+}
+
+/// Old notes: how far back, what was found and what it costs, the cap, and Import.
+struct GooglePastNotesRows: View {
+    @EnvironmentObject var controller: AppController
+    @Environment(\.rowStyle) private var style
+
+    var body: some View {
+        let c = controller.googleConnector
+        ChoiceRow(title: "Old notes", detail: "Import the notes of past meetings once. Mossad's summary costs about $0.02 a meeting, billed to your AI provider.") {
+            HStack(spacing: Space.s) {
+                FillPicker(title: "How far back", selection: Binding(get: { c.pastDays }, set: { c.pastDays = $0; c.pastPlan = nil }),
+                           choices: [(30, "Last 30 days"), (90, "Last 90 days"), (180, "Last 6 months"), (365, "Last year")])
+                Button {
+                    controller.findPastNotes()
+                } label: {
+                    if c.pastSearching { ProgressView().controlSize(.small).frame(width: 40) } else { Text("Look") }
+                }
+                .rowButton()
+                .disabled(c.pastSearching || c.pastImport != nil)
+            }
+        }
+        if let line = c.pastLine {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(line).font(.system(size: style.detailSize)).foregroundStyle(Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                HStack(spacing: Space.s) {
+                    Text("Spend at most").font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
+                    TextField("Cap", value: Binding(get: { c.pastCap }, set: { c.pastCap = max(0, $0) }), format: .currency(code: "USD"))
+                        .textFieldStyle(SheetFieldStyle())
+                        .frame(width: 90)
+                        .accessibilityLabel("The most to spend on summaries")
+                    Spacer()
+                    if let progress = c.pastImport {
+                        Text("Importing \(progress.done) of \(progress.total)").font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
+                    } else {
+                        let count = GeminiImport.capped(c.pastPlan ?? [], dollars: c.pastCap).count
+                        Button("Import \(count)") { controller.importPastNotes() }
+                            .rowButton(accent: true)
+                            .disabled(count == 0 || controller.isRecording)
+                    }
+                }
+            }
+            .padding(.vertical, style.padding)
+        }
+        if let result = c.pastResult {
+            Text(result).font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
+                .padding(.vertical, style.padding)
+        }
     }
 }

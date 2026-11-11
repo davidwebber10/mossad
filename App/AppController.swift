@@ -327,7 +327,7 @@ final class AppController: ObservableObject {
     /// The calendar the app and the pipeline read: Google for the Google calendar, the Mac for the rest.
     let calendar: MergedCalendarSource
     let notifier = Notifier()
-    private var pipeline: Pipeline!
+    var pipeline: Pipeline!
     /// Used only on `CaptureQueue.queue`, except its meters, sinks, and track durations, which any thread can read.
     private nonisolated let recorder: CallRecorder
     private var window: NSWindow?
@@ -621,6 +621,10 @@ final class AppController: ObservableObject {
             }
             upcomingTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.refreshUpcoming() }
+            }
+            // The Gemini notes of meetings that ended: a light read every 15 minutes, never while a call records.
+            googleTimer = Timer.scheduledTimer(withTimeInterval: GeminiImport.checkEvery, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.runGeminiCheck() }
             }
             housekeeping = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
                 Task(priority: .utility) { await self?.runHousekeeping() }

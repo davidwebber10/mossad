@@ -57,7 +57,8 @@ public enum PersonStatistics {
             guard !names.isEmpty else { continue }
             var talk: [String: TimeInterval] = [:]
             var total: TimeInterval = 0
-            for u in r.utterances {
+            // A notes-only meeting has placed times, not heard ones: it counts as a meeting, with no talk time.
+            for u in r.utterances where !r.isNotesOnly {
                 let seconds = max(0, u.end - u.start)
                 total += seconds
                 if let name = r.speakerNames[u.speakerKey] { talk[name, default: 0] += seconds }

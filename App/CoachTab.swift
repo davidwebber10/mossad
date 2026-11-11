@@ -25,6 +25,9 @@ struct CoachTab: View {
         let review = controller.shownCoachReview(record.id)
         if let review {
             content(review)
+        } else if record.isNotesOnly {
+            EmptyState(symbol: "doc.text", title: "No review for Gemini notes",
+                       message: "Mossad did not record this meeting, and you may not have been in it. The coach reviews only your recorded calls.")
         } else if !controller.coachEnabled {
             EmptyState(symbol: "person.wave.2", title: "The coach is off",
                        message: "Turn on the communication coach in Settings. After a call it leaves one line with its proof, or nothing.")

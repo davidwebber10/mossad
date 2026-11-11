@@ -163,7 +163,8 @@ public struct AnalyticsReport: Sendable {
         var people: [String: PersonTime] = [:]
         var platforms: [String: Slice] = [:], kinds: [String: Slice] = [:], tags: [String: Slice] = [:]
         for r in records {
-            for u in r.utterances {
+            // A notes-only meeting has placed times: no talk time and no share.
+            for u in r.utterances where !r.isNotesOnly {
                 let d = max(0, u.end - u.start)
                 speech += d
                 if r.speakerNames[u.speakerKey] == owner { mine += d }
@@ -172,8 +173,10 @@ public struct AnalyticsReport: Sendable {
             for name in Set(r.speakerNames.values) where name != owner {
                 people[name, default: PersonTime(name: name, seconds: 0, calls: 0)].seconds += length(r)
                 people[name]!.calls += 1
-                people[name]!.mySpeech += exchange.speech(owner)
-                people[name]!.theirSpeech += exchange.speech(name)
+                if !r.isNotesOnly {
+                    people[name]!.mySpeech += exchange.speech(owner)
+                    people[name]!.theirSpeech += exchange.speech(name)
+                }
                 people[name]!.lastMet = max(people[name]!.lastMet ?? r.start, r.start)
             }
             platforms[r.platform.displayName, default: Slice(name: r.platform.displayName, seconds: 0, calls: 0)].seconds += length(r)

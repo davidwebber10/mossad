@@ -110,7 +110,10 @@ private struct MeetingAnalyticsPage: View {
                 if a.baselines.meeting.context != nil || a.baselines.schedule != nil || a.baselines.trends != nil {
                     MeetingAnalyticsGroup("Against the usual") { UsualSection(analytics: a, record: record) }
                 }
-                if !a.speakers.isEmpty {
+                if !a.speakers.isEmpty, a.byWords {
+                    // Gemini's notes give the words, not when each was said: no talk time, pace, or flow.
+                    MeetingAnalyticsGroup("Words") { WordsSection(analytics: a, people: people, callID: record.id) }
+                } else if !a.speakers.isEmpty {
                     MeetingAnalyticsGroup("Talk time") { TalkTimeSection(analytics: a, people: people, callID: record.id) }
                     MeetingAnalyticsGroup("Conversation flow") { FlowSection(analytics: a, people: people, callID: record.id, long: record.isLong) }
                     MeetingAnalyticsGroup("Delivery") { DeliverySection(analytics: a, people: people, callID: record.id) }
@@ -215,7 +218,11 @@ private struct MeetingFigures: View {
             Figure(title: "People who spoke", value: "\(a.speakers.count)", detail: peopleDetail, change: nil,
                    mark: mark(m[.voices], .voices, m.context, above: "more", below: "fewer"))
             if let share = a.ownerShare {
-                Figure(title: "Your talk share", value: percentText(share), detail: shareDetail, change: nil, mark: shareMark)
+                if a.byWords {
+                    Figure(title: "Your share of the words", value: percentText(share), detail: "by words, from Gemini's notes", change: nil, mark: nil)
+                } else {
+                    Figure(title: "Your talk share", value: percentText(share), detail: shareDetail, change: nil, mark: shareMark)
+                }
             }
             if let decisions = a.facts.values[.decisions], let items = a.facts.values[.actionItems] {
                 Figure(title: "Decisions · action items", value: "\(Int(decisions)) · \(Int(items))", detail: outcomesDetail, change: nil, mark: nil)
@@ -406,5 +413,57 @@ private struct TrendLine: View {
         .hairline(.top)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title), \(value) in this call, over \(points.count - 1) earlier \(points.count == 2 ? "meeting" : "meetings") and this call")
+    }
+}
+
+// MARK: Words
+
+/// A meeting made from Gemini's notes: each person's words, their share by words, their questions, and their
+/// turns. The times of the lines are placed, so nothing here is by time.
+private struct WordsSection: View {
+    let analytics: MeetingAnalytics
+    let people: MeetingPeople
+    let callID: String
+
+    var body: some View {
+        let a = analytics
+        let peak = max(a.speakers.map(\.words).max() ?? 1, 1)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("By words. This meeting was not recorded: its transcript is Gemini's, so there is no talk time, pace, or flow.")
+                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Spacer().frame(width: 150)
+                    Spacer()
+                    Text("Words").frame(width: 70, alignment: .trailing)
+                    Text("Share").frame(width: 54, alignment: .trailing)
+                    Text("Questions").frame(width: 70, alignment: .trailing)
+                    Text("Turns").frame(width: 50, alignment: .trailing)
+                }
+                .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.tertiary)
+                .padding(.bottom, 4)
+                ForEach(a.speakers) { s in
+                    let speaker = people.speaker(forKey: s.id)
+                    HStack(spacing: 12) {
+                        SpeakerCell(speaker: speaker, name: s.name, callID: callID).frame(width: 150, alignment: .leading)
+                        Capsule().fill(Palette.fill)
+                            .overlay(alignment: .leading) {
+                                GeometryReader { g in Capsule().fill(speaker?.color ?? Palette.bar).frame(width: max(6, g.size.width * Double(s.words) / Double(peak))) }
+                            }
+                            .frame(height: 8)
+                            .accessibilityHidden(true)
+                        Text(s.words.formatted()).frame(width: 70, alignment: .trailing)
+                        Text(percentText(s.share)).frame(width: 54, alignment: .trailing)
+                        Text("\(s.questions)").frame(width: 70, alignment: .trailing)
+                        Text("\(s.turns)").frame(width: 50, alignment: .trailing)
+                    }
+                    .font(.system(size: 12.5)).monospacedDigit().foregroundStyle(Palette.secondary)
+                    .padding(.vertical, 7)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(s.name): \(s.words) words, \(percentText(s.share)) of the words, \(s.questions) questions, \(s.turns) turns")
+                }
+            }
+        }
     }
 }

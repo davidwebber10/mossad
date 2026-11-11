@@ -154,6 +154,9 @@ public struct MeetingAnalytics: Sendable, Equatable {
         public var estimated: Bool
     }
 
+    /// True for a meeting made from Gemini's notes: each person's share is their part of the words, and every
+    /// number that needs real times (pace, turns' length, pauses, cut-ins, the floor) is nil.
+    public let byWords: Bool
     /// The length of the recording, or the end of the last line when that is later.
     public let duration: TimeInterval
     public let speechSeconds: TimeInterval
@@ -190,12 +193,15 @@ public struct MeetingAnalytics: Sendable, Equatable {
                 history: [MeetingFacts] = [], value: (String) -> MeetingValue.Rating? = { _ in nil },
                 people: PersonDirectory = PersonDirectory(), commitments: [Commitment] = []) {
         let voices = Voices(record: r, owner: owner)
+        byWords = voices.byWords
         duration = voices.duration
         speechSeconds = voices.speechSeconds
         speakers = voices.speakers
         flow = voices.flow
-        ownerShare = speakers.first(where: \.isOwner).flatMap { $0.seconds > 0 ? $0.share : nil }
-        floor = Self.floor(voices.lanes, duration: duration)
+        let words = voices.byWords
+        ownerShare = speakers.first(where: \.isOwner).flatMap { words ? ($0.words > 0 ? $0.share : nil) : ($0.seconds > 0 ? $0.share : nil) }
+        // The times of a notes-only meeting are placed, not heard: no strip of who held the floor.
+        floor = byWords ? [] : Self.floor(voices.lanes, duration: duration)
 
         participation = Self.participation(r, speakers: speakers, people: people)
         outcomes = Self.outcomes(r, speakers: speakers, commitments: commitments)
@@ -205,7 +211,8 @@ public struct MeetingAnalytics: Sendable, Equatable {
         var facts = MeetingFacts(record: r, owner: owner, voices: voices)
         facts.values[.value] = review?.value.map { Double($0.rating.level) }
         self.facts = facts
-        baselines = Baselines(facts, speakers: speakers, flow: flow, record: r, history: history, value: value)
+        // Shares by words are not comparable with the shares by time of other meetings.
+        baselines = Baselines(facts, speakers: speakers, flow: flow, record: r, history: byWords ? [] : history, value: value)
     }
 }
 
@@ -220,8 +227,10 @@ extension MeetingAnalytics {
         let speechSeconds: TimeInterval
         let speakers: [Speaker]
         let flow: Flow?
+        let byWords: Bool
 
         init(record r: CallRecord, owner: String) {
+            byWords = r.isNotesOnly
             let names = MarkdownWriter.displayNames(r)
             let lanes = SpeakerLanes.make(r, names: names, ownerName: owner)
             self.lanes = lanes
@@ -245,7 +254,23 @@ extension MeetingAnalytics {
             MeetingAnalytics.delivery(lines, into: &speakers)
             let turns = Flow.turns(lines)
             MeetingAnalytics.turnNumbers(turns, into: &speakers)
-            flow = lines.isEmpty ? nil : MeetingAnalytics.flow(lines, turns: turns, speakers: &speakers)
+            if byWords {
+                // Only what the words give: the words, the questions, and the number of turns.
+                let words = speakers.reduce(0) { $0 + $1.words }
+                speakers = speakers.map { s in
+                    var s = s
+                    s.share = words > 0 ? Double(s.words) / Double(words) : 0
+                    s.wordsPerMinute = nil
+                    s.fillersPerMinute = nil
+                    s.averageTurn = 0
+                    s.longestTurn = nil
+                    s.firstQuestion = nil
+                    return s
+                }
+                flow = nil
+            } else {
+                flow = lines.isEmpty ? nil : MeetingAnalytics.flow(lines, turns: turns, speakers: &speakers)
+            }
             self.speakers = speakers
         }
     }

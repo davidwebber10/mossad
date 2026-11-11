@@ -292,6 +292,12 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var screens: [SharedScreen]?
     /// Pauses of the screen capture next to a share session, shown as lines of the transcript.
     public var screenGaps: [ScreenGap]?
+    /// Where the meeting came from when it was not recorded: "geminiNotes" for a meeting made from its Gemini notes,
+    /// with no audio. Nil for a recording.
+    public var source: String?
+    /// The meeting's "Notes by Gemini" document: the source of a notes-only meeting, or a second source of a recorded
+    /// one. Nil when there is none.
+    public var gemini: GeminiNotesRef?
     /// The file names of screens the owner deleted. The text step drops them from `frames.json` if they are still
     /// there (a failed save, a run that was reading at that moment), so a deleted screen never comes back.
     public var deletedScreens: [String]?
@@ -416,7 +422,41 @@ extension CallRecord {
         screens = try c.decodeIfPresent([SharedScreen].self, forKey: .screens)
         screenGaps = try c.decodeIfPresent([ScreenGap].self, forKey: .screenGaps)
         deletedScreens = try c.decodeIfPresent([String].self, forKey: .deletedScreens)
+        source = try c.decodeIfPresent(String.self, forKey: .source)
+        gemini = try c.decodeIfPresent(GeminiNotesRef.self, forKey: .gemini)
     }
+}
+
+/// A meeting's Gemini notes document, as Mossad read it.
+public struct GeminiNotesRef: Codable, Equatable, Sendable {
+    /// The Google Doc's id, which makes each document one import.
+    public var docID: String
+    public var title: String
+    public var url: URL?
+    /// The calendar event the document was attached to.
+    public var eventID: String?
+    public var imported: Date
+    /// Gemini's own notes as plain text, for a meeting with no transcript of its own.
+    public var notes: String?
+
+    public init(docID: String, title: String, url: URL?, eventID: String?, imported: Date, notes: String?) {
+        self.docID = docID
+        self.title = title
+        self.url = url
+        self.eventID = eventID
+        self.imported = imported
+        self.notes = notes
+    }
+}
+
+extension CallRecord {
+    public static let geminiNotesSource = "geminiNotes"
+
+    /// A meeting made from its Gemini notes: no audio, no voices, and nobody's numbers by time.
+    public var isNotesOnly: Bool { source == Self.geminiNotesSource }
+
+    /// The words the lists show for a meeting that was not recorded; nil for a recording.
+    public var sourceLabel: String? { isNotesOnly ? "Gemini notes" : nil }
 }
 
 extension CallRecord {

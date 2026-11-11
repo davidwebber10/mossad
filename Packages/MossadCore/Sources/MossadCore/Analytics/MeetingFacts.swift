@@ -118,6 +118,8 @@ public struct MeetingFacts: Sendable, Equatable {
 
     /// A voice counts for the setting with at least this much speech and this part of the talk.
     static let mainSeconds: TimeInterval = 10
+    /// The same for a notes-only meeting, by words: about 10 seconds of speech.
+    static let mainWords = 25
     static let mainShare = 0.02
     static func isMain(seconds: TimeInterval, share: Double) -> Bool { seconds >= mainSeconds && share >= mainShare }
 
@@ -169,6 +171,23 @@ public struct MeetingFacts: Sendable, Equatable {
         attendees = r.attendees
         invitees = r.invitees
         let hours = max(v.duration / 3600, Self.minimumHours)
+        guard !v.byWords else {
+            // A notes-only meeting is in the history by its size, its people, and its outcomes. Nobody's numbers: shares
+            // by words and counts from placed times do not compare with a recording's.
+            let main = v.speakers.filter { $0.words >= Self.mainWords && $0.share >= Self.mainShare }
+            mainVoices = main.count
+            mainNames = main.map { $0.isUnknown ? nil : $0.name }
+            people = v.speakers.filter { !$0.isUnknown && $0.words > 0 }.map { s in
+                Person(name: s.name, personID: r.speakerPeople?[s.id], isOwner: s.isOwner, isMain: s.words >= Self.mainWords && s.share >= Self.mainShare, values: [:])
+            }
+            var values: [MeetingMetric: Double] = [.length: max(0, r.end.timeIntervalSince(r.start)), .voices: Double(v.speakers.count)]
+            if r.summary != nil {
+                values[.decisions] = Double(r.decisions.count)
+                values[.actionItems] = Double(r.actionItems.count)
+            }
+            self.values = values
+            return
+        }
         people = v.speakers.filter { !$0.isUnknown && $0.seconds > 0 }.map { s in
             var values: [PersonMetric: Double] = [.talkShare: s.share, .questionsPerHour: Double(s.questions) / hours]
             // A typical turn from a few turns is noise, here and in the history.

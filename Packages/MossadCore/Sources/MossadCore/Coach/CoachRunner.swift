@@ -37,8 +37,9 @@ public actor CoachRunner {
 
     static func pending(_ records: [CallRecord], owner: String, since: Date, reviewed: Set<String>) -> [CallRecord] {
         records.filter { r in
-            // A call where only others spoke still gets a review: whether it needed the owner is worth knowing.
-            r.status == .written && r.start >= since && !reviewed.contains(r.id) && !r.utterances.isEmpty
+            // A call where only others spoke still gets a review: whether it needed the owner is worth knowing. A meeting
+            // made from Gemini's notes has no voice to review, and the owner may not have been in it.
+            r.status == .written && r.start >= since && !reviewed.contains(r.id) && !r.utterances.isEmpty && !r.isNotesOnly
         }.sorted { $0.start < $1.start }
     }
 

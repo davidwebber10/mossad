@@ -510,6 +510,38 @@ public actor Pipeline {
         return changed
     }
 
+    /// Makes a notes-only meeting from Gemini's notes and runs its steps: the summary, the note, and what follows.
+    /// False when a meeting with this id exists: an import never replaces one.
+    @discardableResult
+    public func importNotes(_ record: CallRecord) async -> Bool {
+        let dir = paths.callDirectory(record.id)
+        guard !FileManager.default.fileExists(atPath: dir.path) else { return false }
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try store(record, dir: dir)
+        } catch {
+            Log.error("Gemini notes: \(record.id) was not saved: \(error)")
+            return false
+        }
+        Log.info("Gemini notes: made \(record.id) with \(record.utterances.count) lines")
+        await process(record.id)
+        return true
+    }
+
+    /// Gives a recorded meeting its Gemini notes as a second source. The note gets the link when it is written.
+    /// False when the meeting has notes already or cannot be read.
+    @discardableResult
+    public func attachNotes(callID: String, _ notes: GeminiNotesRef) -> Bool {
+        guard var r = edit(callID, { r in
+            guard r.gemini == nil else { return false }
+            r.gemini = notes
+            return true
+        }) else { return false }
+        save(&r, dir: paths.callDirectory(callID))
+        Log.info("Gemini notes: \(callID) has its Gemini notes as a second source")
+        return true
+    }
+
     /// Deletes a finished or failed call: its note, audio, and record. A call that is still recording or
     /// processing is refused, so the pipeline never writes into a folder that is gone.
     public func delete(callID: String) -> Bool { remove(callID: callID) != nil }
@@ -730,7 +762,8 @@ public actor Pipeline {
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
-        if quietRuns[r.id] == nil {
+        // A notes-only meeting was made from its invite.
+        if quietRuns[r.id] == nil, !r.isNotesOnly {
             detail(r.id, "Finding the calendar invite")
             let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
             if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
@@ -852,7 +885,9 @@ public actor Pipeline {
         // note does not wait for it: the app makes the missing recording when no call records
         // (`Recording.backfill`), and until then the player mixes the two tracks.
         let plan = await heavy.plan(.recordingEncode, callID: r.id)
-        if plan == .wait {
+        if r.isNotesOnly {
+            // No audio: nothing to make.
+        } else if plan == .wait {
             Log.info("A call records; the recording of \(r.id) is made later")
         } else {
             detail(r.id, "Making the recording")

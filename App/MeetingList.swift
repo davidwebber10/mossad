@@ -235,6 +235,7 @@ private struct MeetingRow: View {
                     Text("\(record.start.formatted(date: .omitted, time: .shortened)) · \(record.platform.shortName)")
                         .foregroundStyle(Palette.secondary)
                         .layoutPriority(1)
+                    if let source = record.sourceLabel { SourceMark(text: source).padding(.leading, 6).layoutPriority(1) }
                     status
                 }
                 .font(.system(size: 12))

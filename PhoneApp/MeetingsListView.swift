@@ -226,6 +226,7 @@ struct PhoneMeetingRow: View {
                         .multilineTextAlignment(.leading)
                     Text(detail).textRole(.secondary).foregroundStyle(Palette.secondary)
                         .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
+                    if let source = record.source { SourceMark(text: source).padding(.top, 3) }
                     if record.unnamed > 0 {
                         let n = record.unnamed
                         NeedsYouChip(text: n == 1 ? "1 voice needs a name" : "\(n) voices need names").padding(.top, 4)
@@ -262,6 +263,8 @@ struct MeetingRow: Identifiable, Equatable, Sendable {
     let speakers: Int
     /// Voices the Mac waits on the owner to name, once the notes are written.
     let unnamed: Int
+    /// "Gemini notes" for a meeting made from its notes; nil for a recording.
+    let source: String?
 
     init(_ r: CallRecord) {
         id = r.id
@@ -271,6 +274,7 @@ struct MeetingRow: Identifiable, Equatable, Sendable {
         end = r.end
         speakers = Set(r.utterances.map(\.speakerKey)).count
         unnamed = r.status == .written ? r.unknownSpeakers.count : 0
+        source = r.sourceLabel
     }
 }
 

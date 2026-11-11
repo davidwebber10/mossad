@@ -92,6 +92,9 @@ public enum MarkdownWriter {
         ]
         if let kind = r.kind { lines.insert("kind: \(quoted(kind))", at: lines.count - 4) }
         if !r.tags.isEmpty { lines.insert("tags: [\(r.tags.map(quoted).joined(separator: ", "))]", at: lines.count - 4) }
+        // A meeting made from its Gemini notes has no audio: the folder holds its record only.
+        if let label = r.sourceLabel, let i = lines.firstIndex(where: { $0.hasPrefix("platform: ") }) { lines.insert("source: \(quoted(label))", at: i + 1) }
+        if let url = r.gemini?.url { lines.append("gemini_notes: \(quoted(url.absoluteString))") }
         lines += ["---", "# \(oneLine(r.title))", ""]
         if let summary = r.summary {
             lines += ["## Summary", "", summary, ""]
@@ -106,6 +109,8 @@ public enum MarkdownWriter {
                 lines += ["## Decisions", ""] + r.decisions.map { d in d.at.map { "- [\(timestamp($0))] \(d.text)" } ?? "- \(d.text)" } + [""]
             }
         }
+        // Gemini's own notes only when there is no transcript to summarize: otherwise Mossad's summary is the summary.
+        if r.utterances.isEmpty, let notes = r.gemini?.notes { lines += ["## Notes by Gemini", "", notes, ""] }
         lines += ["## Transcript", "", transcript(r), ""]
         return lines.joined(separator: "\n")
     }
