@@ -1,14 +1,14 @@
 {
  "id": "gold-11-4",
  "person": "Robin Hale",
- "title": "Vendor security review",
+ "title": "Internal tools roadmap",
  "tags": [
-  "Security",
-  "Vendors"
+  "Tools",
+  "Engineering"
  ],
  "setting": "one_on_one",
  "start": "2026-09-07T16:00:00Z",
- "end": "2026-09-07T16:13:19Z",
+ "end": "2026-09-07T16:12:12Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Robin Hale"
@@ -19,525 +19,513 @@
    "key": "me:A",
    "start": 0.0,
    "end": 4.6,
-   "text": "Thanks for making the time. Today is about the vendor security review."
+   "text": "Thanks for making the time. Today is about the internal tools roadmap."
   },
   {
    "key": "me:A",
    "start": 5.0,
-   "end": 13.0,
-   "text": "We could keep the pen test as it is for now and only change the access review in the first phase."
+   "end": 11.6,
+   "text": "The draft for the integration is in the folder, with comments from two teams on the backlog."
   },
   {
    "key": "me:A",
-   "start": 13.5,
+   "start": 12.7,
    "end": 21.6,
-   "text": "The access review numbers came in yesterday, and I put a short summary of the pen test in the shared folder."
+   "text": "I talked to the people who run the ticket every day, and they said the backlog is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 22.2,
-   "end": 29.9,
-   "text": "Last time we said we would clean up the questionnaire first, and that work is about two thirds done now."
+   "start": 22.9,
+   "end": 32.1,
+   "text": "So on the integration, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 33.2,
+   "end": 40.5,
+   "text": "The backlog numbers came in yesterday, and I put a short summary of the sprint in the shared folder."
   },
   {
    "key": "them:A",
-   "start": 30.3,
-   "end": 38.8,
-   "text": "I would like us to agree on the of the access review today, even if you know the questionnaire details come later."
+   "start": 42.0,
+   "end": 48.6,
+   "text": "We have three open questions on the integration, mostly timing and who signs off on the ticket."
   },
   {
    "key": "me:A",
-   "start": 39.7,
-   "end": 47.4,
-   "text": "We tested the pen test with a small group, and the audit log results were close to what we hoped."
+   "start": 49.7,
+   "end": 56.6,
+   "text": "There is a dependency on the sprint, so the release work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 48.1,
-   "end": 55.8,
-   "text": "There is a dependency on the access review, so the audit log work cannot really start until that is settled."
+   "start": 57.6,
+   "end": 64.1,
+   "text": "I think the sprint question is the main thing left before we can close out the ticket."
   },
   {
    "key": "me:A",
-   "start": 57.2,
-   "end": 66.4,
-   "text": "So on the questionnaire, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 65.4,
+   "end": 73.5,
+   "text": "One thing I noticed is that the sprint looks different in each region, so the integration plan may need two versions."
   },
   {
    "key": "them:A",
-   "start": 66.7,
-   "end": 76.7,
-   "text": "I talked to the people who run the questionnaire every day, I mean and they said the audit log is the part that slows them down."
+   "start": 74.6,
+   "end": 81.9,
+   "text": "If we you know wait a month on the sprint, the release timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 78.1,
-   "end": 86.2,
-   "text": "We could keep the access review as it is for now and only change the data retention in the first phase."
+   "start": 83.1,
+   "end": 91.1,
+   "text": "One thing I noticed is that the sprint looks different in each region, so the ticket plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 86.7,
-   "end": 94.8,
-   "text": "The data retention numbers came in yesterday, and I put a short summary of the access review in the shared folder."
-  },
-  {
-   "key": "me:A",
-   "start": 95.2,
-   "end": 104.0,
-   "text": "The feedback on the pen test has been mixed, some people like it and some say it adds steps to the audit log."
-  },
-  {
-   "key": "me:A",
-   "start": 105.1,
-   "end": 112.4,
-   "text": "The draft for the audit log is in the folder, with comments from two teams on the access review."
+   "start": 91.9,
+   "end": 99.2,
+   "text": "We could keep the release as it is for now and only change the ticket in the first phase."
   },
   {
    "key": "them:A",
-   "start": 113.8,
-   "end": 121.1,
-   "text": "The vendor sent an updated proposal for the data retention, and it changes the access review a little bit."
+   "start": 100.4,
+   "end": 108.5,
+   "text": "One thing I noticed is that the release looks different in each so the integration um plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 121.6,
-   "end": 129.3,
-   "text": "We tested the access review with a small group, and the data retention results were close to what we hoped."
+   "start": 108.9,
+   "end": 115.8,
+   "text": "There is a dependency on the sprint, so the release work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 129.7,
-   "end": 137.0,
-   "text": "I think the access review question is the main thing left before we can close out the pen test."
-  },
-  {
-   "key": "me:A",
-   "start": 137.9,
-   "end": 146.7,
-   "text": "One thing I noticed is that the pen test looks different in each region, so the access review plan may need two versions."
+   "start": 117.1,
+   "end": 126.0,
+   "text": "I talked to the people who run the sprint every day, and they said the integration is the part that slows them down."
   },
   {
    "key": "them:A",
-   "start": 147.2,
-   "end": 154.5,
-   "text": "We tested the questionnaire with a small group, and the access review results were close to what we hoped."
+   "start": 127.3,
+   "end": 135.4,
+   "text": "The sprint piece is moving, and the team has a draft of the integration changes ready for um review this week."
   },
   {
    "key": "me:A",
-   "start": 155.5,
-   "end": 162.8,
-   "text": "If we wait a month on the access review, the audit log timeline slips by about the same amount."
+   "start": 136.9,
+   "end": 144.9,
+   "text": "The feedback on the integration has been mixed, some people like it and some say it adds steps to the backlog."
   },
   {
    "key": "me:A",
-   "start": 163.3,
-   "end": 170.6,
-   "text": "The draft for the pen test is in the folder, with comments from two teams on the audit log."
+   "start": 146.3,
+   "end": 154.0,
+   "text": "Last time we said we would clean up the backlog first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 155.0,
+   "end": 163.1,
+   "text": "One thing I noticed is that the ticket looks different in each region, so the backlog plan may need two versions."
   },
   {
    "key": "them:A",
-   "start": 171.1,
-   "end": 178.4,
-   "text": "There is a dependency on the questionnaire, so the access review work cannot really start until that is settled."
+   "start": 163.6,
+   "end": 171.3,
+   "text": "We have three open questions on the integration, mostly about timing and who I mean signs off on the ticket."
   },
   {
    "key": "me:A",
-   "start": 179.4,
-   "end": 187.9,
-   "text": "The audit log piece is moving, and the team has a draft of the pen test changes ready for review this week."
+   "start": 171.6,
+   "end": 178.2,
+   "text": "If we wait a month on the sprint, the integration timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 188.7,
-   "end": 197.2,
-   "text": "I would like us to agree on the scope of the audit log today, even if the data retention details come later."
+   "start": 179.2,
+   "end": 186.1,
+   "text": "From what I can see, the backlog is on track, and the risk is mostly in the ticket."
   },
   {
    "key": "me:A",
-   "start": 198.1,
-   "end": 207.7,
-   "text": "So on the pen test, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 186.4,
+   "end": 194.1,
+   "text": "I would like us to agree on the scope of the sprint today, even if the backlog details come later."
   },
   {
    "key": "them:A",
-   "start": 208.0,
-   "end": 217.3,
-   "text": "I talked to the people who run the data retention every day, and they said the questionnaire is the part that slows them down."
+   "start": 194.9,
+   "end": 203.0,
+   "text": "The backlog numbers came in you know yesterday, and I put a short summary of the integration in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 218.6,
-   "end": 227.1,
-   "text": "The pen test piece is moving, and the team has a draft of the data retention changes ready for review this week."
+   "start": 203.7,
+   "end": 211.4,
+   "text": "Last time we said we would clean up the release first, and that work is about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 227.9,
-   "end": 235.2,
-   "text": "The vendor sent an updated proposal for the access review, and it changes the data retention a little bit."
+   "start": 212.3,
+   "end": 218.8,
+   "text": "If we wait a month on the backlog, the release timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 236.2,
-   "end": 243.8,
-   "text": "From what I can see, the pen test is on track, and the risk is mostly in the data retention."
+   "start": 219.8,
+   "end": 226.3,
+   "text": "The draft for the release is in the folder, with comments from two teams on the backlog."
   },
   {
    "key": "me:A",
-   "start": 245.1,
-   "end": 252.8,
-   "text": "We have three open questions on the access review, mostly about timing and who signs off on the pen test."
+   "start": 227.5,
+   "end": 235.5,
+   "text": "Here is the plan: we spend 40,000 on the sprint this quarter and the release changes follow in the next one."
   },
   {
    "key": "them:A",
-   "start": 254.1,
-   "end": 264.1,
-   "text": "So on the pen test, we looked at the last few weeks and uh the picture is mostly what we expected, with a couple of surprises."
+   "start": 236.7,
+   "end": 240.6,
+   "text": "Fine, decision made, we go with that option starting now."
   },
   {
    "key": "me:A",
+   "start": 241.2,
+   "end": 248.2,
+   "text": "We tested the ticket with a small group, and the integration results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 249.2,
+   "end": 257.3,
+   "text": "One thing I noticed is that the integration looks different in each region, so the backlog plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 258.6,
+   "end": 264.7,
+   "text": "The ask is simple: approve the release change so the backlog team can start next week."
+  },
+  {
+   "key": "them:A",
    "start": 265.2,
-   "end": 272.9,
-   "text": "We have three open questions on the audit log, mostly about timing and who signs off on the pen test."
+   "end": 270.2,
+   "text": "I disagree. That plan does not work for me, and here is why."
   },
   {
    "key": "me:A",
-   "start": 273.8,
-   "end": 282.2,
-   "text": "One thing I noticed is that the questionnaire looks different in each region, so the audit log plan may need two versions."
+   "start": 270.6,
+   "end": 277.5,
+   "text": "There is a dependency on the ticket, so the integration work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 282.6,
-   "end": 290.6,
-   "text": "We could keep the access review as it is for now and only change the data retention in the first phase."
+   "start": 278.0,
+   "end": 285.3,
+   "text": "We could keep the integration as it is for now and only change the backlog in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 285.9,
+   "end": 292.4,
+   "text": "The vendor sent an updated proposal for the integration, and it changes the sprint a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 292.8,
+   "end": 299.4,
+   "text": "I think the integration question is the main thing left before we can close out the backlog."
   },
   {
    "key": "them:A",
-   "start": 292.1,
-   "end": 300.9,
-   "text": "The data retention numbers came in yesterday, and I put a short summary of the audit I mean log in the shared folder."
+   "start": 299.9,
+   "end": 307.2,
+   "text": "From what I can see, the sprint um is on track, and the risk is mostly in the ticket."
   },
   {
    "key": "me:A",
-   "start": 302.1,
-   "end": 309.8,
-   "text": "We tested the access review with a small group, and the pen test results were close to what we hoped."
+   "start": 308.1,
+   "end": 314.7,
+   "text": "If we wait a month on the release, the integration timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 310.2,
-   "end": 319.8,
-   "text": "So on the data retention, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "me:A",
-   "start": 320.5,
-   "end": 327.4,
-   "text": "The draft for the audit log is in the folder, with comments from two teams on the questionnaire."
+   "start": 315.3,
+   "end": 321.5,
+   "text": "Right, and the release also touches the sprint, which is why I wanted everyone here today."
   },
   {
    "key": "them:A",
-   "start": 328.8,
-   "end": 338.8,
-   "text": "So on the access review, we looked at the last few weeks and the picture is mostly what we um expected, with a couple of surprises."
+   "start": 322.9,
+   "end": 329.8,
+   "text": "If we you know wait a month on the release, the backlog timeline slips about the same amount."
   },
   {
    "key": "me:A",
-   "start": 339.9,
-   "end": 347.6,
-   "text": "From what I can see, the data retention is on track, and the risk is mostly in the audit log."
+   "start": 330.2,
+   "end": 337.2,
+   "text": "We have three open questions on the sprint, mostly about timing and who signs off on the integration."
   },
   {
    "key": "me:A",
-   "start": 348.7,
-   "end": 356.0,
-   "text": "I think the audit log question is the main thing left before we can close out the pen test."
+   "start": 337.6,
+   "end": 345.3,
+   "text": "The ticket piece is moving, and the team has a draft of the backlog changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 346.3,
+   "end": 353.2,
+   "text": "We have three open questions on the integration, mostly about timing and who signs off on the backlog."
   },
   {
    "key": "them:A",
-   "start": 356.6,
-   "end": 364.7,
-   "text": "The questionnaire numbers came in yesterday, and uh I put a short summary of the data retention in the shared folder."
+   "start": 354.5,
+   "end": 363.3,
+   "text": "I talked to the people who run the release every day, and they said the backlog is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 365.8,
-   "end": 373.5,
-   "text": "From what I can see, the data retention is on track, and the risk is mostly in the access review."
+   "start": 363.9,
+   "end": 371.2,
+   "text": "We could keep the sprint as it is for now and only change the release in the first phase."
   },
   {
    "key": "me:A",
-   "start": 374.4,
-   "end": 382.1,
-   "text": "We tested the access review with a small group, and the data retention results were close to what we hoped."
+   "start": 372.4,
+   "end": 380.1,
+   "text": "I would like us to agree on the scope of the backlog today, even if the sprint details come later."
   },
   {
    "key": "them:A",
-   "start": 382.9,
-   "end": 389.4,
-   "text": "Right, and the pen test also touches the questionnaire, which is why I wanted everyone here today."
+   "start": 380.8,
+   "end": 387.4,
+   "text": "The draft for the integration is in the folder, with comments um two teams on the backlog."
   },
   {
    "key": "me:A",
-   "start": 390.3,
-   "end": 398.0,
-   "text": "We could keep the questionnaire as it is for now and only change the audit log in the first phase."
+   "start": 388.2,
+   "end": 394.7,
+   "text": "If we wait a month on the ticket, the integration timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 399.1,
-   "end": 406.4,
-   "text": "If we wait a month on the data retention, the access review timeline slips by about the same amount."
+   "start": 395.8,
+   "end": 403.1,
+   "text": "We could keep the integration as it is for now and only change the ticket in the first phase."
   },
   {
    "key": "them:A",
-   "start": 406.7,
-   "end": 414.8,
-   "text": "The questionnaire numbers came in yesterday, and I put a short summary of the audit um log in the shared folder."
+   "start": 403.6,
+   "end": 411.7,
+   "text": "We could keep the sprint as it is for now and only change the I mean ticket in the first phase."
   },
   {
    "key": "me:A",
-   "start": 415.3,
-   "end": 423.3,
-   "text": "Last time we said we would clean up the access review first, and that work is about two thirds done now."
+   "start": 413.0,
+   "end": 420.4,
+   "text": "We could keep the release as it is for now and only change the ticket in the first phase."
   },
   {
    "key": "me:A",
-   "start": 424.2,
-   "end": 432.6,
-   "text": "I would like us to agree on the scope of the access review today, even if the pen test details come later."
+   "start": 420.7,
+   "end": 427.2,
+   "text": "I think the backlog question is the main thing left before we can close out the sprint."
   },
   {
    "key": "them:A",
-   "start": 433.1,
-   "end": 440.0,
-   "text": "The vendor sent an proposal for the data retention, and it changes the pen test a little bit."
+   "start": 428.0,
+   "end": 435.3,
+   "text": "The ticket numbers came in yesterday, and I put a short summary of the release in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 440.5,
-   "end": 448.9,
-   "text": "The data retention piece is moving, and the team has a draft of the pen test changes ready for review this week."
+   "start": 436.1,
+   "end": 443.0,
+   "text": "From what I can see, the release is on track, and the risk is mostly in the sprint."
   },
   {
    "key": "me:A",
-   "start": 449.8,
-   "end": 456.8,
-   "text": "Right, and the pen test also touches the data retention, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 457.7,
-   "end": 465.0,
-   "text": "We tested the questionnaire with a small group, and the access review results were close to what we hoped."
+   "start": 443.8,
+   "end": 450.7,
+   "text": "We tested the sprint with a small group, and the release results were close to what we hoped."
   },
   {
    "key": "them:A",
-   "start": 465.8,
-   "end": 475.0,
-   "text": "So on the questionnaire, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 451.0,
+   "end": 457.6,
+   "text": "Right, and the integration also touches the ticket, which is why I you know everyone here today."
   },
   {
    "key": "me:A",
-   "start": 476.3,
-   "end": 484.4,
-   "text": "We could keep the audit log as it is for now and only change the access review in the first phase."
+   "start": 458.7,
+   "end": 466.1,
+   "text": "We could keep the ticket as it is for now and only change the backlog in the first phase."
   },
   {
    "key": "me:A",
-   "start": 485.0,
-   "end": 494.6,
-   "text": "So on the audit log, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "me:A",
-   "start": 496.0,
-   "end": 502.9,
-   "text": "The ask is simple: approve the data retention change so the pen test team can start next week."
+   "start": 466.9,
+   "end": 473.4,
+   "text": "If we wait a month on the release, the sprint timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 504.2,
-   "end": 509.6,
-   "text": "I disagree. That plan does not I mean for me, and here is why."
+   "start": 473.8,
+   "end": 480.7,
+   "text": "The ticket numbers came in yesterday, and I put a summary of the backlog in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 510.2,
-   "end": 519.1,
-   "text": "The feedback on the data retention has been mixed, some people like it and some say it adds steps to the audit log."
+   "start": 481.5,
+   "end": 489.1,
+   "text": "Last time we said we would clean up the sprint first, and that work is about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 519.9,
-   "end": 529.6,
-   "text": "So on the audit log, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 490.0,
+   "end": 497.7,
+   "text": "I would like us to agree on the scope of the sprint today, even if the integration details come later."
   },
   {
    "key": "them:A",
-   "start": 530.0,
-   "end": 538.5,
-   "text": "One thing I noticed is that the questionnaire looks different in each region, so the access review plan may need two versions."
+   "start": 498.7,
+   "end": 505.6,
+   "text": "The vendor sent um an updated proposal for the release, and it changes the integration a little bit."
   },
   {
    "key": "me:A",
-   "start": 539.6,
-   "end": 547.3,
-   "text": "We could keep the audit log as it is for now and only change the questionnaire in the first phase."
+   "start": 506.6,
+   "end": 514.3,
+   "text": "The release piece is moving, and the team has a draft of the integration changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 548.1,
-   "end": 556.9,
-   "text": "The feedback on the audit log has been mixed, some people like it and some say it adds steps to the data retention."
+   "start": 515.6,
+   "end": 521.8,
+   "text": "Right, and the integration also touches the release, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 522.3,
+   "end": 529.3,
+   "text": "We tested the ticket with a small group, and the sprint results were close to what we hoped."
   },
   {
    "key": "them:A",
-   "start": 557.3,
-   "end": 565.0,
-   "text": "The data retention numbers um came in yesterday, and put a short summary of the questionnaire in the shared folder."
+   "start": 529.8,
+   "end": 539.4,
+   "text": "So on the ticket, we looked at the last few weeks and the picture is mostly what we expected, with um a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 565.6,
-   "end": 572.5,
-   "text": "If we wait a month on the data retention, the questionnaire timeline slips by about the same amount."
+   "start": 540.9,
+   "end": 548.2,
+   "text": "We could keep the backlog as it is for now and only change the sprint in the first phase."
   },
   {
    "key": "me:A",
-   "start": 573.6,
-   "end": 580.5,
-   "text": "The vendor sent an updated proposal for the data retention, and it changes the questionnaire a little bit."
+   "start": 549.7,
+   "end": 558.9,
+   "text": "So on the backlog, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:A",
-   "start": 581.5,
-   "end": 589.6,
-   "text": "The pen test numbers came in yesterday, and I put a short summary of the audit log in the shared folder."
+   "start": 559.3,
+   "end": 566.6,
+   "text": "I think the integration I mean question is the main thing left before we can close out the release."
   },
   {
    "key": "me:A",
-   "start": 590.8,
-   "end": 598.9,
-   "text": "Last time we said we would clean up the data retention first, and that work is about two thirds done now."
+   "start": 568.0,
+   "end": 575.3,
+   "text": "We could keep the backlog as it is for now and only change the integration in the first phase."
   },
   {
    "key": "me:A",
-   "start": 599.5,
-   "end": 607.2,
-   "text": "We have three open questions on the data retention, mostly about timing and who signs off on the pen test."
+   "start": 576.4,
+   "end": 583.7,
+   "text": "We could keep the ticket as it is for now and only change the backlog in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 584.5,
+   "end": 593.4,
+   "text": "I talked to the people who run the ticket every day, and they said the sprint is the part that slows them down."
   },
   {
    "key": "them:A",
-   "start": 608.1,
-   "end": 617.3,
-   "text": "I would like us to agree on the scope you know of the access review today, even if the pen test details come later."
+   "start": 594.5,
+   "end": 601.1,
+   "text": "The draft for the sprint is in the folder, with comments um two teams on the integration."
   },
   {
    "key": "me:A",
-   "start": 618.4,
-   "end": 625.3,
-   "text": "If we wait a month on the data retention, the questionnaire timeline slips by about the same amount."
+   "start": 602.1,
+   "end": 608.7,
+   "text": "I think the integration question is the main thing left before we can close out the backlog."
   },
   {
    "key": "me:A",
-   "start": 626.0,
-   "end": 633.6,
-   "text": "We tested the audit log with a small group, and the data retention results were close to what we hoped."
+   "start": 609.9,
+   "end": 618.0,
+   "text": "The feedback on the backlog has been mixed, some people like it and some say it adds steps to the release."
   },
   {
    "key": "me:A",
-   "start": 635.0,
-   "end": 642.7,
-   "text": "From what I can see, the audit log is on track, and the risk is mostly in the pen test."
-  },
-  {
-   "key": "me:A",
-   "start": 644.0,
-   "end": 651.7,
-   "text": "There is a dependency on the data retention, so the access review work cannot really start until that is settled."
-  },
-  {
-   "key": "me:A",
-   "start": 652.6,
-   "end": 661.1,
-   "text": "I propose we change the access review next month and move about 20% of the work to the new audit log setup."
+   "start": 618.5,
+   "end": 625.8,
+   "text": "The ticket numbers came in yesterday, and I put a short summary of the sprint in the shared folder."
   },
   {
    "key": "them:A",
-   "start": 661.9,
-   "end": 665.0,
-   "text": "Right, no need to wait. We do it."
+   "start": 626.6,
+   "end": 636.2,
+   "text": "I talked to the people who run the integration every day, and they said the ticket is the you know part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 665.4,
-   "end": 673.5,
-   "text": "Last time we said we would clean up the access review first, and that work is about two thirds done now."
+   "start": 636.7,
+   "end": 644.4,
+   "text": "The sprint piece is moving, and the team has a draft of the release changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 674.1,
-   "end": 682.2,
-   "text": "The access review piece is moving, and the team has a draft of the questionnaire changes ready for review this week."
+   "start": 645.3,
+   "end": 652.6,
+   "text": "The integration numbers came in yesterday, and I put a short summary of the backlog in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 683.2,
-   "end": 692.5,
-   "text": "So on the questionnaire, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 653.5,
+   "end": 660.5,
+   "text": "From what I can see, the backlog is on track, and the risk is mostly in the ticket."
   },
   {
    "key": "them:A",
-   "start": 692.9,
-   "end": 701.0,
-   "text": "From what I see, the I mean pen test is on track, and the risk is mostly in the data retention."
+   "start": 661.3,
+   "end": 667.4,
+   "text": "Right, and the sprint also touches the backlog, which is why I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 701.8,
-   "end": 709.5,
-   "text": "From what I can see, the audit log is on track, and the risk is mostly in the data retention."
-  },
-  {
-   "key": "me:A",
-   "start": 710.7,
-   "end": 718.4,
-   "text": "There is a dependency on the pen test, so the data retention work cannot really start until that is settled."
-  },
-  {
-   "key": "me:A",
-   "start": 719.2,
-   "end": 726.9,
-   "text": "There is a dependency on the audit log, so the access review work cannot really start until that is settled."
-  },
-  {
-   "key": "them:A",
-   "start": 728.1,
-   "end": 735.0,
-   "text": "Right, and the pen test also touches the access review, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 735.7,
-   "end": 738.7,
-   "text": "Okay, I think that covers it. Thanks, everyone."
+   "start": 668.7,
+   "end": 672.1,
+   "text": "Good, let us pick this up next week. Thanks."
   }
  ],
  "beats": [
   {
-   "line": 57,
-   "person": "Robin Hale",
-   "dimension": "objection",
-   "value": "direct"
-  },
-  {
-   "line": 75,
+   "line": 28,
    "person": "Robin Hale",
    "dimension": "decision",
    "value": "in_the_room"
+  },
+  {
+   "line": 32,
+   "person": "Robin Hale",
+   "dimension": "objection",
+   "value": "direct"
   }
  ]
 }

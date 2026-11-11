@@ -108,7 +108,11 @@ struct PersonaTraitsView: View {
     @ViewBuilder
     private func moment(_ p: PersonaPointer, prefix: String) -> some View {
         if let url = p.link {
-            let day = date(p.callID).map { $0.formatted(.dateTime.month(.abbreviated).day()) } ?? "a call"
+            // The year when it is not this year: an old trait must not look new.
+            let day = date(p.callID).map { d in
+                Calendar.current.isDate(d, equalTo: Date(), toGranularity: .year) ? d.formatted(.dateTime.month(.abbreviated).day())
+                    : d.formatted(.dateTime.month(.abbreviated).day().year())
+            } ?? "a call"
             Link(destination: url) {
                 Label(prefix.isEmpty ? day : "\(prefix)\(day)", systemImage: prefix.isEmpty ? "play.circle" : "arrow.uturn.left.circle")
             }

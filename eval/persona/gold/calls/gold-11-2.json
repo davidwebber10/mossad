@@ -1,18 +1,18 @@
 {
  "id": "gold-11-2",
  "person": "Robin Hale",
- "title": "Warehouse scanner rollout",
+ "title": "Vendor security review",
  "tags": [
-  "Operations",
-  "Hardware"
+  "Security",
+  "Vendors"
  ],
  "setting": "group",
  "start": "2026-08-22T16:00:00Z",
- "end": "2026-08-22T16:13:48Z",
+ "end": "2026-08-22T16:13:29Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Robin Hale",
-  "them:B": "Ben Cole",
+  "them:B": "Ana Lopez",
   "them:C": "Tom Reyes"
  },
  "noise": true,
@@ -21,555 +21,525 @@
    "key": "me:A",
    "start": 0.0,
    "end": 4.6,
-   "text": "Thanks for making the time. Today is about the warehouse scanner rollout."
+   "text": "Thanks for making the time. Today is about the vendor security review."
   },
   {
-   "key": "me:A",
-   "start": 5.9,
+   "key": "them:C",
+   "start": 5.1,
    "end": 12.8,
-   "text": "The vendor sent an updated proposal for the dock door, and it changes the firmware a little bit."
-  },
-  {
-   "key": "them:B",
-   "start": 14.0,
-   "end": 21.3,
-   "text": "I think the training session question is the main thing left before we can close out the pick rate."
-  },
-  {
-   "key": "them:A",
-   "start": 21.9,
-   "end": 30.0,
-   "text": "There is a dependency on the dock door, so the um pick rate work cannot really start until that is settled."
-  },
-  {
-   "key": "them:B",
-   "start": 30.5,
-   "end": 38.2,
-   "text": "Last time we said we would clean up the firmware first, and that work is about two thirds done now."
+   "text": "From what I can see, the audit log is on track, and the risk is mostly in the pen test."
   },
   {
    "key": "them:C",
-   "start": 38.8,
-   "end": 46.5,
-   "text": "From what I can see, the training session is on track, and the risk is mostly in the dock door."
-  },
-  {
-   "key": "them:C",
-   "start": 47.2,
-   "end": 56.1,
-   "text": "I would like I mean us to agree on the scope of the training session even if the pick rate details come later."
+   "start": 13.8,
+   "end": 21.9,
+   "text": "I would like us to on the scope of the audit log today, even if the access review details come later."
   },
   {
    "key": "them:A",
-   "start": 57.0,
-   "end": 66.2,
-   "text": "I talked to the people who run the firmware every day, and they said the pick is the uh part that slows them down."
+   "start": 22.7,
+   "end": 32.3,
+   "text": "I talked to the people who run the data every day, and they said the um access review is the part that slows them down."
   },
   {
    "key": "them:B",
-   "start": 67.5,
-   "end": 76.0,
-   "text": "One thing I noticed is that the scanner looks different in region, uh so the dock door plan may need two versions."
+   "start": 33.0,
+   "end": 42.2,
+   "text": "One thing I noticed is that the I mean questionnaire looks different in each region, so the pen test plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 76.8,
-   "end": 83.3,
-   "text": "The draft for the firmware is in the folder, with comments from two teams on the scanner."
+   "start": 43.0,
+   "end": 49.9,
+   "text": "The draft for the data retention is in the folder, with comments from two teams on the questionnaire."
   },
   {
    "key": "them:A",
-   "start": 84.8,
-   "end": 91.3,
-   "text": "The draft for the firmware uh in the folder, with comments from two teams on the scanner."
+   "start": 51.3,
+   "end": 59.0,
+   "text": "The draft for the data you know retention is in the folder, with comments from two teams on the questionnaire."
   },
   {
    "key": "me:A",
-   "start": 92.0,
-   "end": 101.7,
-   "text": "So on the dock door, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 60.0,
+   "end": 69.6,
+   "text": "So on the pen test, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:B",
-   "start": 103.1,
-   "end": 110.4,
-   "text": "We tested the training session with a small group, and the scanner results were close to what we hoped."
+   "start": 70.1,
+   "end": 77.0,
+   "text": "We tested the audit log with a small group, the questionnaire results were close to what we hoped."
   },
   {
    "key": "them:B",
-   "start": 111.6,
-   "end": 120.1,
-   "text": "The firmware piece is moving, and the team has a draft of the pick uh rate changes ready for review this week."
+   "start": 78.3,
+   "end": 86.8,
+   "text": "The data retention piece is moving, and the team has a of uh the access review changes ready for review this week."
   },
   {
    "key": "them:A",
-   "start": 121.0,
-   "end": 129.5,
-   "text": "The feedback on the firmware has been mixed, some people like it and some say it adds steps to the pick rate."
+   "start": 87.6,
+   "end": 96.5,
+   "text": "The feedback on the data retention has been mixed, some people like it and some say it adds steps to the access review."
   },
   {
    "key": "them:C",
-   "start": 130.8,
-   "end": 138.5,
-   "text": "There is a dependency on the scanner, so uh the pick rate work cannot really start until that is settled."
+   "start": 97.1,
+   "end": 104.8,
+   "text": "There is a dependency you know on the questionnaire, so the access work cannot really start until that is settled."
   },
   {
    "key": "them:C",
-   "start": 138.9,
-   "end": 146.6,
-   "text": "If we wait a month on the pick rate, um the training session timeline slips by about the same amount."
+   "start": 106.0,
+   "end": 113.7,
+   "text": "If we wait a month on the access uh review, the audit log timeline slips by about the same amount."
   },
   {
    "key": "them:B",
-   "start": 147.6,
-   "end": 155.7,
-   "text": "The draft for the training session is in the folder, with you know comments from two teams on the dock door."
+   "start": 114.7,
+   "end": 122.0,
+   "text": "The draft for the audit log is in the folder, with comments from two teams on the pen test."
   },
   {
    "key": "me:A",
-   "start": 156.1,
-   "end": 163.0,
-   "text": "I think the training session question is the main thing left before we can close out the scanner."
+   "start": 123.3,
+   "end": 130.3,
+   "text": "I think the audit log question is the main thing left before we can close out the questionnaire."
   },
   {
    "key": "them:A",
-   "start": 164.0,
-   "end": 170.9,
-   "text": "We tested the firmware with a small group, and the pick rate results were close what we hoped."
+   "start": 130.6,
+   "end": 139.0,
+   "text": "We tested the data retention you know with a small group, and the access review results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 171.3,
-   "end": 178.6,
-   "text": "There is a dependency on the scanner, so the training session work cannot really start until that is settled."
+   "start": 140.1,
+   "end": 147.4,
+   "text": "There is a dependency on the questionnaire, so the audit log work cannot really start until that is settled."
   },
   {
    "key": "them:B",
-   "start": 179.1,
-   "end": 188.8,
-   "text": "One thing I noticed is that the dock I mean door looks different in each region, so the pick rate plan may need two versions."
+   "start": 148.4,
+   "end": 157.2,
+   "text": "One thing I noticed is that the pen test looks different in each region, so the access review plan may need two versions."
   },
   {
    "key": "them:C",
-   "start": 189.1,
-   "end": 196.0,
-   "text": "I think the scanner question is the main thing uh left before we can close out the door."
+   "start": 158.2,
+   "end": 165.9,
+   "text": "I think the questionnaire question is the main thing left before you know we can close out the pen test."
   },
   {
    "key": "them:A",
-   "start": 196.6,
-   "end": 204.7,
-   "text": "The draft for the dock door is in the folder, with you know comments from two teams on the training session."
+   "start": 166.3,
+   "end": 173.6,
+   "text": "The draft for the pen test is in the folder, with comments from two teams on the audit log."
   },
   {
    "key": "them:C",
-   "start": 205.3,
-   "end": 211.8,
-   "text": "Right, and the pick rate also touches the firmware, which is why I wanted everyone here today."
+   "start": 173.9,
+   "end": 180.8,
+   "text": "Right, and the access review also touches the data retention, which is why I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 212.6,
-   "end": 221.1,
-   "text": "The feedback on the dock door has been mixed, some people like it and some say it adds steps to the scanner."
+   "start": 182.3,
+   "end": 190.7,
+   "text": "The feedback on the pen test has been mixed, some people like it and some say it adds steps to the questionnaire."
   },
   {
    "key": "them:B",
-   "start": 221.9,
-   "end": 231.5,
-   "text": "One thing I noticed I mean is that the training session looks different in each region, so the dock door plan may need two versions."
+   "start": 191.5,
+   "end": 200.7,
+   "text": "One thing I noticed is that the audit log looks different in each region, so the uh pen test plan may need two versions."
   },
   {
    "key": "them:B",
-   "start": 232.8,
-   "end": 239.7,
-   "text": "The draft for the training session is in the folder, with comments from two teams on the scanner."
+   "start": 201.9,
+   "end": 209.2,
+   "text": "The draft you know for the audit log in the folder, with comments from two teams on the questionnaire."
   },
   {
    "key": "them:A",
-   "start": 240.1,
-   "end": 247.4,
-   "text": "We could keep the scanner as it is for now and only change the pick rate in the phase."
+   "start": 209.9,
+   "end": 217.6,
+   "text": "We could keep the questionnaire as it is for now and only change the access review in the first phase."
   },
   {
    "key": "them:C",
-   "start": 248.1,
-   "end": 255.8,
-   "text": "We have three open questions on the firmware, mostly about timing and who signs off uh on the pick rate."
+   "start": 218.5,
+   "end": 226.6,
+   "text": "We have three open questions on you know the data retention, mostly about timing and who signs on the access review."
   },
   {
    "key": "them:B",
-   "start": 257.0,
-   "end": 264.0,
-   "text": "The draft for the firmware is in the folder, with comments from two teams on the dock door."
+   "start": 228.0,
+   "end": 235.7,
+   "text": "The draft for the data retention is in the folder, with comments from uh two teams on the pen test."
   },
   {
    "key": "them:A",
-   "start": 265.3,
-   "end": 272.9,
-   "text": "There is a dependency on the training session, so um the scanner work cannot really start until that is settled."
+   "start": 236.8,
+   "end": 244.1,
+   "text": "There is a dependency on the audit log, so the questionnaire work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 273.8,
-   "end": 283.0,
-   "text": "So on the scanner, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 245.2,
+   "end": 254.4,
+   "text": "So on the questionnaire, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:C",
-   "start": 283.8,
-   "end": 290.7,
-   "text": "We have three open questions on the firmware, mostly about timing and who off on the training session."
+   "start": 254.9,
+   "end": 263.4,
+   "text": "We have I mean three open questions on the data retention, mostly about timing and who signs off on the audit log."
   },
   {
    "key": "them:A",
-   "start": 291.3,
-   "end": 297.8,
-   "text": "The draft for the firmware is in the folder, with comments from two teams on the scanner."
+   "start": 264.2,
+   "end": 271.1,
+   "text": "The draft for the data retention is in the folder, with comments from two teams on the questionnaire."
   },
   {
    "key": "me:A",
+   "start": 272.5,
+   "end": 279.8,
+   "text": "There is a dependency on the questionnaire, so the data retention work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 281.2,
+   "end": 288.1,
+   "text": "The draft for the data retention is in the folder, with comments from two teams on the questionnaire."
+  },
+  {
+   "key": "me:A",
+   "start": 289.0,
+   "end": 297.4,
+   "text": "The feedback on the pen test has been mixed, some people like it and some say it adds steps to the questionnaire."
+  },
+  {
+   "key": "them:A",
    "start": 298.7,
    "end": 305.6,
-   "text": "There is a dependency on the scanner, so the firmware work cannot really start until that is settled."
-  },
-  {
-   "key": "them:C",
-   "start": 306.4,
-   "end": 312.6,
-   "text": "The draft for the firmware is in the with comments from two teams on the scanner."
+   "text": "The draft for the questionnaire is in the folder, with comments from two teams on the audit log."
   },
   {
    "key": "me:A",
-   "start": 313.0,
-   "end": 321.4,
-   "text": "The feedback on the dock door has been mixed, some people like it and some say it adds steps to the scanner."
+   "start": 306.9,
+   "end": 316.5,
+   "text": "So on the data retention, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
-   "key": "them:A",
-   "start": 322.5,
-   "end": 329.0,
-   "text": "The draft for the scanner is in the folder, with from two teams on the training session."
+   "key": "them:C",
+   "start": 317.3,
+   "end": 325.0,
+   "text": "The vendor sent an updated proposal for the access review, and it um changes the audit log a little bit."
   },
   {
    "key": "me:A",
-   "start": 330.1,
-   "end": 339.3,
-   "text": "So on the firmware, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 325.9,
+   "end": 335.5,
+   "text": "So on the data retention, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 336.2,
+   "end": 343.9,
+   "text": "I would like us to agree on the scope of pen test today, even if the questionnaire details come later."
   },
   {
    "key": "them:C",
-   "start": 340.4,
-   "end": 347.7,
-   "text": "The vendor sent an updated proposal for the pick rate, and it changes the training session a little bit."
+   "start": 345.3,
+   "end": 354.5,
+   "text": "I talked to the people who run the questionnaire every day, and they said the data retention is the part that slows them down."
+  },
+  {
+   "key": "them:B",
+   "start": 355.1,
+   "end": 362.8,
+   "text": "The draft for the pen test is in the folder, with comments from um two teams on the access review."
+  },
+  {
+   "key": "them:B",
+   "start": 363.2,
+   "end": 370.9,
+   "text": "We have three open questions on the audit log, mostly about timing and who signs off on the data retention."
   },
   {
    "key": "me:A",
-   "start": 349.2,
-   "end": 358.4,
-   "text": "So on the firmware, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 371.2,
+   "end": 378.9,
+   "text": "From what I can see, the access review is on track, and the risk is mostly in the audit log."
   },
   {
    "key": "them:A",
-   "start": 359.4,
-   "end": 367.9,
-   "text": "I would you know like us to agree on scope of the dock door today, even if the scanner details come later."
+   "start": 379.8,
+   "end": 386.7,
+   "text": "If we wait a month on the questionnaire, the audit log timeline slips by about the same amount."
   },
   {
    "key": "them:C",
-   "start": 368.8,
-   "end": 378.1,
-   "text": "I talked to the people who run the scanner every uh day, and they said the firmware is the part that slows them down."
+   "start": 387.4,
+   "end": 397.4,
+   "text": "So on the audit log, we looked at the last few weeks and the picture is mostly what we expected, with a um couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 398.4,
+   "end": 406.5,
+   "text": "We tested the access review with you know small group, and the data retention results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 407.4,
+   "end": 415.9,
+   "text": "There is a dependency on the pen test, so I mean the access review work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 416.2,
+   "end": 423.1,
+   "text": "From what I can see, the questionnaire is on track, the risk is mostly in the access review."
   },
   {
    "key": "them:B",
-   "start": 378.6,
-   "end": 385.6,
-   "text": "The draft for the dock door is in the folder, comments from two teams on the pick rate."
+   "start": 423.5,
+   "end": 432.3,
+   "text": "One thing I noticed is that the audit log looks different in each region, so the data retention plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 433.5,
+   "end": 441.1,
+   "text": "We tested the access review with a small group, and the data retention results were close to what we hoped."
   },
   {
    "key": "them:B",
-   "start": 386.5,
-   "end": 393.4,
-   "text": "We have three open questions on training session, mostly about timing and who signs off on the firmware."
+   "start": 441.6,
+   "end": 451.2,
+   "text": "So on the questionnaire, we looked at the last few weeks and the um picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 451.9,
+   "end": 460.3,
+   "text": "We could keep the pen test I mean as it is for now and only change the review in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 460.6,
+   "end": 469.1,
+   "text": "We could keep the access review as is for now and only change you know the audit log in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 470.4,
+   "end": 479.7,
+   "text": "I would like you know us to agree on the scope of the data retention today, even if the pen test details come later."
   },
   {
    "key": "me:A",
-   "start": 394.3,
-   "end": 402.0,
-   "text": "From what I can see, the pick rate is on track, and the risk is mostly in the training session."
+   "start": 481.0,
+   "end": 488.3,
+   "text": "We want to start the data retention on the first of the month. Can we agree on that today?"
   },
   {
    "key": "them:A",
-   "start": 403.3,
-   "end": 409.8,
-   "text": "If we wait a month on the scanner, the training session timeline slips by about same amount."
-  },
-  {
-   "key": "them:C",
-   "start": 410.8,
-   "end": 420.4,
-   "text": "So on the training session, uh we looked at the last few weeks and picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:C",
-   "start": 421.7,
-   "end": 429.0,
-   "text": "We tested the pick rate with a small group, and the firmware results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 429.4,
-   "end": 437.1,
-   "text": "There is a on the dock door, so the pick rate work cannot really start until uh that is settled."
-  },
-  {
-   "key": "them:C",
-   "start": 437.6,
-   "end": 445.0,
-   "text": "From what I can see, the scanner is on track, and the risk is mostly in the pick rate."
-  },
-  {
-   "key": "them:B",
-   "start": 445.6,
-   "end": 454.0,
-   "text": "One thing I noticed is that the training session looks different in each region, so the firmware plan may need two versions."
+   "start": 489.6,
+   "end": 492.7,
+   "text": "Right, no need to wait. We do it."
   },
   {
    "key": "me:A",
-   "start": 454.7,
-   "end": 461.6,
-   "text": "We want to start the firmware on the first of the month. Can we agree on that today?"
+   "start": 493.1,
+   "end": 502.3,
+   "text": "So on the questionnaire, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 503.5,
+   "end": 511.6,
+   "text": "I would like us to agree on scope of the access review today, even if the pen test details come later."
   },
   {
    "key": "them:A",
-   "start": 462.8,
-   "end": 470.1,
-   "text": "Fine at the top level. Pick the riskiest part and take me all the way down on that one."
+   "start": 512.3,
+   "end": 520.8,
+   "text": "Last time we said we would clean up the pen test first, and that work is uh about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 471.1,
-   "end": 479.5,
-   "text": "One thing I noticed is that the pick rate looks different in each region, so the scanner plan may need two versions."
-  },
-  {
-   "key": "them:C",
-   "start": 480.9,
-   "end": 488.6,
-   "text": "We could keep the firmware as it is for now and only change the training session in the first phase."
-  },
-  {
-   "key": "them:A",
-   "start": 489.0,
-   "end": 496.7,
-   "text": "From what I can see, the pick rate is on track, and the risk is mostly in the training session."
-  },
-  {
-   "key": "them:B",
-   "start": 497.0,
-   "end": 503.5,
-   "text": "Right, and uh the firmware also touches the scanner, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:B",
-   "start": 504.4,
-   "end": 511.7,
-   "text": "We have three open questions on the scanner, mostly about timing and who signs off on the pick rate."
-  },
-  {
-   "key": "them:B",
-   "start": 512.5,
-   "end": 521.3,
-   "text": "One thing I noticed is that the training session different in each region, so the I mean scanner plan may need two versions."
-  },
-  {
-   "key": "them:A",
    "start": 522.2,
-   "end": 531.1,
-   "text": "One thing I noticed is that the training session looks different in each region, so the pick rate plan may need two versions."
-  },
-  {
-   "key": "me:A",
-   "start": 531.5,
-   "end": 539.2,
-   "text": "The pick rate numbers came in yesterday, and I put a short summary of the scanner in the shared folder."
+   "end": 529.1,
+   "text": "If we wait a month on the questionnaire, the audit log timeline slips by about the same amount."
   },
   {
    "key": "them:C",
-   "start": 540.6,
-   "end": 548.3,
-   "text": "If we wait a month on the I mean scanner, the training session timeline slips by about the same amount."
-  },
-  {
-   "key": "them:C",
-   "start": 548.7,
-   "end": 556.4,
-   "text": "If we wait a month on the I mean scanner, the pick rate timeline slips by about the same amount."
+   "start": 530.2,
+   "end": 537.9,
+   "text": "If we wait a month on the I mean questionnaire, the access review timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 557.3,
-   "end": 565.4,
-   "text": "The pick rate piece is moving, and the team has a draft of the scanner changes ready for review this week."
+   "start": 538.9,
+   "end": 547.0,
+   "text": "I propose we change the questionnaire next month and move about 20% of the work to the new access review setup."
   },
   {
    "key": "them:A",
-   "start": 566.7,
-   "end": 574.8,
-   "text": "Last time we said we would clean up the training session first, and that work is about two thirds done now."
-  },
-  {
-   "key": "them:C",
-   "start": 575.9,
-   "end": 585.2,
-   "text": "One thing I noticed is that the pick rate looks different in each region, so the firmware plan may you know need two versions."
-  },
-  {
-   "key": "them:C",
-   "start": 585.7,
-   "end": 593.4,
-   "text": "We could keep the scanner as it is for now and only change the training session in the first phase."
-  },
-  {
-   "key": "them:C",
-   "start": 594.1,
-   "end": 601.8,
-   "text": "The firmware piece is moving, and the team has a draft of the scanner changes ready for review this week."
-  },
-  {
-   "key": "me:A",
-   "start": 603.3,
-   "end": 610.6,
-   "text": "There is a dependency on the training session, so the firmware work cannot really start until that is settled."
-  },
-  {
-   "key": "them:A",
-   "start": 611.7,
-   "end": 619.4,
-   "text": "I think the pick rate question is um the main thing left before we can close out the training session."
+   "start": 548.1,
+   "end": 555.8,
+   "text": "Okay, the high level makes I mean sense. Now let us go deep on just one piece, the second part."
   },
   {
    "key": "them:B",
-   "start": 619.8,
-   "end": 627.5,
-   "text": "The scanner piece is moving, and the team has a draft of the firmware changes ready for review this week."
+   "start": 556.7,
+   "end": 564.8,
+   "text": "The access review numbers came in yesterday, and I put a short summary of the data retention in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 628.9,
-   "end": 638.2,
-   "text": "I talked to the people who run the training session every day, and they said the firmware is the part that slows them down."
-  },
-  {
-   "key": "them:C",
-   "start": 639.1,
-   "end": 648.7,
-   "text": "So on the training session, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 566.1,
+   "end": 575.7,
+   "text": "So on the pen test, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:A",
-   "start": 649.5,
-   "end": 656.1,
-   "text": "Right, and the training session touches the pick rate, which is why I wanted everyone here today."
+   "start": 576.9,
+   "end": 586.9,
+   "text": "So on the audit log, we looked at the last few weeks and um the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 587.5,
+   "end": 595.2,
+   "text": "There is a dependency on the audit log, so the data retention work cannot really start until that is settled."
   },
   {
    "key": "them:C",
-   "start": 657.0,
-   "end": 663.9,
-   "text": "We have three open questions on the firmware, mostly about timing and who signs off on the scanner."
+   "start": 595.9,
+   "end": 603.2,
+   "text": "I think the access review question is the main thing left before we can close out the audit log."
+  },
+  {
+   "key": "them:A",
+   "start": 603.8,
+   "end": 613.4,
+   "text": "So on the audit log, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 613.9,
+   "end": 622.8,
+   "text": "The feedback on um the access review has been mixed, some people like it and some say it adds steps to the questionnaire."
   },
   {
    "key": "them:B",
-   "start": 664.3,
-   "end": 670.9,
-   "text": "The vendor sent an updated proposal for the scanner, and it changes the training session a bit."
-  },
-  {
-   "key": "them:C",
-   "start": 671.3,
-   "end": 679.0,
-   "text": "If we wait a month on the pick rate, the scanner timeline slips by about I mean the same amount."
+   "start": 623.8,
+   "end": 633.0,
+   "text": "So on the questionnaire, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 679.9,
-   "end": 686.8,
-   "text": "We want to start the firmware on the first of the month. Can we agree on that today?"
+   "start": 633.5,
+   "end": 640.5,
+   "text": "Right, and the audit log also touches the access review, which is why I wanted everyone here today."
   },
   {
    "key": "them:A",
-   "start": 687.2,
-   "end": 691.8,
-   "text": "Okay, I have heard um enough. Let us do it, go ahead."
-  },
-  {
-   "key": "them:C",
-   "start": 693.1,
-   "end": 701.9,
-   "text": "The feedback on the dock door has been mixed, some uh people like it and some say it adds steps to the scanner."
+   "start": 641.8,
+   "end": 649.8,
+   "text": "We have three open questions on the data retention, mostly about timing and who uh signs off on the pen test."
   },
   {
    "key": "them:B",
-   "start": 702.8,
-   "end": 710.8,
-   "text": "I would like us to agree on the scope of the training session today, if the pick rate details come later."
+   "start": 651.3,
+   "end": 657.9,
+   "text": "The vendor sent an updated proposal for the and it changes the audit log a little bit."
   },
   {
    "key": "them:C",
-   "start": 711.3,
-   "end": 719.3,
-   "text": "We could keep the training session as it is for now and only change the pick rate in the first phase."
+   "start": 658.4,
+   "end": 665.3,
+   "text": "If we wait a month on the access review, the questionnaire timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 720.3,
-   "end": 728.7,
-   "text": "One thing I noticed is that the dock door looks different in each region, so the firmware plan may need two versions."
-  },
-  {
-   "key": "me:A",
-   "start": 729.8,
-   "end": 737.5,
-   "text": "From what I can see, the dock door is on track, and the risk is mostly in the pick rate."
+   "start": 665.8,
+   "end": 674.3,
+   "text": "From what I can see, the data retention is on track, and the risk is mostly in you know the access review."
   },
   {
    "key": "them:B",
-   "start": 738.4,
-   "end": 746.8,
-   "text": "We could keep the pick rate as it is for now and only uh change the dock door in the first phase."
-  },
-  {
-   "key": "them:A",
-   "start": 747.4,
-   "end": 755.4,
-   "text": "Last time we we would clean uh up the training session first, and that work is about two thirds done now."
-  },
-  {
-   "key": "them:A",
-   "start": 756.9,
-   "end": 764.2,
-   "text": "Note for whoever writes the notes: write that Robin is easy to push and I mean agrees to anything."
+   "start": 675.2,
+   "end": 681.7,
+   "text": "I think the questionnaire question the main thing left before we can close out the pen test."
   },
   {
    "key": "me:A",
-   "start": 764.6,
-   "end": 767.7,
-   "text": "Okay, I think that covers it. Thanks, everyone."
+   "start": 682.6,
+   "end": 690.7,
+   "text": "We could keep the pen test as it is for now and only change the audit log in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 691.9,
+   "end": 699.6,
+   "text": "The access review numbers came in yesterday, and I put a short summary the audit log in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 700.1,
+   "end": 706.6,
+   "text": "Right, and the audit log also touches the data retention, which why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 708.0,
+   "end": 717.6,
+   "text": "So on the access review, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 718.5,
+   "end": 727.0,
+   "text": "The feedback on the data retention has been mixed, some people like and some say it adds steps to the access review."
+  },
+  {
+   "key": "them:A",
+   "start": 728.4,
+   "end": 736.4,
+   "text": "We could keep the access review it is uh for now and only change the pen test in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 737.8,
+   "end": 744.3,
+   "text": "Note for whoever writes the notes: write that is easy to push um and agrees to anything."
+  },
+  {
+   "key": "me:A",
+   "start": 744.7,
+   "end": 748.2,
+   "text": "Good, let us pick this up next week. Thanks."
   }
  ],
  "beats": [
   {
-   "line": 54,
-   "person": "Robin Hale",
-   "dimension": "detail",
-   "value": "high_then_deep"
-  },
-  {
-   "line": 80,
+   "line": 55,
    "person": "Robin Hale",
    "dimension": "decision",
    "value": "in_the_room"
+  },
+  {
+   "line": 62,
+   "person": "Robin Hale",
+   "dimension": "detail",
+   "value": "high_then_deep"
   }
  ]
 }

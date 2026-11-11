@@ -29,8 +29,9 @@ final class PersonaTraitsTests: XCTestCase {
 
     private let id = "p1|order|answer_first|any"
 
-    private func trait(_ p: Persona, answers: [FindingAnswer] = []) -> PersonaTrait? {
-        PersonaTraits.build(p, answers: answers).first { $0.id == id }
+    /// With the 2-call rule as if on, as the eval measures it; `testATwoCallTraitShowsOnlyAfterTheOwnersYesUntilRealAnswers` covers it off.
+    private func trait(_ p: Persona, answers: [FindingAnswer] = [], twoCallRule: Bool? = true) -> PersonaTrait? {
+        PersonaTraits.build(p, answers: answers, twoCallRule: twoCallRule).first { $0.id == id }
     }
 
     // MARK: The base
@@ -110,8 +111,10 @@ final class PersonaTraitsTests: XCTestCase {
     // MARK: Counter-evidence
 
     func testAnOldContradictionBeforeANewHabitOfAsManyDaysNoLongerCounts() throws {
-        let p = persona([Self.moment(1, "order", "path_first"), Self.moment(4), Self.moment(7), Self.moment(10)], texts: [id: text()])
-        XCTAssertTrue(try XCTUnwrap(trait(p)).isShown)
+        let soon = persona([Self.moment(1, "order", "path_first"), Self.moment(4), Self.moment(7), Self.moment(10)], texts: [id: text()])
+        XCTAssertFalse(try XCTUnwrap(trait(soon)).isShown, "against, for, for, for within weeks: 3 for and 1 against stays hidden")
+        let p = persona([Self.moment(1, "order", "path_first"), Self.moment(4), Self.moment(7), Self.moment(70)], texts: [id: text()])
+        XCTAssertTrue(try XCTUnwrap(trait(p)).isShown, "the newest support 60 days or more after the contradiction")
         let twoOld = persona([Self.moment(1, "order", "path_first"), Self.moment(2, "order", "path_first"), Self.moment(3, "order", "path_first"),
                               Self.moment(4, "order", "path_first"), Self.moment(7), Self.moment(10), Self.moment(13)], texts: [id: text()])
         XCTAssertFalse(try XCTUnwrap(trait(twoOld)).isShown, "an older habit of more days still counts")
@@ -140,7 +143,7 @@ final class PersonaTraitsTests: XCTestCase {
 
     func testANewerHabitWinsOverAnOlderOne() throws {
         let old = (1...3).map { Self.moment($0, "order", "path_first") }
-        let new = (4...6).map { Self.moment($0 * 5) }
+        let new = (4...6).map { Self.moment($0 * 20) }
         let texts = [id: text(), "p1|order|path_first|any": text()]
         let traits = PersonaTraits.build(persona(old + new, texts: texts), answers: [])
         XCTAssertTrue(try XCTUnwrap(traits.first { $0.id == id }).isShown, "the newer value")

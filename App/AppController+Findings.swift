@@ -34,15 +34,16 @@ extension AppController {
         }
         let now = Date(), paths = paths, profile = shownCoachProfile, saved = personaPeople, personas = personasOn
         let recent = meetings.filter { $0.status == .written && now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }.map { ($0.id, $0.start) }
+        let records = personas ? meetings : []
         findingsAsk += 1
         let ask = findingsAsk
         Task {
             let (cards, reads, traits) = await Task.detached(priority: .utility) {
                 // The reads of how people think, and the trait card of each call: from the files, off the main thread.
-                let reads = personas ? PersonaReads.all(paths: paths, saved: saved, answers: profile.answers) : [:]
+                let reads = personas ? PersonaReads.all(paths: paths, saved: saved, answers: profile.answers, callsWith: PersonaReads.callsWith(records, saved: saved)) : [:]
                 let traits = personas ? PersonaFindings.cards(PersonaReads.sources(paths: paths, saved: saved, answers: profile.answers),
                                                               calls: recent.map { (callID: $0.0, date: $0.1) }, profile: profile, now: now,
-                                                              quote: { PersonaReads.words($0, paths: paths) }) : [:]
+                                                              quote: { PersonaReads.words($0, person: $1, paths: paths, saved: saved) }) : [:]
                 let cards = FindingRules.deck(reviews: recent.compactMap { id, start in
                     CoachReview.load(in: paths.callDirectory(id)).map { (callID: id, date: start, review: $0) }
                 }, profile: profile, now: now, traits: traits)
@@ -50,7 +51,13 @@ extension AppController {
             }.value
             // A later ask is newer: its cards win.
             guard ask == findingsAsk else { return }
-            if reads != personaReads { personaReads = reads }
+            let first = !personaReadsMade
+            personaReadsMade = true
+            if reads != personaReads {
+                personaReads = reads
+                // The phone's copy follows a changed read: a deleted meeting, a switch turned off.
+                if !first { syncNow() }
+            }
             traitCards = traits
             if cards != findings { findings = cards }
         }

@@ -1,14 +1,14 @@
 {
  "id": "gold-12-4",
  "person": "Quinn Ellis",
- "title": "Inventory forecast",
+ "title": "Training program design",
  "tags": [
-  "Inventory",
-  "Forecasting"
+  "Training",
+  "People"
  ],
  "setting": "one_on_one",
  "start": "2026-09-08T17:00:00Z",
- "end": "2026-09-08T17:14:17Z",
+ "end": "2026-09-08T17:14:18Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Quinn Ellis"
@@ -18,571 +18,577 @@
   {
    "key": "me:A",
    "start": 0.0,
-   "end": 4.2,
-   "text": "Thanks for making the time. Today is about the inventory forecast."
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the training program design."
   },
   {
    "key": "me:A",
-   "start": 4.8,
-   "end": 13.3,
-   "text": "One thing I noticed is that the stockout looks different in each region, so the demand signal plan may need two versions."
+   "start": 5.1,
+   "end": 12.0,
+   "text": "The draft for the manager guide is in the folder, with comments from two teams on the workshop."
   },
   {
    "key": "me:A",
-   "start": 14.6,
-   "end": 23.1,
-   "text": "The feedback on the safety stock has been mixed, some people like it and some say it adds steps to the season."
+   "start": 12.6,
+   "end": 19.5,
+   "text": "If we wait a month on the completion rate, the module timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 23.8,
-   "end": 33.4,
-   "text": "So on the demand signal, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 20.6,
+   "end": 28.3,
+   "text": "We could keep the manager guide as it is for now and only change the module in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 29.6,
+   "end": 38.8,
+   "text": "So on the module, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:A",
-   "start": 34.7,
-   "end": 42.8,
-   "text": "The demand signal numbers came in yesterday, and I put a short summary of the safety stock in the shared folder."
+   "start": 40.0,
+   "end": 46.5,
+   "text": "I think the workshop question is the main thing left before we can close out the module."
   },
   {
    "key": "me:A",
-   "start": 44.3,
-   "end": 51.2,
-   "text": "I think the stockout question is the main thing left before we can close out the safety stock."
+   "start": 47.7,
+   "end": 54.6,
+   "text": "The vendor sent an updated proposal for the workshop, and it changes the completion rate a little bit."
   },
   {
    "key": "me:A",
-   "start": 51.7,
-   "end": 60.9,
-   "text": "I talked to the people who run the stockout every day, and they said the reorder point is the part that slows them down."
+   "start": 55.4,
+   "end": 63.5,
+   "text": "Last time we said we would clean up the manager guide first, and that work is about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 61.5,
-   "end": 68.4,
-   "text": "The draft for the season is in the folder, with comments from two teams on the reorder point."
+   "start": 64.9,
+   "end": 74.2,
+   "text": "I talked to the people who run the manager guide every day, and they said the module is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 75.0,
+   "end": 84.2,
+   "text": "I talked to the people who run the trainer every day, and they said the manager guide is the part that slows them down."
   },
   {
    "key": "them:A",
-   "start": 68.7,
-   "end": 76.8,
-   "text": "I would like us to agree on the scope of the stockout today, even if the reorder point details come later."
+   "start": 85.5,
+   "end": 94.7,
+   "text": "The feedback on the completion rate has been mixed, some people like it and some say it adds steps you know to the module."
   },
   {
    "key": "me:A",
-   "start": 78.3,
-   "end": 85.2,
-   "text": "I think the reorder point question is the main thing left before we can close out the season."
+   "start": 95.1,
+   "end": 101.2,
+   "text": "Right, and the workshop also touches the trainer, which is why I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 85.6,
-   "end": 93.6,
-   "text": "Last time we said we would clean up the demand signal first, and that work is about two thirds done now."
+   "start": 102.4,
+   "end": 110.5,
+   "text": "The feedback on the module has been mixed, some people like it and some say it adds steps to the workshop."
   },
   {
    "key": "them:A",
-   "start": 94.1,
-   "end": 101.4,
-   "text": "We have three open questions on the season, mostly about timing and who signs off on the demand signal."
-  },
-  {
-   "key": "me:A",
-   "start": 102.8,
-   "end": 112.1,
-   "text": "I talked to the people who run the reorder point every day, and they said the season is the part that slows them down."
-  },
-  {
-   "key": "me:A",
-   "start": 112.6,
+   "start": 111.0,
    "end": 120.3,
-   "text": "Last time we said we would clean up the stockout first, and that work is about two thirds done now."
+   "text": "So on the trainer, um we looked at the last few weeks and the picture is mostly we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 121.1,
-   "end": 128.0,
-   "text": "If we wait a month on the season, the safety stock timeline slips by about the same amount."
+   "start": 120.7,
+   "end": 129.1,
+   "text": "The completion rate piece is moving, and the team has a draft of the manager guide changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 128.7,
-   "end": 135.6,
-   "text": "The draft for the reorder point is in the folder, with comments from two teams on the season."
+   "start": 130.6,
+   "end": 138.7,
+   "text": "The feedback on the module has been mixed, some people like it and some say it adds steps to the workshop."
   },
   {
    "key": "them:A",
-   "start": 136.9,
-   "end": 144.6,
-   "text": "The draft for the stockout is in the folder, with comments from two teams on you know the reorder point."
+   "start": 139.1,
+   "end": 147.1,
+   "text": "I would like to um agree on the scope of the manager guide today, even if the module details come later."
   },
   {
    "key": "me:A",
-   "start": 145.8,
-   "end": 153.1,
-   "text": "We could keep the stockout as it is for now and only change the season in the first phase."
+   "start": 148.0,
+   "end": 154.9,
+   "text": "The draft for the trainer is in the folder, with comments from two teams on the completion rate."
   },
   {
    "key": "me:A",
-   "start": 154.2,
-   "end": 162.6,
-   "text": "I would like us to agree on the scope of the safety stock today, even if the demand signal details come later."
+   "start": 155.2,
+   "end": 161.8,
+   "text": "If we wait a month on the workshop, the trainer timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 163.4,
-   "end": 171.1,
-   "text": "Last time we said we would clean up the stockout first, and that work is about two thirds done now."
+   "start": 163.1,
+   "end": 171.9,
+   "text": "One thing I noticed is that the completion rate looks different in each region, so the manager guide plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 172.4,
+   "end": 180.5,
+   "text": "The feedback on the module has been mixed, some people like it and some say it adds steps to the workshop."
   },
   {
    "key": "them:A",
-   "start": 172.0,
-   "end": 178.9,
-   "text": "The draft for the demand signal is in the folder, with comments from two teams on the stockout."
+   "start": 181.1,
+   "end": 190.3,
+   "text": "So on the completion rate, we at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 180.3,
-   "end": 189.6,
-   "text": "So on the season, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 191.2,
+   "end": 200.4,
+   "text": "So on the trainer, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 190.2,
-   "end": 197.5,
-   "text": "There is a dependency on the reorder point, so the stockout work cannot really start until that is settled."
+   "start": 201.0,
+   "end": 208.7,
+   "text": "We could keep the module as it is for now and only change the completion rate in the first phase."
   },
   {
    "key": "me:A",
-   "start": 198.4,
-   "end": 205.7,
-   "text": "If we wait a month on the demand signal, the safety stock timeline slips by about the same amount."
+   "start": 210.0,
+   "end": 216.2,
+   "text": "Right, and the module also touches the trainer, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 216.9,
+   "end": 224.2,
+   "text": "I think the completion rate question is the main thing left before we can close out the manager guide."
   },
   {
    "key": "them:A",
-   "start": 206.4,
-   "end": 214.9,
-   "text": "I would like us to agree on the scope of the season today, even if the stockout you know details come later."
+   "start": 225.0,
+   "end": 234.2,
+   "text": "I talked to the people who run the trainer every day, and they said the completion rate is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 215.3,
-   "end": 222.6,
-   "text": "The vendor sent an updated proposal for the demand signal, and it changes the reorder point a little bit."
+   "start": 235.3,
+   "end": 243.8,
+   "text": "The feedback on the manager guide has been mixed, some people like it and some say it adds steps to the trainer."
   },
   {
    "key": "me:A",
-   "start": 223.2,
-   "end": 229.3,
-   "text": "Right, and the season also touches the stockout, which is why I wanted everyone here today."
+   "start": 245.0,
+   "end": 251.9,
+   "text": "We tested the workshop with a small group, and the trainer results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 230.6,
-   "end": 237.9,
-   "text": "From what I can see, the season is on track, and the risk is mostly in the reorder point."
-  },
-  {
-   "key": "me:A",
-   "start": 238.3,
-   "end": 246.4,
-   "text": "The demand signal numbers came in yesterday, and I put a short summary of the safety stock in the shared folder."
+   "start": 253.3,
+   "end": 261.4,
+   "text": "Last time we said we would clean up the completion rate first, and that work is about two thirds done now."
   },
   {
    "key": "them:A",
-   "start": 246.9,
-   "end": 256.5,
-   "text": "I talked to the people who run the demand signal every day, and they said the safety stock is the part that slows them down."
+   "start": 262.7,
+   "end": 269.3,
+   "text": "From what I can see, the workshop is on and the risk is mostly in the module."
   },
   {
    "key": "me:A",
-   "start": 257.5,
-   "end": 264.8,
-   "text": "There is a dependency on the safety stock, so the stockout work cannot really start until that is settled."
+   "start": 270.1,
+   "end": 278.9,
+   "text": "I talked to the people who run the trainer every day, and they said the workshop is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 265.4,
-   "end": 273.9,
-   "text": "The feedback on the safety stock has been mixed, some people like it and some say it adds steps to the season."
-  },
-  {
-   "key": "me:A",
-   "start": 275.0,
-   "end": 283.5,
-   "text": "One thing I noticed is that the stockout looks different in each region, so the demand signal plan may need two versions."
+   "start": 280.1,
+   "end": 287.0,
+   "text": "There is a dependency on the module, so the workshop work cannot really start until that is settled."
   },
   {
    "key": "them:A",
-   "start": 284.2,
-   "end": 290.8,
-   "text": "Right, and the stockout also touches the reorder point, which is why I wanted everyone here today."
+   "start": 288.1,
+   "end": 295.0,
+   "text": "The draft for the um manager guide is in the folder, with comments from two teams on workshop."
   },
   {
    "key": "me:A",
-   "start": 292.1,
-   "end": 301.7,
-   "text": "I talked to the people who run the reorder point every day, and they said the safety stock is the part that slows them down."
+   "start": 295.6,
+   "end": 303.7,
+   "text": "We could keep the completion rate as it is for now and only change the manager guide in the first phase."
   },
   {
    "key": "me:A",
-   "start": 302.3,
-   "end": 310.4,
-   "text": "One thing I noticed is that the stockout looks different in each region, so the season plan may need two versions."
+   "start": 305.1,
+   "end": 312.8,
+   "text": "From what I can see, the completion rate is on track, and the risk is mostly in the manager guide."
   },
   {
    "key": "me:A",
-   "start": 311.3,
-   "end": 320.1,
-   "text": "Here is the plan: we spend 40,000 on the safety stock this quarter and the reorder point changes follow in the next one."
+   "start": 313.7,
+   "end": 321.7,
+   "text": "I would like us to agree on the scope of the manager guide today, even if the module details come later."
   },
   {
    "key": "them:A",
-   "start": 320.8,
-   "end": 327.3,
-   "text": "Show me it on the screen rather than describing it. I want uh to see it run."
+   "start": 322.9,
+   "end": 330.6,
+   "text": "Last time we said would clean up the manager guide first, and that work is about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 328.7,
-   "end": 336.0,
-   "text": "There is a dependency on the demand signal, so the season work cannot really start until that is settled."
+   "start": 331.1,
+   "end": 338.0,
+   "text": "The vendor sent an updated proposal for the manager guide, and it changes the workshop a little bit."
   },
   {
    "key": "me:A",
-   "start": 336.6,
-   "end": 343.6,
-   "text": "The draft for the demand signal is in the folder, with comments from two teams on the stockout."
+   "start": 338.4,
+   "end": 348.0,
+   "text": "So on the manager guide, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 344.2,
-   "end": 351.9,
-   "text": "The safety stock numbers came in yesterday, and I put a short summary of the season in the shared folder."
+   "start": 348.5,
+   "end": 355.8,
+   "text": "There is a dependency on the trainer, so the completion rate work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 352.9,
-   "end": 359.8,
-   "text": "From what I can see, the stockout is on track, and the risk is mostly in the season."
+   "start": 356.4,
+   "end": 363.3,
+   "text": "If we wait a month on the manager guide, the module timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 360.6,
-   "end": 369.8,
-   "text": "So on the stockout, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 363.7,
+   "end": 372.2,
+   "text": "I would like us to agree on the scope of the workshop today, even if the completion rate uh details come later."
   },
   {
    "key": "me:A",
-   "start": 370.7,
-   "end": 378.4,
-   "text": "The stockout numbers came in yesterday, and I put a short summary of the reorder point in the shared folder."
+   "start": 372.7,
+   "end": 379.6,
+   "text": "The vendor sent an updated proposal for the manager guide, and it changes the trainer a little bit."
   },
   {
    "key": "me:A",
-   "start": 379.3,
-   "end": 387.7,
-   "text": "I would like us to agree on the scope of the demand signal today, even if the safety stock details come later."
+   "start": 380.2,
+   "end": 386.8,
+   "text": "Right, and the workshop also touches the completion rate, which is why I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 389.0,
-   "end": 395.9,
-   "text": "Right, and the reorder point also touches the demand signal, which is why I wanted everyone here today."
+   "start": 387.4,
+   "end": 394.3,
+   "text": "From what I can see, the workshop is on track, and the risk is mostly in the trainer."
+  },
+  {
+   "key": "me:A",
+   "start": 395.1,
+   "end": 402.7,
+   "text": "The manager guide numbers came in yesterday, and I put a short summary of the module in the shared folder."
   },
   {
    "key": "them:A",
-   "start": 396.3,
-   "end": 405.6,
-   "text": "I talked to the people who run the reorder point every day, they said the safety stock is the part that slows them down."
+   "start": 403.5,
+   "end": 413.5,
+   "text": "I talked to the people who run the you know manager guide every day, and they said the module is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 406.3,
-   "end": 414.4,
-   "text": "I would like us to agree on the scope of the season today, even if the reorder point details come later."
+   "start": 414.4,
+   "end": 421.7,
+   "text": "There is a dependency on the module, so the completion rate work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 415.3,
-   "end": 424.1,
-   "text": "One thing I noticed is that the demand signal looks different in each region, so the reorder point plan may need two versions."
+   "start": 422.4,
+   "end": 430.4,
+   "text": "The feedback on the module has been mixed, some people like it and some say it adds steps to the workshop."
+  },
+  {
+   "key": "me:A",
+   "start": 431.1,
+   "end": 439.9,
+   "text": "One thing I noticed is that the completion rate looks different in each region, so the manager guide plan may need two versions."
   },
   {
    "key": "them:A",
-   "start": 425.2,
-   "end": 432.9,
-   "text": "Last time we said we would clean up the season first, and that work is about two thirds done now."
+   "start": 440.8,
+   "end": 447.8,
+   "text": "Right, and the completion rate also touches the trainer, um which is why I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 434.3,
-   "end": 443.9,
-   "text": "I talked to the people who run the demand signal every day, and they said the safety stock is the part that slows them down."
+   "start": 448.4,
+   "end": 457.2,
+   "text": "I talked to the people who run the trainer every day, and they said the module is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 445.1,
-   "end": 452.1,
-   "text": "The vendor sent an updated proposal for the season, and it changes the safety stock a little bit."
+   "start": 458.1,
+   "end": 466.6,
+   "text": "One thing I noticed is that the completion rate looks different in each region, so the workshop plan may need two versions."
   },
   {
    "key": "them:A",
-   "start": 453.6,
-   "end": 461.6,
-   "text": "Last time we said we would clean up the safety stock first, and that work is about two thirds done now."
+   "start": 467.3,
+   "end": 475.4,
+   "text": "The module numbers came in yesterday, and I put a short I mean summary of the trainer in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 462.2,
-   "end": 470.3,
-   "text": "The safety stock numbers came in yesterday, and I put a short summary of the reorder point in the shared folder."
+   "start": 476.7,
+   "end": 484.0,
+   "text": "There is a dependency on the manager guide, so the workshop work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 470.9,
-   "end": 478.6,
-   "text": "The season numbers came in yesterday, and I put a short summary of the demand signal in the shared folder."
+   "start": 485.2,
+   "end": 492.5,
+   "text": "The draft for the manager guide is in the folder, with comments from two teams on the completion rate."
   },
   {
    "key": "me:A",
-   "start": 479.2,
-   "end": 486.5,
-   "text": "We tested the season with a small group, and the reorder point results were close to what we hoped."
-  },
-  {
-   "key": "me:A",
-   "start": 487.2,
-   "end": 494.1,
-   "text": "The vendor sent an updated proposal for the demand signal, and it changes the season a little bit."
+   "start": 492.9,
+   "end": 500.2,
+   "text": "The module numbers came in yesterday, and I put a short summary of the workshop in the shared folder."
   },
   {
    "key": "them:A",
-   "start": 494.5,
-   "end": 501.4,
-   "text": "I think the stockout question is the main thing left before we can close um out the season."
+   "start": 500.9,
+   "end": 508.2,
+   "text": "If we wait a month on the completion um rate, the workshop timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 501.8,
-   "end": 508.3,
-   "text": "Right, and the safety stock also touches the season, which is why I wanted everyone here today."
+   "start": 508.8,
+   "end": 515.7,
+   "text": "We tested the module with a small group, and the trainer results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 508.9,
-   "end": 516.2,
-   "text": "We tested the demand signal with a small group, and the season results were close to what we hoped."
+   "start": 516.9,
+   "end": 524.6,
+   "text": "The completion rate numbers came in yesterday, and I put a short summary of the trainer in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 517.5,
-   "end": 524.0,
-   "text": "Right, and the season also touches the demand signal, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:A",
    "start": 525.3,
-   "end": 532.2,
-   "text": "From what I can see, the stockout is on track, and the risk is mostly in the season."
+   "end": 533.4,
+   "text": "I would like us to agree on the scope of the manager guide today, even if the module details come later."
   },
   {
    "key": "me:A",
-   "start": 533.7,
-   "end": 540.7,
-   "text": "The vendor sent an updated proposal for the season, and it changes the demand signal a little bit."
-  },
-  {
-   "key": "me:A",
-   "start": 541.2,
-   "end": 548.5,
-   "text": "There is a dependency on the season, so the reorder point work cannot really start until that is settled."
-  },
-  {
-   "key": "me:A",
-   "start": 549.4,
-   "end": 557.1,
-   "text": "The demand signal numbers came in yesterday, and I put a short summary of the stockout in the shared folder."
-  },
-  {
-   "key": "me:A",
-   "start": 557.7,
-   "end": 565.0,
-   "text": "We tested the safety stock with a small group, and the stockout results were close to what we hoped."
-  },
-  {
-   "key": "me:A",
-   "start": 565.4,
-   "end": 572.3,
-   "text": "We want to start the stockout on the first of the month. Can we agree on that today?"
+   "start": 534.9,
+   "end": 543.0,
+   "text": "Here is the plan: we spend 40,000 on the workshop this quarter and the trainer changes follow in the next one."
   },
   {
    "key": "them:A",
-   "start": 573.0,
-   "end": 578.4,
-   "text": "I am more interested in what we gain here. What does success look like?"
+   "start": 544.0,
+   "end": 549.8,
+   "text": "Show me it on the screen rather than describing it. I to see it run."
   },
   {
    "key": "me:A",
-   "start": 579.2,
-   "end": 586.1,
-   "text": "We tested the stockout with a small group, and the season results were close to what we hoped."
+   "start": 551.1,
+   "end": 558.0,
+   "text": "I think the manager guide question is the main thing left before we can close out the module."
   },
   {
    "key": "me:A",
-   "start": 586.6,
-   "end": 595.1,
-   "text": "The feedback on the season has been mixed, some people like it and some say it adds steps to the safety stock."
-  },
-  {
-   "key": "me:A",
-   "start": 595.6,
-   "end": 605.2,
-   "text": "So on the reorder point, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "me:A",
-   "start": 606.1,
-   "end": 613.8,
-   "text": "There is a dependency on the reorder point, so the safety stock work cannot really start until that is settled."
+   "start": 559.1,
+   "end": 566.8,
+   "text": "I would like us to agree on the scope of the workshop today, even if the trainer details come later."
   },
   {
    "key": "them:A",
-   "start": 615.2,
-   "end": 622.1,
-   "text": "The draft for the season is in the folder, with comments from two teams on the demand signal."
+   "start": 567.1,
+   "end": 574.8,
+   "text": "Last time we said we would clean up the manager guide first, and that work is about two thirds now."
   },
   {
    "key": "me:A",
-   "start": 622.9,
-   "end": 630.2,
-   "text": "From what I can see, the reorder point is on track, and the risk is mostly in the season."
+   "start": 576.1,
+   "end": 583.8,
+   "text": "Last time we said we would clean up the workshop first, and that work is about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 630.8,
-   "end": 638.9,
-   "text": "Last time we said we would clean up the reorder point first, and that work is about two thirds done now."
+   "start": 584.5,
+   "end": 593.8,
+   "text": "I talked to the people who run the completion rate every day, and they said the module is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 594.4,
+   "end": 601.0,
+   "text": "The vendor sent an updated proposal for the workshop, and it changes the module a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 601.9,
+   "end": 610.0,
+   "text": "The trainer piece is moving, and the team has a draft of the manager guide changes ready for review this week."
   },
   {
    "key": "them:A",
-   "start": 640.2,
-   "end": 647.2,
-   "text": "Right, and the demand signal also touches the reorder point, which is why I wanted everyone here today."
+   "start": 610.8,
+   "end": 618.8,
+   "text": "The trainer piece is moving, and the team has a draft of the manager guide changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 648.6,
-   "end": 655.9,
-   "text": "We tested the safety stock with a small group, and the season results were close to what we hoped."
+   "start": 619.8,
+   "end": 627.9,
+   "text": "One thing I noticed is that the workshop looks different in each region, so the trainer plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 656.6,
-   "end": 664.0,
-   "text": "The vendor sent an updated proposal for the safety stock, and it changes the reorder point a little bit."
+   "start": 628.7,
+   "end": 635.2,
+   "text": "If we wait a month on the trainer, the workshop timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 665.4,
-   "end": 673.9,
-   "text": "The feedback on the safety stock has been mixed, some people like it and some say it adds steps to the stockout."
+   "start": 636.5,
+   "end": 643.4,
+   "text": "I think the completion rate question is the main thing left before we can close out the workshop."
+  },
+  {
+   "key": "me:A",
+   "start": 643.8,
+   "end": 651.5,
+   "text": "I propose we change the workshop next month and move about 20% of the work to the new trainer setup."
   },
   {
    "key": "them:A",
-   "start": 674.5,
-   "end": 683.4,
-   "text": "The feedback on the reorder point has been mixed, some people like it and some say it adds steps to the demand signal."
+   "start": 653.0,
+   "end": 659.1,
+   "text": "I am more interested in what I mean we gain here. What does success look like?"
   },
   {
    "key": "me:A",
-   "start": 684.7,
-   "end": 692.8,
-   "text": "The safety stock numbers came in yesterday, and I put a short summary of the reorder point in the shared folder."
+   "start": 660.5,
+   "end": 667.4,
+   "text": "We tested the workshop with a small group, and the trainer results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 693.7,
-   "end": 703.3,
-   "text": "I talked to the people who run the safety stock every day, and they said the reorder point is the part that slows them down."
+   "start": 668.0,
+   "end": 675.3,
+   "text": "From what I can see, the manager guide is on track, and the risk is mostly in the module."
   },
   {
    "key": "me:A",
-   "start": 703.9,
-   "end": 711.2,
-   "text": "We have three open questions on the stockout, mostly about timing and who signs off on the reorder point."
+   "start": 675.7,
+   "end": 682.2,
+   "text": "Right, and the workshop also touches the completion rate, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 683.2,
+   "end": 690.5,
+   "text": "If we wait a month on the completion rate, the manager guide timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 711.7,
-   "end": 721.3,
-   "text": "So on the reorder point, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 690.8,
+   "end": 697.7,
+   "text": "The draft for the workshop is in the folder, with comments from two teams on the completion rate."
   },
   {
    "key": "me:A",
-   "start": 722.0,
-   "end": 729.3,
-   "text": "We tested the season with a small group, and the safety stock results were close to what we hoped."
+   "start": 698.2,
+   "end": 705.5,
+   "text": "We could keep the trainer as it is for now and only change the workshop in the first phase."
   },
   {
    "key": "me:A",
-   "start": 729.8,
-   "end": 739.5,
-   "text": "So on the safety stock, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "me:A",
-   "start": 739.8,
-   "end": 747.1,
-   "text": "If we wait a month on the safety stock, the reorder point timeline slips by about the same amount."
+   "start": 706.8,
+   "end": 714.1,
+   "text": "We could keep the workshop as it is for now and only change the trainer in the first phase."
   },
   {
    "key": "them:A",
-   "start": 747.9,
-   "end": 756.3,
-   "text": "The feedback on the stockout has been mixed, some people like it and some say it adds steps to the reorder point."
+   "start": 714.7,
+   "end": 721.2,
+   "text": "The vendor sent an updated proposal for the module, and it changes the workshop a little bit."
   },
   {
    "key": "me:A",
-   "start": 757.4,
-   "end": 764.7,
-   "text": "There is a dependency on the demand signal, so the season work cannot really start until that is settled."
+   "start": 722.2,
+   "end": 731.4,
+   "text": "I talked to the people who run the workshop every day, and they said the manager guide is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 765.2,
-   "end": 773.6,
-   "text": "The demand signal piece is moving, and the team has a draft of the safety stock changes ready for review this week."
+   "start": 732.2,
+   "end": 741.8,
+   "text": "So on the completion rate, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 775.0,
-   "end": 784.2,
-   "text": "I talked to the people who run the season every day, and they said the demand signal is the part that slows them down."
+   "start": 742.3,
+   "end": 749.2,
+   "text": "I think the completion rate question is the main thing left before we can close out the workshop."
+  },
+  {
+   "key": "me:A",
+   "start": 749.7,
+   "end": 758.9,
+   "text": "So on the trainer, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:A",
-   "start": 785.3,
-   "end": 793.3,
-   "text": "Last time we said we would clean up the demand signal first, and that work is about two thirds done now."
+   "start": 760.0,
+   "end": 768.9,
+   "text": "One thing I noticed I mean is that the module looks different in each region, so the trainer plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 793.7,
-   "end": 796.8,
+   "start": 769.8,
+   "end": 776.4,
+   "text": "The draft for the workshop is in the folder, with comments from two teams on the module."
+  },
+  {
+   "key": "me:A",
+   "start": 777.6,
+   "end": 784.5,
+   "text": "From what I can see, the trainer is on track, and the risk is mostly in the workshop."
+  },
+  {
+   "key": "them:A",
+   "start": 786.0,
+   "end": 794.1,
+   "text": "We could keep the module as it is for now and only change the manager guide in um the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 794.9,
+   "end": 797.9,
    "text": "Okay, I think that covers it. Thanks, everyone."
   }
  ],
  "beats": [
   {
-   "line": 37,
+   "line": 63,
    "person": "Quinn Ellis",
    "dimension": "order",
    "value": "live_walkthrough"
   },
   {
-   "line": 67,
+   "line": 76,
    "person": "Quinn Ellis",
    "dimension": "risk",
    "value": "upside_first"

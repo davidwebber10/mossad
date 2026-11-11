@@ -39,7 +39,9 @@ public enum PersonaDimension: String, CaseIterable, Codable, Sendable {
         case .pace: ["short_turns", "long_turns", "cuts_in", "waits"]
         case .authority: ["decides_alone", "refers_up", "refers_to_expert", "group_agreement"]
         case .drivers: ["cost", "time", "customer", "quality", "team_load", "risk_rules", "growth"]
-        case .expects: []
+        // A fixed list, so the same expectation meets itself in 3 calls.
+        case .expects: ["material_ahead", "short_updates", "recommendation_first", "owner_and_date", "promises_kept", "early_warning",
+                        "written_recap", "prepared_numbers"]
         }
     }
 
@@ -171,6 +173,17 @@ public struct PersonaPointer: Codable, Equatable, Hashable, Sendable {
         return same.min { abs($0.start - at) < abs($1.start - at) }
     }
 
+    /// The line, only while its speaker is still that person: a voice named again as someone else gives none.
+    public func utterance(in record: CallRecord, person: String, saved: CoachPeople) -> Utterance? {
+        guard record.id == callID else { return nil }
+        func isPerson(_ key: String) -> Bool {
+            if let id = record.speakerPeople?[key], saved.knows(id) { return saved.canonical(id) == person }
+            return record.speakerNames[key].flatMap { saved.id(of: $0) }.map(saved.canonical) == person
+        }
+        let same = record.utterances.filter { Self.hash($0.text) == line && isPerson($0.speakerKey) }
+        return same.min { abs($0.start - at) < abs($1.start - at) }
+    }
+
     /// `mossad://call/<id>?t=<seconds>`, to play the moment.
     public var link: URL? { URL(string: "mossad://call/\(callID)?t=\(Int(at.rounded(.down)))") }
 }
@@ -189,6 +202,8 @@ public struct PersonaText: Codable, Equatable, Sendable {
     /// The calls for and against when it was written, to know when to write it again.
     public var calls: Int
     public var counter: Int
+    /// Why the word check refused the sentence, by reason ("topic: freight", "number"). Nil when it passed.
+    public var refused: [String]?
 
     public init(statement: String, soDoThis: String, rating: Rating, written: Date, calls: Int, counter: Int) {
         self.statement = statement

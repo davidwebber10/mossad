@@ -1,14 +1,14 @@
 {
  "id": "gold-12-1",
  "person": "Quinn Ellis",
- "title": "Training program design",
+ "title": "Data warehouse migration",
  "tags": [
-  "Training",
-  "People"
+  "Data",
+  "Engineering"
  ],
  "setting": "one_on_one",
  "start": "2026-08-15T17:00:00Z",
- "end": "2026-08-15T17:13:55Z",
+ "end": "2026-08-15T17:13:07Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Quinn Ellis"
@@ -19,573 +19,549 @@
    "key": "me:A",
    "start": 0.0,
    "end": 4.6,
-   "text": "Thanks for making the time. Today is about the training program design."
+   "text": "Thanks for making the time. Today is about the data warehouse migration."
   },
   {
    "key": "me:A",
-   "start": 5.6,
-   "end": 12.6,
-   "text": "The vendor sent an updated proposal for the module, and it changes the manager guide a little bit."
+   "start": 5.1,
+   "end": 13.5,
+   "text": "The feedback on the cutover has been mixed, some people like it and some say it adds steps to the query cost."
   },
   {
    "key": "me:A",
-   "start": 13.4,
-   "end": 20.8,
-   "text": "The trainer numbers came in yesterday, and I put a short summary of the workshop in the shared folder."
+   "start": 13.9,
+   "end": 20.9,
+   "text": "We have three open questions on the cutover, mostly about timing and who signs off on the dashboard."
   },
   {
    "key": "me:A",
-   "start": 22.2,
-   "end": 29.5,
-   "text": "The trainer numbers came in yesterday, and I put a short summary of the module in the shared folder."
-  },
-  {
-   "key": "me:A",
-   "start": 30.7,
-   "end": 37.6,
-   "text": "If we wait a month on the module, the manager guide timeline slips by about the same amount."
+   "start": 21.2,
+   "end": 28.1,
+   "text": "We have three open questions on the cutover, mostly about timing and who signs off on the pipeline."
   },
   {
    "key": "them:A",
-   "start": 38.6,
-   "end": 45.6,
-   "text": "The draft for the workshop is in the folder, with comments from two teams on the manager guide."
+   "start": 29.3,
+   "end": 36.6,
+   "text": "We have three open questions on the cutover, mostly about timing and who signs off on the query cost."
   },
   {
    "key": "me:A",
-   "start": 46.9,
-   "end": 54.2,
-   "text": "We tested the manager guide with a small group, and the trainer results were close to what we hoped."
+   "start": 37.5,
+   "end": 44.0,
+   "text": "The vendor sent an updated proposal for the cutover, and it changes the pipeline a little bit."
   },
   {
    "key": "me:A",
-   "start": 55.6,
-   "end": 62.1,
-   "text": "The vendor sent an updated proposal for the workshop, and it changes the module a little bit."
+   "start": 45.5,
+   "end": 52.0,
+   "text": "The vendor sent an updated proposal for the dashboard, and it changes the pipeline a little bit."
   },
   {
    "key": "me:A",
-   "start": 62.9,
-   "end": 71.3,
-   "text": "One thing I noticed is that the module looks different in each region, so the manager guide plan may need two versions."
-  },
-  {
-   "key": "me:A",
-   "start": 72.3,
-   "end": 80.4,
-   "text": "The feedback on the workshop has been mixed, some people like it and some say it adds steps to the trainer."
+   "start": 52.6,
+   "end": 60.3,
+   "text": "Last time we said we would clean up the pipeline first, and that work is about two thirds done now."
   },
   {
    "key": "them:A",
-   "start": 81.0,
-   "end": 89.5,
-   "text": "The feedback on the workshop has been mixed, some people like it and some say it adds steps to the manager guide."
+   "start": 60.9,
+   "end": 67.4,
+   "text": "If we wait a month on the dashboard, the table timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 90.0,
-   "end": 97.3,
-   "text": "If we wait a month on the completion rate, the manager guide timeline slips by about the same amount."
+   "start": 68.2,
+   "end": 75.1,
+   "text": "We have three open questions on the pipeline, mostly about timing and who signs off on the dashboard."
   },
   {
    "key": "me:A",
-   "start": 97.7,
-   "end": 104.6,
-   "text": "The vendor sent an updated proposal for the completion rate, and it changes the module a little bit."
+   "start": 75.5,
+   "end": 82.8,
+   "text": "The cutover numbers came in yesterday, and I put a short summary of the table in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 105.5,
-   "end": 112.4,
-   "text": "The draft for the completion rate is in the folder, with comments from two teams on the workshop."
+   "start": 83.3,
+   "end": 91.0,
+   "text": "I would like us to agree on the scope of the dashboard today, even if the cutover details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 91.4,
+   "end": 99.1,
+   "text": "I would like us to agree on the scope of the cutover today, even if the pipeline details come later."
   },
   {
    "key": "them:A",
-   "start": 113.4,
-   "end": 120.3,
-   "text": "If we wait a month on the completion rate, the workshop timeline slips by about the same amount."
+   "start": 100.3,
+   "end": 108.7,
+   "text": "The feedback on the query cost has been mixed, some people like it and some say it adds steps to the dashboard."
   },
   {
    "key": "me:A",
-   "start": 121.4,
-   "end": 128.3,
-   "text": "We have three open questions on the trainer, mostly about timing and who signs off on the workshop."
+   "start": 110.1,
+   "end": 119.0,
+   "text": "I talked to the people who run the pipeline every day, and they said the dashboard is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 129.1,
-   "end": 136.4,
-   "text": "There is a dependency on the completion rate, so the workshop work cannot really start until that is settled."
-  },
-  {
-   "key": "me:A",
-   "start": 136.9,
-   "end": 144.2,
-   "text": "We could keep the trainer as it is for now and only change the module in the first phase."
-  },
-  {
-   "key": "me:A",
-   "start": 145.2,
-   "end": 153.7,
-   "text": "One thing I noticed is that the module looks different in each region, so the completion rate plan may need two versions."
-  },
-  {
-   "key": "me:A",
-   "start": 154.6,
-   "end": 161.2,
-   "text": "The ask is simple: approve the module change so the completion rate team can start next week."
+   "start": 119.7,
+   "end": 126.2,
+   "text": "If we wait a month on the cutover, the pipeline timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 161.9,
-   "end": 168.0,
-   "text": "Show me it on the screen rather than describing it. I want to see it run."
+   "start": 127.1,
+   "end": 134.5,
+   "text": "We tested the table with a small group, and the query cost results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 168.7,
-   "end": 176.8,
-   "text": "One thing I noticed is that the module looks different in each region, so the trainer plan may need two versions."
+   "start": 135.8,
+   "end": 143.5,
+   "text": "We could keep the pipeline as it is for now and only change the query cost in the first phase."
   },
   {
    "key": "me:A",
-   "start": 178.0,
-   "end": 186.1,
-   "text": "I would like us to agree on the scope of the completion rate today, even if the workshop details come later."
+   "start": 144.4,
+   "end": 152.4,
+   "text": "One thing I noticed is that the pipeline looks different in each region, so the table plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 153.4,
+   "end": 162.6,
+   "text": "So on the pipeline, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:A",
-   "start": 187.4,
-   "end": 194.4,
-   "text": "We have three open questions on the workshop, mostly about timing and who signs off on the trainer."
+   "start": 164.0,
+   "end": 172.8,
+   "text": "I talked to the people who run the pipeline every day, and they said the cutover is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 195.2,
-   "end": 202.2,
-   "text": "The vendor sent an updated proposal for the workshop, and it changes the completion rate a little bit."
+   "start": 173.9,
+   "end": 181.6,
+   "text": "The table piece is moving, and the team has a draft of the pipeline changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 203.6,
-   "end": 210.9,
-   "text": "There is a dependency on the completion rate, so the module work cannot really start until that is settled."
+   "start": 182.1,
+   "end": 189.8,
+   "text": "Last time we said we would clean up the dashboard first, and that work is about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 211.5,
-   "end": 219.6,
-   "text": "I would like us to agree on the scope of the module today, even if the completion rate details come later."
+   "start": 190.3,
+   "end": 198.4,
+   "text": "I would like us to agree on the scope of the pipeline today, even if the query cost details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 199.6,
+   "end": 209.2,
+   "text": "So on the query cost, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:A",
-   "start": 220.3,
-   "end": 228.4,
-   "text": "I would like us to agree on the scope of the completion rate today, even if the trainer details come later."
+   "start": 209.6,
+   "end": 216.5,
+   "text": "From what I can see, the pipeline is on track, and the risk is mostly in the table."
   },
   {
    "key": "me:A",
-   "start": 228.9,
-   "end": 236.2,
-   "text": "We tested the module with a small group, and the completion rate results were close to what we hoped."
+   "start": 217.5,
+   "end": 225.2,
+   "text": "We could keep the cutover as it is for now and only change the query cost in the first phase."
   },
   {
    "key": "me:A",
-   "start": 237.7,
-   "end": 245.8,
-   "text": "The feedback on the trainer has been mixed, some people like it and some say it adds steps to the workshop."
+   "start": 225.8,
+   "end": 232.7,
+   "text": "There is a dependency on the pipeline, so the table work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 233.8,
+   "end": 240.7,
+   "text": "The vendor sent an updated proposal for the cutover, and it changes the query cost a little bit."
   },
   {
    "key": "them:A",
-   "start": 246.3,
-   "end": 254.0,
-   "text": "Last time we said we would clean up the workshop first, and that work is about two thirds done now."
+   "start": 242.1,
+   "end": 249.0,
+   "text": "The draft for the dashboard is in the folder, with comments from two teams on the query cost."
   },
   {
    "key": "me:A",
-   "start": 254.9,
-   "end": 262.6,
-   "text": "The trainer piece is moving, and the team has a draft of the workshop changes ready for review this week."
+   "start": 249.4,
+   "end": 257.1,
+   "text": "The query cost numbers came in yesterday, and I put a short summary of the cutover in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 264.0,
-   "end": 272.1,
-   "text": "One thing I noticed is that the trainer looks different in each region, so the module plan may need two versions."
+   "start": 258.0,
+   "end": 265.3,
+   "text": "From what I can see, the query cost is on track, and the risk is mostly in the dashboard."
   },
   {
    "key": "me:A",
-   "start": 273.4,
-   "end": 281.1,
-   "text": "Last time we said we would clean up the workshop first, and that work is about two thirds done now."
+   "start": 266.3,
+   "end": 273.2,
+   "text": "There is a dependency on the dashboard, so the table work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 274.7,
+   "end": 281.6,
+   "text": "We want to start the cutover on the first of the month. Can we agree on that today?"
   },
   {
    "key": "them:A",
-   "start": 282.1,
-   "end": 289.8,
-   "text": "We could keep the manager guide as it is for now and only change the module in the first phase."
+   "start": 282.4,
+   "end": 285.1,
+   "text": "That one is mine to decide. Done."
   },
   {
    "key": "me:A",
-   "start": 290.9,
-   "end": 299.0,
-   "text": "I would like us to agree on the scope of the trainer today, even if the manager guide details come later."
+   "start": 286.0,
+   "end": 293.7,
+   "text": "The query cost numbers came in yesterday, and I put a short summary of the dashboard in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 300.1,
-   "end": 307.4,
-   "text": "We could keep the trainer as it is for now and only change the module in the first phase."
-  },
-  {
-   "key": "me:A",
-   "start": 308.4,
-   "end": 315.7,
-   "text": "We have three open questions on the workshop, mostly about timing and who signs off on the completion rate."
-  },
-  {
-   "key": "me:A",
-   "start": 317.0,
-   "end": 323.5,
-   "text": "The ask is simple: approve the trainer change so the completion rate team can start next week."
+   "start": 294.4,
+   "end": 301.3,
+   "text": "We have three open questions on the table, mostly about timing and who signs off on the cutover."
   },
   {
    "key": "them:A",
-   "start": 324.4,
-   "end": 328.2,
-   "text": "This is my call, and I will decide it now."
+   "start": 301.9,
+   "end": 308.8,
+   "text": "We tested the dashboard with a small group, and the pipeline results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 329.2,
-   "end": 338.4,
-   "text": "So on the module, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 309.3,
+   "end": 317.8,
+   "text": "One thing I noticed is that the query cost looks different in each region, so the table plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 339.6,
-   "end": 348.1,
-   "text": "One thing I noticed is that the module looks different in each region, so the completion rate plan may need two versions."
+   "start": 318.8,
+   "end": 326.1,
+   "text": "We have three open questions on the table, mostly about timing and who signs off on the query cost."
   },
   {
    "key": "them:A",
-   "start": 349.5,
-   "end": 357.9,
-   "text": "One thing I noticed is that the module looks different in each region, so the manager guide plan may need two versions."
+   "start": 326.6,
+   "end": 333.9,
+   "text": "We tested the query cost with a small group, and the cutover results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 358.7,
-   "end": 365.7,
-   "text": "The vendor sent an updated proposal for the manager guide, and it changes the module a little bit."
+   "start": 334.7,
+   "end": 342.0,
+   "text": "We tested the query cost with a small group, and the table results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 366.3,
-   "end": 374.3,
-   "text": "The completion rate piece is moving, and the team has a draft of the workshop changes ready for review this week."
+   "start": 343.2,
+   "end": 349.7,
+   "text": "The vendor sent an updated proposal for the cutover, and it changes the pipeline a little bit."
   },
   {
    "key": "me:A",
-   "start": 375.7,
-   "end": 382.6,
-   "text": "I think the completion rate question is the main thing left before we can close out the trainer."
+   "start": 351.2,
+   "end": 359.6,
+   "text": "One thing I noticed is that the pipeline looks different in each region, so the query cost plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 383.4,
-   "end": 390.0,
-   "text": "The draft for the workshop is in the folder, with comments from two teams on the module."
+   "start": 360.4,
+   "end": 368.5,
+   "text": "The feedback on the cutover has been mixed, some people like it and some say it adds steps to the table."
   },
   {
    "key": "them:A",
-   "start": 391.3,
-   "end": 398.3,
-   "text": "We have three open questions on the module, mostly about timing and who signs off on the trainer."
+   "start": 369.1,
+   "end": 377.5,
+   "text": "The feedback on the cutover has been mixed, some people like it and some say it adds steps to the query cost."
   },
   {
    "key": "me:A",
-   "start": 399.5,
-   "end": 406.1,
-   "text": "Right, and the workshop also touches the manager guide, which is why I wanted everyone here today."
+   "start": 378.8,
+   "end": 385.8,
+   "text": "If we wait a month on the dashboard, the query cost timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 406.8,
-   "end": 414.1,
-   "text": "We tested the trainer with a small group, and the completion rate results were close to what we hoped."
+   "start": 386.3,
+   "end": 392.8,
+   "text": "The vendor sent an updated proposal for the dashboard, and it changes the pipeline a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 393.4,
+   "end": 399.9,
+   "text": "The draft for the dashboard is in the folder, with comments from two teams on the cutover."
   },
   {
    "key": "them:A",
-   "start": 415.5,
-   "end": 422.5,
-   "text": "The vendor sent an updated proposal for the manager guide, and it changes the trainer a little bit."
+   "start": 400.3,
+   "end": 406.9,
+   "text": "If we wait a month on the dashboard, the cutover timeline slips by about the same amount."
   },
   {
    "key": "me:A",
-   "start": 422.8,
-   "end": 430.1,
-   "text": "We have three open questions on the manager guide, mostly about timing and who signs off on the trainer."
+   "start": 407.4,
+   "end": 414.3,
+   "text": "We have three open questions on the table, mostly about timing and who signs off on the cutover."
   },
   {
    "key": "me:A",
-   "start": 430.6,
-   "end": 438.7,
-   "text": "The trainer piece is moving, and the team has a draft of the manager guide changes ready for review this week."
+   "start": 415.2,
+   "end": 422.2,
+   "text": "There is a dependency on the dashboard, so the cutover work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 439.9,
-   "end": 449.2,
-   "text": "I talked to the people who run the trainer every day, and they said the completion rate is the part that slows them down."
+   "start": 423.4,
+   "end": 430.7,
+   "text": "We could keep the table as it is for now and only change the pipeline in the first phase."
   },
   {
    "key": "me:A",
-   "start": 449.9,
-   "end": 457.6,
-   "text": "We could keep the manager guide as it is for now and only change the module in the first phase."
+   "start": 432.1,
+   "end": 440.2,
+   "text": "One thing I noticed is that the pipeline looks different in each region, so the dashboard plan may need two versions."
   },
   {
    "key": "them:A",
-   "start": 458.7,
-   "end": 466.0,
-   "text": "The workshop numbers came in yesterday, and I put a short summary of the trainer in the shared folder."
+   "start": 441.2,
+   "end": 447.7,
+   "text": "I think the dashboard question is the main thing left before we can close out the pipeline."
   },
   {
    "key": "me:A",
-   "start": 466.8,
-   "end": 474.1,
-   "text": "The workshop numbers came in yesterday, and I put a short summary of the module in the shared folder."
+   "start": 449.1,
+   "end": 457.9,
+   "text": "I talked to the people who run the cutover every day, and they said the table is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 474.7,
-   "end": 482.8,
-   "text": "The feedback on the module has been mixed, some people like it and some say it adds steps to the workshop."
+   "start": 458.4,
+   "end": 465.0,
+   "text": "If we wait a month on the dashboard, the pipeline timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 466.3,
+   "end": 473.2,
+   "text": "We have three open questions on the cutover, mostly about timing and who signs off on the table."
   },
   {
    "key": "them:A",
-   "start": 483.1,
-   "end": 491.9,
-   "text": "I talked to the people who run the module every day, and they said the workshop is the part that slows them down."
+   "start": 474.5,
+   "end": 480.7,
+   "text": "Right, and the dashboard also touches the cutover, which is why I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 492.6,
-   "end": 499.9,
-   "text": "There is a dependency on the trainer, so the manager guide work cannot really start until that is settled."
+   "start": 481.1,
+   "end": 488.4,
+   "text": "We could keep the pipeline as it is for now and only change the dashboard in the first phase."
   },
   {
    "key": "me:A",
-   "start": 500.3,
-   "end": 508.0,
-   "text": "The module numbers came in yesterday, and I put a short summary of the manager guide in the shared folder."
+   "start": 488.9,
+   "end": 495.4,
+   "text": "The vendor sent an updated proposal for the dashboard, and it changes the pipeline a little bit."
   },
   {
    "key": "me:A",
-   "start": 509.0,
-   "end": 516.3,
-   "text": "From what I can see, the module is on track, and the risk is mostly in the manager guide."
+   "start": 496.0,
+   "end": 503.7,
+   "text": "I would like us to agree on the scope of the dashboard today, even if the table details come later."
   },
   {
    "key": "them:A",
-   "start": 517.7,
-   "end": 524.6,
-   "text": "I think the manager guide question is the main thing left before we can close out the workshop."
+   "start": 504.2,
+   "end": 510.7,
+   "text": "The vendor sent an updated proposal for the pipeline, and it changes the table a little bit."
   },
   {
    "key": "me:A",
-   "start": 525.4,
-   "end": 532.7,
-   "text": "There is a dependency on the manager guide, so the trainer work cannot really start until that is settled."
+   "start": 511.9,
+   "end": 520.0,
+   "text": "One thing I noticed is that the cutover looks different in each region, so the pipeline plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 534.1,
-   "end": 541.4,
-   "text": "We tested the trainer with a small group, and the manager guide results were close to what we hoped."
-  },
-  {
-   "key": "me:A",
-   "start": 542.3,
-   "end": 549.3,
-   "text": "There is a dependency on the workshop, so the trainer work cannot really start until that is settled."
+   "start": 521.4,
+   "end": 529.1,
+   "text": "Last time we said we would clean up the cutover first, and that work is about two thirds done now."
   },
   {
    "key": "them:A",
-   "start": 550.5,
-   "end": 557.8,
-   "text": "The trainer numbers came in yesterday, and I put a short summary of the module in the shared folder."
+   "start": 529.6,
+   "end": 537.7,
+   "text": "One thing I noticed is that the dashboard looks different in each region, so the cutover plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 558.7,
-   "end": 565.7,
-   "text": "There is a dependency on the trainer, so the module work cannot really start until that is settled."
+   "start": 538.8,
+   "end": 545.8,
+   "text": "There is a dependency on the pipeline, so the cutover work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 567.1,
-   "end": 574.0,
-   "text": "The vendor sent an updated proposal for the manager guide, and it changes the trainer a little bit."
+   "start": 546.8,
+   "end": 554.1,
+   "text": "We tested the query cost with a small group, and the dashboard results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 574.7,
-   "end": 581.6,
-   "text": "We have three open questions on the trainer, mostly about timing and who signs off on the workshop."
+   "start": 555.0,
+   "end": 562.7,
+   "text": "We could keep the query cost as it is for now and only change the pipeline in the first phase."
   },
   {
    "key": "them:A",
-   "start": 582.4,
-   "end": 589.3,
-   "text": "The draft for the completion rate is in the folder, with comments from two teams on the module."
+   "start": 563.9,
+   "end": 570.8,
+   "text": "There is a dependency on the cutover, so the dashboard work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 590.6,
-   "end": 598.7,
-   "text": "Last time we said we would clean up the manager guide first, and that work is about two thirds done now."
+   "start": 572.1,
+   "end": 581.7,
+   "text": "So on the query cost, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 599.8,
-   "end": 606.7,
-   "text": "The draft for the manager guide is in the folder, with comments from two teams on the module."
+   "start": 582.8,
+   "end": 589.7,
+   "text": "We tested the cutover with a small group, and the dashboard results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 591.0,
+   "end": 598.3,
+   "text": "We have three open questions on the query cost, mostly about timing and who signs off on the dashboard."
+  },
+  {
+   "key": "me:A",
+   "start": 598.7,
+   "end": 607.2,
+   "text": "One thing I noticed is that the pipeline looks different in each region, so the query cost plan may need two versions."
   },
   {
    "key": "me:A",
    "start": 607.5,
-   "end": 615.2,
-   "text": "The module piece is moving, and the team has a draft of the trainer changes ready for review this week."
+   "end": 616.7,
+   "text": "So on the pipeline, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 618.1,
+   "end": 625.8,
+   "text": "I propose we change the pipeline next month and move about 20% of the work to the new dashboard setup."
   },
   {
    "key": "them:A",
-   "start": 616.1,
-   "end": 625.4,
-   "text": "So on the module, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 626.5,
+   "end": 631.5,
+   "text": "Can you share your screen and just click through it with me live?"
   },
   {
    "key": "me:A",
-   "start": 626.6,
-   "end": 632.8,
-   "text": "Right, and the trainer also touches the workshop, which is why I wanted everyone here today."
+   "start": 632.9,
+   "end": 639.5,
+   "text": "The draft for the table is in the folder, with comments from two teams on the dashboard."
   },
   {
    "key": "me:A",
-   "start": 633.1,
-   "end": 640.0,
-   "text": "From what I can see, the module is on track, and the risk is mostly in the trainer."
+   "start": 640.7,
+   "end": 647.2,
+   "text": "The vendor sent an updated proposal for the dashboard, and it changes the table a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 648.1,
+   "end": 655.8,
+   "text": "Last time we said we would clean up the table first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 657.0,
+   "end": 664.3,
+   "text": "We tested the dashboard with a small group, and the query cost results were close to what we hoped."
   },
   {
    "key": "them:A",
-   "start": 641.4,
-   "end": 647.9,
-   "text": "The vendor sent an updated proposal for the workshop, and it changes the trainer a little bit."
+   "start": 665.7,
+   "end": 674.2,
+   "text": "One thing I noticed is that the query cost looks different in each region, so the pipeline plan may need two versions."
   },
   {
    "key": "me:A",
-   "start": 649.3,
-   "end": 659.0,
-   "text": "I talked to the people who run the completion rate every day, and they said the manager guide is the part that slows them down."
+   "start": 674.5,
+   "end": 681.4,
+   "text": "We tested the cutover with a small group, and the pipeline results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 660.4,
-   "end": 668.5,
-   "text": "Last time we said we would clean up the completion rate first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 668.9,
-   "end": 676.6,
-   "text": "We could keep the completion rate as it is for now and only change the workshop in the first phase."
-  },
-  {
-   "key": "me:A",
-   "start": 677.1,
-   "end": 684.0,
-   "text": "We have three open questions on the trainer, mostly about timing and who signs off on the module."
+   "start": 682.8,
+   "end": 689.3,
+   "text": "The draft for the pipeline is in the folder, with comments from two teams on the dashboard."
   },
   {
    "key": "them:A",
-   "start": 684.5,
-   "end": 691.8,
-   "text": "We could keep the module as it is for now and only change the trainer in the first phase."
+   "start": 690.8,
+   "end": 697.3,
+   "text": "I think the cutover question is the main thing left before we can close out the table."
   },
   {
    "key": "me:A",
-   "start": 692.3,
-   "end": 699.2,
-   "text": "I think the completion rate question is the main thing left before we can close out the trainer."
+   "start": 698.3,
+   "end": 705.3,
+   "text": "I think the table question is the main thing left before we can close out the query cost."
   },
   {
    "key": "me:A",
-   "start": 700.0,
-   "end": 706.9,
-   "text": "I think the manager guide question is the main thing left before we can close out the workshop."
-  },
-  {
-   "key": "me:A",
-   "start": 708.2,
-   "end": 717.4,
-   "text": "So on the module, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "me:A",
-   "start": 717.7,
-   "end": 727.4,
-   "text": "So on the manager guide, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 705.7,
+   "end": 714.2,
+   "text": "The feedback on the pipeline has been mixed, some people like it and some say it adds steps to the query cost."
   },
   {
    "key": "them:A",
-   "start": 728.4,
-   "end": 735.3,
-   "text": "The draft for the completion rate is in the folder, with comments from two teams on the module."
+   "start": 715.6,
+   "end": 723.7,
+   "text": "The table piece is moving, and the team has a draft of the query cost changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 736.5,
-   "end": 745.4,
-   "text": "I talked to the people who run the module every day, and they said the trainer is the part that slows them down."
-  },
-  {
-   "key": "me:A",
-   "start": 746.9,
-   "end": 753.8,
-   "text": "We have three open questions on the workshop, mostly about timing and who signs off on the module."
-  },
-  {
-   "key": "me:A",
-   "start": 754.3,
-   "end": 762.0,
-   "text": "We have three open questions on the manager guide, mostly about timing and who signs off on the completion rate."
-  },
-  {
-   "key": "them:A",
-   "start": 762.6,
-   "end": 770.3,
-   "text": "Last time we said we would clean up the trainer first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 771.1,
-   "end": 774.5,
-   "text": "Good, let us pick this up next week. Thanks."
+   "start": 724.1,
+   "end": 727.2,
+   "text": "Okay, I think that covers it. Thanks, everyone."
   }
  ],
  "beats": [
   {
-   "line": 20,
-   "person": "Quinn Ellis",
-   "dimension": "order",
-   "value": "live_walkthrough"
-  },
-  {
-   "line": 39,
+   "line": 34,
    "person": "Quinn Ellis",
    "dimension": "authority",
    "value": "decides_alone"
+  },
+  {
+   "line": 76,
+   "person": "Quinn Ellis",
+   "dimension": "order",
+   "value": "live_walkthrough"
   }
  ]
 }

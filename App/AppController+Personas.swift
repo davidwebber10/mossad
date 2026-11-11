@@ -40,7 +40,7 @@ extension AppController {
         guard let store = library.identity?.people, let id = personID(of: name) else { return }
         do {
             try store.setDoNotProfile(!on, for: PersonID(rawValue: id))
-            if !on { forgetPersona(id) }
+            if !on { forgetPersona(id) } else { rereadCalls(of: id) }
             Log.info(on ? "The coach keeps a read on a person again" : "The coach keeps no read on a person; its files are deleted")
         } catch {
             Log.error("The switch for a person's read was not saved: \(error)")
@@ -56,12 +56,23 @@ extension AppController {
         for one in personaPeople.ids(of: id) + [id] { store.delete(one) }
     }
 
+    /// The read is on again: the person's calls are due again, so the old calls count.
+    private func rereadCalls(of id: String) {
+        let saved = personaPeople, dir = PersonaStore(paths: paths).directory
+        var ledger = PersonaLedger.load(from: dir)
+        for r in meetings where PersonaReads.callsWith([r], saved: saved)[id] != nil { ledger.calls[r.id] = nil }
+        ledger.save(to: dir)
+    }
+
     /// "Delete" on the People page: the person's read goes with them.
     func forgetPersona(named name: String) {
         if let id = personID(of: name) { forgetPersona(id) }
     }
 
-    /// The persona step for the calls that are due: after the coach's run, never while a call is recorded.
+    /// The persona step for the calls that are due: after the coach's run and at launch, never while a call is
+    /// recorded. The first time, it also reads the stored calls (the first fill), newest first, with a hard cap
+    /// of $1 across launches. A fill that would cost more, or whose price is not known, waits for the owner's yes in
+    /// Settings > Coach.
     func runPersonas() async {
         guard !isInert, personasOn, !personasRunning, !isRecording else { return }
         let key = aiProvider.key.flatMap { keychain.get($0) }
@@ -69,13 +80,64 @@ extension AppController {
         if personaSince == 0 { personaSince = Date().timeIntervalSince1970 }
         personasRunning = true
         defer { personasRunning = false }
-        let runner = PersonaRunner(paths: paths, llm: made.llm, owner: ownerName)
-        let report = await runner.run(since: Date(timeIntervalSince1970: personaSince), callLimit: Self.personaCallsPerRun,
-                                      isLive: { await MainActor.run { self.isRecording } })
-        if report.calls + report.people > 0 {
-            Log.info("Persona step: \(report.calls) calls, \(report.requests) requests, sentences for \(report.people) people")
-            coachVersion += 1
+        let paths = paths, owner = ownerName, usage = usage
+        let price = PersonaFill.price(service: made.service, model: made.name)
+        let runner = PersonaRunner(paths: paths, llm: made.llm, owner: owner)
+        // The fill waits for the people's ids: a call read before them gives no evidence.
+        var filling = false
+        if !personaFillDone, library.identity != nil {
+            let e = await Task.detached(priority: .utility) { PersonaRunner.estimate(paths: paths, owner: owner, since: nil, price: price.cost) }.value
+            if e.calls == 0 {
+                personaFillDone = true
+                personaFillNote = nil
+            } else if personaFillApproved || (price.known && e.dollars <= PersonaFill.defaultCap) {
+                filling = true
+                personaFillNote = nil
+                if personaFillStart == 0 {
+                    personaFillStart = Date().timeIntervalSince1970
+                    Log.info(String(format: "The first fill of the reads starts: %d calls, about $%.2f", e.calls, e.dollars))
+                }
+            } else {
+                personaFillCap = min(PersonaFill.maxCap, max(PersonaFill.defaultCap, (e.dollars * 1.25 * 100).rounded(.up) / 100))
+                personaFillNote = price.known
+                    ? String(format: "Reading your %d older calls once would cost about $%.2f, more than the $1 that Mossad spends by itself.", e.calls, e.dollars)
+                    : "Mossad does not know the price of \(made.name), so it does not read your \(e.calls) older calls by itself."
+            }
         }
+        let start = Date(timeIntervalSince1970: personaFillStart)
+        let cap = personaFillApproved ? personaFillCap : PersonaFill.defaultCap
+        let known = price.known
+        let canSpend: @Sendable (Double) -> Bool = { cost in
+            guard known else { return true }
+            let spent = usage.all().filter { $0.purpose == .persona && $0.date >= start }.reduce(0) { $0 + Pricing.cost($1) }
+            return spent + cost <= cap
+        }
+        var rounds = 0
+        repeat {
+            rounds += 1
+            let report = await runner.run(since: filling || personaFillDone ? nil : Date(timeIntervalSince1970: personaSince), callLimit: Self.personaCallsPerRun,
+                                          newestFirst: filling, isLive: { await MainActor.run { self.isRecording } },
+                                          canSpend: filling ? canSpend : { _ in true }, price: price.cost)
+            if report.calls + report.people > 0 {
+                Log.info("Persona step: \(report.calls) calls, \(report.requests) requests, sentences for \(report.people) people")
+                coachVersion += 1
+            }
+            guard filling else { break }
+            if report.stopped != nil { break }
+            if report.calls < Self.personaCallsPerRun {
+                personaFillDone = true
+                let spent = usage.all().filter { $0.purpose == .persona && $0.date >= start }.reduce(0) { $0 + Pricing.cost($1) }
+                Log.info(String(format: "The first fill of the reads is done: $%.2f spent", spent))
+                break
+            }
+        } while rounds < 30 && !isRecording
+    }
+
+    /// "Read the older calls" in Settings > Coach: the owner's yes to a fill above $1, with its own cap.
+    func approvePersonaFill() {
+        personaFillApproved = true
+        personaFillNote = nil
+        Task { await runPersonas() }
     }
 
     // MARK: The cover
@@ -106,16 +168,26 @@ extension AppController {
     /// for the share or the call it was made in.
     func startShareWatch() {
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+            // Only while there are reads to cover.
+            guard let self, self.personasOn else { return }
             DispatchQueue.global(qos: .utility).async {
-                let windows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []).map {
-                    (owner: $0[kCGWindowOwnerName as String] as? String ?? "", title: $0[kCGWindowName as String] as? String)
-                }
-                let sharing = OwnerShare.isSharing(windows)
+                // With no Screen Recording permission the titles of other apps cannot be read: not known.
+                let own = ProcessInfo.processInfo.processIdentifier
+                let sharing: Bool? = CGPreflightScreenCaptureAccess()
+                    ? OwnerShare.isSharing((CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? [])
+                        .filter { ($0[kCGWindowOwnerPID as String] as? Int32) != own }
+                        .map { (owner: $0[kCGWindowOwnerName as String] as? String ?? "", title: $0[kCGWindowName as String] as? String) })
+                    : nil
                 Task { @MainActor in
-                    guard let self else { return }
+                    // A card opened before a share or a call is covered again when one starts.
+                    if sharing == true, self.ownerSharing != true { self.shownCovered = [] }
+                    if self.isRecording, !self.coverWasRecording { self.shownCovered = [] }
+                    self.coverWasRecording = self.isRecording
                     if self.ownerSharing != sharing { self.ownerSharing = sharing }
                     if sharing != true, !self.isRecording, !self.shownCovered.isEmpty { self.shownCovered = [] }
                 }
+            }
             }
         }
     }

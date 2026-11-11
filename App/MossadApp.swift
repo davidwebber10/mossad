@@ -19,7 +19,9 @@ struct MossadEntry {
             if Rehearsal.isOn { print("Mossad Rehearsal does not serve MCP."); exit(1) }
             let owner = UserDefaults.standard.string(forKey: "ownerName") ?? NSFullUserName()
             // The coach's reads of how people think: on for other AI apps, unless the owner turned it off.
-            let traits = UserDefaults.standard.object(forKey: "personaInMCP") as? Bool ?? true
+            let d = UserDefaults.standard
+            let traits = MCPServer.showsPersonas(coachEnabled: d.bool(forKey: "coachEnabled"), personaEnabled: d.object(forKey: "personaEnabled") as? Bool ?? true,
+                                                 personaInMCP: d.object(forKey: "personaInMCP") as? Bool ?? true)
             MCPServer(paths: .live, owner: owner, personaTraits: traits).run()
             exit(0)
         }
@@ -50,8 +52,8 @@ struct MossadEntry {
             let chosen = defaults.string(forKey: "aiModel") ?? ""
             let server = LocalServer.url(from: defaults.string(forKey: "localServerURL") ?? "") ?? LocalServer.ollama
             Task {
-                let status = await PersonaFill.command(args, paths: .live, owner: owner, model: { usage in
-                    PersonaExtractor.model(provider: provider, chosen: chosen, key: provider.key.flatMap { Keychain.app.get($0) }, usage: usage, serverURL: server)
+                let status = await PersonaFill.command(args, paths: .live, owner: owner, plan: PersonaExtractor.plan(provider: provider, chosen: chosen), makeModel: { usage in
+                    PersonaExtractor.model(provider: provider, chosen: chosen, key: provider.key.flatMap { Keychain.app.get($0) }, usage: usage, serverURL: server)?.llm
                 }, say: { print($0); fflush(stdout) })
                 exit(status)
             }

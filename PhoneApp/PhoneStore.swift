@@ -868,7 +868,7 @@ final class PhoneStore {
         Task {
             let (cards, traits) = await Task.detached(priority: .utility) {
                 let traits = PersonaFindings.cards(sources, calls: recent.map { (callID: $0.0, date: $0.1) }, profile: profile, now: now,
-                                                   quote: { PersonaReads.words($0, paths: paths) })
+                                                   quote: { PersonaReads.words($0, person: $1, paths: paths, saved: saved) })
                 let cards = FindingRules.deck(reviews: recent.compactMap { id, start in
                     CoachReview.load(in: paths.callDirectory(id)).map { (callID: id, date: start, review: $0) }
                 }, profile: profile, now: now, traits: traits)

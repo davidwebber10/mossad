@@ -66,9 +66,11 @@ final class PersonaEvalTests: XCTestCase {
         let report = try await PersonaEval.run(gold, inner: model, usage: usage, model: "claude-sonnet-5-5", cap: 15, cache: cache, log: { _ in })
         XCTAssertFalse(report.stoppedAtCap)
         XCTAssertGreaterThan(report.requests, 72)
-        XCTAssertTrue(report.lines.contains { $0.hasPrefix("Precision of shown traits after 6 calls:") })
-        XCTAssertTrue(report.lines.contains { $0.hasPrefix("Recall after 4 calls:") })
-        XCTAssertTrue(report.lines.contains { $0.hasPrefix("Specificity") })
+        XCTAssertTrue(report.lines.contains { $0.hasPrefix("Precision of shown traits after 6 calls") })
+        XCTAssertTrue(report.lines.contains { $0.hasPrefix("Recall after 4 calls") })
+        XCTAssertTrue(report.lines.contains { $0.hasPrefix("Sentences that the word check refused") })
+        XCTAssertTrue(report.lines[0].hasPrefix("Limits: the gold set is made from templates"), "the limits stand at the top")
+        XCTAssertFalse(report.lines.contains { $0.contains("lower") && !$0.contains("never lowers") }, "the eval never lowers the threshold")
         XCTAssertTrue(report.lines.contains { $0.hasPrefix("Calibration mean gap") })
         let shown = report.traits.filter { $0.checkpoint == 6 && $0.shown }
         XCTAssertFalse(shown.isEmpty)
@@ -109,10 +111,10 @@ final class PersonaEvalTests: XCTestCase {
         let report = await PersonaRunner(paths: paths, llm: small, owner: "Dana Lee").run(since: nil, isLive: { false })
         XCTAssertEqual(report.stopped, "the model's context is too small")
         XCTAssertEqual(small.calls, 0)
-        XCTAssertFalse(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r.id), "the call waits for a model that can read it")
+        XCTAssertFalse(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r), "the call waits for a model that can read it")
         let broken = await PersonaRunner(paths: paths, llm: BrokenModel(), owner: "Dana Lee").run(since: nil, isLive: { false })
         XCTAssertNil(broken.stopped)
-        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r.id), "a reply in another shape leaves the call out, so it blocks nothing")
+        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r), "a reply in another shape leaves the call out, so it blocks nothing")
     }
 
     @MainActor
@@ -127,19 +129,31 @@ final class PersonaEvalTests: XCTestCase {
         }
         let model = GoldStubModel(gold: gold)
         var said: [String] = []
-        let status = await PersonaFill.command(["--persona-fill"], paths: paths, owner: "Dana Lee", model: { _ in (model, "claude-sonnet-5-5", .claude) },
+        var keyRead = false
+        let status = await PersonaFill.command(["--persona-fill"], paths: paths, owner: "Dana Lee", plan: ("claude-sonnet-5-5", .claude), makeModel: { _ in keyRead = true; return model },
                                                say: { said.append($0) })
         XCTAssertEqual(status, 0)
         XCTAssertEqual(model.calls, 0)
+        XCTAssertFalse(keyRead, "the estimate makes no model and reads no key")
         XCTAssertTrue(said.contains { $0.hasPrefix("Estimated cost: $") })
         XCTAssertTrue(said.contains { $0.contains("Calls to read: 6") })
-        let go = await PersonaFill.command(["--persona-fill", "--go"], paths: paths, owner: "Dana Lee", model: { usage in model.usage = usage; return (model, "claude-sonnet-5-5", .claude) },
+        let go = await PersonaFill.command(["--persona-fill", "--go"], paths: paths, owner: "Dana Lee", plan: ("claude-sonnet-5-5", .claude), makeModel: { usage in model.usage = usage; return model },
                                            say: { said.append($0) })
         XCTAssertEqual(go, 0)
         XCTAssertGreaterThan(model.calls, 0)
-        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(gold.calls[0].id))
-        let none = await PersonaFill.command(["--persona-fill"], paths: paths, owner: "Dana Lee", model: { _ in nil }, say: { said.append($0) })
+        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(gold.records()[0]))
+        let none = await PersonaFill.command(["--persona-fill"], paths: paths, owner: "Dana Lee", plan: nil, makeModel: { _ in nil }, say: { said.append($0) })
         XCTAssertEqual(none, 1)
+        for bad in ["inf", "0", "-1", "40"] {
+            let s = await PersonaFill.command(["--persona-fill", "--cap", bad], paths: paths, owner: "Dana Lee", plan: ("claude-sonnet-5-5", .claude), makeModel: { _ in nil },
+                                              say: { said.append($0) })
+            XCTAssertEqual(s, 1, bad)
+        }
+        _ = await PersonaFill.command(["--persona-fill"], paths: paths, owner: "Dana Lee", plan: ("some-model", .openrouter), makeModel: { _ in model },
+                                      say: { said.append($0) })
+        XCTAssertTrue(said.contains { $0.contains("price of some-model is not known") })
+        XCTAssertFalse(PersonaFill.price(service: .openrouter, model: "some-model").known)
+        XCTAssertTrue(PersonaFill.price(service: .local, model: "llama").known)
     }
 }
 

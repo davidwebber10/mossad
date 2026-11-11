@@ -43,7 +43,8 @@ public enum PersonaFindings {
         }
 
         var isAsked: Bool {
-            guard statement.nonBlank != nil else { return false }
+            // Pace is not shown in this version, so it is not asked.
+            guard statement.nonBlank != nil, !trait.contains("|\(PersonaDimension.pace.rawValue)|") else { return false }
             return (state == .candidate && supportCalls == 2) || state == .shown
         }
     }
@@ -51,12 +52,12 @@ public enum PersonaFindings {
     /// The trait card of each call, by call id: newest calls first, one for each call, and no more than the week
     /// leaves. `calls` are the calls of the deck with their start. `quote` gives the person's words of a moment.
     public static func cards(_ sources: [Source], calls: [(callID: String, date: Date)], profile: CoachProfile, now: Date = Date(),
-                             quote: (PersonaPointer) -> String? = { _ in nil }) -> [String: CoachFinding] {
-        let traitAnswers = profile.answers.filter { $0.trait != nil }
-        let answered = Set(traitAnswers.compactMap(\.trait))
+                             quote: (PersonaPointer, String) -> String? = { _, _ in nil }) -> [String: CoachFinding] {
+        let traitAnswers = profile.answers.filter { $0.traitID != nil }
+        let answered = Set(traitAnswers.compactMap(\.traitID))
         let thisWeek = traitAnswers.filter { $0.verdict != nil && now.timeIntervalSince($0.date) < 7 * 86_400 }.count
         var room = max(0, perWeek - thisWeek)
-        let blocked = Set(traitAnswers.filter { $0.verdict == .never }.compactMap { $0.trait.map(PersonaTrait.block(of:)) })
+        let blocked = Set(traitAnswers.filter { $0.verdict == .never }.compactMap { $0.traitID.map(PersonaTrait.block(of:)) })
         var out: [String: CoachFinding] = [:]
         var used: Set<String> = []
         for call in calls.sorted(by: { $0.date > $1.date }) where room > 0 {
@@ -70,7 +71,7 @@ public enum PersonaFindings {
             used.insert(pick.trait)
             room -= 1
             out[call.callID] = CoachFinding(id: "\(call.callID)|\(CoachFinding.Kind.trait.rawValue)|\(pick.trait)", callID: call.callID, date: call.date, kind: .trait,
-                                            text: pick.statement, skill: "", detail: "Seen in \(pick.supportCalls) calls", quote: quote(moment), at: moment.at,
+                                            text: pick.statement, skill: "", detail: "Seen in \(pick.supportCalls) calls", quote: quote(moment, pick.person), at: moment.at,
                                             person: pick.person, personName: pick.personName, trait: pick.trait)
         }
         return out

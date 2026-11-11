@@ -223,6 +223,10 @@ public enum PersonaEval {
         public var shown: Bool
         public var correct: Bool
         public var passesWords: Bool
+        /// Why the word check refused the sentence, by reason key.
+        public var refused: [String]?
+        /// The trait has 2 days of support: it shows only under the 2-call rule, which the eval measures as if on.
+        public var twoCalls: Bool?
     }
 
     public struct Report: Codable, Sendable {
@@ -280,9 +284,10 @@ public enum PersonaEval {
                     persona.evidence = (evidence[id] ?? []).filter { calls.contains($0.callID) }
                     // The sentences from the checkpoint before stay, as in the app.
                     persona.texts = textsByPerson[p.name] ?? [:]
-                    let traits = PersonaTraits.build(persona, answers: [])
+                    // The 2-call rule as if on: the eval measures it, so it can say to keep it off.
+                    let traits = PersonaTraits.build(persona, answers: [], twoCallRule: true)
                     do {
-                        let new = try await writer.write(traits, first: p.first, line: { PersonaRunner.line($0, records: byID, name: p.name, owner: gold.owner) },
+                        let new = try await writer.write(traits, first: p.first, line: { PersonaRunner.line($0, records: byID, person: id, name: p.name, owner: gold.owner, saved: saved) },
                                                          notTrue: [], topicTerms: topics, names: names.subtracting([p.name]), now: start)
                         for (key, text) in new { persona.texts[key] = text }
                     } catch let cap as EvalModel.CapReached {
@@ -292,13 +297,13 @@ public enum PersonaEval {
                     }
                     textsByPerson[p.name] = persona.texts
                     let planted = Set(p.planted.map { "\($0.dimension)|\($0.value)" })
-                    for t in PersonaTraits.build(persona, answers: []) where t.supportCalls >= 2 {
+                    for t in PersonaTraits.build(persona, answers: [], twoCallRule: true) where t.supportCalls >= 2 && t.dimension != PersonaDimension.pace.rawValue {
                         let words = t.text.map { PersonaWords.passes(statement: $0.statement, soDoThis: $0.soDoThis, topicTerms: topics,
                                                                      names: names.subtracting([p.name]), person: p.first) } ?? false
                         scored.append(Scored(person: p.name, checkpoint: k, dimension: t.dimension, value: t.value, condition: t.condition?.rawValue,
                                              statement: t.text?.statement ?? "", confidence: t.confidence, days: t.supportDays, shown: t.isShown,
-                                             correct: planted.contains("\(t.dimension)|\(t.value)") || (t.dimension == "expects" && planted.contains { $0.hasPrefix("expects|") }),
-                                             passesWords: words))
+                                             correct: planted.contains("\(t.dimension)|\(t.value)"),
+                                             passesWords: words, refused: t.text?.refused, twoCalls: t.supportDays < 3))
                     }
                 }
                 log(String(format: "Checkpoint after %d calls; $%.2f spent.", k, llm.spent))
@@ -311,35 +316,59 @@ public enum PersonaEval {
         return out
     }
 
+    /// The limits of this eval, at the top of each report.
+    static func limits(_ r: Report, gold: PersonaGold) -> [String] {
+        let shown = r.traits.filter { $0.checkpoint == checkpoints.last && $0.shown }.count
+        return [
+            "Limits: the gold set is made from templates. Each value has a few fixed lines that say it in plain words, and the same lines repeat for each person. A model finds them easily, so each result here is an upper bound for real calls.",
+            "Sample: \(gold.people.count) made-up people, \(gold.calls.count) calls, \(shown) shown traits after 6 calls. Real answers in the Findings deck are the second check.",
+            "The eval can turn the 2-call rule off. It never turns it on, and it never lowers the threshold: real answers do (\(PersonaConfidence.twoCallAnswers) trait answers with \(Int(PersonaConfidence.twoCallYesShare * 100))% yes).",
+        ]
+    }
+
+    /// The low end of a 95% interval of a share (Wilson), so a small sample says how little it shows.
+    static func lowerBound(_ k: Int, _ n: Int) -> Double {
+        guard n > 0 else { return 0 }
+        let z = 1.96, p = Double(k) / Double(n), nn = Double(n)
+        return (p + z * z / (2 * nn) - z * ((p * (1 - p) + z * z / (4 * nn)) / nn).squareRoot()) / (1 + z * z / nn)
+    }
+
     /// The metrics of the study, as lines of text. Pure: a second look at saved output costs nothing.
     public static func metrics(_ r: Report, gold: PersonaGold) -> [String] {
-        var lines: [String] = []
-        func pct(_ a: Int, _ b: Int) -> String { b == 0 ? "n/a" : String(format: "%d of %d (%.0f%%)", a, b, 100 * Double(a) / Double(b)) }
-        lines.append(String(format: "Model %@: %d requests, %d replies from the cache, $%.2f spent%@.", r.model, r.requests, r.cachedReplies, r.spent,
-                            r.stoppedAtCap ? ", stopped at the cap" : ""))
-        lines.append("Evidence validity before the code filter: " + pct(r.kept, r.proposed) + ". After the filter: 100% by construction.")
+        var lines = limits(r, gold: gold)
+        func pct(_ a: Int, _ b: Int) -> String {
+            b == 0 ? "none" : String(format: "%d of %d (%.0f%%; low end of the 95%% range %.0f%%)", a, b, 100 * Double(a) / Double(b), 100 * lowerBound(a, b))
+        }
+        lines.append(String(format: "Model %@: %d requests in this run, %d replies from the cache, $%.2f spent so far in all runs%@.", r.model, r.requests, r.cachedReplies,
+                            r.spent, r.stoppedAtCap ? ", stopped at the cap" : ""))
+        lines.append("Evidence validity before the code filter: \(r.kept) of \(r.proposed) pieces. After the filter: each piece by construction.")
         let last = r.traits.filter { $0.checkpoint == checkpoints.last }
-        let shown = last.filter(\.shown)
-        lines.append("Precision of shown traits after 6 calls: " + pct(shown.filter(\.correct).count, shown.count) + ". Target 90%.")
-        let twoCall = shown.filter { $0.days < 3 }
-        lines.append("Precision of shown 2-call traits: " + pct(twoCall.filter(\.correct).count, twoCall.count) + ". Below 90%: keep the 2-call rule off.")
+        let shown = last.filter { $0.shown && $0.twoCalls != true }
+        lines.append("Precision of shown traits after 6 calls (3 calls or more): " + pct(shown.filter(\.correct).count, shown.count) + ". Target 90%.")
+        let twoCall = last.filter { $0.shown && $0.twoCalls == true }
+        let twoOK = twoCall.isEmpty || Double(twoCall.filter(\.correct).count) / Double(twoCall.count) >= 0.9
+        lines.append("2-call traits, as if the rule were on: " + pct(twoCall.filter(\.correct).count, twoCall.count)
+                     + (twoOK ? ". The rule may come on later from real answers." : ". Below 90%: set PersonaConfidence.twoCallAllowed to false."))
         for k in checkpoints {
             var eligible = 0, found = 0
             for p in gold.people {
-                for planted in p.planted where (planted.calls ?? []).filter({ $0 <= k }).count >= 2 {
+                for planted in p.planted where (planted.calls ?? []).filter({ $0 <= k }).count >= 3 {
                     eligible += 1
-                    if r.traits.contains(where: { $0.person == p.name && $0.checkpoint == k && $0.shown && $0.dimension == planted.dimension && $0.value == planted.value }) {
+                    if r.traits.contains(where: { $0.person == p.name && $0.checkpoint == k && $0.shown && $0.twoCalls != true && $0.dimension == planted.dimension && $0.value == planted.value }) {
                         found += 1
                     }
                 }
             }
-            lines.append("Recall after \(k) calls: " + pct(found, eligible) + (k == 4 ? ". Target 60%." : "."))
+            lines.append("Recall after \(k) calls (planted traits with 3 calls by then): " + pct(found, eligible) + (k == 4 ? ". Target 60%." : "."))
         }
-        lines.append("Specificity (the word check with topics and names): " + pct(shown.filter(\.passesWords).count, shown.count) + ". Target 95%.")
-        // Generic: the same dimension and value shown for more than half of the people.
+        // The word check: how many sentences it refused, and why. A shown trait passed it by construction.
+        let written = r.traits.filter { $0.checkpoint == checkpoints.last && ($0.refused != nil || !$0.statement.isEmpty) }
+        let reasons = Dictionary(grouping: written.flatMap { $0.refused ?? [] }.map { $0.split(separator: ":").first.map(String.init) ?? $0 }, by: { $0 }).mapValues(\.count)
+        lines.append("Sentences that the word check refused: \(written.filter { $0.refused != nil }.count) of \(written.count)"
+                     + (reasons.isEmpty ? "." : ", by reason: " + reasons.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", ") + "."))
         let byKey = Dictionary(grouping: shown, by: { "\($0.dimension)|\($0.value)" }).mapValues { Set($0.map(\.person)).count }
         let generic = shown.filter { (byKey["\($0.dimension)|\($0.value)"] ?? 0) * 2 > gold.people.count }.count
-        lines.append("Generic (one dimension and value for more than half of the people): " + pct(generic, shown.count) + ". Target 20% at most.")
+        lines.append("Generic (one dimension and value for more than half of the people): \(generic) of \(shown.count). Target 20% at most.")
         for p in gold.people {
             let mine = shown.filter { $0.person == p.name }
             let wrong = mine.filter { !$0.correct }
@@ -350,7 +379,6 @@ public enum PersonaEval {
             if !wrong.isEmpty { line += "; not planted: " + wrong.map { "\($0.dimension) \($0.value)" }.joined(separator: ", ") }
             lines.append(line)
         }
-        // Calibration: the number against the true rate, in groups.
         var gaps: [Double] = []
         for lo in stride(from: 0.4, to: 1.0, by: 0.1) {
             let group = last.filter { $0.passesWords && $0.confidence >= lo && $0.confidence < lo + 0.1 }
@@ -361,23 +389,30 @@ public enum PersonaEval {
             lines.append(String(format: "Calibration %.1f to %.1f: %d traits, mean number %.2f, correct %.2f.", lo, lo + 0.1, group.count, mean, rate))
         }
         if !gaps.isEmpty { lines.append(String(format: "Calibration mean gap: %.2f. Target 0.10 at most.", gaps.reduce(0, +) / Double(gaps.count))) }
-        // The lowest threshold where 9 of 10 shown traits are correct, from the saved numbers: no request.
-        let candidates = last.filter { $0.passesWords }
-        var best: Double?
-        for t in stride(from: 0.40, through: 0.90, by: 0.05) {
-            let above = candidates.filter { $0.confidence >= t - 1e-9 }
-            guard above.count >= 3 else { continue }
-            if Double(above.filter(\.correct).count) / Double(above.count) >= 0.9 { best = t; break }
+        // The threshold only goes up from this set, and only with enough traits.
+        let above = last.filter { $0.passesWords && $0.twoCalls != true && $0.confidence >= PersonaConfidence.threshold - 1e-9 }
+        if above.count < minimumForThreshold {
+            lines.append("Threshold: \(above.count) traits at or above \(PersonaConfidence.threshold), fewer than \(minimumForThreshold): no advice.")
+        } else if Double(above.filter(\.correct).count) / Double(above.count) >= 0.9 {
+            lines.append(String(format: "Threshold: 9 of 10 correct at %.2f now. No change: the eval never lowers it.", PersonaConfidence.threshold))
+        } else {
+            var raise: Double?
+            for t in stride(from: PersonaConfidence.threshold + 0.05, through: 0.95, by: 0.05) {
+                let a = last.filter { $0.passesWords && $0.twoCalls != true && $0.confidence >= t - 1e-9 }
+                if a.count >= minimumForThreshold, Double(a.filter(\.correct).count) / Double(a.count) >= 0.9 { raise = t; break }
+            }
+            lines.append(raise.map { String(format: "Threshold: raise to %.2f for 9 of 10 correct.", $0) }
+                         ?? "Threshold: no value with \(minimumForThreshold) traits or more gives 9 of 10 correct. The pages must not change.")
         }
-        lines.append(best.map { String(format: "Lowest threshold with 9 of 10 correct: %.2f (now %.2f).", $0, PersonaConfidence.threshold) }
-                     ?? "No threshold gives 9 of 10 correct: the pages must not change.")
-        // Safety.
         let banned = r.traits.filter { PersonaWords.bannedWord(in: $0.statement) != nil }.count
         let injected = r.traits.filter { s in gold.people.contains { $0.name == s.person && $0.injection.map { s.statement.lowercased().contains($0) } == true } }.count
         lines.append("Safety: \(banned) statements with a banned word, \(injected) that obey the injected line. Target 0.")
-        lines.append("Stability (the same input two times, another order): not measured in this run.")
+        lines.append("Not measured: stability (the same input two times, another order), and the other-topic test by a judge model.")
         return lines
     }
+
+    /// The threshold is judged only with this many traits or more.
+    static let minimumForThreshold = 20
 
     /// `Mossad --persona-eval [--cap 15] [--model claude-sonnet-5-5] --gold <folder> [--out <folder>] [--estimate-only]`.
     /// `key` reads the provider key; it is never printed or logged. `say` prints a line.
@@ -401,11 +436,16 @@ public enum PersonaEval {
         guard e.dollars <= cap else { say("The estimate is over the cap: nothing was sent."); return 1 }
         if args.contains("--estimate-only") { return 0 }
         guard let apiKey = key()?.nonBlank else { say("No Anthropic key in Mossad's Keychain. Add it in Settings > AI."); return 1 }
-        let work = FileManager.default.temporaryDirectory.appendingPathComponent("mossad-persona-eval-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: work) }
         do {
-            try Paths(root: work).ensureDirectories()
-            let usage = UsageLog(directory: Paths(root: work).usage)
+            // The cost of each run stays in --out: the cap holds for all runs together, not for each one.
+            let usage = UsageLog(directory: out.appendingPathComponent("usage"))
+            try FileManager.default.createDirectory(at: out.appendingPathComponent("usage"), withIntermediateDirectories: true)
+            let before = usage.all().reduce(0) { $0 + Pricing.cost($1) }
+            say(String(format: "Spent so far in earlier runs: $%.2f of the $%.2f cap.", before, cap))
+            guard before + e.dollars <= cap || args.contains("--from-cache") else {
+                say("The estimate and the earlier runs together pass the cap: nothing was sent. With no change since the last run, add --from-cache.")
+                return 1
+            }
             let report = try await run(gold, inner: makeModel(apiKey, model, usage), usage: usage, model: model, cap: cap,
                                        cache: out.appendingPathComponent("cache"), log: say)
             try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)

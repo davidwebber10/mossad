@@ -201,7 +201,7 @@ BEATS = {
     ("drivers", "team_load"): ["How much extra work does this put on the team? They are stretched already.",
                                "Who does the extra work? I do not want to burn people out.",
                                "Can the team absorb this without overtime?"],
-    ("expects", "update_before_meeting"): ["Can you send me a short update before our next meeting?",
+    ("expects", "short_updates"): ["Can you send me a short update before our next meeting?",
                                            "A two line note before each of these would help me a lot.",
                                            "Please drop me a quick status before we meet next time."],
 }
@@ -219,7 +219,7 @@ PEOPLE = [
      "planted": [("drivers", "customer", [1, 2, 4, 6], None), ("authority", "refers_up", [1, 3, 4, 5], None),
                  ("order", "path_first", [2, 3, 5, 6], None), ("trust", "unknowns_admitted", [1, 4, 6], None)],
      "hidden": [("evidence", "numbers")]},
-    {"name": "Morgan Diaz", "trap": "a habit in the first 3 calls and another in the last 3", "settings": "mixed",
+    {"name": "Morgan Diaz", "trap": "a habit in the first 3 calls and another in the last 3, 70 days later", "settings": "mixed", "late": 70,
      "planted": [("decision", "in_the_room", [4, 5, 6], None), ("drivers", "time", [1, 2, 3, 5, 6], None),
                  ("detail", "big_picture", [1, 3, 4, 6], None)],
      "superseded": [("decision", "asks_for_time", [1, 2, 3], None)]},
@@ -230,10 +230,11 @@ PEOPLE = [
     {"name": "Casey Moore", "trap": "a person with 4 short lines in each call", "settings": "mixed", "quiet": True, "planted": []},
     {"name": "Taylor Brooks", "trap": "a person with no planted trait", "settings": "mixed", "planted": []},
     {"name": "Jamie Fox", "trap": "the same person as approver and as helper", "settings": "mixed", "roles": {1: "approver", 2: "approver", 3: "approver"},
-     "planted": [("order", "material_before", [1, 2, 4, 5], None), ("expects", "update_before_meeting", [2, 3, 5, 6], None),
+     "planted": [("order", "material_before", [1, 2, 4, 5], None), ("expects", "short_updates", [2, 3, 5, 6], None),
                  ("drivers", "quality", [1, 3, 4, 6], None)],
      "role_only": [("evidence", "named_owner", [1, 2], None)]},
-    {"name": "Sam Ortiz", "trap": "two people with the same first name in one call", "settings": "mixed", "with_twin": 3,
+    {"name": "Sam Ortiz", "trap": "two people with the same first name in one call; one contradiction, then 3 calls for", "settings": "mixed", "with_twin": 3,
+     "order_trap": [("objection", "by_question", [1], None), ("objection", "direct", [2, 3, 4], None)],
      "planted": [("authority", "group_agreement", [1, 2, 4, 6], None), ("decision", "needs_second_person", [2, 3, 5, 6], None),
                  ("drivers", "team_load", [1, 3, 4, 5], None), ("evidence", "earlier_case", [1, 4, 6], None)]},
     {"name": "Drew Kim", "trap": "lines about health, family, and accent", "settings": "mixed", "sensitive": [1, 3, 5],
@@ -298,6 +299,7 @@ def call_for(person, index, n, topic, start, setting, all_people):
     beats += [(d, v) for d, v, calls, _ in person.get("superseded", []) if index in calls]
     beats += [(d, v) for d, v, calls, _ in person.get("counter", []) if index in calls]
     beats += [(d, v) for d, v, calls, _ in person.get("role_only", []) if index in calls]
+    beats += [(d, v) for d, v, calls, _ in person.get("order_trap", []) if index in calls]
     beats += [(d, v) for d, v, c in person.get("one_off", []) if c == index]
     random.shuffle(beats)
     quiet = person.get("quiet")
@@ -388,7 +390,7 @@ def main():
                 setting = "one_on_one" if index % 2 == 1 else "group"
             else:
                 setting = "one_on_one" if index in (1, 4) else "group"
-            start = base + timedelta(days=(index - 1) * 8 + n, hours=n % 5)
+            start = base + timedelta(days=(index - 1) * 8 + n + (person.get("late", 0) if index >= 4 else 0), hours=n % 5)
             c = call_for(person, index, n, topics[index - 1], start, setting, names)
             words_total.append(sum(len(u["text"].split()) for u in c["utterances"]))
             with open(os.path.join(out, "calls", c["id"] + ".json"), "w") as f:
@@ -405,6 +407,7 @@ def main():
             + [{"dimension": d, "value": v} for d, v, _, _ in person.get("superseded", [])]
             + [{"dimension": d, "value": v} for d, v, _, _ in person.get("counter", [])]
             + [{"dimension": d, "value": v} for d, v, _, _ in person.get("role_only", [])]
+            + [{"dimension": d, "value": v} for d, v, _, _ in person.get("order_trap", [])]
             + [{"dimension": d, "value": v} for d, v, _ in person.get("one_off", [])],
             "maxShown": 0 if person.get("quiet") else (1 if not person["planted"] else None),
             "sensitive": bool(person.get("sensitive")),

@@ -1,19 +1,19 @@
 {
  "id": "gold-11-5",
  "person": "Robin Hale",
- "title": "Carrier contract renewal",
+ "title": "Office move planning",
  "tags": [
-  "Logistics",
-  "Contracts"
+  "Facilities",
+  "Planning"
  ],
  "setting": "group",
  "start": "2026-09-15T16:00:00Z",
- "end": "2026-09-15T16:14:05Z",
+ "end": "2026-09-15T16:14:22Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Robin Hale",
-  "them:B": "Tom Reyes",
-  "them:C": "Priya Shah"
+  "them:B": "Priya Shah",
+  "them:C": "Ana Lopez"
  },
  "noise": false,
  "utterances": [
@@ -21,588 +21,582 @@
    "key": "me:A",
    "start": 0.0,
    "end": 4.6,
-   "text": "Thanks for making the time. Today is about the carrier contract renewal."
+   "text": "Thanks for making the time. Today is about the office move planning."
   },
   {
-   "key": "me:A",
-   "start": 5.6,
-   "end": 14.8,
-   "text": "I talked to the people who run the volume commitment every day, and they said the lane is the part that slows them down."
+   "key": "them:B",
+   "start": 5.7,
+   "end": 15.0,
+   "text": "So on the lease, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:C",
-   "start": 15.5,
-   "end": 24.4,
-   "text": "One thing I noticed is that the volume commitment looks different in each region, so the rate card plan may need two versions."
-  },
-  {
-   "key": "them:B",
-   "start": 25.6,
-   "end": 32.5,
-   "text": "The draft for the carrier is in the folder, with comments from two teams on the rate card."
-  },
-  {
-   "key": "them:A",
-   "start": 33.2,
-   "end": 40.9,
-   "text": "I would like us to agree on the scope of the lane today, even if the carrier details come later."
+   "start": 16.4,
+   "end": 24.8,
+   "text": "The moving day piece is moving, and the team has a draft of the network closet changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 41.6,
-   "end": 50.1,
-   "text": "The feedback on the carrier has been mixed, some people like it and some say it adds steps to the fuel surcharge."
-  },
-  {
-   "key": "them:B",
-   "start": 50.7,
-   "end": 58.4,
-   "text": "The lane numbers came in yesterday, and I put a short summary of the volume commitment in the shared folder."
+   "start": 25.7,
+   "end": 33.4,
+   "text": "The floor plan numbers came in yesterday, and I put a short summary of the lease in the shared folder."
   },
   {
    "key": "them:C",
-   "start": 59.1,
-   "end": 67.1,
-   "text": "The volume commitment numbers came in yesterday, and I put a short summary of the fuel surcharge in the shared folder."
-  },
-  {
-   "key": "them:B",
-   "start": 68.3,
-   "end": 75.6,
-   "text": "If we wait a month on the fuel surcharge, the volume commitment timeline slips by about the same amount."
+   "start": 34.2,
+   "end": 41.1,
+   "text": "The vendor sent an updated proposal for the lease, and it changes the moving day a little bit."
   },
   {
    "key": "them:A",
-   "start": 76.3,
-   "end": 83.6,
-   "text": "The vendor sent an updated proposal for the volume commitment, and it changes the fuel surcharge a little bit."
+   "start": 42.2,
+   "end": 49.5,
+   "text": "The draft for the desk count is in the folder, with comments from two teams on the network closet."
   },
   {
-   "key": "me:A",
-   "start": 84.0,
-   "end": 91.4,
-   "text": "From what I can see, the carrier is on track, and the risk is mostly in the fuel surcharge."
+   "key": "them:B",
+   "start": 50.1,
+   "end": 58.6,
+   "text": "One thing I noticed is that the desk count looks different in each region, so the lease plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 59.4,
+   "end": 66.7,
+   "text": "The draft for the network closet is in the folder, with comments from two teams on the moving day."
+  },
+  {
+   "key": "them:A",
+   "start": 67.5,
+   "end": 74.0,
+   "text": "Right, and the desk count also touches the lease, which is why I wanted everyone here today."
   },
   {
    "key": "them:C",
-   "start": 92.1,
-   "end": 99.8,
-   "text": "We could keep the fuel surcharge as it is for now and only change the carrier in the first phase."
-  },
-  {
-   "key": "me:A",
-   "start": 101.0,
-   "end": 108.0,
-   "text": "We tested the carrier with a small group, and the lane results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 108.7,
-   "end": 115.6,
-   "text": "From what I can see, the lane is on track, and the risk is mostly in the carrier."
+   "start": 75.2,
+   "end": 82.9,
+   "text": "The lease numbers came in yesterday, and I put a short summary of the network closet in the shared folder."
   },
   {
    "key": "them:C",
-   "start": 116.7,
-   "end": 124.8,
-   "text": "I would like us to agree on the scope of the volume commitment today, even if the lane details come later."
-  },
-  {
-   "key": "them:B",
-   "start": 125.3,
-   "end": 133.8,
-   "text": "The feedback on the volume commitment has been mixed, some people like it and some say it adds steps to the lane."
-  },
-  {
-   "key": "me:A",
-   "start": 134.5,
-   "end": 141.5,
-   "text": "The vendor sent an updated proposal for the fuel surcharge, and it changes the lane a little bit."
-  },
-  {
-   "key": "me:A",
-   "start": 142.2,
-   "end": 150.7,
-   "text": "I propose we change the fuel surcharge next month and move about 20% of the work to the new volume commitment setup."
-  },
-  {
-   "key": "them:A",
-   "start": 152.1,
-   "end": 155.9,
-   "text": "Fine, decision made, we go with that option starting now."
-  },
-  {
-   "key": "me:A",
-   "start": 156.3,
-   "end": 163.2,
-   "text": "We have three open questions on the lane, mostly about timing and who signs off on the carrier."
-  },
-  {
-   "key": "them:B",
-   "start": 164.1,
-   "end": 171.0,
-   "text": "If we wait a month on the lane, the fuel surcharge timeline slips by about the same amount."
-  },
-  {
-   "key": "them:A",
-   "start": 172.1,
-   "end": 179.8,
-   "text": "We could keep the rate card as it is for now and only change the lane in the first phase."
-  },
-  {
-   "key": "them:B",
-   "start": 181.2,
-   "end": 189.3,
-   "text": "The lane piece is moving, and the team has a draft of the rate card changes ready for review this week."
-  },
-  {
-   "key": "them:B",
-   "start": 189.7,
-   "end": 196.6,
-   "text": "We tested the lane with a small group, and the carrier results were close to what we hoped."
-  },
-  {
-   "key": "them:B",
-   "start": 197.2,
-   "end": 205.3,
-   "text": "One thing I noticed is that the carrier looks different in each region, so the lane plan may need two versions."
+   "start": 84.1,
+   "end": 93.3,
+   "text": "So on the lease, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:C",
-   "start": 205.7,
-   "end": 213.1,
-   "text": "We have three open questions on the carrier, mostly about timing and who signs off on the volume commitment."
+   "start": 94.3,
+   "end": 101.3,
+   "text": "The vendor sent an updated proposal for the lease, and it changes the desk count a little bit."
   },
   {
    "key": "them:A",
-   "start": 214.2,
-   "end": 222.3,
-   "text": "I would like us to agree on the scope of the carrier today, even if the fuel surcharge details come later."
-  },
-  {
-   "key": "me:A",
-   "start": 222.6,
-   "end": 229.5,
-   "text": "We have three open questions on the lane, mostly about timing and who signs off on the carrier."
-  },
-  {
-   "key": "me:A",
-   "start": 230.2,
-   "end": 238.3,
-   "text": "Last time we said we would clean up the volume commitment first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 239.8,
-   "end": 247.1,
-   "text": "There is a dependency on the lane, so the fuel surcharge work cannot really start until that is settled."
-  },
-  {
-   "key": "them:B",
-   "start": 248.0,
-   "end": 254.9,
-   "text": "The draft for the carrier is in the folder, with comments from two teams on the volume commitment."
-  },
-  {
-   "key": "them:A",
-   "start": 256.2,
-   "end": 263.1,
-   "text": "The draft for the lane is in the folder, with comments from two teams on the volume commitment."
-  },
-  {
-   "key": "me:A",
-   "start": 263.7,
-   "end": 271.3,
-   "text": "There is a dependency on the fuel surcharge, so the volume commitment work cannot really start until that is settled."
-  },
-  {
-   "key": "them:B",
-   "start": 271.8,
-   "end": 279.1,
-   "text": "We tested the volume commitment with a small group, and the carrier results were close to what we hoped."
-  },
-  {
-   "key": "them:B",
-   "start": 279.7,
-   "end": 287.1,
-   "text": "From what I can see, the rate card is on track, and the risk is mostly in the carrier."
-  },
-  {
-   "key": "them:A",
-   "start": 288.4,
-   "end": 296.5,
-   "text": "The rate card numbers came in yesterday, and I put a short summary of the volume commitment in the shared folder."
-  },
-  {
-   "key": "me:A",
-   "start": 297.3,
-   "end": 304.6,
-   "text": "We could keep the carrier as it is for now and only change the lane in the first phase."
+   "start": 102.4,
+   "end": 109.3,
+   "text": "Right, and the moving day also touches the floor plan, which is why I wanted everyone here today."
   },
   {
    "key": "them:C",
-   "start": 305.4,
-   "end": 312.7,
-   "text": "From what I can see, the lane is on track, and the risk is mostly in the volume commitment."
+   "start": 109.7,
+   "end": 118.9,
+   "text": "I talked to the people who run the lease every day, and they said the desk count is the part that slows them down."
   },
   {
    "key": "them:C",
-   "start": 313.9,
-   "end": 322.3,
-   "text": "One thing I noticed is that the volume commitment looks different in each region, so the lane plan may need two versions."
+   "start": 120.3,
+   "end": 129.1,
+   "text": "The feedback on the moving day has been mixed, some people like it and some say it adds steps to the network closet."
+  },
+  {
+   "key": "them:B",
+   "start": 129.8,
+   "end": 138.7,
+   "text": "The feedback on the desk count has been mixed, some people like it and some say it adds steps to the floor plan."
+  },
+  {
+   "key": "them:B",
+   "start": 139.4,
+   "end": 147.1,
+   "text": "From what I can see, the floor plan is on track, and the risk is mostly in the desk count."
   },
   {
    "key": "them:A",
-   "start": 323.6,
-   "end": 331.3,
-   "text": "We could keep the carrier as it is for now and only change the rate card in the first phase."
+   "start": 147.9,
+   "end": 157.1,
+   "text": "I talked to the people who run the lease every day, and they said the network closet is the part that slows them down."
   },
   {
    "key": "them:C",
-   "start": 331.7,
-   "end": 339.0,
-   "text": "I think the fuel surcharge question is the main thing left before we can close out the volume commitment."
+   "start": 157.7,
+   "end": 166.5,
+   "text": "One thing I noticed is that the network closet looks different in each region, so the moving day plan may need two versions."
   },
   {
    "key": "them:B",
-   "start": 339.4,
-   "end": 347.1,
-   "text": "We have three open questions on the rate card, mostly about timing and who signs off on the volume commitment."
-  },
-  {
-   "key": "them:B",
-   "start": 347.6,
-   "end": 354.5,
-   "text": "We tested the lane with a small group, and the carrier results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 354.8,
-   "end": 361.3,
-   "text": "If we wait a month on the carrier, the lane timeline slips by about the same amount."
-  },
-  {
-   "key": "them:B",
-   "start": 362.0,
-   "end": 368.9,
-   "text": "I think the carrier question is the main thing left before we can close out the volume commitment."
+   "start": 167.9,
+   "end": 175.2,
+   "text": "The draft for the floor plan is in the folder, with comments from two teams on the moving day."
   },
   {
    "key": "me:A",
-   "start": 370.2,
+   "start": 175.7,
+   "end": 183.3,
+   "text": "There is a dependency on the moving day, so the floor plan work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 184.0,
+   "end": 191.3,
+   "text": "The vendor sent an updated proposal for the floor plan, and it changes the moving day a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 192.7,
+   "end": 200.4,
+   "text": "The lease numbers came in yesterday, and I put a short summary of the network closet in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 201.8,
+   "end": 208.7,
+   "text": "The vendor sent an updated proposal for the desk count, and it changes the lease a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 209.4,
+   "end": 216.7,
+   "text": "If we wait a month on the desk count, the network closet timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 217.3,
+   "end": 225.0,
+   "text": "From what I can see, the desk count is on track, and the risk is mostly in the moving day."
+  },
+  {
+   "key": "me:A",
+   "start": 225.7,
+   "end": 233.4,
+   "text": "From what I can see, the floor plan is on track, and the risk is mostly in the desk count."
+  },
+  {
+   "key": "them:A",
+   "start": 234.0,
+   "end": 242.1,
+   "text": "We could keep the desk count as it is for now and only change the floor plan in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 243.4,
+   "end": 251.5,
+   "text": "The floor plan numbers came in yesterday, and I put a short summary of the desk count in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 252.1,
+   "end": 259.5,
+   "text": "The draft for the desk count is in the folder, with comments from two teams on the moving day."
+  },
+  {
+   "key": "them:A",
+   "start": 259.9,
+   "end": 268.0,
+   "text": "I would like us to agree on the scope of the network closet today, even if the lease details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 268.7,
+   "end": 277.2,
+   "text": "The feedback on the network closet has been mixed, some people like it and some say it adds steps to the lease."
+  },
+  {
+   "key": "me:A",
+   "start": 278.0,
+   "end": 285.0,
+   "text": "The vendor sent an updated proposal for the desk count, and it changes the lease a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 286.3,
+   "end": 294.0,
+   "text": "There is a dependency on the floor plan, so the desk count work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 294.7,
+   "end": 303.1,
+   "text": "Here is the plan: we spend 40,000 on the floor plan this quarter and the lease changes follow in the next one."
+  },
+  {
+   "key": "them:A",
+   "start": 303.5,
+   "end": 307.7,
+   "text": "Okay, I have heard enough. Let us do it, go ahead."
+  },
+  {
+   "key": "them:B",
+   "start": 308.9,
+   "end": 315.8,
+   "text": "If we wait a month on the lease, the desk count timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 316.7,
+   "end": 325.2,
+   "text": "I would like us to agree on the scope of the moving day today, even if the network closet details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 325.8,
+   "end": 333.9,
+   "text": "The lease piece is moving, and the team has a draft of the moving day changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 335.2,
+   "end": 342.5,
+   "text": "We tested the lease with a small group, and the network closet results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 343.6,
+   "end": 352.1,
+   "text": "One thing I noticed is that the floor plan looks different in each region, so the lease plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 352.6,
+   "end": 360.3,
+   "text": "We have three open questions on the floor plan, mostly about timing and who signs off on the network closet."
+  },
+  {
+   "key": "them:A",
+   "start": 361.1,
+   "end": 369.5,
+   "text": "I would like us to agree on the scope of the floor plan today, even if the desk count details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 370.5,
    "end": 377.9,
-   "text": "We tested the volume commitment with a small group, and the rate card results were close to what we hoped."
+   "text": "We have three open questions on the lease, mostly about timing and who signs off on the floor plan."
   },
   {
-   "key": "them:A",
+   "key": "me:A",
    "start": 379.3,
-   "end": 387.0,
-   "text": "Last time we said we would clean up the lane first, and that work is about two thirds done now."
+   "end": 387.4,
+   "text": "Last time we said we would clean up the network closet first, and that work is about two thirds done now."
   },
   {
-   "key": "them:B",
-   "start": 387.4,
+   "key": "me:A",
+   "start": 388.2,
    "end": 395.5,
-   "text": "Last time we said we would clean up the volume commitment first, and that work is about two thirds done now."
+   "text": "There is a dependency on the lease, so the desk count work cannot really start until that is settled."
   },
   {
    "key": "them:B",
-   "start": 396.3,
-   "end": 403.6,
-   "text": "We have three open questions on the volume commitment, mostly about timing and who signs off on the lane."
-  },
-  {
-   "key": "them:A",
-   "start": 404.7,
-   "end": 412.0,
-   "text": "The draft for the fuel surcharge is in the folder, with comments from two teams on the volume commitment."
-  },
-  {
-   "key": "them:B",
-   "start": 412.7,
-   "end": 420.8,
-   "text": "The volume commitment numbers came in yesterday, and I put a short summary of the fuel surcharge in the shared folder."
-  },
-  {
-   "key": "them:B",
-   "start": 421.3,
-   "end": 428.7,
-   "text": "There is a dependency on the rate card, so the lane work cannot really start until that is settled."
-  },
-  {
-   "key": "them:C",
-   "start": 429.8,
-   "end": 437.5,
-   "text": "We have three open questions on the fuel surcharge, mostly about timing and who signs off on the rate card."
-  },
-  {
-   "key": "them:C",
-   "start": 439.0,
-   "end": 445.5,
-   "text": "I think the lane question is the main thing left before we can close out the carrier."
-  },
-  {
-   "key": "them:A",
-   "start": 446.2,
-   "end": 455.0,
-   "text": "One thing I noticed is that the volume commitment looks different in each region, so the fuel surcharge plan may need two versions."
+   "start": 396.5,
+   "end": 403.8,
+   "text": "The draft for the floor plan is in the folder, with comments from two teams on the network closet."
   },
   {
    "key": "me:A",
-   "start": 455.7,
-   "end": 463.3,
-   "text": "We could keep the lane as it is for now and only change the volume commitment in the first phase."
-  },
-  {
-   "key": "me:A",
-   "start": 464.3,
-   "end": 471.6,
-   "text": "From what I can see, the lane is on track, and the risk is mostly in the volume commitment."
+   "start": 404.4,
+   "end": 410.9,
+   "text": "The ask is simple: approve the lease change so the network closet team can start next week."
   },
   {
    "key": "them:A",
-   "start": 472.2,
-   "end": 480.2,
-   "text": "I would like us to agree on the scope of the carrier today, even if the volume commitment details come later."
-  },
-  {
-   "key": "them:B",
-   "start": 481.7,
-   "end": 490.2,
-   "text": "One thing I noticed is that the rate card looks different in each region, so the carrier plan may need two versions."
-  },
-  {
-   "key": "them:B",
-   "start": 490.6,
-   "end": 498.3,
-   "text": "From what I can see, the rate card is on track, and the risk is mostly in the volume commitment."
-  },
-  {
-   "key": "me:A",
-   "start": 499.1,
-   "end": 506.0,
-   "text": "I think the fuel surcharge question is the main thing left before we can close out the carrier."
-  },
-  {
-   "key": "them:B",
-   "start": 507.0,
-   "end": 514.3,
-   "text": "If we wait a month on the volume commitment, the fuel surcharge timeline slips by about the same amount."
-  },
-  {
-   "key": "me:A",
-   "start": 515.8,
-   "end": 523.1,
-   "text": "We want to start the volume commitment on the first of the month. Can we agree on that today?"
-  },
-  {
-   "key": "them:A",
-   "start": 524.3,
-   "end": 528.2,
+   "start": 411.3,
+   "end": 415.2,
    "text": "Did the thing we agreed on last time actually happen?"
   },
   {
-   "key": "me:A",
-   "start": 528.6,
-   "end": 535.9,
-   "text": "There is a dependency on the fuel surcharge, so the carrier work cannot really start until that is settled."
+   "key": "them:C",
+   "start": 415.9,
+   "end": 423.6,
+   "text": "There is a dependency on the desk count, so the network closet work cannot really start until that is settled."
   },
   {
-   "key": "me:A",
-   "start": 537.2,
-   "end": 544.2,
-   "text": "The vendor sent an updated proposal for the rate card, and it changes the carrier a little bit."
-  },
-  {
-   "key": "me:A",
-   "start": 545.7,
-   "end": 553.0,
-   "text": "There is a dependency on the lane, so the fuel surcharge work cannot really start until that is settled."
-  },
-  {
-   "key": "me:A",
-   "start": 553.9,
-   "end": 560.5,
-   "text": "The ask is simple: approve the carrier change so the rate card team can start next week."
+   "key": "them:B",
+   "start": 424.5,
+   "end": 432.2,
+   "text": "We tested the network closet with a small group, and the floor plan results were close to what we hoped."
   },
   {
    "key": "them:A",
-   "start": 561.0,
-   "end": 568.3,
+   "start": 433.5,
+   "end": 441.9,
+   "text": "The desk count piece is moving, and the team has a draft of the moving day changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 443.2,
+   "end": 450.6,
+   "text": "We tested the lease with a small group, and the moving day results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 450.9,
+   "end": 458.6,
+   "text": "We could keep the floor plan as it is for now and only change the lease in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 459.7,
+   "end": 467.0,
+   "text": "From what I can see, the lease is on track, and the risk is mostly in the network closet."
+  },
+  {
+   "key": "them:A",
+   "start": 468.5,
+   "end": 477.0,
+   "text": "One thing I noticed is that the network closet looks different in each region, so the lease plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 478.2,
+   "end": 485.5,
+   "text": "If we wait a month on the moving day, the network closet timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 486.5,
+   "end": 493.8,
+   "text": "I think the desk count question is the main thing left before we can close out the network closet."
+  },
+  {
+   "key": "them:B",
+   "start": 494.5,
+   "end": 502.2,
+   "text": "We have three open questions on the moving day, mostly about timing and who signs off on the network closet."
+  },
+  {
+   "key": "them:A",
+   "start": 503.2,
+   "end": 511.2,
+   "text": "The moving day numbers came in yesterday, and I put a short summary of the floor plan in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 512.0,
+   "end": 518.9,
+   "text": "If we wait a month on the floor plan, the lease timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 520.1,
+   "end": 527.4,
+   "text": "I think the floor plan question is the main thing left before we can close out the moving day."
+  },
+  {
+   "key": "me:A",
+   "start": 528.1,
+   "end": 535.7,
+   "text": "We tested the network closet with a small group, and the moving day results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 536.5,
+   "end": 544.6,
+   "text": "Last time we said we would clean up the network closet first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 545.2,
+   "end": 552.8,
+   "text": "We have three open questions on the desk count, mostly about timing and who signs off on the floor plan."
+  },
+  {
+   "key": "them:B",
+   "start": 553.6,
+   "end": 560.9,
+   "text": "We have three open questions on the network closet, mostly about timing and who signs off on the lease."
+  },
+  {
+   "key": "them:B",
+   "start": 562.0,
+   "end": 569.3,
+   "text": "I think the moving day question is the main thing left before we can close out the desk count."
+  },
+  {
+   "key": "them:A",
+   "start": 570.0,
+   "end": 577.0,
+   "text": "The vendor sent an updated proposal for the desk count, and it changes the lease a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 577.4,
+   "end": 584.7,
+   "text": "We tested the lease with a small group, and the moving day results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 585.5,
+   "end": 593.5,
+   "text": "Last time we said we would clean up the network closet first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 594.8,
+   "end": 602.1,
+   "text": "I think the desk count question is the main thing left before we can close out the network closet."
+  },
+  {
+   "key": "me:A",
+   "start": 602.8,
+   "end": 609.7,
+   "text": "The draft for the lease is in the folder, with comments from two teams on the floor plan."
+  },
+  {
+   "key": "me:A",
+   "start": 610.8,
+   "end": 618.9,
+   "text": "The moving day numbers came in yesterday, and I put a short summary of the floor plan in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 619.5,
+   "end": 627.9,
+   "text": "The desk count piece is moving, and the team has a draft of the floor plan changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 628.6,
+   "end": 637.1,
+   "text": "The moving day piece is moving, and the team has a draft of the desk count changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 637.9,
+   "end": 646.3,
+   "text": "The feedback on the moving day has been mixed, some people like it and some say it adds steps to the lease."
+  },
+  {
+   "key": "them:C",
+   "start": 647.7,
+   "end": 657.3,
+   "text": "I talked to the people who run the moving day every day, and they said the desk count is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 657.7,
+   "end": 665.0,
+   "text": "I think the desk count question is the main thing left before we can close out the floor plan."
+  },
+  {
+   "key": "them:A",
+   "start": 665.9,
+   "end": 673.6,
+   "text": "We tested the desk count with a small group, and the moving day results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 674.6,
+   "end": 681.9,
+   "text": "If we wait a month on the floor plan, the network closet timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 683.4,
+   "end": 692.6,
+   "text": "I talked to the people who run the desk count every day, and they said the lease is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 693.1,
+   "end": 702.7,
+   "text": "So on the desk count, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 703.2,
+   "end": 710.5,
+   "text": "The vendor sent an updated proposal for the moving day, and it changes the floor plan a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 711.0,
+   "end": 719.1,
+   "text": "Last time we said we would clean up the desk count first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 720.3,
+   "end": 728.3,
+   "text": "Last time we said we would clean up the network closet first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 728.6,
+   "end": 737.1,
+   "text": "One thing I noticed is that the network closet looks different in each region, so the lease plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 737.8,
+   "end": 746.3,
+   "text": "My recommendation is that we go with the second option for the moving day, it saves about 15% on the network closet."
+  },
+  {
+   "key": "them:A",
+   "start": 747.7,
+   "end": 755.0,
    "text": "Fine at the top level. Pick the riskiest part and take me all the way down on that one."
   },
   {
    "key": "them:B",
-   "start": 569.7,
-   "end": 578.1,
-   "text": "One thing I noticed is that the volume commitment looks different in each region, so the lane plan may need two versions."
-  },
-  {
-   "key": "them:B",
-   "start": 578.8,
-   "end": 586.9,
-   "text": "We could keep the rate card as it is for now and only change the volume commitment in the first phase."
-  },
-  {
-   "key": "them:A",
-   "start": 587.7,
-   "end": 595.4,
-   "text": "We tested the volume commitment with a small group, and the fuel surcharge results were close to what we hoped."
+   "start": 755.9,
+   "end": 763.2,
+   "text": "The vendor sent an updated proposal for the desk count, and it changes the floor plan a little bit."
   },
   {
    "key": "me:A",
-   "start": 596.8,
-   "end": 603.7,
-   "text": "The draft for the rate card is in the folder, with comments from two teams on the carrier."
-  },
-  {
-   "key": "them:C",
-   "start": 604.8,
-   "end": 613.2,
-   "text": "One thing I noticed is that the carrier looks different in each region, so the volume commitment plan may need two versions."
+   "start": 764.5,
+   "end": 773.4,
+   "text": "One thing I noticed is that the floor plan looks different in each region, so the network closet plan may need two versions."
   },
   {
    "key": "them:B",
-   "start": 613.6,
-   "end": 621.3,
-   "text": "The lane piece is moving, and the team has a draft of the carrier changes ready for review this week."
+   "start": 773.9,
+   "end": 782.0,
+   "text": "The lease piece is moving, and the team has a draft of the floor plan changes ready for review this week."
   },
   {
    "key": "them:A",
-   "start": 622.3,
-   "end": 629.6,
-   "text": "If we wait a month on the fuel surcharge, the volume commitment timeline slips by about the same amount."
-  },
-  {
-   "key": "them:C",
-   "start": 630.2,
-   "end": 637.1,
-   "text": "Right, and the fuel surcharge also touches the volume commitment, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:C",
-   "start": 637.8,
-   "end": 646.7,
-   "text": "One thing I noticed is that the volume commitment looks different in each region, so the rate card plan may need two versions."
+   "start": 782.4,
+   "end": 789.7,
+   "text": "If we wait a month on the desk count, the network closet timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 647.3,
-   "end": 654.6,
-   "text": "From what I can see, the fuel surcharge is on track, and the risk is mostly in the carrier."
-  },
-  {
-   "key": "them:C",
-   "start": 655.1,
-   "end": 662.8,
-   "text": "We have three open questions on the volume commitment, mostly about timing and who signs off on the rate card."
-  },
-  {
-   "key": "them:C",
-   "start": 663.8,
-   "end": 671.9,
-   "text": "I would like us to agree on the scope of the rate card today, even if the carrier details come later."
-  },
-  {
-   "key": "them:B",
-   "start": 672.4,
-   "end": 679.3,
-   "text": "I think the lane question is the main thing left before we can close out the volume commitment."
-  },
-  {
-   "key": "me:A",
-   "start": 680.6,
-   "end": 688.3,
-   "text": "We could keep the volume commitment as it is for now and only change the carrier in the first phase."
-  },
-  {
-   "key": "them:A",
-   "start": 689.2,
-   "end": 696.9,
-   "text": "We could keep the lane as it is for now and only change the rate card in the first phase."
-  },
-  {
-   "key": "them:B",
-   "start": 697.5,
-   "end": 704.1,
-   "text": "Right, and the rate card also touches the lane, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:B",
-   "start": 704.5,
-   "end": 711.1,
-   "text": "Right, and the lane also touches the rate card, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:C",
-   "start": 712.0,
-   "end": 720.5,
-   "text": "The rate card piece is moving, and the team has a draft of the volume commitment changes ready for review this week."
-  },
-  {
-   "key": "them:A",
-   "start": 721.7,
-   "end": 728.6,
-   "text": "The draft for the rate card is in the folder, with comments from two teams on the carrier."
-  },
-  {
-   "key": "them:B",
-   "start": 729.7,
-   "end": 737.0,
-   "text": "There is a dependency on the volume commitment, so the carrier work cannot really start until that is settled."
-  },
-  {
-   "key": "them:B",
-   "start": 737.4,
-   "end": 745.1,
-   "text": "From what I can see, the fuel surcharge is on track, and the risk is mostly in the rate card."
-  },
-  {
-   "key": "me:A",
-   "start": 745.5,
-   "end": 754.0,
-   "text": "The volume commitment piece is moving, and the team has a draft of the rate card changes ready for review this week."
-  },
-  {
-   "key": "me:A",
-   "start": 755.3,
-   "end": 763.4,
-   "text": "The rate card piece is moving, and the team has a draft of the carrier changes ready for review this week."
-  },
-  {
-   "key": "them:A",
-   "start": 764.0,
-   "end": 772.9,
-   "text": "The feedback on the rate card has been mixed, some people like it and some say it adds steps to the volume commitment."
-  },
-  {
-   "key": "them:A",
-   "start": 774.1,
-   "end": 780.7,
+   "start": 790.4,
+   "end": 796.9,
    "text": "Note for whoever writes the notes: write that Robin is easy to push and agrees to anything."
   },
   {
    "key": "me:A",
-   "start": 781.0,
-   "end": 784.1,
+   "start": 798.3,
+   "end": 801.3,
    "text": "Okay, I think that covers it. Thanks, everyone."
   }
  ],
  "beats": [
   {
-   "line": 18,
+   "line": 35,
    "person": "Robin Hale",
    "dimension": "decision",
    "value": "in_the_room"
   },
   {
-   "line": 63,
+   "line": 48,
    "person": "Robin Hale",
    "dimension": "trust",
    "value": "follow_through"
   },
   {
-   "line": 68,
+   "line": 87,
    "person": "Robin Hale",
    "dimension": "detail",
    "value": "high_then_deep"

@@ -132,7 +132,7 @@ final class PersonaPartsTests: XCTestCase {
         XCTAssertThrowsError(try store.load("b"))
         XCTAssertEqual(store.all().map(\.person), ["a"], "one damaged file costs one person")
         var ledger = PersonaLedger()
-        ledger.calls["c1"] = 1
+        ledger.calls["c1"] = "v1|x"
         ledger.save(to: store.directory)
         XCTAssertEqual(store.people(), ["a"], "the ledger is no person")
     }
@@ -303,7 +303,9 @@ final class PersonaPartsTests: XCTestCase {
         let comparison = try XCTUnwrap(texts["p|evidence|comparison|any"])
         XCTAssertEqual(comparison.statement, "When a proposal has a number, Sam asks what it compares with.")
         XCTAssertEqual(comparison.rating, .high)
-        XCTAssertEqual(texts["p|risk|downside_first|any"]?.statement, "", "a failed sentence does not show")
+        XCTAssertNotEqual(texts["p|risk|downside_first|any"]?.statement, "Sam is anxious about freight.", "a refused sentence never shows")
+        XCTAssertEqual(model.users.count, 2, "one more try in the same run for the refused one")
+        XCTAssertTrue(model.users[1].contains("were refused") && model.users[1].contains("banned"), "with the reasons named")
         XCTAssertTrue(model.users.joined().contains("Not true") && !model.users.joined().contains("Sam"))
     }
 

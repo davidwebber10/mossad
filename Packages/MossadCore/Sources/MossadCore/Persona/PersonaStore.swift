@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// One file for each person id in `~/Mossad/Coach/people/`. One changed person writes one small file, and one
@@ -5,8 +6,13 @@ import Foundation
 /// saved over. Never in `people.json`, a call's record, or the Markdown note.
 public struct PersonaStore: Sendable {
     public let directory: URL
+    /// A reader that changes nothing (Chat in other AI apps): a file that does not decode is left where it is.
+    public let readOnly: Bool
 
-    public init(directory: URL) { self.directory = directory }
+    public init(directory: URL, readOnly: Bool = false) {
+        self.directory = directory
+        self.readOnly = readOnly
+    }
     public init(paths: Paths) { self.init(directory: paths.coach.appendingPathComponent("people")) }
 
     public struct NewerFile: Error, CustomStringConvertible {
@@ -22,7 +28,11 @@ public struct PersonaStore: Sendable {
 
     /// The person's file, or nil when there is none. A file that does not decode is moved aside and throws.
     public func load(_ person: String) throws -> Persona? {
-        try StoredFile.load(Persona.self, from: url(person), decoder: .coach, recovery: .local)
+        if readOnly {
+            guard let data = try? Data(contentsOf: url(person)) else { return nil }
+            return try JSONDecoder.coach.decode(Persona.self, from: data)
+        }
+        return try StoredFile.load(Persona.self, from: url(person), decoder: .coach, recovery: .local)
     }
 
     /// Writes the file, unless the file on disk is from a later build.
@@ -55,7 +65,7 @@ public struct PersonaStore: Sendable {
     /// merged record stay, so an undo of the merge separates them again.
     public func persona(of id: String, saved: CoachPeople) -> Persona? {
         let ids = saved.isEmpty ? [id] : saved.ids(of: id)
-        let files = ids.compactMap { try? load($0) }
+        let files = ids.compactMap { (try? load($0)) ?? nil }
         guard !files.isEmpty else { return nil }
         var out = Persona(person: saved.isEmpty ? id : saved.canonical(id), updated: files.map(\.updated).max() ?? .distantPast)
         // Evidence of one moment in two files counts once.
@@ -89,15 +99,29 @@ public struct PersonaStore: Sendable {
     }
 }
 
-/// The calls the persona step has read, with the prompt version that read them, and when each person's
-/// sentences were last written. In the same folder as the files.
+/// The calls the persona step has read, each with its stamp, and when each person's sentences were last written.
+/// The stamp is the prompt version and a hash of the call's speaker names, person ids, and lines: a voice that
+/// gets a name, a name that is corrected, and "Transcribe again" all change it, and the call is read again.
 public struct PersonaLedger: Codable, Equatable, Sendable {
     static let fileName = "_ledger.json"
+    /// A call that fails this many times (not a reply in the wrong shape) is left out, so it cannot stop each run.
+    static let maxFailures = 3
 
-    public var calls: [String: Int] = [:]
+    public var calls: [String: String] = [:]
     public var written: [String: Date] = [:]
+    public var failures: [String: Int] = [:]
 
     public init() {}
+
+    enum CodingKeys: String, CodingKey { case calls, written, failures }
+
+    /// A ledger of an earlier build (a number for each call) reads as empty calls: each call is read again once.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        calls = (try? c.decodeIfPresent([String: String].self, forKey: .calls)) ?? [:]
+        written = (try? c.decodeIfPresent([String: Date].self, forKey: .written)) ?? [:]
+        failures = (try? c.decodeIfPresent([String: Int].self, forKey: .failures)) ?? [:]
+    }
 
     public static func load(from dir: URL) -> PersonaLedger {
         (try? Data(contentsOf: dir.appendingPathComponent(fileName))).flatMap { try? JSONDecoder.coach.decode(PersonaLedger.self, from: $0) } ?? PersonaLedger()
@@ -112,5 +136,24 @@ public struct PersonaLedger: Codable, Equatable, Sendable {
         }
     }
 
-    public func isRead(_ callID: String) -> Bool { (calls[callID] ?? 0) >= PersonaExtractor.promptVersion }
+    /// "v<prompt>|<hash>". The record must have the owner's lines under the owner's name of now, as the runner reads it.
+    public static func stamp(_ r: CallRecord) -> String {
+        var text = ""
+        for (k, v) in r.speakerNames.sorted(by: { $0.key < $1.key }) { text += "n\(k)=\(v)\n" }
+        for (k, v) in (r.speakerPeople ?? [:]).sorted(by: { $0.key < $1.key }) { text += "p\(k)=\(v)\n" }
+        for u in r.utterances { text += "u\(u.speakerKey)|\(u.start)|\(u.text)\n" }
+        let hash = SHA256.hash(data: Data(text.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+        return "v\(PersonaExtractor.promptVersion)|\(hash)"
+    }
+
+    /// Read with this prompt, as the call is now.
+    public func isRead(_ r: CallRecord) -> Bool { calls[r.id] == Self.stamp(r) }
+
+    /// Read once, maybe as it was before a change.
+    public func wasRead(_ id: String) -> Bool { calls[id] != nil }
+
+    public mutating func markRead(_ r: CallRecord) {
+        calls[r.id] = Self.stamp(r)
+        failures[r.id] = nil
+    }
 }

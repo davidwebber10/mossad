@@ -1,14 +1,14 @@
 {
  "id": "gold-11-3",
  "person": "Robin Hale",
- "title": "Hiring plan for support",
+ "title": "Customer advisory board",
  "tags": [
-  "Hiring",
-  "Support"
+  "Customers",
+  "Events"
  ],
  "setting": "group",
  "start": "2026-08-30T16:00:00Z",
- "end": "2026-08-30T16:14:36Z",
+ "end": "2026-08-30T16:13:55Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Robin Hale",
@@ -20,592 +20,580 @@
   {
    "key": "me:A",
    "start": 0.0,
-   "end": 5.0,
-   "text": "Thanks for making the time. Today is about the hiring plan for support."
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the customer advisory board."
   },
   {
    "key": "me:A",
-   "start": 5.4,
-   "end": 14.2,
-   "text": "One thing I noticed is that the shift coverage looks different in each region, so the onboarding week plan may need two versions."
-  },
-  {
-   "key": "me:A",
-   "start": 15.0,
-   "end": 22.7,
-   "text": "We tested the job posting with a small group, and the onboarding week results were close to what we hoped."
+   "start": 5.0,
+   "end": 12.3,
+   "text": "We have three open questions on the agenda, mostly about timing and who signs off on the invite list."
   },
   {
    "key": "them:B",
-   "start": 23.0,
-   "end": 32.6,
-   "text": "So on the onboarding week, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 13.3,
+   "end": 19.9,
+   "text": "Right, and the agenda also touches the feedback session, which is why I wanted everyone here today."
   },
   {
    "key": "them:C",
-   "start": 33.9,
-   "end": 42.7,
-   "text": "One thing I noticed is that the support queue looks different in each region, so the shift coverage plan may need two versions."
+   "start": 21.1,
+   "end": 28.4,
+   "text": "There is a dependency on the board meeting, so the agenda work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 29.8,
+   "end": 37.5,
+   "text": "We have three open questions on the board meeting, mostly about timing and who signs off on the feedback session."
   },
   {
    "key": "them:A",
-   "start": 43.6,
-   "end": 52.5,
-   "text": "The feedback on the support queue has been mixed, some people like it and some say it adds steps to the onboarding week."
+   "start": 38.7,
+   "end": 46.0,
+   "text": "The vendor sent an updated proposal for the feedback session, and it changes the board meeting a little bit."
   },
   {
    "key": "them:B",
-   "start": 53.8,
-   "end": 61.1,
-   "text": "The vendor sent an updated proposal for the interview loop, and it changes the shift coverage a little bit."
-  },
-  {
-   "key": "them:C",
-   "start": 62.5,
-   "end": 70.2,
-   "text": "We have three open questions on the support queue, mostly about timing and who signs off on the onboarding week."
+   "start": 46.9,
+   "end": 54.9,
+   "text": "Last time we said we would clean up the invite list first, and that work is about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 71.3,
+   "start": 56.2,
+   "end": 64.2,
+   "text": "We could keep the invite list as it is for now and only change the board meeting in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 65.2,
+   "end": 72.1,
+   "text": "We tested the agenda with a small group, and the follow-up results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 73.2,
    "end": 80.1,
-   "text": "The feedback on the job posting has been mixed, some people like it and some say it adds steps to the shift coverage."
-  },
-  {
-   "key": "them:A",
-   "start": 80.6,
-   "end": 87.9,
-   "text": "If we wait a month on the support queue, the shift coverage timeline slips by about the same amount."
-  },
-  {
-   "key": "them:B",
-   "start": 88.4,
-   "end": 95.7,
-   "text": "The vendor sent an updated proposal for the interview loop, and it changes the onboarding week a little bit."
-  },
-  {
-   "key": "me:A",
-   "start": 96.1,
-   "end": 104.2,
-   "text": "We could keep the job posting as it is for now and only change the interview loop in the first phase."
-  },
-  {
-   "key": "them:A",
-   "start": 105.3,
-   "end": 113.0,
-   "text": "We tested the shift coverage with a small group, and the interview loop results were close to what we hoped."
-  },
-  {
-   "key": "them:B",
-   "start": 114.4,
-   "end": 123.2,
-   "text": "One thing I noticed is that the onboarding week looks different in each region, so the shift coverage plan may need two versions."
+   "text": "We have three open questions on the follow-up, mostly about timing and who signs off on the agenda."
   },
   {
    "key": "them:C",
-   "start": 124.7,
-   "end": 131.6,
-   "text": "Right, and the shift coverage also touches the interview loop, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:B",
-   "start": 132.8,
-   "end": 139.7,
-   "text": "Right, and the support queue also touches the job posting, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:A",
-   "start": 140.8,
-   "end": 148.1,
-   "text": "The vendor sent an updated proposal for the shift coverage, and it changes the job posting a little bit."
+   "start": 81.0,
+   "end": 88.3,
+   "text": "If we wait a month on the feedback session, the board meeting timeline slips by about the same amount."
   },
   {
    "key": "them:C",
-   "start": 149.6,
-   "end": 157.3,
-   "text": "We have three open questions on the onboarding week, mostly about timing and who signs off on the support queue."
-  },
-  {
-   "key": "me:A",
-   "start": 157.6,
-   "end": 165.7,
-   "text": "The onboarding week numbers came in yesterday, and I put a short summary of the shift coverage in the shared folder."
+   "start": 89.4,
+   "end": 97.1,
+   "text": "From what I can see, the feedback session is on track, and the risk is mostly in the board meeting."
   },
   {
    "key": "them:B",
-   "start": 167.2,
-   "end": 176.8,
-   "text": "So on the onboarding week, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 97.9,
+   "end": 106.4,
+   "text": "The feedback on the invite list has been mixed, some people like it and some say it adds steps to the agenda."
+  },
+  {
+   "key": "them:B",
+   "start": 106.8,
+   "end": 114.1,
+   "text": "We tested the agenda with a small group, and the invite list results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 178.0,
-   "end": 185.4,
-   "text": "The draft for the job posting is in the folder, with comments from two teams on the onboarding week."
+   "start": 114.5,
+   "end": 122.6,
+   "text": "My recommendation is that we go with the second option for the invite list, it saves about 15% on the follow-up."
   },
   {
    "key": "them:A",
-   "start": 186.2,
-   "end": 194.3,
-   "text": "The interview loop numbers came in yesterday, and I put a short summary of the shift coverage in the shared folder."
-  },
-  {
-   "key": "them:B",
-   "start": 194.8,
-   "end": 203.2,
-   "text": "The interview loop piece is moving, and the team has a draft of the shift coverage changes ready for review this week."
-  },
-  {
-   "key": "them:B",
-   "start": 204.6,
-   "end": 213.1,
-   "text": "I would like us to agree on the scope of the support queue today, even if the onboarding week details come later."
-  },
-  {
-   "key": "me:A",
-   "start": 214.2,
-   "end": 221.9,
-   "text": "We have three open questions on the interview loop, mostly about timing and who signs off on the shift coverage."
-  },
-  {
-   "key": "me:A",
-   "start": 222.3,
-   "end": 230.0,
-   "text": "We have three open questions on the onboarding week, mostly about timing and who signs off on the shift coverage."
-  },
-  {
-   "key": "them:A",
-   "start": 230.6,
-   "end": 237.5,
-   "text": "Right, and the support queue also touches the interview loop, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:B",
-   "start": 238.0,
-   "end": 246.5,
-   "text": "I would like us to agree on the scope of the job posting today, even if the onboarding week details come later."
-  },
-  {
-   "key": "them:C",
-   "start": 247.8,
-   "end": 255.1,
-   "text": "I think the onboarding week question is the main thing left before we can close out the interview loop."
-  },
-  {
-   "key": "them:A",
-   "start": 256.4,
-   "end": 264.5,
-   "text": "Last time we said we would clean up the support queue first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 266.0,
-   "end": 274.4,
-   "text": "The job posting piece is moving, and the team has a draft of the onboarding week changes ready for review this week."
-  },
-  {
-   "key": "me:A",
-   "start": 275.8,
-   "end": 283.5,
-   "text": "From what I can see, the shift coverage is on track, and the risk is mostly in the job posting."
-  },
-  {
-   "key": "them:A",
-   "start": 285.0,
-   "end": 291.9,
-   "text": "Right, and the support queue also touches the job posting, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 292.2,
-   "end": 299.5,
-   "text": "I think the onboarding week question is the main thing left before we can close out the job posting."
-  },
-  {
-   "key": "me:A",
-   "start": 300.5,
-   "end": 308.2,
-   "text": "We have three open questions on the interview loop, mostly about timing and who signs off on the support queue."
-  },
-  {
-   "key": "them:C",
-   "start": 309.1,
-   "end": 316.4,
-   "text": "If we wait a month on the job posting, the shift coverage timeline slips by about the same amount."
-  },
-  {
-   "key": "them:A",
-   "start": 316.7,
-   "end": 324.0,
-   "text": "The draft for the support queue is in the folder, with comments from two teams on the job posting."
-  },
-  {
-   "key": "them:B",
-   "start": 324.7,
-   "end": 332.1,
-   "text": "The draft for the support queue is in the folder, with comments from two teams on the interview loop."
-  },
-  {
-   "key": "them:B",
-   "start": 332.4,
-   "end": 339.7,
-   "text": "If we wait a month on the shift coverage, the interview loop timeline slips by about the same amount."
-  },
-  {
-   "key": "them:C",
-   "start": 340.1,
-   "end": 349.0,
-   "text": "The feedback on the job posting has been mixed, some people like it and some say it adds steps to the support queue."
-  },
-  {
-   "key": "them:C",
-   "start": 350.4,
-   "end": 357.7,
-   "text": "The vendor sent an updated proposal for the interview loop, and it changes the onboarding week a little bit."
-  },
-  {
-   "key": "them:A",
-   "start": 359.0,
-   "end": 367.5,
-   "text": "The shift coverage piece is moving, and the team has a draft of the support queue changes ready for review this week."
-  },
-  {
-   "key": "me:A",
-   "start": 368.3,
-   "end": 376.4,
-   "text": "We could keep the support queue as it is for now and only change the shift coverage in the first phase."
-  },
-  {
-   "key": "them:B",
-   "start": 377.3,
-   "end": 387.0,
-   "text": "I talked to the people who run the job posting every day, and they said the shift coverage is the part that slows them down."
-  },
-  {
-   "key": "me:A",
-   "start": 387.8,
-   "end": 394.7,
-   "text": "Right, and the shift coverage also touches the job posting, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 395.4,
-   "end": 402.7,
-   "text": "The vendor sent an updated proposal for the job posting, and it changes the shift coverage a little bit."
-  },
-  {
-   "key": "them:A",
-   "start": 403.2,
-   "end": 411.7,
-   "text": "I would like us to agree on the scope of the onboarding week today, even if the job posting details come later."
-  },
-  {
-   "key": "them:C",
-   "start": 412.7,
-   "end": 420.8,
-   "text": "We could keep the support queue as it is for now and only change the interview loop in the first phase."
-  },
-  {
-   "key": "them:B",
-   "start": 421.5,
-   "end": 429.2,
-   "text": "We have three open questions on the interview loop, mostly about timing and who signs off on the shift coverage."
-  },
-  {
-   "key": "them:B",
-   "start": 430.4,
-   "end": 437.7,
-   "text": "The draft for the interview loop is in the folder, with comments from two teams on the shift coverage."
-  },
-  {
-   "key": "me:A",
-   "start": 438.3,
-   "end": 446.3,
-   "text": "Last time we said we would clean up the support queue first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 447.8,
-   "end": 454.7,
-   "text": "The ask is simple: approve the interview loop change so the onboarding week team can start next week."
-  },
-  {
-   "key": "them:A",
-   "start": 455.2,
-   "end": 462.1,
+   "start": 123.6,
+   "end": 130.5,
    "text": "Okay, the high level makes sense. Now let us go deep on just one piece, the second part."
   },
   {
    "key": "them:B",
-   "start": 463.0,
-   "end": 470.3,
-   "text": "If we wait a month on the job posting, the support queue timeline slips by about the same amount."
+   "start": 131.7,
+   "end": 140.2,
+   "text": "The feedback on the board meeting has been mixed, some people like it and some say it adds steps to the follow-up."
   },
   {
    "key": "them:B",
-   "start": 470.9,
-   "end": 477.8,
-   "text": "Right, and the shift coverage also touches the interview loop, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:B",
-   "start": 478.8,
-   "end": 486.5,
-   "text": "We tested the shift coverage with a small group, and the support queue results were close to what we hoped."
+   "start": 140.8,
+   "end": 150.4,
+   "text": "I talked to the people who run the invite list every day, and they said the feedback session is the part that slows them down."
   },
   {
    "key": "them:A",
-   "start": 487.6,
-   "end": 496.5,
-   "text": "One thing I noticed is that the job posting looks different in each region, so the shift coverage plan may need two versions."
+   "start": 150.7,
+   "end": 158.0,
+   "text": "There is a dependency on the agenda, so the feedback session work cannot really start until that is settled."
   },
   {
    "key": "them:B",
-   "start": 497.0,
-   "end": 504.3,
-   "text": "I think the onboarding week question is the main thing left before we can close out the job posting."
+   "start": 158.9,
+   "end": 168.1,
+   "text": "So on the agenda, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
-   "key": "them:C",
-   "start": 505.0,
-   "end": 511.9,
-   "text": "Right, and the interview loop also touches the shift coverage, which is why I wanted everyone here today."
+   "key": "them:B",
+   "start": 169.3,
+   "end": 176.6,
+   "text": "We tested the feedback session with a small group, and the agenda results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 177.1,
+   "end": 184.4,
+   "text": "From what I can see, the feedback session is on track, and the risk is mostly in the follow-up."
   },
   {
    "key": "me:A",
-   "start": 512.3,
-   "end": 520.8,
-   "text": "My recommendation is that we go with the second option for the onboarding week, it saves about 15% on the support queue."
+   "start": 185.8,
+   "end": 192.3,
+   "text": "Right, and the feedback session also touches the agenda, which is why I wanted everyone here today."
   },
   {
    "key": "them:A",
-   "start": 521.7,
-   "end": 527.9,
-   "text": "You said last week you would send the update, and you did. That helps a lot."
+   "start": 193.0,
+   "end": 202.6,
+   "text": "So on the feedback session, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 203.7,
+   "end": 210.6,
+   "text": "The vendor sent an updated proposal for the follow-up, and it changes the board meeting a little bit."
   },
   {
    "key": "them:C",
-   "start": 528.9,
-   "end": 536.2,
-   "text": "I think the onboarding week question is the main thing left before we can close out the interview loop."
-  },
-  {
-   "key": "them:C",
-   "start": 536.7,
-   "end": 544.4,
-   "text": "We tested the shift coverage with a small group, and the interview loop results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 545.6,
-   "end": 553.6,
-   "text": "We could keep the onboarding week as it is for now and only change the support queue in the first phase."
-  },
-  {
-   "key": "them:B",
-   "start": 554.1,
-   "end": 561.4,
-   "text": "I think the support queue question is the main thing left before we can close out the interview loop."
-  },
-  {
-   "key": "them:C",
-   "start": 562.9,
-   "end": 571.0,
-   "text": "Last time we said we would clean up the shift coverage first, and that work is about two thirds done now."
-  },
-  {
-   "key": "them:B",
-   "start": 572.4,
-   "end": 581.2,
-   "text": "One thing I noticed is that the job posting looks different in each region, so the interview loop plan may need two versions."
-  },
-  {
-   "key": "them:A",
-   "start": 582.1,
-   "end": 589.8,
-   "text": "We tested the onboarding week with a small group, and the support queue results were close to what we hoped."
-  },
-  {
-   "key": "them:B",
-   "start": 590.5,
-   "end": 598.2,
-   "text": "There is a dependency on the job posting, so the shift coverage work cannot really start until that is settled."
-  },
-  {
-   "key": "them:B",
-   "start": 599.5,
-   "end": 606.8,
-   "text": "I think the shift coverage question is the main thing left before we can close out the job posting."
-  },
-  {
-   "key": "them:C",
-   "start": 607.7,
-   "end": 615.4,
-   "text": "There is a dependency on the onboarding week, so the shift coverage work cannot really start until that is settled."
-  },
-  {
-   "key": "them:A",
-   "start": 615.8,
-   "end": 625.5,
-   "text": "So on the support queue, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:C",
-   "start": 626.8,
-   "end": 634.5,
-   "text": "There is a dependency on the support queue, so the onboarding week work cannot really start until that is settled."
-  },
-  {
-   "key": "them:B",
-   "start": 635.8,
-   "end": 643.1,
-   "text": "The vendor sent an updated proposal for the shift coverage, and it changes the support queue a little bit."
-  },
-  {
-   "key": "them:B",
-   "start": 644.3,
-   "end": 652.0,
-   "text": "We tested the onboarding week with a small group, and the support queue results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 652.7,
-   "end": 660.8,
-   "text": "The interview loop numbers came in yesterday, and I put a short summary of the job posting in the shared folder."
-  },
-  {
-   "key": "them:B",
-   "start": 661.3,
-   "end": 668.6,
-   "text": "If we wait a month on the shift coverage, the onboarding week timeline slips by about the same amount."
+   "start": 211.1,
+   "end": 218.4,
+   "text": "We have three open questions on the follow-up, mostly about timing and who signs off on the invite list."
   },
   {
    "key": "me:A",
-   "start": 669.9,
-   "end": 678.8,
-   "text": "One thing I noticed is that the job posting looks different in each region, so the onboarding week plan may need two versions."
-  },
-  {
-   "key": "them:C",
-   "start": 679.3,
-   "end": 687.8,
-   "text": "I would like us to agree on the scope of the onboarding week today, even if the shift coverage details come later."
-  },
-  {
-   "key": "them:C",
-   "start": 688.9,
-   "end": 697.0,
-   "text": "Last time we said we would clean up the onboarding week first, and that work is about two thirds done now."
+   "start": 218.8,
+   "end": 226.5,
+   "text": "The follow-up numbers came in yesterday, and I put a short summary of the feedback session in the shared folder."
   },
   {
    "key": "them:A",
-   "start": 697.4,
-   "end": 705.1,
-   "text": "There is a dependency on the interview loop, so the shift coverage work cannot really start until that is settled."
+   "start": 227.8,
+   "end": 237.4,
+   "text": "So on the invite list, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 238.0,
+   "end": 245.0,
+   "text": "The draft for the board meeting is in the folder, with comments from two teams on the follow-up."
+  },
+  {
+   "key": "me:A",
+   "start": 245.6,
+   "end": 252.5,
+   "text": "The draft for the feedback session is in the folder, with comments from two teams on the agenda."
+  },
+  {
+   "key": "them:A",
+   "start": 253.6,
+   "end": 260.1,
+   "text": "Right, and the feedback session also touches the agenda, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 261.6,
+   "end": 268.5,
+   "text": "The vendor sent an updated proposal for the invite list, and it changes the follow-up a little bit."
   },
   {
    "key": "them:B",
-   "start": 706.3,
-   "end": 714.0,
-   "text": "We tested the support queue with a small group, and the interview loop results were close to what we hoped."
+   "start": 269.7,
+   "end": 277.0,
+   "text": "From what I can see, the board meeting is on track, and the risk is mostly in the agenda."
   },
   {
    "key": "me:A",
-   "start": 715.2,
-   "end": 723.3,
-   "text": "We could keep the onboarding week as it is for now and only change the support queue in the first phase."
+   "start": 277.3,
+   "end": 285.0,
+   "text": "We have three open questions on the board meeting, mostly about timing and who signs off on the feedback session."
   },
   {
    "key": "them:B",
-   "start": 724.1,
-   "end": 731.4,
-   "text": "The vendor sent an updated proposal for the interview loop, and it changes the job posting a little bit."
+   "start": 285.7,
+   "end": 293.8,
+   "text": "The agenda piece is moving, and the team has a draft of the feedback session changes ready for review this week."
   },
   {
    "key": "them:A",
-   "start": 732.0,
-   "end": 739.3,
-   "text": "The draft for the shift coverage is in the folder, with comments from two teams on the onboarding week."
+   "start": 294.1,
+   "end": 303.7,
+   "text": "I talked to the people who run the feedback session every day, and they said the board meeting is the part that slows them down."
   },
   {
    "key": "them:C",
-   "start": 740.8,
-   "end": 749.3,
-   "text": "I would like us to agree on the scope of the job posting today, even if the shift coverage details come later."
+   "start": 304.9,
+   "end": 311.4,
+   "text": "I think the follow-up question is the main thing left before we can close out the agenda."
+  },
+  {
+   "key": "them:C",
+   "start": 311.8,
+   "end": 319.4,
+   "text": "Last time we said we would clean up the agenda first, and that work is about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 749.6,
-   "end": 756.9,
-   "text": "I think the onboarding week question is the main thing left before we can close out the job posting."
+   "start": 320.6,
+   "end": 328.7,
+   "text": "The board meeting piece is moving, and the team has a draft of the follow-up changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 329.5,
+   "end": 339.2,
+   "text": "I talked to the people who run the board meeting every day, and they said the feedback session is the part that slows them down."
   },
   {
    "key": "them:B",
-   "start": 757.8,
-   "end": 765.5,
-   "text": "We have three open questions on the support queue, mostly about timing and who signs off on the onboarding week."
+   "start": 340.0,
+   "end": 348.5,
+   "text": "I would like us to agree on the scope of the board meeting today, even if the feedback session details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 349.0,
+   "end": 355.9,
+   "text": "I think the follow-up question is the main thing left before we can close out the board meeting."
+  },
+  {
+   "key": "me:A",
+   "start": 357.2,
+   "end": 364.6,
+   "text": "We have three open questions on the agenda, mostly about timing and who signs off on the invite list."
+  },
+  {
+   "key": "me:A",
+   "start": 365.3,
+   "end": 372.6,
+   "text": "We want to start the feedback session on the first of the month. Can we agree on that today?"
   },
   {
    "key": "them:A",
-   "start": 766.5,
-   "end": 773.4,
-   "text": "Right, and the job posting also touches the support queue, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:C",
-   "start": 774.0,
-   "end": 781.7,
-   "text": "From what I can see, the shift coverage is on track, and the risk is mostly in the interview loop."
-  },
-  {
-   "key": "me:A",
-   "start": 782.8,
-   "end": 790.5,
-   "text": "We tested the shift coverage with a small group, and the support queue results were close to what we hoped."
-  },
-  {
-   "key": "me:A",
-   "start": 790.9,
-   "end": 798.3,
-   "text": "The vendor sent an updated proposal for the job posting, and it changes the support queue a little bit."
-  },
-  {
-   "key": "me:A",
-   "start": 799.1,
-   "end": 806.1,
-   "text": "The ask is simple: approve the interview loop change so the support queue team can start next week."
-  },
-  {
-   "key": "them:A",
-   "start": 806.9,
-   "end": 811.9,
+   "start": 373.1,
+   "end": 378.1,
    "text": "I disagree. That plan does not work for me, and here is why."
   },
   {
+   "key": "them:C",
+   "start": 378.6,
+   "end": 387.1,
+   "text": "The feedback on the invite list has been mixed, some people like it and some say it adds steps to the follow-up."
+  },
+  {
+   "key": "them:C",
+   "start": 387.5,
+   "end": 395.6,
+   "text": "Last time we said we would clean up the invite list first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 396.2,
+   "end": 404.3,
+   "text": "I would like us to agree on the scope of the feedback session today, even if the follow-up details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 404.7,
+   "end": 411.2,
+   "text": "The vendor sent an updated proposal for the agenda, and it changes the follow-up a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 412.1,
+   "end": 421.7,
+   "text": "So on the invite list, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 422.8,
+   "end": 430.8,
+   "text": "We could keep the invite list as it is for now and only change the feedback session in the first phase."
+  },
+  {
    "key": "me:A",
-   "start": 812.4,
-   "end": 815.5,
+   "start": 431.6,
+   "end": 440.5,
+   "text": "One thing I noticed is that the board meeting looks different in each region, so the feedback session plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 441.7,
+   "end": 448.6,
+   "text": "Right, and the feedback session also touches the board meeting, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 449.3,
+   "end": 456.6,
+   "text": "The vendor sent an updated proposal for the board meeting, and it changes the feedback session a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 457.6,
+   "end": 465.7,
+   "text": "I would like us to agree on the scope of the follow-up today, even if the board meeting details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 466.1,
+   "end": 473.8,
+   "text": "We could keep the invite list as it is for now and only change the agenda in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 474.8,
+   "end": 482.1,
+   "text": "We have three open questions on the agenda, mostly about timing and who signs off on the feedback session."
+  },
+  {
+   "key": "them:B",
+   "start": 483.2,
+   "end": 490.1,
+   "text": "The draft for the agenda is in the folder, with comments from two teams on the feedback session."
+  },
+  {
+   "key": "me:A",
+   "start": 491.4,
+   "end": 499.4,
+   "text": "Last time we said we would clean up the invite list first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 500.8,
+   "end": 507.3,
+   "text": "I think the follow-up question is the main thing left before we can close out the agenda."
+  },
+  {
+   "key": "me:A",
+   "start": 508.0,
+   "end": 515.3,
+   "text": "The vendor sent an updated proposal for the feedback session, and it changes the invite list a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 516.6,
+   "end": 524.7,
+   "text": "I would like us to agree on the scope of the follow-up today, even if the feedback session details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 526.2,
+   "end": 532.7,
+   "text": "Right, and the agenda also touches the feedback session, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 533.9,
+   "end": 541.6,
+   "text": "We tested the feedback session with a small group, and the invite list results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 543.0,
+   "end": 551.8,
+   "text": "One thing I noticed is that the board meeting looks different in each region, so the feedback session plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 553.1,
+   "end": 560.1,
+   "text": "I think the follow-up question is the main thing left before we can close out the board meeting."
+  },
+  {
+   "key": "them:C",
+   "start": 561.3,
+   "end": 567.9,
+   "text": "Right, and the agenda also touches the feedback session, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 568.3,
+   "end": 575.2,
+   "text": "The vendor sent an updated proposal for the follow-up, and it changes the invite list a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 576.0,
+   "end": 583.0,
+   "text": "There is a dependency on the agenda, so the follow-up work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 584.2,
+   "end": 591.1,
+   "text": "From what I can see, the follow-up is on track, and the risk is mostly in the agenda."
+  },
+  {
+   "key": "them:A",
+   "start": 591.7,
+   "end": 599.0,
+   "text": "I think the invite list question is the main thing left before we can close out the feedback session."
+  },
+  {
+   "key": "them:B",
+   "start": 599.6,
+   "end": 608.0,
+   "text": "The feedback on the follow-up has been mixed, some people like it and some say it adds steps to the invite list."
+  },
+  {
+   "key": "them:C",
+   "start": 609.2,
+   "end": 616.1,
+   "text": "I think the invite list question is the main thing left before we can close out the agenda."
+  },
+  {
+   "key": "them:C",
+   "start": 616.6,
+   "end": 624.7,
+   "text": "Last time we said we would clean up the feedback session first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 626.2,
+   "end": 634.6,
+   "text": "One thing I noticed is that the board meeting looks different in each region, so the agenda plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 635.0,
+   "end": 642.3,
+   "text": "We want to start the invite list on the first of the month. Can we agree on that today?"
+  },
+  {
+   "key": "them:A",
+   "start": 643.2,
+   "end": 647.1,
+   "text": "Did the thing we agreed on last time actually happen?"
+  },
+  {
+   "key": "them:B",
+   "start": 647.8,
+   "end": 655.9,
+   "text": "I would like us to agree on the scope of the board meeting today, even if the agenda details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 656.6,
+   "end": 663.9,
+   "text": "From what I can see, the feedback session is on track, and the risk is mostly in the follow-up."
+  },
+  {
+   "key": "them:C",
+   "start": 664.8,
+   "end": 671.4,
+   "text": "Right, and the agenda also touches the invite list, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 671.8,
+   "end": 679.1,
+   "text": "The draft for the board meeting is in the folder, with comments from two teams on the feedback session."
+  },
+  {
+   "key": "them:B",
+   "start": 680.3,
+   "end": 687.2,
+   "text": "If we wait a month on the feedback session, the agenda timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 687.9,
+   "end": 696.0,
+   "text": "I would like us to agree on the scope of the invite list today, even if the follow-up details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 696.9,
+   "end": 704.9,
+   "text": "The invite list numbers came in yesterday, and I put a short summary of the feedback session in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 706.0,
+   "end": 712.9,
+   "text": "If we wait a month on the agenda, the board meeting timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 713.5,
+   "end": 720.4,
+   "text": "If we wait a month on the feedback session, the follow-up timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 721.1,
+   "end": 728.0,
+   "text": "I think the agenda question is the main thing left before we can close out the board meeting."
+  },
+  {
+   "key": "them:B",
+   "start": 729.1,
+   "end": 736.8,
+   "text": "We have three open questions on the invite list, mostly about timing and who signs off on the board meeting."
+  },
+  {
+   "key": "them:A",
+   "start": 737.3,
+   "end": 745.4,
+   "text": "Last time we said we would clean up the feedback session first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 746.6,
+   "end": 754.3,
+   "text": "We could keep the agenda as it is for now and only change the invite list in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 755.7,
+   "end": 763.0,
+   "text": "The draft for the board meeting is in the folder, with comments from two teams on the invite list."
+  },
+  {
+   "key": "them:A",
+   "start": 763.4,
+   "end": 770.7,
+   "text": "We tested the follow-up with a small group, and the invite list results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 771.7,
+   "end": 774.8,
    "text": "Okay, I think that covers it. Thanks, everyone."
   }
  ],
  "beats": [
   {
-   "line": 52,
+   "line": 15,
    "person": "Robin Hale",
    "dimension": "detail",
    "value": "high_then_deep"
   },
   {
-   "line": 60,
-   "person": "Robin Hale",
-   "dimension": "trust",
-   "value": "follow_through"
-  },
-  {
-   "line": 93,
+   "line": 44,
    "person": "Robin Hale",
    "dimension": "objection",
    "value": "direct"
+  },
+  {
+   "line": 76,
+   "person": "Robin Hale",
+   "dimension": "trust",
+   "value": "follow_through"
   }
  ]
 }

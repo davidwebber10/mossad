@@ -111,8 +111,8 @@ public struct ChatAgent: Sendable {
 
     /// `onStep` reports each lookup as it starts, for the "Reading Launch sync" line.
     public func answer(_ question: String, history: [ChatMessage], records: [CallRecord], paths: Paths? = nil, now: Date = Date(),
-                       about callID: String? = nil, onStep: @escaping @Sendable (String) -> Void) async throws -> String {
-        let tools = ChatTools(records: records, owner: ownerName, paths: paths)
+                       about callID: String? = nil, personaTraits: Bool = true, onStep: @escaping @Sendable (String) -> Void) async throws -> String {
+        let tools = ChatTools(records: records, owner: ownerName, paths: paths, personaTraits: personaTraits)
         return try await llm.runTools(system: Self.system(owner: ownerName, tools: tools, now: now, about: callID), history: history, question: question,
                                       tools: paths == nil ? ChatTools.definitions : ChatTools.allDefinitions, purpose: .question) { name, input in
             onStep(ChatTools.step(name, input: input) { id in tools.records.first { $0.id == id }?.title })

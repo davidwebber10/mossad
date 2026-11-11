@@ -131,6 +131,14 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
         trait = finding.trait
     }
 
+    /// The trait, also when a build that does not know the field dropped it: a trait card's id is "<call>|trait|<trait id>".
+    public var traitID: String? {
+        if let trait { return trait }
+        guard kind == .trait else { return nil }
+        let marker = "|\(CoachFinding.Kind.trait.rawValue)|"
+        return id.range(of: marker).map { String(id[$0.upperBound...]) }.flatMap(\.nonBlank)
+    }
+
     enum CodingKeys: String, CodingKey { case id, callID, kind, skill, text, verdict, date, note, questionID, focusID, person, replaced, trait }
 
     public init(from decoder: Decoder) throws {

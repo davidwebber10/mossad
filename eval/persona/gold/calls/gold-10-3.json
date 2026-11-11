@@ -1,19 +1,19 @@
 {
  "id": "gold-10-3",
  "person": "Drew Kim",
- "title": "Carrier contract renewal",
+ "title": "Internal tools roadmap",
  "tags": [
-  "Logistics",
-  "Contracts"
+  "Tools",
+  "Engineering"
  ],
  "setting": "group",
  "start": "2026-08-29T15:00:00Z",
- "end": "2026-08-29T15:14:27Z",
+ "end": "2026-08-29T15:14:01Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Drew Kim",
-  "them:B": "Ben Cole",
-  "them:C": "Priya Shah"
+  "them:B": "Priya Shah",
+  "them:C": "Ana Lopez"
  },
  "noise": false,
  "utterances": [
@@ -21,582 +21,594 @@
    "key": "me:A",
    "start": 0.0,
    "end": 4.6,
-   "text": "Thanks for making the time. Today is about the carrier contract renewal."
-  },
-  {
-   "key": "me:A",
-   "start": 5.8,
-   "end": 13.1,
-   "text": "I think the rate card question is the main thing left before we can close out the volume commitment."
-  },
-  {
-   "key": "me:A",
-   "start": 13.4,
-   "end": 21.1,
-   "text": "We could keep the rate card as it is for now and only change the lane in the first phase."
+   "text": "Thanks for making the time. Today is about the internal tools roadmap."
   },
   {
    "key": "them:B",
-   "start": 21.7,
-   "end": 28.6,
-   "text": "I think the fuel surcharge question is the main thing left before we can close out the carrier."
-  },
-  {
-   "key": "them:A",
-   "start": 29.3,
-   "end": 38.9,
-   "text": "So on the rate card, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:B",
-   "start": 40.0,
-   "end": 48.1,
-   "text": "Last time we said we would clean up the rate card first, and that work is about two thirds done now."
+   "start": 5.7,
+   "end": 12.6,
+   "text": "We tested the integration with a small group, and the ticket results were close to what we hoped."
   },
   {
    "key": "me:A",
-   "start": 49.3,
-   "end": 57.3,
-   "text": "The carrier piece is moving, and the team has a draft of the rate card changes ready for review this week."
-  },
-  {
-   "key": "them:A",
-   "start": 57.7,
-   "end": 65.0,
-   "text": "The draft for the fuel surcharge is in the folder, with comments from two teams on the volume commitment."
+   "start": 13.0,
+   "end": 19.5,
+   "text": "If we wait a month on the release, the backlog timeline slips by about the same amount."
   },
   {
    "key": "them:C",
-   "start": 65.4,
-   "end": 73.8,
-   "text": "One thing I noticed is that the fuel surcharge looks different in each region, so the lane plan may need two versions."
+   "start": 20.4,
+   "end": 27.0,
+   "text": "The draft for the backlog is in the folder, with comments from two teams on the integration."
   },
   {
    "key": "them:B",
-   "start": 74.9,
-   "end": 83.3,
-   "text": "One thing I noticed is that the lane looks different in each region, so the fuel surcharge plan may need two versions."
-  },
-  {
-   "key": "me:A",
-   "start": 84.7,
-   "end": 92.8,
-   "text": "I would like us to agree on the scope of the fuel surcharge today, even if the carrier details come later."
+   "start": 28.4,
+   "end": 35.0,
+   "text": "The draft for the integration is in the folder, with comments from two teams on the ticket."
   },
   {
    "key": "them:A",
-   "start": 94.0,
-   "end": 102.0,
-   "text": "Last time we said we would clean up the fuel surcharge first, and that work is about two thirds done now."
+   "start": 35.5,
+   "end": 42.4,
+   "text": "From what I can see, the sprint is on track, and the risk is mostly in the ticket."
+  },
+  {
+   "key": "them:B",
+   "start": 43.2,
+   "end": 49.4,
+   "text": "Right, and the integration also touches the release, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 50.6,
+   "end": 58.2,
+   "text": "The release piece is moving, and the team has a draft of the integration changes ready for review this week."
   },
   {
    "key": "them:C",
-   "start": 103.4,
-   "end": 111.5,
-   "text": "The lane piece is moving, and the team has a draft of the fuel surcharge changes ready for review this week."
+   "start": 59.2,
+   "end": 66.1,
+   "text": "There is a dependency on the ticket, so the sprint work cannot really start until that is settled."
   },
   {
-   "key": "them:C",
-   "start": 112.4,
-   "end": 119.3,
-   "text": "If we wait a month on the lane, the rate card timeline slips by about the same amount."
-  },
-  {
-   "key": "them:C",
-   "start": 120.7,
-   "end": 127.2,
-   "text": "Right, and the lane also touches the volume commitment, which is why I wanted everyone here today."
+   "key": "them:B",
+   "start": 67.4,
+   "end": 75.1,
+   "text": "Last time we said we would clean up the integration first, and that work is about two thirds done now."
   },
   {
    "key": "them:A",
-   "start": 127.7,
-   "end": 135.8,
-   "text": "Last time we said we would clean up the volume commitment first, and that work is about two thirds done now."
+   "start": 76.3,
+   "end": 84.0,
+   "text": "The integration piece is moving, and the team has a draft of the sprint changes ready for review this week."
   },
   {
    "key": "them:B",
-   "start": 136.3,
-   "end": 145.2,
-   "text": "One thing I noticed is that the rate card looks different in each region, so the fuel surcharge plan may need two versions."
+   "start": 84.5,
+   "end": 91.4,
+   "text": "We have three open questions on the backlog, mostly about timing and who signs off on the release."
   },
   {
    "key": "them:B",
-   "start": 145.5,
-   "end": 153.2,
-   "text": "We tested the rate card with a small group, and the fuel surcharge results were close to what we hoped."
+   "start": 92.5,
+   "end": 101.4,
+   "text": "I talked to the people who run the sprint every day, and they said the ticket is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 102.0,
+   "end": 109.7,
+   "text": "The sprint piece is moving, and the team has a draft of the ticket changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 110.5,
+   "end": 118.2,
+   "text": "I propose we change the integration next month and move about 20% of the work to the new sprint setup."
   },
   {
    "key": "them:A",
-   "start": 153.9,
-   "end": 162.4,
-   "text": "One thing I noticed is that the volume commitment looks different in each region, so the lane plan may need two versions."
-  },
-  {
-   "key": "me:A",
-   "start": 162.9,
-   "end": 171.0,
-   "text": "I would like us to agree on the scope of the lane today, even if the rate card details come later."
-  },
-  {
-   "key": "them:B",
-   "start": 171.5,
-   "end": 180.3,
-   "text": "One thing I noticed is that the fuel surcharge looks different in each region, so the rate card plan may need two versions."
-  },
-  {
-   "key": "me:A",
-   "start": 181.3,
-   "end": 190.9,
-   "text": "I talked to the people who run the fuel surcharge every day, and they said the rate card is the part that slows them down."
-  },
-  {
-   "key": "me:A",
-   "start": 192.0,
-   "end": 198.9,
-   "text": "The vendor sent an updated proposal for the lane, and it changes the volume commitment a little bit."
-  },
-  {
-   "key": "me:A",
-   "start": 199.9,
-   "end": 208.4,
-   "text": "My recommendation is that we go with the second option for the volume commitment, it saves about 15% on the rate card."
-  },
-  {
-   "key": "them:A",
-   "start": 209.3,
-   "end": 214.3,
-   "text": "Let me verify that figure against my own sheet before we go on."
-  },
-  {
-   "key": "me:A",
-   "start": 214.9,
-   "end": 222.6,
-   "text": "There is a dependency on the volume commitment, so the rate card work cannot really start until that is settled."
+   "start": 118.8,
+   "end": 123.4,
+   "text": "I double checked last month's totals, and two of them were off."
   },
   {
    "key": "them:C",
-   "start": 223.3,
-   "end": 232.9,
-   "text": "So on the volume commitment, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:B",
-   "start": 234.2,
-   "end": 241.9,
-   "text": "There is a dependency on the fuel surcharge, so the rate card work cannot really start until that is settled."
-  },
-  {
-   "key": "them:C",
-   "start": 243.2,
-   "end": 250.9,
-   "text": "The fuel surcharge numbers came in yesterday, and I put a short summary of the lane in the shared folder."
-  },
-  {
-   "key": "them:A",
-   "start": 252.2,
-   "end": 260.2,
-   "text": "Last time we said we would clean up the rate card first, and that work is about two thirds done now."
+   "start": 124.0,
+   "end": 130.5,
+   "text": "The vendor sent an updated proposal for the ticket, and it changes the sprint a little bit."
   },
   {
    "key": "me:A",
-   "start": 261.7,
-   "end": 270.6,
-   "text": "The feedback on the fuel surcharge has been mixed, some people like it and some say it adds steps to the rate card."
+   "start": 131.6,
+   "end": 137.8,
+   "text": "Right, and the ticket also touches the backlog, which is why I wanted everyone here today."
   },
   {
    "key": "them:C",
-   "start": 271.3,
-   "end": 280.5,
-   "text": "I talked to the people who run the carrier every day, and they said the fuel surcharge is the part that slows them down."
-  },
-  {
-   "key": "them:C",
-   "start": 281.7,
-   "end": 290.9,
-   "text": "I talked to the people who run the carrier every day, and they said the fuel surcharge is the part that slows them down."
-  },
-  {
-   "key": "them:B",
-   "start": 291.8,
-   "end": 299.1,
-   "text": "The draft for the fuel surcharge is in the folder, with comments from two teams on the volume commitment."
-  },
-  {
-   "key": "them:A",
-   "start": 299.6,
-   "end": 306.9,
-   "text": "The draft for the rate card is in the folder, with comments from two teams on the volume commitment."
-  },
-  {
-   "key": "them:C",
-   "start": 307.3,
-   "end": 314.2,
-   "text": "The draft for the volume commitment is in the folder, with comments from two teams on the carrier."
+   "start": 139.1,
+   "end": 147.2,
+   "text": "The feedback on the ticket has been mixed, some people like it and some say it adds steps to the integration."
   },
   {
    "key": "me:A",
-   "start": 315.4,
-   "end": 322.3,
-   "text": "The draft for the carrier is in the folder, with comments from two teams on the fuel surcharge."
-  },
-  {
-   "key": "them:B",
-   "start": 323.0,
-   "end": 330.0,
-   "text": "Right, and the volume commitment also touches the fuel surcharge, which is why I wanted everyone here today."
+   "start": 147.9,
+   "end": 155.6,
+   "text": "I would like us to agree on the scope of the backlog today, even if the ticket details come later."
   },
   {
    "key": "them:A",
-   "start": 331.1,
-   "end": 338.7,
-   "text": "From what I can see, the fuel surcharge is on track, and the risk is mostly in the volume commitment."
+   "start": 156.3,
+   "end": 163.6,
+   "text": "The backlog numbers came in yesterday, and I put a short summary of the release in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 339.9,
-   "end": 346.8,
-   "text": "There is a dependency on the carrier, so the lane work cannot really start until that is settled."
-  },
-  {
-   "key": "them:B",
-   "start": 348.2,
-   "end": 356.2,
-   "text": "Last time we said we would clean up the volume commitment first, and that work is about two thirds done now."
-  },
-  {
-   "key": "them:C",
-   "start": 357.3,
-   "end": 365.4,
-   "text": "The feedback on the carrier has been mixed, some people like it and some say it adds steps to the lane."
-  },
-  {
-   "key": "them:B",
-   "start": 366.2,
-   "end": 373.9,
-   "text": "We have three open questions on the rate card, mostly about timing and who signs off on the fuel surcharge."
-  },
-  {
-   "key": "them:A",
-   "start": 374.8,
-   "end": 384.0,
-   "text": "I talked to the people who run the fuel surcharge every day, and they said the lane is the part that slows them down."
+   "start": 164.4,
+   "end": 170.6,
+   "text": "Right, and the release also touches the sprint, which is why I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 385.4,
-   "end": 393.1,
-   "text": "The lane piece is moving, and the team has a draft of the carrier changes ready for review this week."
+   "start": 171.4,
+   "end": 178.0,
+   "text": "The vendor sent an updated proposal for the sprint, and it changes the ticket a little bit."
   },
   {
    "key": "them:C",
-   "start": 394.3,
-   "end": 402.0,
-   "text": "The lane piece is moving, and the team has a draft of the carrier changes ready for review this week."
-  },
-  {
-   "key": "them:A",
-   "start": 403.3,
-   "end": 410.2,
-   "text": "The vendor sent an updated proposal for the volume commitment, and it changes the lane a little bit."
-  },
-  {
-   "key": "them:C",
-   "start": 410.9,
-   "end": 417.5,
-   "text": "Right, and the carrier also touches the rate card, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:C",
-   "start": 418.0,
-   "end": 426.5,
-   "text": "The feedback on the carrier has been mixed, some people like it and some say it adds steps to the volume commitment."
-  },
-  {
-   "key": "them:A",
-   "start": 427.7,
-   "end": 435.8,
-   "text": "The lane piece is moving, and the team has a draft of the rate card changes ready for review this week."
-  },
-  {
-   "key": "them:C",
-   "start": 436.9,
-   "end": 444.2,
-   "text": "If we wait a month on the volume commitment, the rate card timeline slips by about the same amount."
+   "start": 178.5,
+   "end": 185.0,
+   "text": "The vendor sent an updated proposal for the release, and it changes the sprint a little bit."
   },
   {
    "key": "me:A",
-   "start": 445.7,
-   "end": 453.0,
-   "text": "There is a dependency on the fuel surcharge, so the lane work cannot really start until that is settled."
+   "start": 185.4,
+   "end": 192.4,
+   "text": "There is a dependency on the release, so the backlog work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 193.0,
+   "end": 201.1,
+   "text": "The feedback on the sprint has been mixed, some people like it and some say it adds steps to the release."
   },
   {
    "key": "them:C",
-   "start": 453.6,
-   "end": 461.3,
-   "text": "The fuel surcharge numbers came in yesterday, and I put a short summary of the carrier in the shared folder."
-  },
-  {
-   "key": "me:A",
-   "start": 462.6,
-   "end": 469.9,
-   "text": "The draft for the volume commitment is in the folder, with comments from two teams on the rate card."
-  },
-  {
-   "key": "them:A",
-   "start": 470.3,
-   "end": 477.3,
-   "text": "The vendor sent an updated proposal for the fuel surcharge, and it changes the lane a little bit."
-  },
-  {
-   "key": "them:B",
-   "start": 477.8,
-   "end": 485.1,
-   "text": "From what I can see, the fuel surcharge is on track, and the risk is mostly in the lane."
-  },
-  {
-   "key": "me:A",
-   "start": 485.7,
-   "end": 493.0,
-   "text": "From what I can see, the rate card is on track, and the risk is mostly in the carrier."
-  },
-  {
-   "key": "them:A",
-   "start": 494.4,
-   "end": 502.9,
-   "text": "I would like us to agree on the scope of the rate card today, even if the volume commitment details come later."
+   "start": 202.1,
+   "end": 209.4,
+   "text": "We could keep the backlog as it is for now and only change the release in the first phase."
   },
   {
    "key": "them:C",
-   "start": 504.4,
-   "end": 512.1,
-   "text": "There is a dependency on the volume commitment, so the rate card work cannot really start until that is settled."
+   "start": 210.6,
+   "end": 217.2,
+   "text": "The vendor sent an updated proposal for the backlog, and it changes the integration a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 218.1,
+   "end": 226.2,
+   "text": "The feedback on the backlog has been mixed, some people like it and some say it adds steps to the sprint."
   },
   {
    "key": "them:C",
-   "start": 512.4,
-   "end": 521.3,
-   "text": "The feedback on the rate card has been mixed, some people like it and some say it adds steps to the volume commitment."
-  },
-  {
-   "key": "them:B",
-   "start": 522.0,
-   "end": 530.1,
-   "text": "We could keep the volume commitment as it is for now and only change the rate card in the first phase."
+   "start": 227.6,
+   "end": 234.9,
+   "text": "We could keep the integration as it is for now and only change the backlog in the first phase."
   },
   {
    "key": "me:A",
-   "start": 531.0,
-   "end": 540.6,
-   "text": "I talked to the people who run the rate card every day, and they said the volume commitment is the part that slows them down."
-  },
-  {
-   "key": "them:A",
-   "start": 542.1,
-   "end": 548.6,
-   "text": "Right, and the fuel surcharge also touches the lane, which is why I wanted everyone here today."
+   "start": 235.9,
+   "end": 244.8,
+   "text": "I talked to the people who run the backlog every day, and they said the integration is the part that slows them down."
   },
   {
    "key": "them:B",
-   "start": 549.2,
-   "end": 557.2,
-   "text": "I would like us to agree on the scope of the rate card today, even if the lane details come later."
+   "start": 246.0,
+   "end": 253.3,
+   "text": "We could keep the release as it is for now and only change the sprint in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 254.7,
+   "end": 262.4,
+   "text": "I would like us to agree on the scope of the backlog today, even if the sprint details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 263.1,
+   "end": 270.8,
+   "text": "I would like us to agree on the scope of the sprint today, even if the backlog details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 271.2,
+   "end": 279.2,
+   "text": "One thing I noticed is that the release looks different in each region, so the ticket plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 279.8,
+   "end": 287.9,
+   "text": "The feedback on the ticket has been mixed, some people like it and some say it adds steps to the integration."
+  },
+  {
+   "key": "them:B",
+   "start": 288.6,
+   "end": 295.5,
+   "text": "From what I can see, the integration is on track, and the risk is mostly in the release."
+  },
+  {
+   "key": "them:A",
+   "start": 296.7,
+   "end": 302.8,
+   "text": "Right, and the release also touches the backlog, which is why I wanted everyone here today."
   },
   {
    "key": "them:C",
-   "start": 557.7,
-   "end": 564.2,
-   "text": "The vendor sent an updated proposal for the carrier, and it changes the lane a little bit."
-  },
-  {
-   "key": "them:B",
-   "start": 565.2,
-   "end": 572.5,
-   "text": "From what I can see, the rate card is on track, and the risk is mostly in the carrier."
-  },
-  {
-   "key": "me:A",
-   "start": 573.8,
-   "end": 582.2,
-   "text": "The feedback on the carrier has been mixed, some people like it and some say it adds steps to the fuel surcharge."
-  },
-  {
-   "key": "them:A",
-   "start": 583.0,
-   "end": 590.7,
-   "text": "From what I can see, the rate card is on track, and the risk is mostly in the fuel surcharge."
-  },
-  {
-   "key": "them:B",
-   "start": 591.1,
-   "end": 599.2,
-   "text": "We could keep the fuel surcharge as it is for now and only change the rate card in the first phase."
+   "start": 303.6,
+   "end": 311.7,
+   "text": "The feedback on the sprint has been mixed, some people like it and some say it adds steps to the release."
   },
   {
    "key": "them:C",
-   "start": 599.6,
-   "end": 608.0,
-   "text": "The feedback on the lane has been mixed, some people like it and some say it adds steps to the fuel surcharge."
+   "start": 312.9,
+   "end": 319.4,
+   "text": "If we wait a month on the sprint, the ticket timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 320.2,
+   "end": 326.7,
+   "text": "If we wait a month on the integration, the sprint timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 327.3,
+   "end": 334.2,
+   "text": "We tested the sprint with a small group, and the backlog results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 335.6,
+   "end": 342.1,
+   "text": "I think the ticket question is the main thing left before we can close out the sprint."
+  },
+  {
+   "key": "them:B",
+   "start": 342.6,
+   "end": 349.9,
+   "text": "We could keep the sprint as it is for now and only change the backlog in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 350.3,
+   "end": 357.6,
+   "text": "We could keep the ticket as it is for now and only change the release in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 358.0,
+   "end": 364.6,
+   "text": "I think the release question is the main thing left before we can close out the ticket."
+  },
+  {
+   "key": "them:B",
+   "start": 365.7,
+   "end": 373.3,
+   "text": "Last time we said we would clean up the backlog first, and that work is about two thirds done now."
   },
   {
    "key": "them:C",
-   "start": 608.4,
-   "end": 614.9,
-   "text": "If we wait a month on the lane, the carrier timeline slips by about the same amount."
+   "start": 373.8,
+   "end": 380.7,
+   "text": "From what I can see, the integration is on track, and the risk is mostly in the release."
   },
   {
    "key": "me:A",
-   "start": 615.8,
-   "end": 622.8,
-   "text": "If we wait a month on the volume commitment, the lane timeline slips by about the same amount."
+   "start": 382.2,
+   "end": 388.7,
+   "text": "If we wait a month on the sprint, the ticket timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 623.1,
-   "end": 630.4,
-   "text": "We tested the lane with a small group, and the rate card results were close to what we hoped."
+   "start": 389.9,
+   "end": 396.0,
+   "text": "Right, and the release also touches the ticket, which is why I wanted everyone here today."
   },
   {
    "key": "them:B",
-   "start": 631.2,
-   "end": 637.7,
-   "text": "I think the carrier question is the main thing left before we can close out the lane."
+   "start": 397.4,
+   "end": 406.7,
+   "text": "So on the sprint, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:B",
-   "start": 638.1,
-   "end": 645.8,
-   "text": "We could keep the lane as it is for now and only change the rate card in the first phase."
+   "start": 407.4,
+   "end": 414.3,
+   "text": "We have three open questions on the ticket, mostly about timing and who signs off on the release."
   },
   {
    "key": "them:A",
-   "start": 646.2,
-   "end": 653.9,
-   "text": "We could keep the carrier as it is for now and only change the fuel surcharge in the first phase."
+   "start": 414.7,
+   "end": 422.0,
+   "text": "We could keep the integration as it is for now and only change the backlog in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 423.1,
+   "end": 430.8,
+   "text": "Last time we said we would clean up the sprint first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 431.8,
+   "end": 439.5,
+   "text": "I would like us to agree on the scope of the release today, even if the backlog details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 440.8,
+   "end": 448.2,
+   "text": "The ticket numbers came in yesterday, and I put a short summary of the sprint in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 448.9,
+   "end": 455.1,
+   "text": "Right, and the ticket also touches the backlog, which is why I wanted everyone here today."
   },
   {
    "key": "them:B",
-   "start": 654.2,
-   "end": 661.2,
-   "text": "I think the fuel surcharge question is the main thing left before we can close out the carrier."
+   "start": 456.2,
+   "end": 463.5,
+   "text": "We could keep the release as it is for now and only change the backlog in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 464.5,
+   "end": 473.3,
+   "text": "I talked to the people who run the backlog every day, and they said the ticket is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 474.1,
+   "end": 480.3,
+   "text": "Right, and the integration also touches the ticket, which is why I wanted everyone here today."
   },
   {
    "key": "them:B",
-   "start": 661.7,
-   "end": 669.7,
-   "text": "Last time we said we would clean up the rate card first, and that work is about two thirds done now."
+   "start": 481.3,
+   "end": 489.4,
+   "text": "The feedback on the release has been mixed, some people like it and some say it adds steps to the backlog."
+  },
+  {
+   "key": "me:A",
+   "start": 489.8,
+   "end": 497.5,
+   "text": "I propose we change the ticket next month and move about 20% of the work to the new release setup."
+  },
+  {
+   "key": "them:A",
+   "start": 498.5,
+   "end": 504.2,
+   "text": "What were the other options you looked at? Lay them side by side for me."
+  },
+  {
+   "key": "them:B",
+   "start": 505.1,
+   "end": 513.9,
+   "text": "I talked to the people who run the integration every day, and they said the backlog is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 514.8,
+   "end": 521.4,
+   "text": "If we wait a month on the ticket, the sprint timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 522.9,
+   "end": 529.8,
+   "text": "We have three open questions on the sprint, mostly about timing and who signs off on the integration."
+  },
+  {
+   "key": "me:A",
+   "start": 530.5,
+   "end": 539.3,
+   "text": "I talked to the people who run the ticket every day, and they said the release is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 539.7,
+   "end": 546.2,
+   "text": "The draft for the integration is in the folder, with comments from two teams on the sprint."
+  },
+  {
+   "key": "them:A",
+   "start": 546.6,
+   "end": 553.1,
+   "text": "I think the backlog question is the main thing left before we can close out the sprint."
+  },
+  {
+   "key": "me:A",
+   "start": 554.2,
+   "end": 560.7,
+   "text": "The vendor sent an updated proposal for the release, and it changes the integration a little bit."
   },
   {
    "key": "them:C",
-   "start": 670.8,
-   "end": 678.5,
-   "text": "From what I can see, the volume commitment is on track, and the risk is mostly in the fuel surcharge."
-  },
-  {
-   "key": "me:A",
-   "start": 679.5,
-   "end": 686.0,
-   "text": "If we wait a month on the lane, the carrier timeline slips by about the same amount."
-  },
-  {
-   "key": "them:A",
-   "start": 686.7,
-   "end": 693.2,
-   "text": "Right, and the fuel surcharge also touches the carrier, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:B",
-   "start": 694.5,
-   "end": 703.7,
-   "text": "So on the lane, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:B",
-   "start": 704.7,
-   "end": 712.0,
-   "text": "We have three open questions on the carrier, mostly about timing and who signs off on the fuel surcharge."
-  },
-  {
-   "key": "them:A",
-   "start": 712.5,
-   "end": 720.5,
-   "text": "We could keep the volume commitment as it is for now and only change the rate card in the first phase."
-  },
-  {
-   "key": "me:A",
-   "start": 721.2,
-   "end": 728.9,
-   "text": "Last time we said we would clean up the lane first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 729.7,
-   "end": 738.2,
-   "text": "I would like us to agree on the scope of the fuel surcharge today, even if the rate card details come later."
-  },
-  {
-   "key": "me:A",
-   "start": 739.4,
-   "end": 746.7,
-   "text": "The carrier numbers came in yesterday, and I put a short summary of the lane in the shared folder."
-  },
-  {
-   "key": "me:A",
-   "start": 747.0,
-   "end": 753.9,
-   "text": "We want to start the carrier on the first of the month. Can we agree on that today?"
-  },
-  {
-   "key": "them:A",
-   "start": 755.3,
-   "end": 759.9,
-   "text": "Before you recommend one, what are all the choices we have here?"
-  },
-  {
-   "key": "them:B",
-   "start": 761.4,
-   "end": 769.1,
-   "text": "There is a dependency on the rate card, so the fuel surcharge work cannot really start until that is settled."
-  },
-  {
-   "key": "them:B",
-   "start": 769.8,
-   "end": 779.1,
-   "text": "So on the carrier, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 561.0,
+   "end": 567.6,
+   "text": "If we wait a month on the integration, the backlog timeline slips by about the same amount."
   },
   {
    "key": "them:C",
-   "start": 780.1,
-   "end": 787.0,
-   "text": "The vendor sent an updated proposal for the carrier, and it changes the fuel surcharge a little bit."
+   "start": 568.1,
+   "end": 575.0,
+   "text": "We have three open questions on the ticket, mostly about timing and who signs off on the sprint."
+  },
+  {
+   "key": "them:B",
+   "start": 576.1,
+   "end": 583.4,
+   "text": "We could keep the integration as it is for now and only change the backlog in the first phase."
   },
   {
    "key": "them:A",
-   "start": 787.5,
-   "end": 796.3,
-   "text": "The feedback on the fuel surcharge has been mixed, some people like it and some say it adds steps to the rate card."
+   "start": 584.5,
+   "end": 591.4,
+   "text": "We tested the backlog with a small group, and the sprint results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 592.5,
+   "end": 600.6,
+   "text": "The feedback on the sprint has been mixed, some people like it and some say it adds steps to the release."
+  },
+  {
+   "key": "them:C",
+   "start": 600.9,
+   "end": 609.0,
+   "text": "One thing I noticed is that the integration looks different in each region, so the sprint plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 610.1,
+   "end": 617.5,
+   "text": "The ticket numbers came in yesterday, and I put a short summary of the release in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 618.0,
+   "end": 625.3,
+   "text": "The sprint numbers came in yesterday, and I put a short summary of the backlog in the shared folder."
   },
   {
    "key": "them:A",
-   "start": 796.7,
-   "end": 802.1,
+   "start": 626.4,
+   "end": 633.7,
+   "text": "We could keep the ticket as it is for now and only change the backlog in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 635.1,
+   "end": 642.8,
+   "text": "Last time we said we would clean up the sprint first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 643.4,
+   "end": 651.1,
+   "text": "I would like us to agree on the scope of the ticket today, even if the release details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 651.6,
+   "end": 660.8,
+   "text": "So on the integration, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 661.6,
+   "end": 668.1,
+   "text": "The draft for the sprint is in the folder, with comments from two teams on the ticket."
+  },
+  {
+   "key": "me:A",
+   "start": 669.4,
+   "end": 678.7,
+   "text": "So on the ticket, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 680.1,
+   "end": 687.0,
+   "text": "We tested the backlog with a small group, and the release results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 688.2,
+   "end": 695.5,
+   "text": "We could keep the backlog as it is for now and only change the sprint in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 696.0,
+   "end": 705.3,
+   "text": "So on the release, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 706.0,
+   "end": 713.3,
+   "text": "We could keep the backlog as it is for now and only change the ticket in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 713.9,
+   "end": 720.9,
+   "text": "From what I can see, the backlog is on track, and the risk is mostly in the sprint."
+  },
+  {
+   "key": "me:A",
+   "start": 721.6,
+   "end": 727.7,
+   "text": "Right, and the release also touches the backlog, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 728.6,
+   "end": 735.9,
+   "text": "The ticket numbers came in yesterday, and I put a short summary of the integration in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 737.3,
+   "end": 745.0,
+   "text": "The release piece is moving, and the team has a draft of the ticket changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 745.3,
+   "end": 752.3,
+   "text": "From what I can see, the sprint is on track, and the risk is mostly in the backlog."
+  },
+  {
+   "key": "them:B",
+   "start": 753.3,
+   "end": 759.8,
+   "text": "The vendor sent an updated proposal for the sprint, and it changes the ticket a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 760.8,
+   "end": 768.9,
+   "text": "The feedback on the release has been mixed, some people like it and some say it adds steps to the sprint."
+  },
+  {
+   "key": "them:A",
+   "start": 770.3,
+   "end": 775.6,
    "text": "People sometimes ask about my accent, I grew up abroad, anyway, back to this."
   },
   {
    "key": "me:A",
-   "start": 803.4,
-   "end": 806.5,
-   "text": "Okay, I think that covers it. Thanks, everyone."
+   "start": 776.8,
+   "end": 780.2,
+   "text": "Good, let us pick this up next week. Thanks."
   }
  ],
  "beats": [
   {
-   "line": 24,
+   "line": 15,
    "person": "Drew Kim",
    "dimension": "trust",
    "value": "numbers_checked"
   },
   {
-   "line": 88,
+   "line": 62,
    "person": "Drew Kim",
    "dimension": "order",
    "value": "options_first"

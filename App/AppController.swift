@@ -389,6 +389,17 @@ final class AppController: ObservableObject {
     @AppStorage("personaInMCP") var personaInMCP = true
     /// The in-app step reads calls from this time on (seconds since 1970); older calls are the first fill's.
     @AppStorage("personaSince") var personaSince: Double = 0
+    /// The one-time first fill from the stored calls: done, when it started (for its cap across launches), and the
+    /// owner's yes when it costs more than Mossad spends by itself.
+    @AppStorage("personaFillDone") var personaFillDone = false
+    @AppStorage("personaFillStart") var personaFillStart: Double = 0
+    @AppStorage("personaFillApproved") var personaFillApproved = false
+    @AppStorage("personaFillCap") var personaFillCap: Double = 1
+    /// One line for Settings > Coach when the fill waits for the owner. No notification.
+    @Published var personaFillNote: String?
+    /// The reads were made one time since launch: before that, an empty list is not "nobody".
+    var personaReadsMade = false
+    var coverWasRecording = false
     @AppStorage("commitmentsSince") var commitmentsSince: Double = 0
     @AppStorage("coachEmailEnabled") var coachEmailEnabled = false
     @AppStorage("coachMonthlyEmail") var coachMonthlyEmail = false
@@ -890,9 +901,13 @@ final class AppController: ObservableObject {
         }
         stopSharing(callID: record.id)
         forgetCoaching(of: record.id)
-        // Its moments go from each person's read; a trait can fall below the line.
+        // Its moments go from each person's read; a trait can fall below the line. Then the reads are made again,
+        // and the next sync sends them.
         let paths = paths
-        Task.detached(priority: .utility) { PersonaStore(paths: paths).forget(callID: record.id) }
+        Task {
+            await Task.detached(priority: .utility) { PersonaStore(paths: paths).forget(callID: record.id) }.value
+            coachVersion += 1
+        }
     }
 
     /// Puts a record saved by the pipeline into the list, so the step shows while the call is processed.
@@ -1380,7 +1395,7 @@ final class AppController: ObservableObject {
         // The chat's `remember` tool writes the coach's profile.
         defer { coachVersion += 1 }
         return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths,
-                                                                          about: callID, onStep: onStep)
+                                                                          about: callID, personaTraits: personasOn, onStep: onStep)
     }
 
     /// Writes the chat's short summary for later chats to recall, and syncs it.

@@ -224,7 +224,9 @@ extension ChatTools {
     /// The reads by person id: from the files on the Mac, or the copy the phone keeps.
     func personaReads() -> [String: PersonaSummary] {
         guard let paths else { return [:] }
-        let local = PersonaReads.all(paths: paths, saved: coachPeople, answers: profile.answers)
+        // Only reads: a damaged file stays where it is for the app to handle.
+        let local = PersonaReads.all(paths: paths, saved: coachPeople, answers: profile.answers, callsWith: PersonaReads.callsWith(records, saved: coachPeople),
+                                     readOnly: true)
         if !local.isEmpty { return local }
         return Dictionary((SyncedPersonas.load(from: paths.coach)?.personas ?? []).map { ($0.person, $0) }, uniquingKeysWith: { a, _ in a })
     }

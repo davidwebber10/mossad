@@ -70,8 +70,25 @@ public enum PersonaConfidence {
     static let newDaysAfterNo = 2
     /// Counter-evidence older than the newest support weighs half for each this many days.
     static let halfLifeDays = 365.0
-    /// A habit that changed: at least this many days of the new value at the end.
+    /// A habit that changed: at least this many days of the new value at the end, the newest of them this many
+    /// days after the newest opposite moment before them.
     static let changeRun = 3
+    static let changeGapDays = 60.0
+
+    /// The 2-call rule may come on. The eval can set this to false; it never turns the rule on. Real answers do.
+    public static let twoCallAllowed = true
+    /// The rule comes on when the owner answered this many trait cards, with this share of yes.
+    public static let twoCallAnswers = 30
+    public static let twoCallYesShare = 0.8
+
+    /// Whether a trait of 2 calls can show without the owner's yes: only after enough real answers say the reads
+    /// are right. Until then a 2-call trait is a question in the Findings deck.
+    public static func twoCallRuleOn(_ answers: [FindingAnswer]) -> Bool {
+        guard twoCallAllowed else { return false }
+        let given = answers.filter { $0.traitID != nil && $0.verdict != nil }
+        guard given.count >= twoCallAnswers else { return false }
+        return Double(given.filter { $0.verdict == .yes }.count) / Double(given.count) >= twoCallYesShare
+    }
 
     /// The low end of what the true rate can be, given S days for and C against: the 10th percentile of
     /// Beta(S + 1, C + 1). More calls raise it; one contradiction lowers it much.
@@ -104,12 +121,14 @@ public enum PersonaConfidence {
 /// answers give the same traits on each device.
 public enum PersonaTraits {
     /// `answers` are the coach's answers to cards; only those with a trait id count, and a taken-back answer is none.
-    public static func build(_ persona: Persona, answers: [FindingAnswer], doNotProfile: Bool = false) -> [PersonaTrait] {
+    /// `twoCallRule`: nil reads it from the answers (`PersonaConfidence.twoCallRuleOn`); the eval sets it.
+    public static func build(_ persona: Persona, answers: [FindingAnswer], doNotProfile: Bool = false, twoCallRule: Bool? = nil) -> [PersonaTrait] {
         guard !doNotProfile else { return [] }
         let person = persona.person
-        let mine = answers.filter { $0.trait != nil && $0.verdict != nil && ($0.trait.map { PersonaTrait.block(of: $0).hasPrefix(person + "|") } ?? false) }
-        let latest = Dictionary(grouping: mine, by: { $0.trait ?? "" }).compactMapValues { $0.max { ($0.date, $0.id) < ($1.date, $1.id) } }
-        let blocked = Set(mine.filter { $0.verdict == .never }.compactMap { $0.trait.map(PersonaTrait.block(of:)) })
+        let twoCalls = twoCallRule ?? PersonaConfidence.twoCallRuleOn(answers)
+        let mine = answers.filter { a in a.verdict != nil && (a.traitID.map { PersonaTrait.block(of: $0).hasPrefix(person + "|") } ?? false) }
+        let latest = Dictionary(grouping: mine, by: { $0.traitID ?? "" }).compactMapValues { $0.max { ($0.date, $0.id) < ($1.date, $1.id) } }
+        let blocked = Set(mine.filter { $0.verdict == .never }.compactMap { $0.traitID.map(PersonaTrait.block(of:)) })
 
         let evidence = persona.evidence.filter { ev in
             ev.dimension != PersonaDimension.expects.rawValue || !ev.value.isEmpty
@@ -138,7 +157,8 @@ public enum PersonaTraits {
                 counter.sort(by: order)
                 let id = PersonaTrait.id(person: person, dimension: dimension, value: value, condition: condition)
                 var trait = score(id: id, person: person, dimension: dimension, value: value, condition: condition, support: support, counter: counter,
-                                  counted: counted, text: persona.texts[id], answer: latest[id] ?? latest[PersonaTrait.id(person: person, dimension: dimension, value: value, condition: nil)])
+                                  counted: counted, text: persona.texts[id], answer: latest[id] ?? latest[PersonaTrait.id(person: person, dimension: dimension, value: value, condition: nil)],
+                                  twoCallRule: twoCalls)
                 if blocked.contains(PersonaTrait.block(of: id)) {
                     trait.state = .rejected
                     trait.answer = .never
@@ -172,13 +192,21 @@ public enum PersonaTraits {
             start = day
         }
         guard run >= PersonaConfidence.changeRun, let start else { return counter }
-        let before = Set(counter.filter { $0.day < start }.map(\.day)).count
+        let older = counter.filter { $0.day < start }
+        let before = Set(older.map(\.day)).count
         guard run >= before else { return counter }
+        // Time, not only order: the newest support at least 60 days after the newest older contradiction. Four
+        // moments in a row cannot show a change; a later call of support can only start the rule, a later
+        // contradiction only end it.
+        if let lastAgainst = older.map(\.date).max(), let lastFor = moments.filter({ $0.value == value }).map(\.date).max(),
+           lastFor.timeIntervalSince(lastAgainst) < PersonaConfidence.changeGapDays * 86_400 {
+            return counter
+        }
         return counter.filter { $0.day >= start }
     }
 
     static func score(id: String, person: String, dimension: String, value: String, condition: PersonaSetting?, support: [PersonaEvidence],
-                      counter: [PersonaEvidence], counted: [PersonaEvidence], text: PersonaText?, answer: FindingAnswer?) -> PersonaTrait {
+                      counter: [PersonaEvidence], counted: [PersonaEvidence], text: PersonaText?, answer: FindingAnswer?, twoCallRule: Bool = true) -> PersonaTrait {
         // S: one for a day with a clear moment, one half for a day with weak moments only.
         let byDay = Dictionary(grouping: support, by: \.day)
         let s = byDay.values.reduce(0.0) { $0 + ($1.contains { $0.strength == .clear } ? 1 : 0.5) }
@@ -208,13 +236,15 @@ public enum PersonaTraits {
         let words = text.map { PersonaWords.passes(statement: $0.statement, soDoThis: $0.soDoThis) } ?? false
         // Hard gates: one call never shows; two calls only with a high rating, two topics or settings, and no
         // contradiction; a trait needs a sentence that passes the word check.
-        let twoCallRule = days >= 3 || (days == 2 && rating == .high && diverse && counted.isEmpty)
+        let gate = days >= 3 || (twoCallRule && days == 2 && rating == .high && diverse && counted.isEmpty)
+        // Pace follows the meeting's format as much as the person: kept as evidence, not shown in this version.
+        let measured = dimension == PersonaDimension.pace.rawValue
         let state: PersonaTrait.State
         if answer?.verdict == .never {
             state = .rejected
         } else if answer?.verdict == .yes, text != nil {
             state = .confirmed
-        } else if days >= 2, twoCallRule, words, !waits, number >= PersonaConfidence.threshold {
+        } else if days >= 2, gate, words, !waits, !measured, number >= PersonaConfidence.threshold {
             state = .shown
         } else {
             state = days >= 2 ? .candidate : .hidden

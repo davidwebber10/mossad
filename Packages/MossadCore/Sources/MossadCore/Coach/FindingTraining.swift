@@ -181,6 +181,9 @@ extension CoachProfile {
             var keep = old.date <= x.date ? x : old
             // The focus that a yes replaced stays known, also when a later answer wins.
             keep.replaced = keep.replaced ?? (old.date <= x.date ? old : x).replaced
+            // An older build drops the fields it does not know: the copy that has them keeps them.
+            keep.trait = keep.trait ?? old.trait ?? x.trait
+            keep.person = keep.person ?? old.person ?? x.person
             byID[x.id] = keep
         }
         var seen = Set<String>()

@@ -12,7 +12,7 @@ public struct SyncedPersonas: Codable, Equatable, Sendable {
         "root": ["version", "personas"],
         "persona": ["person", "updated", "traits", "card", "calls", "oneCall"],
         "trait": ["id", "dimension", "value", "condition", "statement", "soDoThis", "confirmed", "confidence", "supportCalls", "counterCalls",
-                  "moments", "counter", "lastSeen"],
+                  "moments", "counter", "lastSeen", "totalCalls"],
         "card": ["headline", "lines"],
         "line": ["kind", "text", "traits", "confidenceLine", "moment"],
         "pointer": ["callID", "at", "line"],
@@ -45,15 +45,27 @@ extension SharedPayload {
 /// apps, and the copy for the phone.
 public enum PersonaReads {
     /// Each person with a file who is a live person here and keeps a read, by the id of now.
-    public static func all(paths: Paths, saved: CoachPeople, answers: [FindingAnswer]) -> [String: PersonaSummary] {
-        let store = PersonaStore(paths: paths)
+    /// `callsWith`: the calls with each person by id (`callsWith(_:saved:)`), for the counts.
+    public static func all(paths: Paths, saved: CoachPeople, answers: [FindingAnswer], callsWith: [String: Int] = [:], readOnly: Bool = false) -> [String: PersonaSummary] {
+        let store = PersonaStore(directory: PersonaStore(paths: paths).directory, readOnly: readOnly)
         let off = saved.notProfiled
         var out: [String: PersonaSummary] = [:]
         let ids = Set(store.people().map { saved.isEmpty ? $0 : saved.canonical($0) })
         for id in ids where !off.contains(id) {
             guard let name = saved.name(of: id), let persona = store.persona(of: id, saved: saved),
-                  let summary = PersonaSummary.make(persona, answers: answers, name: name) else { continue }
+                  let summary = PersonaSummary.make(persona, answers: answers, name: name, callsWith: callsWith[id]) else { continue }
             out[id] = summary
+        }
+        return out
+    }
+
+    /// The written calls of each person, by id: who spoke, on a sure match.
+    public static func callsWith(_ records: [CallRecord], saved: CoachPeople) -> [String: Int] {
+        var out: [String: Int] = [:]
+        for r in records where r.status == .written {
+            var ids = Set((r.speakerPeople ?? [:]).values.filter(saved.knows).map(saved.canonical))
+            for name in Set(r.speakerNames.values) { if let id = saved.id(of: name) { ids.insert(saved.canonical(id)) } }
+            for id in ids { out[id, default: 0] += 1 }
         }
         return out
     }
@@ -72,8 +84,8 @@ public enum PersonaReads {
     }
 
     /// The words of a moment, from the call's record on disk: for a card's quote, never stored.
-    public static func words(_ p: PersonaPointer, paths: Paths) -> String? {
-        (try? CallRecord.load(from: paths.callDirectory(p.callID))).flatMap { p.utterance(in: $0)?.text }
+    public static func words(_ p: PersonaPointer, person: String, paths: Paths, saved: CoachPeople) -> String? {
+        (try? CallRecord.load(from: paths.callDirectory(p.callID))).flatMap { p.utterance(in: $0, person: person, saved: saved)?.text }
     }
 
     /// One person's read, or nil.

@@ -11,13 +11,13 @@ public enum PersonaWords {
 
     /// Verbs of acts that a transcript shows, in their third-person form.
     static let acts: Set<String> = [
-        "asks", "says", "decides", "returns", "interrupts", "names", "agrees", "objects", "questions", "requests", "wants", "needs",
+        "asks", "says", "decides", "returns", "interrupts", "names", "agrees", "objects", "questions", "requests",
         "tests", "checks", "challenges", "pushes", "proposes", "suggests", "sends", "replies", "answers", "explains", "opens", "starts",
         "cuts", "waits", "stops", "brings", "compares", "refers", "defers", "involves", "looks", "accepts", "rejects", "declines",
         "approves", "commits", "follows", "takes", "gives", "talks", "speaks", "listens", "summarizes", "repeats", "praises", "thanks",
         "goes", "moves", "raises", "frames", "points", "presses", "probes", "digs", "drills", "focuses", "steers", "leads", "closes",
-        "confirms", "insists", "counters", "doubts", "holds", "puts", "lists", "walks", "uses", "keeps", "makes", "sets", "turns",
-        "expects", "prefers", "chooses", "picks", "drops", "skips", "flags", "admits", "reports", "shares", "comes", "runs", "offers",
+        "confirms", "insists", "counters", "holds", "puts", "lists", "walks", "uses", "keeps", "makes", "sets", "turns",
+        "chooses", "picks", "drops", "skips", "flags", "admits", "reports", "shares", "comes", "runs", "offers",
         "agree", "ask", "say", "decide", "object",
     ]
 
@@ -34,7 +34,8 @@ public enum PersonaWords {
         "emotional*", "feels", "feeling", "afraid", "fear*", "angry", "frustrat*", "upset", "happy", "sad", "nervous", "stressed",
         "ego", "wants to look", "look good", "likes you", "does not like", "dislikes", "hates", "lazy", "stupid", "incompetent", "weak",
         "dishonest", "liar", "lies", "manipulat*", "easy to push", "pushover", "push around", "exploit*", "weakness", "conflict-averse",
-        "conflict averse", "difficult", "toxic", "aggressive", "arrogant", "rude",
+        "conflict averse", "difficult", "toxic", "aggressive", "arrogant", "rude", "impatient", "stubborn", "defensive", "micromanag*",
+        "controlling", "control of", "second language", "maternity", "paternity", "retire*", "medical", "wants", "desires", "craves",
     ]
 
     /// The first banned word or phrase in a text, at a word's edge.
@@ -66,22 +67,32 @@ public enum PersonaWords {
         if words.count > statementWords { out.append("long") }
         if soDoThis.split(whereSeparator: \.isWhitespace).count > soDoThisWords || soDoThis.nonBlank == nil { out.append("so do this") }
         let both = statement + " " + soDoThis
-        if both.contains(where: \.isNumber) { out.append("number") }
+        // "1:1" is a setting, not a number.
+        if both.replacingOccurrences(of: "1:1", with: "one-to-one").contains(where: \.isNumber) { out.append("number") }
         if let word = bannedWord(in: both) { out.append("banned: \(word)") }
         let tokens = statement.lowercased().split { !$0.isLetter && $0 != "'" && $0 != "-" }.map(String.init)
         if !tokens.contains(where: { acts.contains($0) }) { out.append("no act") }
-        // "Sam is direct": a state verb right after the subject, with no act in the sentence, is a verdict.
-        if let first = tokens.firstIndex(where: { stateVerbs.contains($0) }), !tokens[..<first].contains(where: { acts.contains($0) }),
-           !tokens[first...].dropFirst().prefix(1).contains(where: { ["given", "asked", "shown", "told", "offered", "presented"].contains($0) }) {
+        // "Sam is direct": a state verb in the main clause before any act is a verdict. A leading "When a plan is
+        // new," is a condition, not the main clause.
+        let lead: Set<String> = ["when", "if", "before", "after", "once", "while", "unless", "whenever", "in", "with"]
+        var mainStart = 0
+        if let w = tokens.first, lead.contains(w), let comma = statement.firstIndex(of: ",") {
+            mainStart = statement[..<comma].lowercased().split { !$0.isLetter && $0 != "'" && $0 != "-" }.count
+        }
+        let main = Array(tokens.dropFirst(mainStart))
+        if let first = main.firstIndex(where: { stateVerbs.contains($0) }), !main[..<first].contains(where: { acts.contains($0) }),
+           !main[first...].dropFirst().prefix(1).contains(where: { ["given", "asked", "shown", "told", "offered", "presented"].contains($0) }) {
             out.append("state")
         }
         let content = Set((statement + " " + soDoThis).lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init))
         let topics = topicTerms.map { $0.lowercased() }.filter { $0.count >= 4 && !common.contains($0) }
         if let t = topics.first(where: { content.contains($0) }) { out.append("topic: \(t)") }
-        let own = Set(person.lowercased().split(whereSeparator: \.isWhitespace).map(String.init))
+        // A name is a word with its capital: a person named Case or Price does not block "case" or "price".
+        let own = Set(person.split(whereSeparator: \.isWhitespace).map(String.init))
+        let capitals = Set((statement + " " + soDoThis).split { !$0.isLetter }.map(String.init).filter { $0.first?.isUppercase == true })
         for name in names {
-            let parts = name.lowercased().split(whereSeparator: \.isWhitespace).map(String.init).filter { $0.count >= 2 && !own.contains($0) }
-            if let hit = parts.first(where: { content.contains($0) }) { out.append("name: \(hit)"); break }
+            let parts = name.split(whereSeparator: \.isWhitespace).map(String.init).filter { $0.count >= 2 && !own.contains($0) }
+            if let hit = parts.first(where: { capitals.contains($0) }) { out.append("name: \(hit.lowercased())"); break }
         }
         return out
     }

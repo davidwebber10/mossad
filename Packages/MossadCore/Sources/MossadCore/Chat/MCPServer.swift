@@ -12,6 +12,11 @@ public struct MCPServer: Sendable {
     /// The coach's reads of how each person thinks, in the `people` tool. The owner can turn it off in Settings.
     let personaTraits: Bool
 
+    /// The reads go to other AI apps only when the coach, the reads, and the setting for other apps are all on.
+    public static func showsPersonas(coachEnabled: Bool, personaEnabled: Bool, personaInMCP: Bool) -> Bool {
+        coachEnabled && personaEnabled && personaInMCP
+    }
+
     public init(paths: Paths, owner: String, personaTraits: Bool = true) {
         self.paths = paths
         self.owner = owner

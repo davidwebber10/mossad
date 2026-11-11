@@ -1,8 +1,9 @@
 import Foundation
 
 /// The persona step for one call: code picks the moments that show how each named person decides, one small
-/// request finds the evidence in them, and code checks each piece against the transcript. The provider sees
-/// handles ("P1"), never a name, an address, or a job title, and no summary.
+/// request finds the evidence in them, and code checks each piece against the transcript. The provider sees the
+/// call's people as handles ("P1", "Owner", "Other"), and no address, job title, meeting title, or summary. A name
+/// of someone who is not in the call stays in a line as it was said.
 public struct PersonaExtractor: Sendable {
     /// Evidence keeps the version of the prompt that found it, so a later prompt replaces only its own.
     public static let promptVersion = 1
@@ -49,7 +50,12 @@ public struct PersonaExtractor: Sendable {
     /// Nil when the provider needs a key that is not there, or has no model chosen: the step then skips.
     public static func model(provider: AIProvider, chosen: String, key: String?, usage: UsageLog?, serverURL: URL = LocalServer.ollama)
         -> (llm: any LanguageModel, name: String, service: UsageEvent.Service)? {
-        guard key?.nonBlank != nil || !provider.requiresKey else { return nil }
+        guard key?.nonBlank != nil || !provider.requiresKey, let plan = plan(provider: provider, chosen: chosen) else { return nil }
+        return (provider.model(plan.name, apiKey: key, usage: usage, serverURL: serverURL), plan.name, plan.service)
+    }
+
+    /// The model's name and service, with no key: for an estimate.
+    public static func plan(provider: AIProvider, chosen: String) -> (name: String, service: UsageEvent.Service)? {
         let name = provider == .anthropic ? anthropicModel : (chosen.nonBlank ?? provider.defaultModel)
         guard !name.isEmpty else { return nil }
         let service: UsageEvent.Service = switch provider {
@@ -58,7 +64,7 @@ public struct PersonaExtractor: Sendable {
         case .openrouter: .openrouter
         case .localServer, .apple: .local
         }
-        return (provider.model(name, apiKey: key, usage: usage, serverURL: serverURL), name, service)
+        return (name, service)
     }
 
     // MARK: Who and where
@@ -69,11 +75,13 @@ public struct PersonaExtractor: Sendable {
     }
 
     /// A 1:1 is the owner and one other voice.
+    /// More invited people than voices also makes a group: the audience changes how a person acts.
     public static func setting(_ r: CallRecord, owner: String) -> PersonaSetting {
         let mine = ownerKeys(r, owner: owner)
         let spoke = Set(r.utterances.map(\.speakerKey)).subtracting(mine)
         let voices = Set(spoke.map { r.speakerNames[$0] ?? $0 })
-        return voices.count <= 1 ? .oneOnOne : .group
+        let invited = r.invitees.map { $0.filter { $0.isSelf != true }.count } ?? max(0, r.attendees.count - 1)
+        return voices.count <= 1 && invited <= 1 ? .oneOnOne : .group
     }
 
     /// Who in a call can get evidence: a speaker who is one saved person on a sure match (the id the record has,
@@ -181,11 +189,13 @@ public struct PersonaExtractor: Sendable {
         return out.sorted { $0.0.count > $1.0.count }
     }
 
+    /// A whole name in any case; a single word (a first name) only with its capital, so "will" is not Will.
     static func replaceNames(_ text: String, _ names: [(String, String)]) -> String {
         var out = text
         for (name, handle) in names {
             let pattern = "\\b" + NSRegularExpression.escapedPattern(for: name) + "\\b"
-            out = out.replacingOccurrences(of: pattern, with: handle, options: [.regularExpression, .caseInsensitive])
+            let options: String.CompareOptions = name.contains(" ") ? [.regularExpression, .caseInsensitive] : [.regularExpression]
+            out = out.replacingOccurrences(of: pattern, with: handle, options: options)
         }
         return out
     }
@@ -200,9 +210,9 @@ public struct PersonaExtractor: Sendable {
         Give a piece of evidence only for a line of P1, P2, and so on, never for Owner or Other. Each piece has: the line \
         number; the person's handle; quote, the person's own words from that line, 12 words at most, copied exactly; one \
         dimension and one value from this list:
-        \(PersonaDimension.allCases.filter { $0 != .pace && $0 != .expects }.map { "- \($0.rawValue): \($0.values.joined(separator: ", "))" }.joined(separator: "\n"))
-        - expects: value is a short label of what they expect from the Owner, such as "update_before_meeting"
-        - free: only when no dimension above fits, with label naming the dimension and value naming what they did
+        \(PersonaDimension.allCases.filter { $0 != .pace }.map { "- \($0.rawValue) (\(Self.meaning[$0] ?? "")): \($0.values.joined(separator: ", "))" }.joined(separator: "\n"))
+        - free: only when no dimension above fits, with label naming the dimension and value naming what they did, \
+        both as general words with no topic, product, or project in them
         strength: clear when the line alone shows it, weak when it only hints; role: the person's role in this call \
         (decides, advises, does_the_work, informed). label is "" except for free.
         Rules: evidence is how the person acts, not the topic. A question that the topic forces on everyone (each \
@@ -212,9 +222,24 @@ public struct PersonaExtractor: Sendable {
         """
     }
 
-    static func user(_ moments: [Moment], speakers: [Speaker], setting: PersonaSetting, notTrue: [String]) -> String {
+    /// What each dimension listens for, from the study: one line each, so two calls read a value the same way.
+    static let meaning: [PersonaDimension: String] = [
+        .order: "what the person asks to hear first, or how they want material: before the meeting, live",
+        .detail: "the level of their questions: the overall effect, or the exact row and figure",
+        .evidence: "what they ask for before a yes: a figure, a comparison or baseline, a case where it worked, a demonstration, a named owner, each step of the logic",
+        .decision: "how a decision ends: decided in the call, time asked to think, another person must agree, a small trial first",
+        .risk: "their first question about a change: what can go wrong, what we gain, or yes when it can be undone",
+        .objection: "how they say no: plainly, with a question, with their own figures, agreement now and questions later, a request for more work",
+        .trust: "what they praise or check: promises kept, unknowns said plainly, figures checked, a problem raised early",
+        .authority: "who decides: they alone, someone above them, an expert, the group",
+        .drivers: "the concern they return to on any topic",
+        .expects: "what they ask the Owner for again and again: material ahead, short updates, the recommendation first, an owner and a date, promises kept, early warning, a written recap, figures prepared",
+    ]
+
+    static func user(_ moments: [Moment], speakers: [Speaker], setting: PersonaSetting, notTrue: [String], known: [String] = []) -> String {
         var parts = ["People: " + speakers.map(\.handle).joined(separator: ", ") + ". Setting: " + (setting == .oneOnOne ? "a 1:1 with the Owner." : "a group call.")]
         if !notTrue.isEmpty { parts.append("Not true (the Owner said so; give no evidence for these):\n" + notTrue.map { "- \($0)" }.joined(separator: "\n")) }
+        if !known.isEmpty { parts.append(known.joined(separator: "\n")) }
         parts.append("Lines:\n" + moments.map { "L\($0.line) | \($0.who) | \($0.text)\($0.context ? " (context)" : "")" }.joined(separator: "\n"))
         return parts.joined(separator: "\n\n")
     }
@@ -250,15 +275,15 @@ public struct PersonaExtractor: Sendable {
 
     /// The text that would be sent for a call, with no request: for the cost estimate. Nil when nobody in it can get
     /// evidence.
-    public static func request(for r: CallRecord, speakers: [Speaker], owner: String, notTrue: [String] = []) -> (system: String, user: String)? {
+    public static func request(for r: CallRecord, speakers: [Speaker], owner: String, notTrue: [String] = [], known: [String] = []) -> (system: String, user: String)? {
         guard !speakers.isEmpty else { return nil }
         let moments = moments(in: r, speakers: speakers, owner: owner)
         guard moments.contains(where: { !$0.context }) else { return nil }
-        return (system, user(moments, speakers: speakers, setting: setting(r, owner: owner), notTrue: notTrue))
+        return (system, user(moments, speakers: speakers, setting: setting(r, owner: owner), notTrue: notTrue, known: known))
     }
 
     /// One request for the call. `notTrue` are statements the owner rejected about these people, with handles.
-    public func extract(_ r: CallRecord, speakers: [Speaker], owner: String, notTrue: [String] = []) async throws -> Result {
+    public func extract(_ r: CallRecord, speakers: [Speaker], owner: String, notTrue: [String] = [], known: [String] = []) async throws -> Result {
         let setting = Self.setting(r, owner: owner)
         let moments = Self.moments(in: r, speakers: speakers, owner: owner)
         var out = Result(evidence: [:], proposed: 0, kept: 0, sent: false)
@@ -266,22 +291,27 @@ public struct PersonaExtractor: Sendable {
         for (person, ev) in PersonaPace.evidence(in: r, speakers: speakers, owner: owner, setting: setting) { out.evidence[person, default: []] += ev }
         guard moments.contains(where: { !$0.context }) else { return out }
         let reply = try await UsageContext.$callID.withValue(r.id) {
-            try await llm.json(system: Self.system, user: Self.user(moments, speakers: speakers, setting: setting, notTrue: notTrue), schema: Self.schema,
+            try await llm.json(system: Self.system, user: Self.user(moments, speakers: speakers, setting: setting, notTrue: notTrue, known: known), schema: Self.schema,
                                effort: .low, purpose: .persona, as: Output.self)
         }
         out.sent = true
         let byHandle = Dictionary(speakers.map { ($0.handle, $0) }, uniquingKeysWith: { a, _ in a })
-        let sent = Set(moments.filter { !$0.context }.map(\.line))
+        let sent = Dictionary(moments.filter { !$0.context }.map { ($0.line, $0.text) }, uniquingKeysWith: { a, _ in a })
         let series = Self.seriesKey(r.title)
+        // A free label with a word of the call's topic is the topic, not the person.
+        let topic = Set(PersonaWords.topicTerms([r]).filter { !PersonaWords.common.contains($0) })
         var seen: Set<String> = []
         for item in reply.evidence {
             out.proposed += 1
-            guard let who = byHandle[item.person.trimmingCharacters(in: .whitespaces)], sent.contains(item.line), item.line < r.utterances.count else { continue }
+            guard let who = byHandle[item.person.trimmingCharacters(in: .whitespaces)], let shown = sent[item.line], item.line < r.utterances.count else { continue }
             let u = r.utterances[item.line]
-            guard who.keys.contains(u.speakerKey), Self.quote(item.quote, isIn: u.text) else { continue }
+            // The model saw the line with handles: its quote is checked against that, and against the line itself.
+            guard who.keys.contains(u.speakerKey), Self.quote(item.quote, isIn: shown) || Self.quote(item.quote, isIn: u.text) else { continue }
             guard let key = PersonaDimension.normalized(dimension: item.dimension, value: item.value, label: item.label ?? ""),
                   key.dimension != PersonaDimension.pace.rawValue, PersonaWords.bannedWord(in: key.value.replacingOccurrences(of: "_", with: " ")) == nil,
                   PersonaWords.bannedWord(in: key.dimension.replacingOccurrences(of: "_", with: " ")) == nil else { continue }
+            if key.dimension.hasPrefix(PersonaDimension.freePrefix),
+               !Set((String(key.dimension.dropFirst(PersonaDimension.freePrefix.count)) + "_" + key.value).split(separator: "_").map { String($0).lowercased() }).isDisjoint(with: topic) { continue }
             let dedupe = "\(who.person)|\(key.dimension)|\(key.value)|\(item.line)"
             guard seen.insert(dedupe).inserted else { continue }
             out.kept += 1

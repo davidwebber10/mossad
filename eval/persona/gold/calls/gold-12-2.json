@@ -1,19 +1,19 @@
 {
  "id": "gold-12-2",
  "person": "Quinn Ellis",
- "title": "Vendor security review",
+ "title": "Carrier contract renewal",
  "tags": [
-  "Security",
-  "Vendors"
+  "Logistics",
+  "Contracts"
  ],
  "setting": "group",
  "start": "2026-08-23T17:00:00Z",
- "end": "2026-08-23T17:13:36Z",
+ "end": "2026-08-23T17:14:40Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Quinn Ellis",
-  "them:B": "Ana Lopez",
-  "them:C": "Priya Shah"
+  "them:B": "Tom Reyes",
+  "them:C": "Ben Cole"
  },
  "noise": true,
  "utterances": [
@@ -21,528 +21,576 @@
    "key": "me:A",
    "start": 0.0,
    "end": 4.6,
-   "text": "Thanks for making the time. Today is about the vendor security review."
+   "text": "Thanks for making the time. Today is about the carrier contract renewal."
+  },
+  {
+   "key": "them:C",
+   "start": 5.1,
+   "end": 13.1,
+   "text": "We could keep the rate card as it is for now and only change the volume commitment in the first phase."
   },
   {
    "key": "them:B",
-   "start": 5.2,
-   "end": 14.5,
-   "text": "I would like us to agree on the scope of the audit log today, even if the data retention you know details come later."
+   "start": 14.5,
+   "end": 21.8,
+   "text": "We have three open questions on the lane, mostly about timing and who signs uh off on the carrier."
   },
   {
    "key": "them:C",
-   "start": 14.9,
-   "end": 23.3,
-   "text": "From what I can see, the pen test is on track, and the I mean risk is mostly in the access review."
-  },
-  {
-   "key": "them:C",
-   "start": 24.6,
-   "end": 31.9,
-   "text": "The vendor sent an updated proposal for the pen test, and it changes the audit log um a bit."
+   "start": 23.0,
+   "end": 30.3,
+   "text": "We could keep the carrier as it is for now and only change the lane in the first phase."
   },
   {
    "key": "them:A",
-   "start": 32.9,
-   "end": 41.3,
-   "text": "We have three open questions on the access review, mostly about timing and who signs I mean off on the pen test."
+   "start": 31.0,
+   "end": 39.5,
+   "text": "I would like us to agree on the scope of the lane today, even if the um volume commitment details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 40.5,
+   "end": 47.0,
+   "text": "Right, and the lane also touches the fuel surcharge, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 47.3,
+   "end": 55.4,
+   "text": "Last time we said we would up the I mean carrier first, and that work is about two thirds done now."
   },
   {
    "key": "me:A",
-   "start": 41.9,
-   "end": 50.0,
-   "text": "The pen test numbers came in yesterday, and I put a short summary of the data retention in the shared folder."
+   "start": 55.9,
+   "end": 65.1,
+   "text": "So on the lane, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:B",
-   "start": 50.8,
-   "end": 59.7,
-   "text": "I would like us to agree on the scope of the um audit log today, even if the pen test details come later."
+   "start": 66.1,
+   "end": 74.1,
+   "text": "The carrier numbers came in yesterday, and I put a short summary of the uh fuel surcharge in the shared folder."
   },
   {
    "key": "them:A",
-   "start": 61.1,
-   "end": 68.0,
-   "text": "The draft for the questionnaire is in the folder, with comments from two teams on the data retention."
-  },
-  {
-   "key": "me:A",
-   "start": 68.6,
-   "end": 76.7,
-   "text": "The audit log piece is moving, and the team has a draft of the questionnaire changes ready for review this week."
-  },
-  {
-   "key": "them:C",
-   "start": 77.1,
-   "end": 86.4,
-   "text": "I talked to the people who run the audit log every day, and they said the access review is part that slows them down."
-  },
-  {
-   "key": "them:A",
-   "start": 87.4,
-   "end": 95.5,
-   "text": "We have three open questions on the access review, mostly about timing and who signs uh off on the audit log."
+   "start": 74.6,
+   "end": 83.5,
+   "text": "I talked to the people who run the carrier every day, and they said the lane is the part that slows them down."
   },
   {
    "key": "them:B",
-   "start": 96.8,
-   "end": 104.1,
-   "text": "The draft for the questionnaire I mean is in the folder, with comments from teams on the audit log."
+   "start": 84.8,
+   "end": 91.7,
+   "text": "The draft for the carrier is in the folder, with comments from two teams on the volume commitment."
+  },
+  {
+   "key": "me:A",
+   "start": 92.6,
+   "end": 100.3,
+   "text": "We have three open questions on the volume commitment, mostly about timing and who signs off on the rate card."
+  },
+  {
+   "key": "me:A",
+   "start": 101.5,
+   "end": 109.2,
+   "text": "Last time we said we would clean up the lane first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 109.8,
+   "end": 117.8,
+   "text": "If we wait you know a month on the volume commitment, the rate card timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 118.5,
+   "end": 126.2,
+   "text": "The vendor sent an updated proposal for the carrier, and it changes the fuel surcharge I mean a little bit."
   },
   {
    "key": "them:B",
-   "start": 104.5,
-   "end": 111.8,
-   "text": "Right, and the data retention also touches the access review, which is why uh I wanted everyone here today."
-  },
-  {
-   "key": "them:A",
-   "start": 112.9,
-   "end": 120.2,
-   "text": "If we wait a month on the data retention, the access review timeline slips by about the same amount."
-  },
-  {
-   "key": "me:A",
-   "start": 121.1,
-   "end": 128.8,
-   "text": "We tested the pen test with a small group, and the audit log results were close to what we hoped."
-  },
-  {
-   "key": "me:A",
-   "start": 130.0,
-   "end": 138.5,
-   "text": "The pen test piece is moving, and the team has a draft of the audit log changes ready for review this week."
-  },
-  {
-   "key": "them:A",
-   "start": 139.4,
-   "end": 147.8,
-   "text": "Last time we said we would clean up the data retention first, and that work is um about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 148.7,
-   "end": 156.0,
-   "text": "If we wait a month on the data retention, the audit log timeline slips by about the same amount."
+   "start": 127.4,
+   "end": 134.3,
+   "text": "The vendor sent an updated for the rate um card, and it changes the carrier a little bit."
   },
   {
    "key": "them:B",
-   "start": 156.4,
-   "end": 162.9,
-   "text": "Right, and the audit log also touches the questionnaire, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 163.7,
-   "end": 170.7,
-   "text": "The vendor sent an updated proposal for the questionnaire, and it changes the data retention a little bit."
-  },
-  {
-   "key": "me:A",
-   "start": 171.1,
-   "end": 179.6,
-   "text": "I propose we change the data retention next month and move about 20% of the work to the new audit log setup."
+   "start": 135.5,
+   "end": 142.5,
+   "text": "I think the carrier question is um the main thing left before we can close out the lane."
   },
   {
    "key": "them:A",
-   "start": 180.5,
-   "end": 184.4,
-   "text": "This is my call, and I will decide it now."
+   "start": 143.3,
+   "end": 151.4,
+   "text": "We have three open questions on the rate card, mostly uh about timing and who signs off on the fuel surcharge."
   },
   {
-   "key": "them:C",
-   "start": 184.7,
-   "end": 192.8,
-   "text": "We tested the audit log with a small group, and the questionnaire results were I mean close to what we hoped."
+   "key": "me:A",
+   "start": 152.1,
+   "end": 160.5,
+   "text": "I would like us to agree on the scope of the volume commitment today, even if the rate card details come later."
   },
   {
-   "key": "them:C",
-   "start": 193.2,
-   "end": 203.6,
-   "text": "So on the access review, we you know looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "key": "me:A",
+   "start": 161.1,
+   "end": 168.4,
+   "text": "We tested the fuel surcharge with a small group, and the lane results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 169.0,
+   "end": 176.3,
+   "text": "The vendor sent an updated proposal for the rate card, and it changes the volume commitment a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 177.1,
+   "end": 185.2,
+   "text": "I would like us to agree on the scope of the lane today, even if the fuel surcharge details come later."
   },
   {
    "key": "them:A",
-   "start": 204.1,
-   "end": 211.4,
-   "text": "There is a dependency on the questionnaire, so the audit log work cannot really start until that is settled."
+   "start": 186.0,
+   "end": 192.9,
+   "text": "Right, and the carrier also touches the lane, I mean which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 194.0,
+   "end": 201.7,
+   "text": "From what I can see, the rate card is on track, and the risk uh is mostly in the lane."
   },
   {
    "key": "them:B",
-   "start": 212.8,
-   "end": 221.2,
-   "text": "The data retention numbers came in yesterday, and I put a short summary of the access review in uh the shared folder."
-  },
-  {
-   "key": "me:A",
-   "start": 222.7,
-   "end": 230.0,
-   "text": "From what I can see, the questionnaire is on track, and the risk is mostly in the access review."
-  },
-  {
-   "key": "them:C",
-   "start": 230.8,
-   "end": 240.4,
-   "text": "I talked to the people who run the access review every day, and they said the pen test is the part that slows them down."
+   "start": 202.5,
+   "end": 210.2,
+   "text": "If we wait a month on the fuel surcharge, the rate card timeline slips uh by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 241.1,
-   "end": 249.2,
-   "text": "I would like us to agree on the scope of the questionnaire today, even if the access review details come later."
+   "start": 211.4,
+   "end": 219.1,
+   "text": "I think the fuel surcharge question is the main thing left we can close you know out the rate card."
   },
   {
    "key": "me:A",
-   "start": 250.0,
-   "end": 258.1,
-   "text": "The data retention numbers came in yesterday, and I put a short summary of the access review in the shared folder."
-  },
-  {
-   "key": "them:C",
-   "start": 258.4,
-   "end": 265.4,
-   "text": "From what I can see, the questionnaire is on track, and risk is mostly in the pen test."
-  },
-  {
-   "key": "them:A",
-   "start": 266.6,
-   "end": 275.1,
-   "text": "The pen test numbers came in yesterday, and I put a short summary of access review you know in the shared folder."
+   "start": 220.2,
+   "end": 227.1,
+   "text": "I think the carrier question is the main thing left before we can close out the rate card."
   },
   {
    "key": "them:B",
-   "start": 275.4,
-   "end": 283.5,
-   "text": "We tested the pen test with a small group, and the questionnaire you know results were close to what we hoped."
-  },
-  {
-   "key": "them:C",
-   "start": 285.0,
-   "end": 293.8,
-   "text": "The access review piece is moving, the team has a you know draft of the pen test changes ready for review this week."
+   "start": 227.9,
+   "end": 237.5,
+   "text": "So on the carrier, we um looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 294.6,
-   "end": 303.1,
-   "text": "One thing I noticed is that the questionnaire looks different in each region, so the audit log plan may need two versions."
-  },
-  {
-   "key": "them:C",
-   "start": 303.5,
-   "end": 310.8,
-   "text": "If we wait a month on the pen test, the access review timeline slips by about the same amount."
+   "start": 238.5,
+   "end": 247.0,
+   "text": "My recommendation is that we go with the second option for the rate card, it saves about 15% on the volume commitment."
   },
   {
    "key": "them:A",
-   "start": 311.2,
-   "end": 320.1,
-   "text": "The access review piece is moving, and the team has a draft you know of the questionnaire changes ready for review this week."
+   "start": 247.8,
+   "end": 251.6,
+   "text": "This is my call, and I will um decide now."
   },
   {
    "key": "them:C",
-   "start": 320.6,
-   "end": 327.9,
-   "text": "There is uh a dependency on the pen so the questionnaire work cannot really start until that is settled."
+   "start": 252.4,
+   "end": 259.3,
+   "text": "The draft for the carrier is in the folder, with comments from two teams on the fuel surcharge."
+  },
+  {
+   "key": "them:C",
+   "start": 260.0,
+   "end": 268.8,
+   "text": "One thing I noticed is that the rate card looks different in each region, so the volume commitment plan may need two versions."
   },
   {
    "key": "them:B",
-   "start": 329.4,
-   "end": 339.0,
-   "text": "I talked to the people who run the audit log every day, and they said the pen test is the part that slows them down."
+   "start": 269.8,
+   "end": 277.1,
+   "text": "I think the fuel surcharge question is the main thing left before we can close out the volume commitment."
+  },
+  {
+   "key": "me:A",
+   "start": 278.0,
+   "end": 284.9,
+   "text": "The vendor sent an updated proposal for the lane, and it changes the fuel surcharge a little bit."
   },
   {
    "key": "them:A",
-   "start": 339.4,
-   "end": 347.4,
-   "text": "The vendor sent an updated proposal for I mean the pen test, and it changes the access review a little bit."
+   "start": 285.5,
+   "end": 295.1,
+   "text": "So on the volume commitment, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 296.3,
+   "end": 306.3,
+   "text": "So on the fuel surcharge, we uh looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 348.9,
-   "end": 358.5,
-   "text": "So on the audit log, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 307.3,
+   "end": 314.3,
+   "text": "The vendor sent an updated proposal for the volume commitment, and it changes the lane a little bit."
   },
   {
    "key": "me:A",
-   "start": 359.5,
-   "end": 366.4,
-   "text": "I think the questionnaire question is the main thing left before we can close out the audit log."
+   "start": 315.6,
+   "end": 323.6,
+   "text": "The fuel surcharge piece is moving, and the team has a draft of the lane changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 367.5,
-   "end": 375.2,
-   "text": "We could keep the questionnaire as it is for now and only change the pen test in the first phase."
-  },
-  {
-   "key": "me:A",
-   "start": 376.2,
-   "end": 385.1,
-   "text": "Here is the plan: we spend 40,000 on the pen test this quarter and the data retention changes follow in the next one."
+   "start": 324.4,
+   "end": 332.9,
+   "text": "One thing I noticed is that the lane looks different in each region, so the volume commitment plan may need two versions."
   },
   {
    "key": "them:A",
-   "start": 385.8,
-   "end": 390.8,
+   "start": 334.3,
+   "end": 341.6,
+   "text": "The draft for the rate card is in the uh folder, with comments from two teams the fuel surcharge."
+  },
+  {
+   "key": "them:C",
+   "start": 342.4,
+   "end": 350.1,
+   "text": "If we wait a month on I mean the volume commitment, the lane timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 351.1,
+   "end": 359.2,
+   "text": "We could keep the volume commitment as it is for now and only change the rate card in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 359.8,
+   "end": 368.3,
+   "text": "I would like us to agree on the scope of the rate card today, even if the fuel surcharge details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 369.1,
+   "end": 376.4,
+   "text": "From what I can see, the volume commitment is on track, and the risk is mostly in the lane."
+  },
+  {
+   "key": "them:A",
+   "start": 377.5,
+   "end": 385.2,
+   "text": "The vendor sent an uh updated proposal for the volume commitment, and it changes the rate card a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 386.2,
+   "end": 395.4,
+   "text": "I talked to the people who run the carrier every day, and they said the volume commitment is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 396.3,
+   "end": 403.9,
+   "text": "We could keep the lane as it is for now and only change the fuel surcharge in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 405.3,
+   "end": 413.8,
+   "text": "My recommendation is that we go with the second option for the rate card, it saves about 15% on the volume commitment."
+  },
+  {
+   "key": "them:A",
+   "start": 415.1,
+   "end": 420.1,
    "text": "What is the best case if this works? How big could it get?"
   },
   {
-   "key": "them:B",
-   "start": 391.2,
-   "end": 400.8,
-   "text": "I talked to the people who run the access review every day, and they said the pen test is the part that slows them down."
-  },
-  {
-   "key": "them:B",
-   "start": 401.8,
-   "end": 409.9,
-   "text": "The data retention numbers came in uh yesterday, and I put a short summary of the questionnaire in the shared folder."
-  },
-  {
-   "key": "them:B",
-   "start": 411.2,
-   "end": 418.5,
-   "text": "We have three open questions on the pen test, mostly about timing and who signs off on the questionnaire."
-  },
-  {
    "key": "them:C",
-   "start": 419.6,
+   "start": 420.8,
    "end": 429.2,
-   "text": "I talked to the people who run the audit log every day, and they uh said the pen test the part that slows them down."
+   "text": "The feedback on the lane has um been mixed, some people like it and some say it adds steps to the carrier."
+  },
+  {
+   "key": "me:A",
+   "start": 430.5,
+   "end": 437.8,
+   "text": "There is a dependency on the rate card, so the carrier work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 438.7,
+   "end": 446.0,
+   "text": "We have three open questions on the lane, mostly about timing and who signs off on the rate card."
   },
   {
    "key": "them:A",
-   "start": 430.2,
-   "end": 438.2,
-   "text": "We could keep the access review as it is for now and only change the data retention in the first phase."
+   "start": 446.9,
+   "end": 456.5,
+   "text": "I talked to the people who run the lane every day, and they said the rate um card is the part that slows them down."
   },
   {
-   "key": "me:A",
-   "start": 439.4,
-   "end": 447.0,
-   "text": "We have three open questions on the data retention, mostly about timing and who signs off on the pen test."
-  },
-  {
-   "key": "me:A",
-   "start": 447.8,
-   "end": 454.7,
-   "text": "The draft for the pen test is in the folder, with comments from two teams on the questionnaire."
-  },
-  {
-   "key": "them:B",
-   "start": 456.1,
+   "key": "them:C",
+   "start": 457.7,
    "end": 464.6,
-   "text": "The questionnaire numbers came in yesterday, and I put I mean a short summary of the data retention in the shared folder."
+   "text": "The draft for the volume commitment is in the folder, with comments from two teams on the card."
   },
   {
    "key": "them:B",
-   "start": 466.1,
+   "start": 465.6,
    "end": 472.6,
-   "text": "Right, and the pen test also touches the questionnaire, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:A",
-   "start": 472.9,
-   "end": 481.8,
-   "text": "The feedback on the questionnaire has been mixed, some people like it and some say it adds steps um to the audit log."
+   "text": "Right, and the fuel surcharge also touches the lane, which is why uh I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 483.1,
-   "end": 492.0,
-   "text": "One thing I noticed is that the data retention looks different in each region, so the access review plan may need two versions."
-  },
-  {
-   "key": "them:B",
-   "start": 492.7,
-   "end": 500.4,
-   "text": "From what I can see, the pen test is on track, and the risk is mostly in the audit log."
-  },
-  {
-   "key": "them:B",
-   "start": 501.6,
-   "end": 509.7,
-   "text": "We have three open questions on the questionnaire, mostly about timing and who signs you know off on the pen test."
-  },
-  {
-   "key": "them:A",
-   "start": 510.6,
-   "end": 519.0,
-   "text": "One thing I noticed is that the data retention looks different in each region, so the questionnaire plan may need two versions."
+   "start": 473.0,
+   "end": 482.6,
+   "text": "So on the fuel surcharge, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "me:A",
+   "start": 484.1,
+   "end": 491.8,
+   "text": "We tested the volume commitment with a small group, and the rate card results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 493.2,
+   "end": 501.7,
+   "text": "The carrier piece is moving, and um the team has a draft of the rate card changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 502.9,
+   "end": 511.0,
+   "text": "The feedback on the lane been mixed, some people like it and some say it adds steps to the fuel surcharge."
+  },
+  {
+   "key": "me:A",
+   "start": 512.1,
+   "end": 519.4,
+   "text": "If we wait a month on the fuel surcharge, the rate card timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
    "start": 520.2,
-   "end": 527.5,
-   "text": "We have three open questions on the questionnaire, mostly about timing and who signs off on the access review."
-  },
-  {
-   "key": "them:C",
-   "start": 528.2,
-   "end": 535.5,
-   "text": "From what I can see, the questionnaire is on track, and the risk is mostly in the pen test."
-  },
-  {
-   "key": "me:A",
-   "start": 536.5,
-   "end": 543.8,
-   "text": "I think the pen test question is the main thing left before we can close out the access review."
+   "end": 526.4,
+   "text": "Right, and the rate card also touches the carrier, which is I wanted everyone here today."
   },
   {
    "key": "them:A",
-   "start": 545.1,
-   "end": 552.1,
-   "text": "If we wait a month on the audit log, the questionnaire timeline slips by about the same amount."
+   "start": 527.8,
+   "end": 534.8,
+   "text": "If we wait a month um on the carrier, the lane timeline slips by about the same amount."
   },
   {
-   "key": "them:C",
-   "start": 552.5,
-   "end": 561.4,
-   "text": "I would like us to agree um on the scope of the access review today, even if the data retention details come later."
-  },
-  {
-   "key": "me:A",
-   "start": 562.8,
-   "end": 570.1,
-   "text": "From what I can see, the questionnaire is on track, and the risk is mostly in the audit log."
+   "key": "them:B",
+   "start": 535.6,
+   "end": 545.6,
+   "text": "So on the fuel surcharge, we looked at the last few weeks and the picture is mostly what we expected, with um a couple of surprises."
   },
   {
    "key": "me:A",
-   "start": 571.1,
-   "end": 579.2,
-   "text": "The audit log numbers came in yesterday, and I put a short summary of the pen test in the shared folder."
+   "start": 546.6,
+   "end": 555.0,
+   "text": "The feedback on the volume commitment has been mixed, some people like it and some say it adds steps to the carrier."
+  },
+  {
+   "key": "them:B",
+   "start": 555.4,
+   "end": 564.6,
+   "text": "So on the lane, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 565.6,
+   "end": 572.9,
+   "text": "If we wait a month you know on the lane, the carrier timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 580.3,
-   "end": 589.9,
-   "text": "So on the data retention, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 573.9,
+   "end": 582.7,
+   "text": "One thing I noticed is that the volume commitment looks different in each region, so the fuel surcharge plan may need two versions."
   },
   {
    "key": "me:A",
+   "start": 583.1,
+   "end": 590.1,
+   "text": "From what I can see, the carrier is on track, and the risk is mostly in the lane."
+  },
+  {
+   "key": "them:C",
    "start": 590.9,
-   "end": 598.2,
-   "text": "We have three open questions on the questionnaire, mostly about timing and who signs off on the access review."
-  },
-  {
-   "key": "them:B",
-   "start": 598.8,
-   "end": 607.7,
-   "text": "One thing I noticed is that the audit log looks different in each region, so the pen test plan may need two versions."
-  },
-  {
-   "key": "them:C",
-   "start": 608.4,
-   "end": 616.5,
-   "text": "If we wait a month on the pen test, the data retention timeline you know slips by about the same amount."
+   "end": 600.9,
+   "text": "I talked to the people who run the lane every day, and I mean they said the volume commitment is the part that slows them down."
   },
   {
    "key": "them:A",
-   "start": 617.3,
-   "end": 625.0,
-   "text": "We have three open questions on the questionnaire, mostly um about timing and who signs off on the audit log."
-  },
-  {
-   "key": "them:B",
-   "start": 626.1,
-   "end": 634.6,
-   "text": "From what you know I can see, the audit log is on track, and the risk is mostly in the access review."
+   "start": 602.1,
+   "end": 609.8,
+   "text": "I would like us to agree on the scope of the carrier today, even if the lane details come later."
   },
   {
    "key": "me:A",
-   "start": 635.2,
-   "end": 642.9,
-   "text": "From what I can see, the access review is on track, and the risk is mostly in the data retention."
-  },
-  {
-   "key": "them:B",
-   "start": 643.3,
-   "end": 651.0,
-   "text": "We tested um the pen test with a small group, and the retention results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 651.6,
-   "end": 661.2,
-   "text": "So on the data retention, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:B",
-   "start": 661.9,
-   "end": 670.0,
-   "text": "We have three open questions on the data retention, mostly about timing and who signs um off on the pen test."
-  },
-  {
-   "key": "me:A",
-   "start": 671.2,
-   "end": 679.7,
-   "text": "The feedback on the questionnaire has been mixed, some people like it and some say it adds steps to the data retention."
-  },
-  {
-   "key": "me:A",
-   "start": 680.6,
-   "end": 687.1,
-   "text": "Right, and the questionnaire also touches the audit log, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:A",
-   "start": 687.4,
-   "end": 695.1,
-   "text": "We have three open questions on the pen test, mostly about timing and who signs off on the access review."
+   "start": 611.2,
+   "end": 618.9,
+   "text": "The fuel surcharge numbers came in yesterday, and I put a short summary of the lane in the shared folder."
   },
   {
    "key": "them:C",
-   "start": 696.0,
-   "end": 704.1,
-   "text": "From what I can see, uh the pen test is on track, and the risk is mostly in the access review."
-  },
-  {
-   "key": "them:C",
-   "start": 704.6,
-   "end": 712.6,
-   "text": "The access uh review numbers came in yesterday, and I put a short summary of the test in the shared folder."
+   "start": 620.3,
+   "end": 628.4,
+   "text": "From what you know I can see, the carrier is on track, and the risk is mostly in the volume commitment."
   },
   {
    "key": "them:A",
-   "start": 713.6,
-   "end": 722.5,
-   "text": "The feedback on the pen test has been mixed, some people like it and some say it adds steps to the access review."
-  },
-  {
-   "key": "them:C",
-   "start": 723.1,
-   "end": 732.4,
-   "text": "I would like us to agree on the scope I mean of the pen test today, even if the data retention details come later."
+   "start": 629.8,
+   "end": 637.9,
+   "text": "The volume commitment numbers came in and I put a you know short summary of the lane in the shared folder."
   },
   {
    "key": "them:B",
-   "start": 733.4,
-   "end": 740.4,
-   "text": "Right, and the pen test also touches the audit log, which is why I wanted everyone here today."
+   "start": 638.7,
+   "end": 646.4,
+   "text": "We tested the volume commitment with a group, and the carrier results were close I mean to what we hoped."
   },
   {
-   "key": "them:A",
-   "start": 741.1,
-   "end": 751.1,
-   "text": "I talked to the people who run the access um review every day, and they said the audit log is the part that slows them down."
+   "key": "them:C",
+   "start": 647.4,
+   "end": 655.5,
+   "text": "The lane piece is moving, and the team has a draft of the volume commitment changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 751.7,
+   "start": 656.3,
+   "end": 664.8,
+   "text": "One thing I noticed is that the carrier looks different in each region, so the rate card plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 665.4,
+   "end": 672.3,
+   "text": "If we uh wait a on the volume commitment, the lane timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 673.7,
+   "end": 681.4,
+   "text": "The lane piece is moving, and the team has a draft of the carrier changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 681.8,
+   "end": 689.9,
+   "text": "There is a dependency on the volume I mean commitment, so the carrier work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 691.3,
+   "end": 700.9,
+   "text": "I talked to the people who run the rate card every day, and they said the volume commitment is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 701.9,
+   "end": 709.6,
+   "text": "The vendor sent an updated proposal I mean for the volume commitment, and it changes the lane a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 709.9,
+   "end": 719.5,
+   "text": "So on the rate card, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 720.7,
+   "end": 727.6,
+   "text": "I think the carrier question is the main thing left before we can close out the rate card."
+  },
+  {
+   "key": "me:A",
+   "start": 728.3,
+   "end": 736.0,
+   "text": "We could keep the carrier as it is for now and only change the volume commitment in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 737.4,
+   "end": 745.4,
+   "text": "The volume commitment numbers came yesterday, and I uh put a short summary of the fuel surcharge in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 746.7,
    "end": 755.1,
+   "text": "One thing I noticed is that the lane looks different in each region, so the rate card plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 756.3,
+   "end": 764.0,
+   "text": "We have three open questions on the rate card, mostly about timing and who signs off on the fuel surcharge."
+  },
+  {
+   "key": "them:A",
+   "start": 765.0,
+   "end": 773.1,
+   "text": "The lane piece is moving, and the team has a draft of the rate uh card changes ready for this week."
+  },
+  {
+   "key": "them:C",
+   "start": 774.1,
+   "end": 781.0,
+   "text": "The draft for the carrier is in the folder, with comments from two teams on the rate card."
+  },
+  {
+   "key": "them:C",
+   "start": 782.1,
+   "end": 789.8,
+   "text": "If we wait a month on the carrier, you know the rate card timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 790.4,
+   "end": 797.3,
+   "text": "I think the rate card question is the main thing left before we can close out the lane."
+  },
+  {
+   "key": "me:A",
+   "start": 798.8,
+   "end": 806.5,
+   "text": "We have three open questions on the fuel surcharge, mostly about timing and who signs off on the volume commitment."
+  },
+  {
+   "key": "them:A",
+   "start": 807.8,
+   "end": 815.2,
+   "text": "The draft for um the carrier is in the folder, with comments from two teams on the volume commitment."
+  },
+  {
+   "key": "me:A",
+   "start": 816.5,
+   "end": 819.9,
    "text": "Good, let us pick this up next week. Thanks."
   }
  ],
  "beats": [
   {
-   "line": 21,
+   "line": 29,
    "person": "Quinn Ellis",
    "dimension": "authority",
    "value": "decides_alone"
   },
   {
-   "line": 44,
+   "line": 48,
    "person": "Quinn Ellis",
    "dimension": "risk",
    "value": "upside_first"

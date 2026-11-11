@@ -16,8 +16,11 @@ public struct ShownTrait: Codable, Equatable, Sendable, Identifiable {
     public var moments: [PersonaPointer]
     public var counter: [PersonaPointer]
     public var lastSeen: Date
+    /// The calls with this person that the step read: the count says how often, not only how often it agreed.
+    /// Nil in a copy from before it.
+    public var totalCalls: Int?
 
-    public init(_ t: PersonaTrait, name: String) {
+    public init(_ t: PersonaTrait, name: String, totalCalls: Int? = nil) {
         id = t.id
         dimension = t.dimension
         value = t.value
@@ -33,10 +36,15 @@ public struct ShownTrait: Codable, Equatable, Sendable, Identifiable {
         moments = t.support.reversed().filter { seen.insert($0.callID).inserted }.prefix(5).map(\.pointer)
         counter = t.counter.reversed().prefix(3).map(\.pointer)
         lastSeen = t.lastSeen ?? .distantPast
+        self.totalCalls = totalCalls.map { max($0, t.supportCalls + t.counterCalls) }
     }
 
     public var label: String { confirmed ? "You confirmed" : confidence >= PersonaConfidence.established ? "Established" : "Likely" }
-    public var countLine: String { "seen in \(supportCalls) of \(supportCalls + counterCalls) \(supportCalls + counterCalls == 1 ? "call" : "calls")" }
+    /// "seen in 5 of 22 calls, the opposite in 1": of all the calls with the person, not only the ones that agree.
+    public var countLine: String {
+        let total = max(totalCalls ?? 0, supportCalls + counterCalls)
+        return "seen in \(supportCalls) of \(total) \(total == 1 ? "call" : "calls")" + (counterCalls > 0 ? ", the opposite in \(counterCalls)" : "")
+    }
     /// "Likely, seen in 3 of 4 calls".
     public var confidenceLine: String { "\(label), \(countLine)" }
     /// The number, for the trait's detail: "0.62".
@@ -67,8 +75,9 @@ public struct PersonaCard: Codable, Equatable, Sendable {
             case .decision, .authority, .drivers: .ask
             case .risk: value == "downside_first" ? .objections : .ask
             case .objection: .objections
-            case .pace: .avoid
-            case nil: .avoid
+            // Each sentence is an instruction to do something: under "Avoid" it would read as the opposite.
+            case .pace: .open
+            case nil: .ask
             }
         }
     }
@@ -102,9 +111,8 @@ public struct PersonaCard: Codable, Equatable, Sendable {
                               confidenceLine: first.confidenceLine, moment: first.moments.first))
         }
         guard lines.count >= minimumLines, let top = usable.first else { return nil }
-        // The headline is the strongest trait's "so do this", from the opening line when there is one.
-        let lead = lines.first { $0.kind == .open }.flatMap { l in usable.first { $0.id == l.traits.first } } ?? top
-        return PersonaCard(headline: sentence(lead.soDoThis), lines: lines)
+        // The headline is the opening line, whole, when there is one; else the strongest trait's "so do this".
+        return PersonaCard(headline: lines.first { $0.kind == .open }?.text ?? sentence(top.soDoThis), lines: lines)
     }
 
     static func sentence(_ text: String) -> String {
@@ -145,10 +153,11 @@ public struct PersonaSummary: Codable, Equatable, Sendable, Identifiable {
     }
 
     /// From the person's file and the owner's answers. `name` is the person's name now, for the sentences.
-    public static func make(_ persona: Persona, answers: [FindingAnswer], name: String, doNotProfile: Bool = false) -> PersonaSummary? {
+    /// `callsWith`: the calls with the person, for the counts.
+    public static func make(_ persona: Persona, answers: [FindingAnswer], name: String, doNotProfile: Bool = false, callsWith: Int? = nil) -> PersonaSummary? {
         guard !doNotProfile else { return nil }
         let traits = PersonaTraits.build(persona, answers: answers)
-        let shown = traits.filter(\.isShown).map { ShownTrait($0, name: name) }
+        let shown = traits.filter(\.isShown).map { ShownTrait($0, name: name, totalCalls: callsWith) }
         let oneCall = traits.filter { $0.state == .hidden && $0.supportCalls == 1 }.count
         return PersonaSummary(person: persona.person, updated: persona.updated, traits: shown, card: PersonaCard.build(shown), calls: persona.calls.count, oneCall: oneCall)
     }

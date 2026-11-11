@@ -1,19 +1,19 @@
 {
  "id": "gold-12-5",
  "person": "Quinn Ellis",
- "title": "Office move planning",
+ "title": "Warehouse scanner rollout",
  "tags": [
-  "Facilities",
-  "Planning"
+  "Operations",
+  "Hardware"
  ],
  "setting": "group",
  "start": "2026-09-16T17:00:00Z",
- "end": "2026-09-16T17:14:09Z",
+ "end": "2026-09-16T17:14:06Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Quinn Ellis",
-  "them:B": "Tom Reyes",
-  "them:C": "Priya Shah"
+  "them:B": "Ben Cole",
+  "them:C": "Ana Lopez"
  },
  "noise": false,
  "utterances": [
@@ -21,567 +21,567 @@
    "key": "me:A",
    "start": 0.0,
    "end": 4.6,
-   "text": "Thanks for making the time. Today is about the office move planning."
-  },
-  {
-   "key": "them:B",
-   "start": 5.2,
-   "end": 12.9,
-   "text": "From what I can see, the network closet is on track, and the risk is mostly in the floor plan."
-  },
-  {
-   "key": "me:A",
-   "start": 13.8,
-   "end": 23.0,
-   "text": "So on the lease, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:A",
-   "start": 24.2,
-   "end": 31.5,
-   "text": "The vendor sent an updated proposal for the network closet, and it changes the desk count a little bit."
+   "text": "Thanks for making the time. Today is about the warehouse scanner rollout."
   },
   {
    "key": "them:C",
-   "start": 33.0,
-   "end": 41.0,
-   "text": "The network closet piece is moving, and the team has a draft of the lease changes ready for review this week."
-  },
-  {
-   "key": "me:A",
-   "start": 41.4,
-   "end": 48.7,
-   "text": "The draft for the floor plan is in the folder, with comments from two teams on the network closet."
-  },
-  {
-   "key": "them:B",
-   "start": 49.8,
-   "end": 57.1,
-   "text": "The draft for the floor plan is in the folder, with comments from two teams on the moving day."
-  },
-  {
-   "key": "them:A",
-   "start": 58.5,
-   "end": 68.1,
-   "text": "So on the desk count, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:B",
-   "start": 68.7,
-   "end": 76.4,
-   "text": "Last time we said we would clean up the lease first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 77.2,
-   "end": 85.7,
-   "text": "The network closet piece is moving, and the team has a draft of the desk count changes ready for review this week."
-  },
-  {
-   "key": "me:A",
-   "start": 87.2,
-   "end": 94.9,
-   "text": "We have three open questions on the network closet, mostly about timing and who signs off on the desk count."
+   "start": 5.9,
+   "end": 14.4,
+   "text": "The feedback on the pick rate has been mixed, some people like it and some say it adds steps to the scanner."
   },
   {
    "key": "them:C",
-   "start": 95.4,
-   "end": 102.7,
-   "text": "We tested the lease with a small group, and the desk count results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 103.7,
-   "end": 111.8,
-   "text": "Last time we said we would clean up the desk count first, and that work is about two thirds done now."
+   "start": 15.0,
+   "end": 21.9,
+   "text": "The draft for the training session is in the folder, with comments from two teams on the firmware."
   },
   {
    "key": "them:B",
-   "start": 112.4,
-   "end": 120.0,
-   "text": "The moving day numbers came in yesterday, and I put a short summary of the lease in the shared folder."
+   "start": 23.3,
+   "end": 31.7,
+   "text": "The feedback on the training session has been mixed, some people like it and some say it adds steps to the firmware."
   },
   {
    "key": "me:A",
-   "start": 121.3,
-   "end": 128.6,
-   "text": "The vendor sent an updated proposal for the floor plan, and it changes the moving day a little bit."
-  },
-  {
-   "key": "them:B",
-   "start": 129.0,
-   "end": 135.9,
-   "text": "The draft for the desk count is in the folder, with comments from two teams on the lease."
+   "start": 32.5,
+   "end": 39.8,
+   "text": "If we wait a month on the pick rate, the training session timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 136.7,
-   "end": 143.6,
-   "text": "Right, and the floor plan also touches the moving day, which is why I wanted everyone here today."
+   "start": 40.2,
+   "end": 47.9,
+   "text": "We tested the pick rate with a small group, and the dock door results were close to what we hoped."
   },
   {
-   "key": "me:A",
-   "start": 144.9,
-   "end": 152.2,
-   "text": "The vendor sent an updated proposal for the moving day, and it changes the network closet a little bit."
+   "key": "them:B",
+   "start": 49.2,
+   "end": 56.9,
+   "text": "We could keep the dock door as it is for now and only change the firmware in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 57.8,
+   "end": 65.1,
+   "text": "The vendor sent an updated proposal for the pick rate, and it changes the dock door a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 65.6,
+   "end": 74.1,
+   "text": "The feedback on the dock door has been mixed, some people like it and some say it adds steps to the scanner."
   },
   {
    "key": "them:C",
-   "start": 152.9,
-   "end": 160.2,
-   "text": "The vendor sent an updated proposal for the floor plan, and it changes the moving day a little bit."
-  },
-  {
-   "key": "me:A",
-   "start": 161.4,
-   "end": 168.8,
-   "text": "I think the moving day question is the main thing left before we can close out the network closet."
-  },
-  {
-   "key": "them:A",
-   "start": 169.9,
-   "end": 178.4,
-   "text": "The feedback on the network closet has been mixed, some people like it and some say it adds steps to the lease."
-  },
-  {
-   "key": "them:B",
-   "start": 179.6,
-   "end": 187.0,
-   "text": "The vendor sent an updated proposal for the moving day, and it changes the desk count a little bit."
+   "start": 75.4,
+   "end": 83.1,
+   "text": "There is a dependency on the training session, so the dock door work cannot really start until that is settled."
   },
   {
    "key": "them:C",
-   "start": 188.4,
-   "end": 195.7,
-   "text": "The vendor sent an updated proposal for the desk count, and it changes the floor plan a little bit."
+   "start": 83.9,
+   "end": 91.2,
+   "text": "We have three open questions on the dock door, mostly about timing and who signs off on the scanner."
   },
   {
    "key": "them:C",
-   "start": 197.1,
-   "end": 206.7,
-   "text": "I talked to the people who run the desk count every day, and they said the floor plan is the part that slows them down."
+   "start": 92.6,
+   "end": 99.1,
+   "text": "Right, and the training session also touches the scanner, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 100.3,
+   "end": 106.9,
+   "text": "Right, and the firmware also touches the pick rate, which is why I wanted everyone here today."
   },
   {
    "key": "them:A",
-   "start": 208.1,
-   "end": 215.8,
-   "text": "Last time we said we would clean up the lease first, and that work is about two thirds done now."
+   "start": 108.3,
+   "end": 118.0,
+   "text": "I talked to the people who run the dock door every day, and they said the pick rate is the part that slows them down."
   },
   {
    "key": "them:C",
-   "start": 217.1,
-   "end": 225.6,
-   "text": "The feedback on the lease has been mixed, some people like it and some say it adds steps to the floor plan."
-  },
-  {
-   "key": "them:B",
-   "start": 225.9,
-   "end": 232.9,
-   "text": "Right, and the floor plan also touches the network closet, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 233.4,
-   "end": 241.4,
-   "text": "The moving day numbers came in yesterday, and I put a short summary of the floor plan in the shared folder."
+   "start": 118.6,
+   "end": 126.3,
+   "text": "Last time we said we would clean up the firmware first, and that work is about two thirds done now."
   },
   {
    "key": "them:C",
-   "start": 242.7,
-   "end": 250.1,
-   "text": "The vendor sent an updated proposal for the network closet, and it changes the desk count a little bit."
-  },
-  {
-   "key": "me:A",
-   "start": 250.4,
-   "end": 257.7,
-   "text": "We want to start the moving day on the first of the month. Can we agree on that today?"
-  },
-  {
-   "key": "them:A",
-   "start": 258.3,
-   "end": 262.2,
-   "text": "This is my call, and I will decide it now."
-  },
-  {
-   "key": "me:A",
-   "start": 263.2,
-   "end": 272.1,
-   "text": "The feedback on the network closet has been mixed, some people like it and some say it adds steps to the moving day."
-  },
-  {
-   "key": "them:B",
-   "start": 272.6,
-   "end": 281.1,
-   "text": "The floor plan piece is moving, and the team has a draft of the network closet changes ready for review this week."
-  },
-  {
-   "key": "them:B",
-   "start": 282.2,
-   "end": 290.2,
-   "text": "The lease piece is moving, and the team has a draft of the moving day changes ready for review this week."
-  },
-  {
-   "key": "me:A",
-   "start": 291.1,
-   "end": 299.2,
-   "text": "The moving day numbers came in yesterday, and I put a short summary of the floor plan in the shared folder."
-  },
-  {
-   "key": "them:A",
-   "start": 300.0,
-   "end": 307.7,
-   "text": "There is a dependency on the desk count, so the moving day work cannot really start until that is settled."
-  },
-  {
-   "key": "them:B",
-   "start": 308.7,
-   "end": 317.1,
-   "text": "The desk count piece is moving, and the team has a draft of the floor plan changes ready for review this week."
-  },
-  {
-   "key": "them:B",
-   "start": 318.3,
-   "end": 327.1,
-   "text": "The feedback on the moving day has been mixed, some people like it and some say it adds steps to the floor plan."
-  },
-  {
-   "key": "them:B",
-   "start": 327.5,
-   "end": 334.4,
-   "text": "Right, and the floor plan also touches the moving day, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 335.3,
-   "end": 342.2,
-   "text": "The vendor sent an updated proposal for the network closet, and it changes the lease a little bit."
-  },
-  {
-   "key": "them:A",
-   "start": 343.3,
-   "end": 351.4,
-   "text": "I would like us to agree on the scope of the lease today, even if the floor plan details come later."
+   "start": 127.3,
+   "end": 137.0,
+   "text": "So on the pick rate, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:C",
-   "start": 352.8,
-   "end": 361.3,
-   "text": "The floor plan piece is moving, and the team has a draft of the network closet changes ready for review this week."
-  },
-  {
-   "key": "me:A",
-   "start": 362.2,
-   "end": 370.3,
-   "text": "The network closet numbers came in yesterday, and I put a short summary of the moving day in the shared folder."
+   "start": 137.6,
+   "end": 144.5,
+   "text": "The vendor sent an updated proposal for the dock door, and it changes the firmware a little bit."
   },
   {
    "key": "them:A",
-   "start": 371.1,
-   "end": 379.6,
-   "text": "I would like us to agree on the scope of the floor plan today, even if the network closet details come later."
-  },
-  {
-   "key": "them:C",
-   "start": 381.0,
-   "end": 389.1,
-   "text": "The network closet numbers came in yesterday, and I put a short summary of the desk count in the shared folder."
-  },
-  {
-   "key": "them:C",
-   "start": 389.9,
-   "end": 397.2,
-   "text": "I think the moving day question is the main thing left before we can close out the desk count."
+   "start": 145.1,
+   "end": 153.6,
+   "text": "The training session piece is moving, and the team has a draft of the pick rate changes ready for review this week."
   },
   {
    "key": "me:A",
-   "start": 397.9,
-   "end": 405.2,
-   "text": "We tested the network closet with a small group, and the lease results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 405.8,
-   "end": 413.1,
-   "text": "The vendor sent an updated proposal for the desk count, and it changes the network closet a little bit."
-  },
-  {
-   "key": "them:C",
-   "start": 413.9,
-   "end": 421.2,
-   "text": "If we wait a month on the floor plan, the network closet timeline slips by about the same amount."
+   "start": 154.7,
+   "end": 162.0,
+   "text": "We have three open questions on the scanner, mostly about timing and who signs off on the training session."
   },
   {
    "key": "them:B",
-   "start": 422.5,
-   "end": 430.2,
-   "text": "We tested the network closet with a small group, and the moving day results were close to what we hoped."
-  },
-  {
-   "key": "me:A",
-   "start": 430.6,
-   "end": 439.0,
-   "text": "The desk count piece is moving, and the team has a draft of the moving day changes ready for review this week."
+   "start": 162.6,
+   "end": 169.5,
+   "text": "If we wait a month on the firmware, the dock door timeline slips by about the same amount."
   },
   {
    "key": "them:A",
-   "start": 439.9,
-   "end": 448.0,
-   "text": "Last time we said we would clean up the floor plan first, and that work is about two thirds done now."
+   "start": 170.7,
+   "end": 179.9,
+   "text": "So on the scanner, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 180.7,
+   "end": 188.4,
+   "text": "The scanner piece is moving, and the team has a draft of the firmware changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 188.9,
+   "end": 196.2,
+   "text": "We have three open questions on the dock door, mostly about timing and who signs off on the firmware."
+  },
+  {
+   "key": "them:A",
+   "start": 197.6,
+   "end": 206.1,
+   "text": "One thing I noticed is that the firmware looks different in each region, so the dock door plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 207.5,
+   "end": 214.8,
+   "text": "We tested the pick rate with a small group, and the firmware results were close to what we hoped."
   },
   {
    "key": "them:B",
-   "start": 448.4,
-   "end": 456.9,
-   "text": "I would like us to agree on the scope of the moving day today, even if the floor plan details come later."
+   "start": 215.2,
+   "end": 223.3,
+   "text": "The training session numbers came in yesterday, and I put a short summary of the pick rate in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 458.4,
-   "end": 466.1,
-   "text": "We could keep the network closet as it is for now and only change the lease in the first phase."
+   "start": 224.2,
+   "end": 231.1,
+   "text": "The vendor sent an updated proposal for the scanner, and it changes the training session a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 232.1,
+   "end": 240.6,
+   "text": "Here is the plan: we spend 40,000 on the training session this quarter and the firmware changes follow in the next one."
   },
   {
    "key": "them:A",
-   "start": 467.4,
-   "end": 475.5,
-   "text": "Last time we said we would clean up the moving day first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 475.8,
-   "end": 482.7,
-   "text": "The vendor sent an updated proposal for the moving day, and it changes the lease a little bit."
-  },
-  {
-   "key": "them:B",
-   "start": 483.1,
-   "end": 492.0,
-   "text": "The feedback on the floor plan has been mixed, some people like it and some say it adds steps to the desk count."
-  },
-  {
-   "key": "me:A",
-   "start": 492.4,
-   "end": 499.7,
-   "text": "We tested the lease with a small group, and the network closet results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 500.7,
-   "end": 509.2,
-   "text": "The floor plan piece is moving, and the team has a draft of the network closet changes ready for review this week."
-  },
-  {
-   "key": "them:B",
-   "start": 509.5,
-   "end": 519.1,
-   "text": "I talked to the people who run the floor plan every day, and they said the moving day is the part that slows them down."
-  },
-  {
-   "key": "me:A",
-   "start": 519.7,
-   "end": 526.6,
-   "text": "I think the moving day question is the main thing left before we can close out the lease."
-  },
-  {
-   "key": "them:C",
-   "start": 527.7,
-   "end": 536.2,
-   "text": "The desk count piece is moving, and the team has a draft of the moving day changes ready for review this week."
-  },
-  {
-   "key": "them:A",
-   "start": 537.7,
-   "end": 545.3,
-   "text": "We tested the network closet with a small group, and the desk count results were close to what we hoped."
-  },
-  {
-   "key": "them:C",
-   "start": 546.5,
-   "end": 553.8,
-   "text": "We have three open questions on the moving day, mostly about timing and who signs off on the lease."
-  },
-  {
-   "key": "me:A",
-   "start": 555.3,
-   "end": 562.6,
-   "text": "The vendor sent an updated proposal for the network closet, and it changes the floor plan a little bit."
-  },
-  {
-   "key": "them:A",
-   "start": 563.6,
-   "end": 570.1,
-   "text": "Right, and the network closet also touches the lease, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:B",
-   "start": 570.9,
-   "end": 578.6,
-   "text": "We have three open questions on the network closet, mostly about timing and who signs off on the floor plan."
-  },
-  {
-   "key": "them:C",
-   "start": 579.2,
-   "end": 586.5,
-   "text": "From what I can see, the lease is on track, and the risk is mostly in the moving day."
-  },
-  {
-   "key": "me:A",
-   "start": 588.0,
-   "end": 595.7,
-   "text": "We tested the network closet with a small group, and the floor plan results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 596.5,
-   "end": 603.8,
-   "text": "The draft for the network closet is in the folder, with comments from two teams on the moving day."
-  },
-  {
-   "key": "me:A",
-   "start": 604.5,
-   "end": 613.0,
-   "text": "The floor plan piece is moving, and the team has a draft of the desk count changes ready for review this week."
-  },
-  {
-   "key": "me:A",
-   "start": 613.3,
-   "end": 623.0,
-   "text": "I talked to the people who run the desk count every day, and they said the moving day is the part that slows them down."
-  },
-  {
-   "key": "them:A",
-   "start": 624.1,
-   "end": 631.4,
-   "text": "From what I can see, the network closet is on track, and the risk is mostly in the lease."
-  },
-  {
-   "key": "me:A",
-   "start": 631.9,
-   "end": 640.7,
-   "text": "The feedback on the desk count has been mixed, some people like it and some say it adds steps to the moving day."
-  },
-  {
-   "key": "me:A",
-   "start": 642.1,
-   "end": 649.8,
-   "text": "We have three open questions on the floor plan, mostly about timing and who signs off on the moving day."
-  },
-  {
-   "key": "them:B",
-   "start": 650.4,
-   "end": 658.4,
-   "text": "We could keep the desk count as it is for now and only change the network closet in the first phase."
-  },
-  {
-   "key": "them:A",
-   "start": 658.9,
-   "end": 665.8,
-   "text": "If we wait a month on the lease, the desk count timeline slips by about the same amount."
-  },
-  {
-   "key": "them:B",
-   "start": 667.2,
-   "end": 674.5,
-   "text": "I think the floor plan question is the main thing left before we can close out the desk count."
-  },
-  {
-   "key": "them:B",
-   "start": 675.4,
-   "end": 682.4,
-   "text": "The vendor sent an updated proposal for the network closet, and it changes the lease a little bit."
-  },
-  {
-   "key": "them:B",
-   "start": 683.8,
-   "end": 691.9,
-   "text": "Last time we said we would clean up the floor plan first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 693.3,
-   "end": 700.2,
-   "text": "The ask is simple: approve the network closet change so the moving day team can start next week."
-  },
-  {
-   "key": "them:A",
-   "start": 701.3,
-   "end": 705.9,
+   "start": 241.5,
+   "end": 246.1,
    "text": "Before we move on, put an owner on each of those items."
   },
   {
-   "key": "them:B",
-   "start": 706.9,
-   "end": 715.0,
-   "text": "The floor plan numbers came in yesterday, and I put a short summary of the moving day in the shared folder."
-  },
-  {
-   "key": "them:C",
-   "start": 716.1,
-   "end": 723.8,
-   "text": "We tested the network closet with a small group, and the moving day results were close to what we hoped."
+   "key": "me:A",
+   "start": 247.1,
+   "end": 255.2,
+   "text": "I would like us to agree on the scope of the training session today, even if the firmware details come later."
   },
   {
    "key": "me:A",
-   "start": 724.2,
-   "end": 733.8,
-   "text": "I talked to the people who run the floor plan every day, and they said the moving day is the part that slows them down."
+   "start": 255.7,
+   "end": 263.0,
+   "text": "The vendor sent an updated proposal for the training session, and it changes the dock door a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 264.2,
+   "end": 271.2,
+   "text": "The vendor sent an updated proposal for the scanner, and it changes the training session a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 272.5,
+   "end": 279.8,
+   "text": "I think the training session question is the main thing left before we can close out the dock door."
   },
   {
    "key": "them:A",
-   "start": 735.1,
-   "end": 743.2,
-   "text": "The network closet numbers came in yesterday, and I put a short summary of the desk count in the shared folder."
-  },
-  {
-   "key": "them:C",
-   "start": 743.7,
-   "end": 751.8,
-   "text": "The network closet numbers came in yesterday, and I put a short summary of the floor plan in the shared folder."
-  },
-  {
-   "key": "them:C",
-   "start": 753.1,
-   "end": 760.0,
-   "text": "Right, and the desk count also touches the moving day, which is why I wanted everyone here today."
+   "start": 280.5,
+   "end": 289.4,
+   "text": "The feedback on the dock door has been mixed, some people like it and some say it adds steps to the pick rate."
   },
   {
    "key": "them:B",
-   "start": 760.4,
-   "end": 767.7,
-   "text": "We have three open questions on the network closet, mostly about timing and who signs off on the lease."
+   "start": 290.2,
+   "end": 297.2,
+   "text": "The vendor sent an updated proposal for the training session, and it changes the firmware a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 298.6,
+   "end": 305.2,
+   "text": "The vendor sent an updated proposal for the firmware, and it changes the scanner a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 306.6,
+   "end": 315.4,
+   "text": "I talked to the people who run the firmware every day, and they said the scanner is the part that slows them down."
   },
   {
    "key": "me:A",
-   "start": 768.0,
-   "end": 777.7,
-   "text": "So on the desk count, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 316.0,
+   "end": 324.9,
+   "text": "Here is the plan: we spend 40,000 on the training session this quarter and the pick rate changes follow in the next one."
   },
   {
    "key": "them:A",
-   "start": 778.6,
-   "end": 785.2,
-   "text": "Right, and the lease also touches the floor plan, which is why I wanted everyone here today."
+   "start": 325.3,
+   "end": 328.0,
+   "text": "That one is mine to decide. Done."
+  },
+  {
+   "key": "them:C",
+   "start": 329.1,
+   "end": 337.6,
+   "text": "The feedback on the pick rate has been mixed, some people like it and some say it adds steps to the scanner."
+  },
+  {
+   "key": "them:B",
+   "start": 338.4,
+   "end": 344.9,
+   "text": "Right, and the scanner also touches the dock door, which is why I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 785.5,
-   "end": 788.6,
-   "text": "Okay, I think that covers it. Thanks, everyone."
+   "start": 346.0,
+   "end": 353.7,
+   "text": "The training session numbers came in yesterday, and I put a short summary of the scanner in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 354.7,
+   "end": 361.6,
+   "text": "The vendor sent an updated proposal for the dock door, and it changes the firmware a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 362.7,
+   "end": 369.6,
+   "text": "Right, and the training session also touches the pick rate, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 370.2,
+   "end": 378.3,
+   "text": "We could keep the training session as it is for now and only change the pick rate in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 379.1,
+   "end": 388.7,
+   "text": "So on the training session, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 389.3,
+   "end": 397.0,
+   "text": "Last time we said we would clean up the firmware first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 397.9,
+   "end": 406.0,
+   "text": "I would like us to agree on the scope of the scanner today, even if the dock door details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 407.2,
+   "end": 414.9,
+   "text": "From what I can see, the pick rate is on track, and the risk is mostly in the training session."
+  },
+  {
+   "key": "me:A",
+   "start": 416.3,
+   "end": 423.6,
+   "text": "If we wait a month on the training session, the dock door timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 424.0,
+   "end": 431.3,
+   "text": "From what I can see, the dock door is on track, and the risk is mostly in the scanner."
+  },
+  {
+   "key": "them:A",
+   "start": 432.3,
+   "end": 440.8,
+   "text": "The feedback on the training session has been mixed, some people like it and some say it adds steps to the scanner."
+  },
+  {
+   "key": "me:A",
+   "start": 442.2,
+   "end": 449.2,
+   "text": "Right, and the dock door also touches the training session, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 449.7,
+   "end": 457.0,
+   "text": "The vendor sent an updated proposal for the dock door, and it changes the pick rate a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 457.9,
+   "end": 466.3,
+   "text": "One thing I noticed is that the training session looks different in each region, so the scanner plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 467.8,
+   "end": 477.4,
+   "text": "So on the dock door, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 478.0,
+   "end": 485.7,
+   "text": "The scanner numbers came in yesterday, and I put a short summary of the training session in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 486.7,
+   "end": 493.6,
+   "text": "The vendor sent an updated proposal for the scanner, and it changes the training session a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 494.2,
+   "end": 501.9,
+   "text": "The dock door numbers came in yesterday, and I put a short summary of the firmware in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 503.1,
+   "end": 510.0,
+   "text": "I think the training session question is the main thing left before we can close out the firmware."
+  },
+  {
+   "key": "them:A",
+   "start": 510.4,
+   "end": 519.2,
+   "text": "One thing I noticed is that the dock door looks different in each region, so the pick rate plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 520.0,
+   "end": 527.3,
+   "text": "From what I can see, the firmware is on track, and the risk is mostly in the training session."
+  },
+  {
+   "key": "them:C",
+   "start": 528.6,
+   "end": 535.5,
+   "text": "If we wait a month on the scanner, the dock door timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 536.3,
+   "end": 544.0,
+   "text": "We tested the dock door with a small group, and the training session results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 545.2,
+   "end": 553.3,
+   "text": "I would like us to agree on the scope of the pick rate today, even if the firmware details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 554.4,
+   "end": 562.9,
+   "text": "One thing I noticed is that the pick rate looks different in each region, so the scanner plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 564.1,
+   "end": 572.2,
+   "text": "I would like us to agree on the scope of the training session today, even if the scanner details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 573.7,
+   "end": 581.8,
+   "text": "Last time we said we would clean up the pick rate first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 583.1,
+   "end": 591.2,
+   "text": "We could keep the pick rate as it is for now and only change the training session in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 592.6,
+   "end": 599.9,
+   "text": "The vendor sent an updated proposal for the training session, and it changes the pick rate a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 601.2,
+   "end": 609.3,
+   "text": "The feedback on the scanner has been mixed, some people like it and some say it adds steps to the firmware."
+  },
+  {
+   "key": "them:A",
+   "start": 609.7,
+   "end": 617.4,
+   "text": "We tested the dock door with a small group, and the pick rate results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 617.9,
+   "end": 625.2,
+   "text": "From what I can see, the scanner is on track, and the risk is mostly in the training session."
+  },
+  {
+   "key": "me:A",
+   "start": 626.5,
+   "end": 636.1,
+   "text": "So on the training session, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 636.5,
+   "end": 643.8,
+   "text": "I think the training session question is the main thing left before we can close out the pick rate."
+  },
+  {
+   "key": "them:C",
+   "start": 644.4,
+   "end": 652.4,
+   "text": "The firmware piece is moving, and the team has a draft of the training session changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 653.5,
+   "end": 660.8,
+   "text": "We tested the dock door with a small group, and the firmware results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 661.4,
+   "end": 670.2,
+   "text": "One thing I noticed is that the training session looks different in each region, so the dock door plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 671.3,
+   "end": 678.2,
+   "text": "The vendor sent an updated proposal for the scanner, and it changes the dock door a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 679.1,
+   "end": 686.0,
+   "text": "Right, and the dock door also touches the pick rate, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 686.8,
+   "end": 694.1,
+   "text": "We have three open questions on the dock door, mostly about timing and who signs off on the scanner."
+  },
+  {
+   "key": "them:C",
+   "start": 695.1,
+   "end": 702.8,
+   "text": "From what I can see, the pick rate is on track, and the risk is mostly in the training session."
+  },
+  {
+   "key": "me:A",
+   "start": 703.9,
+   "end": 711.2,
+   "text": "We tested the dock door with a small group, and the scanner results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 711.6,
+   "end": 718.9,
+   "text": "The draft for the dock door is in the folder, with comments from two teams on the training session."
+  },
+  {
+   "key": "me:A",
+   "start": 719.8,
+   "end": 727.5,
+   "text": "The scanner piece is moving, and the team has a draft of the firmware changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 728.6,
+   "end": 737.8,
+   "text": "I talked to the people who run the firmware every day, and they said the training session is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 739.2,
+   "end": 746.9,
+   "text": "From what I can see, the dock door is on track, and the risk is mostly in the pick rate."
+  },
+  {
+   "key": "me:A",
+   "start": 747.8,
+   "end": 756.3,
+   "text": "The feedback on the firmware has been mixed, some people like it and some say it adds steps to the training session."
+  },
+  {
+   "key": "me:A",
+   "start": 757.2,
+   "end": 764.5,
+   "text": "We have three open questions on the scanner, mostly about timing and who signs off on the training session."
+  },
+  {
+   "key": "them:B",
+   "start": 765.9,
+   "end": 773.6,
+   "text": "We could keep the firmware as it is for now and only change the dock door in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 774.4,
+   "end": 781.3,
+   "text": "If we wait a month on the pick rate, the firmware timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 782.0,
+   "end": 785.5,
+   "text": "Good, let us pick this up next week. Thanks."
   }
  ],
  "beats": [
   {
-   "line": 30,
-   "person": "Quinn Ellis",
-   "dimension": "authority",
-   "value": "decides_alone"
-  },
-  {
-   "line": 81,
+   "line": 28,
    "person": "Quinn Ellis",
    "dimension": "evidence",
    "value": "named_owner"
+  },
+  {
+   "line": 38,
+   "person": "Quinn Ellis",
+   "dimension": "authority",
+   "value": "decides_alone"
   }
  ]
 }

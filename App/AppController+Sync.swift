@@ -169,7 +169,7 @@ extension AppController {
         let place = syncWith == .server ? "your server" : "iCloud"
         // The reduced copy of the reads for the phone's card: shown traits and pointers, no words. None before the
         // reads were read once, so a sync at launch does not empty the phone's copy; an empty one when they are off.
-        let personas: SyncedPersonas? = !personasOn ? SyncedPersonas([]) : personaReads.isEmpty ? nil : SyncedPersonas(Array(personaReads.values))
+        let personas: SyncedPersonas? = !personasOn ? SyncedPersonas([]) : personaReadsMade ? SyncedPersonas(Array(personaReads.values)) : nil
         Task.detached(priority: .utility) {
             var received = 0
             var failure: FriendlyError?

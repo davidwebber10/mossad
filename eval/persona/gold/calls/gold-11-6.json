@@ -1,19 +1,19 @@
 {
  "id": "gold-11-6",
  "person": "Robin Hale",
- "title": "Customer returns process",
+ "title": "Supplier quality issue",
  "tags": [
-  "Returns",
-  "Customer service"
+  "Quality",
+  "Suppliers"
  ],
  "setting": "group",
  "start": "2026-09-23T16:00:00Z",
- "end": "2026-09-23T16:14:31Z",
+ "end": "2026-09-23T16:13:41Z",
  "speakers": {
   "me:A": "Dana Lee",
   "them:A": "Robin Hale",
-  "them:B": "Ana Lopez",
-  "them:C": "Tom Reyes"
+  "them:B": "Ben Cole",
+  "them:C": "Ana Lopez"
  },
  "noise": true,
  "utterances": [
@@ -21,597 +21,549 @@
    "key": "me:A",
    "start": 0.0,
    "end": 4.6,
-   "text": "Thanks for making the time. Today is about the customer returns process."
-  },
-  {
-   "key": "them:B",
-   "start": 4.9,
-   "end": 11.9,
-   "text": "The vendor sent updated proposal for you know the inspection, and it changes the portal a little bit."
-  },
-  {
-   "key": "them:C",
-   "start": 12.2,
-   "end": 20.3,
-   "text": "There is a dependency on the inspection, so the refund you know time work cannot really start until that is settled."
+   "text": "Thanks for making the time. Today is about the supplier quality issue."
   },
   {
    "key": "me:A",
-   "start": 21.1,
-   "end": 29.2,
-   "text": "The feedback on the restock has been mixed, some people like it and some say it adds steps to the inspection."
-  },
-  {
-   "key": "them:A",
-   "start": 29.9,
-   "end": 36.8,
-   "text": "Right, and the you know restock also touches the inspection, which is why I wanted everyone here today."
+   "start": 5.9,
+   "end": 14.7,
+   "text": "The feedback on the supplier visit has been mixed, some people like it and some say it adds steps to the defect rate."
   },
   {
    "key": "them:B",
-   "start": 37.3,
-   "end": 46.6,
-   "text": "One thing I uh noticed is that the refund time looks different in each region, so the return label plan may need two versions."
-  },
-  {
-   "key": "them:C",
-   "start": 47.0,
-   "end": 53.5,
-   "text": "Right, and the refund time also touches the restock, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:C",
-   "start": 54.4,
-   "end": 62.1,
-   "text": "We could keep the portal as it um is for now and only change the inspection in the first phase."
-  },
-  {
-   "key": "them:C",
-   "start": 62.4,
-   "end": 70.5,
-   "text": "The return label piece is moving, and the team has a draft of the portal changes ready for review this week."
-  },
-  {
-   "key": "them:A",
-   "start": 71.3,
-   "end": 80.2,
-   "text": "One thing I I mean noticed is that the restock looks different in each region, so the portal plan may need two versions."
-  },
-  {
-   "key": "them:C",
-   "start": 81.2,
-   "end": 89.3,
-   "text": "Last time we said we would clean up the return label first, and that work is about two thirds done now."
+   "start": 16.0,
+   "end": 23.3,
+   "text": "I think the defect rate question is the main thing left before we can close out the supplier visit."
   },
   {
    "key": "them:B",
-   "start": 89.9,
-   "end": 97.6,
-   "text": "One thing I noticed is that the inspection looks different in each region, so the plan may need two versions."
+   "start": 23.8,
+   "end": 32.7,
+   "text": "The defect rate numbers came in yesterday, and I I mean put a short summary of the corrective action in the shared folder."
   },
   {
    "key": "them:C",
-   "start": 98.4,
-   "end": 105.3,
-   "text": "If we wait a month on the time, the return label timeline slips by about the same amount."
+   "start": 34.2,
+   "end": 41.1,
+   "text": "The vendor sent an updated proposal the defect rate, and it changes the corrective action a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 42.3,
+   "end": 50.7,
+   "text": "There is a dependency on the corrective action, so the supplier visit work I mean cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 106.3,
-   "end": 112.4,
-   "text": "The ask is simple: approve the inspection change so the restock team can start next week."
+   "start": 51.2,
+   "end": 58.9,
+   "text": "Last time we said we would clean up the batch first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 59.8,
+   "end": 68.3,
+   "text": "I would like us uh to agree on the scope of the defect rate today, even the corrective action details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 68.7,
+   "end": 76.0,
+   "text": "Right, and the supplier visit also the inspection report, which is why I I mean wanted everyone here today."
   },
   {
    "key": "them:A",
-   "start": 113.9,
-   "end": 118.1,
+   "start": 77.4,
+   "end": 84.4,
+   "text": "Right, and the inspection report also touches the corrective action, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 85.7,
+   "end": 93.0,
+   "text": "I think the supplier visit question is the main thing left before we can close out the defect rate."
+  },
+  {
+   "key": "them:C",
+   "start": 93.6,
+   "end": 102.0,
+   "text": "The corrective action piece is moving, and the team has a draft of uh supplier visit changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 103.2,
+   "end": 110.9,
+   "text": "We have three open questions on the inspection report, mostly about timing and who signs off on the supplier visit."
+  },
+  {
+   "key": "them:C",
+   "start": 111.2,
+   "end": 119.7,
+   "text": "The feedback on the batch has been mixed, some people like it and some say it adds steps to the defect rate."
+  },
+  {
+   "key": "them:B",
+   "start": 120.3,
+   "end": 128.4,
+   "text": "We could keep the inspection report as it is for now and only change the defect rate in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 128.9,
+   "end": 137.8,
+   "text": "The supplier visit piece is moving, and the team has a draft um of the corrective action changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 138.4,
+   "end": 146.1,
+   "text": "The vendor sent an I mean updated for the corrective action, and it changes the supplier visit a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 146.9,
+   "end": 154.2,
+   "text": "If we wait a month on the inspection report, the defect rate timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 155.5,
+   "end": 162.0,
+   "text": "The ask is simple: approve the batch change so the supplier visit team can start next week."
+  },
+  {
+   "key": "them:A",
+   "start": 163.4,
+   "end": 168.8,
+   "text": "No, I do not agree with that. I think it is the wrong call."
+  },
+  {
+   "key": "them:B",
+   "start": 169.6,
+   "end": 176.1,
+   "text": "Right, and the batch also touches the supplier visit, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 176.8,
+   "end": 184.9,
+   "text": "If we wait a month on the inspection report, the corrective action timeline slips by about you know the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 186.4,
+   "end": 194.5,
+   "text": "The supplier visit piece is moving, and team has a draft of the inspection report changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 195.5,
+   "end": 203.9,
+   "text": "The feedback on the visit has been mixed, some people like it and some say it adds steps to the corrective action."
+  },
+  {
+   "key": "them:A",
+   "start": 204.3,
+   "end": 212.0,
+   "text": "I think the supplier visit question is the main thing you know left before we can close out the batch."
+  },
+  {
+   "key": "me:A",
+   "start": 212.8,
+   "end": 220.5,
+   "text": "There is a dependency on the supplier visit, so the inspection report work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 221.2,
+   "end": 229.2,
+   "text": "From what I you know can see, the corrective action is on track, and the risk is mostly in the batch."
+  },
+  {
+   "key": "them:B",
+   "start": 229.8,
+   "end": 239.8,
+   "text": "So on the uh corrective action, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 240.2,
+   "end": 249.1,
+   "text": "Here is the plan: we spend 40,000 on the defect rate this quarter and the corrective action changes follow in the next one."
+  },
+  {
+   "key": "them:A",
+   "start": 250.1,
+   "end": 253.9,
+   "text": "Did the thing we agreed on last time actually happen?"
+  },
+  {
+   "key": "me:A",
+   "start": 254.3,
+   "end": 262.4,
+   "text": "We could keep the inspection report as it is for now and only change the defect rate in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 263.1,
+   "end": 272.7,
+   "text": "I talked um to the people who run the batch every day, and they said the inspection report is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 273.5,
+   "end": 280.4,
+   "text": "The vendor sent an updated proposal for the batch, and it changes the supplier visit a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 281.2,
+   "end": 289.7,
+   "text": "There is a I mean dependency on the supplier visit, so the inspection report work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 290.7,
+   "end": 298.8,
+   "text": "We could keep the inspection report as it is for now and only change the corrective action in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 299.4,
+   "end": 306.3,
+   "text": "If we wait a month on the batch, the supplier visit timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 307.5,
+   "end": 317.9,
+   "text": "So on the corrective action, we looked at the last few weeks and the I mean picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 318.8,
+   "end": 326.5,
+   "text": "There is a dependency on the defect rate, so the corrective action work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 327.0,
+   "end": 334.3,
+   "text": "There is a dependency on the inspection report, so the batch work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 335.2,
+   "end": 343.7,
+   "text": "My recommendation is that we go with the second option for the supplier visit, it saves about 15% on the inspection report."
+  },
+  {
+   "key": "them:A",
+   "start": 345.1,
+   "end": 349.4,
    "text": "Fine, decision uh made, we go with that option starting now."
   },
   {
-   "key": "me:A",
-   "start": 119.4,
-   "end": 127.1,
-   "text": "We could keep the refund time as it is for now and only change the portal in the first phase."
+   "key": "them:C",
+   "start": 350.7,
+   "end": 358.0,
+   "text": "The vendor sent an updated proposal for the supplier visit, and it changes the inspection report a little bit."
   },
   {
    "key": "me:A",
-   "start": 128.4,
-   "end": 135.3,
-   "text": "I think the refund time question is the main thing left before we can close out the restock."
+   "start": 358.5,
+   "end": 366.2,
+   "text": "We tested the defect rate with a small group, and the corrective action results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 367.3,
+   "end": 376.5,
+   "text": "So on the batch, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:B",
-   "start": 136.5,
-   "end": 143.4,
-   "text": "The draft for the inspection is in the folder, with comments from um two teams on the restock."
+   "start": 377.2,
+   "end": 384.5,
+   "text": "I think the inspection report question is the main thing left before we can close out the corrective action."
+  },
+  {
+   "key": "me:A",
+   "start": 385.4,
+   "end": 395.0,
+   "text": "I talked to the people who run the supplier visit every day, and they said the corrective action is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 395.7,
+   "end": 403.0,
+   "text": "If we wait a month on the supplier visit, the corrective action timeline slips by about the same amount."
   },
   {
    "key": "them:C",
-   "start": 144.1,
-   "end": 153.3,
-   "text": "So on the portal, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:A",
-   "start": 154.2,
-   "end": 164.2,
-   "text": "So on the refund time, we looked at the last few weeks and the picture is mostly what uh we expected, with a couple of surprises."
-  },
-  {
-   "key": "me:A",
-   "start": 165.3,
-   "end": 172.6,
-   "text": "There is a dependency on the refund time, so the inspection work cannot really start until that is settled."
+   "start": 404.1,
+   "end": 413.7,
+   "text": "I talked to the people who run the inspection report every day, and they said the defect rate is the part that slows them down."
   },
   {
    "key": "them:C",
-   "start": 173.7,
-   "end": 182.6,
-   "text": "The feedback on the refund time has been mixed, um some people like it and some say it adds steps to the portal."
+   "start": 414.3,
+   "end": 422.0,
+   "text": "The vendor sent an updated proposal for uh the inspection report, and it changes the supplier visit a little bit."
   },
   {
    "key": "them:A",
-   "start": 183.0,
-   "end": 190.3,
-   "text": "The draft for refund time is in the folder, with comments from you know two teams on the portal."
+   "start": 423.5,
+   "end": 432.0,
+   "text": "The feedback on corrective action has been mixed, some people like it and some say it adds steps to the supplier visit."
   },
   {
    "key": "me:A",
-   "start": 191.0,
-   "end": 199.5,
-   "text": "The feedback on the refund time has been mixed, some people like it and some say it adds steps to the restock."
+   "start": 432.7,
+   "end": 441.2,
+   "text": "The supplier visit piece is moving, and the team has a draft of the defect rate changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 442.6,
+   "end": 449.6,
+   "text": "I think the inspection report question is the main thing left before we can close out the batch."
+  },
+  {
+   "key": "them:A",
+   "start": 450.2,
+   "end": 459.4,
+   "text": "One thing I noticed is that the batch looks different in each region, so the inspection report plan you know may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 459.9,
+   "end": 466.8,
+   "text": "The draft for the batch is in the folder, with comments from two teams on the inspection report."
+  },
+  {
+   "key": "them:B",
+   "start": 467.6,
+   "end": 476.0,
+   "text": "The corrective action piece is moving, and the team has a draft of the supplier visit changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 477.3,
+   "end": 485.4,
+   "text": "One thing I noticed is that the batch looks different in each region, so the action plan may need two versions."
   },
   {
    "key": "them:C",
-   "start": 201.0,
-   "end": 209.0,
-   "text": "We tested you know the inspection with a small group, and the return label results were close to what we hoped."
+   "start": 486.3,
+   "end": 494.4,
+   "text": "I would like us to agree on the scope of the batch today, even if the corrective action details come later."
   },
   {
    "key": "me:A",
-   "start": 209.5,
-   "end": 217.6,
-   "text": "The portal piece is moving, and the team has a draft of the return label changes ready for review this week."
+   "start": 495.4,
+   "end": 503.1,
+   "text": "From what I can see, the defect rate is on track, and the risk is mostly in the corrective action."
   },
   {
-   "key": "them:B",
-   "start": 218.7,
-   "end": 225.6,
-   "text": "I think the refund time question is the main thing left before we can close out the restock."
+   "key": "me:A",
+   "start": 503.9,
+   "end": 513.5,
+   "text": "So on the defect rate, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
   },
   {
    "key": "them:A",
-   "start": 226.6,
-   "end": 235.8,
-   "text": "I talked to the people who run the return label every day, and they said the restock is the part that slows them down."
+   "start": 514.2,
+   "end": 522.3,
+   "text": "The draft for the supplier visit is I mean in the folder, with comments from two teams on the corrective action."
+  },
+  {
+   "key": "me:A",
+   "start": 522.8,
+   "end": 531.3,
+   "text": "I would like us to agree on the scope of the inspection report today, even if the defect rate details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 532.3,
+   "end": 539.3,
+   "text": "I think the supplier visit question is the main thing left before we can close out the batch."
+  },
+  {
+   "key": "me:A",
+   "start": 539.8,
+   "end": 549.4,
+   "text": "So on the corrective action, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 550.6,
+   "end": 557.9,
+   "text": "The vendor sent you know an updated proposal for the batch, and it the supplier visit a little bit."
   },
   {
    "key": "them:C",
-   "start": 237.1,
-   "end": 244.0,
-   "text": "If we wait a month on the portal, um the restock timeline slips by about the same amount."
+   "start": 558.5,
+   "end": 566.5,
+   "text": "The defect rate numbers came in yesterday, and um I put a short summary of the report in the shared folder."
   },
   {
    "key": "me:A",
-   "start": 245.5,
-   "end": 254.7,
-   "text": "I talked to the people who run the portal every day, and they said the refund time is the part that slows them down."
+   "start": 567.4,
+   "end": 574.0,
+   "text": "Right, and the batch also touches the inspection report, which is why I wanted everyone here today."
   },
   {
    "key": "me:A",
-   "start": 255.7,
-   "end": 264.1,
-   "text": "One thing I noticed is that the refund time looks different in each region, so the portal plan may need two versions."
+   "start": 574.9,
+   "end": 583.4,
+   "text": "One thing I noticed is that the corrective action looks different in each region, so the batch plan may need two versions."
   },
   {
    "key": "them:B",
-   "start": 264.9,
-   "end": 273.8,
-   "text": "The feedback on the restock has been mixed, you know some people like it and some say it adds steps to the portal."
+   "start": 584.1,
+   "end": 592.5,
+   "text": "The corrective you know action numbers came in yesterday, and I put a short summary of the batch in the shared folder."
   },
   {
    "key": "them:A",
-   "start": 274.6,
-   "end": 281.9,
-   "text": "I think the return label question is the main thing left before we can close out the refund time."
-  },
-  {
-   "key": "me:A",
-   "start": 282.6,
-   "end": 289.9,
-   "text": "From what I can see, the return label is on track, and the risk is mostly in the portal."
-  },
-  {
-   "key": "me:A",
-   "start": 290.3,
-   "end": 297.2,
-   "text": "The draft for the portal is in the folder, with comments from two teams on the refund time."
+   "start": 593.0,
+   "end": 599.9,
+   "text": "The draft for the supplier visit is the folder, with comments from two teams on the inspection report."
   },
   {
    "key": "them:C",
-   "start": 298.6,
-   "end": 306.6,
-   "text": "One thing I noticed is that the inspection looks different in each region, so the portal plan may need two versions."
-  },
-  {
-   "key": "me:A",
-   "start": 307.0,
-   "end": 313.9,
-   "text": "There is a dependency on the inspection, so the restock work cannot really start until that is settled."
-  },
-  {
-   "key": "them:A",
-   "start": 314.9,
-   "end": 322.6,
-   "text": "I would like us to agree on the scope of the portal today, even if the restock details come later."
-  },
-  {
-   "key": "me:A",
-   "start": 324.0,
-   "end": 332.1,
-   "text": "One thing I noticed is that the inspection looks different in each region, so the restock plan may need two versions."
-  },
-  {
-   "key": "them:B",
-   "start": 332.6,
-   "end": 341.5,
-   "text": "The feedback on the inspection has been mixed, some people you know like it and some say it adds steps to the portal."
-  },
-  {
-   "key": "them:B",
-   "start": 342.7,
-   "end": 350.4,
-   "text": "We could keep the portal as it is for now and only change the return label in the first phase."
-  },
-  {
-   "key": "them:A",
-   "start": 351.5,
-   "end": 360.7,
-   "text": "So on the inspection, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+   "start": 600.6,
+   "end": 608.3,
+   "text": "We could keep um the batch as it is for now and only change the defect rate the first phase."
   },
   {
    "key": "them:C",
-   "start": 361.5,
-   "end": 368.4,
-   "text": "The draft for the return label is in uh the folder, with from two teams on the restock."
-  },
-  {
-   "key": "them:B",
-   "start": 369.2,
-   "end": 378.5,
-   "text": "I talked to the people run the return label every day, and they said the refund time is the part that slows them down."
+   "start": 609.2,
+   "end": 618.1,
+   "text": "One thing I noticed is that the defect rate looks different in each region, so the supplier visit plan may need two versions."
   },
   {
    "key": "them:A",
-   "start": 379.2,
-   "end": 386.5,
-   "text": "Right, and the you know restock also touches the return label, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:B",
-   "start": 387.5,
-   "end": 395.9,
-   "text": "The feedback on the refund time has been mixed, some people like it and some say it adds steps to the portal."
-  },
-  {
-   "key": "them:B",
-   "start": 396.3,
-   "end": 403.6,
-   "text": "If we wait a month on the inspection, the return label timeline slips by you know about the amount."
-  },
-  {
-   "key": "them:C",
-   "start": 404.3,
-   "end": 412.4,
-   "text": "There is a dependency on the return label, so the restock work cannot you know really start until that is settled."
-  },
-  {
-   "key": "them:C",
-   "start": 413.2,
-   "end": 420.5,
-   "text": "Right, and the you know refund time also touches the portal, which is why I wanted everyone here today."
-  },
-  {
-   "key": "them:A",
-   "start": 421.5,
-   "end": 429.2,
-   "text": "The refund time piece is moving, and the team has a draft the inspection changes ready for review this week."
-  },
-  {
-   "key": "them:B",
-   "start": 430.4,
-   "end": 438.1,
-   "text": "I would like us to agree on the scope of the refund time today, even the inspection details come later."
-  },
-  {
-   "key": "them:B",
-   "start": 439.2,
-   "end": 446.5,
-   "text": "The draft uh for the refund time is in the folder, with comments from two teams on the portal."
-  },
-  {
-   "key": "me:A",
-   "start": 447.3,
-   "end": 454.3,
-   "text": "If we wait a month on the return label, the portal timeline slips by about the same amount."
-  },
-  {
-   "key": "them:A",
-   "start": 454.8,
-   "end": 463.7,
-   "text": "One thing I noticed is that the return label looks different in uh each region, so the restock plan may need two versions."
-  },
-  {
-   "key": "them:C",
-   "start": 464.0,
-   "end": 474.0,
-   "text": "So on the restock, we looked at the last few weeks and the picture is mostly I mean what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:B",
-   "start": 475.3,
-   "end": 483.0,
-   "text": "We could I mean keep the portal it is for now and only change the inspection in the first phase."
-  },
-  {
-   "key": "them:A",
-   "start": 484.1,
-   "end": 493.7,
-   "text": "I talked to the people who run the return label every day, and they said the inspection is the uh part that slows them down."
-  },
-  {
-   "key": "them:C",
-   "start": 495.0,
-   "end": 504.2,
-   "text": "I talked to the people who run the portal every day, and they said the refund time is the part that slows them down."
-  },
-  {
-   "key": "them:C",
-   "start": 505.1,
-   "end": 512.5,
-   "text": "The inspection numbers came in yesterday, and I put a short summary of the restock in the shared folder."
-  },
-  {
-   "key": "them:B",
-   "start": 513.9,
-   "end": 521.5,
-   "text": "Last time we said we would clean up the restock first, and that work is about two thirds done now."
-  },
-  {
-   "key": "them:B",
-   "start": 522.4,
-   "end": 530.4,
-   "text": "The refund time piece is moving, and the team has a draft of the inspection changes ready for review this week."
-  },
-  {
-   "key": "them:A",
-   "start": 530.9,
-   "end": 537.4,
-   "text": "Right, and the uh portal also touches the restock, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 538.5,
-   "end": 545.4,
-   "text": "Right, and the return label also touches the refund time, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 545.9,
-   "end": 552.8,
-   "text": "The draft for the restock is in the folder, with comments from two teams on the return label."
-  },
-  {
-   "key": "me:A",
-   "start": 554.1,
-   "end": 560.7,
-   "text": "If we wait a month on the restock, the inspection timeline slips by about the same amount."
-  },
-  {
-   "key": "them:A",
-   "start": 561.9,
-   "end": 568.8,
-   "text": "There is a dependency on the inspection, so the uh portal cannot really start until that is settled."
-  },
-  {
-   "key": "me:A",
-   "start": 569.6,
-   "end": 577.7,
-   "text": "The feedback on the restock has been mixed, some people like it and some say it adds steps to the inspection."
-  },
-  {
-   "key": "them:B",
-   "start": 578.1,
-   "end": 586.5,
-   "text": "One thing I noticed is that the refund looks different in each region, so the uh restock plan may need two versions."
-  },
-  {
-   "key": "them:C",
-   "start": 587.5,
-   "end": 595.2,
-   "text": "We could keep the return label as it is for now and only change the portal in the first phase."
-  },
-  {
-   "key": "them:A",
-   "start": 596.2,
-   "end": 602.8,
-   "text": "The vendor sent an updated proposal for the portal, and it changes the restock a little bit."
-  },
-  {
-   "key": "them:B",
-   "start": 604.3,
-   "end": 610.8,
-   "text": "The draft for the portal is in the folder, with comments from two teams on the restock."
-  },
-  {
-   "key": "me:A",
-   "start": 611.8,
-   "end": 619.5,
-   "text": "We tested the refund time with a small group, and the return label results were close to what we hoped."
-  },
-  {
-   "key": "them:A",
-   "start": 620.4,
-   "end": 627.7,
-   "text": "The vendor sent an updated proposal for the refund time, uh and it changes the inspection a little bit."
+   "start": 619.4,
+   "end": 627.8,
+   "text": "The inspection uh report numbers came in yesterday, and I put a short summary of the corrective action in the shared folder."
   },
   {
    "key": "them:B",
    "start": 628.5,
-   "end": 637.3,
-   "text": "We could keep the refund time as it is for now and only change the I mean return label in the first phase."
+   "end": 636.2,
+   "text": "We could keep the supplier visit as it is for now and only change the batch in the first phase."
   },
   {
    "key": "me:A",
-   "start": 638.0,
-   "end": 644.9,
-   "text": "From what I can see, the restock is on track, and the risk is mostly in the portal."
+   "start": 637.0,
+   "end": 644.0,
+   "text": "The draft for the batch is in the folder, with comments from two teams on the defect rate."
+  },
+  {
+   "key": "them:A",
+   "start": 644.3,
+   "end": 651.6,
+   "text": "Right, and the inspection report also touches the defect rate, which is why I you know wanted everyone today."
+  },
+  {
+   "key": "them:C",
+   "start": 652.4,
+   "end": 660.8,
+   "text": "We tested the inspection report with a small group, and the corrective I mean action results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 662.1,
+   "end": 669.8,
+   "text": "We tested the inspection report with a small group, and the corrective action results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 670.2,
+   "end": 677.1,
+   "text": "I think the defect rate question is the main thing left before we can close out the batch."
   },
   {
    "key": "them:B",
-   "start": 646.1,
-   "end": 652.7,
-   "text": "The draft for the refund time is the folder, with comments from two teams on the portal."
-  },
-  {
-   "key": "them:C",
-   "start": 653.4,
-   "end": 661.9,
-   "text": "The return label piece is moving, and the team has a draft of uh the portal changes ready for review this week."
+   "start": 678.5,
+   "end": 686.5,
+   "text": "The batch piece is moving, and the team has a draft of the supplier visit changes ready for review this week."
   },
   {
    "key": "them:A",
-   "start": 662.3,
-   "end": 670.7,
-   "text": "Last time we said we would clean I mean up the inspection first, and that work is about two thirds done now."
-  },
-  {
-   "key": "me:A",
-   "start": 671.7,
-   "end": 681.0,
-   "text": "So on the portal, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "me:A",
-   "start": 681.9,
-   "end": 688.8,
-   "text": "I think the refund time question is the main thing left before we can close out the restock."
-  },
-  {
-   "key": "them:C",
-   "start": 689.2,
-   "end": 695.3,
-   "text": "Right, and the return label also the restock, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 696.7,
-   "end": 704.3,
-   "text": "I propose we change the inspection next month and move about 20% of the work to the new restock setup."
-  },
-  {
-   "key": "them:A",
-   "start": 704.9,
-   "end": 708.4,
-   "text": "Did the thing agreed on last time actually happen?"
+   "start": 687.0,
+   "end": 693.9,
+   "text": "Right, and the defect rate also touches the inspection report, which is why I wanted everyone here today."
   },
   {
    "key": "them:B",
-   "start": 708.7,
-   "end": 716.0,
-   "text": "We have three open questions on the portal, mostly about timing and who signs off on the return label."
-  },
-  {
-   "key": "them:C",
-   "start": 716.5,
-   "end": 723.1,
-   "text": "I think the inspection question is the main thing left before we can uh close out restock."
-  },
-  {
-   "key": "them:A",
-   "start": 723.9,
-   "end": 733.1,
-   "text": "So on the portal, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
-  },
-  {
-   "key": "them:C",
-   "start": 733.6,
-   "end": 741.3,
-   "text": "If we wait a month on the you know return label, the restock timeline slips by about the same amount."
-  },
-  {
-   "key": "me:A",
-   "start": 742.1,
-   "end": 750.2,
-   "text": "The refund time numbers came in yesterday, and I put a short summary of the return label in the shared folder."
+   "start": 694.6,
+   "end": 701.5,
+   "text": "Right, and the defect rate also touches the inspection report, which is why I wanted everyone here today."
   },
   {
    "key": "them:B",
-   "start": 751.7,
-   "end": 760.5,
-   "text": "I would like us to agree on the I mean scope of the portal today, even if the refund time details come later."
-  },
-  {
-   "key": "them:C",
-   "start": 761.0,
-   "end": 767.2,
-   "text": "Right, and the restock also touches the inspection, which is why I wanted everyone here today."
-  },
-  {
-   "key": "me:A",
-   "start": 768.0,
-   "end": 774.5,
-   "text": "The ask is simple: approve the inspection change so the refund time team can start next week."
+   "start": 702.6,
+   "end": 710.3,
+   "text": "There is uh a dependency on the supplier visit, so the batch work cannot really start until that is settled."
   },
   {
    "key": "them:A",
-   "start": 775.0,
-   "end": 779.6,
-   "text": "No. We should not do that, it um is the wrong order."
-  },
-  {
-   "key": "them:C",
-   "start": 780.4,
-   "end": 790.0,
-   "text": "I talked to the people who run the return label every day, I mean and they said the inspection the part that slows them down."
+   "start": 711.1,
+   "end": 719.2,
+   "text": "If we wait a month on I mean the inspection report, the corrective action timeline slips by about the same amount."
   },
   {
    "key": "them:B",
-   "start": 790.6,
-   "end": 799.4,
-   "text": "I talked to the people who run the inspection every day, and they said the restock is the part that slows them down."
-  },
-  {
-   "key": "them:A",
-   "start": 800.4,
-   "end": 806.9,
-   "text": "The draft for the restock in um the folder, with comments from two teams on the portal."
+   "start": 720.5,
+   "end": 727.8,
+   "text": "There is a dependency on the corrective action, so the batch work cannot really start until that is settled."
   },
   {
    "key": "me:A",
-   "start": 807.7,
-   "end": 810.8,
+   "start": 728.8,
+   "end": 736.8,
+   "text": "We could keep the defect rate as it is for now and only change the supplier visit in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 737.8,
+   "end": 748.2,
+   "text": "So on the corrective action, we looked at the last few weeks and the picture I mean is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 749.1,
+   "end": 756.8,
+   "text": "The draft for uh the corrective action is in the folder, with comments from two teams on the supplier visit."
+  },
+  {
+   "key": "me:A",
+   "start": 758.1,
+   "end": 761.2,
    "text": "Okay, I think that covers it. Thanks, everyone."
   }
  ],
  "beats": [
   {
-   "line": 14,
+   "line": 19,
    "person": "Robin Hale",
-   "dimension": "decision",
-   "value": "in_the_room"
+   "dimension": "objection",
+   "value": "direct"
   },
   {
-   "line": 82,
+   "line": 29,
    "person": "Robin Hale",
    "dimension": "trust",
    "value": "follow_through"
   },
   {
-   "line": 91,
+   "line": 40,
    "person": "Robin Hale",
-   "dimension": "objection",
-   "value": "direct"
+   "dimension": "decision",
+   "value": "in_the_room"
   }
  ]
 }

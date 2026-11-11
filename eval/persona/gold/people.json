@@ -210,7 +210,7 @@
   {
    "name": "Morgan Diaz",
    "email": "morgan.diaz@example.com",
-   "trap": "a habit in the first 3 calls and another in the last 3",
+   "trap": "a habit in the first 3 calls and another in the last 3, 70 days later",
    "calls": [
     "gold-04-1",
     "gold-04-2",
@@ -386,7 +386,7 @@
     },
     {
      "dimension": "expects",
-     "value": "update_before_meeting",
+     "value": "short_updates",
      "calls": [
       2,
       3,
@@ -421,7 +421,7 @@
   {
    "name": "Sam Ortiz",
    "email": "sam.ortiz@example.com",
-   "trap": "two people with the same first name in one call",
+   "trap": "two people with the same first name in one call; one contradiction, then 3 calls for",
    "calls": [
     "gold-09-1",
     "gold-09-2",
@@ -475,7 +475,16 @@
      "condition": null
     }
    ],
-   "hidden": [],
+   "hidden": [
+    {
+     "dimension": "objection",
+     "value": "by_question"
+    },
+    {
+     "dimension": "objection",
+     "value": "direct"
+    }
+   ],
    "maxShown": null,
    "sensitive": false,
    "injection": null,

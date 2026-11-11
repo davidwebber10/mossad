@@ -207,7 +207,7 @@ struct PersonProfileView: View {
                     Button("Keep a read") { controller.setKeepsRead(profile.name, true) }.buttonStyle(.plain).foregroundStyle(Palette.accent)
                 }
                 .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.top, 4)
-            } else if read?.card == nil {
+            } else if read?.card == nil, read?.traits.isEmpty ?? true {
                 Text(stats.meetings.count < PersonaCard.callsNeeded
                      ? PersonaCard.needsMore(first: first, calls: stats.meetings.count)
                      : "No habit of \(first) shows in enough calls yet. A habit shows after \(PersonaCard.callsNeeded) calls that agree.")

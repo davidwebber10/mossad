@@ -34,6 +34,14 @@ struct CoachSettings: View {
                     SettingsSwitchRow(title: "Keep a read on each person",
                                       detail: "After each call, one small request finds how each named person decides. Each person's page then says how to present to them.",
                                       isOn: Binding(get: { controller.personaEnabled }, set: { controller.personaEnabled = $0; controller.coachVersion += 1 }))
+                    if controller.personaEnabled, let note = controller.personaFillNote {
+                        SettingsRow(title: "Your older calls", detail: note) {
+                            Button(controller.personaFillCap > PersonaFill.defaultCap ? String(format: "Read them, up to $%.2f", controller.personaFillCap) : "Read them") {
+                                controller.approvePersonaFill()
+                            }
+                            .buttonStyle(.settings)
+                        }
+                    }
                     if controller.personaEnabled {
                         SettingsSwitchRow(title: "Share the reads with other AI apps",
                                           detail: "Apps connected through Mossad's MCP read the traits in the people tool. Chat in Mossad always can.",
