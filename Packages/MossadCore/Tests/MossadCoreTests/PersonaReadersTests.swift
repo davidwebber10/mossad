@@ -19,11 +19,11 @@ final class PersonaReadersTests: XCTestCase {
     /// A person with two shown traits (a card) and one with one shown trait (no card).
     private func persona(_ id: String, card: Bool) -> Persona {
         var p = Persona(person: id, updated: t0)
-        p.evidence = [1, 4, 7].map { PersonaTraitsTests.moment($0) }
+        p.evidence = [1, 4, 7, 10, 13, 16].map { PersonaTraitsTests.moment($0) }
         p.texts["\(id)|order|answer_first|any"] = PersonaText(statement: "Sam asks for the answer first.", soDoThis: "Open with the answer.", rating: .medium,
                                                                written: t0, calls: 3, counter: 0)
         if card {
-            p.evidence += [1, 4, 7].map { PersonaTraitsTests.moment($0, "evidence", "comparison") }
+            p.evidence += [1, 4, 7, 10, 13, 16].map { PersonaTraitsTests.moment($0, "evidence", "comparison") }
             p.texts["\(id)|evidence|comparison|any"] = PersonaText(statement: "Sam asks what a figure compares with.", soDoThis: "Bring a comparison.",
                                                                    rating: .medium, written: t0, calls: 3, counter: 0)
         }
@@ -53,7 +53,7 @@ final class PersonaReadersTests: XCTestCase {
         try meeting("c2", with: "Riley Chen")
         let tools = ChatTools(records: ProcessingQueue(paths: paths).allRecords(), owner: "Dana Lee", paths: paths)
         let text = tools.run("people", input: [:])
-        XCTAssertTrue(text.contains("Sam asks for the answer first. (Likely, seen in 3 of 3 calls)"))
+        XCTAssertTrue(text.contains("Sam asks for the answer first. (Likely, seen in 6 of 6 calls)"))
         XCTAssertTrue(text.contains("How to present to Sam Carter: Open with: Open with the answer."))
         let samPart = text.components(separatedBy: "Riley Chen |").first ?? ""
         XCTAssertFalse(samPart.contains("The coach's read (from"), "the old read goes once the person has a card")

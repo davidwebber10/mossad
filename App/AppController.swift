@@ -389,14 +389,10 @@ final class AppController: ObservableObject {
     @AppStorage("personaInMCP") var personaInMCP = true
     /// The in-app step reads calls from this time on (seconds since 1970); older calls are the first fill's.
     @AppStorage("personaSince") var personaSince: Double = 0
-    /// The one-time first fill from the stored calls: done, when it started (for its cap across launches), and the
-    /// owner's yes when it costs more than Mossad spends by itself.
-    @AppStorage("personaFillDone") var personaFillDone = false
-    @AppStorage("personaFillStart") var personaFillStart: Double = 0
-    @AppStorage("personaFillApproved") var personaFillApproved = false
-    @AppStorage("personaFillCap") var personaFillCap: Double = 1
-    /// One line for Settings > Coach when the fill waits for the owner. No notification.
+    /// One line for Settings > Coach when older calls wait for the owner (`PersonaBudget`). No notification.
     @Published var personaFillNote: String?
+    /// The references step of this launch is done: the records have their people's ids. The reads wait for it.
+    var peopleReferencesReady = false
     /// The reads were made one time since launch: before that, an empty list is not "nobody".
     var personaReadsMade = false
     var coverWasRecording = false
@@ -834,6 +830,7 @@ final class AppController: ObservableObject {
             linkCommitmentPeople(people, records: records)
             if changed > 0 { refresh() }
             linkCoachPeople()
+            peopleReferencesReady = true
         }
     }
 

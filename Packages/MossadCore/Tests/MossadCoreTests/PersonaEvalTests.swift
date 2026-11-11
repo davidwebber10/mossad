@@ -111,10 +111,10 @@ final class PersonaEvalTests: XCTestCase {
         let report = await PersonaRunner(paths: paths, llm: small, owner: "Dana Lee").run(since: nil, isLive: { false })
         XCTAssertEqual(report.stopped, "the model's context is too small")
         XCTAssertEqual(small.calls, 0)
-        XCTAssertFalse(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r), "the call waits for a model that can read it")
+        XCTAssertFalse(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r, saved: CoachPeople.read(paths: paths), owner: "Dana Lee"), "the call waits for a model that can read it")
         let broken = await PersonaRunner(paths: paths, llm: BrokenModel(), owner: "Dana Lee").run(since: nil, isLive: { false })
         XCTAssertNil(broken.stopped)
-        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r), "a reply in another shape leaves the call out, so it blocks nothing")
+        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r, saved: CoachPeople.read(paths: paths), owner: "Dana Lee"), "a reply in another shape leaves the call out, so it blocks nothing")
     }
 
     @MainActor
@@ -141,7 +141,7 @@ final class PersonaEvalTests: XCTestCase {
                                            say: { said.append($0) })
         XCTAssertEqual(go, 0)
         XCTAssertGreaterThan(model.calls, 0)
-        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(gold.records()[0]))
+        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(gold.records()[0], saved: CoachPeople.read(paths: paths), owner: "Dana Lee"))
         let none = await PersonaFill.command(["--persona-fill"], paths: paths, owner: "Dana Lee", plan: nil, makeModel: { _ in nil }, say: { said.append($0) })
         XCTAssertEqual(none, 1)
         for bad in ["inf", "0", "-1", "40"] {
@@ -224,7 +224,7 @@ final class GoldStubModel: LanguageModel, @unchecked Sendable {
         } else {
             let ids = user.split(separator: "\n").filter { $0.hasPrefix("T") }.compactMap { $0.split(separator: " ").first.map(String.init) }
             out = ["traits": ids.map { ["id": $0, "statement": "When asked for a decision, P1 asks one plain question first.", "so_do_this": "Answer the question before you go on.",
-                                        "rating": "medium"] }]
+                                        "rating": "high"] }]
         }
         return try JSONDecoder().decode(Output.self, from: JSONSerialization.data(withJSONObject: out))
     }

@@ -36,7 +36,7 @@ struct CoachSettings: View {
                                       isOn: Binding(get: { controller.personaEnabled }, set: { controller.personaEnabled = $0; controller.coachVersion += 1 }))
                     if controller.personaEnabled, let note = controller.personaFillNote {
                         SettingsRow(title: "Your older calls", detail: note) {
-                            Button(controller.personaFillCap > PersonaFill.defaultCap ? String(format: "Read them, up to $%.2f", controller.personaFillCap) : "Read them") {
+                            Button("Read them") {
                                 controller.approvePersonaFill()
                             }
                             .buttonStyle(.settings)

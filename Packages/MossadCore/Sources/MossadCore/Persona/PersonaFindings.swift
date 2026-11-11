@@ -16,6 +16,7 @@ public enum PersonaFindings {
         public var statement: String
         public var state: PersonaTrait.State
         public var supportCalls: Int
+        public var confidence: Double = 0
         /// The moment of each call that supports it.
         public var moments: [String: PersonaPointer]
 
@@ -35,17 +36,20 @@ public enum PersonaFindings {
             for e in t.support where moments[e.callID] == nil || e.strength == .clear { moments[e.callID] = e.pointer }
             self.init(trait: t.id, person: t.person, personName: name, statement: t.text?.statement ?? "", state: t.state, supportCalls: t.supportCalls,
                       moments: moments)
+            confidence = t.confidence
         }
 
         public init(_ t: ShownTrait, person: String, name: String) {
             self.init(trait: t.id, person: person, personName: name, statement: t.statement, state: t.confirmed ? .confirmed : .shown,
                       supportCalls: t.supportCalls, moments: Dictionary(t.moments.map { ($0.callID, $0) }, uniquingKeysWith: { a, _ in a }))
+            confidence = t.confidence
         }
 
         var isAsked: Bool {
             // Pace is not shown in this version, so it is not asked.
             guard statement.nonBlank != nil, !trait.contains("|\(PersonaDimension.pace.rawValue)|") else { return false }
-            return (state == .candidate && supportCalls == 2) || state == .shown
+            // A candidate is at or above the ask bound already; under it, a trait is never asked.
+            return state == .candidate || state == .shown
         }
     }
 
@@ -72,7 +76,7 @@ public enum PersonaFindings {
             room -= 1
             out[call.callID] = CoachFinding(id: "\(call.callID)|\(CoachFinding.Kind.trait.rawValue)|\(pick.trait)", callID: call.callID, date: call.date, kind: .trait,
                                             text: pick.statement, skill: "", detail: "Seen in \(pick.supportCalls) calls", quote: quote(moment, pick.person), at: moment.at,
-                                            person: pick.person, personName: pick.personName, trait: pick.trait)
+                                            person: pick.person, personName: pick.personName, trait: pick.trait, confidence: pick.confidence)
         }
         return out
     }

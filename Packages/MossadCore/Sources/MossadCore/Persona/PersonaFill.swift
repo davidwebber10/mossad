@@ -53,7 +53,7 @@ public enum PersonaFill {
             say("The AI provider in Settings > AI has no key. Nothing was sent.")
             return 1
         }
-        let started = Date()
+        let started = PersonaBudget.second(Date())
         let spent: @Sendable () -> Double = {
             usage.all().filter { $0.purpose == .persona && $0.date >= started }.reduce(0) { $0 + Pricing.cost($1) }
         }

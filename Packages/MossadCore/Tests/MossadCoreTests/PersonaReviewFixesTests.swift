@@ -88,7 +88,7 @@ final class PersonaReviewFixesTests: XCTestCase {
         let before = try XCTUnwrap(try PersonaStore(paths: paths).load(sam.id.rawValue)).evidence.map(\.pointer.line)
         r.utterances[1].text = "Compared with what, exactly? " + [Self.filler, Self.filler, Self.filler, Self.filler].joined(separator: " ")
         try save(r)
-        XCTAssertFalse(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r))
+        XCTAssertFalse(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r, saved: CoachPeople.read(paths: paths), owner: "Dana Lee"))
         _ = await run()
         let after = try XCTUnwrap(try PersonaStore(paths: paths).load(sam.id.rawValue)).evidence
         XCTAssertEqual(after.count, 1, "the old evidence of the call is replaced, not added to")
@@ -101,7 +101,7 @@ final class PersonaReviewFixesTests: XCTestCase {
     func testALedgerOfAnEarlierBuildReadsAndEachCallIsReadAgainOnce() throws {
         let old = #"{"calls": {"c1": 1}, "written": {}}"#
         let ledger = try JSONDecoder.coach.decode(PersonaLedger.self, from: Data(old.utf8))
-        XCTAssertFalse(ledger.isRead(call(voice: "Sam Carter")))
+        XCTAssertFalse(ledger.isRead(call(voice: "Sam Carter"), saved: CoachPeople.read(paths: paths), owner: "Dana Lee"))
     }
 
     func testACallThatFailsThreeTimesIsLeftOut() async throws {
@@ -114,7 +114,7 @@ final class PersonaReviewFixesTests: XCTestCase {
         }
         let third = await PersonaRunner(paths: paths, llm: FailingModel(), owner: "Dana Lee").run(since: nil, isLive: { false })
         XCTAssertNil(third.stopped)
-        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r))
+        XCTAssertTrue(PersonaLedger.load(from: PersonaStore(paths: paths).directory).isRead(r, saved: CoachPeople.read(paths: paths), owner: "Dana Lee"))
     }
 
     // MARK: H2
@@ -143,7 +143,9 @@ final class PersonaReviewFixesTests: XCTestCase {
         XCTAssertEqual(PersonaTraits.build(p, answers: [yes]).first?.state, .confirmed)
         XCTAssertFalse(PersonaConfidence.twoCallRuleOn(answers(23, 7)), "30 answers, 77% yes")
         XCTAssertTrue(PersonaConfidence.twoCallRuleOn(answers(24, 6)), "30 answers, 80% yes")
-        XCTAssertTrue(try XCTUnwrap(PersonaTraits.build(p, answers: answers(24, 6)).first { $0.person == "p1" }).isShown, "real answers turn the rule on")
+        let on = try XCTUnwrap(PersonaTraits.build(p, answers: answers(24, 6)).first { $0.person == "p1" })
+        XCTAssertFalse(on.isShown, "the rule is on, and the show bound of 0.70 still holds: 2 calls stay a deck question")
+        XCTAssertEqual(on.state, .candidate)
         XCTAssertFalse(PersonaConfidence.twoCallRuleOn(answers(20, 0)), "too few answers")
     }
 
@@ -156,9 +158,9 @@ final class PersonaReviewFixesTests: XCTestCase {
         func report(_ t: [PersonaEval.Scored]) -> [String] {
             PersonaEval.metrics(PersonaEval.Report(model: "m", requests: 0, cachedReplies: 0, spent: 0, stoppedAtCap: false, proposed: 0, kept: 0, traits: t, lines: []), gold: gold)
         }
-        XCTAssertTrue(report(scored(10, correct: 5, confidence: 0.6)).contains { $0.contains("fewer than 20: no advice") })
-        XCTAssertTrue(report(scored(25, correct: 25, confidence: 0.6)).contains { $0.contains("No change: the eval never lowers it") })
-        let mixed = scored(20, correct: 10, confidence: 0.6) + scored(20, correct: 20, confidence: 0.8).map { var s = $0; s.value += "b"; return s }
+        XCTAssertTrue(report(scored(10, correct: 5, confidence: 0.75)).contains { $0.contains("fewer than 20: no advice") })
+        XCTAssertTrue(report(scored(25, correct: 25, confidence: 0.75)).contains { $0.contains("No change: the eval never lowers it") })
+        let mixed = scored(20, correct: 10, confidence: 0.75) + scored(20, correct: 20, confidence: 0.85).map { var s = $0; s.value += "b"; return s }
         XCTAssertTrue(report(mixed).contains { $0.hasPrefix("Threshold: raise to") })
         let lines = report(scored(25, correct: 25, confidence: 0.6))
         XCTAssertTrue(lines[0].hasPrefix("Limits:") && lines[1].hasPrefix("Sample:") && lines[2].contains("never turns it on"))
@@ -207,15 +209,15 @@ final class PersonaReviewFixesTests: XCTestCase {
         XCTAssertEqual(stripped.traitID, "p|order|answer_first|any", "the card id still names the trait")
     }
 
-    func testTheCountSaysHowManyCallsWithThePersonAndTheOpposite() {
+    func testTheCountSaysHowManyCallsWithThePersonAndTheOpposite() throws {
         var p = Persona(person: "p", updated: t0)
-        p.evidence = [1, 4, 7].map { PersonaTraitsTests.moment($0) }
+        p.evidence = [1, 4, 7, 10, 13, 16].map { PersonaTraitsTests.moment($0) }
         p.texts["p|order|answer_first|any"] = PersonaText(statement: "Sam asks for the answer first.", soDoThis: "Open with it.", rating: .medium, written: t0, calls: 3, counter: 0)
         let s = PersonaSummary.make(p, answers: [], name: "Sam Carter", callsWith: 22)
-        XCTAssertEqual(s?.traits.first?.confidenceLine, "Likely, seen in 3 of 22 calls")
-        var t = s!.traits[0]
+        XCTAssertEqual(s?.traits.first?.confidenceLine, "Likely, seen in 6 of 22 calls")
+        var t = try XCTUnwrap(s?.traits.first)
         t.counterCalls = 1
-        XCTAssertEqual(t.countLine, "seen in 3 of 22 calls, the opposite in 1")
+        XCTAssertEqual(t.countLine, "seen in 6 of 22 calls, the opposite in 1")
     }
 
     func testNoTraitFeedsTheAvoidLineAndPaceNeverShows() {

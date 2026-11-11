@@ -52,17 +52,59 @@ final class PersonaTraitsTests: XCTestCase {
         XCTAssertEqual(t.state, .hidden)
     }
 
-    func testThreeCleanCallsShowAsLikely() throws {
+    func testThreeCleanCallsAreADeckQuestionAndSixShowAsLikely() throws {
         let t = try XCTUnwrap(trait(persona([Self.moment(1), Self.moment(5), Self.moment(9)], texts: [id: text()])))
         XCTAssertEqual(t.confidence, 0.56, accuracy: 0.01)
-        XCTAssertTrue(t.isShown)
-        XCTAssertEqual(t.label, "Likely")
-        XCTAssertEqual(t.countLine, "seen in 3 of 3 calls")
+        XCTAssertFalse(t.isShown, "under 0.70: only a question in the Findings deck")
+        XCTAssertEqual(t.state, .candidate)
+        let six = try XCTUnwrap(trait(persona((1...6).map { Self.moment($0 * 4) }, texts: [id: text()])))
+        XCTAssertEqual(six.confidence, 0.72, accuracy: 0.01)
+        XCTAssertTrue(six.isShown)
+        XCTAssertEqual(six.label, "Likely")
+        XCTAssertEqual(six.countLine, "seen in 6 of 6 calls")
     }
 
-    func testTwoCallsShowOnlyWithAHighRatingTwoTopicsAndNoContradiction() throws {
+    func testUnderTheAskBoundATraitIsNeverAsked() throws {
+        let t = try XCTUnwrap(trait(persona([Self.moment(1, series: "a"), Self.moment(4, series: "a")], texts: [id: text()])))
+        XCTAssertLessThan(t.confidence, PersonaConfidence.askBound)
+        XCTAssertEqual(t.state, .hidden)
+    }
+
+    func testOneContradictionBeforeTheSupportKeepsTheTraitHiddenUntilTheSupportClearlyOutweighsIt() throws {
+        // Sam Ortiz in the gold set: "by question" in call 1, then "direct" in calls 2, 3, and 4, a week apart.
+        let direct = "p1|objection|direct|any"
+        func ortiz(_ support: Int, against: PersonaEvidence.Strength) -> PersonaTrait? {
+            let p = persona([Self.moment(1, "objection", "by_question", strength: against)] + (1...support).map { Self.moment(1 + $0 * 8, "objection", "direct") },
+                            texts: [direct: text(.high)])
+            return PersonaTraits.build(p, answers: []).first { $0.id == direct }
+        }
+        XCTAssertFalse(try XCTUnwrap(ortiz(3, against: .clear)).isShown)
+        XCTAssertFalse(try XCTUnwrap(ortiz(3, against: .weak)).isShown, "a weak opposite moment counts too, at half")
+        XCTAssertFalse(try XCTUnwrap(ortiz(5, against: .clear)).isShown)
+        XCTAssertTrue(try XCTUnwrap(ortiz(9, against: .clear)).isShown, "nine calls for and one against")
+    }
+
+    func testAnswersMoveTheBoundsOnlyUpwardUntilThirtyAnswers() {
+        func a(_ n: Int, yes: Int, at c: Double) -> [FindingAnswer] {
+            (0..<n).map { i in
+                FindingAnswer(CoachFinding(id: "c|trait|q|d\(c)\(i)|v|any", callID: "c", date: t0, kind: .trait, text: "t", skill: "", person: "q",
+                                           trait: "q|d\(c)\(i)|v|any", confidence: c), verdict: i < yes ? .yes : .no, date: t0)
+            }
+        }
+        XCTAssertEqual(PersonaConfidence.bounds([]), .start)
+        XCTAssertEqual(PersonaConfidence.bounds(a(10, yes: 7, at: 0.75)).show, 0.8, accuracy: 1e-9, "fewer than 8 in 10 yes: up")
+        XCTAssertEqual(PersonaConfidence.bounds(a(12, yes: 12, at: 0.65)).show, 0.7, accuracy: 1e-9, "under 30 answers: never down")
+        XCTAssertEqual(PersonaConfidence.bounds(a(12, yes: 12, at: 0.65) + a(20, yes: 20, at: 0.75)).show, 0.6, accuracy: 1e-9, "30 answers, 9 in 10 yes: down to 0.6")
+        XCTAssertEqual(PersonaConfidence.bounds(a(10, yes: 2, at: 0.55)).ask, 0.6, accuracy: 1e-9)
+    }
+
+    /// Two calls reach 0.56 at most: under the show bound, so a 2-call trait is a deck question at best, and shows
+    /// only after the owner's yes.
+    func testTwoCallsAreADeckQuestionOnlyWithAHighRatingTwoTopicsAndNoContradiction() throws {
         let two = [Self.moment(1, series: "budget"), Self.moment(4, series: "hiring")]
-        XCTAssertTrue(try XCTUnwrap(trait(persona(two, texts: [id: text(.high)]))).isShown, "two topics, high")
+        let best = try XCTUnwrap(trait(persona(two, texts: [id: text(.high)])))
+        XCTAssertFalse(best.isShown, "two topics, high")
+        XCTAssertEqual(best.state, .candidate, "asked in the deck")
         XCTAssertFalse(try XCTUnwrap(trait(persona(two, texts: [id: text(.medium)]))).isShown, "medium")
         let oneTopic = [Self.moment(1, series: "budget"), Self.moment(4, series: "budget")]
         let t = try XCTUnwrap(trait(persona(oneTopic, texts: [id: text(.high)])))
@@ -71,7 +113,8 @@ final class PersonaTraitsTests: XCTestCase {
         let sameTag = [Self.moment(1, series: "a", tags: ["Budget"]), Self.moment(4, series: "b", tags: ["budget", "Hiring"])]
         XCTAssertFalse(try XCTUnwrap(trait(persona(sameTag, texts: [id: text(.high)]))).isShown, "one tag")
         let twoSettings = [Self.moment(1, setting: .oneOnOne, series: "budget"), Self.moment(4, setting: .group, series: "budget")]
-        XCTAssertTrue(try XCTUnwrap(trait(persona(twoSettings, texts: [id: text(.high)]))).isShown, "two settings")
+        XCTAssertEqual(try XCTUnwrap(trait(persona(twoSettings, texts: [id: text(.high)]))).state, .candidate, "two settings")
+        XCTAssertEqual(try XCTUnwrap(trait(persona(oneTopic, texts: [id: text(.high)]))).state, .hidden, "one topic: under the ask bound")
         let contra = two + [Self.moment(6, "order", "path_first", setting: .group)]
         XCTAssertFalse(try XCTUnwrap(trait(persona(contra, texts: [id: text(.high)]))).isShown, "a contradiction")
     }
@@ -88,10 +131,11 @@ final class PersonaTraitsTests: XCTestCase {
         XCTAssertFalse(t.isShown)
     }
 
-    func testFourCallsWithAHighRatingAreEstablished() throws {
+    func testFourCallsWithAHighRatingAreLikelyAndSixAreEstablished() throws {
         let t = try XCTUnwrap(trait(persona((1...4).map { Self.moment($0 * 3) }, texts: [id: text(.high)])))
         XCTAssertEqual(t.confidence, 0.73, accuracy: 0.01)
-        XCTAssertEqual(t.label, "Established")
+        XCTAssertEqual(t.label, "Likely")
+        XCTAssertEqual(try XCTUnwrap(trait(persona((1...6).map { Self.moment($0 * 3) }, texts: [id: text(.high)]))).label, "Established")
     }
 
     func testALowRatingLowersTheNumber() throws {
@@ -113,7 +157,8 @@ final class PersonaTraitsTests: XCTestCase {
     func testAnOldContradictionBeforeANewHabitOfAsManyDaysNoLongerCounts() throws {
         let soon = persona([Self.moment(1, "order", "path_first"), Self.moment(4), Self.moment(7), Self.moment(10)], texts: [id: text()])
         XCTAssertFalse(try XCTUnwrap(trait(soon)).isShown, "against, for, for, for within weeks: 3 for and 1 against stays hidden")
-        let p = persona([Self.moment(1, "order", "path_first"), Self.moment(4), Self.moment(7), Self.moment(70)], texts: [id: text()])
+        let p = persona([Self.moment(1, "order", "path_first"), Self.moment(4), Self.moment(7), Self.moment(70), Self.moment(75), Self.moment(80), Self.moment(85)],
+                        texts: [id: text()])
         XCTAssertTrue(try XCTUnwrap(trait(p)).isShown, "the newest support 60 days or more after the contradiction")
         let twoOld = persona([Self.moment(1, "order", "path_first"), Self.moment(2, "order", "path_first"), Self.moment(3, "order", "path_first"),
                               Self.moment(4, "order", "path_first"), Self.moment(7), Self.moment(10), Self.moment(13)], texts: [id: text()])
@@ -130,20 +175,20 @@ final class PersonaTraitsTests: XCTestCase {
     }
 
     func testMoreSupportShowsWithTheCounterEvidenceListed() throws {
-        let p = persona((1...6).map { Self.moment($0 * 2) } + [Self.moment(5, "order", "path_first")], texts: [id: text()])
+        let p = persona((1...8).map { Self.moment($0 * 2) } + [Self.moment(5, "order", "path_first")], texts: [id: text(.high)])
         let t = try XCTUnwrap(trait(p))
         XCTAssertTrue(t.isShown)
         XCTAssertEqual(t.counter.count, 1)
     }
 
     func testAnotherValueThatIsNoOppositeIsNoCounterEvidence() throws {
-        let p = persona([Self.moment(1), Self.moment(4), Self.moment(7), Self.moment(10, "order", "material_before")], texts: [id: text()])
+        let p = persona((1...6).map { Self.moment($0 * 3) } + [Self.moment(10, "order", "material_before")], texts: [id: text()])
         XCTAssertTrue(try XCTUnwrap(trait(p)).isShown)
     }
 
     func testANewerHabitWinsOverAnOlderOne() throws {
         let old = (1...3).map { Self.moment($0, "order", "path_first") }
-        let new = (4...6).map { Self.moment($0 * 20) }
+        let new = (4...9).map { Self.moment($0 * 20) }
         let texts = [id: text(), "p1|order|path_first|any": text()]
         let traits = PersonaTraits.build(persona(old + new, texts: texts), answers: [])
         XCTAssertTrue(try XCTUnwrap(traits.first { $0.id == id }).isShown, "the newer value")
@@ -151,8 +196,8 @@ final class PersonaTraitsTests: XCTestCase {
     }
 
     func testOneToOneSupportAndGroupContradictionsGiveTwoTraitsWithACondition() {
-        let oneOnOne = [1, 4, 7].map { Self.moment($0, "objection", "direct", setting: .oneOnOne) }
-        let group = [2, 5, 8].map { Self.moment($0, "objection", "silent_then_later", setting: .group) }
+        let oneOnOne = [1, 4, 7, 10, 13, 16].map { Self.moment($0, "objection", "direct", setting: .oneOnOne) }
+        let group = [2, 5, 8, 11, 14, 17].map { Self.moment($0, "objection", "silent_then_later", setting: .group) }
         let direct = "p1|objection|direct|one_on_one", silent = "p1|objection|silent_then_later|group"
         let texts = [direct: text(), silent: text()]
         let traits = PersonaTraits.build(persona(oneOnOne + group, texts: texts), answers: [])
@@ -190,7 +235,7 @@ final class PersonaTraitsTests: XCTestCase {
         let t = try XCTUnwrap(trait(persona(base, texts: [id: text(.high)]), answers: [no]))
         XCTAssertEqual(t.confidence, 0.73 - 0.25, accuracy: 0.01)
         XCTAssertFalse(t.isShown)
-        let more = base + [Self.moment(15), Self.moment(18), Self.moment(21), Self.moment(24)]
+        let more = base + (5...16).map { Self.moment($0 * 3) }
         let later = try XCTUnwrap(trait(persona(more, texts: [id: text(.high)]), answers: [no]))
         XCTAssertTrue(later.isShown, "two new calls and enough support")
     }

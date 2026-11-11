@@ -84,13 +84,14 @@ public struct PersonaWriter: Sendable {
     /// The new texts by trait id. A sentence that fails the word check is saved empty, so it does not show and is
     /// not asked again until its evidence changes.
     public func write(_ traits: [PersonaTrait], first: String, line: @Sendable (PersonaPointer) -> (text: String, before: String?)?, notTrue: [String],
-                      topicTerms: Set<String>, names: Set<String>, now: Date) async throws -> [String: PersonaText] {
+                      topicTerms: Set<String>, names: Set<String>, now: Date, retry: Bool = true) async throws -> [String: PersonaText] {
         let due = Array(traits.filter(Self.needsText).prefix(Self.maxTraits))
         guard !due.isEmpty else { return [:] }
         var out = try await ask(due, first: first, line: line, notTrue: notTrue, topicTerms: topicTerms, names: names, now: now, refused: [:])
         // One more try in the same run for the refused ones, with the reasons named.
         let refused = Dictionary(uniqueKeysWithValues: due.compactMap { t in out[t.id].flatMap { $0.refused.map { (t.id, $0) } } })
-        if !refused.isEmpty {
+        // The second try is a request too: only when the caller's cap leaves room for it.
+        if !refused.isEmpty, retry {
             let again = try await ask(due.filter { refused[$0.id] != nil }, first: first, line: line, notTrue: notTrue, topicTerms: topicTerms, names: names,
                                       now: now, refused: refused)
             for (id, text) in again where text.refused == nil { out[id] = text }

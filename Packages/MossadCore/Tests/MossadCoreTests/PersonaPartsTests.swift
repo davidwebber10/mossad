@@ -89,7 +89,7 @@ final class PersonaPartsTests: XCTestCase {
 
     func testTheCardHasALineOnlyFromAShownTraitAndNeedsTwoLines() throws {
         XCTAssertNil(PersonaCard.build([shown("order", "answer_first")]), "one line is no card")
-        let card = try XCTUnwrap(PersonaCard.build([shown("order", "answer_first", act: "Open with the answer"), shown("evidence", "comparison", confidence: 0.75),
+        let card = try XCTUnwrap(PersonaCard.build([shown("order", "answer_first", act: "Open with the answer"), shown("evidence", "comparison", confidence: 0.85),
                                                    shown("objection", "by_question")]))
         XCTAssertEqual(card.lines.map(\.kind), [.open, .evidence, .objections])
         XCTAssertEqual(card.headline, "Open with the answer.")
@@ -102,7 +102,7 @@ final class PersonaPartsTests: XCTestCase {
     func testTheSummaryShowsOnlyShownTraitsAndCountsTheOneCallOnes() {
         var p = Persona(person: "p", updated: t0)
         let id = "p|order|answer_first|any"
-        p.evidence = [1, 4, 7].map { PersonaTraitsTests.moment($0) } + [PersonaTraitsTests.moment(9, "risk", "downside_first"), PersonaTraitsTests.moment(9, "drivers", "cost")]
+        p.evidence = [1, 4, 7, 10, 13, 16].map { PersonaTraitsTests.moment($0) } + [PersonaTraitsTests.moment(9, "risk", "downside_first"), PersonaTraitsTests.moment(9, "drivers", "cost")]
         p.texts[id] = PersonaText(statement: "Sam asks for the answer first.", soDoThis: "Open with the answer.", rating: .medium, written: t0, calls: 3, counter: 0)
         let s = PersonaSummary.make(p, answers: [], name: "Sam Carter")
         XCTAssertEqual(s?.traits.map(\.id), [id])
@@ -381,7 +381,7 @@ final class PersonaPartsTests: XCTestCase {
     func testTheCopyForThePhoneHasOnlyTheListedFieldsAndNoWords() throws {
         var p = Persona(person: "p", updated: t0)
         let id = "p|order|answer_first|any"
-        p.evidence = [1, 4, 7].map { PersonaTraitsTests.moment($0) } + [1, 4, 7].map { PersonaTraitsTests.moment($0, "evidence", "comparison") }
+        p.evidence = [1, 4, 7, 10, 13, 16].map { PersonaTraitsTests.moment($0) } + [1, 4, 7, 10, 13, 16].map { PersonaTraitsTests.moment($0, "evidence", "comparison") }
             + [PersonaTraitsTests.moment(9, "risk", "downside_first")]
         p.texts[id] = PersonaText(statement: "Sam asks for the answer first.", soDoThis: "Open with the answer.", rating: .medium, written: t0, calls: 3, counter: 0)
         p.texts["p|evidence|comparison|any"] = PersonaText(statement: "Sam asks what a figure compares with.", soDoThis: "Bring a comparison.", rating: .medium,
@@ -425,9 +425,9 @@ final class PersonaPartsTests: XCTestCase {
 
     func testTheRunnerReadsEachCallOnceNeverDuringALiveCallAndStopsAtTheCap() async throws {
         try writePeople([dana, sam, riley])
-        for (i, id) in ["c1", "c2", "c3"].enumerated() { try save(samCall(id, day: i * 3 + 1, title: ["Freight plan", "Hiring", "Office move"][i])) }
+        for (i, id) in ["c1", "c2", "c3", "c4"].enumerated() { try save(samCall(id, day: i * 3 + 1, title: ["Freight plan", "Hiring", "Office move", "Launch"][i])) }
         let model = PersonaStubModel(evidence: [comparison], traits: [
-            ["id": "T1", "statement": "When a proposal has a figure, P1 asks what it compares with.", "so_do_this": "Bring a comparison.", "rating": "medium"],
+            ["id": "T1", "statement": "When a proposal has a figure, P1 asks what it compares with.", "so_do_this": "Bring a comparison.", "rating": "high"],
         ])
         let live = await PersonaRunner(paths: paths, llm: model, owner: "Dana Lee", now: { PersonaTraitsTests.t0.addingTimeInterval(30 * 86_400) }).run(since: nil, isLive: { true })
         XCTAssertEqual(live.calls, 0)
@@ -437,8 +437,8 @@ final class PersonaPartsTests: XCTestCase {
         XCTAssertEqual(model.users.count, 0)
 
         let report = await PersonaRunner(paths: paths, llm: model, owner: "Dana Lee", now: { PersonaTraitsTests.t0.addingTimeInterval(30 * 86_400) }).run(since: nil, isLive: { false })
-        XCTAssertEqual(report.calls, 3)
-        XCTAssertEqual(report.requests, 4, "three calls and one person's sentences")
+        XCTAssertEqual(report.calls, 4)
+        XCTAssertEqual(report.requests, 5, "four calls and one person's sentences")
         let saved = CoachPeople.read(paths: paths)
         let summary = try XCTUnwrap(PersonaReads.one(sam.id.rawValue, paths: paths, saved: saved, answers: []))
         XCTAssertEqual(summary.traits.map(\.value), ["comparison"])

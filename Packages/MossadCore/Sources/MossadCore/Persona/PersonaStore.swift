@@ -136,24 +136,31 @@ public struct PersonaLedger: Codable, Equatable, Sendable {
         }
     }
 
-    /// "v<prompt>|<hash>". The record must have the owner's lines under the owner's name of now, as the runner reads it.
-    public static func stamp(_ r: CallRecord) -> String {
+    /// "v<prompt>|<hash>": the prompt version, who spoke each line (the owner, a person id on a sure match, or
+    /// nobody saved), and the lines. A voice that gets a name, a voice named as someone else, and "Transcribe again"
+    /// change it. A rename of a person or of the owner does not: the ids stay.
+    public static func stamp(_ r: CallRecord, saved: CoachPeople, owner: String) -> String {
+        let mine = PersonaExtractor.ownerKeys(r, owner: owner)
+        var who: [String: String] = [:]
+        for key in Set(r.utterances.map(\.speakerKey)).union(r.speakerNames.keys) {
+            if mine.contains(key) { who[key] = "owner"; continue }
+            if let id = r.speakerPeople?[key], saved.knows(id) { who[key] = saved.canonical(id); continue }
+            who[key] = r.speakerNames[key].flatMap { saved.id(of: $0) }.map(saved.canonical) ?? "-"
+        }
         var text = ""
-        for (k, v) in r.speakerNames.sorted(by: { $0.key < $1.key }) { text += "n\(k)=\(v)\n" }
-        for (k, v) in (r.speakerPeople ?? [:]).sorted(by: { $0.key < $1.key }) { text += "p\(k)=\(v)\n" }
-        for u in r.utterances { text += "u\(u.speakerKey)|\(u.start)|\(u.text)\n" }
+        for u in r.utterances { text += "\(who[u.speakerKey] ?? "-")|\(u.start)|\(u.text)\n" }
         let hash = SHA256.hash(data: Data(text.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
         return "v\(PersonaExtractor.promptVersion)|\(hash)"
     }
 
     /// Read with this prompt, as the call is now.
-    public func isRead(_ r: CallRecord) -> Bool { calls[r.id] == Self.stamp(r) }
+    public func isRead(_ r: CallRecord, saved: CoachPeople, owner: String) -> Bool { calls[r.id] == Self.stamp(r, saved: saved, owner: owner) }
 
     /// Read once, maybe as it was before a change.
     public func wasRead(_ id: String) -> Bool { calls[id] != nil }
 
-    public mutating func markRead(_ r: CallRecord) {
-        calls[r.id] = Self.stamp(r)
+    public mutating func markRead(_ r: CallRecord, saved: CoachPeople, owner: String) {
+        calls[r.id] = Self.stamp(r, saved: saved, owner: owner)
         failures[r.id] = nil
     }
 }

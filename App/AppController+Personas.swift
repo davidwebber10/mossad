@@ -69,10 +69,9 @@ extension AppController {
         if let id = personID(of: name) { forgetPersona(id) }
     }
 
-    /// The persona step for the calls that are due: after the coach's run and at launch, never while a call is
-    /// recorded. The first time, it also reads the stored calls (the first fill), newest first, with a hard cap
-    /// of $1 across launches. A fill that would cost more, or whose price is not known, waits for the owner's yes in
-    /// Settings > Coach.
+    /// The persona step: new calls with the usual step, older calls within the budget of `PersonaBudget` (the first
+    /// fill, calls read again after a change), then the sentences. After the coach's run and at launch, never while a
+    /// call is recorded, and only after the records have their people's ids.
     func runPersonas() async {
         guard !isInert, personasOn, !personasRunning, !isRecording else { return }
         let key = aiProvider.key.flatMap { keychain.get($0) }
@@ -80,64 +79,33 @@ extension AppController {
         if personaSince == 0 { personaSince = Date().timeIntervalSince1970 }
         personasRunning = true
         defer { personasRunning = false }
-        let paths = paths, owner = ownerName, usage = usage
-        let price = PersonaFill.price(service: made.service, model: made.name)
-        let runner = PersonaRunner(paths: paths, llm: made.llm, owner: owner)
-        // The fill waits for the people's ids: a call read before them gives no evidence.
-        var filling = false
-        if !personaFillDone, library.identity != nil {
-            let e = await Task.detached(priority: .utility) { PersonaRunner.estimate(paths: paths, owner: owner, since: nil, price: price.cost) }.value
-            if e.calls == 0 {
-                personaFillDone = true
-                personaFillNote = nil
-            } else if personaFillApproved || (price.known && e.dollars <= PersonaFill.defaultCap) {
-                filling = true
-                personaFillNote = nil
-                if personaFillStart == 0 {
-                    personaFillStart = Date().timeIntervalSince1970
-                    Log.info(String(format: "The first fill of the reads starts: %d calls, about $%.2f", e.calls, e.dollars))
-                }
-            } else {
-                personaFillCap = min(PersonaFill.maxCap, max(PersonaFill.defaultCap, (e.dollars * 1.25 * 100).rounded(.up) / 100))
-                personaFillNote = price.known
-                    ? String(format: "Reading your %d older calls once would cost about $%.2f, more than the $1 that Mossad spends by itself.", e.calls, e.dollars)
-                    : "Mossad does not know the price of \(made.name), so it does not read your \(e.calls) older calls by itself."
-            }
+        let usage = usage
+        let out = await PersonaBacklog.run(runner: PersonaRunner(paths: paths, llm: made.llm, owner: ownerName), paths: paths, owner: ownerName, model: made.name,
+                                           service: made.service, since: Date(timeIntervalSince1970: personaSince), referencesReady: peopleReferencesReady,
+                                           callsPerRound: Self.personaCallsPerRun,
+                                           spent: { from in usage.all().filter { $0.purpose == .persona && $0.date >= from }.reduce(0) { $0 + Pricing.cost($1) } },
+                                           isLive: { await MainActor.run { self.isRecording } })
+        personaFillNote = out.note
+        let calls = out.newCalls.calls + out.olderCalls.calls
+        if calls + out.newCalls.people > 0 {
+            // Counts only, never words.
+            Log.info("Persona step: \(out.newCalls.calls) new calls, \(out.olderCalls.calls) older calls, \(out.newCalls.requests + out.olderCalls.requests) requests, sentences for \(out.newCalls.people) people")
+            coachVersion += 1
         }
-        let start = Date(timeIntervalSince1970: personaFillStart)
-        let cap = personaFillApproved ? personaFillCap : PersonaFill.defaultCap
-        let known = price.known
-        let canSpend: @Sendable (Double) -> Bool = { cost in
-            guard known else { return true }
-            let spent = usage.all().filter { $0.purpose == .persona && $0.date >= start }.reduce(0) { $0 + Pricing.cost($1) }
-            return spent + cost <= cap
-        }
-        var rounds = 0
-        repeat {
-            rounds += 1
-            let report = await runner.run(since: filling || personaFillDone ? nil : Date(timeIntervalSince1970: personaSince), callLimit: Self.personaCallsPerRun,
-                                          newestFirst: filling, isLive: { await MainActor.run { self.isRecording } },
-                                          canSpend: filling ? canSpend : { _ in true }, price: price.cost)
-            if report.calls + report.people > 0 {
-                Log.info("Persona step: \(report.calls) calls, \(report.requests) requests, sentences for \(report.people) people")
-                coachVersion += 1
-            }
-            guard filling else { break }
-            if report.stopped != nil { break }
-            if report.calls < Self.personaCallsPerRun {
-                personaFillDone = true
-                let spent = usage.all().filter { $0.purpose == .persona && $0.date >= start }.reduce(0) { $0 + Pricing.cost($1) }
-                Log.info(String(format: "The first fill of the reads is done: $%.2f spent", spent))
-                break
-            }
-        } while rounds < 30 && !isRecording
     }
 
-    /// "Read the older calls" in Settings > Coach: the owner's yes to a fill above $1, with its own cap.
+    /// The owner's yes in Settings > Coach for the older calls that wait: for this model, with its own cap.
     func approvePersonaFill() {
-        personaFillApproved = true
+        let key = aiProvider.key.flatMap { keychain.get($0) }
+        guard let made = PersonaExtractor.model(provider: aiProvider, chosen: aiModel, key: key, usage: nil, serverURL: localServerBase) else { return }
+        let paths = paths, owner = ownerName, since = Date(timeIntervalSince1970: personaSince)
         personaFillNote = nil
-        Task { await runPersonas() }
+        Task {
+            await Task.detached(priority: .utility) {
+                PersonaBacklog.approve(paths: paths, owner: owner, model: made.name, service: made.service, since: since)
+            }.value
+            await runPersonas()
+        }
     }
 
     // MARK: The cover

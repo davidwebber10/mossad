@@ -64,10 +64,12 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
     /// The id of the trait a trait card asks about (`PersonaTrait.id`), so the answer finds its trait after the
     /// call is read again.
     public var trait: String?
+    /// The trait's confidence when the card asked about it: the owner's answers move the bounds from it.
+    public var confidence: Double?
 
     public init(id: String, callID: String, date: Date, kind: Kind, text: String, skill: String, detail: String? = nil, quote: String? = nil,
                 at: TimeInterval? = nil, number: String? = nil, usual: String? = nil, say: String? = nil, questionID: UUID? = nil, focusID: UUID? = nil,
-                person: String? = nil, personName: String? = nil, trait: String? = nil) {
+                person: String? = nil, personName: String? = nil, trait: String? = nil, confidence: Double? = nil) {
         self.id = id
         self.callID = callID
         self.date = date
@@ -85,6 +87,7 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
         self.person = person
         self.personName = personName
         self.trait = trait
+        self.confidence = confidence
     }
 
     /// A moment to play, or a number with its usual value. A card without one is never made.
@@ -116,6 +119,8 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
     public var replaced: UUID?
     /// The trait a trait card asked about. The trait's number reads the answers each time.
     public var trait: String?
+    /// The trait's confidence when the card asked.
+    public var confidence: Double?
 
     public init(_ finding: CoachFinding, verdict: FindingVerdict?, date: Date) {
         id = finding.id
@@ -129,6 +134,7 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
         focusID = finding.focusID
         person = finding.person
         trait = finding.trait
+        confidence = finding.confidence
     }
 
     /// The trait, also when a build that does not know the field dropped it: a trait card's id is "<call>|trait|<trait id>".
@@ -139,7 +145,7 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
         return id.range(of: marker).map { String(id[$0.upperBound...]) }.flatMap(\.nonBlank)
     }
 
-    enum CodingKeys: String, CodingKey { case id, callID, kind, skill, text, verdict, date, note, questionID, focusID, person, replaced, trait }
+    enum CodingKeys: String, CodingKey { case id, callID, kind, skill, text, verdict, date, note, questionID, focusID, person, replaced, trait, confidence }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -157,6 +163,7 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
         person = try c.decodeIfPresent(String.self, forKey: .person)
         replaced = try c.decodeIfPresent(UUID.self, forKey: .replaced)
         trait = try c.decodeIfPresent(String.self, forKey: .trait)
+        confidence = try c.decodeIfPresent(Double.self, forKey: .confidence)
     }
 }
 

@@ -183,6 +183,7 @@ extension CoachProfile {
             keep.replaced = keep.replaced ?? (old.date <= x.date ? old : x).replaced
             // An older build drops the fields it does not know: the copy that has them keeps them.
             keep.trait = keep.trait ?? old.trait ?? x.trait
+            keep.confidence = keep.confidence ?? old.confidence ?? x.confidence
             keep.person = keep.person ?? old.person ?? x.person
             byID[x.id] = keep
         }

@@ -58,9 +58,41 @@ public struct PersonaTrait: Equatable, Sendable, Identifiable {
 
 /// The numbers of the confidence. The eval sets the final values; these are the study's start values.
 public enum PersonaConfidence {
-    /// A trait shows at this number or more.
-    public static let threshold = 0.55
-    public static let established = 0.70
+    /// A trait shows on the pages at this number or more, before real answers move it.
+    public static let threshold = 0.70
+    /// From here to the threshold, a trait is only a question in the Findings deck, and shows after the owner's yes.
+    /// Under it, a trait never shows and is never asked.
+    public static let askBound = 0.50
+    public static let established = 0.80
+
+    /// The bounds in use: the owner's answers move them, only upward until 30 trait answers exist.
+    public struct Bounds: Equatable, Sendable {
+        public var show: Double
+        public var ask: Double
+        public static let start = Bounds(show: threshold, ask: askBound)
+    }
+
+    /// From the answers to trait cards with the confidence they were asked at. Fewer than 8 in 10 yes on traits at or
+    /// above the show bound raises it by 0.1 (10 answers at least, 0.9 at most). With 30 answers or more, 9 in 10 yes
+    /// on traits from 0.6 to the bound lowers it to 0.6, never further. Fewer than 3 in 10 yes in the ask band raises
+    /// the ask bound to 0.6.
+    public static func bounds(_ answers: [FindingAnswer]) -> Bounds {
+        let given = answers.filter { $0.traitID != nil && $0.verdict != nil && $0.confidence != nil }
+        func share(_ a: [FindingAnswer]) -> Double { Double(a.filter { $0.verdict == .yes }.count) / Double(max(1, a.count)) }
+        var b = Bounds.start
+        for _ in 0..<2 {
+            let above = given.filter { $0.confidence! >= b.show - 1e-9 }
+            if above.count >= 10, share(above) < 0.8, b.show < 0.9 - 1e-9 { b.show += 0.1 } else { break }
+        }
+        if b.show == threshold, given.count >= twoCallAnswers {
+            let near = given.filter { $0.confidence! >= 0.6 && $0.confidence! < threshold }
+            if near.count >= 10, share(near) >= 0.9 { b.show = 0.6 }
+        }
+        let band = given.filter { $0.confidence! >= askBound && $0.confidence! < b.show }
+        if band.count >= 10, share(band) < 0.3 { b.ask = 0.6 }
+        b.ask = min(b.ask, b.show)
+        return b
+    }
     static let quantile = 0.10
     static let highRating = 0.10
     static let lowRating = 0.15
@@ -126,6 +158,7 @@ public enum PersonaTraits {
         guard !doNotProfile else { return [] }
         let person = persona.person
         let twoCalls = twoCallRule ?? PersonaConfidence.twoCallRuleOn(answers)
+        let bounds = PersonaConfidence.bounds(answers)
         let mine = answers.filter { a in a.verdict != nil && (a.traitID.map { PersonaTrait.block(of: $0).hasPrefix(person + "|") } ?? false) }
         let latest = Dictionary(grouping: mine, by: { $0.traitID ?? "" }).compactMapValues { $0.max { ($0.date, $0.id) < ($1.date, $1.id) } }
         let blocked = Set(mine.filter { $0.verdict == .never }.compactMap { $0.traitID.map(PersonaTrait.block(of:)) })
@@ -142,7 +175,8 @@ public enum PersonaTraits {
         for (dimension, moments) in Dictionary(grouping: kept, by: \.dimension) {
             for value in Set(moments.map(\.value)) {
                 var support = moments.filter { $0.value == value }
-                var counter = moments.filter { $0.strength == .clear && PersonaDimension.contradicts(dimension, value, $0.value) }
+                // A weak opposite moment counts too, at half: a model's doubt about the label must not hide a contradiction.
+                var counter = moments.filter { PersonaDimension.contradicts(dimension, value, $0.value) }
                 // All contradictions stay on the page; the ones of a habit of before do not count.
                 var counted = afterChange(value: value, dimension: dimension, moments: moments, counter: counter)
                 var condition: PersonaSetting?
@@ -158,7 +192,7 @@ public enum PersonaTraits {
                 let id = PersonaTrait.id(person: person, dimension: dimension, value: value, condition: condition)
                 var trait = score(id: id, person: person, dimension: dimension, value: value, condition: condition, support: support, counter: counter,
                                   counted: counted, text: persona.texts[id], answer: latest[id] ?? latest[PersonaTrait.id(person: person, dimension: dimension, value: value, condition: nil)],
-                                  twoCallRule: twoCalls)
+                                  twoCallRule: twoCalls, bounds: bounds)
                 if blocked.contains(PersonaTrait.block(of: id)) {
                     trait.state = .rejected
                     trait.answer = .never
@@ -206,7 +240,7 @@ public enum PersonaTraits {
     }
 
     static func score(id: String, person: String, dimension: String, value: String, condition: PersonaSetting?, support: [PersonaEvidence],
-                      counter: [PersonaEvidence], counted: [PersonaEvidence], text: PersonaText?, answer: FindingAnswer?, twoCallRule: Bool = true) -> PersonaTrait {
+                      counter: [PersonaEvidence], counted: [PersonaEvidence], text: PersonaText?, answer: FindingAnswer?, twoCallRule: Bool = true, bounds: PersonaConfidence.Bounds = .start) -> PersonaTrait {
         // S: one for a day with a clear moment, one half for a day with weak moments only.
         let byDay = Dictionary(grouping: support, by: \.day)
         let s = byDay.values.reduce(0.0) { $0 + ($1.contains { $0.strength == .clear } ? 1 : 0.5) }
@@ -215,7 +249,7 @@ public enum PersonaTraits {
         let c = Dictionary(grouping: counted, by: \.day).values.reduce(0.0) { sum, ms in
             let date = ms.map(\.date).max() ?? newest
             let age = max(0, newest.timeIntervalSince(date) / 86_400)
-            return sum + pow(0.5, age / PersonaConfidence.halfLifeDays)
+            return sum + pow(0.5, age / PersonaConfidence.halfLifeDays) * (ms.contains { $0.strength == .clear } ? 1 : 0.5)
         }
         var number = PersonaConfidence.base(support: s, counter: c)
         let rating = text?.rating ?? .medium
@@ -244,10 +278,13 @@ public enum PersonaTraits {
             state = .rejected
         } else if answer?.verdict == .yes, text != nil {
             state = .confirmed
-        } else if days >= 2, gate, words, !waits, !measured, number >= PersonaConfidence.threshold {
+        } else if days >= 2, gate, words, !waits, !measured, number >= bounds.show - 1e-9 {
             state = .shown
+        } else if days >= 2, !measured, !waits, number >= bounds.ask - 1e-9 {
+            // Only a question in the Findings deck: it shows after the owner's yes.
+            state = .candidate
         } else {
-            state = days >= 2 ? .candidate : .hidden
+            state = .hidden
         }
         return PersonaTrait(id: id, person: person, dimension: dimension, value: value, condition: condition, support: support, counter: counter,
                             supportDays: s, counterDays: (c * 1000).rounded() / 1000, text: text, answer: answer?.verdict, confidence: number, state: state)

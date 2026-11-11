@@ -8,6 +8,10 @@ public actor PersonaRunner {
         public var calls = 0
         public var requests = 0
         public var people = 0
+        /// The calls this run took up: read, or left out for good. Not counted: a call that waits.
+        public var handled = 0
+        /// The calls that were due when the run started, before its limit.
+        public var due = 0
         /// Why it stopped early, when it did.
         public var stopped: String?
     }
@@ -17,6 +21,8 @@ public actor PersonaRunner {
     static let writeGapHours = 20.0
     /// Tokens of one reply, for the estimate.
     static let extractOutputTokens = 450
+    /// The most a reply can be, for the check before a request: a cap holds even for the longest reply.
+    static let worstOutputTokens = 2_000
     static let writeInputTokens = 1_800
     static let writeOutputTokens = 500
 
@@ -38,9 +44,9 @@ public actor PersonaRunner {
 
     /// The written calls whose stamp is not the one the step read, oldest first. `since`: only calls from then on,
     /// and each call that was read before and changed since (a name, a correction, "Transcribe again"), however old.
-    public static func due(_ records: [CallRecord], ledger: PersonaLedger, since: Date?, newestFirst: Bool = false) -> [CallRecord] {
+    public static func due(_ records: [CallRecord], ledger: PersonaLedger, since: Date?, saved: CoachPeople, owner: String, newestFirst: Bool = false) -> [CallRecord] {
         records.filter { r in
-            r.status == .written && !r.utterances.isEmpty && !ledger.isRead(r) && (since.map { r.start >= $0 } ?? true || ledger.wasRead(r.id))
+            r.status == .written && !r.utterances.isEmpty && !ledger.isRead(r, saved: saved, owner: owner) && (since.map { r.start >= $0 } ?? true || ledger.wasRead(r.id))
         }
         .sorted { newestFirst ? $0.start > $1.start : $0.start < $1.start }
     }
@@ -53,11 +59,12 @@ public actor PersonaRunner {
 
     /// What a run would send, with no request: the calls, the requests, and the tokens. `price` gives the dollars
     /// of a request's tokens.
-    public static func estimate(paths: Paths, owner: String, since: Date?, price: (Int, Int) -> Double) -> (calls: Int, requests: Int, input: Int, output: Int, dollars: Double) {
+    public static func estimate(paths: Paths, owner: String, since: Date?, only: Set<String>? = nil, price: (Int, Int) -> Double)
+        -> (calls: Int, requests: Int, input: Int, output: Int, dollars: Double) {
         let records = records(paths: paths, owner: owner)
         let saved = CoachPeople.read(paths: paths)
         let ledger = PersonaLedger.load(from: PersonaStore(paths: paths).directory)
-        let due = due(records, ledger: ledger, since: since)
+        let due = due(records, ledger: ledger, since: since, saved: saved, owner: owner).filter { only?.contains($0.id) ?? true }
         var requests = 0, input = 0, output = 0
         var people: [String: Int] = [:]
         for r in due {
@@ -78,7 +85,9 @@ public actor PersonaRunner {
 
     /// `since`: the in-app step reads only calls from then on; the first fill passes nil. `callLimit` bounds one
     /// run. `canSpend` is asked before each request with that request's estimated dollars, for a hard cap.
-    public func run(since: Date?, callLimit: Int? = nil, newestFirst: Bool = false, writeLimit: Int = PersonaRunner.writesPerRun, isLive: @Sendable () async -> Bool,
+    /// `only`: read these calls and no other (a phase of the budget). `writeGap`: one person's sentences once in 20 hours.
+    public func run(since: Date?, only: Set<String>? = nil, callLimit: Int? = nil, newestFirst: Bool = false, writeLimit: Int = PersonaRunner.writesPerRun,
+                    writeGap: Bool = true, isLive: @Sendable () async -> Bool,
                     canSpend: @Sendable (Double) -> Bool = { _ in true }, price: @Sendable (Int, Int) -> Double = { _, _ in 0 }) async -> Report {
         var report = Report()
         let store = PersonaStore(paths: paths)
@@ -86,7 +95,9 @@ public actor PersonaRunner {
         let byID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var ledger = PersonaLedger.load(from: store.directory)
         let profile = (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile()
-        var due = Self.due(records, ledger: ledger, since: since, newestFirst: newestFirst)
+        var due = Self.due(records, ledger: ledger, since: only == nil ? since : nil, saved: CoachPeople.read(paths: paths), owner: owner, newestFirst: newestFirst)
+            .filter { only?.contains($0.id) ?? true }
+        report.due = due.count
         if let callLimit { due = Array(due.prefix(callLimit)) }
         for r in due {
             if await isLive() { report.stopped = "a call is being recorded"; break }
@@ -96,7 +107,7 @@ public actor PersonaRunner {
             let notTrue = Self.notTrue(speakers, profile: profile)
             let known = Self.knownLabels(speakers, store: store, saved: saved)
             if let req = PersonaExtractor.request(for: r, speakers: speakers, owner: owner, notTrue: notTrue, known: known) {
-                guard canSpend(price((req.system.count + req.user.count) / 4, Self.extractOutputTokens)) else {
+                guard canSpend(price((req.system.count + req.user.count) / 4, Self.worstOutputTokens)) else {
                     report.stopped = "the cap"
                     break
                 }
@@ -118,22 +129,24 @@ public actor PersonaRunner {
                     p.replace(callID: r.id, with: result.evidence[id] ?? [], at: now())
                     if p.evidence.isEmpty, p.texts.isEmpty { store.delete(id) } else { try store.save(p) }
                 }
-                ledger.markRead(r)
+                ledger.markRead(r, saved: saved, owner: owner)
                 ledger.save(to: store.directory)
                 report.calls += 1
+                report.handled += 1
                 // Counts and keys only, never words.
                 Log.info("Persona step for \(r.id): \(result.kept) of \(result.proposed) pieces kept, \(speakers.count) people")
             } catch let e as SummaryError where e.isReply {
                 // The model answered, but not in the shape asked: this call is left out, so it cannot block the others.
-                ledger.markRead(r)
-                ledger.save(to: store.directory)
+                // Its older evidence goes: a call read again after a change must not keep the moments of before.
+                leaveOut(r, store: store, ledger: &ledger, saved: saved)
+                report.handled += 1
                 Log.error("The persona step left out \(r.id): \(e)")
             } catch {
                 // A failure that repeats on one call: after a few, the call is left out and the later calls go on.
                 ledger.failures[r.id, default: 0] += 1
                 if ledger.failures[r.id, default: 0] >= PersonaLedger.maxFailures {
-                    ledger.markRead(r)
-                    ledger.save(to: store.directory)
+                    leaveOut(r, store: store, ledger: &ledger, saved: saved)
+                    report.handled += 1
                     Log.error("The persona step left out \(r.id) after \(PersonaLedger.maxFailures) failures: \(error)")
                     continue
                 }
@@ -151,11 +164,11 @@ public actor PersonaRunner {
         let people = Set(store.people().map { saved.isEmpty ? $0 : saved.canonical($0) }).sorted()
         for person in people where writes < writeLimit {
             if await isLive() { report.stopped = "a call is being recorded"; break }
-            if let last = ledger.written[person], now().timeIntervalSince(last) < Self.writeGapHours * 3600, since != nil { continue }
+            if writeGap, let last = ledger.written[person], now().timeIntervalSince(last) < Self.writeGapHours * 3600 { continue }
             guard let name = saved.name(of: person), !saved.notProfiled.contains(person), let persona = store.persona(of: person, saved: saved) else { continue }
             let traits = PersonaTraits.build(persona, answers: profile.answers)
             guard traits.contains(where: PersonaWriter.needsText) else { continue }
-            guard canSpend(price(Self.writeInputTokens, Self.writeOutputTokens)) else { report.stopped = "the cap"; break }
+            guard canSpend(price(Self.writeInputTokens, Self.worstOutputTokens)) else { report.stopped = "the cap"; break }
             let first = name.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? name
             let calls = persona.calls.compactMap { byID[$0] }
             let names = Set(saved.others.map(\.name)).union(calls.flatMap { $0.speakerNames.values }).union([owner]).subtracting([name])
@@ -163,7 +176,7 @@ public actor PersonaRunner {
                 let owner = owner
                 let texts = try await writer.write(traits, first: first, line: { Self.line($0, records: byID, person: person, name: name, owner: owner, saved: saved) },
                                                    notTrue: Self.rejected(person, profile: profile, first: first), topicTerms: PersonaWords.topicTerms(calls),
-                                                   names: names, now: now())
+                                                   names: names, now: now(), retry: canSpend(price(Self.writeInputTokens * 2, Self.worstOutputTokens * 2)))
                 report.requests += 1
                 writes += 1
                 guard !texts.isEmpty else { continue }
@@ -182,6 +195,17 @@ public actor PersonaRunner {
             }
         }
         return report
+    }
+
+    /// A call that is left out for good: read as it is now, with none of its evidence of before.
+    private func leaveOut(_ r: CallRecord, store: PersonaStore, ledger: inout PersonaLedger, saved: CoachPeople) {
+        for id in store.people() {
+            guard var p = (try? store.load(id)) ?? nil, p.calls.contains(r.id) else { continue }
+            p.replace(callID: r.id, with: [], at: now())
+            if p.evidence.isEmpty, p.texts.isEmpty { store.delete(id) } else { try? store.save(p) }
+        }
+        ledger.markRead(r, saved: saved, owner: owner)
+        ledger.save(to: store.directory)
     }
 
     /// The words of a moment and the line before it, with the person as P1, the owner as Owner, and others' names
