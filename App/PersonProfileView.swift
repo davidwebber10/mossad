@@ -102,7 +102,19 @@ struct PersonProfileView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 14) {
-            PersonMark(name: profile.name, size: 44, isOwner: profile.isOwner)
+            if let photo = directory?.photoURL {
+                // The directory's photo, from Google; the initials while it loads or when it cannot.
+                AsyncImage(url: photo) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    PersonMark(name: profile.name, size: 44, isOwner: profile.isOwner)
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+            } else {
+                PersonMark(name: profile.name, size: 44, isOwner: profile.isOwner)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: Space.s) {
                     Text(profile.name)
@@ -146,9 +158,15 @@ struct PersonProfileView: View {
         }
     }
 
-    /// "VP, Planning · reports to Sam Park", from the org chart.
+    /// The job, the team, and the photo from Google's directory, when it has this person.
+    private var directory: DirectoryDetails? { controller.directoryDetails(of: profile.name) }
+
+    /// "VP, Planning · reports to Sam Park", from the org chart; else "Staff Engineer · Platform" from the directory.
     private var roleLine: String? {
-        guard let org else { return nil }
+        guard let org else {
+            let parts = [directory?.jobTitle, directory?.department].compactMap { $0 }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }
         var parts: [String] = []
         if !org.person.title.isEmpty { parts.append(org.person.title) }
         if let manager = chart?.manager(of: org.person.id) { parts.append("reports to \(manager.fullName)") }

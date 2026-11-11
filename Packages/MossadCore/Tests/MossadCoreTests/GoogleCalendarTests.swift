@@ -173,6 +173,18 @@ final class GoogleCalendarTests: XCTestCase {
         XCTAssertEqual(events.map(\.title), ["Lunch"], "unknown is not false: the Mac's copy stays")
     }
 
+    func testAnInviteeGivenOnlyAsAnAddressGetsTheDirectorysName() async throws {
+        let secrets = MemorySecrets()
+        try secrets.setClient(testClient)
+        try secrets.setTokens(GoogleTokens(accessToken: "a", refreshToken: "r", expiry: Date().addingTimeInterval(3600), scopes: [.calendar]))
+        let session = GoogleSession(secrets: secrets, transport: StubTransport { _ in (200, StubTransport.json(CalendarFixture.page)) })
+        let source = GoogleCalendarSource(session: session, names: { ["jordan.lee@example.com": "Jordan Lee"] })
+        let page = await source.page(from: Date(), to: Date())
+        let e = try XCTUnwrap(page?.events.first)
+        XCTAssertEqual(e.participants.map(\.name), ["Alex Rivera", "Sam Carter", "Jordan Lee"])
+        XCTAssertEqual(e.attendees, ["Alex Rivera", "Sam Carter", "Jordan Lee"])
+    }
+
     // MARK: The record
 
     func testTheRecordKeepsTheSeriesAndTheOrganizerFromTheInvite() throws {

@@ -146,10 +146,15 @@ public enum GoogleCalendarAPI {
 /// calendars alone are the truth, as before.
 public final class GoogleCalendarSource: Sendable {
     private let session: GoogleSession
+    /// The directory's name for an address (`GoogleDirectoryCache.names`), for an invitee given only as an address.
+    private let names: @Sendable () -> [String: String]
     /// At most this many pages of 250 events for one read.
     static let maxPages = 8
 
-    public init(session: GoogleSession) { self.session = session }
+    public init(session: GoogleSession, names: @escaping @Sendable () -> [String: String] = { [:] }) {
+        self.session = session
+        self.names = names
+    }
 
     public func page(from: Date, to: Date) async -> GoogleCalendarAPI.Page? {
         guard session.has(.calendar) else { return nil }
@@ -169,6 +174,16 @@ public final class GoogleCalendarSource: Sendable {
             }
         }
         if let account = all.account { await session.setAccount(account) }
+        let known = names()
+        if !known.isEmpty {
+            all.events = all.events.map { e in
+                var e = e
+                e.participants = DirectoryMerge.fillNames(e.participants, names: known)
+                e.organizer = e.organizer.map { DirectoryMerge.fillNames([$0], names: known)[0] }
+                e.attendees = e.participants.map { $0.name ?? $0.email ?? "" }
+                return e
+            }
+        }
         return all
     }
 }

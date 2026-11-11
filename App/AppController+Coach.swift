@@ -52,7 +52,7 @@ extension AppController {
         linkCoachPeople()
         let runner = CoachRunner(paths: paths, coach: LLMCoach(llm: llm, ownerName: ownerName, people: { [paths] in CoachPeople.read(paths: paths) }), owner: ownerName,
                                  since: Date(timeIntervalSince1970: coachSince),
-                                 titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) }, facts: MeetingAnalyticsStore.shared.facts)
+                                 titles: { [paths, library] in Self.titleLines(for: $0, paths: paths, library: library) }, facts: MeetingAnalyticsStore.shared.facts)
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
             await runPersonas()

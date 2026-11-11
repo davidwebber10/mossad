@@ -249,6 +249,19 @@ public final class PeopleStore: @unchecked Sendable {
         return id
     }
 
+    /// Fills the people from Google's directory and contacts by `DirectoryMerge`. Returns how many changed.
+    @discardableResult
+    public func applyDirectory(_ profiles: [GoogleProfile]) throws -> Int {
+        var count = 0
+        try change { people, date in
+            let result = DirectoryMerge.apply(profiles, to: people, at: date)
+            people = result.people
+            count = result.changed.count
+            return result.log
+        }
+        return count
+    }
+
     public func rename(_ id: PersonID, to new: String, actor: String = "owner") throws {
         try change { people, date in
             guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }) else { return [] }

@@ -20,6 +20,33 @@ public struct SourceKind: RawRepresentable, Hashable, Codable, Sendable {
     public static let orgChart = SourceKind(rawValue: "orgChart")
     public static let migration = SourceKind(rawValue: "migration")
     public static let call = SourceKind(rawValue: "call")
+    /// Google's company directory or the owner's Google contacts.
+    public static let googleDirectory = SourceKind(rawValue: "googleDirectory")
+    public static let googleContacts = SourceKind(rawValue: "googleContacts")
+}
+
+/// What a directory says about a person: the job, the team, and the photo. Filled again at each read; the owner's
+/// own words are never here.
+public struct DirectoryDetails: Codable, Equatable, Sendable {
+    public var jobTitle: String?
+    public var department: String?
+    public var photoURL: URL?
+    public var source: SourceKind
+    public var updated: Date
+
+    public init(jobTitle: String?, department: String?, photoURL: URL?, source: SourceKind, updated: Date) {
+        self.jobTitle = jobTitle
+        self.department = department
+        self.photoURL = photoURL
+        self.source = source
+        self.updated = updated
+    }
+
+    /// The same facts, whenever they were read.
+    func sameFacts(as other: DirectoryDetails?) -> Bool {
+        guard let other else { return false }
+        return jobTitle == other.jobTitle && department == other.department && photoURL == other.photoURL && source == other.source
+    }
 }
 
 /// The parts of a name, as keys. A part can be missing.
@@ -223,6 +250,9 @@ public struct Person: Codable, Equatable, Sendable, Identifiable {
     public var updated: Date
     /// A marker with no personal data, so the id is never used again.
     public var deleted: Date?
+    /// The job title, the department, and the photo from Google's directory or contacts; nil without one. Local:
+    /// the people sync does not send it.
+    public var directory: DirectoryDetails?
 
     public init(id: PersonID = PersonID(), displayName: String, isOwner: Bool = false, origin: SourceKind, at date: Date) {
         self.id = id
@@ -246,7 +276,7 @@ public struct Person: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, displayName, name, forms, emails, identities, isOwner, company, note, doNotProfile, provisional
-        case distinctFrom, mergedFrom, mergedInto, created, origin, updated, deleted
+        case distinctFrom, mergedFrom, mergedInto, created, origin, updated, deleted, directory
     }
 
     // Each field that can be missing has a default, so a file from an older build reads.
@@ -270,6 +300,7 @@ public struct Person: Codable, Equatable, Sendable, Identifiable {
         origin = try c.decodeIfPresent(SourceKind.self, forKey: .origin) ?? .migration
         updated = try c.decodeIfPresent(Date.self, forKey: .updated) ?? created
         deleted = try c.decodeIfPresent(Date.self, forKey: .deleted)
+        directory = try c.decodeIfPresent(DirectoryDetails.self, forKey: .directory)
     }
 }
 

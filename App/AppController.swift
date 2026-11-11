@@ -319,6 +319,11 @@ final class AppController: ObservableObject {
     /// The owner's own Google app and its sign-in (+Google). Optional: without it, nothing changes.
     let google = GoogleSession(secrets: Keychain.app)
     let googleConnector = GoogleConnector()
+    /// The directory's name for each address, from the last read (`People/google-directory.json`).
+    nonisolated let googleNames = GoogleNameBook()
+    /// Every 15 minutes: the Gemini notes of meetings that ended (+Google).
+    var googleTimer: Timer?
+    var googleRunning = false
     /// The calendar the app and the pipeline read: Google for the Google calendar, the Mac for the rest.
     let calendar: MergedCalendarSource
     let notifier = Notifier()
@@ -467,7 +472,8 @@ final class AppController: ObservableObject {
         library = VoiceLibrary(directory: paths.voices)
         recorder = Self.makeRecorder(paths: paths)
         // A preview never reads Google: it shows the folder it was given and asks no service.
-        let googleCalendar = GoogleCalendarSource(session: google)
+        let names = googleNames
+        let googleCalendar = GoogleCalendarSource(session: google, names: { names.value })
         let googleAllowed = !CommandLine.arguments.contains("--ui-preview")
         calendar = MergedCalendarSource(mac: macCalendar, google: { googleAllowed ? googleCalendar : nil })
         Self.current = self
@@ -482,6 +488,7 @@ final class AppController: ObservableObject {
         noRecordGate.persistSession(in: paths.noRecord)
         // The chosen calendars apply before anything matches a call to an invite.
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
+        loadGoogleNames()
         rebuildPipeline()
         observeForSearch()
         // The Google step's state is drawn by views that watch the controller.
@@ -831,6 +838,7 @@ final class AppController: ObservableObject {
             await MainActor.run {
                 self.linkCoachPeople()
                 self.refreshPeopleReferences()
+                self.refreshGoogleDirectory()
             }
         }
     }
@@ -896,7 +904,7 @@ final class AppController: ObservableObject {
                             onProgress: { [weak self] id, p in
                                 Task { @MainActor in self?.progress[id] = p }
                             },
-                            titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) },
+                            titles: { [paths, library] in Self.titleLines(for: $0, paths: paths, library: library) },
                             onDiscard: { [weak self] record in
                                 Task { @MainActor in self?.forget(record) }
                             },
@@ -1792,6 +1800,7 @@ final class AppController: ObservableObject {
         runCoach()
         runCommitments()
         syncNow()
+        refreshGoogleDirectory()
     }
 
     private func requestPermissions() {
