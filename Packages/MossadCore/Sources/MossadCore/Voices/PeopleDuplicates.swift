@@ -30,7 +30,11 @@ public enum PeopleDuplicates {
         if let ea = a.email?.lowercased(), ea == b.email?.lowercased() { return .sameEmail }
         let na = normalized(a.name), nb = normalized(b.name)
         if na == nb { return .sameName }
-        if similar(na, nb) { return .similarName }
+        // One name written two ways: last name first, a middle name, or a short first name.
+        let fit = PersonNames.fit(PersonNames.parse(a.name), PersonNames.parse(b.name))
+        if [NameFit.same, .sameWithMiddle, .swapped, .nickname].contains(fit) { return .sameName }
+        // Two middle names that disagree are two people, whatever else is alike.
+        if fit != .conflict, similar(na, nb) { return .similarName }
         if let ca = VoiceLibrary.centroid(a.embeddings), let cb = VoiceLibrary.centroid(b.embeddings),
            VoiceLibrary.cosine(ca, cb) >= sameVoice { return .sameVoice }
         return nil
@@ -66,14 +70,9 @@ public enum PeopleDuplicates {
 }
 
 extension VoiceLibrary {
-    /// The saved person a new name stands for: the same email (any case), or the same name in other case or
-    /// spacing. Nil for someone new.
+    /// The saved person a new name stands for, when a voice is named: the same email (any case), or the whole
+    /// name in any case, spacing, or order. Nil for someone new, and for a guess (`PersonDirectory.existing`).
     public func existingName(name: String, email: String?) -> String? {
-        let people = profiles
-        if let email = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !email.isEmpty,
-           let p = people.first(where: { $0.email?.lowercased() == email }) { return p.name }
-        let key = PeopleDuplicates.normalized(name)
-        guard !key.isEmpty else { return nil }
-        return people.first { PeopleDuplicates.normalized($0.name) == key }?.name
+        PersonDirectory.existing(name: name, email: email, among: profiles.map { PersonDirectory.Person(name: $0.name, email: $0.email) })
     }
 }

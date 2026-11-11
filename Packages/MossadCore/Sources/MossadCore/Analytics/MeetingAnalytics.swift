@@ -352,6 +352,7 @@ extension MeetingAnalytics {
         h.combine(r.utterances.last?.end)
         h.combine(r.speakerNames)
         h.combine(r.attendees)
+        h.combine(r.invitees)
         h.combine(r.actionItems)
         h.combine(r.decisions.count)
         h.combine(r.parts.count)

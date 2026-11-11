@@ -17,6 +17,7 @@ public enum MeetingMerge {
         merged.speakerNames = [:]
         merged.unknownSpeakers = []
         merged.speakerEmbeddings = [:]
+        merged.speakerSamples = nil
         merged.parts = []
         merged.markers = []
         // The archived copy of the first part is of the old audio. It goes once the joined recording is safe.
@@ -54,6 +55,7 @@ public enum MeetingMerge {
             for (k, name) in r.speakerNames { merged.speakerNames[key(k)] = name }
             merged.unknownSpeakers += r.unknownSpeakers.map(key)
             for (k, e) in r.speakerEmbeddings { merged.speakerEmbeddings[key(k)] = e }
+            for (k, d) in r.speakerSamples ?? [:] { merged.speakerSamples = (merged.speakerSamples ?? [:]).merging([key(k): d]) { _, new in new } }
             // A record that was itself merged keeps its own parts.
             let own = r.parts.isEmpty ? [CallPart(start: r.start, end: r.end, offset: 0)] : r.parts
             merged.parts += own.map { CallPart(start: $0.start, end: $0.end, offset: $0.offset + offset) }
@@ -75,6 +77,7 @@ public enum MeetingMerge {
                 merged.plannedEnd = r.plannedEnd
             }
             for a in r.attendees where !merged.attendees.contains(a) { merged.attendees.append(a) }
+            for i in r.invitees ?? [] where merged.invitees?.contains(i) != true { merged.invitees = (merged.invitees ?? []) + [i] }
             offset += durations[r.id] ?? r.end.timeIntervalSince(r.start)
         }
         merged.utterances.sort { $0.start < $1.start }

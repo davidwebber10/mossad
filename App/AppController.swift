@@ -425,6 +425,7 @@ final class AppController: ObservableObject {
         // Reading the calendar records nothing, so the preview shows the real upcoming meetings too.
         if inert { refreshUpcoming() }
         if !inert {
+            startPeople()
             enableLaunchAtLoginOnce()
             notifier.onOpen = { [weak self] callID in self?.openNaming(callID) }
             notifier.onRecord = { [weak self] bundleID, platform in
@@ -711,6 +712,20 @@ final class AppController: ObservableObject {
                      region: mailRegion, accessKeyID: mailAccessKeyID)
     }
 
+    /// Brings the people store (`people.json`) and the voice samples (`samples.json`) in step with the voice library,
+    /// off the main thread, and lets them follow the library from then on. Only the main copy does this: a preview,
+    /// Rehearsal, and a second copy write nothing. Until it is done, and when a file stops it, the voice library
+    /// works alone, as before.
+    private func startPeople() {
+        let paths = paths, library = library
+        let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
+        let notDuplicates = (UserDefaults.standard.string(forKey: "peopleNotDuplicates") ?? "").split(separator: "\n").map(String.init)
+        Task.detached(priority: .utility) {
+            guard let identity = PeopleMigration.runAtLaunch(paths: paths, library: library, ownerName: owner, notDuplicates: notDuplicates) else { return }
+            library.identity = identity
+        }
+    }
+
     /// Gives the pipeline the current keys and settings. The pipeline itself lives as long as the app, so a call in
     /// flight stays known to it; a second pipeline would process that call again.
     func rebuildPipeline() {
@@ -718,6 +733,13 @@ final class AppController: ObservableObject {
         updateSharedAIKey()
         updateSharedServer()
         let owner = ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? NSFullUserName() : ownerName
+        // A new name in Settings renames the owner as a person. The old name stays one of the owner's names, so the
+        // owner's lines in old meetings are still the owner's.
+        if let people = library.identity?.people {
+            Task.detached(priority: .utility) {
+                do { try people.setOwnerName(owner) } catch { Log.error("People: the owner's new name was not saved: \(error)") }
+            }
+        }
         let organization = organization.trimmingCharacters(in: .whitespaces)
         let provider = transcriptionProvider
         let transcriber: Transcribing = if let key = provider.key {

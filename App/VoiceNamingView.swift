@@ -160,7 +160,7 @@ struct VoiceNamingView: View {
                 // Pick only when the call's own meeting link matched an invite; a time match can be another meeting.
                 if record.hasInviteLink, !record.attendees.isEmpty {
                     Menu {
-                        picks(for: key)
+                        picks(for: key, people: people)
                     } label: {
                         Text("Pick")
                     }
@@ -196,21 +196,23 @@ struct VoiceNamingView: View {
 
     /// The invite's people. Picking one sets the email, and the saved name for that email when there is one.
     @ViewBuilder
-    private func picks(for key: String) -> some View {
+    private func picks(for key: String, people: MeetingPeople) -> some View {
         let used = Set(emails.filter { $0.key != key }.values)
         Section("Invited to this meeting") {
             ForEach(record.attendees.filter { !used.contains($0) }, id: \.self) { attendee in
-                let saved = attendee.contains("@") ? controller.library.name(forEmail: attendee) : nil
+                // A name the invite wrote in another form ("Carter, Sam") shows as the saved person it is. The
+                // meeting's links are worked out one time for the sheet, not for each row.
+                let saved = attendee.contains("@") ? controller.library.name(forEmail: attendee) : people.links.person(for: attendee)
                 Button {
                     if attendee.contains("@") {
                         emails[key] = attendee
                         if let saved, names[key, default: ""].isEmpty { names[key] = saved }
                     } else {
-                        names[key] = attendee
+                        names[key] = saved ?? attendee
                     }
                 } label: {
                     Text(saved ?? attendee)
-                    if saved != nil { Text(attendee) }
+                    if saved != nil, saved != attendee { Text(attendee) }
                 }
             }
         }
