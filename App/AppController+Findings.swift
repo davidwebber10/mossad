@@ -32,7 +32,7 @@ extension AppController {
             if !findings.isEmpty { findings = [] }
             return
         }
-        let now = Date(), paths = paths, profile = shownCoachProfile, saved = shownCoachPeople, personas = personasOn
+        let now = Date(), paths = paths, profile = shownCoachProfile, saved = personaPeople, personas = personasOn
         let recent = meetings.filter { $0.status == .written && now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }.map { ($0.id, $0.start) }
         findingsAsk += 1
         let ask = findingsAsk

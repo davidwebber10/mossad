@@ -10,8 +10,18 @@ extension AppController {
 
     var personasOn: Bool { coachEnabled && personaEnabled }
 
+    /// The people for the reads: the store's when it runs, else a look at `people.json` that only reads (a preview,
+    /// or the time before the store is ready). The reads are by id, so they need the ids either way.
+    var personaPeople: CoachPeople {
+        let shown = shownCoachPeople
+        return shown.isEmpty ? coachPeopleCache.value(1, version: coachVersion) { CoachPeople.read(paths: paths) } : shown
+    }
+
     /// The person id of a name, on a sure match.
-    func personID(of name: String) -> String? { shownCoachPeople.id(of: name).map(shownCoachPeople.canonical) }
+    func personID(of name: String) -> String? {
+        let saved = personaPeople
+        return saved.id(of: name).map(saved.canonical)
+    }
 
     /// The read of a person, when the person has one and the owner keeps reads.
     func persona(of name: String) -> PersonaSummary? {
@@ -22,7 +32,7 @@ extension AppController {
     /// The per-person switch. True for a name that is no saved person: there is nothing to keep.
     func keepsRead(_ name: String) -> Bool {
         guard let id = personID(of: name) else { return true }
-        return !shownCoachPeople.notProfiled.contains(id)
+        return !personaPeople.notProfiled.contains(id)
     }
 
     /// Off stops new evidence and deletes what the coach kept about the person. The meetings stay.
@@ -43,7 +53,7 @@ extension AppController {
     /// Deletes what the coach knows about how a person thinks: each file of the person and of the records they took in.
     func forgetPersona(_ id: String) {
         let store = PersonaStore(paths: paths)
-        for one in shownCoachPeople.ids(of: id) + [id] { store.delete(one) }
+        for one in personaPeople.ids(of: id) + [id] { store.delete(one) }
     }
 
     /// "Delete" on the People page: the person's read goes with them.
@@ -73,7 +83,7 @@ extension AppController {
     /// The people of the call being recorded, by id: who speaks and who was invited.
     var livePeople: Set<String> {
         guard let r = meetings.first(where: isLive) else { return [] }
-        let saved = shownCoachPeople
+        let saved = personaPeople
         var names = Array(r.speakerNames.values) + r.attendees
         names += (r.invitees ?? []).compactMap(\.name)
         var ids = Set(names.compactMap { saved.id(of: $0).map(saved.canonical) })

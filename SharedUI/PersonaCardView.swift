@@ -13,7 +13,6 @@ struct PersonaCardView: View {
     var body: some View {
         if compact {
             VStack(alignment: .leading, spacing: 8) {
-                Text(card.headline).textRole(.headline).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                 ForEach(card.lines) { line in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(line.kind.title).textRole(.label).foregroundStyle(Palette.secondary)
@@ -24,11 +23,16 @@ struct PersonaCardView: View {
             }
             .textSelection(.enabled)
         } else {
+            // The headline is the opening line's words: it stands once, with that line's counts.
+            let lead = card.lines.first { $0.text == card.headline }
             VStack(alignment: .leading, spacing: 18) {
                 LabelColumn(label: "How to present to \(first)") {
-                    Text(card.headline).textRole(.lede).lineSpacing(3).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(card.headline).textRole(.lede).lineSpacing(3).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                        if let lead { PersonaEvidenceLine(text: lead.confidenceLine, moment: lead.moment) }
+                    }
                 }
-                ForEach(card.lines) { line in
+                ForEach(card.lines.filter { $0.id != lead?.id }) { line in
                     LabelColumn(label: line.kind.title) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(line.text).textRole(.body).lineSpacing(2).foregroundStyle(Palette.ink)

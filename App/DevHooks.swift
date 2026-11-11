@@ -87,6 +87,8 @@ enum DevHooks {
             c.syncActivity = SyncActivity(last: Date().addingTimeInterval(-7200), status: status)
         }
         if let update = env["MOSSAD_UPDATE_PREVIEW"] { c.updater.applyPreview(update) }
+        // `MOSSAD_SHARING=1` acts as if the owner shares the screen: the coach's reads of people are covered.
+        if env["MOSSAD_SHARING"] == "1" { c.ownerSharing = true }
         // `MOSSAD_APPEARANCE=dark|light` picks the look of a preview, to capture both.
         if let look = env["MOSSAD_APPEARANCE"] {
             NSApp.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
