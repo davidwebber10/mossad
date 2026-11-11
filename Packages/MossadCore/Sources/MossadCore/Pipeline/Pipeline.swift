@@ -562,11 +562,13 @@ public actor Pipeline {
         transcribing.remove(r.id)
         detail(r.id, "Joining the two tracks")
         // Without the them track (deleted or unreadable) only the word rule removes echo. A full read of the track,
-        // so off this actor.
+        // so off this actor. It reads one buffer at a time, so it also runs behind a call.
         let them = dir.appendingPathComponent(Track.them.fileName)
-        await waitForQuiet(r.id)
-        let themSound = try? await HeavyWork.run { try SoundTimeline.measure(url: them) }
-        r.utterances = TranscriptMerger.merge(me: try meResult.get(), them: try themResult.get(), themSound: themSound)
+        let meWords = try meResult.get(), themWords = try themResult.get()
+        let plan = await clearance(r.id, .trackJoin)
+        r.utterances = try await runHeavy(r.id, .trackJoin, plan) {
+            TranscriptMerger.merge(me: meWords, them: themWords, themSound: try? SoundTimeline.measure(url: them))
+        }
         r.status = .transcribed
         Log.info("Transcribed \(r.id): \(r.utterances.count) utterances")
     }
@@ -595,21 +597,25 @@ public actor Pipeline {
         }
         // A compressed copy goes up; the raw track stays for speaker identification and the recording. The encode
         // takes seconds of processor time: it waits out a call and runs off this actor. The upload does not wait.
-        await waitForQuiet(callID)
-        let upload = (try? await HeavyWork.run { try UploadAudio.compress(url, into: dir) }) ?? url
+        let encode = await clearance(callID, .uploadEncode)
+        let upload = (try? await runHeavy(callID, .uploadEncode, encode) { try UploadAudio.compress(url, into: dir) }) ?? url
         defer { if upload != url { try? FileManager.default.removeItem(at: upload) } }
         let transcriber = transcriber
-        // A model on this Mac uses all of the processor for minutes.
-        if transcriber.runsOnThisDevice { await waitForQuiet(callID) }
         let job = TranscriptionJobStore(saved: jobs[callID]?[track.rawValue]) { job in await self.saveJob(callID, track, job) }
-        do {
-            return .success(try await UsageContext.$callID.withValue(callID) {
+        let work: @Sendable () async throws -> [Utterance] = {
+            try await UsageContext.$callID.withValue(callID) {
                 try await TranscriptionJob.$store.withValue(job) {
                     try await transcriber.transcribe(file: upload, track: track, speakers: speakers) { stage in
                         Task { await self.stageChanged(callID, track, stage) }
                     }
                 }
-            })
+            }
+        }
+        do {
+            // A model on this Mac uses all of the processor for minutes.
+            guard transcriber.runsOnThisDevice else { return .success(try await work()) }
+            let plan = await clearance(callID, .onDeviceTranscription)
+            return .success(try await runHeavy(callID, .onDeviceTranscription, plan, work))
         } catch { return .failure(error) }
     }
 
@@ -686,9 +692,14 @@ public actor Pipeline {
             r.status = .identified
             return
         }
-        await waitForQuiet(r.id)
-        let result = try await identifier.identify(utterances: r.utterances, meURL: dir.appendingPathComponent(Track.me.fileName),
-                                                   themURL: dir.appendingPathComponent(Track.them.fileName), call: (r.id, r.start))
+        // Short pieces of each voice, at most a minute per speaker, through the one copy of the voice models that the
+        // live transcript's namer also uses; so it runs behind a call.
+        let plan = await clearance(r.id, .voiceIdentification)
+        let identifier = identifier, utterances = r.utterances, call = (id: r.id, start: r.start)
+        let me = dir.appendingPathComponent(Track.me.fileName), them = dir.appendingPathComponent(Track.them.fileName)
+        let result = try await runHeavy(r.id, .voiceIdentification, plan) {
+            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call)
+        }
         r.speakerNames = result.names
         r.unknownSpeakers = result.unknown
         r.speakerEmbeddings = result.embeddings
@@ -771,11 +782,47 @@ public actor Pipeline {
 
     private func knownTags() -> [String] { Tags.known(queue.allRecords()) }
 
-    /// Processor-heavy work waits here while a call records.
-    private func waitForQuiet(_ id: String) async {
-        guard await heavy.isHeld else { return }
+    /// A heavy step waits here while a call records, when `HeavyWorkPlan` says so; "Process now" ends the wait.
+    /// Returns how the step runs.
+    private func clearance(_ id: String, _ step: HeavyStep) async -> HeavyWorkPlan {
+        let plan = await heavy.plan(step, callID: id)
+        guard plan == .wait else { return plan }
+        let before = progress[id]?.detail
         detail(id, "Waiting for the current call to end")
-        await heavy.waitForQuiet("the work on \(id)")
+        setWaitsForCall(id, true)
+        let cleared = await heavy.waitForClearance(step, callID: id)
+        setWaitsForCall(id, false)
+        if let before { detail(id, before) } else { clearDetail(id) }
+        return cleared
+    }
+
+    private func setWaitsForCall(_ id: String, _ waits: Bool) {
+        guard var p = progress[id] else { return }
+        p.waitsForCall = waits
+        progress[id] = p
+        onProgress(id, p)
+    }
+
+    /// Back to the step's own lines (the tracks while transcribing).
+    private func clearDetail(_ id: String) {
+        onDetail(id, nil)
+        guard var p = progress[id] else { return }
+        p.detail = nil
+        progress[id] = p
+        onProgress(id, p)
+    }
+
+    /// Runs a heavy step off this actor at the plan's priority. A step that ran during a call logs its time.
+    private func runHeavy<T: Sendable>(_ id: String, _ step: HeavyStep, _ plan: HeavyWorkPlan,
+                                       _ body: @escaping @Sendable () async throws -> T) async throws -> T {
+        let clock = ContinuousClock(), start = clock.now
+        defer {
+            if plan.duringCall {
+                let d = (clock.now - start).components
+                heavy.log(step.logLine(callID: id, seconds: Double(d.seconds) + Double(d.attoseconds) / 1e18))
+            }
+        }
+        return try await HeavyWork.run(priority: plan.priority, body)
     }
 
     /// Makes the recording file of a call folder. A test puts its own in, to edit a call during the encode.
@@ -787,12 +834,13 @@ public actor Pipeline {
         // The recording first: a mix and an AAC encode of the whole call, off this actor. While a call records, the
         // note does not wait for it: the app makes the missing recording when no call records
         // (`Recording.backfill`), and until then the player mixes the two tracks.
-        if await heavy.isHeld {
+        let plan = await heavy.plan(.recordingEncode, callID: r.id)
+        if plan == .wait {
             Log.info("A call records; the recording of \(r.id) is made later")
         } else {
             detail(r.id, "Making the recording")
             let make = makeRecording
-            try? await HeavyWork.run { make(dir) }
+            try? await runHeavy(r.id, .recordingEncode, plan) { make(dir) }
         }
         // The encode takes seconds, and this actor was free for the owner's edits in that time (a title, a tag, a
         // name, a bookmark). Each edit saved the record at once, so the record is taken fresh from the disk. From
@@ -805,6 +853,7 @@ public actor Pipeline {
         try MarkdownWriter.render(r).write(to: url, atomically: true, encoding: .utf8)
         r.markdownPath = url.path
         r.status = .written
+        heavy.forget(r.id)
         Log.info("Wrote \(url.lastPathComponent)")
         // Without fingerprints a name is never learned, so asking after every call would only nag.
         if voiceFingerprints, !r.unknownSpeakers.isEmpty, quietRuns[r.id] == nil { notify(r) }

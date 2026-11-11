@@ -53,6 +53,13 @@ struct FakeCalendar: CalendarSource {
 
 struct Boom: Error {}
 
+final class LogLines: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [String] = []
+    var all: [String] { lock.withLock { lines } }
+    func add(_ line: String) { lock.withLock { lines.append(line) } }
+}
+
 final class Notifications: @unchecked Sendable {
     var records: [CallRecord] = []
     var steps: [CallRecord] = []
@@ -136,6 +143,64 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path))
     }
 
+    /// Back-to-back meetings: once the transcripts are back, the join of the two tracks and the voices run while the
+    /// next call records, at the lowest priority, so the note does not wait for that call to end. The recording waits.
+    func testTheJoinAndTheVoicesRunWhileACallRecords() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        var r = try CallRecord.load(from: dir)
+        r.meUtterances = transcriber.result[.me]
+        r.themUtterances = transcriber.result[.them]
+        try r.save(to: dir)
+        let lines = LogLines()
+        let gate = HeavyWorkGate(pollInterval: .seconds(3600), isCallRecording: { true }, log: { lines.add($0) })
+        let notifications = notifications
+        let later = start.addingTimeInterval(3600)
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         onDetail: { _, text in notifications.detail(text) }, heavy: gate)
+        await p.process(id)
+        let done = try CallRecord.load(from: dir)
+        XCTAssertEqual(done.status, .written)
+        XCTAssertFalse(done.utterances.isEmpty)
+        XCTAssertFalse(done.speakerNames.isEmpty || done.speakerEmbeddings.isEmpty)
+        XCTAssertFalse(notifications.details.contains("Waiting for the current call to end"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: Recording.url(in: dir).path), "the recording encode waits")
+        XCTAssertEqual(lines.all.filter { $0.hasPrefix("During a call:") }.count, 2, lines.all.joined(separator: "\n"))
+        XCTAssertTrue(lines.all.contains { $0.hasPrefix("During a call: joining the two tracks of \(id) took ") })
+        XCTAssertTrue(lines.all.contains { $0.hasPrefix("During a call: voice identification of \(id) took ") })
+    }
+
+    /// "Process now": one click and every step of that call runs while the next call records, the encodes too.
+    func testProcessNowRunsEveryStepOfThatCallDuringACall() async throws {
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        let lines = LogLines()
+        final class Waiting: @unchecked Sendable { let lock = NSLock(); var seen = false }
+        let waiting = Waiting()
+        let gate = HeavyWorkGate(pollInterval: .seconds(3600), isCallRecording: { true }, log: { lines.add($0) })
+        let notifications = notifications
+        let later = start.addingTimeInterval(3600)
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "David Webber",
+                         onDetail: { _, text in notifications.detail(text) },
+                         onProgress: { _, p in if p?.waitsForCall == true { waiting.lock.withLock { waiting.seen = true } } }, heavy: gate)
+        let run = Task { await p.process(id) }
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(transcriber.calls, [], "the upload encode waits")
+        XCTAssertEqual(gate.waiting, [id])
+        XCTAssertTrue(waiting.lock.withLock { waiting.seen }, "the card knows the call waits")
+        gate.release(id)
+        await run.value
+        XCTAssertEqual(try CallRecord.load(from: dir).status, .written)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: dir).path), "the recording is made during the call")
+        XCTAssertEqual(gate.waiting, [])
+        XCTAssertFalse(gate.isReleased(id), "a written call leaves the list")
+        let during = lines.all.filter { $0.hasPrefix("During a call:") }
+        XCTAssertTrue(during.contains { $0.contains("the upload encode of \(id)") }, during.joined(separator: "\n"))
+        XCTAssertTrue(during.contains { $0.contains("the recording encode of \(id)") }, during.joined(separator: "\n"))
+    }
+
     /// The note of the last call does not wait for the next call to end: only its recording does.
     func testANoteIsWrittenWhileACallRecordsAndItsRecordingIsMadeLater() async throws {
         let id = try makeRecord()
@@ -206,7 +271,8 @@ final class PipelineTests: XCTestCase {
         let gate = HeavyWorkGate()
         let held = await gate.isHeld
         XCTAssertFalse(held)
-        await gate.waitForQuiet("a test")
+        let plan = await gate.waitForClearance(.recordingEncode, callID: "a")
+        XCTAssertEqual(plan, .run)
     }
 
     /// A call held because its muted parts could not be silenced is tried again by the pipeline's regular run. The

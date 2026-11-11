@@ -17,6 +17,8 @@ public struct ProcessingProgress: Equatable, Sendable {
     public var tracks: [Track: TrackState] = [:]
     /// The sub-step, such as "Finding the calendar invite".
     public var detail: String?
+    /// The step waits for the call that records now; "Process now" can release it.
+    public var waitsForCall = false
 
     public init(step: ProcessingStep, started: Date) {
         self.step = step
