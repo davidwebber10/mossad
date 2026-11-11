@@ -60,8 +60,10 @@ public enum FindingRules {
         func add(_ line: CoachLine) {
             switch line.kind {
             case .focus:
+                // A goal's line: "Target 56% or less; 64% in a typical 1:1 before the goal".
+                let parts = (line.number ?? "").components(separatedBy: "; ")
                 add(line.outcome == .hit ? .didWell : line.outcome == .missed ? .missed : nil, text: line.text, skill: line.skill, quote: line.quote, at: line.at,
-                    number: line.number)
+                    number: parts.count > 1 ? parts[0] : line.number, usual: parts.count > 1 ? parts.dropFirst().joined(separator: "; ") : nil)
             case .progress:
                 // "You talked 48% in your last 5 with Sam; 62 to 70% in the 10 before."
                 let parts = (line.number ?? "").components(separatedBy: "; ")
@@ -108,13 +110,19 @@ public enum FindingRules {
             .filter { $0.kind.isKnown && $0.hasProof && !training.isBlocked($0.skill) }
 
         var head: [CoachFinding] = []
-        // The focus that the coach proposed from this call, with the moment of this call that shows its skill.
-        if let focus = profile.proposedFocus, abs(focus.proposed.timeIntervalSince(date)) < 1, !training.isGoalBlocked(focus.skillID),
-           let proof = base.first(where: { $0.at != nil && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) }) {
-            head.append(CoachFinding(id: "\(callID)|\(CoachFinding.Kind.goalOffer.rawValue)|\(focus.id.uuidString)", callID: callID, date: date, kind: .goalOffer, text: focus.plan,
-                                skill: focus.skillID, detail: focus.why.nonBlank, quote: proof.quote, at: proof.at, focusID: focus.id))
+        // The focus that the coach proposed from this call: a goal with its number and what was usual, or a focus
+        // with the moment of this call that shows its skill.
+        if let focus = profile.proposedFocus, abs(focus.proposed.timeIntervalSince(date)) < 1, !training.isGoalBlocked(focus.skillID) {
+            let id = "\(callID)|\(CoachFinding.Kind.goalOffer.rawValue)|\(focus.id.uuidString)"
+            if let goal = focus.goal {
+                head.append(CoachFinding(id: id, callID: callID, date: date, kind: .goalOffer, text: focus.plan, skill: focus.skillID, detail: focus.why.nonBlank,
+                                         number: goal.typicalText, usual: goal.usualText, focusID: focus.id))
+            } else if let proof = base.first(where: { $0.at != nil && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) }) {
+                head.append(CoachFinding(id: id, callID: callID, date: date, kind: .goalOffer, text: focus.plan, skill: focus.skillID, detail: focus.why.nonBlank,
+                                         quote: proof.quote, at: proof.at, focusID: focus.id))
+            }
             // The offer stands for the advice about its skill.
-            base.removeAll { $0.kind != .didWell && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) }
+            if head.last?.kind == .goalOffer { base.removeAll { $0.kind != .didWell && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) } }
         }
         if let line = review.shownLine, let first = base.first, first.skill == line.skill { head.append(base.removeFirst()) }
         for q in profile.questions where q.status == .open && q.callID == callID {

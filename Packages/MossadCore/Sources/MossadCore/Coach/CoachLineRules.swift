@@ -75,6 +75,23 @@ public enum CoachLineRules {
             dropped.append("focus_proposal: the owner said never again")
         }
 
+        // A goal that the app measures: its number decides how the call went, and the model's moment stays only
+        // when it says the same.
+        if let focus, focus.goal != nil {
+            if var code = measured.goalResult {
+                if let model = review.focusResult, review.focusID == focus.id, model.outcome == code.outcome, code.outcome != .noChance,
+                   let moment = ownerMoment(quote: model.quote ?? "", in: r, owner: owner) {
+                    code.quote = moment.quote
+                    code.at = moment.at
+                }
+                review.focusID = focus.id
+                review.focusResult = code
+            } else {
+                review.focusID = nil
+                review.focusResult = nil
+            }
+        }
+
         review.didWell = checked(review.didWell, "did_well")
         review.tryNext = checked(review.tryNext, "try_next")
         review.seenAgain = checked(review.seenAgain, "seen_again")
@@ -112,7 +129,13 @@ public enum CoachLineRules {
         }
 
         var candidates: [CoachLine] = []
-        if let focus, review.focusID == focus.id, let result = review.focusResult, result.outcome != .noChance {
+        if let focus, let goal = focus.goal, review.focusID == focus.id, let result = review.focusResult, result.outcome != .noChance {
+            // The number of the call against the target and what was usual. The progress only when the app can say it.
+            var number = "Target \(goal.targetText); \(goal.typicalText) before the goal"
+            if let progress = measured.goal, !progress.isEarly { number += ". \(progress.sentence)." }
+            candidates.append(CoachLine(kind: .focus, text: result.evidence, skill: focus.skillID, quote: result.quote, at: result.at, number: number,
+                                        outcome: result.outcome))
+        } else if let focus, focus.goal == nil, review.focusID == focus.id, let result = review.focusResult, result.outcome != .noChance {
             if let moment = ownerMoment(quote: result.quote ?? "", in: r, owner: owner), !judgesTrend(result.evidence), count(result.evidence) <= textWords {
                 let chances = focus.chances.filter { $0.callID != r.id } + [result]
                 var number = "\(chances.filter { $0.outcome == .hit }.count) of \(chances.count) chances"

@@ -50,6 +50,10 @@ public struct CoachFocus: Codable, Equatable, Sendable, Identifiable, Hashable {
     /// The id of the skill this focus is about (`CoachSkill.id`). Nil for a focus from before the skill list.
     public var skill: String?
 
+    /// The number the app measures for this focus, with its baseline and target: a goal. Nil for a focus that
+    /// the model judges call by call, and for one from before goals.
+    public var goal: CoachGoal?
+
     /// The number the app counts for this focus, when it is not one of the call's own numbers in `metric`.
     public var measure: CoachMeasure? { measureName.flatMap(CoachMeasure.init(rawValue:)) ?? CoachSkill(id: skillID)?.measure }
 
@@ -72,8 +76,11 @@ public struct CoachFocus: Codable, Equatable, Sendable, Identifiable, Hashable {
     static let learnedHits = 5
     static let learnedWindow = 6
 
-    /// 5 hits in the last 6 chances.
-    public var isLearned: Bool { chances.suffix(Self.learnedWindow).filter { $0.outcome == .hit }.count >= Self.learnedHits }
+    /// 5 hits in the last 6 chances. A goal is never learned this way: its progress is its number, and the owner
+    /// says when it is learned.
+    public var isLearned: Bool {
+        goal == nil && chances.suffix(Self.learnedWindow).filter { $0.outcome == .hit }.count >= Self.learnedHits
+    }
 }
 
 /// How the coach talks.
@@ -105,7 +112,7 @@ public struct GoalHistory: Equatable, Sendable {
     public var current: CoachFocus?
     /// Offered, and the owner did not take it.
     public var offered: [CoachFocus]
-    /// Taken, then replaced by another goal before it was learned.
+    /// Taken, then ended by the owner or replaced by another goal before it was learned.
     public var ended: [CoachFocus]
     public var finished: [CoachFocus]
 }
@@ -147,6 +154,14 @@ extension CoachProfile {
         focus = foci[i].plan
     }
 
+    /// The owner says the goal is learned. Only the active one.
+    public mutating func learnFocus(_ id: UUID, at date: Date) {
+        guard let i = foci.firstIndex(where: { $0.id == id && $0.status == .active }) else { return }
+        foci[i].status = .learned
+        foci[i].updated = date
+        focus = ""
+    }
+
     public mutating func dismissFocus(_ id: UUID, at date: Date) {
         guard let i = foci.firstIndex(where: { $0.id == id }) else { return }
         foci[i].status = .dismissed
@@ -184,6 +199,7 @@ extension CoachProfile {
             let other = f.updated > old.updated ? old : f
             keep.skill = keep.skill ?? other.skill
             keep.measureName = keep.measureName ?? other.measureName
+            keep.goal = keep.goal ?? other.goal
             byID[f.id] = keep
         }
         return order.compactMap { byID[$0] }

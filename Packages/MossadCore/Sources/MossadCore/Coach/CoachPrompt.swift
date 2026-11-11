@@ -179,7 +179,7 @@ enum CoachPrompt {
             notes.append("Recent calls, oldest first:\n" + recent.map { "- \(day($0.date)) \($0.title): \($0.headline)" }.joined(separator: "\n"))
         }
         if !notes.isEmpty { parts.append("## Your notes on \(owner)\n" + notes.joined(separator: "\n")) }
-        parts.append("## The focus\n" + focusText(profile))
+        parts.append("## The focus\n" + focusText(profile, measured: measured))
         let said = earlierAdviceText(profile, record: r)
         if !said.isEmpty { parts.append("## Advice you already gave (do not give it again)\n" + said) }
         let asked = questionsText(profile, now: r.start)
@@ -262,7 +262,21 @@ enum CoachPrompt {
         return parts.joined(separator: "\n")
     }
 
-    static func focusText(_ p: CoachProfile) -> String {
+    static func focusText(_ p: CoachProfile, measured: CoachMeasured = CoachMeasured()) -> String {
+        if let f = p.activeFocus, let goal = f.goal, let measure = goal.measure {
+            // A goal that the app measures: the numbers are the app's, and the model gives only the moment.
+            var lines = ["Active goal" + (f.accepted.map { " (accepted \(day($0)))" } ?? "") + ": \(f.plan)",
+                         "The app measures it: \(measure.title.lowercased()). Before the goal: \(goal.typicalText) (\(goal.usualText)). Target: \(goal.targetText)."]
+            if let r = measured.goalResult {
+                lines.append(r.outcome == .noChance
+                             ? "This call is not a 1:1, so the goal does not apply: set focus_result to no_chance."
+                             : "In this call: \(r.evidence) The app sets hit or missed from this number.")
+            }
+            if let progress = measured.goal { lines.append("Progress, measured by the app (do not restate or judge it): \(progress.sentence).") }
+            lines.append("In focus_result, give the one moment of the owner's that shows it best: hit for a moment that gave the other person room "
+                         + "(a question, a handover, a pause for them), missed for one that took it (a long turn, talking over them, answering for them).")
+            return lines.joined(separator: "\n")
+        }
         if let f = p.activeFocus {
             let since = f.accepted.map { " (accepted \(day($0)))" } ?? ""
             let recent = f.results.suffix(6).map { "- \(day($0.date)): \($0.outcome.rawValue). \($0.evidence)" }
