@@ -17,6 +17,20 @@ ok(r.headers.get('content-security-policy')?.includes("script-src 'nonce-"), 'cs
 r = await fetch(`${share}/${crypto.randomBytes(32).toString('base64url')}`); ok(r.status === 404, 'unknown link 404');
 r = await fetch(`${share}/${token}/chat`, { method: 'POST', body: JSON.stringify({ question: 'hi' }) }); ok(r.status === 503, 'chat without key ' + r.status);
 r = await fetch(`${share}/api/shares`, { headers: auth }); ok((await r.json()).shares[0].views === 1, 'views counted');
+r = await fetch(`${share}/${token}`); ok(!/mossad/i.test(await r.text()), 'the page does not name the software');
+r = await fetch(`${share}/${token}.md`); ok(r.ok && r.headers.get('content-type').startsWith('text/markdown') && (await r.text()).startsWith('# Budget review'), 'markdown');
+r = await fetch(`${share}/f/literata-v1.woff2`); ok(r.ok && r.headers.get('content-type') === 'font/woff2', 'font');
+// A PIN: the page asks for it, a wrong one is refused, the right one gives a pass, and the Markdown has no address.
+r = await fetch(`${share}/api/shares/${id}/pin`, { method: 'PUT', headers: auth, body: '{}' }); const { pin } = await r.json(); ok(/^\d{4}$/.test(pin), 'pin made');
+r = await fetch(`${share}/${token}`); ok(r.status === 401 && !(await r.text()).includes('Budget review'), 'pin page');
+r = await fetch(`${share}/${token}.md`); ok(r.status === 404, 'no markdown address with a pin');
+const form = (value) => ({ method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `pin=${value}` });
+r = await fetch(`${share}/${token}/pin`, form(pin === '0000' ? '0001' : '0000')); ok(r.status === 401, 'wrong pin ' + r.status);
+r = await fetch(`${share}/${token}/pin`, form(pin)); const pass = r.headers.getSetCookie().find((c) => c.startsWith('a=')); ok(r.status === 303 && /HttpOnly; Secure; SameSite=Lax/.test(pass), 'right pin gives a pass');
+r = await fetch(`${share}/${token}`, { headers: { Cookie: pass.split(';')[0] } }); ok(r.ok && (await r.text()).includes('Budget review'), 'page with the pass');
+r = await fetch(`${share}/api/shares/${id}`, { headers: auth }); const detail = await r.json(); ok(detail.share.pin === true && detail.days.length === 1, 'share detail ' + JSON.stringify(detail).slice(0, 160));
+r = await fetch(`${share}/api/shares/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ expires: '2030-01-01T00:00:00Z' }) }); ok(r.ok, 'expiry changed');
+r = await fetch(`${share}/api/shares/${id}/pin`, { method: 'DELETE', headers: auth }); ok(r.ok, 'pin removed');
 // MCP OAuth
 r = await fetch(`${mcp}/mossad`, { method: 'POST', body: '{}' }); ok(r.status === 401, 'mcp needs a token'); const www = r.headers.get('www-authenticate'); console.log(' ', www);
 const prmURL = /resource_metadata="([^"]+)"/.exec(www)[1];

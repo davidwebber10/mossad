@@ -50,12 +50,15 @@ extension Data {
 public enum ServerError: Error, LocalizedError, Equatable {
     case notMossad
     case wrongSecret
+    /// The server is from before this call, or its database is: the owner must update it.
+    case needsUpdate
     case http(Int, String)
 
     public var errorDescription: String? {
         switch self {
         case .notMossad: "That address does not answer like a Mossad server."
         case .wrongSecret: "The server does not accept this secret."
+        case .needsUpdate: "Your server is an older version. Update it to use this."
         case .http(let code, let message): message.isEmpty ? "The server answered with HTTP \(code)." : message
         }
     }
@@ -82,6 +85,12 @@ public struct ServerClient: Sendable {
         public var recordingLimit: Int64?
         /// The id that the server gave itself, kept in the bucket that holds its recordings. Only the owner gets it.
         public var id: String?
+        /// What the share calls can do: 2 has the PIN, the views, and the change of an expiry. 0 on an older server.
+        public var shares = 0
+
+        /// The share calls that this version of the app uses. A server that reports less is older than the app.
+        public static let currentShares = 2
+        public var isCurrent: Bool { shares >= Self.currentShares }
     }
 
     /// Whether the address is a Mossad server, and whether it takes the secret. The first call goes without the
@@ -101,7 +110,8 @@ public struct ServerClient: Sendable {
         let recordings = body["recordings"] as? [String: Any]
         let limit = (recordings?["maxBytes"] as? NSNumber)?.int64Value
         return Hello(authorized: body["authorized"] as? Bool == true, mcp: (body["mcp"] as? String).flatMap(URL.init(string:)), chat: body["chat"] as? Bool == true,
-                     recordingLimit: limit.flatMap { $0 > 0 ? $0 : nil }, id: (recordings?["id"] as? String).flatMap { $0.isEmpty ? nil : $0 })
+                     recordingLimit: limit.flatMap { $0 > 0 ? $0 : nil }, id: (recordings?["id"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+                     shares: (body["shares"] as? NSNumber)?.intValue ?? 0)
     }
 
     @discardableResult

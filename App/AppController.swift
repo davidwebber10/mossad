@@ -17,6 +17,7 @@ final class AppController: ObservableObject {
 
     enum Section: String, CaseIterable, Identifiable {
         case meetings = "Meetings", commitments = "Tasks", chat = "Chat", people = "People", analytics = "Analytics", coach = "Coach",
+             shares = "Shares",
              settings = "Settings", log = "Log"
         var id: String { rawValue }
         /// The number in the Go menu. Coach came after the others had theirs, so it takes the next free one and
@@ -31,6 +32,7 @@ final class AppController: ObservableObject {
             case .settings: "6"
             case .log: "7"
             case .coach: "8"
+            case .shares: "9"
             }
         }
         var icon: Icon {
@@ -41,6 +43,7 @@ final class AppController: ObservableObject {
             case .people: .people
             case .analytics: .analytics
             case .coach: .coach
+            case .shares: .link
             case .settings: .settings
             case .log: .log
             }
@@ -334,6 +337,10 @@ final class AppController: ObservableObject {
     @AppStorage("serverMCP") var serverMCP = ""
     /// Whether the server has an AI key for the chat on share pages.
     @AppStorage("serverHasChat") var serverHasChat = false
+    /// What the server's share calls can do, as it reported: 2 has the PIN, the views, and the change of an expiry.
+    @AppStorage("serverShares") var serverShares = 0
+    /// A link that its owner just stopped and may still bring back; the Shares page shows Undo meanwhile.
+    @Published var stoppedShare: MeetingLink?
     @AppStorage("shareAIKey") var shareAIKey = true
     var syncRunning = false
     /// The server learns the owner's name and time zone once a launch, for the MCP's answers and dates.

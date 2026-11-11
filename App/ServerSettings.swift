@@ -16,6 +16,7 @@ struct ServerGroup: View {
         SettingsGroup(label: "Your server", footer: controller.serverConnection == nil ? nil : "Anyone with a share link can open that one meeting. Links are hidden from search engines.") {
             if let connection = controller.serverConnection {
                 connectionRow(connection)
+                if controller.serverNeedsUpdate { ServerUpdateRow() }
                 AIAccessRows()
                 ShareLinkRows()
             } else {
@@ -150,64 +151,37 @@ private struct AIAccessRows: View {
     }
 }
 
-/// The share links that work now, each with Copy link and Stop.
-private struct ShareLinkRows: View {
-    @EnvironmentObject var controller: AppController
-    @State private var stats: [String: ServerClient.ShareStats] = [:]
-    @State private var stopping: MeetingLink?
-
-    private var links: [MeetingLink] { controller.shareBook.links.filter { !$0.isExpired() } }
+/// Shown when the server reports an older version than this app uses: what is missing, and the steps.
+private struct ServerUpdateRow: View {
+    @State private var copied = false
+    private static let guide = URL(string: "https://github.com/davidwebber10/mossad/tree/main/server#update-your-server")!
 
     var body: some View {
-        Group {
-            SettingsRow(title: "Share links",
-                        detail: links.isEmpty ? "No links yet. Open a meeting and click Share." : "\(links.count == 1 ? "1 link works" : "\(links.count) links work") now.")
-            ForEach(links, id: \.token) { row($0) }
-        }
-        .task { await loadStats() }
-        .confirmationDialog("Stop sharing this meeting?", isPresented: Binding(get: { stopping != nil }, set: { if !$0 { stopping = nil } }), presenting: stopping) { link in
-            Button("Stop sharing", role: .destructive) { Task { try? await controller.stopSharing(link) } }
-        } message: { _ in
-            Text("The link stops working at once, and the copy on your server is deleted.")
-        }
-    }
-
-    private func row(_ link: MeetingLink) -> some View {
-        HStack(spacing: Space.m) {
-            VStack(alignment: .leading, spacing: 2) {
-                Button(link.title) { controller.openMeeting(link.callID) }
-                    .buttonStyle(SettingsTextButtonStyle(color: Palette.ink, weight: .medium))
-                    .font(.system(size: 13))
-                    .lineLimit(1)
-                Text(detail(link)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+        SettingsRow(title: "Update your server",
+                    detail: "Your server runs an older version than this Mac. Share links, sync, and the backup work as before. Views, PINs, and a change of an expiry need the update.") {
+            HStack(spacing: Space.m) {
+                SettingsHelpLink(title: "Read the steps", url: Self.guide)
+                Button(copied ? "Copied" : "Copy the steps") {
+                    copy(AppController.serverUpdateSteps)
+                    copied = true
+                    Task { try? await Task.sleep(for: .seconds(2)); copied = false }
+                }
+                .buttonStyle(.settingsAccent)
             }
-            Spacer(minLength: Space.m)
-            Button("Copy link") { if let url = controller.shareURL(link) { copy(url.absoluteString) } }.buttonStyle(.settings)
-            Button("Stop") { stopping = link }
-                .buttonStyle(SettingsTextButtonStyle(color: Palette.recording, weight: .medium))
-                .help("Stop sharing")
-                .accessibilityLabel("Stop sharing \(link.title)")
         }
-        .padding(.vertical, 9)
     }
+}
 
-    private func detail(_ link: MeetingLink) -> String {
-        var parts = [parts(link.options)]
-        parts.append(link.expires.map { "until \($0.formatted(.dateTime.month(.abbreviated).day()))" } ?? "no expiry")
-        if let s = stats[link.id] {
-            parts.append("\(s.views) \(s.views == 1 ? "view" : "views")")
-            if s.questions > 0 { parts.append("\(s.questions) \(s.questions == 1 ? "question" : "questions")") }
+/// The share links that work now, in one line: the Shares page has each link with its numbers and its actions.
+private struct ShareLinkRows: View {
+    @EnvironmentObject var controller: AppController
+
+    private var count: Int { controller.shareBook.links.filter { !$0.isExpired() && $0.stopping != true }.count }
+
+    var body: some View {
+        SettingsRow(title: "Share links",
+                    detail: count == 0 ? "No links yet. Open a meeting and click Share." : "\(count == 1 ? "1 link works" : "\(count) links work") now. Shares has each link with its views, its PIN, and its expiry.") {
+            Button("Open Shares") { controller.open(.shares) }.buttonStyle(.settings)
         }
-        return parts.joined(separator: " · ")
-    }
-
-    private func parts(_ o: ShareOptions) -> String {
-        [o.summary ? "Summary" : nil, o.transcript ? "Transcript" : nil, o.recording ? "Recording" : nil, o.chat ? "Chat" : nil]
-            .compactMap { $0 }.joined(separator: ", ")
-    }
-
-    private func loadStats() async {
-        guard !ServerSample.isOn, let c = controller.serverConnection, !links.isEmpty else { return }
-        stats = (try? await ServerClient(c).shareStats()) ?? [:]
     }
 }

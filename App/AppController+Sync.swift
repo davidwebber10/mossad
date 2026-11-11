@@ -56,6 +56,7 @@ extension AppController {
     func connectServer(_ c: ServerConnection, hello: ServerClient.Hello, syncThere: Bool) {
         serverMCP = hello.mcp?.absoluteString ?? ""
         serverHasChat = hello.chat
+        serverShares = hello.shares
         serverRecordingLimit = Double(hello.recordingLimit ?? 0)
         // Another server has another id: the recordings on the old one are then not "in the backup" any more.
         let previous = serverID
@@ -83,6 +84,7 @@ extension AppController {
         keysChanged()
         serverAddress = ""
         serverMCP = ""
+        serverShares = 0
         serverRecordingLimit = 0
         serverID = ""
         if syncWith == .server { syncWith = Self.hasICloud ? .icloud : .off }
@@ -220,68 +222,8 @@ extension AppController {
         }
     }
 
-    // MARK: Share links
-
-    /// Makes or updates the link for a meeting with these options, and returns it.
-    func share(_ record: CallRecord, options: ShareOptions, existing: MeetingLink?) async throws -> MeetingLink {
-        guard let c = serverConnection else { throw ServerError.wrongSecret }
-        let now = Date()
-        var link = existing ?? MeetingLink(token: MeetingLink.newToken(), callID: record.id, title: record.title, options: options, created: now)
-        link.options = options
-        link.title = record.title
-        link.expires = options.days.map { (existing?.created ?? now).addingTimeInterval(Double($0) * 86_400) }
-        let model = aiProvider == .anthropic ? aiProvider.resolvedModel(aiModel) : nil
-        let meeting = SharedMeeting(MeetingView(record), owner: ownerName, options: options, expires: link.expires, model: model)
-        let audio = options.recording ? try await recordingFile(record) : nil
-        try await ServerClient(c).putShare(link, meeting: meeting, audio: audio)
-        shareBook.put(link)
-        saveShares()
-        return link
-    }
-
-    func stopSharing(_ link: MeetingLink) async throws {
-        if let c = serverConnection { try await ServerClient(c).deleteShare(link) }
-        shareBook.remove(link.token)
-        saveShares()
-    }
-
-    /// Stops every link of a meeting that is gone (deleted, or merged into another), so its page does not stay
-    /// public with no meeting left to stop it from. A link the server could not be told about is kept, marked, and
-    /// tried again after each sync.
-    func stopSharing(callID: String) {
-        guard shareBook.links.contains(where: { $0.callID == callID }) else { return }
-        shareBook.markStopping(callID: callID)
-        saveShares()
-        retryShareStops()
-    }
-
-    func retryShareStops() {
-        let links = shareBook.links.filter { $0.stopping == true }
-        // Without a server connection the link cannot be stopped; it stays marked until there is one. Dropping it
-        // here would leave the public page with no trace of it on this Mac.
-        guard !links.isEmpty, !stoppingShares, serverConnection != nil else { return }
-        stoppingShares = true
-        Task {
-            for link in links {
-                do {
-                    try await stopSharing(link)
-                    Log.info("Stopped the share link of a meeting that is gone")
-                } catch {
-                    Log.error("A share link of a removed meeting could not be stopped yet; it is tried again after the next sync: \(error)")
-                }
-            }
-            stoppingShares = false
-        }
-    }
-
-    func shareURL(_ link: MeetingLink) -> URL? { serverConnection.map { link.url(on: $0.address) } }
-
-    private func saveShares() {
-        do { try shareBook.save(to: paths.shares) } catch { Log.error("Saving share links failed: \(error)") }
-    }
-
     /// The recording on this Mac, or a copy from the cloud archive when the local one was removed.
-    private func recordingFile(_ r: CallRecord) async throws -> URL? {
+    func recordingFile(_ r: CallRecord) async throws -> URL? {
         let local = Recording.url(in: paths.callDirectory(r.id))
         if FileManager.default.fileExists(atPath: local.path) { return local }
         guard let remote = cloudArchive?.playbackURL(for: r) else { return nil }

@@ -6,6 +6,7 @@ public struct ShareOptions: Codable, Equatable, Sendable {
     public var summary = true
     public var transcript = true
     public var recording = false
+    /// Only on a link from before the share sheet lost its chat switch. A new link has no chat.
     public var chat = false
     /// Days until the link stops working; nil for never.
     public var days: Int? = 30
@@ -34,6 +35,14 @@ public struct MeetingLink: Codable, Equatable, Identifiable, Sendable {
     public var expires: Date?
     /// The meeting is gone and the link must stop; set until the server confirms.
     public var stopping: Bool?
+    /// The owner stopped the link and may still undo that: the server is told only after this time.
+    public var stopAfter: Date?
+    /// The PIN of the link, when it has one. The server keeps only a hash, so this Mac is where the owner reads it.
+    /// It is beside the token, which opens more than the PIN does.
+    public var pin: String?
+    /// When the server set that PIN, in its milliseconds. When the server names another time, another Mac (or a new
+    /// owner secret) changed the PIN, and the one here is old.
+    public var pinSet: Int64?
 
     public var id: String { Self.serverID(token) }
 
@@ -56,6 +65,88 @@ public struct MeetingLink: Codable, Equatable, Identifiable, Sendable {
     public func url(on address: URL) -> URL { address.appendingPathComponent(token) }
 
     public func isExpired(at now: Date = Date()) -> Bool { expires.map { $0 < now } ?? false }
+
+    /// When a link stops working. A link that is sent again with the same choice keeps its date; another choice,
+    /// or a link that had expired, counts from now.
+    public static func expiry(days: Int?, existing: MeetingLink?, now: Date = Date()) -> Date? {
+        guard let days else { return nil }
+        if let existing, existing.options.days == days, let kept = existing.expires, kept > now { return kept }
+        return now.addingTimeInterval(Double(days) * 86_400)
+    }
+}
+
+/// What the share sheet holds before its owner clicks Share. Nothing of it is on the server or in the book yet,
+/// so closing the sheet creates nothing.
+public struct ShareDraft: Equatable, Sendable {
+    public var options: ShareOptions
+    public var pinOn: Bool
+    /// The PIN that the sheet shows while the switch is on: the link's own, or a new random one.
+    public private(set) var pin: String
+
+    public init(existing: MeetingLink?, hasRecording: Bool, newPIN: String = SharePIN.random()) {
+        options = existing?.options ?? ShareOptions()
+        if !hasRecording { options.recording = false }
+        pinOn = existing?.pin != nil
+        pin = existing?.pin ?? newPIN
+    }
+
+    /// The PIN to set with the share, or nil for none.
+    public var sentPIN: String? { pinOn ? pin : nil }
+
+    public mutating func makeNewPIN() {
+        var next = SharePIN.random()
+        while next == pin { next = SharePIN.random() }
+        pin = next
+    }
+
+    public var canShare: Bool { options.showsAnything }
+
+    public func differs(from link: MeetingLink) -> Bool { options != link.options || sentPIN != link.pin }
+}
+
+/// Whether the PIN must be sent after the meeting: when the owner chose another PIN, or when the server answers
+/// that the share has none although this Mac holds one (the server lost the row and made it again).
+public enum SharePINStep {
+    public static func needed(wanted: String?, held: String?, serverHasPIN: Bool?) -> Bool {
+        if wanted != held { return true }
+        return wanted != nil && serverHasPIN == false
+    }
+}
+
+/// The PIN of a share: 4 digits from the system's random source.
+public enum SharePIN {
+    public static func random() -> String {
+        var generator = SystemRandomNumberGenerator()
+        return String(format: "%04d", Int.random(in: 0..<10_000, using: &generator))
+    }
+
+    public static func isValid(_ text: String) -> Bool { text.utf8.count == 4 && text.utf8.allSatisfy { (48...57).contains($0) } }
+}
+
+/// What "Copy link and PIN" copies: the link on one line and the PIN on the next. The PIN is never in the link.
+public enum ShareMessage {
+    public static func text(url: URL, pin: String?) -> String {
+        guard let pin else { return url.absoluteString }
+        return "\(url.absoluteString)\nPIN: \(pin)"
+    }
+}
+
+/// The mark on a link that the owner opens from the app, so the server keeps the owner's own visits out of the
+/// count: "<unix seconds>.<hex HMAC-SHA256 of "owner-view\n<share id>\n<seconds>">". The key is made from the owner
+/// secret for this one purpose, as the server makes it, so the address holds nothing to test a guess of the secret
+/// with. It lasts five minutes, for one share, and gives nothing but that.
+public enum OwnerMark {
+    public static func make(secret: String, shareID: String, expires: Int) -> String {
+        let key = HMAC<SHA256>.authenticationCode(for: Data("share\nowner-mark".utf8), using: SymmetricKey(data: Data(secret.utf8)))
+        let mac = HMAC<SHA256>.authenticationCode(for: Data("owner-view\n\(shareID)\n\(expires)".utf8), using: SymmetricKey(data: Data(key)))
+        return "\(expires).\(mac.map { String(format: "%02x", $0) }.joined())"
+    }
+
+    public static func url(_ link: URL, shareID: String, secret: String, now: Date = Date()) -> URL {
+        var c = URLComponents(url: link, resolvingAgainstBaseURL: false)!
+        c.queryItems = [URLQueryItem(name: "owner", value: make(secret: secret, shareID: shareID, expires: Int(now.timeIntervalSince1970) + 300))]
+        return c.url ?? link
+    }
 }
 
 /// The copy of a meeting that a link shows: only the parts the owner turned on.
@@ -118,7 +209,30 @@ public struct ShareBook: Codable, Equatable, Sendable {
 
     /// Marks every link of a meeting that is gone, so each is stopped on the server, now or on a later try.
     public mutating func markStopping(callID: String) {
-        for i in links.indices where links[i].callID == callID { links[i].stopping = true }
+        for i in links.indices where links[i].callID == callID {
+            links[i].stopping = true
+            links[i].stopAfter = nil
+        }
+    }
+
+    /// Marks one link that its owner stopped. The mark is saved at once, so a quit before `after` still stops it.
+    public mutating func markStopping(token: String, after: Date) {
+        for i in links.indices where links[i].token == token {
+            links[i].stopping = true
+            links[i].stopAfter = after
+        }
+    }
+
+    public mutating func undoStop(token: String) {
+        for i in links.indices where links[i].token == token {
+            links[i].stopping = nil
+            links[i].stopAfter = nil
+        }
+    }
+
+    /// The marked links whose undo time is over: these the server is told to stop.
+    public func dueStops(now: Date = Date()) -> [MeetingLink] {
+        links.filter { $0.stopping == true && ($0.stopAfter.map { $0 <= now } ?? true) }
     }
 
     public mutating func put(_ link: MeetingLink) {
@@ -145,30 +259,20 @@ public struct ShareBook: Codable, Equatable, Sendable {
 
 extension ServerClient {
     /// Puts the copy on the server, and the recording when the link shows it.
-    public func putShare(_ link: MeetingLink, meeting: SharedMeeting, audio: URL?) async throws {
-        try await send(connection.request("api/shares/\(link.id)", method: "PUT"), body: meeting.encoded())
+    /// Sends the copy of a meeting. Answers whether the share has a PIN now, or nil from a server that does not say.
+    @discardableResult
+    public func putShare(_ link: MeetingLink, meeting: SharedMeeting, audio: URL?) async throws -> Bool? {
+        let data = try await send(connection.request("api/shares/\(link.id)", method: "PUT"), body: meeting.encoded())
+        let hasPIN = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["pin"] as? Bool
         if meeting.audio, let audio {
             var request = connection.request("api/shares/\(link.id)/audio", method: "PUT")
             request.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
             try await send(request, file: audio)
         }
+        return hasPIN
     }
 
     public func deleteShare(_ link: MeetingLink) async throws {
         try await send(connection.request("api/shares/\(link.id)", method: "DELETE"))
-    }
-
-    public struct ShareStats: Equatable, Sendable {
-        public var views: Int
-        public var questions: Int
-    }
-
-    /// Views and chat questions per link, by server ID.
-    public func shareStats() async throws -> [String: ShareStats] {
-        let data = try await send(connection.request("api/shares"))
-        let list = (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["shares"] as? [[String: Any]] ?? []
-        return Dictionary(list.compactMap { s in
-            (s["id"] as? String).map { ($0, ShareStats(views: (s["views"] as? Int) ?? 0, questions: (s["questions"] as? Int) ?? 0)) }
-        }, uniquingKeysWith: { a, _ in a })
     }
 }

@@ -11,6 +11,7 @@ export interface Env {
   MCP_PATH?: string;
   REPO_URL: string;
   OWNER_SECRET: string;
+  /** Only for the chat of share links from before the share sheet lost its chat switch. New links have no chat. */
   ANTHROPIC_API_KEY?: string;
   /** The model for share-page chats when a share does not name one. */
   SHARE_MODEL?: string;
