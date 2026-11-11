@@ -18,9 +18,10 @@ extension AppController {
     /// of the player does not make them again.
     func findings(for record: CallRecord) -> [CoachFinding] {
         guard coachEnabled else { return [] }
-        return coachFindingsCache.value(record.id, version: coachVersion) {
+        let trait = traitCards[record.id]
+        return coachFindingsCache.value("\(record.id)|\(trait?.id ?? "")", version: coachVersion) {
             guard let review = shownCoachReview(record.id) else { return [] }
-            return FindingRules.deck(callID: record.id, date: record.start, review: review, profile: shownCoachProfile)
+            return FindingRules.deck(callID: record.id, date: record.start, review: review, profile: shownCoachProfile, trait: trait)
         }
     }
 
@@ -31,18 +32,27 @@ extension AppController {
             if !findings.isEmpty { findings = [] }
             return
         }
-        let now = Date(), paths = paths, profile = shownCoachProfile
+        let now = Date(), paths = paths, profile = shownCoachProfile, saved = shownCoachPeople, personas = personasOn
         let recent = meetings.filter { $0.status == .written && now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }.map { ($0.id, $0.start) }
         findingsAsk += 1
         let ask = findingsAsk
         Task {
-            let cards = await Task.detached(priority: .utility) {
-                FindingRules.deck(reviews: recent.compactMap { id, start in
+            let (cards, reads, traits) = await Task.detached(priority: .utility) {
+                // The reads of how people think, and the trait card of each call: from the files, off the main thread.
+                let reads = personas ? PersonaReads.all(paths: paths, saved: saved, answers: profile.answers) : [:]
+                let traits = personas ? PersonaFindings.cards(PersonaReads.sources(paths: paths, saved: saved, answers: profile.answers),
+                                                              calls: recent.map { (callID: $0.0, date: $0.1) }, profile: profile, now: now,
+                                                              quote: { PersonaReads.words($0, paths: paths) }) : [:]
+                let cards = FindingRules.deck(reviews: recent.compactMap { id, start in
                     CoachReview.load(in: paths.callDirectory(id)).map { (callID: id, date: start, review: $0) }
-                }, profile: profile, now: now)
+                }, profile: profile, now: now, traits: traits)
+                return (cards, reads, traits)
             }.value
             // A later ask is newer: its cards win.
-            if ask == findingsAsk, cards != findings { findings = cards }
+            guard ask == findingsAsk else { return }
+            if reads != personaReads { personaReads = reads }
+            traitCards = traits
+            if cards != findings { findings = cards }
         }
     }
 

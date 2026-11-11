@@ -83,7 +83,10 @@ struct PeopleView: View {
         .sheet(isPresented: $importing) { OrgImportSheet(org: org, profiles: profiles, stats: stats, owner: controller.ownerName) }
         .confirmationDialog("Delete \(deleting?.name ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete", role: .destructive) {
-                if let p = deleting { edit { try controller.library.delete(p.name) } }
+                if let p = deleting {
+                    controller.forgetPersona(named: p.name)
+                    edit { try controller.library.delete(p.name) }
+                }
                 deleting = nil
             }
         } message: {

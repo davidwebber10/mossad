@@ -167,6 +167,9 @@ extension AppController {
         syncRunning = true
         syncActivity.running = true
         let place = syncWith == .server ? "your server" : "iCloud"
+        // The reduced copy of the reads for the phone's card: shown traits and pointers, no words. None before the
+        // reads were read once, so a sync at launch does not empty the phone's copy; an empty one when they are off.
+        let personas: SyncedPersonas? = !personasOn ? SyncedPersonas([]) : personaReads.isEmpty ? nil : SyncedPersonas(Array(personaReads.values))
         Task.detached(priority: .utility) {
             var received = 0
             var failure: FriendlyError?
@@ -175,7 +178,7 @@ extension AppController {
                 do {
                     let changed = try await cloud.push()
                     received = try await cloud.pull(includeMeetings: false)
-                    let shared = try await cloud.pushShared(people: true)
+                    let shared = try await cloud.pushShared(people: true, personas: personas)
                     if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
                     if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
                 } catch {

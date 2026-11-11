@@ -21,6 +21,7 @@ public actor PersonaRunner {
     static let writeOutputTokens = 500
 
     private let paths: Paths
+    private let llm: any LanguageModel
     private let extractor: PersonaExtractor
     private let writer: PersonaWriter
     private let owner: String
@@ -28,6 +29,7 @@ public actor PersonaRunner {
 
     public init(paths: Paths, llm: any LanguageModel, owner: String, now: @escaping @Sendable () -> Date = Date.init) {
         self.paths = paths
+        self.llm = llm
         extractor = PersonaExtractor(llm: llm)
         writer = PersonaWriter(llm: llm)
         self.owner = owner
@@ -90,10 +92,18 @@ public actor PersonaRunner {
             let saved = CoachPeople.read(paths: paths)
             let speakers = PersonaExtractor.speakers(in: r, saved: saved, owner: owner, excluded: saved.notProfiled)
             let notTrue = Self.notTrue(speakers, profile: profile)
-            if let req = PersonaExtractor.request(for: r, speakers: speakers, owner: owner, notTrue: notTrue),
-               !canSpend(price((req.system.count + req.user.count) / 4, Self.extractOutputTokens)) {
-                report.stopped = "the cap"
-                break
+            if let req = PersonaExtractor.request(for: r, speakers: speakers, owner: owner, notTrue: notTrue) {
+                guard canSpend(price((req.system.count + req.user.count) / 4, Self.extractOutputTokens)) else {
+                    report.stopped = "the cap"
+                    break
+                }
+                // A small on-device model cannot hold the moments: the step waits for a provider that can.
+                if let small = llm as? any ContextLimitedModel,
+                   await small.tokenCount(req.system + req.user) + Self.extractOutputTokens * 2 > small.contextTokens() {
+                    report.stopped = "the model's context is too small"
+                    Log.info("The persona step skips: the on-device model's context is too small for the moments of a call")
+                    break
+                }
             }
             do {
                 let result = try await extractor.extract(r, speakers: speakers, owner: owner, notTrue: notTrue)
@@ -109,6 +119,11 @@ public actor PersonaRunner {
                 report.calls += 1
                 // Counts and keys only, never words.
                 Log.info("Persona step for \(r.id): \(result.kept) of \(result.proposed) pieces kept, \(speakers.count) people")
+            } catch let e as SummaryError where e.isReply {
+                // The model answered, but not in the shape asked: this call is left out, so it cannot block the others.
+                ledger.calls[r.id] = PersonaExtractor.promptVersion
+                ledger.save(to: store.directory)
+                Log.error("The persona step left out \(r.id): \(e)")
             } catch {
                 Log.error("The persona step for \(r.id) waits: \(error)")
                 report.stopped = "an error"
@@ -180,5 +195,15 @@ public actor PersonaRunner {
         let blocked = profile.answers.filter { $0.trait != nil && $0.person == person && $0.verdict == .never }.map(\.text)
         let reasons = profile.guidance(about: person).map(\.text)
         return (blocked + reasons).map { $0.replacingOccurrences(of: "\\b\(NSRegularExpression.escapedPattern(for: first))\\b", with: "P1", options: .regularExpression) }
+    }
+}
+
+extension SummaryError {
+    /// A reply that came back in another shape: asking again gives the same.
+    var isReply: Bool {
+        switch self {
+        case .malformed, .refused, .cutOff: true
+        default: false
+        }
     }
 }

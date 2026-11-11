@@ -24,6 +24,8 @@ final class MeetingPrepStore {
         /// The saved people's names and emails.
         var people: Int
         var coach: Int
+        /// The reads of how people think, which come in after a coach change.
+        var reads: Int
         var commitments: Int
         /// Counts every change of any meeting.
         var meetings: Int
@@ -45,6 +47,10 @@ final class MeetingPrepStore {
             owner = controller.ownerName
             self.people = people.finalize()
             coach = controller.coachVersion
+            var reads = Hasher()
+            for (id, r) in controller.personaReads.sorted(by: { $0.key < $1.key }) { reads.combine(id); reads.combine(r.updated); reads.combine(r.card?.lines.count) }
+            reads.combine(controller.personasOn)
+            self.reads = reads.finalize()
             commitments = controller.commitmentsVersion
             meetings = controller.meetingsVersion
             day = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)
@@ -71,6 +77,7 @@ final class MeetingPrepStore {
         let records: [CallRecord]
         let profiles: [VoiceProfile]
         let coach: CoachProfile
+        let reads: [String: PersonaSummary]
         let people: URL
         let ownerEmails: [String]
         let commitments: URL
@@ -80,14 +87,14 @@ final class MeetingPrepStore {
             // Nil when the file is there and cannot be read: the page then says so, not "no tasks".
             MeetingPrep(meeting: meeting, owner: owner, records: records, facts: facts, commitments: CommitmentBook.peek(in: commitments)?.items,
                         people: PersonDirectory(profiles: profiles), ownerEmails: ownerEmails, keep: keep,
-                        memory: coach, saved: CoachPeople(people: PeopleStore.peek(in: people) ?? []))
+                        memory: coach, saved: CoachPeople(people: PeopleStore.peek(in: people) ?? []), reads: reads)
         }
     }
 
     private func inputs(_ meeting: UpcomingMeeting, key: Key, controller: AppController) -> Inputs {
         // The coach's memory as the other pages show it: read one time for each change of it.
         Inputs(meeting: meeting, owner: key.owner, records: controller.meetings, profiles: controller.library.profiles,
-               coach: controller.shownCoachProfile, people: controller.paths.people, ownerEmails: [UserDefaults.standard.string(forKey: "ownerEmail") ?? ""],
+               coach: controller.shownCoachProfile, reads: controller.personasOn ? controller.personaReads : [:], people: controller.paths.people, ownerEmails: [UserDefaults.standard.string(forKey: "ownerEmail") ?? ""],
                commitments: controller.paths.commitments, keep: key.keep)
     }
 

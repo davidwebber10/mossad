@@ -1,0 +1,621 @@
+{
+ "id": "gold-04-1",
+ "person": "Morgan Diaz",
+ "title": "Carrier contract renewal",
+ "tags": [
+  "Logistics",
+  "Contracts"
+ ],
+ "setting": "one_on_one",
+ "start": "2026-08-07T19:00:00Z",
+ "end": "2026-08-07T19:14:40Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Morgan Diaz"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the carrier contract renewal."
+  },
+  {
+   "key": "me:A",
+   "start": 5.6,
+   "end": 13.3,
+   "text": "I would like us to agree on the scope of the carrier today, even if the lane details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 14.6,
+   "end": 23.4,
+   "text": "The feedback on the volume commitment has been mixed, some people like it and some say it adds steps to the rate card."
+  },
+  {
+   "key": "me:A",
+   "start": 24.9,
+   "end": 32.2,
+   "text": "From what I can see, the fuel surcharge is on track, and the risk is mostly in the carrier."
+  },
+  {
+   "key": "me:A",
+   "start": 32.7,
+   "end": 40.7,
+   "text": "I would like us to agree on the scope of the lane today, even if the fuel surcharge details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 41.2,
+   "end": 49.3,
+   "text": "The volume commitment piece is moving, and the team has a draft of the carrier changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 50.3,
+   "end": 57.6,
+   "text": "We could keep the carrier as it is for now and only change the lane in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 58.3,
+   "end": 66.4,
+   "text": "The rate card numbers came in yesterday, and I put a short summary of the volume commitment in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 67.0,
+   "end": 74.3,
+   "text": "We tested the lane with a small group, and the rate card results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 75.1,
+   "end": 83.5,
+   "text": "One thing I noticed is that the carrier looks different in each region, so the volume commitment plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 84.7,
+   "end": 91.7,
+   "text": "I think the volume commitment question is the main thing left before we can close out the lane."
+  },
+  {
+   "key": "me:A",
+   "start": 92.9,
+   "end": 99.5,
+   "text": "The draft for the carrier is in the folder, with comments from two teams on the lane."
+  },
+  {
+   "key": "me:A",
+   "start": 100.1,
+   "end": 107.8,
+   "text": "The carrier numbers came in yesterday, and I put a short summary of the volume commitment in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 108.3,
+   "end": 115.2,
+   "text": "The vendor sent an updated proposal for the fuel surcharge, and it changes the lane a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 115.8,
+   "end": 125.1,
+   "text": "I talked to the people who run the lane every day, and they said the fuel surcharge is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 126.2,
+   "end": 135.4,
+   "text": "So on the carrier, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 135.8,
+   "end": 143.1,
+   "text": "From what I can see, the volume commitment is on track, and the risk is mostly in the lane."
+  },
+  {
+   "key": "me:A",
+   "start": 143.8,
+   "end": 151.9,
+   "text": "The carrier piece is moving, and the team has a draft of the fuel surcharge changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 153.3,
+   "end": 160.3,
+   "text": "Right, and the fuel surcharge also touches the volume commitment, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 161.1,
+   "end": 170.3,
+   "text": "So on the lane, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 171.2,
+   "end": 178.9,
+   "text": "Last time we said we would clean up the carrier first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 179.5,
+   "end": 186.8,
+   "text": "I think the fuel surcharge question is the main thing left before we can close out the rate card."
+  },
+  {
+   "key": "me:A",
+   "start": 188.1,
+   "end": 195.4,
+   "text": "We tested the volume commitment with a small group, and the lane results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 196.3,
+   "end": 204.0,
+   "text": "We could keep the volume commitment as it is for now and only change the lane in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 205.2,
+   "end": 212.9,
+   "text": "The rate card numbers came in yesterday, and I put a short summary of the lane in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 213.9,
+   "end": 222.3,
+   "text": "The feedback on the volume commitment has been mixed, some people like it and some say it adds steps to the carrier."
+  },
+  {
+   "key": "me:A",
+   "start": 223.5,
+   "end": 230.8,
+   "text": "We have three open questions on the rate card, mostly about timing and who signs off on the carrier."
+  },
+  {
+   "key": "me:A",
+   "start": 231.2,
+   "end": 238.5,
+   "text": "There is a dependency on the fuel surcharge, so the carrier work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 239.8,
+   "end": 246.8,
+   "text": "I think the fuel surcharge question is the main thing left before we can close out the carrier."
+  },
+  {
+   "key": "them:A",
+   "start": 247.3,
+   "end": 257.0,
+   "text": "So on the volume commitment, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 257.9,
+   "end": 265.6,
+   "text": "From what I can see, the rate card is on track, and the risk is mostly in the fuel surcharge."
+  },
+  {
+   "key": "me:A",
+   "start": 266.9,
+   "end": 275.4,
+   "text": "The feedback on the lane has been mixed, some people like it and some say it adds steps to the rate card."
+  },
+  {
+   "key": "them:A",
+   "start": 276.7,
+   "end": 284.7,
+   "text": "Last time we said we would clean up the fuel surcharge first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 285.8,
+   "end": 293.5,
+   "text": "The fuel surcharge numbers came in yesterday, and I put a short summary of the carrier in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 293.8,
+   "end": 303.0,
+   "text": "So on the lane, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 304.4,
+   "end": 313.6,
+   "text": "So on the carrier, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 314.8,
+   "end": 321.8,
+   "text": "We have three open questions on the lane, mostly about timing and who signs off on the carrier."
+  },
+  {
+   "key": "me:A",
+   "start": 322.9,
+   "end": 331.3,
+   "text": "Here is the plan: we spend 40,000 on the rate card this quarter and the carrier changes follow in the next one."
+  },
+  {
+   "key": "them:A",
+   "start": 332.6,
+   "end": 336.8,
+   "text": "How fast can we get this done? Speed matters most here."
+  },
+  {
+   "key": "me:A",
+   "start": 337.2,
+   "end": 344.5,
+   "text": "There is a dependency on the fuel surcharge, so the carrier work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 345.0,
+   "end": 351.9,
+   "text": "From what I can see, the carrier is on track, and the risk is mostly in the lane."
+  },
+  {
+   "key": "me:A",
+   "start": 352.2,
+   "end": 360.3,
+   "text": "I would like us to agree on the scope of the carrier today, even if the fuel surcharge details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 361.5,
+   "end": 368.8,
+   "text": "We tested the fuel surcharge with a small group, and the lane results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 370.2,
+   "end": 377.5,
+   "text": "There is a dependency on the carrier, so the volume commitment work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 378.7,
+   "end": 385.6,
+   "text": "I think the carrier question is the main thing left before we can close out the fuel surcharge."
+  },
+  {
+   "key": "me:A",
+   "start": 387.0,
+   "end": 394.3,
+   "text": "We have three open questions on the carrier, mostly about timing and who signs off on the rate card."
+  },
+  {
+   "key": "them:A",
+   "start": 394.8,
+   "end": 403.3,
+   "text": "The fuel surcharge piece is moving, and the team has a draft of the rate card changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 403.6,
+   "end": 411.7,
+   "text": "I would like us to agree on the scope of the fuel surcharge today, even if the lane details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 412.8,
+   "end": 420.1,
+   "text": "We tested the carrier with a small group, and the volume commitment results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 421.3,
+   "end": 428.2,
+   "text": "The vendor sent an updated proposal for the volume commitment, and it changes the carrier a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 428.7,
+   "end": 436.8,
+   "text": "We could keep the rate card as it is for now and only change the volume commitment in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 437.5,
+   "end": 444.5,
+   "text": "I think the rate card question is the main thing left before we can close out the carrier."
+  },
+  {
+   "key": "me:A",
+   "start": 444.9,
+   "end": 454.1,
+   "text": "I talked to the people who run the lane every day, and they said the fuel surcharge is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 455.1,
+   "end": 462.8,
+   "text": "I propose we change the lane next month and move about 20% of the work to the new carrier setup."
+  },
+  {
+   "key": "them:A",
+   "start": 463.8,
+   "end": 468.4,
+   "text": "Let me sleep on it and get back to you on Thursday."
+  },
+  {
+   "key": "me:A",
+   "start": 469.6,
+   "end": 477.3,
+   "text": "We tested the volume commitment with a small group, and the fuel surcharge results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 478.5,
+   "end": 485.8,
+   "text": "We tested the lane with a small group, and the volume commitment results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 486.7,
+   "end": 496.3,
+   "text": "So on the volume commitment, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 497.6,
+   "end": 504.9,
+   "text": "I think the volume commitment question is the main thing left before we can close out the rate card."
+  },
+  {
+   "key": "me:A",
+   "start": 505.9,
+   "end": 514.3,
+   "text": "I propose we change the fuel surcharge next month and move about 20% of the work to the new rate card setup."
+  },
+  {
+   "key": "them:A",
+   "start": 515.5,
+   "end": 519.4,
+   "text": "Zoom out for me. What is the overall picture here?"
+  },
+  {
+   "key": "me:A",
+   "start": 520.6,
+   "end": 528.0,
+   "text": "We could keep the carrier as it is for now and only change the lane in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 529.3,
+   "end": 537.8,
+   "text": "The feedback on the lane has been mixed, some people like it and some say it adds steps to the volume commitment."
+  },
+  {
+   "key": "me:A",
+   "start": 538.9,
+   "end": 548.5,
+   "text": "So on the fuel surcharge, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 548.9,
+   "end": 555.8,
+   "text": "The vendor sent an updated proposal for the fuel surcharge, and it changes the carrier a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 556.1,
+   "end": 563.8,
+   "text": "We could keep the rate card as it is for now and only change the lane in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 564.7,
+   "end": 572.7,
+   "text": "The volume commitment numbers came in yesterday, and I put a short summary of the fuel surcharge in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 574.1,
+   "end": 581.4,
+   "text": "From what I can see, the rate card is on track, and the risk is mostly in the lane."
+  },
+  {
+   "key": "me:A",
+   "start": 582.5,
+   "end": 591.0,
+   "text": "The feedback on the fuel surcharge has been mixed, some people like it and some say it adds steps to the carrier."
+  },
+  {
+   "key": "me:A",
+   "start": 592.4,
+   "end": 601.7,
+   "text": "I talked to the people who run the fuel surcharge every day, and they said the lane is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 602.5,
+   "end": 609.8,
+   "text": "From what I can see, the fuel surcharge is on track, and the risk is mostly in the lane."
+  },
+  {
+   "key": "me:A",
+   "start": 611.2,
+   "end": 619.3,
+   "text": "The volume commitment piece is moving, and the team has a draft of the lane changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 620.3,
+   "end": 627.6,
+   "text": "We tested the lane with a small group, and the fuel surcharge results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 629.0,
+   "end": 635.9,
+   "text": "If we wait a month on the carrier, the volume commitment timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 636.2,
+   "end": 643.6,
+   "text": "We tested the rate card with a small group, and the carrier results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 644.0,
+   "end": 651.4,
+   "text": "The vendor sent an updated proposal for the rate card, and it changes the volume commitment a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 652.0,
+   "end": 658.5,
+   "text": "Right, and the fuel surcharge also touches the carrier, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 659.5,
+   "end": 667.6,
+   "text": "The carrier piece is moving, and the team has a draft of the rate card changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 668.3,
+   "end": 674.9,
+   "text": "Right, and the volume commitment also touches the carrier, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 676.0,
+   "end": 683.3,
+   "text": "We have three open questions on the rate card, mostly about timing and who signs off on the lane."
+  },
+  {
+   "key": "me:A",
+   "start": 684.1,
+   "end": 691.0,
+   "text": "I think the fuel surcharge question is the main thing left before we can close out the lane."
+  },
+  {
+   "key": "me:A",
+   "start": 691.9,
+   "end": 698.8,
+   "text": "The draft for the rate card is in the folder, with comments from two teams on the lane."
+  },
+  {
+   "key": "them:A",
+   "start": 699.7,
+   "end": 707.4,
+   "text": "From what I can see, the rate card is on track, and the risk is mostly in the volume commitment."
+  },
+  {
+   "key": "me:A",
+   "start": 708.2,
+   "end": 715.9,
+   "text": "We have three open questions on the fuel surcharge, mostly about timing and who signs off on the rate card."
+  },
+  {
+   "key": "me:A",
+   "start": 717.0,
+   "end": 724.7,
+   "text": "The lane piece is moving, and the team has a draft of the carrier changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 725.1,
+   "end": 732.4,
+   "text": "From what I can see, the carrier is on track, and the risk is mostly in the rate card."
+  },
+  {
+   "key": "me:A",
+   "start": 733.0,
+   "end": 741.0,
+   "text": "Last time we said we would clean up the volume commitment first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 742.5,
+   "end": 749.0,
+   "text": "The vendor sent an updated proposal for the carrier, and it changes the lane a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 749.6,
+   "end": 756.5,
+   "text": "The draft for the carrier is in the folder, with comments from two teams on the volume commitment."
+  },
+  {
+   "key": "me:A",
+   "start": 757.8,
+   "end": 765.5,
+   "text": "We tested the volume commitment with a small group, and the rate card results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 766.0,
+   "end": 773.7,
+   "text": "We could keep the carrier as it is for now and only change the volume commitment in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 774.3,
+   "end": 781.6,
+   "text": "I think the fuel surcharge question is the main thing left before we can close out the rate card."
+  },
+  {
+   "key": "me:A",
+   "start": 782.0,
+   "end": 790.0,
+   "text": "Last time we said we would clean up the rate card first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 790.6,
+   "end": 799.1,
+   "text": "The fuel surcharge piece is moving, and the team has a draft of the volume commitment changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 800.5,
+   "end": 807.5,
+   "text": "The draft for the lane is in the folder, with comments from two teams on the volume commitment."
+  },
+  {
+   "key": "them:A",
+   "start": 807.9,
+   "end": 815.2,
+   "text": "The draft for the rate card is in the folder, with comments from two teams on the fuel surcharge."
+  },
+  {
+   "key": "me:A",
+   "start": 816.1,
+   "end": 819.2,
+   "text": "Okay, I think that covers it. Thanks, everyone."
+  }
+ ],
+ "beats": [
+  {
+   "line": 38,
+   "person": "Morgan Diaz",
+   "dimension": "drivers",
+   "value": "time"
+  },
+  {
+   "line": 54,
+   "person": "Morgan Diaz",
+   "dimension": "decision",
+   "value": "asks_for_time"
+  },
+  {
+   "line": 60,
+   "person": "Morgan Diaz",
+   "dimension": "detail",
+   "value": "big_picture"
+  }
+ ]
+}

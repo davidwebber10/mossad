@@ -145,7 +145,17 @@ struct PersonView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.s) {
                 header
-                PersonBriefCard(name: name, brief: store.profile.people[name]?.brief, calls: stats.meetings.count)
+                // How to present to them, from the Mac's copy; the older read until the person has a card.
+                if !isOwner, let read = store.persona(named: name), let card = read.card {
+                    PersonaCardView(card: card, first: name.split(separator: " ").first.map(String.init) ?? name)
+                    PersonaTraitsView(read: read, date: { id in store.meetings.first { $0.id == id }?.start })
+                } else {
+                    PersonBriefCard(name: name, brief: store.profile.people[name]?.brief, calls: stats.meetings.count)
+                    if !isOwner, stats.meetings.count < PersonaCard.callsNeeded {
+                        Text(PersonaCard.needsMore(first: name.split(separator: " ").first.map(String.init) ?? name, calls: stats.meetings.count))
+                            .textRole(.secondary).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 LabelColumn(label: "By the numbers") { numbers }
                 // What the owner confirmed on a card about this person. The iPhone has no people store: the label of
                 // the coach's note, which the Mac keeps at the person's name of now, gives the person's id.

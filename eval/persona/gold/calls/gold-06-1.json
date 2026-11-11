@@ -1,0 +1,446 @@
+{
+ "id": "gold-06-1",
+ "person": "Casey Moore",
+ "title": "Warehouse scanner rollout",
+ "tags": [
+  "Operations",
+  "Hardware"
+ ],
+ "setting": "one_on_one",
+ "start": "2026-08-09T16:00:00Z",
+ "end": "2026-08-09T16:10:49Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Casey Moore"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the warehouse scanner rollout."
+  },
+  {
+   "key": "me:A",
+   "start": 6.1,
+   "end": 13.4,
+   "text": "If we wait a month on the training session, the pick rate timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 14.6,
+   "end": 21.5,
+   "text": "The draft for the dock door is in the folder, with comments from two teams on the firmware."
+  },
+  {
+   "key": "me:A",
+   "start": 22.7,
+   "end": 31.2,
+   "text": "I would like us to agree on the scope of the dock door today, even if the pick rate details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 32.4,
+   "end": 40.8,
+   "text": "The feedback on the firmware has been mixed, some people like it and some say it adds steps to the pick rate."
+  },
+  {
+   "key": "them:A",
+   "start": 42.3,
+   "end": 44.3,
+   "text": "Yes."
+  },
+  {
+   "key": "me:A",
+   "start": 45.4,
+   "end": 53.5,
+   "text": "I would like us to agree on the scope of the pick rate today, even if the firmware details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 54.2,
+   "end": 60.7,
+   "text": "The draft for the firmware is in the folder, with comments from two teams on the scanner."
+  },
+  {
+   "key": "me:A",
+   "start": 61.9,
+   "end": 68.8,
+   "text": "I think the training session question is the main thing left before we can close out the scanner."
+  },
+  {
+   "key": "them:A",
+   "start": 70.2,
+   "end": 72.2,
+   "text": "Okay, sounds fine."
+  },
+  {
+   "key": "me:A",
+   "start": 72.9,
+   "end": 81.0,
+   "text": "One thing I noticed is that the scanner looks different in each region, so the firmware plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 81.7,
+   "end": 90.5,
+   "text": "The feedback on the training session has been mixed, some people like it and some say it adds steps to the dock door."
+  },
+  {
+   "key": "me:A",
+   "start": 91.6,
+   "end": 99.3,
+   "text": "There is a dependency on the pick rate, so the training session work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 100.7,
+   "end": 102.7,
+   "text": "Sure."
+  },
+  {
+   "key": "me:A",
+   "start": 104.0,
+   "end": 111.3,
+   "text": "If we wait a month on the dock door, the pick rate timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 112.4,
+   "end": 119.7,
+   "text": "I think the dock door question is the main thing left before we can close out the training session."
+  },
+  {
+   "key": "them:A",
+   "start": 120.3,
+   "end": 122.3,
+   "text": "Thanks, that works."
+  },
+  {
+   "key": "me:A",
+   "start": 123.5,
+   "end": 132.0,
+   "text": "One thing I noticed is that the pick rate looks different in each region, so the firmware plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 132.3,
+   "end": 140.0,
+   "text": "Last time we said we would clean up the scanner first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 140.6,
+   "end": 148.6,
+   "text": "The dock door numbers came in yesterday, and I put a short summary of the training session in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 150.0,
+   "end": 157.7,
+   "text": "The training session numbers came in yesterday, and I put a short summary of the scanner in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 158.4,
+   "end": 166.5,
+   "text": "Last time we said we would clean up the dock door first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 167.3,
+   "end": 176.6,
+   "text": "I talked to the people who run the scanner every day, and they said the pick rate is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 176.9,
+   "end": 184.2,
+   "text": "We tested the training session with a small group, and the firmware results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 184.7,
+   "end": 194.0,
+   "text": "I talked to the people who run the training session every day, and they said the firmware is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 195.0,
+   "end": 201.6,
+   "text": "Right, and the scanner also touches the training session, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 202.7,
+   "end": 209.6,
+   "text": "The vendor sent an updated proposal for the training session, and it changes the firmware a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 210.8,
+   "end": 217.7,
+   "text": "If we wait a month on the scanner, the pick rate timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 218.9,
+   "end": 225.8,
+   "text": "The draft for the pick rate is in the folder, with comments from two teams on the scanner."
+  },
+  {
+   "key": "me:A",
+   "start": 226.8,
+   "end": 233.3,
+   "text": "Right, and the scanner also touches the dock door, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 234.1,
+   "end": 241.4,
+   "text": "The vendor sent an updated proposal for the dock door, and it changes the pick rate a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 242.2,
+   "end": 249.5,
+   "text": "We have three open questions on the scanner, mostly about timing and who signs off on the pick rate."
+  },
+  {
+   "key": "me:A",
+   "start": 250.6,
+   "end": 257.1,
+   "text": "Right, and the dock door also touches the scanner, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 258.6,
+   "end": 266.3,
+   "text": "The pick rate numbers came in yesterday, and I put a short summary of the scanner in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 267.0,
+   "end": 273.6,
+   "text": "Right, and the pick rate also touches the scanner, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 274.9,
+   "end": 282.2,
+   "text": "There is a dependency on the pick rate, so the firmware work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 283.0,
+   "end": 290.3,
+   "text": "If we wait a month on the pick rate, the dock door timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 291.0,
+   "end": 299.1,
+   "text": "The feedback on the scanner has been mixed, some people like it and some say it adds steps to the firmware."
+  },
+  {
+   "key": "me:A",
+   "start": 299.5,
+   "end": 308.4,
+   "text": "One thing I noticed is that the pick rate looks different in each region, so the dock door plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 309.8,
+   "end": 317.9,
+   "text": "Last time we said we would clean up the pick rate first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 319.2,
+   "end": 326.5,
+   "text": "We tested the firmware with a small group, and the dock door results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 327.8,
+   "end": 337.4,
+   "text": "So on the dock door, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 338.3,
+   "end": 347.1,
+   "text": "The feedback on the pick rate has been mixed, some people like it and some say it adds steps to the dock door."
+  },
+  {
+   "key": "me:A",
+   "start": 348.5,
+   "end": 355.8,
+   "text": "If we wait a month on the dock door, the pick rate timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 357.0,
+   "end": 365.1,
+   "text": "One thing I noticed is that the firmware looks different in each region, so the scanner plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 366.5,
+   "end": 374.2,
+   "text": "The scanner numbers came in yesterday, and I put a short summary of the dock door in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 374.6,
+   "end": 381.9,
+   "text": "The draft for the dock door is in the folder, with comments from two teams on the pick rate."
+  },
+  {
+   "key": "me:A",
+   "start": 382.9,
+   "end": 392.5,
+   "text": "So on the training session, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 392.8,
+   "end": 400.9,
+   "text": "We could keep the dock door as it is for now and only change the training session in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 401.5,
+   "end": 409.6,
+   "text": "The scanner piece is moving, and the team has a draft of the dock door changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 409.9,
+   "end": 416.8,
+   "text": "I think the firmware question is the main thing left before we can close out the dock door."
+  },
+  {
+   "key": "me:A",
+   "start": 418.2,
+   "end": 427.8,
+   "text": "So on the pick rate, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 428.7,
+   "end": 438.0,
+   "text": "I talked to the people who run the pick rate every day, and they said the firmware is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 438.7,
+   "end": 446.4,
+   "text": "We could keep the training session as it is for now and only change the firmware in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 447.8,
+   "end": 455.9,
+   "text": "The training session piece is moving, and the team has a draft of the scanner changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 457.3,
+   "end": 465.4,
+   "text": "The pick rate numbers came in yesterday, and I put a short summary of the dock door in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 466.8,
+   "end": 476.1,
+   "text": "So on the firmware, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 476.7,
+   "end": 483.6,
+   "text": "The vendor sent an updated proposal for the dock door, and it changes the scanner a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 483.9,
+   "end": 491.6,
+   "text": "We could keep the scanner as it is for now and only change the pick rate in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 492.6,
+   "end": 499.1,
+   "text": "If we wait a month on the firmware, the scanner timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 500.4,
+   "end": 508.1,
+   "text": "From what I can see, the training session is on track, and the risk is mostly in the pick rate."
+  },
+  {
+   "key": "me:A",
+   "start": 509.5,
+   "end": 517.2,
+   "text": "We could keep the training session as it is for now and only change the firmware in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 518.1,
+   "end": 525.0,
+   "text": "The vendor sent an updated proposal for the dock door, and it changes the scanner a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 525.4,
+   "end": 532.3,
+   "text": "The vendor sent an updated proposal for the scanner, and it changes the training session a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 533.6,
+   "end": 540.1,
+   "text": "The vendor sent an updated proposal for the firmware, and it changes the scanner a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 541.2,
+   "end": 550.8,
+   "text": "I talked to the people who run the dock door every day, and they said the pick rate is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 551.9,
+   "end": 559.6,
+   "text": "Last time we said we would clean up the firmware first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 560.2,
+   "end": 567.5,
+   "text": "We have three open questions on the firmware, mostly about timing and who signs off on the training session."
+  },
+  {
+   "key": "me:A",
+   "start": 567.8,
+   "end": 575.9,
+   "text": "We could keep the dock door as it is for now and only change the pick rate in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 577.1,
+   "end": 584.4,
+   "text": "The draft for the pick rate is in the folder, with comments from two teams on the training session."
+  },
+  {
+   "key": "me:A",
+   "start": 585.0,
+   "end": 588.5,
+   "text": "Good, let us pick this up next week. Thanks."
+  }
+ ],
+ "beats": []
+}

@@ -293,6 +293,15 @@ final class AppController: ObservableObject {
     let coachReviewCache = VersionedCache<String, CoachReview?>()
     let coachPeopleCache = VersionedCache<Int, CoachPeople>()
     let coachFindingsCache = VersionedCache<String, [CoachFinding]>()
+    /// The reads of how each person thinks, by person id, as of the last coach change (+Personas).
+    @Published var personaReads: [String: PersonaSummary] = [:]
+    /// The trait card of each call, by call id, for the deck (+Personas).
+    var traitCards: [String: CoachFinding] = [:]
+    /// Whether the owner shares the screen now; nil when Mossad cannot tell (+Personas).
+    @Published var ownerSharing: Bool?
+    /// The reads that the owner opened while they are covered, by person id: one click opens a card.
+    @Published var shownCovered: Set<String> = []
+    var personasRunning = false
     /// The cards of all calls that wait for an answer, the newest call first (+Findings).
     @Published var findings: [CoachFinding] = []
     /// Counts the reads of the cards, so an older read never replaces a newer one.
@@ -374,6 +383,12 @@ final class AppController: ObservableObject {
     @AppStorage("coachEnabled") var coachEnabled = false
     /// Calls that start before this (seconds since 1970) are not coached, so turning the coach on does not review years of calls.
     @AppStorage("coachSince") var coachSince: Double = 0
+    /// The coach's reads of how each person thinks (Settings > Coach). On with the coach.
+    @AppStorage("personaEnabled") var personaEnabled = true
+    /// The reads in the `people` tool of other AI apps (`Mossad --mcp`): on, by the owner's choice.
+    @AppStorage("personaInMCP") var personaInMCP = true
+    /// The in-app step reads calls from this time on (seconds since 1970); older calls are the first fill's.
+    @AppStorage("personaSince") var personaSince: Double = 0
     @AppStorage("commitmentsSince") var commitmentsSince: Double = 0
     @AppStorage("coachEmailEnabled") var coachEmailEnabled = false
     @AppStorage("coachMonthlyEmail") var coachMonthlyEmail = false
@@ -647,8 +662,13 @@ final class AppController: ObservableObject {
             // The coach's reads on people: a minute after launch, so a call being processed goes first.
             Task {
                 try? await Task.sleep(for: .seconds(60))
-                if coachEnabled { await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName, saved: shownCoachPeople)) }
+                await runPersonas()
+                if coachEnabled {
+                    await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName, saved: shownCoachPeople)
+                        .filter { persona(of: $0)?.card == nil })
+                }
             }
+            startShareWatch()
         }
         DevHooks.run(self, inert: inert)
     }
@@ -870,6 +890,9 @@ final class AppController: ObservableObject {
         }
         stopSharing(callID: record.id)
         forgetCoaching(of: record.id)
+        // Its moments go from each person's read; a trait can fall below the line.
+        let paths = paths
+        Task.detached(priority: .utility) { PersonaStore(paths: paths).forget(callID: record.id) }
     }
 
     /// Puts a record saved by the pipeline into the list, so the step shows while the call is processed.

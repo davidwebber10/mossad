@@ -1,0 +1,502 @@
+{
+ "id": "gold-06-3",
+ "person": "Casey Moore",
+ "title": "Internal tools roadmap",
+ "tags": [
+  "Tools",
+  "Engineering"
+ ],
+ "setting": "group",
+ "start": "2026-08-25T16:00:00Z",
+ "end": "2026-08-25T16:11:32Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Casey Moore",
+  "them:B": "Tom Reyes",
+  "them:C": "Ben Cole"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the internal tools roadmap."
+  },
+  {
+   "key": "me:A",
+   "start": 5.2,
+   "end": 14.4,
+   "text": "So on the release, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 15.5,
+   "end": 24.8,
+   "text": "So on the release, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 25.2,
+   "end": 32.5,
+   "text": "We could keep the integration as it is for now and only change the ticket in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 33.3,
+   "end": 35.3,
+   "text": "Yes."
+  },
+  {
+   "key": "me:A",
+   "start": 36.3,
+   "end": 43.6,
+   "text": "The sprint numbers came in yesterday, and I put a short summary of the release in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 44.5,
+   "end": 52.2,
+   "text": "Last time we said we would clean up the release first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 53.1,
+   "end": 60.0,
+   "text": "We have three open questions on the ticket, mostly about timing and who signs off on the sprint."
+  },
+  {
+   "key": "them:A",
+   "start": 61.0,
+   "end": 63.0,
+   "text": "Okay, sounds fine."
+  },
+  {
+   "key": "them:B",
+   "start": 63.9,
+   "end": 71.6,
+   "text": "The ticket piece is moving, and the team has a draft of the sprint changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 72.2,
+   "end": 78.4,
+   "text": "Right, and the backlog also touches the sprint, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 79.9,
+   "end": 86.4,
+   "text": "The vendor sent an updated proposal for the integration, and it changes the release a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 87.7,
+   "end": 89.7,
+   "text": "Sure."
+  },
+  {
+   "key": "them:C",
+   "start": 90.6,
+   "end": 98.7,
+   "text": "One thing I noticed is that the ticket looks different in each region, so the integration plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 99.1,
+   "end": 107.2,
+   "text": "The feedback on the backlog has been mixed, some people like it and some say it adds steps to the sprint."
+  },
+  {
+   "key": "me:A",
+   "start": 107.7,
+   "end": 114.2,
+   "text": "The vendor sent an updated proposal for the integration, and it changes the sprint a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 115.2,
+   "end": 121.3,
+   "text": "Right, and the sprint also touches the backlog, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 122.8,
+   "end": 124.8,
+   "text": "Thanks, that works."
+  },
+  {
+   "key": "them:B",
+   "start": 125.3,
+   "end": 132.3,
+   "text": "There is a dependency on the ticket, so the backlog work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 133.7,
+   "end": 141.8,
+   "text": "The feedback on the sprint has been mixed, some people like it and some say it adds steps to the release."
+  },
+  {
+   "key": "them:B",
+   "start": 143.1,
+   "end": 149.6,
+   "text": "The draft for the integration is in the folder, with comments from two teams on the backlog."
+  },
+  {
+   "key": "them:C",
+   "start": 150.6,
+   "end": 157.5,
+   "text": "There is a dependency on the sprint, so the backlog work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 158.9,
+   "end": 165.5,
+   "text": "The draft for the ticket is in the folder, with comments from two teams on the sprint."
+  },
+  {
+   "key": "me:A",
+   "start": 166.8,
+   "end": 174.5,
+   "text": "The sprint piece is moving, and the team has a draft of the ticket changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 175.9,
+   "end": 182.4,
+   "text": "The draft for the sprint is in the folder, with comments from two teams on the backlog."
+  },
+  {
+   "key": "them:B",
+   "start": 182.8,
+   "end": 189.3,
+   "text": "The vendor sent an updated proposal for the backlog, and it changes the release a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 190.1,
+   "end": 199.0,
+   "text": "I talked to the people who run the integration every day, and they said the ticket is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 200.0,
+   "end": 206.9,
+   "text": "We tested the release with a small group, and the backlog results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 208.2,
+   "end": 214.7,
+   "text": "If we wait a month on the backlog, the ticket timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 216.0,
+   "end": 222.5,
+   "text": "The draft for the ticket is in the folder, with comments from two teams on the sprint."
+  },
+  {
+   "key": "them:B",
+   "start": 223.3,
+   "end": 229.5,
+   "text": "Right, and the integration also touches the sprint, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 230.6,
+   "end": 239.9,
+   "text": "So on the backlog, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 240.5,
+   "end": 248.2,
+   "text": "I would like us to agree on the scope of the integration today, even if the backlog details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 248.8,
+   "end": 255.7,
+   "text": "From what I can see, the ticket is on track, and the risk is mostly in the release."
+  },
+  {
+   "key": "them:B",
+   "start": 256.7,
+   "end": 263.3,
+   "text": "The vendor sent an updated proposal for the sprint, and it changes the release a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 264.1,
+   "end": 270.7,
+   "text": "The draft for the integration is in the folder, with comments from two teams on the sprint."
+  },
+  {
+   "key": "them:B",
+   "start": 271.6,
+   "end": 280.5,
+   "text": "I talked to the people who run the ticket every day, and they said the release is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 281.4,
+   "end": 289.1,
+   "text": "I would like us to agree on the scope of the sprint today, even if the ticket details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 289.8,
+   "end": 296.8,
+   "text": "From what I can see, the sprint is on track, and the risk is mostly in the integration."
+  },
+  {
+   "key": "them:B",
+   "start": 297.9,
+   "end": 305.2,
+   "text": "The ticket numbers came in yesterday, and I put a short summary of the backlog in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 306.2,
+   "end": 313.9,
+   "text": "Last time we said we would clean up the backlog first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 315.1,
+   "end": 324.3,
+   "text": "So on the release, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 325.0,
+   "end": 331.5,
+   "text": "If we wait a month on the backlog, the sprint timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 332.4,
+   "end": 339.0,
+   "text": "The vendor sent an updated proposal for the release, and it changes the backlog a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 339.8,
+   "end": 346.7,
+   "text": "There is a dependency on the backlog, so the integration work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 347.4,
+   "end": 355.1,
+   "text": "The sprint piece is moving, and the team has a draft of the release changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 356.6,
+   "end": 365.5,
+   "text": "I talked to the people who run the integration every day, and they said the backlog is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 366.6,
+   "end": 374.7,
+   "text": "The feedback on the integration has been mixed, some people like it and some say it adds steps to the sprint."
+  },
+  {
+   "key": "them:B",
+   "start": 375.5,
+   "end": 382.1,
+   "text": "The draft for the sprint is in the folder, with comments from two teams on the ticket."
+  },
+  {
+   "key": "me:A",
+   "start": 383.2,
+   "end": 390.9,
+   "text": "I would like us to agree on the scope of the release today, even if the backlog details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 392.2,
+   "end": 398.7,
+   "text": "The draft for the sprint is in the folder, with comments from two teams on the integration."
+  },
+  {
+   "key": "me:A",
+   "start": 399.5,
+   "end": 406.4,
+   "text": "We tested the backlog with a small group, and the release results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 407.0,
+   "end": 416.3,
+   "text": "So on the integration, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 417.0,
+   "end": 423.5,
+   "text": "The draft for the integration is in the folder, with comments from two teams on the release."
+  },
+  {
+   "key": "them:C",
+   "start": 424.0,
+   "end": 431.7,
+   "text": "The ticket piece is moving, and the team has a draft of the backlog changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 433.1,
+   "end": 442.3,
+   "text": "So on the ticket, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 443.6,
+   "end": 450.1,
+   "text": "I think the ticket question is the main thing left before we can close out the sprint."
+  },
+  {
+   "key": "them:C",
+   "start": 451.6,
+   "end": 457.7,
+   "text": "Right, and the release also touches the backlog, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 459.2,
+   "end": 466.9,
+   "text": "Last time we said we would clean up the release first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 467.3,
+   "end": 475.0,
+   "text": "I would like us to agree on the scope of the integration today, even if the sprint details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 476.4,
+   "end": 483.3,
+   "text": "There is a dependency on the integration, so the release work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 483.9,
+   "end": 491.2,
+   "text": "The integration numbers came in yesterday, and I put a short summary of the ticket in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 491.5,
+   "end": 499.2,
+   "text": "I would like us to agree on the scope of the release today, even if the backlog details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 500.4,
+   "end": 507.4,
+   "text": "From what I can see, the sprint is on track, and the risk is mostly in the integration."
+  },
+  {
+   "key": "them:C",
+   "start": 508.6,
+   "end": 515.9,
+   "text": "We could keep the sprint as it is for now and only change the backlog in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 516.4,
+   "end": 523.0,
+   "text": "If we wait a month on the sprint, the backlog timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 523.9,
+   "end": 530.1,
+   "text": "Right, and the release also touches the sprint, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 530.8,
+   "end": 538.1,
+   "text": "The release numbers came in yesterday, and I put a short summary of the integration in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 538.4,
+   "end": 545.3,
+   "text": "There is a dependency on the release, so the sprint work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 545.7,
+   "end": 553.8,
+   "text": "The feedback on the backlog has been mixed, some people like it and some say it adds steps to the release."
+  },
+  {
+   "key": "them:C",
+   "start": 554.2,
+   "end": 560.4,
+   "text": "Right, and the ticket also touches the sprint, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 561.8,
+   "end": 568.3,
+   "text": "The vendor sent an updated proposal for the ticket, and it changes the release a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 569.1,
+   "end": 576.8,
+   "text": "The release piece is moving, and the team has a draft of the integration changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 578.2,
+   "end": 585.9,
+   "text": "The integration piece is moving, and the team has a draft of the backlog changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 586.8,
+   "end": 593.7,
+   "text": "We tested the integration with a small group, and the backlog results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 594.7,
+   "end": 602.0,
+   "text": "The integration numbers came in yesterday, and I put a short summary of the backlog in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 602.7,
+   "end": 608.9,
+   "text": "Right, and the backlog also touches the release, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 610.0,
+   "end": 619.3,
+   "text": "So on the ticket, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 619.9,
+   "end": 627.2,
+   "text": "We could keep the integration as it is for now and only change the backlog in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 627.6,
+   "end": 631.1,
+   "text": "Good, let us pick this up next week. Thanks."
+  }
+ ],
+ "beats": []
+}

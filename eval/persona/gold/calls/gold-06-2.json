@@ -1,0 +1,478 @@
+{
+ "id": "gold-06-2",
+ "person": "Casey Moore",
+ "title": "Hiring plan for support",
+ "tags": [
+  "Hiring",
+  "Support"
+ ],
+ "setting": "group",
+ "start": "2026-08-17T16:00:00Z",
+ "end": "2026-08-17T16:11:58Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Casey Moore",
+  "them:B": "Ana Lopez",
+  "them:C": "Ben Cole"
+ },
+ "noise": true,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 5.0,
+   "text": "Thanks for making the time. Today is about the hiring plan for support."
+  },
+  {
+   "key": "them:B",
+   "start": 6.4,
+   "end": 14.9,
+   "text": "Last time um we said we would clean up the shift coverage first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 15.7,
+   "end": 22.6,
+   "text": "Right, and the interview loop also touches the onboarding week, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 23.6,
+   "end": 32.1,
+   "text": "We could keep the onboarding week as it for now and only you know change the job posting in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 32.5,
+   "end": 34.5,
+   "text": "Yes."
+  },
+  {
+   "key": "them:B",
+   "start": 35.3,
+   "end": 43.4,
+   "text": "Last time we said we would clean up the interview loop first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 44.5,
+   "end": 51.4,
+   "text": "The draft for the interview is in the folder, with comments from two teams on the shift coverage."
+  },
+  {
+   "key": "me:A",
+   "start": 52.4,
+   "end": 61.2,
+   "text": "One thing I noticed is that the job posting looks different in each region, so the shift coverage plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 62.2,
+   "end": 64.2,
+   "text": "Okay, sounds fine."
+  },
+  {
+   "key": "them:C",
+   "start": 65.4,
+   "end": 73.9,
+   "text": "We tested the shift coverage with a small group, and you know the onboarding week results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 75.2,
+   "end": 83.6,
+   "text": "The interview loop piece is moving, and the team has a draft of the support queue changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 84.3,
+   "end": 92.3,
+   "text": "The shift coverage piece is moving, the team has a draft of the support queue changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 93.3,
+   "end": 100.2,
+   "text": "The draft for the support queue is in the folder, with from two teams on the shift coverage."
+  },
+  {
+   "key": "them:A",
+   "start": 101.1,
+   "end": 103.1,
+   "text": "Sure."
+  },
+  {
+   "key": "me:A",
+   "start": 103.7,
+   "end": 111.4,
+   "text": "We have three open questions on the shift coverage, mostly about timing and who signs off on the onboarding week."
+  },
+  {
+   "key": "them:C",
+   "start": 112.8,
+   "end": 120.9,
+   "text": "Last time we said we would clean up the interview loop first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 121.3,
+   "end": 123.3,
+   "text": "Thanks, that works."
+  },
+  {
+   "key": "me:A",
+   "start": 124.7,
+   "end": 132.4,
+   "text": "From what I can see, the job posting is on track, and the risk is mostly in the support queue."
+  },
+  {
+   "key": "them:C",
+   "start": 133.0,
+   "end": 140.7,
+   "text": "There is a dependency on the job posting, the onboarding uh week work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 141.5,
+   "end": 149.9,
+   "text": "The feedback on the posting has been mixed, some people like it and some say it adds steps to the shift coverage."
+  },
+  {
+   "key": "them:B",
+   "start": 150.6,
+   "end": 159.1,
+   "text": "Last time we said we would clean up the interview loop um first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 160.6,
+   "end": 167.9,
+   "text": "I think the support queue question is the main thing left before we can close out the interview loop."
+  },
+  {
+   "key": "them:B",
+   "start": 168.8,
+   "end": 177.3,
+   "text": "The onboarding week piece is moving, and the team has a draft of the job posting changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 178.5,
+   "end": 186.2,
+   "text": "There is a dependency on the interview loop, so the onboarding week work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 187.2,
+   "end": 195.7,
+   "text": "I would like us to agree on the scope of the job posting today, even if the onboarding week details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 196.3,
+   "end": 203.6,
+   "text": "There is a dependency on the posting, so the support queue work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 204.6,
+   "end": 211.9,
+   "text": "I think the onboarding week question is the main thing left before we can close out the interview loop."
+  },
+  {
+   "key": "them:B",
+   "start": 213.2,
+   "end": 221.3,
+   "text": "The interview loop numbers came in yesterday, and I put a short summary of the shift coverage in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 221.6,
+   "end": 228.1,
+   "text": "Right, and the onboarding week also the support queue, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 228.8,
+   "end": 239.2,
+   "text": "So on the I mean interview loop, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 240.0,
+   "end": 248.4,
+   "text": "The shift coverage piece is moving, and the team has a draft of the job posting changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 249.8,
+   "end": 258.3,
+   "text": "There is a I mean dependency on the support queue, so the shift coverage work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 259.0,
+   "end": 268.6,
+   "text": "So on the interview loop, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 270.0,
+   "end": 277.4,
+   "text": "Right, and the job posting also touches the shift coverage, which is why I wanted uh everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 278.6,
+   "end": 286.7,
+   "text": "I think the onboarding week question is the main thing left before we can you know close out the shift coverage."
+  },
+  {
+   "key": "me:A",
+   "start": 287.7,
+   "end": 294.6,
+   "text": "Right, and the job posting also touches the shift coverage, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 295.8,
+   "end": 303.5,
+   "text": "From what I can see, the support queue is on track, and the risk is mostly in the interview loop."
+  },
+  {
+   "key": "me:A",
+   "start": 304.1,
+   "end": 311.4,
+   "text": "The draft for the support queue is in the folder, with comments from two teams on the job posting."
+  },
+  {
+   "key": "me:A",
+   "start": 312.0,
+   "end": 320.1,
+   "text": "Last time we said we would clean up the support queue first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 320.7,
+   "end": 329.6,
+   "text": "The feedback on the interview loop has been mixed, some people like it and some say it adds steps to the job posting."
+  },
+  {
+   "key": "them:C",
+   "start": 330.8,
+   "end": 339.2,
+   "text": "One thing I noticed is that the onboarding week different in each region, so the support queue plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 340.5,
+   "end": 349.4,
+   "text": "One thing I noticed is that the job posting looks different in each region, so the interview loop plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 350.0,
+   "end": 359.6,
+   "text": "I talked to the people who run the interview loop every day, and they said the shift coverage is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 360.3,
+   "end": 369.1,
+   "text": "The feedback on the shift coverage has been mixed, some people like it and some say it adds steps to the interview loop."
+  },
+  {
+   "key": "them:C",
+   "start": 370.5,
+   "end": 380.1,
+   "text": "So on the interview loop, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 380.7,
+   "end": 390.3,
+   "text": "So on the onboarding week, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 391.2,
+   "end": 399.3,
+   "text": "The draft for you know the onboarding week is in the folder, with comments from two teams on the shift coverage."
+  },
+  {
+   "key": "them:C",
+   "start": 400.5,
+   "end": 409.4,
+   "text": "I would like us to agree on the scope of the shift coverage today, even if um the support queue details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 410.3,
+   "end": 418.4,
+   "text": "The draft for the support queue is in the folder, with comments from two teams on you know the interview loop."
+  },
+  {
+   "key": "them:C",
+   "start": 418.7,
+   "end": 426.1,
+   "text": "There is a dependency on the onboarding week, so the support queue work cannot really start that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 427.1,
+   "end": 436.7,
+   "text": "So on the shift coverage, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 437.7,
+   "end": 446.2,
+   "text": "I would like us to agree on the scope of the interview loop today, even if the job posting details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 446.8,
+   "end": 454.1,
+   "text": "If we wait a month on the interview loop, the job posting timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 455.3,
+   "end": 464.2,
+   "text": "The feedback on the onboarding week has been mixed, some people like it and some say it adds steps to the shift coverage."
+  },
+  {
+   "key": "me:A",
+   "start": 465.3,
+   "end": 473.4,
+   "text": "We could keep the support queue as it is for now and only change the shift coverage in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 474.3,
+   "end": 482.4,
+   "text": "I think the job posting question is I mean the main thing left before we can close out the onboarding week."
+  },
+  {
+   "key": "me:A",
+   "start": 483.8,
+   "end": 493.4,
+   "text": "I talked to the people who run the support queue every day, and they said the job posting is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 494.7,
+   "end": 502.4,
+   "text": "From what I can see, the shift coverage is on track, and the risk is mostly in the onboarding week."
+  },
+  {
+   "key": "me:A",
+   "start": 503.5,
+   "end": 512.3,
+   "text": "The feedback on the job posting has been mixed, some people like it and some say it adds steps to the support queue."
+  },
+  {
+   "key": "them:C",
+   "start": 513.4,
+   "end": 521.4,
+   "text": "The support queue numbers came in yesterday, and I put a short summary of the onboarding week in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 522.5,
+   "end": 530.6,
+   "text": "We could keep the interview loop as it is for now and only change the onboarding week in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 531.6,
+   "end": 538.9,
+   "text": "The draft for the interview loop is in the folder, with comments from two teams on the job posting."
+  },
+  {
+   "key": "them:C",
+   "start": 539.7,
+   "end": 548.6,
+   "text": "The feedback on the onboarding week has been mixed, some people like it and some say it adds steps to the support queue."
+  },
+  {
+   "key": "them:C",
+   "start": 549.5,
+   "end": 557.9,
+   "text": "One thing I noticed is that the interview loop looks different in each region, so onboarding week plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 558.9,
+   "end": 567.3,
+   "text": "I would like us to agree on the scope of the support queue today, even if the job posting details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 568.6,
+   "end": 576.7,
+   "text": "We tested the onboarding week with a small and the support queue results were I mean close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 577.1,
+   "end": 585.6,
+   "text": "There is a dependency on the job posting, so the onboarding week work cannot really start until I mean that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 586.3,
+   "end": 593.6,
+   "text": "If we wait a month on the support queue, the interview loop timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 593.9,
+   "end": 601.6,
+   "text": "Right, and the job posting also I mean touches the onboarding week, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 602.9,
+   "end": 610.2,
+   "text": "From what I can see, the support queue is on track, and the risk is mostly in the loop."
+  },
+  {
+   "key": "them:C",
+   "start": 610.9,
+   "end": 618.6,
+   "text": "The vendor sent an updated proposal for the onboarding week, and it changes the uh support queue a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 619.1,
+   "end": 627.5,
+   "text": "Last time we said we would up the shift coverage first, and that you know work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 628.1,
+   "end": 635.4,
+   "text": "If we wait a month on the support queue, the job posting timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 636.2,
+   "end": 643.9,
+   "text": "From what I can see, the onboarding week is on track, and the risk is mostly in the job posting."
+  },
+  {
+   "key": "me:A",
+   "start": 645.0,
+   "end": 652.7,
+   "text": "From what I can see, the job posting is on track, and the risk is mostly in the onboarding week."
+  },
+  {
+   "key": "me:A",
+   "start": 653.9,
+   "end": 657.3,
+   "text": "Good, let us pick this up next week. Thanks."
+  }
+ ],
+ "beats": []
+}

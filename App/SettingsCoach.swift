@@ -28,6 +28,19 @@ struct CoachSettings: View {
                     }
                 }
             }
+            if controller.coachEnabled {
+                SettingsGroup(label: "How people think",
+                              footer: "A trait shows after 3 calls that agree, or 2 on different topics when the moments are strong. The reads stay on this Mac; a short copy goes to your iPhone through your own server.") {
+                    SettingsSwitchRow(title: "Keep a read on each person",
+                                      detail: "After each call, one small request finds how each named person decides. Each person's page then says how to present to them.",
+                                      isOn: Binding(get: { controller.personaEnabled }, set: { controller.personaEnabled = $0; controller.coachVersion += 1 }))
+                    if controller.personaEnabled {
+                        SettingsSwitchRow(title: "Share the reads with other AI apps",
+                                          detail: "Apps connected through Mossad's MCP read the traits in the people tool. Chat in Mossad always can.",
+                                          isOn: $controller.personaInMCP)
+                    }
+                }
+            }
             if controller.coachEnabled, showsPagesLink {
                 SettingsGroup(label: "Coach") {
                     SettingsRow(title: "Findings, goals, and what the coach knows", detail: "These are in Coach, in the sidebar.") {

@@ -1,0 +1,611 @@
+{
+ "id": "gold-05-6",
+ "person": "Avery Singh",
+ "title": "Marketing calendar",
+ "tags": [
+  "Marketing",
+  "Campaigns"
+ ],
+ "setting": "group",
+ "start": "2026-09-17T15:00:00Z",
+ "end": "2026-09-17T15:15:01Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Avery Singh",
+  "them:B": "Ben Cole",
+  "them:C": "Ana Lopez"
+ },
+ "noise": true,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.2,
+   "text": "Thanks for making the time. Today is about the marketing calendar."
+  },
+  {
+   "key": "me:A",
+   "start": 5.7,
+   "end": 13.0,
+   "text": "From what I can see, the email send is on track, and the risk is mostly in the campaign."
+  },
+  {
+   "key": "them:C",
+   "start": 13.4,
+   "end": 20.0,
+   "text": "If we wait a month on the landing page, the timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 20.3,
+   "end": 26.9,
+   "text": "If we wait a month on the creative, the campaign timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 28.0,
+   "end": 36.1,
+   "text": "We could keep the email send as it is for now and only change the launch week in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 36.7,
+   "end": 43.6,
+   "text": "We tested the creative a small group, and the campaign results were um close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 45.0,
+   "end": 55.0,
+   "text": "I talked to the people who run the email send every day, and they said I mean the campaign is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 55.6,
+   "end": 62.5,
+   "text": "The draft for the landing page is in the folder, with comments from two teams on the creative."
+  },
+  {
+   "key": "them:B",
+   "start": 63.5,
+   "end": 73.5,
+   "text": "So on the launch week, we looked at the last few weeks and the picture is mostly what we expected, a I mean couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 74.9,
+   "end": 81.4,
+   "text": "If we wait a month on the creative, the campaign timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 81.8,
+   "end": 88.7,
+   "text": "The vendor sent an updated proposal for the landing page, and it changes the creative a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 89.8,
+   "end": 99.8,
+   "text": "I talked to the people who run the email send every day, you know and they the landing page is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 100.5,
+   "end": 107.4,
+   "text": "If we wait a month on the creative, the launch week timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 108.6,
+   "end": 115.5,
+   "text": "The draft for the email send is in the folder, with comments from two teams on the campaign."
+  },
+  {
+   "key": "them:A",
+   "start": 116.9,
+   "end": 124.2,
+   "text": "We tested the creative with a small group, and the launch week results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 124.8,
+   "end": 134.1,
+   "text": "I talked to the people who run the email send every day, and they said the creative is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 135.1,
+   "end": 143.2,
+   "text": "We could keep the launch week as it is for now and only change the landing page in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 143.8,
+   "end": 151.5,
+   "text": "There is a dependency on the launch week, so the landing page work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 152.6,
+   "end": 159.1,
+   "text": "Right, and the creative also touches the email send, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 159.5,
+   "end": 167.2,
+   "text": "The vendor sent an updated proposal for the landing page, and it changes uh the launch week a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 167.7,
+   "end": 175.4,
+   "text": "We have three open questions on the email send, mostly about timing and who signs off on the landing page."
+  },
+  {
+   "key": "them:C",
+   "start": 176.5,
+   "end": 184.6,
+   "text": "The landing page piece is moving, and the team has a draft of the campaign changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 186.0,
+   "end": 193.3,
+   "text": "We have three open questions on the campaign, mostly about timing and who signs off on the launch week."
+  },
+  {
+   "key": "them:A",
+   "start": 193.9,
+   "end": 202.0,
+   "text": "From what I can you know see, the creative is on track, and the risk is mostly in the launch week."
+  },
+  {
+   "key": "them:C",
+   "start": 203.3,
+   "end": 211.4,
+   "text": "Last time we uh said we would clean up email send first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 212.7,
+   "end": 222.3,
+   "text": "I talked to the people who run the email send every day, and they said the week is um the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 223.1,
+   "end": 230.8,
+   "text": "The vendor sent an updated proposal for I mean launch week, and it changes the landing page a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 231.7,
+   "end": 239.4,
+   "text": "Last time we said we would clean up the creative first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 240.0,
+   "end": 247.7,
+   "text": "From what I can see, the launch week is on track, and the risk is mostly in the email send."
+  },
+  {
+   "key": "them:B",
+   "start": 248.3,
+   "end": 257.5,
+   "text": "I talked to the people who run the send every day, and they said the launch week is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 258.1,
+   "end": 265.8,
+   "text": "From what I can see, the campaign um is on track, and the risk is mostly in the email send."
+  },
+  {
+   "key": "me:A",
+   "start": 266.9,
+   "end": 275.4,
+   "text": "I propose we change the landing page next month and move about 20% of the work to the new email send setup."
+  },
+  {
+   "key": "them:A",
+   "start": 276.1,
+   "end": 281.5,
+   "text": "I would want to see it working before I agree. Can we get demo?"
+  },
+  {
+   "key": "them:B",
+   "start": 282.2,
+   "end": 290.3,
+   "text": "I think I mean the email send question is the main thing left before we can close out the landing page."
+  },
+  {
+   "key": "them:B",
+   "start": 291.0,
+   "end": 299.0,
+   "text": "We could keep the launch week as it is for now and only change the email send in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 299.8,
+   "end": 309.1,
+   "text": "So on the landing page, we looked at the last few weeks and the picture is what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 310.4,
+   "end": 319.2,
+   "text": "The email send piece is moving, and the team has a you know draft of the campaign changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 320.4,
+   "end": 327.7,
+   "text": "The launch week numbers came in yesterday, and I put a short summary of the in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 328.1,
+   "end": 335.8,
+   "text": "I would like us to agree on the scope of the creative today, even if the campaign details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 336.4,
+   "end": 344.1,
+   "text": "We could keep the campaign as it is for now and only change the launch week in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 345.3,
+   "end": 353.0,
+   "text": "The campaign numbers came in yesterday, and I put a short summary of the email send in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 353.9,
+   "end": 361.9,
+   "text": "I would like us to agree on the scope of the landing page today, even if the campaign details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 363.3,
+   "end": 372.5,
+   "text": "So on the landing page, we looked at the last few weeks and the picture is mostly what we with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 373.3,
+   "end": 381.0,
+   "text": "The email send numbers came in yesterday, and I put a short summary of the creative in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 382.0,
+   "end": 390.1,
+   "text": "Last time we said we would clean up the email send first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 390.5,
+   "end": 399.3,
+   "text": "The feedback on the email send has been mixed, some people like it and some say it adds steps to the landing page."
+  },
+  {
+   "key": "them:A",
+   "start": 400.1,
+   "end": 408.2,
+   "text": "The launch week piece is moving, and the team has a draft of the campaign changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 409.1,
+   "end": 418.4,
+   "text": "I talked to the people who run the email send every day, and they said the campaign is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 419.3,
+   "end": 428.9,
+   "text": "So on the email send, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 429.7,
+   "end": 437.4,
+   "text": "The campaign piece is moving, and the team has a of the landing page changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 437.9,
+   "end": 446.4,
+   "text": "The feedback on the campaign has been mixed, some people like it and some say it adds steps to the email send."
+  },
+  {
+   "key": "them:A",
+   "start": 447.1,
+   "end": 455.2,
+   "text": "The draft for the landing page is in the folder, you know with comments from two teams on the launch week."
+  },
+  {
+   "key": "them:B",
+   "start": 455.9,
+   "end": 462.8,
+   "text": "The draft for the launch week is in the folder, with comments from two teams on the creative."
+  },
+  {
+   "key": "them:B",
+   "start": 463.5,
+   "end": 471.6,
+   "text": "The feedback on the landing page been mixed, some people like it and some say it adds steps to the creative."
+  },
+  {
+   "key": "them:C",
+   "start": 472.8,
+   "end": 480.5,
+   "text": "We could keep the landing page as it is now and only change the email send in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 481.4,
+   "end": 488.3,
+   "text": "The draft for the launch week is in the folder, with comments from two teams the landing page."
+  },
+  {
+   "key": "them:C",
+   "start": 489.7,
+   "end": 497.4,
+   "text": "We have three open questions on the landing page, mostly about timing and who signs off on the launch week."
+  },
+  {
+   "key": "me:A",
+   "start": 497.8,
+   "end": 505.9,
+   "text": "Last time we said we would clean up the landing page first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 506.8,
+   "end": 514.1,
+   "text": "From what I can see, the landing page is on track, and the risk is mostly in the creative."
+  },
+  {
+   "key": "them:C",
+   "start": 514.6,
+   "end": 522.3,
+   "text": "The email send numbers came in yesterday, and I put a short summary of the campaign in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 523.7,
+   "end": 532.5,
+   "text": "I would like us to agree on um the scope of the landing page today, even if the email send details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 533.3,
+   "end": 540.6,
+   "text": "I would like us to agree on the scope of campaign today, even if the creative details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 541.2,
+   "end": 550.4,
+   "text": "I talked to the people who run the campaign every day, and they said the launch week is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 551.2,
+   "end": 558.5,
+   "text": "Right, and the campaign also touches the launch week, which is why I mean I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 559.8,
+   "end": 567.4,
+   "text": "The landing page numbers came in yesterday, and I put a short summary of the campaign in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 567.9,
+   "end": 576.4,
+   "text": "The launch week piece is moving, and the team has a draft of the email send changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 577.5,
+   "end": 585.5,
+   "text": "Here is the plan: we spend 40,000 on the creative this quarter and the campaign changes follow in the next one."
+  },
+  {
+   "key": "them:A",
+   "start": 586.3,
+   "end": 591.3,
+   "text": "I would want the team to weigh in, um they are the experts."
+  },
+  {
+   "key": "them:C",
+   "start": 592.5,
+   "end": 601.4,
+   "text": "I would like us to agree on scope of the launch I mean week today, even if the email send details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 601.9,
+   "end": 610.0,
+   "text": "The email send numbers came in yesterday, and I put a short summary of the landing page in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 611.0,
+   "end": 618.7,
+   "text": "We tested the email send with a small group, and the launch week results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 620.1,
+   "end": 628.6,
+   "text": "The feedback on the landing page has been mixed, some people like it and some say it adds steps to the creative."
+  },
+  {
+   "key": "them:A",
+   "start": 629.4,
+   "end": 637.9,
+   "text": "I would like us you know to agree on the scope of creative today, even if the email send details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 639.2,
+   "end": 646.5,
+   "text": "The vendor sent an updated proposal for you know the creative, it changes the email send a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 647.6,
+   "end": 654.6,
+   "text": "The draft for the landing page is in the folder, with comments from two teams on the campaign."
+  },
+  {
+   "key": "me:A",
+   "start": 655.8,
+   "end": 663.1,
+   "text": "If we wait a month on the launch week, the landing page timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 664.6,
+   "end": 674.2,
+   "text": "So on the landing page, we looked at the last few weeks and the picture is mostly we expected, with um a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 675.3,
+   "end": 683.4,
+   "text": "We could keep the landing page as it is for now and only change the launch week in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 684.5,
+   "end": 694.1,
+   "text": "I talked to the people who run the campaign every day, and they said the launch week is the part that uh slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 694.6,
+   "end": 703.8,
+   "text": "So on the campaign, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 705.2,
+   "end": 712.9,
+   "text": "There is a dependency on the campaign, um so the launch week work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 713.4,
+   "end": 720.3,
+   "text": "The vendor sent an updated proposal for the campaign, and it changes the email send a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 720.8,
+   "end": 728.1,
+   "text": "From what I can see, the campaign is on track, and the risk is mostly in the email send."
+  },
+  {
+   "key": "me:A",
+   "start": 729.4,
+   "end": 737.5,
+   "text": "I would like us to agree on the scope of the creative today, even if the landing page details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 739.0,
+   "end": 747.8,
+   "text": "So on the we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 749.2,
+   "end": 756.9,
+   "text": "We tested the launch with a small group, and the landing page results were uh close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 758.1,
+   "end": 765.0,
+   "text": "I think the email send question is the main thing left before we close out the landing page."
+  },
+  {
+   "key": "me:A",
+   "start": 765.6,
+   "end": 773.7,
+   "text": "One thing I noticed is that the campaign looks different in each region, so the creative plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 774.5,
+   "end": 780.6,
+   "text": "Right, and the email send also touches the campaign, which is why wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 781.8,
+   "end": 789.9,
+   "text": "The landing page numbers came in yesterday, and I put a short summary of the email send in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 790.6,
+   "end": 800.3,
+   "text": "I talked to the people uh who run the landing page every day, and they said the send is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 800.6,
+   "end": 810.3,
+   "text": "One thing I noticed is that the launch week looks different in each region, so the email send plan may you know need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 810.8,
+   "end": 817.7,
+   "text": "The vendor sent an updated proposal for the email send, and it changes the campaign a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 818.6,
+   "end": 826.3,
+   "text": "We have three open questions on the launch week, mostly about timing and who signs off on the landing page."
+  },
+  {
+   "key": "them:A",
+   "start": 826.8,
+   "end": 836.0,
+   "text": "The feedback on the creative has been mixed, some people like it and I mean some say it adds steps to the landing page."
+  },
+  {
+   "key": "me:A",
+   "start": 837.2,
+   "end": 840.6,
+   "text": "Good, let us pick this up next week. Thanks."
+  }
+ ],
+ "beats": [
+  {
+   "line": 32,
+   "person": "Avery Singh",
+   "dimension": "evidence",
+   "value": "demonstration"
+  },
+  {
+   "line": 67,
+   "person": "Avery Singh",
+   "dimension": "authority",
+   "value": "refers_to_expert"
+  }
+ ]
+}

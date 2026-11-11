@@ -1,0 +1,490 @@
+{
+ "id": "gold-07-3",
+ "person": "Taylor Brooks",
+ "title": "Data warehouse migration",
+ "tags": [
+  "Data",
+  "Engineering"
+ ],
+ "setting": "group",
+ "start": "2026-08-26T17:00:00Z",
+ "end": "2026-08-26T17:11:46Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Taylor Brooks",
+  "them:B": "Tom Reyes",
+  "them:C": "Ana Lopez"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the data warehouse migration."
+  },
+  {
+   "key": "them:C",
+   "start": 5.1,
+   "end": 14.3,
+   "text": "So on the pipeline, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 15.5,
+   "end": 24.8,
+   "text": "So on the pipeline, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 26.3,
+   "end": 32.8,
+   "text": "The vendor sent an updated proposal for the pipeline, and it changes the dashboard a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 33.7,
+   "end": 41.1,
+   "text": "We could keep the table as it is for now and only change the dashboard in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 41.5,
+   "end": 48.4,
+   "text": "We tested the dashboard with a small group, and the cutover results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 49.7,
+   "end": 56.3,
+   "text": "The vendor sent an updated proposal for the table, and it changes the pipeline a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 57.5,
+   "end": 64.4,
+   "text": "If we wait a month on the query cost, the pipeline timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 65.7,
+   "end": 72.2,
+   "text": "I think the pipeline question is the main thing left before we can close out the table."
+  },
+  {
+   "key": "them:C",
+   "start": 72.9,
+   "end": 79.4,
+   "text": "I think the cutover question is the main thing left before we can close out the dashboard."
+  },
+  {
+   "key": "them:B",
+   "start": 80.7,
+   "end": 88.0,
+   "text": "From what I can see, the table is on track, and the risk is mostly in the query cost."
+  },
+  {
+   "key": "them:C",
+   "start": 89.4,
+   "end": 97.1,
+   "text": "Last time we said we would clean up the table first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 98.2,
+   "end": 104.7,
+   "text": "The draft for the pipeline is in the folder, with comments from two teams on the dashboard."
+  },
+  {
+   "key": "them:B",
+   "start": 105.7,
+   "end": 112.6,
+   "text": "We have three open questions on the pipeline, mostly about timing and who signs off on the cutover."
+  },
+  {
+   "key": "them:C",
+   "start": 113.9,
+   "end": 121.2,
+   "text": "From what I can see, the dashboard is on track, and the risk is mostly in the query cost."
+  },
+  {
+   "key": "them:A",
+   "start": 121.6,
+   "end": 129.3,
+   "text": "I would like us to agree on the scope of the pipeline today, even if the dashboard details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 130.5,
+   "end": 138.6,
+   "text": "I would like us to agree on the scope of the query cost today, even if the pipeline details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 139.5,
+   "end": 146.8,
+   "text": "We could keep the cutover as it is for now and only change the table in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 147.3,
+   "end": 155.4,
+   "text": "One thing I noticed is that the pipeline looks different in each region, so the dashboard plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 156.9,
+   "end": 166.5,
+   "text": "So on the query cost, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 167.3,
+   "end": 174.3,
+   "text": "If we wait a month on the dashboard, the query cost timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 174.8,
+   "end": 182.1,
+   "text": "There is a dependency on the query cost, so the pipeline work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 182.7,
+   "end": 190.8,
+   "text": "The feedback on the cutover has been mixed, some people like it and some say it adds steps to the dashboard."
+  },
+  {
+   "key": "them:C",
+   "start": 191.1,
+   "end": 198.8,
+   "text": "I would like us to agree on the scope of the dashboard today, even if the table details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 199.6,
+   "end": 207.3,
+   "text": "The cutover numbers came in yesterday, and I put a short summary of the query cost in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 208.7,
+   "end": 214.9,
+   "text": "Right, and the table also touches the cutover, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 216.2,
+   "end": 223.2,
+   "text": "The vendor sent an updated proposal for the query cost, and it changes the pipeline a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 224.1,
+   "end": 231.8,
+   "text": "Last time we said we would clean up the table first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 232.4,
+   "end": 239.7,
+   "text": "We have three open questions on the dashboard, mostly about timing and who signs off on the query cost."
+  },
+  {
+   "key": "them:C",
+   "start": 241.0,
+   "end": 248.3,
+   "text": "The cutover numbers came in yesterday, and I put a short summary of the table in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 249.0,
+   "end": 256.3,
+   "text": "We could keep the pipeline as it is for now and only change the cutover in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 256.9,
+   "end": 263.4,
+   "text": "The vendor sent an updated proposal for the pipeline, and it changes the dashboard a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 264.1,
+   "end": 273.0,
+   "text": "I talked to the people who run the table every day, and they said the cutover is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 273.3,
+   "end": 280.2,
+   "text": "We tested the dashboard with a small group, and the table results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 281.2,
+   "end": 288.9,
+   "text": "I would like us to agree on the scope of the pipeline today, even if the dashboard details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 289.9,
+   "end": 296.9,
+   "text": "We have three open questions on the dashboard, mostly about timing and who signs off on the pipeline."
+  },
+  {
+   "key": "them:A",
+   "start": 297.5,
+   "end": 305.6,
+   "text": "The dashboard piece is moving, and the team has a draft of the query cost changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 306.5,
+   "end": 314.2,
+   "text": "The cutover piece is moving, and the team has a draft of the dashboard changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 314.7,
+   "end": 324.0,
+   "text": "I talked to the people who run the query cost every day, and they said the dashboard is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 325.5,
+   "end": 333.5,
+   "text": "I would like us to agree on the scope of the cutover today, even if the query cost details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 335.0,
+   "end": 341.9,
+   "text": "We have three open questions on the dashboard, mostly about timing and who signs off on the pipeline."
+  },
+  {
+   "key": "them:C",
+   "start": 342.3,
+   "end": 349.2,
+   "text": "We have three open questions on the table, mostly about timing and who signs off on the dashboard."
+  },
+  {
+   "key": "them:A",
+   "start": 350.3,
+   "end": 358.3,
+   "text": "One thing I noticed is that the pipeline looks different in each region, so the table plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 359.1,
+   "end": 366.4,
+   "text": "We could keep the table as it is for now and only change the dashboard in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 366.7,
+   "end": 373.6,
+   "text": "We have three open questions on the cutover, mostly about timing and who signs off on the pipeline."
+  },
+  {
+   "key": "them:B",
+   "start": 374.0,
+   "end": 380.5,
+   "text": "The vendor sent an updated proposal for the dashboard, and it changes the cutover a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 381.2,
+   "end": 389.3,
+   "text": "I would like us to agree on the scope of the cutover today, even if the query cost details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 390.1,
+   "end": 396.7,
+   "text": "The draft for the pipeline is in the folder, with comments from two teams on the cutover."
+  },
+  {
+   "key": "them:C",
+   "start": 397.1,
+   "end": 404.4,
+   "text": "There is a dependency on the dashboard, so the query cost work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 405.0,
+   "end": 411.5,
+   "text": "I think the dashboard question is the main thing left before we can close out the table."
+  },
+  {
+   "key": "them:A",
+   "start": 411.9,
+   "end": 420.3,
+   "text": "One thing I noticed is that the query cost looks different in each region, so the dashboard plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 420.8,
+   "end": 428.1,
+   "text": "There is a dependency on the dashboard, so the query cost work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 429.5,
+   "end": 437.5,
+   "text": "One thing I noticed is that the table looks different in each region, so the dashboard plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 438.9,
+   "end": 445.8,
+   "text": "We tested the dashboard with a small group, and the table results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 447.3,
+   "end": 454.2,
+   "text": "I think the query cost question is the main thing left before we can close out the pipeline."
+  },
+  {
+   "key": "them:C",
+   "start": 454.7,
+   "end": 461.7,
+   "text": "From what I can see, the table is on track, and the risk is mostly in the dashboard."
+  },
+  {
+   "key": "them:A",
+   "start": 462.1,
+   "end": 470.9,
+   "text": "I talked to the people who run the table every day, and they said the pipeline is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 471.7,
+   "end": 479.8,
+   "text": "One thing I noticed is that the table looks different in each region, so the pipeline plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 480.8,
+   "end": 489.2,
+   "text": "The feedback on the cutover has been mixed, some people like it and some say it adds steps to the query cost."
+  },
+  {
+   "key": "them:C",
+   "start": 490.4,
+   "end": 498.1,
+   "text": "Last time we said we would clean up the dashboard first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 498.6,
+   "end": 507.8,
+   "text": "So on the dashboard, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 508.1,
+   "end": 516.2,
+   "text": "One thing I noticed is that the dashboard looks different in each region, so the cutover plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 517.2,
+   "end": 525.6,
+   "text": "The feedback on the query cost has been mixed, some people like it and some say it adds steps to the table."
+  },
+  {
+   "key": "them:B",
+   "start": 526.4,
+   "end": 533.7,
+   "text": "From what I can see, the query cost is on track, and the risk is mostly in the table."
+  },
+  {
+   "key": "them:A",
+   "start": 534.4,
+   "end": 541.3,
+   "text": "The draft for the query cost is in the folder, with comments from two teams on the dashboard."
+  },
+  {
+   "key": "them:B",
+   "start": 541.9,
+   "end": 548.4,
+   "text": "I think the cutover question is the main thing left before we can close out the pipeline."
+  },
+  {
+   "key": "me:A",
+   "start": 549.1,
+   "end": 555.7,
+   "text": "I think the pipeline question is the main thing left before we can close out the table."
+  },
+  {
+   "key": "me:A",
+   "start": 556.4,
+   "end": 563.8,
+   "text": "We have three open questions on the query cost, mostly about timing and who signs off on the pipeline."
+  },
+  {
+   "key": "them:C",
+   "start": 564.9,
+   "end": 573.0,
+   "text": "One thing I noticed is that the cutover looks different in each region, so the pipeline plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 574.3,
+   "end": 583.5,
+   "text": "So on the cutover, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 584.0,
+   "end": 591.7,
+   "text": "We could keep the query cost as it is for now and only change the pipeline in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 592.6,
+   "end": 600.3,
+   "text": "We could keep the dashboard as it is for now and only change the query cost in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 600.7,
+   "end": 608.4,
+   "text": "Last time we said we would clean up the pipeline first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 609.5,
+   "end": 617.2,
+   "text": "Last time we said we would clean up the table first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 617.7,
+   "end": 626.1,
+   "text": "One thing I noticed is that the pipeline looks different in each region, so the query cost plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 626.8,
+   "end": 633.3,
+   "text": "The vendor sent an updated proposal for the table, and it changes the dashboard a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 634.7,
+   "end": 641.3,
+   "text": "If we wait a month on the dashboard, the cutover timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 642.0,
+   "end": 645.1,
+   "text": "Okay, I think that covers it. Thanks, everyone."
+  }
+ ],
+ "beats": []
+}

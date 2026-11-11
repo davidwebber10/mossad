@@ -451,6 +451,7 @@ struct FindingsDeck: View {
     private func blockedText(_ card: CoachFinding) -> String {
         switch card.kind {
         case .learning: "Not true, never asked again: \u{201C}\(FindingRules.shortTitle(card.text, words: Self.whyWords))\u{201D}"
+        case .trait: "Not true of \(card.personName ?? "them"), never shown: \u{201C}\(FindingRules.shortTitle(card.text, words: Self.whyWords))\u{201D}"
         case .goalOffer: "This goal is not offered again."
         default: "Never again: \(CoachSkill.subject(of: card.skill))"
         }
@@ -573,6 +574,7 @@ struct FindingCard: View {
                         #endif
                         .opacity(1 - Double(min(1, quiet * 2)))
                         .help(finding.kind == .learning ? "Marks this not true, and the coach never asks it again. You can undo it in Coach \u{203A} Knowledge."
+                              : finding.kind == .trait ? "Marks this not true of this person: the trait never shows. You can undo it in Coach \u{203A} Knowledge."
                               : finding.kind == .goalOffer ? "The coach never offers this goal again. You can undo it in Coach \u{203A} Knowledge."
                               : "The coach never brings this up again. You can undo it in Coach \u{203A} Knowledge.")
                 }
@@ -628,6 +630,7 @@ extension CoachFinding.Kind {
         case .missed: "circle.dashed"
         case .couldBeBetter: "arrow.up.forward.circle.fill"
         case .learning: "questionmark.bubble.fill"
+        case .trait: "person.crop.circle.badge.questionmark"
         case .goalOffer: "scope"
         default: "circle"
         }

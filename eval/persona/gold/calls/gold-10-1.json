@@ -1,0 +1,603 @@
+{
+ "id": "gold-10-1",
+ "person": "Drew Kim",
+ "title": "Website checkout redesign",
+ "tags": [
+  "Ecommerce",
+  "Design"
+ ],
+ "setting": "one_on_one",
+ "start": "2026-08-13T15:00:00Z",
+ "end": "2026-08-13T15:14:29Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Drew Kim"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the website checkout redesign."
+  },
+  {
+   "key": "me:A",
+   "start": 5.2,
+   "end": 12.5,
+   "text": "The draft for the checkout page is in the folder, with comments from two teams on the mobile layout."
+  },
+  {
+   "key": "me:A",
+   "start": 14.0,
+   "end": 20.9,
+   "text": "If we wait a month on the payment step, the conversion timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 21.8,
+   "end": 29.9,
+   "text": "I would like us to agree on the scope of the conversion today, even if the checkout page details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 30.8,
+   "end": 38.9,
+   "text": "The conversion piece is moving, and the team has a draft of the mobile layout changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 39.3,
+   "end": 46.6,
+   "text": "If we wait a month on the payment step, the mobile layout timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 46.9,
+   "end": 54.2,
+   "text": "The draft for the mobile layout is in the folder, with comments from two teams on the payment step."
+  },
+  {
+   "key": "them:A",
+   "start": 54.8,
+   "end": 63.6,
+   "text": "One thing I noticed is that the payment step looks different in each region, so the mobile layout plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 64.0,
+   "end": 70.6,
+   "text": "The vendor sent an updated proposal for the conversion, and it changes the cart a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 71.4,
+   "end": 79.9,
+   "text": "The feedback on the payment step has been mixed, some people like it and some say it adds steps to the cart."
+  },
+  {
+   "key": "them:A",
+   "start": 81.1,
+   "end": 88.8,
+   "text": "There is a dependency on the mobile layout, so the payment step work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 89.7,
+   "end": 96.6,
+   "text": "The vendor sent an updated proposal for the conversion, and it changes the checkout page a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 97.5,
+   "end": 104.0,
+   "text": "Right, and the mobile layout also touches the cart, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 104.9,
+   "end": 112.6,
+   "text": "From what I can see, the payment step is on track, and the risk is mostly in the mobile layout."
+  },
+  {
+   "key": "them:A",
+   "start": 113.9,
+   "end": 121.9,
+   "text": "The mobile layout piece is moving, and the team has a draft of the cart changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 123.3,
+   "end": 131.4,
+   "text": "We could keep the payment step as it is for now and only change the checkout page in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 132.9,
+   "end": 140.2,
+   "text": "If we wait a month on the mobile layout, the checkout page timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 141.2,
+   "end": 148.5,
+   "text": "We have three open questions on the checkout page, mostly about timing and who signs off on the cart."
+  },
+  {
+   "key": "me:A",
+   "start": 149.5,
+   "end": 156.4,
+   "text": "If we wait a month on the mobile layout, the cart timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 157.8,
+   "end": 164.8,
+   "text": "I think the checkout page question is the main thing left before we can close out the cart."
+  },
+  {
+   "key": "me:A",
+   "start": 165.6,
+   "end": 174.8,
+   "text": "I talked to the people who run the cart every day, and they said the checkout page is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 176.0,
+   "end": 184.5,
+   "text": "The feedback on the cart has been mixed, some people like it and some say it adds steps to the checkout page."
+  },
+  {
+   "key": "me:A",
+   "start": 184.8,
+   "end": 192.5,
+   "text": "We tested the checkout page with a small group, and the payment step results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 193.6,
+   "end": 201.6,
+   "text": "Last time we said we would clean up the payment step first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 203.0,
+   "end": 210.3,
+   "text": "The draft for the payment step is in the folder, with comments from two teams on the checkout page."
+  },
+  {
+   "key": "me:A",
+   "start": 211.4,
+   "end": 219.9,
+   "text": "One thing I noticed is that the checkout page looks different in each region, so the conversion plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 220.9,
+   "end": 228.6,
+   "text": "We have three open questions on the checkout page, mostly about timing and who signs off on the payment step."
+  },
+  {
+   "key": "me:A",
+   "start": 230.0,
+   "end": 237.3,
+   "text": "We tested the cart with a small group, and the payment step results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 238.4,
+   "end": 244.9,
+   "text": "Right, and the conversion also touches the checkout page, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 246.1,
+   "end": 254.6,
+   "text": "The feedback on the checkout page has been mixed, some people like it and some say it adds steps to the conversion."
+  },
+  {
+   "key": "me:A",
+   "start": 255.6,
+   "end": 262.9,
+   "text": "The cart numbers came in yesterday, and I put a short summary of the conversion in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 263.4,
+   "end": 269.9,
+   "text": "I think the cart question is the main thing left before we can close out the conversion."
+  },
+  {
+   "key": "me:A",
+   "start": 270.7,
+   "end": 277.2,
+   "text": "Right, and the cart also touches the mobile layout, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 278.4,
+   "end": 286.8,
+   "text": "The checkout page piece is moving, and the team has a draft of the mobile layout changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 287.2,
+   "end": 294.1,
+   "text": "I think the payment step question is the main thing left before we can close out the conversion."
+  },
+  {
+   "key": "me:A",
+   "start": 294.8,
+   "end": 301.0,
+   "text": "Right, and the conversion also touches the cart, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 302.0,
+   "end": 308.9,
+   "text": "The vendor sent an updated proposal for the conversion, and it changes the mobile layout a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 310.2,
+   "end": 318.3,
+   "text": "The mobile layout numbers came in yesterday, and I put a short summary of the checkout page in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 319.5,
+   "end": 328.8,
+   "text": "I talked to the people who run the cart every day, and they said the mobile layout is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 330.1,
+   "end": 339.0,
+   "text": "The feedback on the mobile layout has been mixed, some people like it and some say it adds steps to the payment step."
+  },
+  {
+   "key": "me:A",
+   "start": 339.6,
+   "end": 346.9,
+   "text": "From what I can see, the cart is on track, and the risk is mostly in the payment step."
+  },
+  {
+   "key": "them:A",
+   "start": 347.4,
+   "end": 355.5,
+   "text": "We could keep the checkout page as it is for now and only change the payment step in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 356.3,
+   "end": 364.0,
+   "text": "Last time we said we would clean up the cart first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 364.4,
+   "end": 371.7,
+   "text": "From what I can see, the cart is on track, and the risk is mostly in the checkout page."
+  },
+  {
+   "key": "me:A",
+   "start": 372.7,
+   "end": 380.4,
+   "text": "Last time we said we would clean up the conversion first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 381.7,
+   "end": 390.2,
+   "text": "I propose we change the checkout page next month and move about 20% of the work to the new payment step setup."
+  },
+  {
+   "key": "them:A",
+   "start": 390.6,
+   "end": 396.4,
+   "text": "What were the other options you looked at? Lay them side by side for me."
+  },
+  {
+   "key": "me:A",
+   "start": 396.7,
+   "end": 405.2,
+   "text": "The mobile layout piece is moving, and the team has a draft of the checkout page changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 406.2,
+   "end": 412.7,
+   "text": "Right, and the checkout page also touches the conversion, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 413.9,
+   "end": 420.8,
+   "text": "We have three open questions on the conversion, mostly about timing and who signs off on the cart."
+  },
+  {
+   "key": "them:A",
+   "start": 422.0,
+   "end": 428.5,
+   "text": "The draft for the cart is in the folder, with comments from two teams on the conversion."
+  },
+  {
+   "key": "me:A",
+   "start": 428.9,
+   "end": 435.8,
+   "text": "If we wait a month on the cart, the payment step timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 437.2,
+   "end": 446.4,
+   "text": "So on the cart, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 447.9,
+   "end": 457.1,
+   "text": "So on the cart, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 457.8,
+   "end": 467.0,
+   "text": "So on the cart, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 468.0,
+   "end": 475.0,
+   "text": "I think the conversion question is the main thing left before we can close out the checkout page."
+  },
+  {
+   "key": "me:A",
+   "start": 475.7,
+   "end": 483.0,
+   "text": "We have three open questions on the cart, mostly about timing and who signs off on the mobile layout."
+  },
+  {
+   "key": "me:A",
+   "start": 483.8,
+   "end": 491.1,
+   "text": "If we wait a month on the checkout page, the mobile layout timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 492.3,
+   "end": 498.8,
+   "text": "The draft for the cart is in the folder, with comments from two teams on the conversion."
+  },
+  {
+   "key": "me:A",
+   "start": 500.1,
+   "end": 507.0,
+   "text": "If we wait a month on the cart, the payment step timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 507.7,
+   "end": 517.0,
+   "text": "I talked to the people who run the checkout page every day, and they said the cart is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 517.7,
+   "end": 525.0,
+   "text": "We tested the cart with a small group, and the mobile layout results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 526.4,
+   "end": 533.7,
+   "text": "We tested the conversion with a small group, and the payment step results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 534.8,
+   "end": 541.7,
+   "text": "I think the conversion question is the main thing left before we can close out the payment step."
+  },
+  {
+   "key": "me:A",
+   "start": 542.8,
+   "end": 549.4,
+   "text": "I think the conversion question is the main thing left before we can close out the cart."
+  },
+  {
+   "key": "me:A",
+   "start": 550.5,
+   "end": 557.4,
+   "text": "The vendor sent an updated proposal for the cart, and it changes the checkout page a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 558.4,
+   "end": 567.6,
+   "text": "I talked to the people who run the cart every day, and they said the checkout page is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 568.7,
+   "end": 578.3,
+   "text": "So on the payment step, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 578.8,
+   "end": 587.3,
+   "text": "The feedback on the payment step has been mixed, some people like it and some say it adds steps to the cart."
+  },
+  {
+   "key": "me:A",
+   "start": 588.4,
+   "end": 596.1,
+   "text": "From what I can see, the checkout page is on track, and the risk is mostly in the mobile layout."
+  },
+  {
+   "key": "them:A",
+   "start": 596.8,
+   "end": 604.1,
+   "text": "From what I can see, the cart is on track, and the risk is mostly in the mobile layout."
+  },
+  {
+   "key": "me:A",
+   "start": 605.2,
+   "end": 613.7,
+   "text": "The checkout page piece is moving, and the team has a draft of the mobile layout changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 614.8,
+   "end": 624.1,
+   "text": "I talked to the people who run the mobile layout every day, and they said the cart is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 624.5,
+   "end": 634.1,
+   "text": "So on the mobile layout, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 634.9,
+   "end": 643.0,
+   "text": "We could keep the checkout page as it is for now and only change the mobile layout in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 643.7,
+   "end": 652.1,
+   "text": "I would like us to agree on the scope of the checkout page today, even if the mobile layout details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 652.7,
+   "end": 659.2,
+   "text": "Right, and the cart also touches the payment step, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 660.2,
+   "end": 667.6,
+   "text": "From what I can see, the cart is on track, and the risk is mostly in the payment step."
+  },
+  {
+   "key": "me:A",
+   "start": 668.4,
+   "end": 677.2,
+   "text": "One thing I noticed is that the mobile layout looks different in each region, so the checkout page plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 678.2,
+   "end": 686.3,
+   "text": "The conversion piece is moving, and the team has a draft of the mobile layout changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 687.5,
+   "end": 695.6,
+   "text": "I would like us to agree on the scope of the payment step today, even if the cart details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 696.5,
+   "end": 703.5,
+   "text": "If we wait a month on the checkout page, the cart timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 704.9,
+   "end": 712.6,
+   "text": "We could keep the checkout page as it is for now and only change the cart in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 713.2,
+   "end": 721.7,
+   "text": "I would like us to agree on the scope of the payment step today, even if the checkout page details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 723.1,
+   "end": 729.6,
+   "text": "The vendor sent an updated proposal for the conversion, and it changes the cart a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 730.3,
+   "end": 737.6,
+   "text": "From what I can see, the conversion is on track, and the risk is mostly in the mobile layout."
+  },
+  {
+   "key": "me:A",
+   "start": 738.9,
+   "end": 745.8,
+   "text": "If we wait a month on the checkout page, the cart timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 746.8,
+   "end": 755.7,
+   "text": "Here is the plan: we spend 40,000 on the checkout page this quarter and the mobile layout changes follow in the next one."
+  },
+  {
+   "key": "them:A",
+   "start": 757.0,
+   "end": 762.4,
+   "text": "I ran this on my own data last night and got a different answer."
+  },
+  {
+   "key": "me:A",
+   "start": 763.8,
+   "end": 771.1,
+   "text": "If we wait a month on the mobile layout, the checkout page timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 771.7,
+   "end": 779.8,
+   "text": "Last time we said we would clean up the payment step first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 780.4,
+   "end": 788.4,
+   "text": "We could keep the mobile layout as it is for now and only change the checkout page in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 789.0,
+   "end": 797.1,
+   "text": "The checkout page piece is moving, and the team has a draft of the cart changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 798.1,
+   "end": 805.4,
+   "text": "Sorry I am a bit slow today, I have been sick all week and my kids were home too."
+  },
+  {
+   "key": "me:A",
+   "start": 806.3,
+   "end": 809.4,
+   "text": "Okay, I think that covers it. Thanks, everyone."
+  }
+ ],
+ "beats": [
+  {
+   "line": 46,
+   "person": "Drew Kim",
+   "dimension": "order",
+   "value": "options_first"
+  },
+  {
+   "line": 88,
+   "person": "Drew Kim",
+   "dimension": "objection",
+   "value": "own_numbers"
+  }
+ ]
+}

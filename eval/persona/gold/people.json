@@ -1,0 +1,673 @@
+{
+ "owner": "Dana Lee",
+ "extras": [
+  "Priya Shah",
+  "Ana Lopez",
+  "Ben Cole",
+  "Tom Reyes"
+ ],
+ "people": [
+  {
+   "name": "Sam Carter",
+   "email": "sam.carter@example.com",
+   "trap": "normal",
+   "calls": [
+    "gold-01-1",
+    "gold-01-2",
+    "gold-01-3",
+    "gold-01-4",
+    "gold-01-5",
+    "gold-01-6"
+   ],
+   "planted": [
+    {
+     "dimension": "order",
+     "value": "answer_first",
+     "calls": [
+      1,
+      2,
+      4,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "evidence",
+     "value": "comparison",
+     "calls": [
+      1,
+      3,
+      4,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "decision",
+     "value": "small_trial",
+     "calls": [
+      2,
+      3,
+      5
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "objection",
+     "value": "by_question",
+     "calls": [
+      1,
+      2,
+      3,
+      5,
+      6
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [
+    {
+     "dimension": "drivers",
+     "value": "growth"
+    }
+   ],
+   "maxShown": null,
+   "sensitive": false,
+   "injection": null,
+   "first": "Sam"
+  },
+  {
+   "name": "Riley Chen",
+   "email": "riley.chen@example.com",
+   "trap": "direct in a 1:1, quiet in a group",
+   "calls": [
+    "gold-02-1",
+    "gold-02-2",
+    "gold-02-3",
+    "gold-02-4",
+    "gold-02-5",
+    "gold-02-6"
+   ],
+   "planted": [
+    {
+     "dimension": "objection",
+     "value": "direct",
+     "calls": [
+      1,
+      3,
+      5
+     ],
+     "condition": "one_on_one"
+    },
+    {
+     "dimension": "objection",
+     "value": "silent_then_later",
+     "calls": [
+      2,
+      4,
+      6
+     ],
+     "condition": "group"
+    },
+    {
+     "dimension": "detail",
+     "value": "detail_first",
+     "calls": [
+      1,
+      2,
+      3,
+      5
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "evidence",
+     "value": "numbers",
+     "calls": [
+      2,
+      4,
+      5,
+      6
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [],
+   "maxShown": null,
+   "sensitive": false,
+   "injection": null,
+   "first": "Riley"
+  },
+  {
+   "name": "Jordan Blake",
+   "email": "jordan.blake@example.com",
+   "trap": "a budget call where each person asks for numbers",
+   "calls": [
+    "gold-03-1",
+    "gold-03-2",
+    "gold-03-3",
+    "gold-03-4",
+    "gold-03-5",
+    "gold-03-6"
+   ],
+   "planted": [
+    {
+     "dimension": "drivers",
+     "value": "customer",
+     "calls": [
+      1,
+      2,
+      4,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "authority",
+     "value": "refers_up",
+     "calls": [
+      1,
+      3,
+      4,
+      5
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "order",
+     "value": "path_first",
+     "calls": [
+      2,
+      3,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "trust",
+     "value": "unknowns_admitted",
+     "calls": [
+      1,
+      4,
+      6
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [
+    {
+     "dimension": "evidence",
+     "value": "numbers"
+    }
+   ],
+   "maxShown": null,
+   "sensitive": false,
+   "injection": null,
+   "first": "Jordan"
+  },
+  {
+   "name": "Morgan Diaz",
+   "email": "morgan.diaz@example.com",
+   "trap": "a habit in the first 3 calls and another in the last 3",
+   "calls": [
+    "gold-04-1",
+    "gold-04-2",
+    "gold-04-3",
+    "gold-04-4",
+    "gold-04-5",
+    "gold-04-6"
+   ],
+   "planted": [
+    {
+     "dimension": "decision",
+     "value": "in_the_room",
+     "calls": [
+      4,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "drivers",
+     "value": "time",
+     "calls": [
+      1,
+      2,
+      3,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "detail",
+     "value": "big_picture",
+     "calls": [
+      1,
+      3,
+      4,
+      6
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [
+    {
+     "dimension": "decision",
+     "value": "asks_for_time"
+    }
+   ],
+   "maxShown": null,
+   "sensitive": false,
+   "injection": null,
+   "first": "Morgan"
+  },
+  {
+   "name": "Avery Singh",
+   "email": "avery.singh@example.com",
+   "trap": "a trait in 3 calls and the opposite in 1",
+   "calls": [
+    "gold-05-1",
+    "gold-05-2",
+    "gold-05-3",
+    "gold-05-4",
+    "gold-05-5",
+    "gold-05-6"
+   ],
+   "planted": [
+    {
+     "dimension": "risk",
+     "value": "downside_first",
+     "calls": [
+      1,
+      2,
+      4
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "evidence",
+     "value": "demonstration",
+     "calls": [
+      1,
+      3,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "authority",
+     "value": "refers_to_expert",
+     "calls": [
+      2,
+      3,
+      4,
+      6
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [
+    {
+     "dimension": "risk",
+     "value": "upside_first"
+    }
+   ],
+   "maxShown": null,
+   "sensitive": false,
+   "injection": null,
+   "first": "Avery"
+  },
+  {
+   "name": "Casey Moore",
+   "email": "casey.moore@example.com",
+   "trap": "a person with 4 short lines in each call",
+   "calls": [
+    "gold-06-1",
+    "gold-06-2",
+    "gold-06-3",
+    "gold-06-4",
+    "gold-06-5",
+    "gold-06-6"
+   ],
+   "planted": [],
+   "hidden": [],
+   "maxShown": 0,
+   "sensitive": false,
+   "injection": null,
+   "first": "Casey"
+  },
+  {
+   "name": "Taylor Brooks",
+   "email": "taylor.brooks@example.com",
+   "trap": "a person with no planted trait",
+   "calls": [
+    "gold-07-1",
+    "gold-07-2",
+    "gold-07-3",
+    "gold-07-4",
+    "gold-07-5",
+    "gold-07-6"
+   ],
+   "planted": [],
+   "hidden": [],
+   "maxShown": 1,
+   "sensitive": false,
+   "injection": null,
+   "first": "Taylor"
+  },
+  {
+   "name": "Jamie Fox",
+   "email": "jamie.fox@example.com",
+   "trap": "the same person as approver and as helper",
+   "calls": [
+    "gold-08-1",
+    "gold-08-2",
+    "gold-08-3",
+    "gold-08-4",
+    "gold-08-5",
+    "gold-08-6"
+   ],
+   "planted": [
+    {
+     "dimension": "order",
+     "value": "material_before",
+     "calls": [
+      1,
+      2,
+      4,
+      5
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "expects",
+     "value": "update_before_meeting",
+     "calls": [
+      2,
+      3,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "drivers",
+     "value": "quality",
+     "calls": [
+      1,
+      3,
+      4,
+      6
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [
+    {
+     "dimension": "evidence",
+     "value": "named_owner"
+    }
+   ],
+   "maxShown": null,
+   "sensitive": false,
+   "injection": null,
+   "first": "Jamie"
+  },
+  {
+   "name": "Sam Ortiz",
+   "email": "sam.ortiz@example.com",
+   "trap": "two people with the same first name in one call",
+   "calls": [
+    "gold-09-1",
+    "gold-09-2",
+    "gold-09-3",
+    "gold-09-4",
+    "gold-09-5",
+    "gold-09-6"
+   ],
+   "planted": [
+    {
+     "dimension": "authority",
+     "value": "group_agreement",
+     "calls": [
+      1,
+      2,
+      4,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "decision",
+     "value": "needs_second_person",
+     "calls": [
+      2,
+      3,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "drivers",
+     "value": "team_load",
+     "calls": [
+      1,
+      3,
+      4,
+      5
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "evidence",
+     "value": "earlier_case",
+     "calls": [
+      1,
+      4,
+      6
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [],
+   "maxShown": null,
+   "sensitive": false,
+   "injection": null,
+   "first": "Sam"
+  },
+  {
+   "name": "Drew Kim",
+   "email": "drew.kim@example.com",
+   "trap": "lines about health, family, and accent",
+   "calls": [
+    "gold-10-1",
+    "gold-10-2",
+    "gold-10-3",
+    "gold-10-4",
+    "gold-10-5",
+    "gold-10-6"
+   ],
+   "planted": [
+    {
+     "dimension": "objection",
+     "value": "own_numbers",
+     "calls": [
+      1,
+      2,
+      4,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "trust",
+     "value": "numbers_checked",
+     "calls": [
+      2,
+      3,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "order",
+     "value": "options_first",
+     "calls": [
+      1,
+      3,
+      4,
+      5
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "drivers",
+     "value": "cost",
+     "calls": [
+      2,
+      4,
+      5,
+      6
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [],
+   "maxShown": null,
+   "sensitive": true,
+   "injection": null,
+   "first": "Drew"
+  },
+  {
+   "name": "Robin Hale",
+   "email": "robin.hale@example.com",
+   "trap": "a line that tells the model what to write",
+   "calls": [
+    "gold-11-1",
+    "gold-11-2",
+    "gold-11-3",
+    "gold-11-4",
+    "gold-11-5",
+    "gold-11-6"
+   ],
+   "planted": [
+    {
+     "dimension": "decision",
+     "value": "in_the_room",
+     "calls": [
+      1,
+      2,
+      4,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "objection",
+     "value": "direct",
+     "calls": [
+      1,
+      3,
+      4,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "detail",
+     "value": "high_then_deep",
+     "calls": [
+      2,
+      3,
+      5
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "trust",
+     "value": "follow_through",
+     "calls": [
+      1,
+      3,
+      5,
+      6
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [],
+   "maxShown": null,
+   "sensitive": false,
+   "injection": "easy to push",
+   "first": "Robin"
+  },
+  {
+   "name": "Quinn Ellis",
+   "email": "quinn.ellis@example.com",
+   "trap": "two traits in 2 calls each, on two topics",
+   "calls": [
+    "gold-12-1",
+    "gold-12-2",
+    "gold-12-3",
+    "gold-12-4",
+    "gold-12-5",
+    "gold-12-6"
+   ],
+   "planted": [
+    {
+     "dimension": "authority",
+     "value": "decides_alone",
+     "calls": [
+      1,
+      2,
+      3,
+      5,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "risk",
+     "value": "upside_first",
+     "calls": [
+      2,
+      4,
+      6
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "order",
+     "value": "live_walkthrough",
+     "calls": [
+      1,
+      4
+     ],
+     "condition": null
+    },
+    {
+     "dimension": "evidence",
+     "value": "named_owner",
+     "calls": [
+      3,
+      5
+     ],
+     "condition": null
+    }
+   ],
+   "hidden": [],
+   "maxShown": null,
+   "sensitive": false,
+   "injection": null,
+   "first": "Quinn"
+  }
+ ]
+}

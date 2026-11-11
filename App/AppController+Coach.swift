@@ -55,7 +55,10 @@ extension AppController {
                                  titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) }, facts: MeetingAnalyticsStore.shared.facts)
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
-            await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName, saved: shownCoachPeople))
+            await runPersonas()
+            // The older read only for a person with no card yet: a card replaces it.
+            await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName, saved: shownCoachPeople)
+                .filter { persona(of: $0)?.card == nil })
             coaching = false
             syncNow()
             await sendCoachEmail()

@@ -1,0 +1,575 @@
+{
+ "id": "gold-08-5",
+ "person": "Jamie Fox",
+ "title": "Customer advisory board",
+ "tags": [
+  "Customers",
+  "Events"
+ ],
+ "setting": "group",
+ "start": "2026-09-12T18:00:00Z",
+ "end": "2026-09-12T18:13:56Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Jamie Fox",
+  "them:B": "Ana Lopez",
+  "them:C": "Ben Cole"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the customer advisory board."
+  },
+  {
+   "key": "them:B",
+   "start": 5.6,
+   "end": 14.8,
+   "text": "I talked to the people who run the follow-up every day, and they said the board meeting is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 15.2,
+   "end": 22.5,
+   "text": "There is a dependency on the agenda, so the invite list work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 23.3,
+   "end": 32.2,
+   "text": "The feedback on the feedback session has been mixed, some people like it and some say it adds steps to the invite list."
+  },
+  {
+   "key": "them:B",
+   "start": 32.7,
+   "end": 39.7,
+   "text": "The vendor sent an updated proposal for the agenda, and it changes the board meeting a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 40.7,
+   "end": 47.6,
+   "text": "The draft for the board meeting is in the folder, with comments from two teams on the follow-up."
+  },
+  {
+   "key": "them:B",
+   "start": 49.0,
+   "end": 57.5,
+   "text": "One thing I noticed is that the agenda looks different in each region, so the board meeting plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 57.8,
+   "end": 65.9,
+   "text": "We could keep the board meeting as it is for now and only change the feedback session in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 66.8,
+   "end": 74.9,
+   "text": "The board meeting piece is moving, and the team has a draft of the agenda changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 75.4,
+   "end": 82.7,
+   "text": "We tested the follow-up with a small group, and the board meeting results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 83.8,
+   "end": 90.7,
+   "text": "Right, and the feedback session also touches the invite list, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 91.9,
+   "end": 100.3,
+   "text": "One thing I noticed is that the invite list looks different in each region, so the follow-up plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 101.2,
+   "end": 109.2,
+   "text": "I would like us to agree on the scope of the follow-up today, even if the feedback session details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 109.8,
+   "end": 116.3,
+   "text": "Right, and the follow-up also touches the board meeting, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 116.9,
+   "end": 125.4,
+   "text": "The feedback on the follow-up has been mixed, some people like it and some say it adds steps to the board meeting."
+  },
+  {
+   "key": "them:B",
+   "start": 126.3,
+   "end": 134.0,
+   "text": "I would like us to agree on the scope of the agenda today, even if the follow-up details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 135.1,
+   "end": 143.6,
+   "text": "The board meeting piece is moving, and the team has a draft of the feedback session changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 144.0,
+   "end": 150.9,
+   "text": "The draft for the follow-up is in the folder, with comments from two teams on the feedback session."
+  },
+  {
+   "key": "them:B",
+   "start": 152.2,
+   "end": 159.5,
+   "text": "If we wait a month on the invite list, the feedback session timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 160.6,
+   "end": 169.0,
+   "text": "One thing I noticed is that the follow-up looks different in each region, so the board meeting plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 169.7,
+   "end": 177.0,
+   "text": "We could keep the follow-up as it is for now and only change the agenda in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 177.3,
+   "end": 185.8,
+   "text": "One thing I noticed is that the agenda looks different in each region, so the board meeting plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 187.2,
+   "end": 194.1,
+   "text": "There is a dependency on the agenda, so the follow-up work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 195.0,
+   "end": 202.3,
+   "text": "If we wait a month on the feedback session, the invite list timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 203.7,
+   "end": 211.0,
+   "text": "We tested the agenda with a small group, and the board meeting results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 212.2,
+   "end": 220.2,
+   "text": "Last time we said we would clean up the feedback session first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 220.6,
+   "end": 227.1,
+   "text": "Right, and the board meeting also touches the follow-up, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 227.7,
+   "end": 235.7,
+   "text": "We could keep the feedback session as it is for now and only change the board meeting in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 237.0,
+   "end": 246.6,
+   "text": "So on the board meeting, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 248.0,
+   "end": 256.0,
+   "text": "We could keep the board meeting as it is for now and only change the feedback session in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 257.0,
+   "end": 263.6,
+   "text": "I think the follow-up question is the main thing left before we can close out the agenda."
+  },
+  {
+   "key": "them:B",
+   "start": 264.5,
+   "end": 273.3,
+   "text": "I talked to the people who run the follow-up every day, and they said the agenda is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 274.4,
+   "end": 282.4,
+   "text": "The invite list piece is moving, and the team has a draft of the follow-up changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 283.8,
+   "end": 291.1,
+   "text": "From what I can see, the agenda is on track, and the risk is mostly in the invite list."
+  },
+  {
+   "key": "me:A",
+   "start": 292.5,
+   "end": 301.4,
+   "text": "I talked to the people who run the agenda every day, and they said the follow-up is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 302.6,
+   "end": 310.3,
+   "text": "We have three open questions on the board meeting, mostly about timing and who signs off on the feedback session."
+  },
+  {
+   "key": "me:A",
+   "start": 310.8,
+   "end": 318.5,
+   "text": "From what I can see, the feedback session is on track, and the risk is mostly in the board meeting."
+  },
+  {
+   "key": "them:C",
+   "start": 319.6,
+   "end": 327.7,
+   "text": "The follow-up piece is moving, and the team has a draft of the feedback session changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 328.1,
+   "end": 337.7,
+   "text": "So on the board meeting, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 339.1,
+   "end": 346.4,
+   "text": "We have three open questions on the agenda, mostly about timing and who signs off on the feedback session."
+  },
+  {
+   "key": "me:A",
+   "start": 347.5,
+   "end": 354.0,
+   "text": "The ask is simple: approve the feedback session change so the agenda team can start next week."
+  },
+  {
+   "key": "them:A",
+   "start": 354.6,
+   "end": 359.6,
+   "text": "A two line note before each of these would help me a lot."
+  },
+  {
+   "key": "them:B",
+   "start": 360.6,
+   "end": 368.3,
+   "text": "Last time we said we would clean up the follow-up first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 368.6,
+   "end": 376.3,
+   "text": "We have three open questions on the board meeting, mostly about timing and who signs off on the invite list."
+  },
+  {
+   "key": "them:A",
+   "start": 377.0,
+   "end": 385.1,
+   "text": "Last time we said we would clean up the feedback session first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 385.6,
+   "end": 392.5,
+   "text": "If we wait a month on the board meeting, the agenda timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 393.7,
+   "end": 401.0,
+   "text": "We tested the follow-up with a small group, and the invite list results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 401.4,
+   "end": 409.1,
+   "text": "We could keep the feedback session as it is for now and only change the follow-up in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 409.6,
+   "end": 416.9,
+   "text": "From what I can see, the board meeting is on track, and the risk is mostly in the agenda."
+  },
+  {
+   "key": "me:A",
+   "start": 417.4,
+   "end": 426.3,
+   "text": "The feedback on the invite list has been mixed, some people like it and some say it adds steps to the feedback session."
+  },
+  {
+   "key": "them:C",
+   "start": 427.3,
+   "end": 435.4,
+   "text": "I would like us to agree on the scope of the follow-up today, even if the board meeting details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 436.8,
+   "end": 443.7,
+   "text": "The vendor sent an updated proposal for the feedback session, and it changes the agenda a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 445.1,
+   "end": 452.8,
+   "text": "From what I can see, the invite list is on track, and the risk is mostly in the board meeting."
+  },
+  {
+   "key": "them:A",
+   "start": 453.9,
+   "end": 460.8,
+   "text": "The vendor sent an updated proposal for the feedback session, and it changes the agenda a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 461.6,
+   "end": 469.7,
+   "text": "The invite list numbers came in yesterday, and I put a short summary of the feedback session in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 470.1,
+   "end": 478.9,
+   "text": "I talked to the people who run the follow-up every day, and they said the agenda is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 479.4,
+   "end": 487.1,
+   "text": "The follow-up numbers came in yesterday, and I put a short summary of the feedback session in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 488.5,
+   "end": 495.5,
+   "text": "The draft for the board meeting is in the folder, with comments from two teams on the follow-up."
+  },
+  {
+   "key": "them:A",
+   "start": 496.7,
+   "end": 503.6,
+   "text": "The vendor sent an updated proposal for the agenda, and it changes the feedback session a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 504.7,
+   "end": 512.0,
+   "text": "From what I can see, the follow-up is on track, and the risk is mostly in the feedback session."
+  },
+  {
+   "key": "them:B",
+   "start": 512.4,
+   "end": 520.1,
+   "text": "We have three open questions on the feedback session, mostly about timing and who signs off on the board meeting."
+  },
+  {
+   "key": "them:C",
+   "start": 521.3,
+   "end": 528.6,
+   "text": "We could keep the follow-up as it is for now and only change the agenda in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 529.8,
+   "end": 538.3,
+   "text": "I would like us to agree on the scope of the invite list today, even if the board meeting details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 539.2,
+   "end": 546.1,
+   "text": "If we wait a month on the invite list, the follow-up timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 546.7,
+   "end": 554.0,
+   "text": "I think the board meeting question is the main thing left before we can close out the feedback session."
+  },
+  {
+   "key": "them:C",
+   "start": 554.8,
+   "end": 564.4,
+   "text": "So on the board meeting, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 565.4,
+   "end": 572.7,
+   "text": "I think the invite list question is the main thing left before we can close out the feedback session."
+  },
+  {
+   "key": "them:B",
+   "start": 573.3,
+   "end": 582.9,
+   "text": "I talked to the people who run the invite list every day, and they said the board meeting is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 584.0,
+   "end": 592.1,
+   "text": "I would like us to agree on the scope of the agenda today, even if the feedback session details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 593.3,
+   "end": 601.4,
+   "text": "I would like us to agree on the scope of the agenda today, even if the invite list details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 602.4,
+   "end": 612.1,
+   "text": "I talked to the people who run the invite list every day, and they said the feedback session is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 613.5,
+   "end": 621.6,
+   "text": "I would like us to agree on the scope of the board meeting today, even if the follow-up details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 622.3,
+   "end": 630.0,
+   "text": "We could keep the invite list as it is for now and only change the follow-up in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 630.5,
+   "end": 637.8,
+   "text": "The vendor sent an updated proposal for the invite list, and it changes the board meeting a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 638.5,
+   "end": 646.2,
+   "text": "From what I can see, the board meeting is on track, and the risk is mostly in the invite list."
+  },
+  {
+   "key": "them:C",
+   "start": 646.5,
+   "end": 655.7,
+   "text": "I talked to the people who run the board meeting every day, and they said the agenda is the part that slows them down."
+  },
+  {
+   "key": "them:B",
+   "start": 656.5,
+   "end": 664.2,
+   "text": "There is a dependency on the board meeting, so the feedback session work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 665.6,
+   "end": 673.3,
+   "text": "There is a dependency on the board meeting, so the feedback session work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 674.7,
+   "end": 681.7,
+   "text": "If we wait a month on the follow-up, the invite list timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 682.2,
+   "end": 690.7,
+   "text": "The feedback on the board meeting has been mixed, some people like it and some say it adds steps to the follow-up."
+  },
+  {
+   "key": "them:A",
+   "start": 692.0,
+   "end": 699.7,
+   "text": "The invite list numbers came in yesterday, and I put a short summary of the follow-up in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 701.2,
+   "end": 708.9,
+   "text": "We tested the board meeting with a small group, and the invite list results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 710.3,
+   "end": 719.9,
+   "text": "So on the board meeting, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 720.9,
+   "end": 728.2,
+   "text": "We tested the follow-up with a small group, and the feedback session results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 729.4,
+   "end": 737.9,
+   "text": "Here is the plan: we spend 40,000 on the board meeting this quarter and the agenda changes follow in the next one."
+  },
+  {
+   "key": "them:A",
+   "start": 739.3,
+   "end": 745.8,
+   "text": "Next time, can you send me the document a day before? I like to read it first."
+  },
+  {
+   "key": "me:A",
+   "start": 747.1,
+   "end": 755.5,
+   "text": "One thing I noticed is that the feedback session looks different in each region, so the agenda plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 756.3,
+   "end": 763.6,
+   "text": "From what I can see, the feedback session is on track, and the risk is mostly in the agenda."
+  },
+  {
+   "key": "them:A",
+   "start": 764.0,
+   "end": 771.3,
+   "text": "There is a dependency on the invite list, so the agenda work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 772.4,
+   "end": 775.8,
+   "text": "Good, let us pick this up next week. Thanks."
+  }
+ ],
+ "beats": [
+  {
+   "line": 41,
+   "person": "Jamie Fox",
+   "dimension": "expects",
+   "value": "update_before_meeting"
+  },
+  {
+   "line": 85,
+   "person": "Jamie Fox",
+   "dimension": "order",
+   "value": "material_before"
+  }
+ ]
+}

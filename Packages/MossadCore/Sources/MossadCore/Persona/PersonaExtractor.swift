@@ -45,6 +45,22 @@ public struct PersonaExtractor: Sendable {
 
     public init(llm: any LanguageModel) { self.llm = llm }
 
+    /// The model of the persona step on each provider path: Sonnet 5.5 on Anthropic, the chosen model elsewhere.
+    /// Nil when the provider needs a key that is not there, or has no model chosen: the step then skips.
+    public static func model(provider: AIProvider, chosen: String, key: String?, usage: UsageLog?, serverURL: URL = LocalServer.ollama)
+        -> (llm: any LanguageModel, name: String, service: UsageEvent.Service)? {
+        guard key?.nonBlank != nil || !provider.requiresKey else { return nil }
+        let name = provider == .anthropic ? anthropicModel : (chosen.nonBlank ?? provider.defaultModel)
+        guard !name.isEmpty else { return nil }
+        let service: UsageEvent.Service = switch provider {
+        case .anthropic: .claude
+        case .openai: .openai
+        case .openrouter: .openrouter
+        case .localServer, .apple: .local
+        }
+        return (provider.model(name, apiKey: key, usage: usage, serverURL: serverURL), name, service)
+    }
+
     // MARK: Who and where
 
     /// The owner's speaker keys in a call: by the owner's name now.

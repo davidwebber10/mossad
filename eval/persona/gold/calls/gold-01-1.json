@@ -1,0 +1,603 @@
+{
+ "id": "gold-01-1",
+ "person": "Sam Carter",
+ "title": "Inventory forecast",
+ "tags": [
+  "Inventory",
+  "Forecasting"
+ ],
+ "setting": "one_on_one",
+ "start": "2026-08-04T16:00:00Z",
+ "end": "2026-08-04T16:14:03Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Sam Carter"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.2,
+   "text": "Thanks for making the time. Today is about the inventory forecast."
+  },
+  {
+   "key": "me:A",
+   "start": 5.6,
+   "end": 13.3,
+   "text": "We could keep the reorder point as it is for now and only change the stockout in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 13.7,
+   "end": 20.6,
+   "text": "I think the stockout question is the main thing left before we can close out the safety stock."
+  },
+  {
+   "key": "me:A",
+   "start": 21.0,
+   "end": 30.6,
+   "text": "I talked to the people who run the safety stock every day, and they said the reorder point is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 30.9,
+   "end": 39.0,
+   "text": "I would like us to agree on the scope of the safety stock today, even if the season details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 40.2,
+   "end": 48.3,
+   "text": "One thing I noticed is that the season looks different in each region, so the stockout plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 48.9,
+   "end": 55.0,
+   "text": "Right, and the stockout also touches the season, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 56.4,
+   "end": 64.1,
+   "text": "The season numbers came in yesterday, and I put a short summary of the reorder point in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 65.2,
+   "end": 72.1,
+   "text": "There is a dependency on the stockout, so the season work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 73.3,
+   "end": 80.6,
+   "text": "We tested the reorder point with a small group, and the season results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 81.3,
+   "end": 89.4,
+   "text": "Last time we said we would clean up the safety stock first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 90.8,
+   "end": 98.9,
+   "text": "Last time we said we would clean up the demand signal first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 99.6,
+   "end": 106.9,
+   "text": "From what I can see, the stockout is on track, and the risk is mostly in the safety stock."
+  },
+  {
+   "key": "me:A",
+   "start": 108.0,
+   "end": 115.0,
+   "text": "I think the stockout question is the main thing left before we can close out the safety stock."
+  },
+  {
+   "key": "me:A",
+   "start": 115.4,
+   "end": 121.9,
+   "text": "Right, and the season also touches the reorder point, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 122.6,
+   "end": 129.5,
+   "text": "We want to start the stockout on the first of the month. Can we agree on that today?"
+  },
+  {
+   "key": "them:A",
+   "start": 130.3,
+   "end": 133.3,
+   "text": "How does that compare with the other teams?"
+  },
+  {
+   "key": "me:A",
+   "start": 134.2,
+   "end": 143.1,
+   "text": "The feedback on the reorder point has been mixed, some people like it and some say it adds steps to the safety stock."
+  },
+  {
+   "key": "me:A",
+   "start": 143.9,
+   "end": 151.6,
+   "text": "The stockout numbers came in yesterday, and I put a short summary of the safety stock in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 152.2,
+   "end": 159.1,
+   "text": "The draft for the season is in the folder, with comments from two teams on the reorder point."
+  },
+  {
+   "key": "me:A",
+   "start": 160.1,
+   "end": 167.0,
+   "text": "I think the season question is the main thing left before we can close out the safety stock."
+  },
+  {
+   "key": "me:A",
+   "start": 168.3,
+   "end": 180.6,
+   "text": "Let me give you the history of the stockout before I get to what we want to do, because it matters for the demand signal, and there were three rounds of changes"
+  },
+  {
+   "key": "them:A",
+   "start": 182.0,
+   "end": 185.8,
+   "text": "Before the details, what is the recommendation in one sentence?"
+  },
+  {
+   "key": "me:A",
+   "start": 187.1,
+   "end": 194.0,
+   "text": "The draft for the safety stock is in the folder, with comments from two teams on the stockout."
+  },
+  {
+   "key": "me:A",
+   "start": 195.0,
+   "end": 202.3,
+   "text": "We have three open questions on the safety stock, mostly about timing and who signs off on the stockout."
+  },
+  {
+   "key": "them:A",
+   "start": 202.8,
+   "end": 210.1,
+   "text": "There is a dependency on the season, so the reorder point work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 211.2,
+   "end": 218.5,
+   "text": "There is a dependency on the season, so the safety stock work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 219.3,
+   "end": 227.0,
+   "text": "We could keep the stockout as it is for now and only change the demand signal in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 227.9,
+   "end": 234.9,
+   "text": "The draft for the safety stock is in the folder, with comments from two teams on the season."
+  },
+  {
+   "key": "me:A",
+   "start": 235.9,
+   "end": 243.9,
+   "text": "I would like us to agree on the scope of the reorder point today, even if the stockout details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 245.1,
+   "end": 252.1,
+   "text": "The draft for the stockout is in the folder, with comments from two teams on the reorder point."
+  },
+  {
+   "key": "me:A",
+   "start": 253.2,
+   "end": 261.3,
+   "text": "The reorder point piece is moving, and the team has a draft of the stockout changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 262.2,
+   "end": 269.9,
+   "text": "There is a dependency on the safety stock, so the demand signal work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 271.3,
+   "end": 279.0,
+   "text": "We could keep the safety stock as it is for now and only change the season in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 279.8,
+   "end": 286.7,
+   "text": "The draft for the demand signal is in the folder, with comments from two teams on the season."
+  },
+  {
+   "key": "me:A",
+   "start": 287.4,
+   "end": 295.4,
+   "text": "My recommendation is that we go with the second option for the safety stock, it saves about 15% on the season."
+  },
+  {
+   "key": "them:A",
+   "start": 296.5,
+   "end": 300.7,
+   "text": "And what happens to the other team if we do that?"
+  },
+  {
+   "key": "me:A",
+   "start": 302.0,
+   "end": 310.8,
+   "text": "One thing I noticed is that the safety stock looks different in each region, so the demand signal plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 311.1,
+   "end": 317.7,
+   "text": "Right, and the safety stock also touches the stockout, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 318.5,
+   "end": 325.9,
+   "text": "I think the demand signal question is the main thing left before we can close out the reorder point."
+  },
+  {
+   "key": "me:A",
+   "start": 326.7,
+   "end": 335.2,
+   "text": "The feedback on the season has been mixed, some people like it and some say it adds steps to the reorder point."
+  },
+  {
+   "key": "me:A",
+   "start": 336.5,
+   "end": 343.8,
+   "text": "There is a dependency on the demand signal, so the stockout work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 345.3,
+   "end": 352.2,
+   "text": "Right, and the demand signal also touches the reorder point, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 352.8,
+   "end": 359.0,
+   "text": "Right, and the season also touches the stockout, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 359.3,
+   "end": 368.5,
+   "text": "So on the stockout, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 369.8,
+   "end": 376.8,
+   "text": "I think the stockout question is the main thing left before we can close out the reorder point."
+  },
+  {
+   "key": "me:A",
+   "start": 378.1,
+   "end": 385.0,
+   "text": "The draft for the safety stock is in the folder, with comments from two teams on the stockout."
+  },
+  {
+   "key": "them:A",
+   "start": 386.0,
+   "end": 393.3,
+   "text": "There is a dependency on the stockout, so the safety stock work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 394.6,
+   "end": 402.3,
+   "text": "We have three open questions on the reorder point, mostly about timing and who signs off on the demand signal."
+  },
+  {
+   "key": "me:A",
+   "start": 403.4,
+   "end": 410.7,
+   "text": "There is a dependency on the reorder point, so the season work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 411.2,
+   "end": 418.9,
+   "text": "The reorder point numbers came in yesterday, and I put a short summary of the season in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 419.4,
+   "end": 426.7,
+   "text": "There is a dependency on the stockout, so the demand signal work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 428.0,
+   "end": 436.5,
+   "text": "The safety stock piece is moving, and the team has a draft of the reorder point changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 437.1,
+   "end": 444.8,
+   "text": "The stockout numbers came in yesterday, and I put a short summary of the demand signal in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 446.0,
+   "end": 454.1,
+   "text": "The demand signal piece is moving, and the team has a draft of the season changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 454.6,
+   "end": 462.3,
+   "text": "I would like us to agree on the scope of the season today, even if the stockout details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 463.0,
+   "end": 470.7,
+   "text": "The safety stock numbers came in yesterday, and I put a short summary of the stockout in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 471.1,
+   "end": 478.8,
+   "text": "The demand signal numbers came in yesterday, and I put a short summary of the stockout in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 479.4,
+   "end": 487.9,
+   "text": "I would like us to agree on the scope of the demand signal today, even if the reorder point details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 488.3,
+   "end": 496.0,
+   "text": "There is a dependency on the demand signal, so the reorder point work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 496.7,
+   "end": 503.2,
+   "text": "The vendor sent an updated proposal for the stockout, and it changes the season a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 504.5,
+   "end": 512.6,
+   "text": "We could keep the reorder point as it is for now and only change the demand signal in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 513.0,
+   "end": 520.4,
+   "text": "I think the safety stock question is the main thing left before we can close out the demand signal."
+  },
+  {
+   "key": "them:A",
+   "start": 520.7,
+   "end": 528.8,
+   "text": "The demand signal numbers came in yesterday, and I put a short summary of the safety stock in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 529.5,
+   "end": 536.4,
+   "text": "I think the season question is the main thing left before we can close out the demand signal."
+  },
+  {
+   "key": "me:A",
+   "start": 537.6,
+   "end": 546.5,
+   "text": "I talked to the people who run the stockout every day, and they said the season is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 547.6,
+   "end": 555.3,
+   "text": "We could keep the stockout as it is for now and only change the reorder point in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 555.7,
+   "end": 562.6,
+   "text": "We tested the stockout with a small group, and the season results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 563.3,
+   "end": 571.4,
+   "text": "The demand signal piece is moving, and the team has a draft of the season changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 572.0,
+   "end": 578.9,
+   "text": "The draft for the stockout is in the folder, with comments from two teams on the demand signal."
+  },
+  {
+   "key": "me:A",
+   "start": 579.7,
+   "end": 588.2,
+   "text": "The feedback on the stockout has been mixed, some people like it and some say it adds steps to the reorder point."
+  },
+  {
+   "key": "them:A",
+   "start": 589.3,
+   "end": 599.0,
+   "text": "I talked to the people who run the demand signal every day, and they said the safety stock is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 599.7,
+   "end": 606.6,
+   "text": "If we wait a month on the reorder point, the season timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 607.2,
+   "end": 614.5,
+   "text": "If we wait a month on the reorder point, the demand signal timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 615.3,
+   "end": 623.0,
+   "text": "Last time we said we would clean up the season first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 624.2,
+   "end": 630.8,
+   "text": "Right, and the demand signal also touches the season, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 631.5,
+   "end": 638.5,
+   "text": "From what I can see, the stockout is on track, and the risk is mostly in the season."
+  },
+  {
+   "key": "me:A",
+   "start": 638.9,
+   "end": 646.6,
+   "text": "Last time we said we would clean up the stockout first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 647.1,
+   "end": 655.6,
+   "text": "One thing I noticed is that the season looks different in each region, so the safety stock plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 656.9,
+   "end": 664.2,
+   "text": "The draft for the safety stock is in the folder, with comments from two teams on the reorder point."
+  },
+  {
+   "key": "me:A",
+   "start": 664.7,
+   "end": 672.7,
+   "text": "Last time we said we would clean up the reorder point first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 674.1,
+   "end": 683.3,
+   "text": "So on the season, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 683.8,
+   "end": 693.0,
+   "text": "I talked to the people who run the season every day, and they said the safety stock is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 693.5,
+   "end": 700.8,
+   "text": "From what I can see, the season is on track, and the risk is mostly in the safety stock."
+  },
+  {
+   "key": "me:A",
+   "start": 701.5,
+   "end": 710.8,
+   "text": "I talked to the people who run the demand signal every day, and they said the stockout is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 711.9,
+   "end": 720.4,
+   "text": "One thing I noticed is that the reorder point looks different in each region, so the stockout plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 721.0,
+   "end": 728.7,
+   "text": "We tested the safety stock with a small group, and the reorder point results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 729.2,
+   "end": 736.1,
+   "text": "I think the safety stock question is the main thing left before we can close out the stockout."
+  },
+  {
+   "key": "me:A",
+   "start": 737.0,
+   "end": 745.1,
+   "text": "Last time we said we would clean up the safety stock first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 745.7,
+   "end": 753.0,
+   "text": "The vendor sent an updated proposal for the safety stock, and it changes the demand signal a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 754.2,
+   "end": 761.5,
+   "text": "We could keep the stockout as it is for now and only change the season in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 762.5,
+   "end": 770.2,
+   "text": "The reorder point numbers came in yesterday, and I put a short summary of the season in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 771.3,
+   "end": 778.6,
+   "text": "From what I can see, the stockout is on track, and the risk is mostly in the reorder point."
+  },
+  {
+   "key": "me:A",
+   "start": 779.4,
+   "end": 782.8,
+   "text": "Good, let us pick this up next week. Thanks."
+  }
+ ],
+ "beats": [
+  {
+   "line": 16,
+   "person": "Sam Carter",
+   "dimension": "evidence",
+   "value": "comparison"
+  },
+  {
+   "line": 22,
+   "person": "Sam Carter",
+   "dimension": "order",
+   "value": "answer_first"
+  },
+  {
+   "line": 36,
+   "person": "Sam Carter",
+   "dimension": "objection",
+   "value": "by_question"
+  }
+ ]
+}

@@ -1,0 +1,545 @@
+{
+ "id": "gold-12-6",
+ "person": "Quinn Ellis",
+ "title": "Pricing update",
+ "tags": [
+  "Pricing",
+  "Sales"
+ ],
+ "setting": "group",
+ "start": "2026-09-24T17:00:00Z",
+ "end": "2026-09-24T17:12:55Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Quinn Ellis",
+  "them:B": "Ben Cole",
+  "them:C": "Ana Lopez"
+ },
+ "noise": true,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.2,
+   "text": "Thanks for making the time. Today is about the pricing update."
+  },
+  {
+   "key": "them:C",
+   "start": 5.6,
+   "end": 14.4,
+   "text": "I would like us to agree on the uh scope of the price list today, even if the effective date details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 15.7,
+   "end": 22.6,
+   "text": "The draft for the effective date is in the folder, with comments from two teams on the margin."
+  },
+  {
+   "key": "them:C",
+   "start": 23.6,
+   "end": 30.5,
+   "text": "I think the price list question is um the main thing left before can close out the discount."
+  },
+  {
+   "key": "them:B",
+   "start": 31.4,
+   "end": 41.4,
+   "text": "So on the dealer price, um we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 42.1,
+   "end": 50.2,
+   "text": "Last time we said we would clean up the price list first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 51.6,
+   "end": 59.7,
+   "text": "I would like us to agree on the scope of the price list today, even if the discount details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 60.3,
+   "end": 67.2,
+   "text": "I think the effective date question is the main thing left before we can close out the margin."
+  },
+  {
+   "key": "them:A",
+   "start": 67.6,
+   "end": 75.7,
+   "text": "One thing I noticed is that the margin looks different in each region, so the discount plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 76.9,
+   "end": 86.2,
+   "text": "So on the margin, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 86.7,
+   "end": 94.4,
+   "text": "From what I can see, the dealer price is on track, and the risk is mostly in the effective date."
+  },
+  {
+   "key": "them:C",
+   "start": 95.6,
+   "end": 102.9,
+   "text": "If we wait a month on the dealer price, the discount uh timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 103.5,
+   "end": 111.1,
+   "text": "We could keep the margin as it is for now and only change the dealer price in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 111.5,
+   "end": 118.4,
+   "text": "If we wait a month on the effective date, the discount timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 119.9,
+   "end": 128.7,
+   "text": "The discount piece is moving, and the team has a draft of the price list changes ready you know for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 129.5,
+   "end": 136.4,
+   "text": "If we wait a month on the price list, the margin timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 137.0,
+   "end": 144.3,
+   "text": "The vendor sent an updated proposal for the price list, and it changes the dealer price a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 145.0,
+   "end": 153.0,
+   "text": "I would like us to agree on the scope of the discount today, even if the price list details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 154.1,
+   "end": 161.8,
+   "text": "We tested the dealer price with a small group, and the price list results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 162.5,
+   "end": 169.8,
+   "text": "We tested the margin with a small group, and the effective date results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 170.6,
+   "end": 178.3,
+   "text": "The discount numbers came in yesterday, and I put a short summary of the price list in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 178.7,
+   "end": 186.0,
+   "text": "If we wait a month on the effective date, the dealer price timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 186.9,
+   "end": 196.1,
+   "text": "I talked to the people who run the discount every day, and they said the effective date is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 196.7,
+   "end": 204.0,
+   "text": "If we wait a month on the price list, the effective date timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 205.3,
+   "end": 212.6,
+   "text": "We have three open questions on the price list, mostly about timing and who signs off on the discount."
+  },
+  {
+   "key": "them:C",
+   "start": 213.9,
+   "end": 222.0,
+   "text": "I would like us to agree on the scope of the price list today, even if the discount details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 223.5,
+   "end": 230.8,
+   "text": "We want to start the dealer price on the first of the month. Can we agree on that today?"
+  },
+  {
+   "key": "them:A",
+   "start": 232.2,
+   "end": 237.6,
+   "text": "I am more interested in what we gain here. What does success look like?"
+  },
+  {
+   "key": "them:C",
+   "start": 239.0,
+   "end": 245.5,
+   "text": "If we wait a month on the effective date, the discount timeline slips by about same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 246.3,
+   "end": 254.3,
+   "text": "We have three open questions on the effective date, mostly about uh timing and who signs off on the price list."
+  },
+  {
+   "key": "them:A",
+   "start": 255.7,
+   "end": 265.3,
+   "text": "I talked to the people who run the discount uh every day, and they said the price list is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 265.7,
+   "end": 273.7,
+   "text": "The draft for you know the effective date is in the folder, with comments from two teams on the price list."
+  },
+  {
+   "key": "them:B",
+   "start": 274.5,
+   "end": 284.1,
+   "text": "So on the discount, we looked at the last few weeks and the picture is mostly uh what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 284.5,
+   "end": 292.1,
+   "text": "We have three open questions on um the discount, mostly about timing and who signs off on the dealer price."
+  },
+  {
+   "key": "them:C",
+   "start": 292.6,
+   "end": 301.4,
+   "text": "The effective date piece is moving, and the uh team has a draft of the price list changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 302.3,
+   "end": 311.2,
+   "text": "The price list piece is moving, and you know the team has a draft of the margin changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 311.5,
+   "end": 318.8,
+   "text": "I would like us to agree the scope of the discount today, even if the margin details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 319.3,
+   "end": 327.0,
+   "text": "We tested the dealer price with a small group, and the effective date results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 327.4,
+   "end": 335.5,
+   "text": "The dealer price piece is moving, and the team has a of the price list changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 336.3,
+   "end": 342.9,
+   "text": "Right, and the price list also touches the dealer price, which why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 343.3,
+   "end": 352.9,
+   "text": "So on the dealer price, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 353.3,
+   "end": 359.8,
+   "text": "Right, and the margin also touches the effective date, which is why I uh everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 360.3,
+   "end": 368.7,
+   "text": "The dealer price piece is moving, and the team has a draft of the price list changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 369.6,
+   "end": 377.3,
+   "text": "From what I can see, the margin is on track, you know and the risk is mostly in the discount."
+  },
+  {
+   "key": "them:A",
+   "start": 378.4,
+   "end": 386.1,
+   "text": "We could keep the price list as it is for now and only change the margin in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 387.4,
+   "end": 394.7,
+   "text": "We have three open questions on um the discount, mostly about timing and who signs off on the margin."
+  },
+  {
+   "key": "them:C",
+   "start": 395.1,
+   "end": 402.4,
+   "text": "We could keep the discount as it is for now and only change effective date in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 402.8,
+   "end": 409.7,
+   "text": "The vendor sent an updated proposal for the uh discount, and it changes the margin a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 411.0,
+   "end": 418.7,
+   "text": "I think the effective date question is the main thing left um before we can close out the dealer price."
+  },
+  {
+   "key": "me:A",
+   "start": 419.9,
+   "end": 427.5,
+   "text": "The discount numbers came in yesterday, and I put a short summary of the price list in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 427.9,
+   "end": 436.0,
+   "text": "I would like us to agree on the scope of the dealer price today, even if the margin details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 437.3,
+   "end": 445.8,
+   "text": "One thing I noticed is that the dealer price looks different in each region, the price list plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 446.3,
+   "end": 454.0,
+   "text": "We have three open questions on the price list, mostly about timing and who signs off on the effective date."
+  },
+  {
+   "key": "them:B",
+   "start": 454.3,
+   "end": 462.8,
+   "text": "We could keep the effective date you know as it is for now and only change the margin in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 464.2,
+   "end": 471.9,
+   "text": "If we wait a month you know on the dealer price, the margin timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 472.3,
+   "end": 479.6,
+   "text": "The vendor sent an updated uh proposal for the margin, and it changes the price list a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 480.4,
+   "end": 488.5,
+   "text": "We could keep the price list as it is for now and only change the effective date in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 489.9,
+   "end": 496.0,
+   "text": "The ask is simple: approve the margin change so the discount team can start next week."
+  },
+  {
+   "key": "them:A",
+   "start": 497.1,
+   "end": 501.0,
+   "text": "This is my call, and I will decide it now."
+  },
+  {
+   "key": "them:B",
+   "start": 502.4,
+   "end": 509.7,
+   "text": "From what I can see, the price list on track, and the risk is mostly in the effective date."
+  },
+  {
+   "key": "me:A",
+   "start": 510.4,
+   "end": 516.9,
+   "text": "Right, and the dealer price also touches the margin, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 517.3,
+   "end": 525.0,
+   "text": "We have three open questions on the effective date, mostly about timing and who signs off on the dealer price."
+  },
+  {
+   "key": "them:B",
+   "start": 526.1,
+   "end": 533.8,
+   "text": "From what I can um see, the effective date is on track, and the risk is mostly in the margin."
+  },
+  {
+   "key": "them:B",
+   "start": 534.5,
+   "end": 541.4,
+   "text": "I think the effective date question is the main thing left before we can close out the margin."
+  },
+  {
+   "key": "them:A",
+   "start": 542.1,
+   "end": 549.0,
+   "text": "From what I can see, the margin is on track, and the risk is mostly in the discount."
+  },
+  {
+   "key": "me:A",
+   "start": 549.7,
+   "end": 557.4,
+   "text": "From what I can see, the price list is on track, and the risk is mostly in the effective date."
+  },
+  {
+   "key": "them:C",
+   "start": 558.8,
+   "end": 568.0,
+   "text": "I talked to the people who run the price list every day, and they said the margin is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 568.9,
+   "end": 575.4,
+   "text": "If we wait a month on the margin, the discount timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 576.2,
+   "end": 583.9,
+   "text": "We could keep the dealer price as it is for and only change the price list in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 584.6,
+   "end": 593.4,
+   "text": "The feedback on the price list has been mixed, some people like it and some say it adds steps to the dealer price."
+  },
+  {
+   "key": "me:A",
+   "start": 594.5,
+   "end": 601.5,
+   "text": "There is a dependency on the discount, so the margin work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 602.9,
+   "end": 610.6,
+   "text": "There is a dependency on the effective date, so the dealer price work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 611.3,
+   "end": 619.0,
+   "text": "Last time we said we would clean up the margin first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 619.3,
+   "end": 627.4,
+   "text": "There is a dependency on the price list, so the you know margin work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 627.8,
+   "end": 635.8,
+   "text": "From what I can see, the price list is on track, and the risk uh is mostly in the effective date."
+  },
+  {
+   "key": "them:C",
+   "start": 636.4,
+   "end": 643.3,
+   "text": "I think the effective question is the main thing left before we can close out the price list."
+  },
+  {
+   "key": "me:A",
+   "start": 644.2,
+   "end": 651.1,
+   "text": "The draft for the effective date is in the folder, with comments from two teams on the margin."
+  },
+  {
+   "key": "them:B",
+   "start": 652.0,
+   "end": 660.9,
+   "text": "I would like us to agree on the scope of the discount today, even if the I mean dealer price details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 662.3,
+   "end": 670.0,
+   "text": "I think the dealer um price question is the main thing left before we can close out the effective date."
+  },
+  {
+   "key": "me:A",
+   "start": 670.4,
+   "end": 677.3,
+   "text": "The draft for the margin is in the folder, with comments from two teams on the price list."
+  },
+  {
+   "key": "them:C",
+   "start": 678.4,
+   "end": 684.9,
+   "text": "The draft for dealer price is in the folder, with comments from two teams on the margin."
+  },
+  {
+   "key": "me:A",
+   "start": 685.6,
+   "end": 693.3,
+   "text": "The margin piece is moving, and the team has a draft of the discount changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 694.2,
+   "end": 701.9,
+   "text": "From what I can see, the effective date is on track, and the risk is mostly in the dealer price."
+  },
+  {
+   "key": "them:A",
+   "start": 703.3,
+   "end": 710.6,
+   "text": "If we wait a month on the discount, the um effective date timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 711.1,
+   "end": 714.2,
+   "text": "Okay, I think that covers it. Thanks, everyone."
+  }
+ ],
+ "beats": [
+  {
+   "line": 27,
+   "person": "Quinn Ellis",
+   "dimension": "risk",
+   "value": "upside_first"
+  },
+  {
+   "line": 58,
+   "person": "Quinn Ellis",
+   "dimension": "authority",
+   "value": "decides_alone"
+  }
+ ]
+}

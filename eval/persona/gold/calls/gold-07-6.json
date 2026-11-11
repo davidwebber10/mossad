@@ -1,0 +1,568 @@
+{
+ "id": "gold-07-6",
+ "person": "Taylor Brooks",
+ "title": "Office move planning",
+ "tags": [
+  "Facilities",
+  "Planning"
+ ],
+ "setting": "group",
+ "start": "2026-09-19T17:00:00Z",
+ "end": "2026-09-19T17:14:30Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Taylor Brooks",
+  "them:B": "Tom Reyes",
+  "them:C": "Ben Cole"
+ },
+ "noise": true,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the office move planning."
+  },
+  {
+   "key": "them:C",
+   "start": 5.8,
+   "end": 14.2,
+   "text": "Last time um we said we would clean up the desk count first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 15.3,
+   "end": 23.8,
+   "text": "I would like us to agree on the scope of the network closet today, even if the moving day details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 24.8,
+   "end": 34.1,
+   "text": "I talked to the people who the floor plan every day, and they said the moving day is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 34.9,
+   "end": 43.3,
+   "text": "The feedback on the floor plan has been mixed, some people like it and some say it adds steps to the lease."
+  },
+  {
+   "key": "them:A",
+   "start": 44.0,
+   "end": 53.2,
+   "text": "One thing I noticed is that the network you know closet looks different in each region, so the lease plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 53.7,
+   "end": 61.8,
+   "text": "I think the floor plan question is the you know main thing left before we can close out the network closet."
+  },
+  {
+   "key": "me:A",
+   "start": 62.5,
+   "end": 69.0,
+   "text": "Right, and the lease also touches the network closet, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 69.6,
+   "end": 79.2,
+   "text": "So on the network closet, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 80.5,
+   "end": 90.5,
+   "text": "I talked to the people who run uh the network closet every day, and they said the floor plan is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 90.9,
+   "end": 100.2,
+   "text": "I talked to the people who run the lease every day, and they said the desk count is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 101.3,
+   "end": 108.2,
+   "text": "I think the floor plan question is the main thing left before we can close out the lease."
+  },
+  {
+   "key": "me:A",
+   "start": 109.6,
+   "end": 116.5,
+   "text": "If we wait a month on the lease, the network closet timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 117.0,
+   "end": 124.3,
+   "text": "The draft for the desk count is in the folder, with comments from two teams on the network closet."
+  },
+  {
+   "key": "me:A",
+   "start": 125.7,
+   "end": 133.0,
+   "text": "There is a dependency on the desk count, so the lease work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 134.4,
+   "end": 142.1,
+   "text": "Last time we we would clean up the network closet first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 143.4,
+   "end": 152.6,
+   "text": "So on the desk count, we looked at last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 154.1,
+   "end": 161.7,
+   "text": "From what I can see, the network closet is on track, and the risk is mostly in the moving day."
+  },
+  {
+   "key": "them:C",
+   "start": 162.6,
+   "end": 170.3,
+   "text": "There is a dependency on the floor plan, so the network closet work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 171.1,
+   "end": 179.5,
+   "text": "We could keep the network closet as it for now and only change the desk you know count in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 180.8,
+   "end": 188.8,
+   "text": "The desk count piece is moving, and the team has a draft of the floor plan ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 189.7,
+   "end": 198.9,
+   "text": "So on the moving day, we looked at the last few weeks and the picture mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 200.3,
+   "end": 208.4,
+   "text": "We tested you know the lease with a small group, and the moving day results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 208.7,
+   "end": 216.0,
+   "text": "I think the floor plan question is the main thing left before we can close out the desk count."
+  },
+  {
+   "key": "them:A",
+   "start": 216.4,
+   "end": 224.5,
+   "text": "There is a dependency on the lease, so the desk count work cannot really I mean start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 225.5,
+   "end": 233.2,
+   "text": "We could keep the desk count as it is for now and only change the network closet in the phase."
+  },
+  {
+   "key": "them:B",
+   "start": 233.6,
+   "end": 241.7,
+   "text": "We tested the network closet with a small group, and I mean the lease results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 242.9,
+   "end": 250.2,
+   "text": "The draft for the network closet is in the folder, with comments from two teams on the moving day."
+  },
+  {
+   "key": "me:A",
+   "start": 250.9,
+   "end": 259.0,
+   "text": "The desk count numbers came in yesterday, and I put a short summary of the moving day in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 260.3,
+   "end": 268.7,
+   "text": "The floor plan piece is moving, and the team has a draft of the desk count changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 270.1,
+   "end": 278.6,
+   "text": "The floor plan piece is moving, and the team has a draft of the moving day changes um for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 279.6,
+   "end": 288.0,
+   "text": "The desk count piece is moving, and the team has a draft of the network closet changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 289.0,
+   "end": 297.0,
+   "text": "Last time we said we would clean up the floor plan first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 298.4,
+   "end": 306.5,
+   "text": "I would like us to agree on the scope of the moving day today, even if the lease details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 306.9,
+   "end": 314.6,
+   "text": "There is a dependency on the floor plan, so the moving day work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 315.9,
+   "end": 323.6,
+   "text": "We have three open questions on the moving day, mostly about timing and who signs off on the network closet."
+  },
+  {
+   "key": "me:A",
+   "start": 325.1,
+   "end": 332.0,
+   "text": "Right, and the moving day also touches the desk count, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 332.9,
+   "end": 341.0,
+   "text": "From what I can see, the floor plan is on track, and I mean risk is mostly in the network closet."
+  },
+  {
+   "key": "me:A",
+   "start": 342.3,
+   "end": 351.1,
+   "text": "One thing I noticed is that the floor plan looks different in each region, so the desk count plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 352.3,
+   "end": 359.9,
+   "text": "If we wait a month on the desk count, the moving day timeline slips by um about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 360.6,
+   "end": 370.2,
+   "text": "One thing I mean I noticed is that the desk count looks different in each region, so the floor plan plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 370.6,
+   "end": 377.9,
+   "text": "The draft for the floor plan is in the folder, with comments from two teams on the network closet."
+  },
+  {
+   "key": "them:A",
+   "start": 379.0,
+   "end": 387.8,
+   "text": "The network closet piece is moving, and the team has a draft of you know the lease changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 389.3,
+   "end": 396.6,
+   "text": "We tested the moving day with a small group, and uh the lease results were close to what hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 397.8,
+   "end": 405.5,
+   "text": "The draft for the lease is in the folder, with comments you know from two teams on the floor plan."
+  },
+  {
+   "key": "them:B",
+   "start": 406.0,
+   "end": 414.1,
+   "text": "The moving day numbers came in yesterday, and I put a short summary of the floor plan in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 415.6,
+   "end": 422.1,
+   "text": "Right, and the moving day also touches the lease, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 423.0,
+   "end": 431.8,
+   "text": "The feedback on the floor plan has been mixed, some people it I mean and some say it adds steps to the lease."
+  },
+  {
+   "key": "them:B",
+   "start": 433.1,
+   "end": 441.2,
+   "text": "Last time we said uh would clean up the desk count first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 442.0,
+   "end": 449.3,
+   "text": "The vendor sent an updated proposal for the floor plan, and it changes the moving day a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 449.9,
+   "end": 458.4,
+   "text": "I would like us to agree on the scope um of the desk count today, even if the lease details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 459.7,
+   "end": 467.0,
+   "text": "We have three open questions on the desk count, mostly about timing and who signs off on the lease."
+  },
+  {
+   "key": "them:B",
+   "start": 468.5,
+   "end": 476.6,
+   "text": "We could keep the network closet as it is for now and only change the desk count in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 477.7,
+   "end": 486.6,
+   "text": "The desk count numbers came in yesterday, and I put I mean a short summary of the floor plan in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 487.5,
+   "end": 494.8,
+   "text": "The floor plan numbers came in yesterday, I put a short summary of the lease in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 495.1,
+   "end": 502.4,
+   "text": "I think the moving day question is the main thing left before we can close out the desk count."
+  },
+  {
+   "key": "me:A",
+   "start": 503.8,
+   "end": 511.5,
+   "text": "We could keep the lease as it is for now and only change the desk count in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 511.8,
+   "end": 519.1,
+   "text": "The draft for the desk count is in the folder, with comments from two teams on the network closet."
+  },
+  {
+   "key": "them:C",
+   "start": 520.1,
+   "end": 528.1,
+   "text": "Last time we said we would clean up the lease first, and um that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 528.9,
+   "end": 538.1,
+   "text": "The feedback on the moving day has been mixed, some um people like it and some say it adds steps to the floor plan."
+  },
+  {
+   "key": "them:A",
+   "start": 538.7,
+   "end": 548.3,
+   "text": "The feedback on I mean the network closet has been mixed, some people like it and some say it adds steps to the floor plan."
+  },
+  {
+   "key": "them:C",
+   "start": 549.5,
+   "end": 557.2,
+   "text": "There is a dependency on the desk count, so the network closet work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 558.2,
+   "end": 566.7,
+   "text": "The network closet piece is moving, and the team has a draft of the moving day changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 567.5,
+   "end": 574.1,
+   "text": "Right, and the network closet also touches the desk which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 575.3,
+   "end": 582.7,
+   "text": "The vendor sent an updated proposal for the floor plan, and it changes the desk count a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 583.5,
+   "end": 590.1,
+   "text": "If we wait a month on the lease, moving day timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 591.1,
+   "end": 598.5,
+   "text": "The vendor sent an updated proposal for the floor plan, and it changes the network closet a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 599.8,
+   "end": 607.1,
+   "text": "The vendor sent an updated proposal for the desk count, and it changes the floor plan a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 608.0,
+   "end": 615.7,
+   "text": "We tested the floor plan with a small group, and the desk count results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 616.6,
+   "end": 626.2,
+   "text": "One thing I you know noticed is that the network closet looks different in each region, so the floor plan plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 626.6,
+   "end": 633.5,
+   "text": "I think the moving day question is the main thing left before we can close out the lease."
+  },
+  {
+   "key": "them:B",
+   "start": 634.5,
+   "end": 642.5,
+   "text": "I think the network closet question is the I mean main thing left before we can close out the moving day."
+  },
+  {
+   "key": "them:C",
+   "start": 643.7,
+   "end": 650.6,
+   "text": "From what I can see, the is on track, and the risk is mostly in the network closet."
+  },
+  {
+   "key": "them:A",
+   "start": 652.0,
+   "end": 660.5,
+   "text": "The feedback on the floor plan has been mixed, some people like it and some say it adds steps to network closet."
+  },
+  {
+   "key": "them:B",
+   "start": 661.0,
+   "end": 669.8,
+   "text": "The floor plan numbers came in I mean yesterday, and I put a short summary of the moving day in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 671.0,
+   "end": 679.8,
+   "text": "Last time you know we said we would clean up the floor plan first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 680.4,
+   "end": 688.4,
+   "text": "We could keep the moving day as it is for now and only change the network closet in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 689.5,
+   "end": 696.4,
+   "text": "The vendor sent an updated proposal for the lease, and it changes the desk count a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 696.8,
+   "end": 705.7,
+   "text": "The lease piece is moving, and the team has a draft of the desk count changes ready for you know review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 706.8,
+   "end": 714.9,
+   "text": "I would like us to agree on the scope of the floor plan today, even if the lease details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 715.5,
+   "end": 724.7,
+   "text": "The feedback on the lease has been mixed, some people like it and some you know say it adds steps to the floor plan."
+  },
+  {
+   "key": "them:A",
+   "start": 725.7,
+   "end": 733.0,
+   "text": "From what I can see, the lease is on track, and the risk is mostly in the moving day."
+  },
+  {
+   "key": "me:A",
+   "start": 733.7,
+   "end": 743.4,
+   "text": "I talked to the people who run the network closet every day, and they said the floor plan is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 743.9,
+   "end": 750.4,
+   "text": "Right, and the lease also touches the moving day, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 750.8,
+   "end": 758.9,
+   "text": "We could keep floor plan as it is uh for now and only change the desk count in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 760.0,
+   "end": 769.6,
+   "text": "So on the network closet, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 770.6,
+   "end": 778.3,
+   "text": "We could keep the moving day as it is for now and only change the lease in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 779.3,
+   "end": 787.0,
+   "text": "We could keep the lease as it is for now and only change the floor plan in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 788.2,
+   "end": 797.4,
+   "text": "So on the lease, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 798.6,
+   "end": 805.5,
+   "text": "If we wait a month on the lease, the desk count timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 806.1,
+   "end": 809.2,
+   "text": "Okay, I think that covers it. Thanks, everyone."
+  }
+ ],
+ "beats": []
+}

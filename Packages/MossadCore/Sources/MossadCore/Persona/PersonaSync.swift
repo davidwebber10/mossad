@@ -58,6 +58,24 @@ public enum PersonaReads {
         return out
     }
 
+    /// The traits that the deck may ask about, with candidates just below the line: only on the Mac, which has the
+    /// evidence.
+    public static func sources(paths: Paths, saved: CoachPeople, answers: [FindingAnswer]) -> [PersonaFindings.Source] {
+        let store = PersonaStore(paths: paths)
+        let off = saved.notProfiled
+        var out: [PersonaFindings.Source] = []
+        for id in Set(store.people().map { saved.isEmpty ? $0 : saved.canonical($0) }) where !off.contains(id) {
+            guard let name = saved.name(of: id), let persona = store.persona(of: id, saved: saved) else { continue }
+            out += PersonaTraits.build(persona, answers: answers).map { PersonaFindings.Source($0, name: name) }.filter(\.isAsked)
+        }
+        return out.sorted { $0.trait < $1.trait }
+    }
+
+    /// The words of a moment, from the call's record on disk: for a card's quote, never stored.
+    public static func words(_ p: PersonaPointer, paths: Paths) -> String? {
+        (try? CallRecord.load(from: paths.callDirectory(p.callID))).flatMap { p.utterance(in: $0)?.text }
+    }
+
     /// One person's read, or nil.
     public static func one(_ id: String, paths: Paths, saved: CoachPeople, answers: [FindingAnswer]) -> PersonaSummary? {
         let id = saved.canonical(id)

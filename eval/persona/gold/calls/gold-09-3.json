@@ -1,0 +1,576 @@
+{
+ "id": "gold-09-3",
+ "person": "Sam Ortiz",
+ "title": "Supplier quality issue",
+ "tags": [
+  "Quality",
+  "Suppliers"
+ ],
+ "setting": "group",
+ "start": "2026-08-28T19:00:00Z",
+ "end": "2026-08-28T19:13:46Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Sam Ortiz",
+  "them:B": "Tom Reyes",
+  "them:C": "Ana Lopez",
+  "them:D": "Sam Carter"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the supplier quality issue."
+  },
+  {
+   "key": "them:C",
+   "start": 6.0,
+   "end": 13.7,
+   "text": "From what I can see, the inspection report is on track, and the risk is mostly in the defect rate."
+  },
+  {
+   "key": "me:A",
+   "start": 14.9,
+   "end": 23.7,
+   "text": "The feedback on the supplier visit has been mixed, some people like it and some say it adds steps to the defect rate."
+  },
+  {
+   "key": "them:C",
+   "start": 24.3,
+   "end": 31.3,
+   "text": "Right, and the inspection report also touches the supplier visit, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 31.6,
+   "end": 40.4,
+   "text": "One thing I noticed is that the defect rate looks different in each region, so the corrective action plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 41.1,
+   "end": 48.0,
+   "text": "The vendor sent an updated proposal for the batch, and it changes the inspection report a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 48.7,
+   "end": 56.0,
+   "text": "I think the defect rate question is the main thing left before we can close out the inspection report."
+  },
+  {
+   "key": "me:A",
+   "start": 56.8,
+   "end": 64.1,
+   "text": "I think the defect rate question is the main thing left before we can close out the corrective action."
+  },
+  {
+   "key": "them:A",
+   "start": 65.5,
+   "end": 72.1,
+   "text": "Right, and the batch also touches the defect rate, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 72.7,
+   "end": 79.2,
+   "text": "Right, and the supplier visit also touches the batch, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 79.6,
+   "end": 86.5,
+   "text": "Right, and the inspection report also touches the corrective action, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 86.8,
+   "end": 96.4,
+   "text": "So on the inspection report, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 97.9,
+   "end": 107.1,
+   "text": "I talked to the people who run the defect rate every day, and they said the batch is the part that slows them down."
+  },
+  {
+   "key": "them:B",
+   "start": 108.4,
+   "end": 116.9,
+   "text": "One thing I noticed is that the corrective action looks different in each region, so the batch plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 117.3,
+   "end": 125.0,
+   "text": "We tested the supplier visit with a small group, and the inspection report results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 125.6,
+   "end": 134.4,
+   "text": "One thing I noticed is that the corrective action looks different in each region, so the inspection report plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 134.7,
+   "end": 143.9,
+   "text": "I talked to the people who run the batch every day, and they said the supplier visit is the part that slows them down."
+  },
+  {
+   "key": "them:B",
+   "start": 145.0,
+   "end": 153.5,
+   "text": "The inspection report piece is moving, and the team has a draft of the corrective action changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 154.8,
+   "end": 162.4,
+   "text": "From what I can see, the defect rate is on track, and the risk is mostly in the inspection report."
+  },
+  {
+   "key": "them:C",
+   "start": 163.3,
+   "end": 171.4,
+   "text": "I would like us to agree on the scope of the defect rate today, even if the batch details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 172.4,
+   "end": 179.7,
+   "text": "We tested the batch with a small group, and the supplier visit results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 181.0,
+   "end": 188.7,
+   "text": "From what I can see, the inspection report is on track, and the risk is mostly in the corrective action."
+  },
+  {
+   "key": "me:A",
+   "start": 189.9,
+   "end": 196.9,
+   "text": "If we wait a month on the inspection report, the batch timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 197.4,
+   "end": 204.7,
+   "text": "The draft for the supplier visit is in the folder, with comments from two teams on the defect rate."
+  },
+  {
+   "key": "them:C",
+   "start": 205.0,
+   "end": 213.1,
+   "text": "Last time we said we would clean up the corrective action first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 213.9,
+   "end": 220.8,
+   "text": "The draft for the batch is in the folder, with comments from two teams on the corrective action."
+  },
+  {
+   "key": "them:B",
+   "start": 221.5,
+   "end": 229.2,
+   "text": "We could keep the supplier visit as it is for now and only change the batch in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 229.9,
+   "end": 237.2,
+   "text": "There is a dependency on the batch, so the inspection report work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 238.4,
+   "end": 248.1,
+   "text": "So on the corrective action, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 249.4,
+   "end": 255.9,
+   "text": "Right, and the batch also touches the defect rate, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 257.0,
+   "end": 265.5,
+   "text": "I would like us to agree on the scope of the defect rate today, even if the inspection report details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 266.9,
+   "end": 275.0,
+   "text": "My recommendation is that we go with the second option for the corrective action, it saves about 15% on the batch."
+  },
+  {
+   "key": "them:A",
+   "start": 275.6,
+   "end": 281.0,
+   "text": "I cannot say yes alone on this, Ana has to look at it too."
+  },
+  {
+   "key": "them:B",
+   "start": 281.9,
+   "end": 288.8,
+   "text": "If we wait a month on the inspection report, the batch timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 289.2,
+   "end": 297.6,
+   "text": "I would like us to agree on the scope of the supplier visit today, even if the defect rate details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 298.1,
+   "end": 305.4,
+   "text": "From what I can see, the batch is on track, and the risk is mostly in the inspection report."
+  },
+  {
+   "key": "them:B",
+   "start": 306.2,
+   "end": 313.5,
+   "text": "There is a dependency on the batch, so the defect rate work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 315.0,
+   "end": 321.9,
+   "text": "I think the inspection report question is the main thing left before we can close out the batch."
+  },
+  {
+   "key": "them:B",
+   "start": 323.3,
+   "end": 330.6,
+   "text": "The draft for the defect rate is in the folder, with comments from two teams on the supplier visit."
+  },
+  {
+   "key": "them:A",
+   "start": 331.4,
+   "end": 339.9,
+   "text": "The feedback on the batch has been mixed, some people like it and some say it adds steps to the corrective action."
+  },
+  {
+   "key": "me:A",
+   "start": 340.4,
+   "end": 347.7,
+   "text": "If we wait a month on the supplier visit, the inspection report timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 348.9,
+   "end": 356.2,
+   "text": "If we wait a month on the supplier visit, the corrective action timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 357.0,
+   "end": 364.7,
+   "text": "We could keep the defect rate as it is for now and only change the batch in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 365.5,
+   "end": 372.8,
+   "text": "If we wait a month on the defect rate, the corrective action timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 373.4,
+   "end": 381.4,
+   "text": "The inspection report numbers came in yesterday, and I put a short summary of the supplier visit in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 382.5,
+   "end": 389.8,
+   "text": "We have three open questions on the batch, mostly about timing and who signs off on the defect rate."
+  },
+  {
+   "key": "me:A",
+   "start": 390.8,
+   "end": 400.5,
+   "text": "I talked to the people who run the defect rate every day, and they said the inspection report is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 401.3,
+   "end": 409.0,
+   "text": "We have three open questions on the defect rate, mostly about timing and who signs off on the supplier visit."
+  },
+  {
+   "key": "me:A",
+   "start": 409.9,
+   "end": 417.2,
+   "text": "I think the supplier visit question is the main thing left before we can close out the inspection report."
+  },
+  {
+   "key": "me:A",
+   "start": 418.2,
+   "end": 426.3,
+   "text": "We could keep the defect rate as it is for now and only change the supplier visit in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 427.6,
+   "end": 436.1,
+   "text": "I would like us to agree on the scope of the inspection report today, even if the corrective action details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 437.1,
+   "end": 445.2,
+   "text": "The defect rate piece is moving, and the team has a draft of the batch changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 445.6,
+   "end": 453.3,
+   "text": "The defect rate numbers came in yesterday, and I put a short summary of the batch in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 454.6,
+   "end": 461.9,
+   "text": "From what I can see, the corrective action is on track, and the risk is mostly in the batch."
+  },
+  {
+   "key": "them:A",
+   "start": 462.9,
+   "end": 470.2,
+   "text": "I think the supplier visit question is the main thing left before we can close out the inspection report."
+  },
+  {
+   "key": "me:A",
+   "start": 471.4,
+   "end": 479.5,
+   "text": "The supplier visit numbers came in yesterday, and I put a short summary of the corrective action in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 480.0,
+   "end": 487.3,
+   "text": "The draft for the corrective action is in the folder, with comments from two teams on the supplier visit."
+  },
+  {
+   "key": "them:C",
+   "start": 487.8,
+   "end": 497.4,
+   "text": "So on the inspection report, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 498.5,
+   "end": 507.0,
+   "text": "My recommendation is that we go with the second option for the defect rate, it saves about 15% on the supplier visit."
+  },
+  {
+   "key": "them:A",
+   "start": 508.4,
+   "end": 511.1,
+   "text": "Can the team absorb this without overtime?"
+  },
+  {
+   "key": "me:A",
+   "start": 512.2,
+   "end": 520.7,
+   "text": "I would like us to agree on the scope of the supplier visit today, even if the corrective action details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 522.1,
+   "end": 529.4,
+   "text": "We have three open questions on the inspection report, mostly about timing and who signs off on the batch."
+  },
+  {
+   "key": "them:A",
+   "start": 529.8,
+   "end": 537.1,
+   "text": "The vendor sent an updated proposal for the defect rate, and it changes the corrective action a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 538.3,
+   "end": 547.2,
+   "text": "The feedback on the supplier visit has been mixed, some people like it and some say it adds steps to the defect rate."
+  },
+  {
+   "key": "them:B",
+   "start": 548.6,
+   "end": 557.5,
+   "text": "One thing I noticed is that the corrective action looks different in each region, so the inspection report plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 558.5,
+   "end": 566.2,
+   "text": "We tested the inspection report with a small group, and the defect rate results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 567.4,
+   "end": 574.7,
+   "text": "The draft for the inspection report is in the folder, with comments from two teams on the corrective action."
+  },
+  {
+   "key": "them:B",
+   "start": 575.7,
+   "end": 582.6,
+   "text": "Right, and the supplier visit also touches the defect rate, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 583.5,
+   "end": 591.2,
+   "text": "We have three open questions on the corrective action, mostly about timing and who signs off on the supplier visit."
+  },
+  {
+   "key": "them:B",
+   "start": 592.1,
+   "end": 599.4,
+   "text": "The draft for the inspection report is in the folder, with comments from two teams on the corrective action."
+  },
+  {
+   "key": "them:A",
+   "start": 599.7,
+   "end": 607.8,
+   "text": "I would like us to agree on the scope of the batch today, even if the inspection report details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 608.2,
+   "end": 616.3,
+   "text": "Last time we said we would clean up the defect rate first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 616.7,
+   "end": 624.8,
+   "text": "I would like us to agree on the scope of the batch today, even if the inspection report details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 625.2,
+   "end": 632.9,
+   "text": "We have three open questions on the inspection report, mostly about timing and who signs off on the supplier visit."
+  },
+  {
+   "key": "them:A",
+   "start": 633.8,
+   "end": 641.1,
+   "text": "There is a dependency on the corrective action, so the batch work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 641.5,
+   "end": 649.2,
+   "text": "We tested the defect rate with a small group, and the inspection report results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 650.0,
+   "end": 658.0,
+   "text": "We could keep the defect rate as it is for now and only change the supplier visit in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 659.0,
+   "end": 666.3,
+   "text": "There is a dependency on the inspection report, so the batch work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 666.8,
+   "end": 674.9,
+   "text": "Last time we said we would clean up the supplier visit first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 675.9,
+   "end": 684.7,
+   "text": "The feedback on the supplier visit has been mixed, some people like it and some say it adds steps to the defect rate."
+  },
+  {
+   "key": "me:A",
+   "start": 685.2,
+   "end": 692.9,
+   "text": "We have three open questions on the corrective action, mostly about timing and who signs off on the inspection report."
+  },
+  {
+   "key": "them:C",
+   "start": 694.3,
+   "end": 700.8,
+   "text": "Right, and the batch also touches the inspection report, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 701.3,
+   "end": 708.6,
+   "text": "We have three open questions on the inspection report, mostly about timing and who signs off on the batch."
+  },
+  {
+   "key": "them:A",
+   "start": 709.4,
+   "end": 719.0,
+   "text": "So on the defect rate, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 720.5,
+   "end": 728.2,
+   "text": "From what I can see, the supplier visit is on track, and the risk is mostly in the corrective action."
+  },
+  {
+   "key": "them:C",
+   "start": 729.2,
+   "end": 738.8,
+   "text": "I talked to the people who run the inspection report every day, and they said the supplier visit is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 739.3,
+   "end": 746.9,
+   "text": "There is a dependency on the supplier visit, so the corrective action work cannot really start until that is settled."
+  },
+  {
+   "key": "them:D",
+   "start": 747.6,
+   "end": 754.9,
+   "text": "Sam here, the other Sam. Let us just go ahead and do it, I am fine with the plan."
+  },
+  {
+   "key": "them:D",
+   "start": 755.8,
+   "end": 761.9,
+   "text": "I do not need to check with anyone on my side, we can start on Monday."
+  },
+  {
+   "key": "me:A",
+   "start": 762.2,
+   "end": 765.7,
+   "text": "Good, let us pick this up next week. Thanks."
+  }
+ ],
+ "beats": [
+  {
+   "line": 32,
+   "person": "Sam Ortiz",
+   "dimension": "decision",
+   "value": "needs_second_person"
+  },
+  {
+   "line": 59,
+   "person": "Sam Ortiz",
+   "dimension": "drivers",
+   "value": "team_load"
+  }
+ ]
+}

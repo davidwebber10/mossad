@@ -147,6 +147,7 @@ struct NeverAgain: View {
     private func effect(_ a: FindingAnswer) -> String {
         switch a.kind {
         case .learning: "The coach does not ask this again."
+        case .trait: "This trait never shows for this person."
         case .goalOffer: "The coach does not offer this goal again."
         default: "The coach says nothing more about this subject."
         }

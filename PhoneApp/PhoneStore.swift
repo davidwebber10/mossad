@@ -22,6 +22,10 @@ final class PhoneStore {
     /// False until the first read of the folder, so an empty list does not say "No meetings yet" too soon.
     private(set) var loaded = false
     private(set) var profile = CoachProfile()
+    /// The Mac's reads of how each person thinks, as the reduced copy that came through the owner's server.
+    private(set) var personas: [PersonaSummary] = []
+    /// The Mac's people, for a name's person id.
+    private(set) var people: [Person] = []
     private(set) var chats: [Chat] = []
     private(set) var commitments = CommitmentBook()
     /// Room recordings made here that the Mac has not turned into meetings yet, from their first second.
@@ -168,6 +172,8 @@ final class PhoneStore {
         /// Changes when any meeting's review file did; nil when the meetings were not read.
         var coachStamp: Int?
         var profile: CoachProfile
+        var personas: [PersonaSummary] = []
+        var people: [Person] = []
         var chats: [Chat]
         var commitments: CommitmentBook
 
@@ -175,6 +181,8 @@ final class PhoneStore {
             var s = Snapshot(profile: (try? CoachProfile.load(from: paths.coach)) ?? CoachProfile(),
                              chats: ChatStore(directory: paths.chats).all(),
                              commitments: (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook())
+            s.personas = SyncedPersonas.load(from: paths.coach)?.personas ?? []
+            s.people = PeopleStore.peek(in: paths.people) ?? []
             guard readMeetings else { return s }
             let meetings = MeetingIndex(paths: paths).all()
             s.meetings = meetings
@@ -229,9 +237,12 @@ final class PhoneStore {
             settleOutbox()
         }
         if profile != s.profile { profile = s.profile }
+        let readsChanged = personas != s.personas
+        if readsChanged { personas = s.personas }
+        if people != s.people { people = s.people }
         if chats != s.chats { chats = s.chats }
         if commitments != s.commitments { commitments = s.commitments }
-        if coachChanged {
+        if coachChanged || readsChanged {
             coachVersion += 1
             refreshFindings()
         }
@@ -830,24 +841,42 @@ final class PhoneStore {
 
     // MARK: Findings
 
+    /// The read of how a person thinks, by the person's id, from the Mac's copy.
+    func persona(named name: String) -> PersonaSummary? {
+        let saved = CoachPeople(people: people)
+        guard let id = saved.id(of: name).map(saved.canonical) else { return nil }
+        return personas.first { $0.person == id }
+    }
+
+    /// The trait cards of the deck: the phone has the shown traits only, so it asks only about those.
+    @ObservationIgnored private var traitCards: [String: CoachFinding] = [:]
+
     /// The cards of one call that wait for an answer.
     func findings(for record: CallRecord, review: CoachReview) -> [CoachFinding] {
-        FindingRules.deck(callID: record.id, date: record.start, review: review, profile: profile)
+        FindingRules.deck(callID: record.id, date: record.start, review: review, profile: profile, trait: traitCards[record.id])
     }
 
     /// Reads the cards of all calls again, off the main thread. Only the calls of the last two weeks can have one.
     func refreshFindings() {
         let now = Date(), paths = paths, profile = profile
         let recent = meetings.filter { now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }.map { ($0.id, $0.start) }
+        let saved = CoachPeople(people: people)
+        let sources = personas.flatMap { p in p.traits.map { PersonaFindings.Source($0, person: p.person, name: saved.name(of: p.person) ?? "") } }
+            .filter { !$0.personName.isEmpty }
         findingsAsk += 1
         let ask = findingsAsk
         Task {
-            let cards = await Task.detached(priority: .utility) {
-                FindingRules.deck(reviews: recent.compactMap { id, start in
+            let (cards, traits) = await Task.detached(priority: .utility) {
+                let traits = PersonaFindings.cards(sources, calls: recent.map { (callID: $0.0, date: $0.1) }, profile: profile, now: now,
+                                                   quote: { PersonaReads.words($0, paths: paths) })
+                let cards = FindingRules.deck(reviews: recent.compactMap { id, start in
                     CoachReview.load(in: paths.callDirectory(id)).map { (callID: id, date: start, review: $0) }
-                }, profile: profile, now: now)
+                }, profile: profile, now: now, traits: traits)
+                return (cards, traits)
             }.value
-            if ask == findingsAsk, cards != findings { findings = cards }
+            guard ask == findingsAsk else { return }
+            traitCards = traits
+            if cards != findings { findings = cards }
         }
     }
 

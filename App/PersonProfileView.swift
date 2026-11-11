@@ -23,6 +23,11 @@ struct PersonProfileView: View {
     /// By the person's id when the people store has one, so the read stays with the person through a new name.
     private var brief: PersonBrief? { controller.shownCoachProfile.note(on: profile.name, people: controller.shownCoachPeople)?.value.brief }
 
+    /// How the person thinks: shown traits and the card, built by code. Nil for the owner and until a trait shows.
+    private var read: PersonaSummary? { profile.isOwner ? nil : controller.persona(of: profile.name) }
+    private var personID: String? { controller.personID(of: profile.name) }
+    private var keepsRead: Bool { controller.keepsRead(profile.name) }
+
     /// What the owner confirmed about this person on a card, by the person's id; by the label of the coach's
     /// note when the people store is off.
     private var confirmed: [CoachFact] {
@@ -36,10 +41,22 @@ struct PersonProfileView: View {
             VStack(alignment: .leading, spacing: Space.xl) {
                 header
                 LabelColumnStack(spacing: 18) {
-                    coachRead
-                    if let brief {
-                        ForEach(brief.sections, id: \.title) { section in
-                            LabelColumn(label: section.title) { prose(section.points) }
+                    if !profile.isOwner, (read != nil || brief != nil), controller.personaCovered(personID) {
+                        // A colleague must not read this on a shared screen.
+                        LabelColumn(label: "The coach’s read") { PersonaCoverRow { controller.uncover(personID) } }
+                    } else if let read, let card = read.card {
+                        // The card replaces the older read.
+                        PersonaCardView(card: card, first: first)
+                        PersonaTraitsView(read: read, date: { id in controller.meetings.first { $0.id == id }?.start })
+                    } else {
+                        coachRead
+                        if let brief {
+                            ForEach(brief.sections, id: \.title) { section in
+                                LabelColumn(label: section.title) { prose(section.points) }
+                            }
+                        }
+                        if let read, !read.traits.isEmpty {
+                            PersonaTraitsView(read: read, date: { id in controller.meetings.first { $0.id == id }?.start })
                         }
                     }
                     if !profile.isOwner, !confirmed.isEmpty {
@@ -113,6 +130,9 @@ struct PersonProfileView: View {
                     Label { Text("Merge into") } icon: { Icon.merge.image }
                 }
                 .disabled(profile.isOwner || others.isEmpty)
+                if !profile.isOwner, personID != nil, controller.personasOn {
+                    Toggle("Keep a read on \(first)", isOn: Binding(get: { keepsRead }, set: { controller.setKeepsRead(profile.name, $0) }))
+                }
                 Divider()
                 Button("Delete…", systemImage: "trash", role: .destructive, action: delete).disabled(profile.isOwner)
             } label: {
@@ -172,6 +192,27 @@ struct PersonProfileView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if stats.meetings.count >= 2 { refreshButton.font(.system(size: 12)) }
                 }
+                readState
+            }
+        }
+    }
+
+    /// Where the read of how they think stands: the count is true to the show rule.
+    @ViewBuilder
+    private var readState: some View {
+        if !profile.isOwner, controller.personasOn, personID != nil {
+            if !keepsRead {
+                HStack(spacing: 6) {
+                    Text("You keep no read on \(first).")
+                    Button("Keep a read") { controller.setKeepsRead(profile.name, true) }.buttonStyle(.plain).foregroundStyle(Palette.accent)
+                }
+                .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.top, 4)
+            } else if read?.card == nil {
+                Text(stats.meetings.count < PersonaCard.callsNeeded
+                     ? PersonaCard.needsMore(first: first, calls: stats.meetings.count)
+                     : "No habit of \(first) shows in enough calls yet. A habit shows after \(PersonaCard.callsNeeded) calls that agree.")
+                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.top, 4)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

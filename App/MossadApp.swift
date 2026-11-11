@@ -18,8 +18,44 @@ struct MossadEntry {
             // Rehearsal never serves the meetings.
             if Rehearsal.isOn { print("Mossad Rehearsal does not serve MCP."); exit(1) }
             let owner = UserDefaults.standard.string(forKey: "ownerName") ?? NSFullUserName()
-            MCPServer(paths: .live, owner: owner).run()
+            // The coach's reads of how people think: on for other AI apps, unless the owner turned it off.
+            let traits = UserDefaults.standard.object(forKey: "personaInMCP") as? Bool ?? true
+            MCPServer(paths: .live, owner: owner, personaTraits: traits).run()
             exit(0)
+        }
+        // `--persona-eval --gold <folder> [--cap 15] [--model claude-sonnet-5-5] [--out <folder>] [--estimate-only]` runs the
+        // persona eval on the made-up gold set. It prints its estimated cost first and stops at the cap ($15 at most).
+        // It reads no meeting and writes nothing in the data folder; the key comes from the Keychain and is never printed.
+        if CommandLine.arguments.contains("--persona-eval") {
+            if Rehearsal.isOn { print("Mossad Rehearsal does not run the eval."); exit(1) }
+            let args = CommandLine.arguments
+            Task {
+                let status = await PersonaEval.command(args, key: { Keychain.app.get(.anthropic) }, say: { print($0); fflush(stdout) })
+                exit(status)
+            }
+            dispatchMain()
+        }
+        // `--persona-fill [--go] [--cap 1]` reads the stored calls once for the coach's reads of how people think. It
+        // prints the estimated cost; only `--go` sends requests, and only while the app is not open.
+        if CommandLine.arguments.contains("--persona-fill") {
+            if Rehearsal.isOn { print("Mossad Rehearsal has no calls to read."); exit(1) }
+            let args = CommandLine.arguments
+            let open = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+                .contains { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+            if args.contains("--go"), open { print("Quit Mossad first: the fill writes the files that the app keeps."); exit(1) }
+            let defaults = UserDefaults.standard
+            let typed = (defaults.string(forKey: "ownerName") ?? "").trimmingCharacters(in: .whitespaces)
+            let owner = typed.isEmpty ? NSFullUserName() : typed
+            let provider = AIProvider(rawValue: defaults.string(forKey: "aiProvider") ?? "") ?? .anthropic
+            let chosen = defaults.string(forKey: "aiModel") ?? ""
+            let server = LocalServer.url(from: defaults.string(forKey: "localServerURL") ?? "") ?? LocalServer.ollama
+            Task {
+                let status = await PersonaFill.command(args, paths: .live, owner: owner, model: { usage in
+                    PersonaExtractor.model(provider: provider, chosen: chosen, key: provider.key.flatMap { Keychain.app.get($0) }, usage: usage, serverURL: server)
+                }, say: { print($0); fflush(stdout) })
+                exit(status)
+            }
+            dispatchMain()
         }
         // `--people-migration dry-run | apply | revert | apply-references | revert-references [--out <folder>]` shows or makes the move to person ids and
         // exits. A dry run with `--out` writes nothing in the data folder.

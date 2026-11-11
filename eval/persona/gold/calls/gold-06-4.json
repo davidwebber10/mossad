@@ -1,0 +1,458 @@
+{
+ "id": "gold-06-4",
+ "person": "Casey Moore",
+ "title": "Q3 budget review",
+ "tags": [
+  "Budget",
+  "Finance"
+ ],
+ "setting": "one_on_one",
+ "start": "2026-09-02T16:00:00Z",
+ "end": "2026-09-02T16:10:46Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Casey Moore"
+ },
+ "noise": true,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the q3 budget review."
+  },
+  {
+   "key": "me:A",
+   "start": 5.3,
+   "end": 13.3,
+   "text": "The feedback on the forecast has been mixed, some people like it and some say it adds steps to the variance."
+  },
+  {
+   "key": "me:A",
+   "start": 14.0,
+   "end": 21.7,
+   "text": "We could keep the headcount cost as it is for now and only change the variance in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 22.7,
+   "end": 31.9,
+   "text": "So on the accrual, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 32.3,
+   "end": 34.3,
+   "text": "Yes."
+  },
+  {
+   "key": "me:A",
+   "start": 35.5,
+   "end": 42.4,
+   "text": "The draft for the headcount cost is in the folder, with comments from two teams on the forecast."
+  },
+  {
+   "key": "me:A",
+   "start": 42.9,
+   "end": 49.4,
+   "text": "The draft for the variance is in the folder, with comments from two teams on the forecast."
+  },
+  {
+   "key": "them:A",
+   "start": 50.2,
+   "end": 52.2,
+   "text": "Okay, sounds fine."
+  },
+  {
+   "key": "me:A",
+   "start": 52.7,
+   "end": 60.4,
+   "text": "Last time we said we would clean up the variance first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 61.7,
+   "end": 68.3,
+   "text": "Right, and the accrual also touches the budget line, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 69.4,
+   "end": 77.1,
+   "text": "From what I can see, the budget line is on track, and the risk is mostly in the headcount cost."
+  },
+  {
+   "key": "them:A",
+   "start": 77.6,
+   "end": 79.6,
+   "text": "Sure."
+  },
+  {
+   "key": "me:A",
+   "start": 80.4,
+   "end": 88.1,
+   "text": "The headcount cost numbers came in yesterday, and I put a short summary of the variance in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 89.4,
+   "end": 97.1,
+   "text": "The headcount cost numbers came in yesterday, and I put a short summary of the variance in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 98.0,
+   "end": 105.4,
+   "text": "The draft for the headcount cost is in the folder, with comments from two teams on the budget line."
+  },
+  {
+   "key": "them:A",
+   "start": 106.8,
+   "end": 108.8,
+   "text": "Thanks, that works."
+  },
+  {
+   "key": "me:A",
+   "start": 110.0,
+   "end": 117.6,
+   "text": "The variance piece is moving, and the team has a draft of the accrual changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 118.1,
+   "end": 125.8,
+   "text": "I would like us to agree on the scope of the variance today, even if the accrual details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 126.9,
+   "end": 134.2,
+   "text": "We have three open questions on the variance, mostly about timing and who signs off on the budget line."
+  },
+  {
+   "key": "me:A",
+   "start": 134.7,
+   "end": 142.0,
+   "text": "We could keep the forecast as it is for now and only change the accrual in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 143.4,
+   "end": 152.6,
+   "text": "I talked to the people who run the accrual every day, and they said the headcount cost is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 153.7,
+   "end": 161.4,
+   "text": "I would like us to agree on the scope of the variance today, even if the forecast details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 162.6,
+   "end": 169.5,
+   "text": "If we wait a month on the headcount cost, the variance timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 170.5,
+   "end": 179.0,
+   "text": "One thing I noticed is that the forecast looks different in each region, so the budget line plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 179.4,
+   "end": 186.4,
+   "text": "Right, and the headcount cost also touches the budget line, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 187.0,
+   "end": 194.3,
+   "text": "There is a dependency on the budget line, so the forecast work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 195.1,
+   "end": 202.0,
+   "text": "If we wait a month on the accrual, the headcount cost timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 203.3,
+   "end": 212.5,
+   "text": "So on the accrual, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 213.7,
+   "end": 221.8,
+   "text": "Last time we said we would clean up the headcount cost first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 222.6,
+   "end": 229.9,
+   "text": "The draft for the headcount cost is in the folder, with comments from two teams on the budget line."
+  },
+  {
+   "key": "me:A",
+   "start": 231.0,
+   "end": 237.9,
+   "text": "We have three open questions on the forecast, mostly about timing and who signs off on the variance."
+  },
+  {
+   "key": "me:A",
+   "start": 239.0,
+   "end": 247.4,
+   "text": "One thing I noticed is that the headcount cost looks different in each region, so the variance plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 248.1,
+   "end": 255.8,
+   "text": "Last time we said we would clean up the accrual first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 257.0,
+   "end": 266.2,
+   "text": "So on the forecast, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 266.6,
+   "end": 273.1,
+   "text": "Right, and the accrual also touches the budget line, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 273.6,
+   "end": 280.1,
+   "text": "If we wait a month on the forecast, the accrual timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 280.7,
+   "end": 287.2,
+   "text": "Right, and the forecast also touches the headcount cost, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 288.7,
+   "end": 296.0,
+   "text": "There is a dependency on the budget line, so the accrual work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 296.4,
+   "end": 304.4,
+   "text": "I would like us to agree on the scope of the accrual today, even if the headcount cost details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 304.8,
+   "end": 312.4,
+   "text": "I would like us to agree on the scope of the variance today, even if the accrual details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 312.9,
+   "end": 319.8,
+   "text": "The vendor sent an updated proposal for the variance, and it changes the headcount cost a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 320.2,
+   "end": 327.9,
+   "text": "I would like us to agree on the scope of the forecast today, even if the variance details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 328.7,
+   "end": 337.9,
+   "text": "I talked to the people who run the headcount cost every day, and they said the accrual is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 338.9,
+   "end": 347.4,
+   "text": "One thing I noticed is that the accrual looks different in each region, so the budget line plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 348.8,
+   "end": 356.9,
+   "text": "The forecast piece is moving, and the team has a draft of the headcount cost changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 357.8,
+   "end": 365.5,
+   "text": "We have three open questions on the headcount cost, mostly about timing and who signs off on the budget line."
+  },
+  {
+   "key": "me:A",
+   "start": 366.5,
+   "end": 375.3,
+   "text": "I talked to the people who run the forecast every day, and they said the accrual is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 376.3,
+   "end": 382.8,
+   "text": "Right, and the budget line also touches the accrual, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 384.0,
+   "end": 391.3,
+   "text": "There is a dependency on the accrual, so the budget line work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 392.3,
+   "end": 400.4,
+   "text": "I would like us to agree on the scope of the headcount cost today, even if the accrual details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 401.5,
+   "end": 408.8,
+   "text": "The accrual numbers came in yesterday, and I put a short summary of the forecast in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 410.2,
+   "end": 418.7,
+   "text": "The feedback on the budget line has been mixed, some people like it and some say it adds steps to the accrual."
+  },
+  {
+   "key": "me:A",
+   "start": 419.0,
+   "end": 426.3,
+   "text": "The variance numbers came in yesterday, and I put a short summary of the forecast in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 427.8,
+   "end": 435.9,
+   "text": "The accrual piece is moving, and the team has a draft of the budget line changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 436.4,
+   "end": 445.6,
+   "text": "So on the variance, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 445.9,
+   "end": 453.3,
+   "text": "We tested the variance with a small group, and the budget line results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 453.8,
+   "end": 460.3,
+   "text": "The draft for the variance is in the folder, with comments from two teams on the forecast."
+  },
+  {
+   "key": "me:A",
+   "start": 460.7,
+   "end": 468.4,
+   "text": "I would like us to agree on the scope of the forecast today, even if the variance details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 469.4,
+   "end": 476.7,
+   "text": "We could keep the accrual as it is for now and only change the forecast in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 477.5,
+   "end": 485.2,
+   "text": "We could keep the accrual as it is for now and only change the headcount cost in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 486.2,
+   "end": 493.1,
+   "text": "The vendor sent an updated proposal for the budget line, and it changes the variance a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 494.0,
+   "end": 500.9,
+   "text": "The draft for the accrual is in the folder, with comments from two teams on the headcount cost."
+  },
+  {
+   "key": "me:A",
+   "start": 501.4,
+   "end": 509.1,
+   "text": "Last time we said we would clean up the accrual first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 509.6,
+   "end": 516.2,
+   "text": "Right, and the accrual also touches the budget line, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 516.6,
+   "end": 525.8,
+   "text": "So on the accrual, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 526.1,
+   "end": 534.2,
+   "text": "The variance piece is moving, and the team has a draft of the headcount cost changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 534.6,
+   "end": 541.6,
+   "text": "The vendor sent an updated proposal for the headcount cost, and it changes the forecast a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 541.9,
+   "end": 548.1,
+   "text": "Right, and the variance also touches the forecast, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 548.9,
+   "end": 558.1,
+   "text": "So on the forecast, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 559.1,
+   "end": 567.1,
+   "text": "I would like us to agree on the scope of the accrual today, even if the budget line details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 568.6,
+   "end": 574.8,
+   "text": "Right, and the variance also touches the forecast, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 575.3,
+   "end": 582.2,
+   "text": "I think the forecast question is the main thing left before we can close out the budget line."
+  },
+  {
+   "key": "me:A",
+   "start": 582.8,
+   "end": 586.2,
+   "text": "Good, let us pick this up next week. Thanks."
+  }
+ ],
+ "beats": []
+}

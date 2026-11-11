@@ -1,0 +1,605 @@
+{
+ "id": "gold-10-5",
+ "person": "Drew Kim",
+ "title": "Sales territory changes",
+ "tags": [
+  "Sales",
+  "Planning"
+ ],
+ "setting": "group",
+ "start": "2026-09-14T15:00:00Z",
+ "end": "2026-09-14T15:13:42Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Drew Kim",
+  "them:B": "Ana Lopez",
+  "them:C": "Ben Cole"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the sales territory changes."
+  },
+  {
+   "key": "them:B",
+   "start": 6.0,
+   "end": 12.5,
+   "text": "The vendor sent an updated proposal for the quota, and it changes the dealer a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 13.1,
+   "end": 21.2,
+   "text": "The feedback on the quota has been mixed, some people like it and some say it adds steps to the territory."
+  },
+  {
+   "key": "them:A",
+   "start": 22.0,
+   "end": 29.0,
+   "text": "From what I can see, the quota is on track, and the risk is mostly in the territory."
+  },
+  {
+   "key": "them:B",
+   "start": 29.4,
+   "end": 36.0,
+   "text": "The draft for the handoff is in the folder, with comments from two teams on the quota."
+  },
+  {
+   "key": "them:B",
+   "start": 37.0,
+   "end": 43.5,
+   "text": "I think the quota question is the main thing left before we can close out the handoff."
+  },
+  {
+   "key": "them:B",
+   "start": 43.9,
+   "end": 52.0,
+   "text": "I would like us to agree on the scope of the handoff today, even if the account list details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 52.8,
+   "end": 59.7,
+   "text": "We have three open questions on the territory, mostly about timing and who signs off on the dealer."
+  },
+  {
+   "key": "them:A",
+   "start": 60.9,
+   "end": 68.2,
+   "text": "The handoff numbers came in yesterday, and I put a short summary of the territory in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 68.7,
+   "end": 75.6,
+   "text": "We tested the territory with a small group, and the dealer results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 76.4,
+   "end": 84.8,
+   "text": "The feedback on the handoff has been mixed, some people like it and some say it adds steps to the account list."
+  },
+  {
+   "key": "me:A",
+   "start": 86.2,
+   "end": 92.7,
+   "text": "The draft for the handoff is in the folder, with comments from two teams on the quota."
+  },
+  {
+   "key": "me:A",
+   "start": 93.7,
+   "end": 101.0,
+   "text": "From what I can see, the account list is on track, and the risk is mostly in the quota."
+  },
+  {
+   "key": "them:A",
+   "start": 101.4,
+   "end": 109.5,
+   "text": "I would like us to agree on the scope of the quota today, even if the account list details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 110.0,
+   "end": 116.9,
+   "text": "We have three open questions on the dealer, mostly about timing and who signs off on the territory."
+  },
+  {
+   "key": "them:C",
+   "start": 117.5,
+   "end": 124.4,
+   "text": "I think the handoff question is the main thing left before we can close out the account list."
+  },
+  {
+   "key": "them:A",
+   "start": 125.8,
+   "end": 132.3,
+   "text": "Right, and the account list also touches the handoff, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 133.1,
+   "end": 140.0,
+   "text": "The vendor sent an updated proposal for the account list, and it changes the territory a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 140.8,
+   "end": 147.3,
+   "text": "Right, and the account list also touches the quota, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 148.5,
+   "end": 155.5,
+   "text": "There is a dependency on the quota, so the handoff work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 156.6,
+   "end": 164.7,
+   "text": "The account list piece is moving, and the team has a draft of the dealer changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 165.0,
+   "end": 171.6,
+   "text": "The ask is simple: approve the quota change so the account list team can start next week."
+  },
+  {
+   "key": "them:A",
+   "start": 172.8,
+   "end": 177.0,
+   "text": "I went back and checked those numbers myself before the call."
+  },
+  {
+   "key": "me:A",
+   "start": 177.7,
+   "end": 184.7,
+   "text": "The draft for the account list is in the folder, with comments from two teams on the dealer."
+  },
+  {
+   "key": "me:A",
+   "start": 185.8,
+   "end": 192.7,
+   "text": "If we wait a month on the account list, the territory timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 193.2,
+   "end": 202.4,
+   "text": "I talked to the people who run the account list every day, and they said the territory is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 203.4,
+   "end": 210.3,
+   "text": "If we wait a month on the account list, the handoff timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 211.6,
+   "end": 218.1,
+   "text": "The draft for the dealer is in the folder, with comments from two teams on the quota."
+  },
+  {
+   "key": "them:C",
+   "start": 218.8,
+   "end": 226.4,
+   "text": "The dealer numbers came in yesterday, and I put a short summary of the account list in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 227.3,
+   "end": 233.9,
+   "text": "I think the quota question is the main thing left before we can close out the territory."
+  },
+  {
+   "key": "them:A",
+   "start": 234.5,
+   "end": 242.9,
+   "text": "One thing I noticed is that the account list looks different in each region, so the quota plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 243.9,
+   "end": 250.8,
+   "text": "We tested the dealer with a small group, and the handoff results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 251.9,
+   "end": 259.2,
+   "text": "We tested the dealer with a small group, and the account list results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 260.2,
+   "end": 267.5,
+   "text": "We could keep the handoff as it is for now and only change the dealer in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 268.2,
+   "end": 275.1,
+   "text": "The vendor sent an updated proposal for the handoff, and it changes the account list a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 275.8,
+   "end": 283.5,
+   "text": "Last time we said we would clean up the handoff first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 283.8,
+   "end": 290.4,
+   "text": "The draft for the territory is in the folder, with comments from two teams on the dealer."
+  },
+  {
+   "key": "them:B",
+   "start": 291.2,
+   "end": 298.1,
+   "text": "We have three open questions on the dealer, mostly about timing and who signs off on the territory."
+  },
+  {
+   "key": "them:A",
+   "start": 298.9,
+   "end": 307.0,
+   "text": "One thing I noticed is that the dealer looks different in each region, so the quota plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 308.0,
+   "end": 315.3,
+   "text": "The handoff numbers came in yesterday, and I put a short summary of the dealer in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 316.2,
+   "end": 323.5,
+   "text": "We could keep the quota as it is for now and only change the territory in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 325.0,
+   "end": 331.5,
+   "text": "The vendor sent an updated proposal for the handoff, and it changes the territory a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 332.9,
+   "end": 341.0,
+   "text": "The handoff piece is moving, and the team has a draft of the account list changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 342.1,
+   "end": 350.5,
+   "text": "Here is the plan: we spend 40,000 on the account list this quarter and the territory changes follow in the next one."
+  },
+  {
+   "key": "them:A",
+   "start": 351.9,
+   "end": 355.8,
+   "text": "Is there a cheaper way to get the same result?"
+  },
+  {
+   "key": "them:C",
+   "start": 356.7,
+   "end": 363.6,
+   "text": "From what I can see, the handoff is on track, and the risk is mostly in the quota."
+  },
+  {
+   "key": "me:A",
+   "start": 364.5,
+   "end": 372.6,
+   "text": "The feedback on the dealer has been mixed, some people like it and some say it adds steps to the territory."
+  },
+  {
+   "key": "them:A",
+   "start": 373.2,
+   "end": 379.7,
+   "text": "If we wait a month on the handoff, the quota timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 380.6,
+   "end": 388.7,
+   "text": "Last time we said we would clean up the account list first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 390.1,
+   "end": 399.3,
+   "text": "So on the handoff, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 400.7,
+   "end": 408.0,
+   "text": "We tested the account list with a small group, and the quota results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 408.4,
+   "end": 415.3,
+   "text": "There is a dependency on the dealer, so the quota work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 416.2,
+   "end": 424.2,
+   "text": "The account list piece is moving, and the team has a draft of the dealer changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 424.9,
+   "end": 432.2,
+   "text": "There is a dependency on the account list, so the handoff work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 433.1,
+   "end": 440.8,
+   "text": "I would like us to agree on the scope of the quota today, even if the handoff details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 441.1,
+   "end": 449.2,
+   "text": "The feedback on the handoff has been mixed, some people like it and some say it adds steps to the quota."
+  },
+  {
+   "key": "me:A",
+   "start": 450.4,
+   "end": 457.0,
+   "text": "If we wait a month on the handoff, the territory timeline slips by about the same amount."
+  },
+  {
+   "key": "them:C",
+   "start": 457.6,
+   "end": 464.9,
+   "text": "We could keep the handoff as it is for now and only change the dealer in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 466.1,
+   "end": 472.7,
+   "text": "The draft for the dealer is in the folder, with comments from two teams on the territory."
+  },
+  {
+   "key": "them:B",
+   "start": 474.0,
+   "end": 480.9,
+   "text": "The vendor sent an updated proposal for the handoff, and it changes the account list a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 481.4,
+   "end": 488.4,
+   "text": "We have three open questions on the dealer, mostly about timing and who signs off on the handoff."
+  },
+  {
+   "key": "them:B",
+   "start": 489.3,
+   "end": 496.3,
+   "text": "We have three open questions on the handoff, mostly about timing and who signs off on the quota."
+  },
+  {
+   "key": "them:A",
+   "start": 497.7,
+   "end": 505.0,
+   "text": "There is a dependency on the account list, so the territory work cannot really start until that is settled."
+  },
+  {
+   "key": "them:B",
+   "start": 505.6,
+   "end": 512.9,
+   "text": "From what I can see, the territory is on track, and the risk is mostly in the account list."
+  },
+  {
+   "key": "me:A",
+   "start": 513.6,
+   "end": 521.3,
+   "text": "We could keep the quota as it is for now and only change the account list in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 522.2,
+   "end": 529.1,
+   "text": "From what I can see, the quota is on track, and the risk is mostly in the territory."
+  },
+  {
+   "key": "me:A",
+   "start": 529.5,
+   "end": 536.5,
+   "text": "We have three open questions on the dealer, mostly about timing and who signs off on the quota."
+  },
+  {
+   "key": "them:A",
+   "start": 537.4,
+   "end": 545.5,
+   "text": "One thing I noticed is that the territory looks different in each region, so the quota plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 546.0,
+   "end": 554.1,
+   "text": "One thing I noticed is that the handoff looks different in each region, so the territory plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 554.8,
+   "end": 561.3,
+   "text": "If we wait a month on the territory, the handoff timeline slips by about the same amount."
+  },
+  {
+   "key": "them:B",
+   "start": 562.1,
+   "end": 569.8,
+   "text": "The dealer piece is moving, and the team has a draft of the territory changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 571.2,
+   "end": 580.4,
+   "text": "So on the territory, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 581.2,
+   "end": 587.8,
+   "text": "The vendor sent an updated proposal for the quota, and it changes the handoff a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 588.8,
+   "end": 596.5,
+   "text": "I would like us to agree on the scope of the quota today, even if the dealer details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 597.5,
+   "end": 606.7,
+   "text": "I talked to the people who run the dealer every day, and they said the account list is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 607.7,
+   "end": 615.8,
+   "text": "One thing I noticed is that the territory looks different in each region, so the quota plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 617.0,
+   "end": 626.6,
+   "text": "So on the account list, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 627.1,
+   "end": 636.3,
+   "text": "So on the dealer, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 636.9,
+   "end": 643.5,
+   "text": "The vendor sent an updated proposal for the quota, and it changes the handoff a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 644.0,
+   "end": 650.9,
+   "text": "We have three open questions on the territory, mostly about timing and who signs off on the quota."
+  },
+  {
+   "key": "me:A",
+   "start": 651.8,
+   "end": 661.0,
+   "text": "So on the territory, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 661.3,
+   "end": 667.9,
+   "text": "The vendor sent an updated proposal for the quota, and it changes the dealer a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 668.3,
+   "end": 677.1,
+   "text": "I talked to the people who run the dealer every day, and they said the handoff is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 677.9,
+   "end": 685.2,
+   "text": "We could keep the handoff as it is for now and only change the territory in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 686.7,
+   "end": 693.6,
+   "text": "The vendor sent an updated proposal for the quota, and it changes the account list a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 694.6,
+   "end": 701.1,
+   "text": "The vendor sent an updated proposal for the dealer, and it changes the territory a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 702.0,
+   "end": 709.7,
+   "text": "My recommendation is that we go with the second option for the territory, it saves about 15% on the dealer."
+  },
+  {
+   "key": "them:A",
+   "start": 711.0,
+   "end": 716.8,
+   "text": "What were the other options you looked at? Lay them side by side for me."
+  },
+  {
+   "key": "me:A",
+   "start": 718.2,
+   "end": 724.7,
+   "text": "The draft for the territory is in the folder, with comments from two teams on the handoff."
+  },
+  {
+   "key": "me:A",
+   "start": 725.6,
+   "end": 733.6,
+   "text": "The feedback on the quota has been mixed, some people like it and some say it adds steps to the territory."
+  },
+  {
+   "key": "them:B",
+   "start": 734.4,
+   "end": 743.6,
+   "text": "So on the handoff, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 744.3,
+   "end": 751.3,
+   "text": "From what I can see, the territory is on track, and the risk is mostly in the handoff."
+  },
+  {
+   "key": "them:A",
+   "start": 752.0,
+   "end": 757.3,
+   "text": "I need to leave early for a doctor appointment, it is a family thing."
+  },
+  {
+   "key": "me:A",
+   "start": 758.7,
+   "end": 761.8,
+   "text": "Okay, I think that covers it. Thanks, everyone."
+  }
+ ],
+ "beats": [
+  {
+   "line": 22,
+   "person": "Drew Kim",
+   "dimension": "trust",
+   "value": "numbers_checked"
+  },
+  {
+   "line": 44,
+   "person": "Drew Kim",
+   "dimension": "drivers",
+   "value": "cost"
+  },
+  {
+   "line": 87,
+   "person": "Drew Kim",
+   "dimension": "order",
+   "value": "options_first"
+  }
+ ]
+}

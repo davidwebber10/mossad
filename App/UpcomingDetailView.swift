@@ -122,7 +122,9 @@ struct UpcomingDetailView: View {
                         MeetingAnalyticsGroup("The series") { PrepSeries(series: series, planned: meeting.end.timeIntervalSince(meeting.start)) }
                     }
                     if !prep.coach.isEmpty {
-                        MeetingAnalyticsGroup("Coach") { PrepCoachSection(input: prep.coach) }
+                        MeetingAnalyticsGroup("Coach") {
+                            PrepCoachSection(input: prep.coach, covered: { controller.personaCovered($0) }, uncover: { controller.uncover($0) })
+                        }
                     }
                 }
                 .font(.system(size: 13))

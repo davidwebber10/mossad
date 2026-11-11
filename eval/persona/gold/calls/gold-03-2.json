@@ -1,0 +1,557 @@
+{
+ "id": "gold-03-2",
+ "person": "Jordan Blake",
+ "title": "Training program design",
+ "tags": [
+  "Training",
+  "People"
+ ],
+ "setting": "group",
+ "start": "2026-08-14T18:00:00Z",
+ "end": "2026-08-14T18:13:28Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Jordan Blake",
+  "them:B": "Priya Shah",
+  "them:C": "Ben Cole"
+ },
+ "noise": true,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the training program design."
+  },
+  {
+   "key": "them:C",
+   "start": 5.8,
+   "end": 13.1,
+   "text": "The vendor sent an updated proposal for the manager guide, and uh it changes the trainer a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 13.9,
+   "end": 21.6,
+   "text": "The module piece is moving, and the team has a draft of the trainer changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 22.6,
+   "end": 31.5,
+   "text": "I talked to the people who run the workshop every day, and they said the trainer is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 32.6,
+   "end": 41.5,
+   "text": "One thing I noticed is that the I mean trainer looks different in each region, so the module plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 42.0,
+   "end": 49.7,
+   "text": "We have three open questions on the uh workshop, mostly about timing and who signs off on the completion rate."
+  },
+  {
+   "key": "them:B",
+   "start": 50.1,
+   "end": 56.6,
+   "text": "The vendor sent an updated proposal for the workshop, and it uh the trainer a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 57.9,
+   "end": 67.2,
+   "text": "So on the manager guide, we looked at the last few weeks and the picture is mostly we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 67.8,
+   "end": 75.1,
+   "text": "We tested the trainer with a small group, and the completion rate results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 75.5,
+   "end": 83.9,
+   "text": "We have three I mean open questions on the manager guide, mostly about timing and who signs off on the completion rate."
+  },
+  {
+   "key": "me:A",
+   "start": 84.5,
+   "end": 94.1,
+   "text": "So on the completion rate, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 94.7,
+   "end": 101.7,
+   "text": "The vendor sent an updated proposal for um the workshop, and it changes the module a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 102.5,
+   "end": 109.5,
+   "text": "We tested the trainer with a small group, and the module results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 110.9,
+   "end": 119.4,
+   "text": "The feedback on the completion rate has been mixed, some people like it and some say it adds steps to the trainer."
+  },
+  {
+   "key": "them:A",
+   "start": 120.2,
+   "end": 127.5,
+   "text": "From what I can see, you know the trainer is on track, and the risk is mostly in module."
+  },
+  {
+   "key": "them:B",
+   "start": 128.8,
+   "end": 137.3,
+   "text": "The feedback on the completion rate has been some people like it and some say it adds steps to the manager guide."
+  },
+  {
+   "key": "them:B",
+   "start": 137.6,
+   "end": 144.2,
+   "text": "Right, and the manager guide also touches the completion rate, which is why I everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 145.5,
+   "end": 152.4,
+   "text": "The draft for the workshop is in the folder, with comments from two teams on the manager guide."
+  },
+  {
+   "key": "them:A",
+   "start": 153.1,
+   "end": 161.2,
+   "text": "I would like us to agree on the scope of the module today, even if the manager guide details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 161.8,
+   "end": 169.1,
+   "text": "From what I can see, the module is on track, and the risk is mostly in the manager guide."
+  },
+  {
+   "key": "them:B",
+   "start": 170.3,
+   "end": 179.1,
+   "text": "One thing I noticed is that the module looks different I mean each region, so the manager guide plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 180.1,
+   "end": 187.4,
+   "text": "We have three open questions on the completion rate, mostly about timing and who signs off on the trainer."
+  },
+  {
+   "key": "them:C",
+   "start": 188.5,
+   "end": 196.1,
+   "text": "There is a dependency on the completion rate, so the manager guide work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 197.2,
+   "end": 206.8,
+   "text": "So on the manager guide, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 208.1,
+   "end": 215.4,
+   "text": "The draft for the completion rate is in the folder, with comments from two teams on the manager guide."
+  },
+  {
+   "key": "them:B",
+   "start": 215.9,
+   "end": 223.2,
+   "text": "We tested the with a small group, you know and the workshop results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 223.6,
+   "end": 230.5,
+   "text": "The vendor sent an updated proposal for the trainer, and it changes the completion rate a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 232.0,
+   "end": 238.5,
+   "text": "Right, and the workshop also touches the manager guide, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 239.0,
+   "end": 247.9,
+   "text": "One thing I noticed is that the completion rate looks different in each region, so the manager guide plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 248.2,
+   "end": 255.9,
+   "text": "We have three open questions on the manager guide, um mostly about timing and who signs off on the module."
+  },
+  {
+   "key": "me:A",
+   "start": 256.4,
+   "end": 263.4,
+   "text": "The vendor sent an updated proposal for the trainer, and it changes the manager guide a little bit."
+  },
+  {
+   "key": "them:A",
+   "start": 264.5,
+   "end": 271.8,
+   "text": "We could keep uh the workshop as it is for now only change the trainer in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 272.8,
+   "end": 280.5,
+   "text": "We tested the trainer I mean with a small group, and the guide results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 281.1,
+   "end": 288.4,
+   "text": "We could keep the module as it is for now and only change the guide in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 289.2,
+   "end": 297.3,
+   "text": "We could keep the module as it is for now and only change the you know workshop in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 298.4,
+   "end": 306.4,
+   "text": "I would like us to agree on um the scope of the workshop today, even if the module details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 307.0,
+   "end": 314.3,
+   "text": "Last time we said would clean up the module first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:C",
+   "start": 315.2,
+   "end": 322.9,
+   "text": "I think the trainer question is the main thing left before I mean we can close out the manager guide."
+  },
+  {
+   "key": "me:A",
+   "start": 323.5,
+   "end": 330.5,
+   "text": "We tested the module with a small group, and the trainer results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 331.5,
+   "end": 339.2,
+   "text": "The completion rate numbers came in yesterday, and I put a short summary of the trainer in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 340.5,
+   "end": 349.7,
+   "text": "I would like us to you know agree on the scope of the completion rate today, even if the manager guide details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 351.2,
+   "end": 359.2,
+   "text": "The feedback on the manager guide has been mixed, some people like it and some say adds steps to the workshop."
+  },
+  {
+   "key": "them:B",
+   "start": 360.0,
+   "end": 367.3,
+   "text": "The vendor sent an updated proposal for the trainer, and it changes the module I mean a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 367.7,
+   "end": 376.2,
+   "text": "One thing I noticed is that the trainer looks different in each region, so the completion rate plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 376.8,
+   "end": 384.5,
+   "text": "Last time we said we would clean up the completion rate and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 385.9,
+   "end": 393.6,
+   "text": "I think the manager guide question is the main you know thing left before we can close out the module."
+  },
+  {
+   "key": "me:A",
+   "start": 394.5,
+   "end": 401.4,
+   "text": "The vendor sent an updated proposal for the module, and it changes the completion rate a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 402.8,
+   "end": 410.5,
+   "text": "There is a dependency on the completion rate, so the module work cannot uh really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 411.4,
+   "end": 420.7,
+   "text": "I talked to the people who run the trainer every day, and they said the module is the part that um slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 421.9,
+   "end": 429.6,
+   "text": "The draft for the manager guide is in the you know folder, with comments from two teams on the rate."
+  },
+  {
+   "key": "me:A",
+   "start": 430.8,
+   "end": 440.0,
+   "text": "So on the workshop, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 440.8,
+   "end": 448.5,
+   "text": "The completion rate numbers came in yesterday, and I put a short summary of the trainer in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 449.9,
+   "end": 458.0,
+   "text": "My recommendation is that we go with the second option for the completion rate, it saves about 15% on the workshop."
+  },
+  {
+   "key": "them:A",
+   "start": 458.7,
+   "end": 462.2,
+   "text": "Did anyone you know ask a customer about this?"
+  },
+  {
+   "key": "me:A",
+   "start": 462.5,
+   "end": 469.4,
+   "text": "The vendor sent an updated proposal for the module, and it changes the manager guide a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 470.9,
+   "end": 477.8,
+   "text": "I think the trainer question is the main thing left before we can close out the completion rate."
+  },
+  {
+   "key": "them:C",
+   "start": 478.8,
+   "end": 486.5,
+   "text": "The workshop numbers came in yesterday, and I put a short summary of the manager guide in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 487.2,
+   "end": 495.7,
+   "text": "My recommendation is that we go with the second option for the completion rate, it saves about 15% on the manager guide."
+  },
+  {
+   "key": "them:A",
+   "start": 496.6,
+   "end": 500.8,
+   "text": "Take me through the reasoning in order before the recommendation, please."
+  },
+  {
+   "key": "them:C",
+   "start": 501.9,
+   "end": 510.3,
+   "text": "The trainer numbers came in yesterday, you know and I put a short summary of the completion rate in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 511.3,
+   "end": 519.8,
+   "text": "One thing I noticed is that the workshop looks different in region, so um the completion rate plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 521.2,
+   "end": 530.4,
+   "text": "I talked to the people who run the trainer every day, and they uh said the module is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 531.5,
+   "end": 539.2,
+   "text": "We could keep the trainer as it is for now and only change the manager guide in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 540.2,
+   "end": 547.9,
+   "text": "The completion rate numbers came in yesterday, and I put a short summary of the module in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 549.0,
+   "end": 555.9,
+   "text": "From what I can see, the module is on track, and the risk is mostly in the workshop."
+  },
+  {
+   "key": "them:B",
+   "start": 556.7,
+   "end": 563.2,
+   "text": "Right, and the completion rate also touches the workshop, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 563.8,
+   "end": 572.3,
+   "text": "The feedback on the module has been mixed, some people like it and um some say it adds to the completion rate."
+  },
+  {
+   "key": "them:B",
+   "start": 573.4,
+   "end": 582.6,
+   "text": "The completion I mean rate piece is moving, and the team has a draft of the manager guide changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 583.7,
+   "end": 592.1,
+   "text": "One thing I noticed is that the workshop looks different in each region, so the completion rate plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 593.3,
+   "end": 600.3,
+   "text": "There is a dependency on the trainer, so the module work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 600.8,
+   "end": 607.7,
+   "text": "We tested the module with a small group, and the workshop results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 608.4,
+   "end": 616.1,
+   "text": "We could keep the trainer as it is for now and only change the manager guide in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 616.8,
+   "end": 624.9,
+   "text": "I would like us to agree on the scope of the workshop today, even if the um trainer details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 625.3,
+   "end": 631.8,
+   "text": "From what I can see, the trainer is on track, and the is mostly in the workshop."
+  },
+  {
+   "key": "them:A",
+   "start": 632.1,
+   "end": 640.6,
+   "text": "We could keep the completion I mean rate as it is for now and only change the trainer in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 641.9,
+   "end": 651.1,
+   "text": "I talked to the people who run the trainer every day, and they said the completion rate is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 652.3,
+   "end": 658.8,
+   "text": "The draft for the trainer is in the folder, with comments from two teams on the workshop."
+  },
+  {
+   "key": "them:C",
+   "start": 659.5,
+   "end": 668.7,
+   "text": "The feedback on the manager guide um has been mixed, some people like it and some say it adds steps to the completion rate."
+  },
+  {
+   "key": "them:A",
+   "start": 669.6,
+   "end": 676.2,
+   "text": "The draft for the workshop is in the folder, with comments from two teams on the trainer."
+  },
+  {
+   "key": "them:B",
+   "start": 677.2,
+   "end": 685.7,
+   "text": "The feedback on the module has been mixed, some people like it um and some say it adds steps to the workshop."
+  },
+  {
+   "key": "them:B",
+   "start": 686.8,
+   "end": 696.4,
+   "text": "I talked to the people who run the completion rate every day, and they said the module is um the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 697.4,
+   "end": 706.7,
+   "text": "I talked to the people who run the module every day, and they said the completion rate is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 708.0,
+   "end": 715.7,
+   "text": "Last time we um said we would clean up the first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 716.7,
+   "end": 724.8,
+   "text": "The completion rate numbers came in yesterday, and I put um a short summary of the module in the shared folder."
+  },
+  {
+   "key": "them:C",
+   "start": 726.3,
+   "end": 734.4,
+   "text": "The workshop numbers came in yesterday, and I put a short summary of the manager I mean guide in shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 735.3,
+   "end": 743.8,
+   "text": "One thing I noticed is that the completion rate uh looks different each region, so the module plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 744.7,
+   "end": 747.7,
+   "text": "Okay, I think that covers it. Thanks, everyone."
+  }
+ ],
+ "beats": [
+  {
+   "line": 53,
+   "person": "Jordan Blake",
+   "dimension": "drivers",
+   "value": "customer"
+  },
+  {
+   "line": 58,
+   "person": "Jordan Blake",
+   "dimension": "order",
+   "value": "path_first"
+  }
+ ]
+}

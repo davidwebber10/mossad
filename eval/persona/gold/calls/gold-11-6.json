@@ -1,0 +1,617 @@
+{
+ "id": "gold-11-6",
+ "person": "Robin Hale",
+ "title": "Customer returns process",
+ "tags": [
+  "Returns",
+  "Customer service"
+ ],
+ "setting": "group",
+ "start": "2026-09-23T16:00:00Z",
+ "end": "2026-09-23T16:14:31Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Robin Hale",
+  "them:B": "Ana Lopez",
+  "them:C": "Tom Reyes"
+ },
+ "noise": true,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the customer returns process."
+  },
+  {
+   "key": "them:B",
+   "start": 4.9,
+   "end": 11.9,
+   "text": "The vendor sent updated proposal for you know the inspection, and it changes the portal a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 12.2,
+   "end": 20.3,
+   "text": "There is a dependency on the inspection, so the refund you know time work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 21.1,
+   "end": 29.2,
+   "text": "The feedback on the restock has been mixed, some people like it and some say it adds steps to the inspection."
+  },
+  {
+   "key": "them:A",
+   "start": 29.9,
+   "end": 36.8,
+   "text": "Right, and the you know restock also touches the inspection, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 37.3,
+   "end": 46.6,
+   "text": "One thing I uh noticed is that the refund time looks different in each region, so the return label plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 47.0,
+   "end": 53.5,
+   "text": "Right, and the refund time also touches the restock, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 54.4,
+   "end": 62.1,
+   "text": "We could keep the portal as it um is for now and only change the inspection in the first phase."
+  },
+  {
+   "key": "them:C",
+   "start": 62.4,
+   "end": 70.5,
+   "text": "The return label piece is moving, and the team has a draft of the portal changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 71.3,
+   "end": 80.2,
+   "text": "One thing I I mean noticed is that the restock looks different in each region, so the portal plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 81.2,
+   "end": 89.3,
+   "text": "Last time we said we would clean up the return label first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 89.9,
+   "end": 97.6,
+   "text": "One thing I noticed is that the inspection looks different in each region, so the plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 98.4,
+   "end": 105.3,
+   "text": "If we wait a month on the time, the return label timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 106.3,
+   "end": 112.4,
+   "text": "The ask is simple: approve the inspection change so the restock team can start next week."
+  },
+  {
+   "key": "them:A",
+   "start": 113.9,
+   "end": 118.1,
+   "text": "Fine, decision uh made, we go with that option starting now."
+  },
+  {
+   "key": "me:A",
+   "start": 119.4,
+   "end": 127.1,
+   "text": "We could keep the refund time as it is for now and only change the portal in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 128.4,
+   "end": 135.3,
+   "text": "I think the refund time question is the main thing left before we can close out the restock."
+  },
+  {
+   "key": "them:B",
+   "start": 136.5,
+   "end": 143.4,
+   "text": "The draft for the inspection is in the folder, with comments from um two teams on the restock."
+  },
+  {
+   "key": "them:C",
+   "start": 144.1,
+   "end": 153.3,
+   "text": "So on the portal, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 154.2,
+   "end": 164.2,
+   "text": "So on the refund time, we looked at the last few weeks and the picture is mostly what uh we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 165.3,
+   "end": 172.6,
+   "text": "There is a dependency on the refund time, so the inspection work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 173.7,
+   "end": 182.6,
+   "text": "The feedback on the refund time has been mixed, um some people like it and some say it adds steps to the portal."
+  },
+  {
+   "key": "them:A",
+   "start": 183.0,
+   "end": 190.3,
+   "text": "The draft for refund time is in the folder, with comments from you know two teams on the portal."
+  },
+  {
+   "key": "me:A",
+   "start": 191.0,
+   "end": 199.5,
+   "text": "The feedback on the refund time has been mixed, some people like it and some say it adds steps to the restock."
+  },
+  {
+   "key": "them:C",
+   "start": 201.0,
+   "end": 209.0,
+   "text": "We tested you know the inspection with a small group, and the return label results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 209.5,
+   "end": 217.6,
+   "text": "The portal piece is moving, and the team has a draft of the return label changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 218.7,
+   "end": 225.6,
+   "text": "I think the refund time question is the main thing left before we can close out the restock."
+  },
+  {
+   "key": "them:A",
+   "start": 226.6,
+   "end": 235.8,
+   "text": "I talked to the people who run the return label every day, and they said the restock is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 237.1,
+   "end": 244.0,
+   "text": "If we wait a month on the portal, um the restock timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 245.5,
+   "end": 254.7,
+   "text": "I talked to the people who run the portal every day, and they said the refund time is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 255.7,
+   "end": 264.1,
+   "text": "One thing I noticed is that the refund time looks different in each region, so the portal plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 264.9,
+   "end": 273.8,
+   "text": "The feedback on the restock has been mixed, you know some people like it and some say it adds steps to the portal."
+  },
+  {
+   "key": "them:A",
+   "start": 274.6,
+   "end": 281.9,
+   "text": "I think the return label question is the main thing left before we can close out the refund time."
+  },
+  {
+   "key": "me:A",
+   "start": 282.6,
+   "end": 289.9,
+   "text": "From what I can see, the return label is on track, and the risk is mostly in the portal."
+  },
+  {
+   "key": "me:A",
+   "start": 290.3,
+   "end": 297.2,
+   "text": "The draft for the portal is in the folder, with comments from two teams on the refund time."
+  },
+  {
+   "key": "them:C",
+   "start": 298.6,
+   "end": 306.6,
+   "text": "One thing I noticed is that the inspection looks different in each region, so the portal plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 307.0,
+   "end": 313.9,
+   "text": "There is a dependency on the inspection, so the restock work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 314.9,
+   "end": 322.6,
+   "text": "I would like us to agree on the scope of the portal today, even if the restock details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 324.0,
+   "end": 332.1,
+   "text": "One thing I noticed is that the inspection looks different in each region, so the restock plan may need two versions."
+  },
+  {
+   "key": "them:B",
+   "start": 332.6,
+   "end": 341.5,
+   "text": "The feedback on the inspection has been mixed, some people you know like it and some say it adds steps to the portal."
+  },
+  {
+   "key": "them:B",
+   "start": 342.7,
+   "end": 350.4,
+   "text": "We could keep the portal as it is for now and only change the return label in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 351.5,
+   "end": 360.7,
+   "text": "So on the inspection, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 361.5,
+   "end": 368.4,
+   "text": "The draft for the return label is in uh the folder, with from two teams on the restock."
+  },
+  {
+   "key": "them:B",
+   "start": 369.2,
+   "end": 378.5,
+   "text": "I talked to the people run the return label every day, and they said the refund time is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 379.2,
+   "end": 386.5,
+   "text": "Right, and the you know restock also touches the return label, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 387.5,
+   "end": 395.9,
+   "text": "The feedback on the refund time has been mixed, some people like it and some say it adds steps to the portal."
+  },
+  {
+   "key": "them:B",
+   "start": 396.3,
+   "end": 403.6,
+   "text": "If we wait a month on the inspection, the return label timeline slips by you know about the amount."
+  },
+  {
+   "key": "them:C",
+   "start": 404.3,
+   "end": 412.4,
+   "text": "There is a dependency on the return label, so the restock work cannot you know really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 413.2,
+   "end": 420.5,
+   "text": "Right, and the you know refund time also touches the portal, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 421.5,
+   "end": 429.2,
+   "text": "The refund time piece is moving, and the team has a draft the inspection changes ready for review this week."
+  },
+  {
+   "key": "them:B",
+   "start": 430.4,
+   "end": 438.1,
+   "text": "I would like us to agree on the scope of the refund time today, even the inspection details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 439.2,
+   "end": 446.5,
+   "text": "The draft uh for the refund time is in the folder, with comments from two teams on the portal."
+  },
+  {
+   "key": "me:A",
+   "start": 447.3,
+   "end": 454.3,
+   "text": "If we wait a month on the return label, the portal timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 454.8,
+   "end": 463.7,
+   "text": "One thing I noticed is that the return label looks different in uh each region, so the restock plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 464.0,
+   "end": 474.0,
+   "text": "So on the restock, we looked at the last few weeks and the picture is mostly I mean what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 475.3,
+   "end": 483.0,
+   "text": "We could I mean keep the portal it is for now and only change the inspection in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 484.1,
+   "end": 493.7,
+   "text": "I talked to the people who run the return label every day, and they said the inspection is the uh part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 495.0,
+   "end": 504.2,
+   "text": "I talked to the people who run the portal every day, and they said the refund time is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 505.1,
+   "end": 512.5,
+   "text": "The inspection numbers came in yesterday, and I put a short summary of the restock in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 513.9,
+   "end": 521.5,
+   "text": "Last time we said we would clean up the restock first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:B",
+   "start": 522.4,
+   "end": 530.4,
+   "text": "The refund time piece is moving, and the team has a draft of the inspection changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 530.9,
+   "end": 537.4,
+   "text": "Right, and the uh portal also touches the restock, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 538.5,
+   "end": 545.4,
+   "text": "Right, and the return label also touches the refund time, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 545.9,
+   "end": 552.8,
+   "text": "The draft for the restock is in the folder, with comments from two teams on the return label."
+  },
+  {
+   "key": "me:A",
+   "start": 554.1,
+   "end": 560.7,
+   "text": "If we wait a month on the restock, the inspection timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 561.9,
+   "end": 568.8,
+   "text": "There is a dependency on the inspection, so the uh portal cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 569.6,
+   "end": 577.7,
+   "text": "The feedback on the restock has been mixed, some people like it and some say it adds steps to the inspection."
+  },
+  {
+   "key": "them:B",
+   "start": 578.1,
+   "end": 586.5,
+   "text": "One thing I noticed is that the refund looks different in each region, so the uh restock plan may need two versions."
+  },
+  {
+   "key": "them:C",
+   "start": 587.5,
+   "end": 595.2,
+   "text": "We could keep the return label as it is for now and only change the portal in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 596.2,
+   "end": 602.8,
+   "text": "The vendor sent an updated proposal for the portal, and it changes the restock a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 604.3,
+   "end": 610.8,
+   "text": "The draft for the portal is in the folder, with comments from two teams on the restock."
+  },
+  {
+   "key": "me:A",
+   "start": 611.8,
+   "end": 619.5,
+   "text": "We tested the refund time with a small group, and the return label results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 620.4,
+   "end": 627.7,
+   "text": "The vendor sent an updated proposal for the refund time, uh and it changes the inspection a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 628.5,
+   "end": 637.3,
+   "text": "We could keep the refund time as it is for now and only change the I mean return label in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 638.0,
+   "end": 644.9,
+   "text": "From what I can see, the restock is on track, and the risk is mostly in the portal."
+  },
+  {
+   "key": "them:B",
+   "start": 646.1,
+   "end": 652.7,
+   "text": "The draft for the refund time is the folder, with comments from two teams on the portal."
+  },
+  {
+   "key": "them:C",
+   "start": 653.4,
+   "end": 661.9,
+   "text": "The return label piece is moving, and the team has a draft of uh the portal changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 662.3,
+   "end": 670.7,
+   "text": "Last time we said we would clean I mean up the inspection first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 671.7,
+   "end": 681.0,
+   "text": "So on the portal, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 681.9,
+   "end": 688.8,
+   "text": "I think the refund time question is the main thing left before we can close out the restock."
+  },
+  {
+   "key": "them:C",
+   "start": 689.2,
+   "end": 695.3,
+   "text": "Right, and the return label also the restock, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 696.7,
+   "end": 704.3,
+   "text": "I propose we change the inspection next month and move about 20% of the work to the new restock setup."
+  },
+  {
+   "key": "them:A",
+   "start": 704.9,
+   "end": 708.4,
+   "text": "Did the thing agreed on last time actually happen?"
+  },
+  {
+   "key": "them:B",
+   "start": 708.7,
+   "end": 716.0,
+   "text": "We have three open questions on the portal, mostly about timing and who signs off on the return label."
+  },
+  {
+   "key": "them:C",
+   "start": 716.5,
+   "end": 723.1,
+   "text": "I think the inspection question is the main thing left before we can uh close out restock."
+  },
+  {
+   "key": "them:A",
+   "start": 723.9,
+   "end": 733.1,
+   "text": "So on the portal, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 733.6,
+   "end": 741.3,
+   "text": "If we wait a month on the you know return label, the restock timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 742.1,
+   "end": 750.2,
+   "text": "The refund time numbers came in yesterday, and I put a short summary of the return label in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 751.7,
+   "end": 760.5,
+   "text": "I would like us to agree on the I mean scope of the portal today, even if the refund time details come later."
+  },
+  {
+   "key": "them:C",
+   "start": 761.0,
+   "end": 767.2,
+   "text": "Right, and the restock also touches the inspection, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 768.0,
+   "end": 774.5,
+   "text": "The ask is simple: approve the inspection change so the refund time team can start next week."
+  },
+  {
+   "key": "them:A",
+   "start": 775.0,
+   "end": 779.6,
+   "text": "No. We should not do that, it um is the wrong order."
+  },
+  {
+   "key": "them:C",
+   "start": 780.4,
+   "end": 790.0,
+   "text": "I talked to the people who run the return label every day, I mean and they said the inspection the part that slows them down."
+  },
+  {
+   "key": "them:B",
+   "start": 790.6,
+   "end": 799.4,
+   "text": "I talked to the people who run the inspection every day, and they said the restock is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 800.4,
+   "end": 806.9,
+   "text": "The draft for the restock in um the folder, with comments from two teams on the portal."
+  },
+  {
+   "key": "me:A",
+   "start": 807.7,
+   "end": 810.8,
+   "text": "Okay, I think that covers it. Thanks, everyone."
+  }
+ ],
+ "beats": [
+  {
+   "line": 14,
+   "person": "Robin Hale",
+   "dimension": "decision",
+   "value": "in_the_room"
+  },
+  {
+   "line": 82,
+   "person": "Robin Hale",
+   "dimension": "trust",
+   "value": "follow_through"
+  },
+  {
+   "line": 91,
+   "person": "Robin Hale",
+   "dimension": "objection",
+   "value": "direct"
+  }
+ ]
+}

@@ -1,0 +1,585 @@
+{
+ "id": "gold-09-4",
+ "person": "Sam Ortiz",
+ "title": "Product catalog cleanup",
+ "tags": [
+  "Catalog",
+  "Data"
+ ],
+ "setting": "one_on_one",
+ "start": "2026-09-05T19:00:00Z",
+ "end": "2026-09-05T19:13:55Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Sam Ortiz"
+ },
+ "noise": true,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the product catalog cleanup."
+  },
+  {
+   "key": "me:A",
+   "start": 5.0,
+   "end": 13.5,
+   "text": "I would like us to agree on the scope of the duplicate listing today, even if the product feed details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 13.8,
+   "end": 21.1,
+   "text": "We have three open questions on the attribute, mostly about timing and who signs off on the product feed."
+  },
+  {
+   "key": "me:A",
+   "start": 22.5,
+   "end": 32.1,
+   "text": "So on the category tree, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:A",
+   "start": 32.7,
+   "end": 40.4,
+   "text": "There is a dependency on the uh product feed, so the attribute work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 41.9,
+   "end": 49.6,
+   "text": "We could keep the attribute as it is for now and only change the product feed in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 51.0,
+   "end": 59.1,
+   "text": "Last time we said we would clean up the image set first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 59.6,
+   "end": 67.3,
+   "text": "We have three open questions on the category tree, mostly about timing and who signs off on the duplicate listing."
+  },
+  {
+   "key": "me:A",
+   "start": 68.0,
+   "end": 75.3,
+   "text": "We tested the duplicate listing with a small group, and the attribute results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 76.2,
+   "end": 83.5,
+   "text": "I think the product feed question is the main thing left before we can close out the duplicate listing."
+  },
+  {
+   "key": "me:A",
+   "start": 84.8,
+   "end": 92.5,
+   "text": "From what I can see, the image set is on track, and the risk is mostly in the product feed."
+  },
+  {
+   "key": "me:A",
+   "start": 93.1,
+   "end": 100.4,
+   "text": "If we wait a month on the product feed, the image set timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 101.0,
+   "end": 108.0,
+   "text": "I think uh the attribute question is the main thing left before we can close out duplicate listing."
+  },
+  {
+   "key": "me:A",
+   "start": 109.0,
+   "end": 116.3,
+   "text": "There is a dependency on the attribute, so the duplicate listing work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 117.4,
+   "end": 127.0,
+   "text": "I talked to the people who run the product feed every day, and they said the image set is the part that slows them down."
+  },
+  {
+   "key": "me:A",
+   "start": 128.4,
+   "end": 135.3,
+   "text": "The draft for the image set is in the folder, with comments from two teams on the attribute."
+  },
+  {
+   "key": "me:A",
+   "start": 136.6,
+   "end": 144.7,
+   "text": "The attribute piece is moving, and the team has a draft of the product feed changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 145.3,
+   "end": 155.7,
+   "text": "So on the product feed, we looked at the last few weeks and the you know picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 156.3,
+   "end": 163.6,
+   "text": "The vendor sent an updated proposal for the duplicate listing, and it changes the image set a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 164.7,
+   "end": 172.0,
+   "text": "The vendor sent an updated proposal for the category tree, and it changes the image set a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 173.2,
+   "end": 180.5,
+   "text": "The vendor sent an updated proposal for the category tree, and it changes the product feed a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 181.3,
+   "end": 188.3,
+   "text": "The draft for the category tree is in the folder, with comments from two teams on the attribute."
+  },
+  {
+   "key": "them:A",
+   "start": 189.5,
+   "end": 197.2,
+   "text": "We could keep the duplicate listing as it is for now and only change the attribute in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 197.9,
+   "end": 205.6,
+   "text": "There is a dependency on the category tree, so the image set work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 206.1,
+   "end": 214.1,
+   "text": "The duplicate listing piece is moving, and the team has a draft of the attribute changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 215.1,
+   "end": 224.0,
+   "text": "I would like us to agree on the scope of the attribute today, even if I mean the product feed details come later."
+  },
+  {
+   "key": "me:A",
+   "start": 225.1,
+   "end": 232.0,
+   "text": "Right, and the category tree also touches the duplicate listing, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 232.8,
+   "end": 240.2,
+   "text": "We tested the attribute with a small group, and the duplicate listing results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 241.1,
+   "end": 248.0,
+   "text": "Right, and the product feed also touches the category tree, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 248.8,
+   "end": 256.1,
+   "text": "We have three open questions on the attribute, mostly about timing and who signs off on the duplicate listing."
+  },
+  {
+   "key": "me:A",
+   "start": 256.7,
+   "end": 265.2,
+   "text": "One thing I noticed is that the image set looks different in each region, so the attribute plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 266.3,
+   "end": 273.6,
+   "text": "The draft for the category tree is in the folder, with comments from two teams on the product feed."
+  },
+  {
+   "key": "me:A",
+   "start": 275.0,
+   "end": 281.9,
+   "text": "The ask is simple: approve the duplicate listing change so the image set team can start next week."
+  },
+  {
+   "key": "them:A",
+   "start": 283.1,
+   "end": 288.5,
+   "text": "What does I mean everyone else think? I want the whole team on board."
+  },
+  {
+   "key": "me:A",
+   "start": 290.0,
+   "end": 297.7,
+   "text": "The category tree numbers came in yesterday, and I put a short summary of the attribute in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 298.7,
+   "end": 305.6,
+   "text": "I think the image set question is the main thing left before we can close out the attribute."
+  },
+  {
+   "key": "me:A",
+   "start": 306.3,
+   "end": 315.9,
+   "text": "So on the duplicate listing, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 317.2,
+   "end": 325.6,
+   "text": "The duplicate listing piece is moving, and the team has a draft of the image set changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 326.1,
+   "end": 333.0,
+   "text": "If we wait a month on the image set, the attribute timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 333.4,
+   "end": 341.1,
+   "text": "We tested the image set with a small group, and the duplicate listing results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 341.6,
+   "end": 350.1,
+   "text": "The feedback on the product feed has been mixed, some people like it and some say it adds steps to the attribute."
+  },
+  {
+   "key": "me:A",
+   "start": 350.5,
+   "end": 358.2,
+   "text": "We tested the category tree with a small group, and the duplicate listing results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 359.2,
+   "end": 367.7,
+   "text": "I would like us to agree on the scope of the product feed today, even if the image set details come later."
+  },
+  {
+   "key": "them:A",
+   "start": 369.0,
+   "end": 377.1,
+   "text": "We have three open questions on the duplicate listing, mostly I mean about timing and who signs off on the attribute."
+  },
+  {
+   "key": "me:A",
+   "start": 377.4,
+   "end": 384.7,
+   "text": "The vendor sent an updated proposal for the duplicate listing, and it changes the product feed a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 385.2,
+   "end": 393.3,
+   "text": "Last time we said we would clean up the product feed first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 394.2,
+   "end": 402.3,
+   "text": "The image set numbers came in yesterday, and I put a short summary of the product feed in the shared folder."
+  },
+  {
+   "key": "them:A",
+   "start": 403.1,
+   "end": 410.4,
+   "text": "There is a dependency on the so uh the product feed work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 411.7,
+   "end": 419.0,
+   "text": "If we wait a month on the product feed, the category tree timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 419.7,
+   "end": 427.1,
+   "text": "I think the product feed question is the main thing left before we can close out the image set."
+  },
+  {
+   "key": "me:A",
+   "start": 428.0,
+   "end": 434.9,
+   "text": "The draft for the attribute is in the folder, with comments from two teams on the product feed."
+  },
+  {
+   "key": "me:A",
+   "start": 435.8,
+   "end": 443.4,
+   "text": "From what I can see, the product feed is on track, and the risk is mostly in the image set."
+  },
+  {
+   "key": "them:A",
+   "start": 444.9,
+   "end": 451.8,
+   "text": "The draft for the category tree is in the folder, with comments from two teams on the attribute."
+  },
+  {
+   "key": "me:A",
+   "start": 452.6,
+   "end": 460.3,
+   "text": "There is a dependency on the duplicate listing, so the image set work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 461.3,
+   "end": 469.0,
+   "text": "We could keep the attribute as it is for now and only change the product feed in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 469.6,
+   "end": 477.3,
+   "text": "We could keep the category tree as it for now and only change the duplicate listing in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 478.2,
+   "end": 485.9,
+   "text": "We tested the image set with a small group, and the category tree results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 486.7,
+   "end": 494.1,
+   "text": "The vendor sent an updated proposal for the category tree, and it changes the duplicate listing a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 494.5,
+   "end": 503.3,
+   "text": "One thing I noticed is that the category tree looks different in each region, so the duplicate listing plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 503.9,
+   "end": 511.6,
+   "text": "There is a dependency on the duplicate listing, so the category tree work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 512.1,
+   "end": 521.7,
+   "text": "So on the product feed, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 522.2,
+   "end": 529.8,
+   "text": "We could keep the duplicate listing as it is for now and only change the attribute in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 531.3,
+   "end": 538.2,
+   "text": "Right, and the product feed also touches the duplicate listing, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 539.3,
+   "end": 548.1,
+   "text": "Last time we said we would clean up the image set first, and that work I mean is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 549.5,
+   "end": 556.1,
+   "text": "Right, and the duplicate listing also touches the attribute, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 557.5,
+   "end": 564.8,
+   "text": "We have three open questions on the attribute, mostly about timing and who signs off on the duplicate listing."
+  },
+  {
+   "key": "me:A",
+   "start": 565.6,
+   "end": 572.9,
+   "text": "We want to start the product feed on the first of the month. Can we agree on that today?"
+  },
+  {
+   "key": "them:A",
+   "start": 573.7,
+   "end": 578.7,
+   "text": "Is there an earlier project we can point to that went this way?"
+  },
+  {
+   "key": "me:A",
+   "start": 580.2,
+   "end": 587.1,
+   "text": "The vendor sent an updated proposal for the attribute, and it changes the product feed a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 587.5,
+   "end": 595.2,
+   "text": "We tested the product feed with a small group, and the image set results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 595.7,
+   "end": 603.7,
+   "text": "The attribute numbers came in yesterday, and I put a short summary of the you know category in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 604.1,
+   "end": 611.4,
+   "text": "We tested the attribute with a small group, and the product feed results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 612.3,
+   "end": 621.1,
+   "text": "The feedback on the image set has been mixed, some people like it and some say it adds steps to the category tree."
+  },
+  {
+   "key": "me:A",
+   "start": 621.7,
+   "end": 630.5,
+   "text": "The feedback on the duplicate listing has been mixed, some people like it and some say it adds steps to the category tree."
+  },
+  {
+   "key": "them:A",
+   "start": 631.4,
+   "end": 639.1,
+   "text": "We have three open questions on the uh tree, mostly about timing and who signs off on the product feed."
+  },
+  {
+   "key": "me:A",
+   "start": 639.7,
+   "end": 646.3,
+   "text": "Right, and the attribute also touches the product feed, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 646.6,
+   "end": 655.8,
+   "text": "So on the attribute, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "me:A",
+   "start": 656.7,
+   "end": 664.0,
+   "text": "The vendor sent an updated proposal for the duplicate listing, and it changes the category tree a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 665.3,
+   "end": 672.2,
+   "text": "The ask is simple: approve the duplicate listing change so the image set team can start next week."
+  },
+  {
+   "key": "them:A",
+   "start": 673.0,
+   "end": 678.4,
+   "text": "How much extra work does this put on the team? They are stretched already."
+  },
+  {
+   "key": "me:A",
+   "start": 678.9,
+   "end": 687.4,
+   "text": "The product feed piece is moving, and the team has a draft of the category tree changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 687.7,
+   "end": 696.6,
+   "text": "The feedback on the image set has been mixed, some people like it and some say it adds steps to the product feed."
+  },
+  {
+   "key": "them:A",
+   "start": 697.0,
+   "end": 706.2,
+   "text": "The product feed I mean piece is moving, and the team has a draft of the image set changes ready for review this week."
+  },
+  {
+   "key": "me:A",
+   "start": 707.6,
+   "end": 715.3,
+   "text": "We could keep the attribute as it is for now and only change the category tree in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 716.7,
+   "end": 726.3,
+   "text": "I talked to the people who run the product feed every day, and they said the category tree is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 727.0,
+   "end": 735.5,
+   "text": "There is a dependency on the duplicate listing, so the product feed work cannot really I mean start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 736.6,
+   "end": 743.9,
+   "text": "The vendor sent an updated proposal for the image set, and it changes the product feed a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 744.5,
+   "end": 752.6,
+   "text": "The product feed numbers came in yesterday, and I put a short summary of the duplicate listing in the shared folder."
+  },
+  {
+   "key": "me:A",
+   "start": 753.0,
+   "end": 760.0,
+   "text": "I think the attribute question is the main thing left before we can close out the product feed."
+  },
+  {
+   "key": "them:A",
+   "start": 761.4,
+   "end": 769.5,
+   "text": "We could keep the image set as it is for now and only change the category tree in the first phase."
+  },
+  {
+   "key": "me:A",
+   "start": 770.3,
+   "end": 773.8,
+   "text": "Good, let us pick this up next week. Thanks."
+  }
+ ],
+ "beats": [
+  {
+   "line": 33,
+   "person": "Sam Ortiz",
+   "dimension": "authority",
+   "value": "group_agreement"
+  },
+  {
+   "line": 67,
+   "person": "Sam Ortiz",
+   "dimension": "evidence",
+   "value": "earlier_case"
+  },
+  {
+   "line": 79,
+   "person": "Sam Ortiz",
+   "dimension": "drivers",
+   "value": "team_load"
+  }
+ ]
+}

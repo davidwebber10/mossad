@@ -1,0 +1,569 @@
+{
+ "id": "gold-04-3",
+ "person": "Morgan Diaz",
+ "title": "Vendor security review",
+ "tags": [
+  "Security",
+  "Vendors"
+ ],
+ "setting": "group",
+ "start": "2026-08-23T19:00:00Z",
+ "end": "2026-08-23T19:13:41Z",
+ "speakers": {
+  "me:A": "Dana Lee",
+  "them:A": "Morgan Diaz",
+  "them:B": "Ben Cole",
+  "them:C": "Ana Lopez"
+ },
+ "noise": false,
+ "utterances": [
+  {
+   "key": "me:A",
+   "start": 0.0,
+   "end": 4.6,
+   "text": "Thanks for making the time. Today is about the vendor security review."
+  },
+  {
+   "key": "me:A",
+   "start": 5.7,
+   "end": 13.4,
+   "text": "We have three open questions on the data retention, mostly about timing and who signs off on the access review."
+  },
+  {
+   "key": "me:A",
+   "start": 14.8,
+   "end": 23.6,
+   "text": "One thing I noticed is that the pen test looks different in each region, so the access review plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 24.1,
+   "end": 31.0,
+   "text": "The vendor sent an updated proposal for the questionnaire, and it changes the pen test a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 31.5,
+   "end": 39.2,
+   "text": "From what I can see, the pen test is on track, and the risk is mostly in the audit log."
+  },
+  {
+   "key": "them:C",
+   "start": 40.0,
+   "end": 47.3,
+   "text": "I think the access review question is the main thing left before we can close out the audit log."
+  },
+  {
+   "key": "me:A",
+   "start": 48.4,
+   "end": 57.6,
+   "text": "I talked to the people who run the pen test every day, and they said the questionnaire is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 58.3,
+   "end": 66.0,
+   "text": "From what I can see, the pen test is on track, and the risk is mostly in the audit log."
+  },
+  {
+   "key": "them:C",
+   "start": 66.4,
+   "end": 74.1,
+   "text": "We tested the pen test with a small group, and the access review results were close to what we hoped."
+  },
+  {
+   "key": "them:B",
+   "start": 74.7,
+   "end": 82.8,
+   "text": "Last time we said we would clean up the pen test first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 84.1,
+   "end": 93.7,
+   "text": "I talked to the people who run the pen test every day, and they said the data retention is the part that slows them down."
+  },
+  {
+   "key": "them:A",
+   "start": 94.7,
+   "end": 101.3,
+   "text": "Right, and the audit log also touches the questionnaire, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 101.7,
+   "end": 109.4,
+   "text": "The pen test numbers came in yesterday, and I put a short summary of the questionnaire in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 110.8,
+   "end": 118.5,
+   "text": "We tested the pen test with a small group, and the access review results were close to what we hoped."
+  },
+  {
+   "key": "me:A",
+   "start": 119.1,
+   "end": 127.6,
+   "text": "My recommendation is that we go with the second option for the data retention, it saves about 15% on the access review."
+  },
+  {
+   "key": "them:A",
+   "start": 128.3,
+   "end": 132.1,
+   "text": "Zoom out for me. What is the overall picture here?"
+  },
+  {
+   "key": "them:C",
+   "start": 133.5,
+   "end": 140.5,
+   "text": "The vendor sent an updated proposal for the questionnaire, and it changes the pen test a little bit."
+  },
+  {
+   "key": "them:B",
+   "start": 141.8,
+   "end": 151.4,
+   "text": "So on the pen test, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 152.5,
+   "end": 160.6,
+   "text": "Last time we said we would clean up the pen test first, and that work is about two thirds done now."
+  },
+  {
+   "key": "them:A",
+   "start": 161.6,
+   "end": 170.8,
+   "text": "So on the questionnaire, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 172.1,
+   "end": 181.7,
+   "text": "I talked to the people who run the access review every day, and they said the audit log is the part that slows them down."
+  },
+  {
+   "key": "them:C",
+   "start": 182.9,
+   "end": 191.4,
+   "text": "The audit log piece is moving, and the team has a draft of the pen test changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 192.6,
+   "end": 199.6,
+   "text": "Right, and the access review also touches the data retention, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 200.2,
+   "end": 209.5,
+   "text": "I talked to the people who run the questionnaire every day, and they said the pen test is the part that slows them down."
+  },
+  {
+   "key": "them:B",
+   "start": 210.1,
+   "end": 217.8,
+   "text": "From what I can see, the data retention is on track, and the risk is mostly in the access review."
+  },
+  {
+   "key": "them:B",
+   "start": 218.4,
+   "end": 225.7,
+   "text": "The vendor sent an updated proposal for the pen test, and it changes the data retention a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 226.7,
+   "end": 235.5,
+   "text": "One thing I noticed is that the data retention looks different in each region, so the pen test plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 236.4,
+   "end": 243.7,
+   "text": "If we wait a month on the data retention, the access review timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 244.2,
+   "end": 251.9,
+   "text": "We could keep the questionnaire as it is for now and only change the access review in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 252.9,
+   "end": 260.6,
+   "text": "We could keep the questionnaire as it is for now and only change the pen test in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 261.8,
+   "end": 269.5,
+   "text": "We have three open questions on the data retention, mostly about timing and who signs off on the pen test."
+  },
+  {
+   "key": "me:A",
+   "start": 270.7,
+   "end": 278.8,
+   "text": "The data retention numbers came in yesterday, and I put a short summary of the pen test in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 280.2,
+   "end": 287.5,
+   "text": "We have three open questions on the questionnaire, mostly about timing and who signs off on the access review."
+  },
+  {
+   "key": "them:C",
+   "start": 288.9,
+   "end": 295.5,
+   "text": "Right, and the pen test also touches the questionnaire, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:A",
+   "start": 296.7,
+   "end": 304.0,
+   "text": "We tested the questionnaire with a small group, and the access review results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 304.8,
+   "end": 314.4,
+   "text": "I talked to the people who run the pen test every day, and they said the data retention is the part that slows them down."
+  },
+  {
+   "key": "them:B",
+   "start": 315.5,
+   "end": 322.8,
+   "text": "The draft for the pen test is in the folder, with comments from two teams on the audit log."
+  },
+  {
+   "key": "them:B",
+   "start": 323.8,
+   "end": 331.1,
+   "text": "If we wait a month on the audit log, the pen test timeline slips by about the same amount."
+  },
+  {
+   "key": "them:A",
+   "start": 332.2,
+   "end": 338.8,
+   "text": "Right, and the audit log also touches the questionnaire, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:B",
+   "start": 339.2,
+   "end": 346.5,
+   "text": "From what I can see, the questionnaire is on track, and the risk is mostly in the pen test."
+  },
+  {
+   "key": "them:C",
+   "start": 347.5,
+   "end": 354.8,
+   "text": "We tested the audit log with a small group, and the questionnaire results were close to what we hoped."
+  },
+  {
+   "key": "them:A",
+   "start": 356.2,
+   "end": 363.5,
+   "text": "The draft for the audit log is in the folder, with comments from two teams on the access review."
+  },
+  {
+   "key": "them:C",
+   "start": 364.2,
+   "end": 371.5,
+   "text": "If we wait a month on the data retention, the access review timeline slips by about the same amount."
+  },
+  {
+   "key": "me:A",
+   "start": 372.1,
+   "end": 379.0,
+   "text": "I think the access review question is the main thing left before we can close out the questionnaire."
+  },
+  {
+   "key": "them:A",
+   "start": 379.4,
+   "end": 387.8,
+   "text": "I would like us to agree on the scope of the data retention today, even if the access review details come later."
+  },
+  {
+   "key": "them:B",
+   "start": 388.4,
+   "end": 396.1,
+   "text": "We could keep the audit log as it is for now and only change the questionnaire in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 396.9,
+   "end": 404.6,
+   "text": "The access review numbers came in yesterday, and I put a short summary of the questionnaire in the shared folder."
+  },
+  {
+   "key": "them:B",
+   "start": 405.2,
+   "end": 414.1,
+   "text": "One thing I noticed is that the data retention looks different in each region, so the audit log plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 415.0,
+   "end": 424.2,
+   "text": "I talked to the people who run the questionnaire every day, and they said the access review is the part that slows them down."
+  },
+  {
+   "key": "them:B",
+   "start": 425.2,
+   "end": 434.1,
+   "text": "The feedback on the access review has been mixed, some people like it and some say it adds steps to the data retention."
+  },
+  {
+   "key": "me:A",
+   "start": 435.5,
+   "end": 443.2,
+   "text": "We have three open questions on the pen test, mostly about timing and who signs off on the access review."
+  },
+  {
+   "key": "them:A",
+   "start": 444.2,
+   "end": 453.8,
+   "text": "So on the data retention, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:B",
+   "start": 454.4,
+   "end": 461.3,
+   "text": "The vendor sent an updated proposal for the questionnaire, and it changes the audit log a little bit."
+  },
+  {
+   "key": "them:C",
+   "start": 462.3,
+   "end": 469.2,
+   "text": "Right, and the data retention also touches the audit log, which is why I wanted everyone here today."
+  },
+  {
+   "key": "me:A",
+   "start": 470.4,
+   "end": 477.7,
+   "text": "From what I can see, the audit log is on track, and the risk is mostly in the questionnaire."
+  },
+  {
+   "key": "them:B",
+   "start": 478.8,
+   "end": 486.5,
+   "text": "We could keep the pen test as it is for now and only change the questionnaire in the first phase."
+  },
+  {
+   "key": "them:A",
+   "start": 487.2,
+   "end": 494.5,
+   "text": "From what I can see, the questionnaire is on track, and the risk is mostly in the audit log."
+  },
+  {
+   "key": "me:A",
+   "start": 495.9,
+   "end": 505.6,
+   "text": "I talked to the people who run the access review every day, and they said the pen test is the part that slows them down."
+  },
+  {
+   "key": "them:B",
+   "start": 506.1,
+   "end": 515.0,
+   "text": "The feedback on the pen test has been mixed, some people like it and some say it adds steps to the data retention."
+  },
+  {
+   "key": "me:A",
+   "start": 516.4,
+   "end": 523.3,
+   "text": "Right, and the audit log also touches the pen test, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 523.6,
+   "end": 532.5,
+   "text": "One thing I noticed is that the audit log looks different in each region, so the data retention plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 533.8,
+   "end": 540.3,
+   "text": "The ask is simple: approve the audit log change so the questionnaire team can start next week."
+  },
+  {
+   "key": "them:A",
+   "start": 541.7,
+   "end": 544.4,
+   "text": "Can we cut that timeline in half?"
+  },
+  {
+   "key": "me:A",
+   "start": 545.3,
+   "end": 553.8,
+   "text": "The audit log piece is moving, and the team has a draft of the pen test changes ready for review this week."
+  },
+  {
+   "key": "them:C",
+   "start": 555.1,
+   "end": 564.7,
+   "text": "So on the pen test, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 565.2,
+   "end": 574.1,
+   "text": "The feedback on the pen test has been mixed, some people like it and some say it adds steps to the audit log."
+  },
+  {
+   "key": "them:C",
+   "start": 574.9,
+   "end": 582.2,
+   "text": "From what I can see, the questionnaire is on track, and the risk is mostly in the audit log."
+  },
+  {
+   "key": "them:A",
+   "start": 583.3,
+   "end": 590.9,
+   "text": "We have three open questions on the data retention, mostly about timing and who signs off on the audit log."
+  },
+  {
+   "key": "me:A",
+   "start": 591.6,
+   "end": 598.9,
+   "text": "There is a dependency on the questionnaire, so the access review work cannot really start until that is settled."
+  },
+  {
+   "key": "them:C",
+   "start": 599.6,
+   "end": 607.6,
+   "text": "Last time we said we would clean up the data retention first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 608.4,
+   "end": 616.9,
+   "text": "My recommendation is that we go with the second option for the pen test, it saves about 15% on the access review."
+  },
+  {
+   "key": "them:A",
+   "start": 618.3,
+   "end": 623.7,
+   "text": "Let me think about it over the weekend and I will tell you Monday."
+  },
+  {
+   "key": "them:C",
+   "start": 625.1,
+   "end": 632.1,
+   "text": "Right, and the data retention also touches the access review, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 633.2,
+   "end": 641.7,
+   "text": "The access review piece is moving, and the team has a draft of the data retention changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 642.1,
+   "end": 649.5,
+   "text": "We tested the data retention with a small group, and the questionnaire results were close to what we hoped."
+  },
+  {
+   "key": "them:C",
+   "start": 650.8,
+   "end": 658.5,
+   "text": "From what I can see, the pen test is on track, and the risk is mostly in the data retention."
+  },
+  {
+   "key": "them:C",
+   "start": 659.1,
+   "end": 667.1,
+   "text": "Last time we said we would clean up the pen test first, and that work is about two thirds done now."
+  },
+  {
+   "key": "me:A",
+   "start": 668.2,
+   "end": 676.7,
+   "text": "The access review piece is moving, and the team has a draft of the data retention changes ready for review this week."
+  },
+  {
+   "key": "them:A",
+   "start": 677.6,
+   "end": 684.9,
+   "text": "The vendor sent an updated proposal for the access review, and it changes the data retention a little bit."
+  },
+  {
+   "key": "me:A",
+   "start": 685.7,
+   "end": 692.6,
+   "text": "Right, and the audit log also touches the data retention, which is why I wanted everyone here today."
+  },
+  {
+   "key": "them:C",
+   "start": 693.1,
+   "end": 702.0,
+   "text": "One thing I noticed is that the access review looks different in each region, so the audit log plan may need two versions."
+  },
+  {
+   "key": "me:A",
+   "start": 703.3,
+   "end": 711.7,
+   "text": "One thing I noticed is that the questionnaire looks different in each region, so the data retention plan may need two versions."
+  },
+  {
+   "key": "them:A",
+   "start": 712.6,
+   "end": 720.2,
+   "text": "From what I can see, the audit log is on track, and the risk is mostly in the data retention."
+  },
+  {
+   "key": "them:B",
+   "start": 721.2,
+   "end": 730.9,
+   "text": "So on the audit log, we looked at the last few weeks and the picture is mostly what we expected, with a couple of surprises."
+  },
+  {
+   "key": "them:C",
+   "start": 731.9,
+   "end": 739.6,
+   "text": "We could keep the questionnaire as it is for now and only change the data retention in the first phase."
+  },
+  {
+   "key": "them:B",
+   "start": 740.8,
+   "end": 748.5,
+   "text": "There is a dependency on the data retention, so the pen test work cannot really start until that is settled."
+  },
+  {
+   "key": "them:A",
+   "start": 748.8,
+   "end": 756.2,
+   "text": "There is a dependency on the questionnaire, so the data retention work cannot really start until that is settled."
+  },
+  {
+   "key": "me:A",
+   "start": 757.3,
+   "end": 760.4,
+   "text": "Okay, I think that covers it. Thanks, everyone."
+  }
+ ],
+ "beats": [
+  {
+   "line": 15,
+   "person": "Morgan Diaz",
+   "dimension": "detail",
+   "value": "big_picture"
+  },
+  {
+   "line": 62,
+   "person": "Morgan Diaz",
+   "dimension": "drivers",
+   "value": "time"
+  },
+  {
+   "line": 71,
+   "person": "Morgan Diaz",
+   "dimension": "decision",
+   "value": "asks_for_time"
+  }
+ ]
+}
