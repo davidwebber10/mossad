@@ -158,6 +158,16 @@ public enum PeopleMigration {
 
     // MARK: Reading
 
+    /// No person in the store while the samples still name their people: the people file is gone, or it reads and
+    /// holds nobody. That is not "no people yet". A new file would give each person a new id, and each old sample
+    /// would stay next to a new one. Nil when there is nothing wrong.
+    static func orphanedSamples(people: [Person], samples: [VoiceSample]) -> String? {
+        let named = Set(samples.compactMap(\.personID)).count
+        guard people.isEmpty, named > 0 else { return nil }
+        return "people.json has no people, and samples.json names \(named) \(named == 1 ? "person" : "people"); a new file would give each person a new id. "
+            + "Put people.json back, or run revert to start again"
+    }
+
     /// Everything the plan is made from. It only reads: a file that does not decode stays where it is and becomes
     /// an error of the plan.
     public static func read(paths: Paths, ownerName: String, notDuplicates: [String], now: Date = Date()) -> Input {
@@ -198,6 +208,9 @@ public enum PeopleMigration {
             } else {
                 input.errors.append("samples.json cannot be read")
             }
+        }
+        if let error = orphanedSamples(people: input.people, samples: input.samples), !input.errors.contains(where: { $0.hasPrefix("people.json") }) {
+            input.errors.append(error)
         }
         if let scan = try? ProcessingQueue(paths: paths).scan() {
             input.records = scan.records.sorted { $0.start < $1.start }
@@ -347,6 +360,13 @@ public enum PeopleMigration {
             p.forms.removeAll { $0.kind == .seen }
             return p
         })
+        // The names a person has now. A name that a person had before can be another person's name: the owner named
+        // a voice wrongly and then corrected it. An address next to such a name is not kept as that person's.
+        let currentNames = PersonResolver(people: people.map { p in
+            var p = p
+            p.forms.removeAll { $0.kind == .seen || $0.kind == .former }
+            return p
+        })
         let display = Dictionary(people.map { ($0.id, $0.displayName) }, uniquingKeysWith: { a, _ in a })
         let strong: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .externalID, .nameForm, .provedOrder, .sameName]
         let byNameOnly: Set<Resolution.Rule> = [.ownerLink, .nameForm, .provedOrder, .sameName]
@@ -421,7 +441,9 @@ public enum PeopleMigration {
                     if PersonNames.key(plain) != PersonNames.nameKey(display[id] ?? "") { seenForms.append((id, plain)) }
                     // An address is kept only from a pair of the calendar whose name is the bare name: the address
                     // next to "Sam Carter (Notetaker)" serves many people.
+                    let current = currentNames.resolve(PersonObservation(name: plain, source: .calendar), in: nil)
                     if r.invitees != nil, plain == written.trimmingCharacters(in: .whitespacesAndNewlines), let email = o.email,
+                       current.person == id, current.rule.map(byNameOnly.contains) == true,
                        resolver.resolve(PersonObservation(email: email)) == .unknown { seenEmails.append((id, email)) }
                 }
                 if !oldRule(written, id) { links[written] = (id, named ? byName.rule ?? rule : rule, (links[written]?.meetings ?? 0) + 1) }
@@ -644,6 +666,11 @@ public enum PeopleMigration {
         // The samples have no ids that another file holds: a damaged file is set aside and made again below.
         if let error = samples.loadError, (error as? UnreadableFile)?.kept == nil {
             Log.error("People: samples.json cannot be read, so the people store waits")
+            return nil
+        }
+        // The people file is gone and the samples still name their people: nothing is made in its place.
+        if let error = orphanedSamples(people: people.people, samples: samples.samples) {
+            Log.error("People: \(error). The people store is off and Mossad works as before it")
             return nil
         }
         var input = read(paths: paths, ownerName: ownerName, notDuplicates: notDuplicates, now: now)

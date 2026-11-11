@@ -506,6 +506,74 @@ final class PeopleMigrationTests: XCTestCase {
         XCTAssertEqual(plan.samples.filter { $0.personID == owner.id }.map(\.callID), ["20261105-100000"], "the owner's sample is found under the old name")
         XCTAssertEqual([plan.report.totals.speakerNames, plan.report.totals.speakerNamesResolved], [3, 2])
     }
+
+    // MARK: Before person ids are written anywhere
+
+    /// A people file that is gone while the samples still name their people is not "no people yet": a new file
+    /// would give each person a new id.
+    func testAPeopleFileThatIsGoneWhileTheSamplesNameTheirPeopleGivesNoNewIds() throws {
+        let file = paths.people.appendingPathComponent(PeopleStore.fileName), samplesFile = paths.voices.appendingPathComponent(VoiceSampleStore.fileName)
+        let first = try XCTUnwrap(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now))
+        let ids = Set(first.people.people.map(\.id)), good = try Data(contentsOf: file), samplesBefore = try Data(contentsOf: samplesFile)
+        try FileManager.default.removeItem(at: file)
+
+        for launch in 1...2 {
+            XCTAssertNil(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [],
+                                                     now: now.addingTimeInterval(Double(launch) * 86_400)), "launch \(launch)")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "no new people file, launch \(launch)")
+            XCTAssertEqual(try Data(contentsOf: samplesFile), samplesBefore, "launch \(launch)")
+        }
+        let dry = run("dry-run", out: out)
+        XCTAssertEqual(dry.status, 1)
+        XCTAssertTrue(dry.text.contains("ERRORS: people.json has no people, and samples.json names"), dry.text)
+        XCTAssertEqual(run("apply").status, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+
+        // A file that reads and holds nobody is the same case.
+        let empty = Data(#"{"version":1}"#.utf8)
+        try empty.write(to: file)
+        XCTAssertNil(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now.addingTimeInterval(3 * 86_400)))
+        XCTAssertEqual(try Data(contentsOf: file), empty)
+        XCTAssertEqual(try Data(contentsOf: samplesFile), samplesBefore)
+
+        // The file is put back: the same ids.
+        try good.write(to: file)
+        let back = try XCTUnwrap(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now.addingTimeInterval(4 * 86_400)))
+        XCTAssertEqual(Set(back.people.people.map(\.id)), ids)
+
+        // The owner's own choice to start again still works.
+        try FileManager.default.removeItem(at: file)
+        XCTAssertEqual(run("revert").status, 0)
+        XCTAssertNotNil(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now.addingTimeInterval(5 * 86_400)))
+    }
+
+    /// A voice was named "Dana Lee" by mistake and then given its right name. The real Dana Lee in an invite,
+    /// with an address that nobody has, is not that person: the address must not become theirs.
+    func testAFormerNameDoesNotPutAnotherPersonsAddressOnAPerson() throws {
+        var input = PeopleMigration.read(paths: paths, ownerName: "Avery Webb", notDuplicates: notDuplicates, now: now)
+        input.people = PeopleMigration.plan(input).people
+        let i = try XCTUnwrap(input.people.firstIndex { $0.displayName == "Dana Lee" }), p = try XCTUnwrap(input.profiles.firstIndex { $0.name == "Dana Lee" })
+        input.people[i].rename(to: "Jordan Blake", source: .owner, at: now)
+        input.profiles[p].name = "Jordan Blake"
+        var c = CallRecord(id: "20261109-100000", platform: .meet, bundleID: "b", start: t0.addingTimeInterval(345_600), end: t0.addingTimeInterval(347_400), status: .written)
+        c.attendees = ["Dana Lee"]
+        c.invitees = [Invitee(name: "Dana Lee", email: "dana.lee@elsewhere.example")]
+        input.records.append(c)
+
+        let jordan = try XCTUnwrap(PeopleMigration.plan(input).people.first { $0.displayName == "Jordan Blake" })
+        XCTAssertEqual(jordan.id, input.people[i].id)
+        XCTAssertEqual(jordan.emails.map(\.address), [], "the address of the invite is not this person's")
+        XCTAssertTrue(jordan.forms.contains { $0.text == "Dana Lee" && $0.kind == .former })
+
+        // A name that is the person's display name still keeps the address of its pair.
+        var d = c
+        d.id = "20261110-100000"
+        d.attendees = ["Blake, Jordan"]
+        d.invitees = [Invitee(name: "Jordan Blake", email: "jordan.blake@elsewhere.example")]
+        input.records.append(d)
+        let again = try XCTUnwrap(PeopleMigration.plan(input).people.first { $0.displayName == "Jordan Blake" })
+        XCTAssertEqual(again.emails.map(\.address), ["jordan.blake@elsewhere.example"])
+    }
 }
 
 /// An older build reads the voice library as it always did, after this build wrote to it.
