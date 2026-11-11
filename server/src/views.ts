@@ -94,13 +94,15 @@ export async function recordView(env: Env, id: string, share: Share, request: Re
 const columns = `s.id, s.title, s.created, s.expires, s.audio, s.chat, s.views, s.questions,
   (SELECT count(*) FROM share_viewers v WHERE v.share_id = s.id) AS viewers,
   s.views - COALESCE((SELECT sum(d.views) FROM share_days d WHERE d.share_id = s.id), 0) AS earlier, s.first_view, s.last_view,
-  s.pin_hash IS NOT NULL AS pin, s.pin_set, s.gone, COALESCE(t.fails, 0) AS wrong, COALESCE(t.locked_until, 0) AS locked_until, COALESCE(t.updated, 0) AS tried`;
-const from = `FROM shares s LEFT JOIN share_pin_tries t ON t.share_id = s.id AND t.client = ''`;
+  s.pin_hash IS NOT NULL AS pin, s.pin_set, s.gone, COALESCE(t.fails, 0) AS wrong, COALESCE(t.locked_until, 0) AS locked_until, COALESCE(t.updated, 0) AS tried,
+  COALESCE(l.fails, 0) AS total`;
+const from = `FROM shares s LEFT JOIN share_pin_tries t ON t.share_id = s.id AND t.client = ''
+  LEFT JOIN share_pin_tries l ON l.share_id = s.id AND l.client = '*'`;
 
 interface Row {
   id: string; title: string; created: string; expires: string | null; audio: number; chat: number; views: number; questions: number; viewers: number;
   earlier: number; first_view: string | null; last_view: string | null; pin: number; pin_set: number | null; gone: number; wrong: number;
-  locked_until: number; tried: number;
+  locked_until: number; tried: number; total: number;
 }
 
 /** A share as the owner's app lists it. The first eight fields are as they were before the views. */
@@ -110,7 +112,7 @@ function listed(r: Row, now: number) {
     id: r.id, title: r.title, created: r.created, expires: r.expires, audio: r.audio, chat: r.chat, views: r.views, questions: r.questions,
     viewers: r.viewers, earlierViews: Math.max(0, r.earlier), firstView: r.first_view, lastView: r.last_view, pin: r.pin === 1,
     pinSet: r.pin === 1 ? r.pin_set : null, pinLocked: locked, lockedAt: locked ? new Date(r.tried).toISOString() : null,
-    wrongPins: r.pin === 1 ? shareFails(r.wrong, r.tried, locked, now) : 0, gone: r.gone === 1,
+    wrongPins: r.pin === 1 ? shareFails(r.wrong, r.tried, locked, now) : 0, wrongPinsTotal: r.pin === 1 ? r.total : 0, gone: r.gone === 1,
   };
 }
 

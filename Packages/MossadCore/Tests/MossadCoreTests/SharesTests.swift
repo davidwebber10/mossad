@@ -378,4 +378,74 @@ final class SharesTests: XCTestCase {
         XCTAssertEqual(s.pinSet, 1_800_000_000_123)
         XCTAssertEqual(s.lockedAt, try Date("2026-11-09T10:00:00Z", strategy: .iso8601))
     }
+
+    // MARK: Second review fixes
+
+    func testWhatAShareThatStopsPartWayLeaves() {
+        // Nothing was sent: nothing to undo.
+        XCTAssertEqual(ShareAttempt.outcome(isNew: true, started: false, cancelled: true), .nothing)
+        XCTAssertEqual(ShareAttempt.outcome(isNew: false, started: false, cancelled: false), .nothing)
+        // A new link goes off the server again. A cancelled request may still land, so its delete waits.
+        XCTAssertEqual(ShareAttempt.outcome(isNew: true, started: true, cancelled: true), .abandon(after: ShareAttempt.inFlightDelay))
+        XCTAssertEqual(ShareAttempt.outcome(isNew: true, started: true, cancelled: false), .abandon(after: 0))
+        // An existing link keeps the larger set once the first request started.
+        XCTAssertEqual(ShareAttempt.outcome(isNew: false, started: true, cancelled: true), .keep)
+        XCTAssertEqual(ShareAttempt.outcome(isNew: false, started: true, cancelled: false), .keep)
+        XCTAssertGreaterThanOrEqual(ShareAttempt.inFlightDelay, 10)
+    }
+
+    func testAnExistingLinkThatStopsPartWayKeepsTheLargerSet() {
+        var old = link("a", days: 30, expires: 3 * 86_400, pin: "4821")
+        old.options = ShareOptions(summary: true, transcript: false, recording: false, days: 30)
+        var tried = old
+        tried.options = ShareOptions(summary: false, transcript: true, recording: true, days: 7)
+        tried.expires = now.addingTimeInterval(7 * 86_400)
+        let kept = ShareAttempt.kept(old: old, attempted: tried)
+        XCTAssertEqual(kept.options.summary, true)
+        XCTAssertEqual(kept.options.transcript, true)
+        XCTAssertEqual(kept.options.recording, true)
+        XCTAssertEqual(kept.expires, now.addingTimeInterval(7 * 86_400), "the later end")
+        XCTAssertEqual(kept.options.days, 7)
+        XCTAssertEqual(kept.pin, "4821")
+        // Never expiring is the latest end.
+        var never = tried
+        never.expires = nil
+        never.options.days = nil
+        XCTAssertNil(ShareAttempt.kept(old: old, attempted: never).expires)
+        XCTAssertNil(ShareAttempt.kept(old: never, attempted: old).expires)
+    }
+
+    func testTheSheetShowsAPINOnlyWhenTheServerConfirmsIt() {
+        var a = link("a", pin: "4821")
+        a.pinSet = 1_000
+        var r = remote(a, pin: true)
+        r.pinSet = 1_000
+        XCTAssertEqual(SharePINCheck.state(link: a, remote: nil, answered: false), .checking)
+        XCTAssertEqual(SharePINCheck.state(link: a, remote: r, answered: true), .confirmed("4821"))
+        XCTAssertEqual(SharePINCheck.state(link: a, remote: nil, answered: true), .unanswered)
+        r.pinSet = 2_000
+        XCTAssertEqual(SharePINCheck.state(link: a, remote: r, answered: true), .changed)
+        r.pinLocked = true
+        XCTAssertEqual(SharePINCheck.state(link: a, remote: r, answered: true), .locked)
+        XCTAssertEqual(SharePINCheck.state(link: a, remote: remote(a, pin: false), answered: true), .none)
+        // A PIN that this Mac does not hold, or holds with no time, is not confirmed.
+        XCTAssertEqual(SharePINCheck.state(link: link("a"), remote: remote(a, pin: true), answered: true), .changed)
+        var untimed = a
+        untimed.pinSet = nil
+        r = remote(a, pin: true)
+        r.pinSet = 1_000
+        XCTAssertEqual(SharePINCheck.state(link: untimed, remote: r, answered: true), .changed)
+        XCTAssertEqual(SharePINCheck.state(link: link("a"), remote: nil, answered: false), .none)
+        // The answer of the PIN call in this same Share confirms it.
+        XCTAssertEqual(SharePINCheck.state(link: a, remote: nil, answered: false, justSet: true), .confirmed("4821"))
+    }
+
+    func testTheListReadsTheLifetimeCountOfWrongPINs() async throws {
+        StubURLProtocol.handler = { _ in (200, json(["shares": [[
+            "id": "abc", "title": "T", "created": "2026-11-05T18:00:00.000Z", "expires": NSNull(), "views": 0, "questions": 0, "viewers": 0,
+            "pin": true, "pinLocked": false, "wrongPins": 3, "wrongPinsTotal": 41, "gone": false,
+        ]]])) }
+        let list = try await client.shares()
+        XCTAssertEqual(list.shares.first?.wrongPinsTotal, 41)
+    }
 }

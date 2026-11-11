@@ -90,6 +90,7 @@ button.t:hover{color:var(--accent);text-decoration:underline;text-underline-offs
 .seek .ln:hover,.ln.now,.ln.flash{background:var(--mark)}
 .ln.now{box-shadow:inset 2px 0 0 var(--accent)}
 .ln.now .t{color:var(--accent)}
+.seek .ln:hover .t,.ln.flash .t{color:var(--soft)}
 .hide{display:none}
 
 .qa .q{font-weight:650;margin:0 0 .25em}

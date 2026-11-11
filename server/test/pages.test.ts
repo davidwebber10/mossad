@@ -108,6 +108,11 @@ describe('share page', () => {
     const values = [...css.matchAll(/--paper:(#[0-9a-f]{6});[^}]*?--faint:(#[0-9a-f]{6})/g)].map((m) => [m[1], m[2]]);
     expect(values.length).toBeGreaterThanOrEqual(2);
     for (const [paper, faint] of values) expect(ratio(paper, faint)).toBeGreaterThanOrEqual(4.5);
+    // A time on a line under the pointer, or a line that flashes, sits on --mark: it uses --soft there.
+    const marks = [...css.matchAll(/--soft:(#[0-9a-f]{6});[^}]*?--mark:(#[0-9a-f]{6})/g)].map((m) => [m[1], m[2]]);
+    expect(marks.length).toBeGreaterThanOrEqual(2);
+    for (const [soft, mark] of marks) expect(ratio(soft, mark)).toBeGreaterThanOrEqual(4.5);
+    expect(css).toContain('.seek .ln:hover .t,.ln.flash .t{color:var(--soft)}');
   });
 
   it('lets a person correct the PIN before it is sent, and names the message in the title', () => {

@@ -113,6 +113,72 @@ public enum SharePINStep {
     }
 }
 
+/// What a share that stops part way leaves behind: after a close of its sheet, or a failure.
+public enum ShareAttempt {
+    public enum Outcome: Equatable, Sendable {
+        /// No request went out: there is nothing to undo.
+        case nothing
+        /// An existing link: the server may have the new copy, so this Mac keeps the larger set (`kept`).
+        case keep
+        /// A new link: it goes off the server again, after this many seconds.
+        case abandon(after: TimeInterval)
+    }
+
+    /// A cancelled request can still land on the server after the cancel. The delete of a new link waits this
+    /// long, so it cannot run ahead of it.
+    public static let inFlightDelay: TimeInterval = 15
+
+    /// `started`: the first request to the server went out. `cancelled`: a request was stopped on this Mac, or
+    /// ended with no answer, so it may still be in flight.
+    public static func outcome(isNew: Bool, started: Bool, cancelled: Bool) -> Outcome {
+        guard started else { return .nothing }
+        return isNew ? .abandon(after: cancelled ? inFlightDelay : 0) : .keep
+    }
+
+    /// The link this Mac keeps when an update stopped part way: each part that either version shows, and the
+    /// later end. The server has one of the two, so the Mac never says less than the page may show.
+    public static func kept(old: MeetingLink, attempted: MeetingLink) -> MeetingLink {
+        var link = attempted
+        let a = old.options, b = attempted.options
+        link.options.summary = a.summary || b.summary
+        link.options.transcript = a.transcript || b.transcript
+        link.options.recording = a.recording || b.recording
+        link.options.chat = a.chat || b.chat
+        let later: MeetingLink = switch (old.expires, attempted.expires) {
+        case (nil, _): old
+        case (_, nil): attempted
+        case let (x?, y?): x > y ? old : attempted
+        }
+        link.expires = later.expires
+        link.options.days = later.options.days
+        return link
+    }
+}
+
+/// What the Share sheet may say of a link's PIN. It shows the PIN only when the server confirms it: the server
+/// has a PIN set at the time this Mac holds, or the PIN call of this same Share just answered.
+public enum SharePINCheck: Equatable, Sendable {
+    case none
+    /// The server was not asked yet.
+    case checking
+    case confirmed(String)
+    /// The server has another PIN, or one that this Mac does not hold.
+    case changed
+    case locked
+    /// The server did not answer.
+    case unanswered
+
+    public static func state(link: MeetingLink, remote: ServerShare?, answered: Bool, justSet: Bool = false) -> SharePINCheck {
+        if justSet, let pin = link.pin, link.pinSet != nil { return .confirmed(pin) }
+        guard answered else { return link.pin == nil ? .none : .checking }
+        guard let remote else { return link.pin == nil ? .none : .unanswered }
+        guard remote.pin == true else { return .none }
+        if remote.pinLocked == true { return .locked }
+        if let pin = link.pin, let held = link.pinSet, held == remote.pinSet { return .confirmed(pin) }
+        return .changed
+    }
+}
+
 /// The PIN of a share: 4 digits from the system's random source.
 public enum SharePIN {
     public static func random() -> String {
