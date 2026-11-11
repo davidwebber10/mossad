@@ -218,8 +218,12 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var failedStep: CallStatus?
     /// Short text for the last error, such as "AssemblyAI key missing"; nil once a step succeeds.
     public var failureReason: String?
-    /// Speaker key (`me:A`, `them:B`) → person name.
+    /// Speaker key (`me:A`, `them:B`) → person name. The name is a label: `speakerPeople` says who it is.
     public var speakerNames: [String: String] = [:]
+    /// Speaker key → the id of the person in `people.json`, on a sure match only. Nil in records from before ids,
+    /// and a key with no id is a label that no saved person surely is. An older build drops this when it saves the
+    /// record; the next refresh finds the ids again from the labels.
+    public var speakerPeople: [String: String]?
     public var unknownSpeakers: [String] = []
     /// Voice fingerprints per speaker key, kept so a speaker named later can be learned.
     public var speakerEmbeddings: [String: [Float]] = [:]
@@ -371,6 +375,7 @@ extension CallRecord {
         failedStep = try c.decodeIfPresent(CallStatus.self, forKey: .failedStep)
         failureReason = try c.decodeIfPresent(String.self, forKey: .failureReason)
         speakerNames = try c.decodeIfPresent([String: String].self, forKey: .speakerNames) ?? [:]
+        speakerPeople = try c.decodeIfPresent([String: String].self, forKey: .speakerPeople)
         unknownSpeakers = try c.decodeIfPresent([String].self, forKey: .unknownSpeakers) ?? []
         speakerEmbeddings = try c.decodeIfPresent([String: [Float]].self, forKey: .speakerEmbeddings) ?? [:]
         speakerSamples = try c.decodeIfPresent([String: SpeakerSampleDetail].self, forKey: .speakerSamples)
@@ -429,6 +434,12 @@ extension CallRecord {
         summary = summary.map(swap)
         topics = topics.map { SummaryTopic(title: swap($0.title), summary: swap($0.summary)) }
         decisions = decisions.map { Decision(text: swap($0.text), at: $0.at) }
-        actionItems = actionItems.map { ActionItem(owner: $0.owner.map { labels[$0] ?? $0 }, task: swap($0.task)) }
+        actionItems = actionItems.map { item in
+            var item = item
+            // A label that becomes a name is no longer the label its id was found from.
+            if let owner = item.owner, let name = labels[owner] { item.owner = name; item.ownerID = nil }
+            item.task = swap(item.task)
+            return item
+        }
     }
 }

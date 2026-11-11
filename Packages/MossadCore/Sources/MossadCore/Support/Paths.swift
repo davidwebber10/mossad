@@ -41,6 +41,9 @@ public struct Paths: Sendable {
     /// owner's matches to it. Nothing here syncs in this phase; when the people do, the HR data still never does.
     public var people: URL { root.appendingPathComponent("People") }
 
+    /// Copies made before a migration changed a file, so it can be undone by hand.
+    public var backups: URL { root.appendingPathComponent("Backups") }
+
     public func callDirectory(_ id: String) -> URL {
         audio.appendingPathComponent(id)
     }

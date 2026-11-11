@@ -1,12 +1,16 @@
 import Foundation
 
 public struct ActionItem: Codable, Equatable, Sendable, Hashable {
+    /// The owner as the model wrote it: a label.
     public var owner: String?
     public var task: String
+    /// The saved person the owner is, by the id in `people.json`, on a sure match among the people of the call.
+    public var ownerID: String?
 
-    public init(owner: String?, task: String) {
+    public init(owner: String?, task: String, ownerID: String? = nil) {
         self.owner = owner
         self.task = task
+        self.ownerID = ownerID
     }
 
     /// The "Owner: task" form used in notes and in older records.
@@ -24,7 +28,7 @@ public struct ActionItem: Codable, Equatable, Sendable, Hashable {
         self.init(owner: nil, task: s)
     }
 
-    private enum CodingKeys: String, CodingKey { case owner, task }
+    private enum CodingKeys: String, CodingKey { case owner, task, ownerID }
 
     public init(from decoder: Decoder) throws {
         // Records written before owners were split store each item as one string.
@@ -33,6 +37,7 @@ public struct ActionItem: Codable, Equatable, Sendable, Hashable {
             return
         }
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(owner: try c.decodeIfPresent(String.self, forKey: .owner), task: try c.decode(String.self, forKey: .task))
+        self.init(owner: try c.decodeIfPresent(String.self, forKey: .owner), task: try c.decode(String.self, forKey: .task),
+                  ownerID: try c.decodeIfPresent(String.self, forKey: .ownerID))
     }
 }

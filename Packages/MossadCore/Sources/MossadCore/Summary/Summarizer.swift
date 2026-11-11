@@ -164,7 +164,7 @@ public struct LLMSummarizer: Summarizing {
                                         effort: .medium, purpose: .summary, as: Output.self)
         }
         let headline = result.headline.trimmingCharacters(in: .whitespacesAndNewlines)
-        return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items, decisions: result.decisions.map { Decision(text: $0.text, at: $0.at_seconds.flatMap { $0 >= 0 ? $0 : nil }) },
+        return MeetingSummary(summary: result.summary, topics: result.topics, actionItems: result.action_items.map { ActionItem(owner: $0.owner, task: $0.task) }, decisions: result.decisions.map { Decision(text: $0.text, at: $0.at_seconds.flatMap { $0 >= 0 ? $0 : nil }) },
                               headline: headline.isEmpty ? nil : headline,
                               kind: result.kind.isEmpty ? nil : result.kind, hasOutcomes: result.has_outcomes,
                               tags: (result.tags ?? []).compactMap(\.nonBlank), title: result.title?.nonBlank.map(Titles.clean))

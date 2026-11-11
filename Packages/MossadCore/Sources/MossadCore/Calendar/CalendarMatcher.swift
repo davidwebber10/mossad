@@ -8,11 +8,14 @@ public struct Invitee: Codable, Equatable, Sendable, Hashable {
     public var email: String?
     /// True for the calendar owner's own entry; nil when it is not.
     public var isSelf: Bool?
+    /// The saved person this entry surely is, by the id in `people.json`. Nil when no saved person surely is.
+    public var personID: String?
 
-    public init(name: String?, email: String?, isSelf: Bool? = nil) {
+    public init(name: String?, email: String?, isSelf: Bool? = nil, personID: String? = nil) {
         self.name = name
         self.email = email
         self.isSelf = isSelf
+        self.personID = personID
     }
 
     /// From what the calendar gives for a participant. `address` is its URL as text: "mailto:sam@example.com" for

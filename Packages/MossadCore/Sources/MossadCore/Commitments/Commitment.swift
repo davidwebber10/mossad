@@ -6,8 +6,11 @@ public struct Commitment: Codable, Equatable, Sendable, Identifiable, Hashable {
 
     public var id = UUID()
     public var text: String
-    /// Who it was promised to, when the call says.
+    /// Who it was promised to, when the call says: a label.
     public var to: String?
+    /// The saved person `to` is, by the id in `people.json`, on a sure match. An older device drops it when it
+    /// saves the book; the next refresh on the Mac finds it again from `to` and the call.
+    public var toID: String?
     public var callID: String?
     public var callTitle: String?
     /// When it was said: the call's start plus the moment.
