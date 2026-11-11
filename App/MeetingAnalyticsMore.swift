@@ -283,7 +283,7 @@ struct MeetingCostSection: View {
 
     private static let purposes: [UsageEvent.Purpose: String] = [
         .transcription: "Transcription", .live: "Live transcript", .summary: "Summary", .coach: "Coach review",
-        .weeklyEmail: "Weekly email", .question: "Questions",
+        .weeklyEmail: "Weekly email", .question: "Questions", .persona: "How people think",
     ]
 
     var body: some View {

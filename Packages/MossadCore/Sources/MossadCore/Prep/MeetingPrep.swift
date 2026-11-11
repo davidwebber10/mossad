@@ -179,7 +179,7 @@ public struct MeetingPrep: Sendable, Equatable {
     /// addresses, when known.
     public init(meeting: UpcomingMeeting, owner: String, records: [CallRecord], facts: [MeetingFacts]?, commitments: [Commitment]?,
                 people directory: PersonDirectory, coach: [String: CoachPerson] = [:], ownerEmails: [String] = [], keep: Set<UUID> = [],
-                now: Date = Date(), memory: CoachProfile? = nil, saved: CoachPeople = .none) {
+                now: Date = Date(), memory: CoachProfile? = nil, saved: CoachPeople = .none, reads: [String: PersonaSummary] = [:]) {
         let invited = Self.invited(meeting.attendees, owner: owner, directory: directory, ownerEmails: ownerEmails)
         self.invited = invited
         tasksKnown = commitments != nil
@@ -225,7 +225,7 @@ public struct MeetingPrep: Sendable, Equatable {
         morePromises = max(0, promises.count - Self.shown)
         openPromises = promises.filter { $0.done == nil }.count
         // With the coach's memory and the saved people, what the coach knows of a person is read by the person's id.
-        self.coach = memory.map { PrepCoach(people: known, profile: $0, saved: saved) } ?? PrepCoach(people: known, coach: coach)
+        self.coach = memory.map { PrepCoach(people: known, profile: $0, saved: saved, reads: reads) } ?? PrepCoach(people: known, coach: coach)
     }
 
     // MARK: In one line

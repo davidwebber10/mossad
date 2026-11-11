@@ -13,6 +13,7 @@ public actor CloudSync {
     static let commitmentsType = "Commitments"
     /// The people, from the Mac to the phone. An older phone does not know the type and leaves it.
     static let peopleType = "People"
+    static let personasType = "Personas"
     static let recordingType = "Recording"
     /// Assets make big requests, so stay well under CloudKit's 400 changes a request.
     static let batch = 50
@@ -157,7 +158,8 @@ public actor CloudSync {
     /// the chats that were deleted here. A chat that is only missing (its file does not decode) is never deleted.
     /// `people`: the Mac sends the people too; the phone only reads them.
     @discardableResult
-    public func pushShared(people sendPeople: Bool = false) async throws -> Int {
+    /// `personas`: the reduced copy of the reads (`SyncedPersonas`), from the Mac, with the people.
+    public func pushShared(people sendPeople: Bool = false, personas: SyncedPersonas? = nil) async throws -> Int {
         try await prepare()
         let chats = ChatStore(directory: paths.chats)
         var payloads = chats.all().map(SharedPayload.chat)
@@ -184,6 +186,10 @@ public actor CloudSync {
            (PeopleStore.version(of: data) ?? 1) <= PeopleStore.currentVersion {
             payloads.append(.people(people))
         }
+        // The shown traits for the phone's card: a reduced copy, to the owner's server only, like the people.
+        if sendPeople, store.wantsMeetingView, let personas {
+            payloads.append(.personas(personas))
+        }
         let deleted = chats.deleted()
         let plan = try loadState().planShared(payloads, deletedChats: deleted)
         guard !plan.upload.isEmpty || !plan.delete.isEmpty else { return 0 }
@@ -198,6 +204,7 @@ public actor CloudSync {
                 case .profile: Self.profileType
                 case .commitments: Self.commitmentsType
                 case .people: Self.peopleType
+                case .personas: Self.personasType
                 }
                 let name = Self.recordName(p.key)
                 return StoredRecord(name: name, type: type, files: ["data": try file(p.data, "\(name).json", in: dir)])
@@ -511,6 +518,14 @@ public actor CloudSync {
             let file = paths.people.appendingPathComponent(PeopleStore.fileName)
             guard (try? Data(contentsOf: file)) != raw else { return false }
             try FileManager.default.createDirectory(at: paths.people, withIntermediateDirectories: true)
+            try raw.write(to: file, options: .atomic)
+        case Self.personasType where includeMeetings:
+            // The phone keeps the Mac's shown traits as they are. The Mac is the one writer.
+            guard let raw = try await data("data") else { throw MissingAsset(name: record.name) }
+            _ = try JSONDecoder.callRecord.decode(SyncedPersonas.self, from: raw)
+            let file = paths.coach.appendingPathComponent(SyncedPersonas.fileName)
+            guard (try? Data(contentsOf: file)) != raw else { return false }
+            try FileManager.default.createDirectory(at: paths.coach, withIntermediateDirectories: true)
             try raw.write(to: file, options: .atomic)
         case Self.notesType:
             let notes = try await decoded(ReviewNotes.self)

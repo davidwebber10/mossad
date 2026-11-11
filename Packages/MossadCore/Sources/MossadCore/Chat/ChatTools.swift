@@ -34,13 +34,21 @@ public struct ChatTools: Sendable {
     /// The saved people, so a name or an id finds a person under any name the records have: an old name after a
     /// rename, or "Carter, Sam". Empty without the people store; then names match as text, as before ids.
     let saved: PersonReferences
+    /// The people as the coach knows them, for the reads of how each person thinks.
+    let coachPeople: CoachPeople
+    /// Whether the `people` tool gives the coach's reads of how each person thinks: on in Chat, and in other AI apps
+    /// unless the owner turned it off.
+    let personaTraits: Bool
 
-    public init(records: [CallRecord], owner: String, paths: Paths? = nil, people: [Person]? = nil) {
+    public init(records: [CallRecord], owner: String, paths: Paths? = nil, people: [Person]? = nil, personaTraits: Bool = true) {
         self.records = records.filter { $0.status == .written }.sorted { $0.start > $1.start }
         live = records.filter { $0.status == .recording }.max { $0.start < $1.start }
         self.owner = owner
         self.paths = paths
-        self.saved = PersonReferences(people: people ?? paths.flatMap { PeopleStore.peek(in: $0.people) } ?? [])
+        let list = people ?? paths.flatMap { PeopleStore.peek(in: $0.people) } ?? []
+        self.saved = PersonReferences(people: list)
+        coachPeople = CoachPeople(people: list)
+        self.personaTraits = personaTraits
     }
 
     /// Whether a name or an id that the model gave is someone of this meeting.

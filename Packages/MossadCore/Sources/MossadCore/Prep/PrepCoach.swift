@@ -17,10 +17,22 @@ public struct PrepCoach: Sendable, Equatable {
         public var note: String?
         /// What the owner confirmed about them, read by the person's id.
         public var learnings: [String] = []
+        /// The person's id, when the name is one saved person on a sure match: for the cover of the card.
+        public var personID: String?
+        /// How to present to them, built by code from shown traits. Nil until the person has a card.
+        public var card: PersonaCard?
+        /// Whether the page shows the whole card for this person: for 2 people at most, the ones with the most shown
+        /// traits. The others show the headline.
+        public var showsCard = false
+        /// Shown traits, for the order of the cards.
+        public var traits = 0
 
-        /// The brief's one line: the best way to work with them.
-        public var headline: String? { brief?.headline.nonBlank }
+        /// The card's headline, or the older read's line until the person has a card.
+        public var headline: String? { card?.headline.nonBlank ?? brief?.headline.nonBlank }
     }
+
+    /// The page shows the whole card for this many people at most.
+    public static let fullCards = 2
 
     /// In the order of the invite. A person the coach has nothing on is not here.
     public var people: [Person]
@@ -43,13 +55,24 @@ public struct PrepCoach: Sendable, Equatable {
 
     /// The same from the coach's memory, read by the person's id where the name is one saved person on a sure
     /// match: a name written last name first, and a person with a new name, read what was learned of them.
-    public init(people names: [String], profile: CoachProfile, saved: CoachPeople) {
+    /// `reads` are the reads of how each person thinks, by person id (`PersonaReads`): an invited person on a sure
+    /// match only.
+    public init(people names: [String], profile: CoachProfile, saved: CoachPeople, reads: [String: PersonaSummary] = [:]) {
         people = names.compactMap { name in
             let known = profile.note(on: name, people: saved)?.value
-            let learnings = saved.id(of: name).map { profile.learnings(about: $0, people: saved).map(\.text) } ?? []
+            let id = saved.id(of: name)
+            let learnings = id.map { profile.learnings(about: $0, people: saved).map(\.text) } ?? []
             let note = known?.note.nonBlank
-            guard known?.brief != nil || note != nil || !learnings.isEmpty else { return nil }
-            return Person(name: name, brief: known?.brief, note: note, learnings: learnings)
+            let read = id.flatMap { reads[saved.canonical($0)] }
+            guard known?.brief != nil || note != nil || !learnings.isEmpty || read?.card != nil else { return nil }
+            var p = Person(name: name, brief: known?.brief, note: note, learnings: learnings)
+            p.personID = id
+            p.card = read?.card
+            p.traits = read?.traits.count ?? 0
+            return p
         }
+        let full = Set(people.enumerated().filter { $0.element.card != nil }.sorted { ($0.element.traits, -$0.offset) > ($1.element.traits, -$1.offset) }
+            .prefix(Self.fullCards).map(\.element.name))
+        for i in people.indices { people[i].showsCard = full.contains(people[i].name) }
     }
 }

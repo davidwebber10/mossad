@@ -4,7 +4,7 @@ import Foundation
 /// What both devices write and read: chats, the owner's ratings and conversation on a review, and the
 /// coach's memory. Meetings themselves come only from the Mac.
 public struct SharedPayload: Sendable {
-    public enum Kind: String, Sendable { case chat, notes, profile, commitments, people }
+    public enum Kind: String, Sendable { case chat, notes, profile, commitments, people, personas }
 
     public let kind: Kind
     /// "chat:<uuid>", "notes:<call id>", or "profile": the record name and the key in the sync state.
@@ -20,7 +20,7 @@ public struct SharedPayload: Sendable {
     }
 
     /// Whether a sync-state key belongs to a shared record, not a meeting: "chat:…", "notes:…", "profile", "commitments".
-    static func isShared(_ key: String) -> Bool { key.contains(":") || key == "profile" || key == "commitments" || key == "people" }
+    static func isShared(_ key: String) -> Bool { key.contains(":") || key == "profile" || key == "commitments" || key == "people" || key == "personas" }
 
     public static func chat(_ chat: Chat) -> SharedPayload {
         SharedPayload(kind: .chat, key: "chat:\(chat.id.uuidString)", data: (try? JSONEncoder.callRecord.encode(chat)) ?? Data())

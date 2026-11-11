@@ -16,7 +16,7 @@ struct CostsSection: View {
 
     private static let purposes: [(UsageEvent.Purpose, String)] = [
         (.transcription, "Transcription"), (.live, "Live transcript"), (.summary, "Summaries"), (.coach, "Coach reviews"),
-        (.weeklyEmail, "Weekly email"), (.question, "Questions"),
+        (.weeklyEmail, "Weekly email"), (.question, "Questions"), (.persona, "How people think"),
     ]
 
     /// Only the services that cost something in this period, so the legend stays short.

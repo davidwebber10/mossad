@@ -46,6 +46,21 @@ public struct CoachPeople: Sendable {
         return current.rawValue
     }
 
+    /// The ids that point to this person now: its own and each record it took in, for a persona that reads the
+    /// evidence of both after a merge.
+    public func ids(of id: String) -> [String] {
+        let target = canonical(id)
+        return all.keys.map(\.rawValue).filter { canonical($0) == target }.sorted()
+    }
+
+    /// The people the owner keeps no read on (`doNotProfile`), by the id of now.
+    public var notProfiled: Set<String> { Set(all.values.filter(\.doNotProfile).map { canonical($0.id.rawValue) }) }
+
+    /// The live people who are not the owner, by id, with their names now.
+    public var others: [(id: String, name: String)] {
+        all.values.filter { $0.isLive && !$0.isOwner && !$0.displayName.isEmpty }.map { ($0.id.rawValue, $0.displayName) }.sorted { $0.id < $1.id }
+    }
+
     /// The name of a person now. Nil for an id that is no live person here.
     public func name(of id: String) -> String? {
         all[PersonID(rawValue: canonical(id))].flatMap { $0.isLive ? $0.displayName.nonBlank : nil }

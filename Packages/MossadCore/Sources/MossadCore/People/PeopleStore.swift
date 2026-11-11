@@ -294,6 +294,17 @@ public final class PeopleStore: @unchecked Sendable {
         }
     }
 
+    /// The per-person switch "Keep a read on this person". Off stops new evidence; the app deletes the person's
+    /// persona files (`PersonaStore`). The meetings stay.
+    public func setDoNotProfile(_ off: Bool, for id: PersonID) throws {
+        try change { people, date in
+            guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }), people[i].doNotProfile != off else { return [] }
+            people[i].doNotProfile = off
+            people[i].updated = date
+            return [PeopleLogEntry(at: date, kind: "profile", actor: "owner", subject: id, before: off ? "read" : "no read", after: off ? "no read" : "read")]
+        }
+    }
+
     /// The owner said these two are other people. It holds through a rename of either, on each device.
     public func setDistinct(_ a: PersonID, _ b: PersonID) throws {
         try change { people, date in

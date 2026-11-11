@@ -16,7 +16,7 @@ extension ChatTools {
                  description: "Reads one meeting's full coach review: scorecard, strengths and improvements with quotes and what to say instead, meeting value, delivery numbers (pace, fillers, talk share, interruptions, voice), and the owner's own ratings and conversation with the coach.",
                  schema: ["type": "object", "properties": ["call_id": ["type": "string"]], "required": ["call_id"]]),
         ToolSpec(name: "people",
-                 description: "The people the owner meets with: meetings together, time, when last seen, and the coach's note on how to work with each. Filter by a name.",
+                 description: "The people the owner meets with: meetings together, time, when last seen, the coach's note, and how each person thinks (traits seen in several calls, with the count, and how to present to them). Filter by a name.",
                  schema: ["type": "object", "properties": ["query": ["type": "string"], "limit": ["type": "integer"]] as [String: Any]]),
         ToolSpec(name: "stats",
                  description: "The numbers for a period (YYYY-MM-DD, default the last 30 days): calls, hours, average length, talk share, scheduled share, meeting value, top topics and people, delivery trends, and API cost.",
@@ -198,6 +198,7 @@ extension ChatTools {
     func peopleText(query: String?, limit: Int) -> String {
         let stats = PersonStatistics.compute(records)
         let notes = profile.people
+        let reads = personaTraits ? personaReads() : [:]
         let names = stats.keys.filter { name in
             name != owner && !name.hasPrefix("Speaker ") && (query.map { q in Self.name(q, matches: name) } ?? true)
         }
@@ -208,9 +209,24 @@ extension ChatTools {
             var line = "\(name) | \(s.meetings.count) meetings | talked \(Int(s.totalTalk / 60)) min"
             if let last = s.lastHeard { line += " | last \(last.formatted(.dateTime.month(.abbreviated).day()))" }
             if let note = notes[name]?.note { line += " | coach: \(note)" }
-            if let brief = notes[name]?.brief { line += "\n  The coach's read: " + brief.text.replacingOccurrences(of: "\n", with: " / ") }
+            let read = coachPeople.id(of: name).flatMap { reads[$0] }
+            if let read, !read.traits.isEmpty {
+                line += "\n  How they think:\n" + read.text(name: name).split(separator: "\n").map { "  " + $0 }.joined(separator: "\n")
+            }
+            // The older read stays until the person has a card.
+            if read?.card == nil, let brief = notes[name]?.brief {
+                line += "\n  The coach's read (from \(brief.calls) calls): " + brief.text.replacingOccurrences(of: "\n", with: " / ")
+            }
             return line
         }.joined(separator: "\n")
+    }
+
+    /// The reads by person id: from the files on the Mac, or the copy the phone keeps.
+    func personaReads() -> [String: PersonaSummary] {
+        guard let paths else { return [:] }
+        let local = PersonaReads.all(paths: paths, saved: coachPeople, answers: profile.answers)
+        if !local.isEmpty { return local }
+        return Dictionary((SyncedPersonas.load(from: paths.coach)?.personas ?? []).map { ($0.person, $0) }, uniquingKeysWith: { a, _ in a })
     }
 
     func statsText(_ interval: DateInterval, usage: [UsageEvent]) -> String {

@@ -9,10 +9,13 @@ public struct MCPServer: Sendable {
 
     let paths: Paths
     let owner: String
+    /// The coach's reads of how each person thinks, in the `people` tool. The owner can turn it off in Settings.
+    let personaTraits: Bool
 
-    public init(paths: Paths, owner: String) {
+    public init(paths: Paths, owner: String, personaTraits: Bool = true) {
         self.paths = paths
         self.owner = owner
+        self.personaTraits = personaTraits
     }
 
     /// Reads requests from stdin until it closes; replies go to stdout, logs to stderr.
@@ -48,7 +51,7 @@ public struct MCPServer: Sendable {
                 break
             }
             // Fresh records on every call: the app may have written a new meeting since the last one.
-            let tools = ChatTools(records: ProcessingQueue(paths: paths).allRecords(), owner: owner, paths: paths)
+            let tools = ChatTools(records: ProcessingQueue(paths: paths).allRecords(), owner: owner, paths: paths, personaTraits: personaTraits)
             let input = params["arguments"] as? [String: Any] ?? [:]
             var content: [[String: Any]] = [["type": "text", "text": tools.run(name, input: input)]]
             // The picture of a shared screen goes out only when the caller asks for it.

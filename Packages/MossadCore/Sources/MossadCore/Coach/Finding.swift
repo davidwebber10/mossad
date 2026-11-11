@@ -16,8 +16,10 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
         public static let learning = Kind(rawValue: "learning")
         /// A focus the coach proposes.
         public static let goalOffer = Kind(rawValue: "goal_offer")
+        /// A trait of how a person thinks, for the owner to confirm (`PersonaFindings`). An older build skips it.
+        public static let trait = Kind(rawValue: "trait")
 
-        public static let all: [Kind] = [.didWell, .missed, .couldBeBetter, .learning, .goalOffer]
+        public static let all: [Kind] = [.didWell, .missed, .couldBeBetter, .learning, .goalOffer, .trait]
         public var isKnown: Bool { Self.all.contains(self) }
         /// About how the owner acted in the call: its answer moves the weight of its skill.
         public var isBehavior: Bool { self == .didWell || self == .missed || self == .couldBeBetter }
@@ -28,7 +30,7 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
             case .didWell: "You did this"
             case .missed: "You did not do this"
             case .couldBeBetter: "This could be better"
-            case .learning: "Is this right?"
+            case .learning, .trait: "Is this right?"
             case .goalOffer: "A goal for you?"
             default: ""
             }
@@ -59,10 +61,13 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
     /// The id of the saved person a conclusion is about, on a sure match only, and that person's name then.
     public var person: String?
     public var personName: String?
+    /// The id of the trait a trait card asks about (`PersonaTrait.id`), so the answer finds its trait after the
+    /// call is read again.
+    public var trait: String?
 
     public init(id: String, callID: String, date: Date, kind: Kind, text: String, skill: String, detail: String? = nil, quote: String? = nil,
                 at: TimeInterval? = nil, number: String? = nil, usual: String? = nil, say: String? = nil, questionID: UUID? = nil, focusID: UUID? = nil,
-                person: String? = nil, personName: String? = nil) {
+                person: String? = nil, personName: String? = nil, trait: String? = nil) {
         self.id = id
         self.callID = callID
         self.date = date
@@ -79,6 +84,7 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
         self.focusID = focusID
         self.person = person
         self.personName = personName
+        self.trait = trait
     }
 
     /// A moment to play, or a number with its usual value. A card without one is never made.
@@ -108,6 +114,8 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
     public var person: String?
     /// The active focus that a yes on a goal offer replaced: Undo makes it active again.
     public var replaced: UUID?
+    /// The trait a trait card asked about. The trait's number reads the answers each time.
+    public var trait: String?
 
     public init(_ finding: CoachFinding, verdict: FindingVerdict?, date: Date) {
         id = finding.id
@@ -120,9 +128,10 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
         questionID = finding.questionID
         focusID = finding.focusID
         person = finding.person
+        trait = finding.trait
     }
 
-    enum CodingKeys: String, CodingKey { case id, callID, kind, skill, text, verdict, date, note, questionID, focusID, person, replaced }
+    enum CodingKeys: String, CodingKey { case id, callID, kind, skill, text, verdict, date, note, questionID, focusID, person, replaced, trait }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -139,6 +148,7 @@ public struct FindingAnswer: Codable, Equatable, Sendable, Hashable, Identifiabl
         focusID = try c.decodeIfPresent(UUID.self, forKey: .focusID)
         person = try c.decodeIfPresent(String.self, forKey: .person)
         replaced = try c.decodeIfPresent(UUID.self, forKey: .replaced)
+        trait = try c.decodeIfPresent(String.self, forKey: .trait)
     }
 }
 
