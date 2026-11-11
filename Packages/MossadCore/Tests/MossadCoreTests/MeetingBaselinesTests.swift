@@ -367,8 +367,11 @@ final class MeetingBaselinesTests: XCTestCase {
     func testTheTrendsFollowTheSeriesWithThisCallLast() {
         let r = oneOnOne(dana: 40, title: "Weekly sync")
         let both: [(String, Double)] = [(owner, 0.5), (sam, 0.5)], onlySam: [(String, Double)] = [(sam, 1)]
-        let history = (1...14).map { i -> MeetingFacts in
-            past("s\(i)", daysAgo: Double(i * 7), voices: 2, shares: i == 2 ? onlySam : both, meeting: [.length: 1800 + Double(i)])
+        var history: [MeetingFacts] = []
+        for i in 1...14 {
+            let shares: [(String, Double)] = i == 2 ? onlySam : both
+            let length: Double = 1800 + Double(i)
+            history.append(past("s\(i)", daysAgo: Double(i * 7), voices: 2, shares: shares, meeting: [MeetingMetric.length: length]))
         }
         let ratings: [String: MeetingValue.Rating] = ["s1": .high, "s3": .low]
         let review = CoachReview(headline: "", overview: "", strengths: [], improvements: [], focusProgress: nil,

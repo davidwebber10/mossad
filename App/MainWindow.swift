@@ -211,12 +211,7 @@ private struct Sidebar: View {
     @ViewBuilder
     private func trailing(_ section: AppController.Section) -> some View {
         switch section {
-        // The open tasks show on Meetings while Tasks is hidden under it, as Coach shows its cards.
-        case .meetings where openCommitments > 0 && !controller.sidebarOpen(.meetings):
-            Text("\(openCommitments)")
-                .font(.system(size: 11)).monospacedDigit()
-                .foregroundStyle(Palette.tertiary)
-                .accessibilityLabel("\(openCommitments) open tasks")
+        // No count on a closed Meetings row: the open tasks there would read as a number of meetings.
         case .coach where !controller.findings.isEmpty && !controller.sidebarOpen(.coach):
             Text("\(controller.findings.count)")
                 .font(.system(size: 11)).monospacedDigit()
