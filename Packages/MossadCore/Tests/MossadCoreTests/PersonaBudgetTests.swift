@@ -221,6 +221,24 @@ final class PersonaBudgetTests: XCTestCase {
                        .wait(.overEstimate(calls: 300, dollars: 3)), "a start with another model is no start for this one")
     }
 
+    // MARK: Release check M1
+
+    /// A sentence reply with no usable item, or a refusal, must not be asked again at the next run: each run is an
+    /// hour or a call apart, and the same person would cost a request each time.
+    func testASentenceReplyWithNothingOrARefusalWaitsLikeASentence() async throws {
+        for kind in [CostModel.Sentences.empty, .refuse] {
+            try? FileManager.default.removeItem(at: root)
+            try FileManager.default.createDirectory(at: paths.usage, withIntermediateDirectories: true)
+            try PeopleStore(directory: paths.people).replaceAll([dana, sam])
+            try calls(3)
+            let m = CostModel(usage: UsageLog(directory: paths.usage), bad: [], sentences: kind)
+            let runner = PersonaRunner(paths: paths, llm: m, owner: "Dana Lee")
+            _ = await runner.run(since: nil, isLive: { false })
+            _ = await runner.run(since: nil, isLive: { false })
+            XCTAssertEqual(m.writes, 1, "\(kind): one request for the person in two runs, not one in each")
+        }
+    }
+
     // MARK: M9, M3
 
     func testSentencesThatAreDueAreWrittenInALaterRunAfterAStop() async throws {
@@ -253,14 +271,21 @@ final class PersonaBudgetTests: XCTestCase {
 final class CostModel: LanguageModel, @unchecked Sendable {
     let usage: UsageLog
     let bad: Set<String>
+    /// How the sentence step answers: with sentences, with no usable item, or with a refusal.
+    enum Sentences { case write, empty, refuse }
+    let sentences: Sentences
     private(set) var requests = 0
     /// Requests that read a call.
     private(set) var reads = 0
 
-    init(usage: UsageLog, bad: Set<String>) {
+    init(usage: UsageLog, bad: Set<String>, sentences: Sentences = .write) {
         self.usage = usage
         self.bad = bad
+        self.sentences = sentences
     }
+
+    /// Requests that asked for sentences.
+    var writes: Int { requests - reads }
 
     func json<Output: Decodable>(system: String, user: String, schema: [String: Any], effort: Effort, purpose: UsageEvent.Purpose, as: Output.Type) async throws -> Output {
         requests += 1
@@ -270,6 +295,10 @@ final class CostModel: LanguageModel, @unchecked Sendable {
         if let id = UsageContext.callID, bad.contains(id) { throw SummaryError.malformed }
         let props = schema["properties"] as? [String: Any] ?? [:]
         if props["evidence"] != nil { reads += 1 }
+        if props["evidence"] == nil, sentences == .refuse { throw SummaryError.refused }
+        if props["evidence"] == nil, sentences == .empty {
+            return try JSONDecoder().decode(Output.self, from: JSONSerialization.data(withJSONObject: ["traits": [[String: Any]]()]))
+        }
         let out: [String: Any] = props["evidence"] != nil
             ? ["evidence": [["line": 1, "person": "P1", "quote": "Compared with what?", "dimension": "evidence", "value": "comparison", "label": "", "strength": "clear", "role": "decides"]]]
             : ["traits": [["id": "T1", "statement": "When a figure comes up, P1 asks what it compares with.", "so_do_this": "Bring a comparison.", "rating": "medium"]]]

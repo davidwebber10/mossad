@@ -179,6 +179,10 @@ public actor PersonaRunner {
                                                    names: names, now: now(), retry: canSpend(price(Self.writeInputTokens * 2, Self.worstOutputTokens * 2)))
                 report.requests += 1
                 writes += 1
+                // The wait starts with the request, not with a good reply: a reply with nothing usable would be asked
+                // again at each run, each hour and after each call.
+                ledger.written[person] = now()
+                ledger.save(to: store.directory)
                 guard !texts.isEmpty else { continue }
                 var own = (try store.load(person)) ?? Persona(person: person, updated: now())
                 for (id, text) in texts { own.texts[id] = text }
@@ -188,6 +192,14 @@ public actor PersonaRunner {
                 ledger.save(to: store.directory)
                 report.people += 1
                 Log.info("Persona sentences for one person: \(texts.count) traits, \(texts.values.filter { $0.statement.isEmpty }.count) failed the word check")
+            } catch let e as SummaryError where e.isReply {
+                // A refusal or a reply in another shape: asking again gives the same, so this person waits as after
+                // sentences, and the others still get theirs.
+                report.requests += 1
+                writes += 1
+                ledger.written[person] = now()
+                ledger.save(to: store.directory)
+                Log.error("The persona sentences for one person wait a day: \(e)")
             } catch {
                 Log.error("The persona sentences wait: \(error)")
                 report.stopped = "an error"
