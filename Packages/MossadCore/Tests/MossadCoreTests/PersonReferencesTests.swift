@@ -216,3 +216,24 @@ extension PersonReferencesTests {
         XCTAssertEqual(OwnerIdentity(name: "Avery Webb").speakerKeys(in: r), [], "with no id, the name of before")
     }
 }
+
+extension PersonReferencesTests {
+    func testANewPersonNeverMovesAnId() {
+        let before = PersonReferences(people: people).refresh(record())
+        let unrelated = Person(id: PersonID(rawValue: "id-0"), displayName: "Riley Chen", origin: .migration, at: t0)
+        XCTAssertEqual(PersonReferences(people: people + [unrelated]).refresh(before), before)
+        // Another Sam Carter: the ids stay with the person they were given to, and no new reference gets either.
+        let twin = Person(id: PersonID(rawValue: "id-00"), displayName: "Sam Carter", origin: .migration, at: t0)
+        let after = PersonReferences(people: [twin] + people).refresh(before)
+        XCTAssertEqual(after.speakerPeople?["them:A"], "id-sam")
+        XCTAssertEqual(after.actionItems[1].ownerID, "id-sam")
+        var fresh = record()
+        fresh.id = "other"
+        XCTAssertNil(PersonReferences(people: [twin] + people).refresh(fresh).speakerPeople?["them:A"])
+    }
+
+    func testTheAnswerDoesNotDependOnTheOrderOfThePeople() {
+        let r = record()
+        XCTAssertEqual(PersonReferences(people: people).refresh(r), PersonReferences(people: people.reversed()).refresh(r))
+    }
+}

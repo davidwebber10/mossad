@@ -943,9 +943,9 @@ public enum PeopleMigration {
             "Org matches: \(t.orgMatchesResolved) of \(t.orgMatches) resolve",
         ]
         if let x = plan.report.references {
-            lines.append("References: \(x.recordsToChange) of \(x.records) meetings change; ids for speakers \(x.speakersWithID) of \(x.speakers), invited \(x.inviteesWithID) of \(x.invitees), "
+            lines.append("References: \(x.recordsToChange) of \(x.records) \(x.records == 1 ? "meeting changes" : "meetings change"); ids for speakers \(x.speakersWithID) of \(x.speakers), invited \(x.inviteesWithID) of \(x.invitees), "
                 + "action item owners \(x.actionItemsWithID) of \(x.actionItems), commitments \(x.commitmentsWithID) of \(x.commitments) (\(x.commitmentsToChange) change), "
-                + "org matches \(x.orgMatchesWithID) of \(x.orgMatches); \(x.labels.count) labels become a name of now")
+                + "org matches \(x.orgMatchesWithID) of \(x.orgMatches); \(x.labels.count) \(x.labels.count == 1 ? "label becomes" : "labels become") a name of now")
             if !x.refused.isEmpty { lines.append("References left as they are: \(x.refused.count) meetings") }
         }
         if !plan.report.errors.isEmpty { lines.insert("ERRORS: " + plan.report.errors.joined(separator: "; "), at: 0) }

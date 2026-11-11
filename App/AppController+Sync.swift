@@ -196,6 +196,8 @@ extension AppController {
                 // Chats, ratings, and memories from the phone show here at once.
                 if received > 0 {
                     self.coachVersion += 1; self.chatsVersion += 1; self.commitmentsVersion += 1
+                    // A commitment saved by a phone that does not know the ids gets its person's id back.
+                    self.linkCommitmentPeople(self.library.identity?.people.people ?? [], records: self.meetings)
                     // A room recording from the iPhone is a new call to process, also while another call is
                     // processed: the pipeline takes each call once, and the hourly run would be a long wait.
                     self.processPending()
