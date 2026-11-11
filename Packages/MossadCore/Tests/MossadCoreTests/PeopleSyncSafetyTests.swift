@@ -65,7 +65,7 @@ extension PeopleSyncSafetyTests {
     }
 
     func testThePeopleGoFromTheMacToThePhoneAndNotBack() async throws {
-        let store = MemoryStore()
+        let store = MemoryStore(view: true)
         let mac = temp(), phone = temp()
         defer { for p in [mac, phone] { try? FileManager.default.removeItem(at: p.root) } }
         let people = PeopleStore(directory: mac.people)
@@ -83,5 +83,13 @@ extension PeopleSyncSafetyTests {
         XCTAssertEqual(try Data(contentsOf: mac.people.appendingPathComponent(PeopleStore.fileName)), before)
         let sent = try await CloudSync(paths: mac, store: store).pushShared(people: true)
         XCTAssertEqual(sent, 0, "nothing new to send")
+    }
+
+    func testThePeopleDoNotGoToICloud() async throws {
+        let mac = temp()
+        defer { try? FileManager.default.removeItem(at: mac.root) }
+        _ = try PeopleStore(directory: mac.people).ensure(voiceName: "Sam Carter", isOwner: false, origin: .voiceNaming)
+        let sent = try await CloudSync(paths: mac, store: MemoryStore()).pushShared(people: true)
+        XCTAssertEqual(sent, 0, "the record type is not in the iCloud schema")
     }
 }

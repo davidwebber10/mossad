@@ -95,3 +95,33 @@ extension PeopleLocalTests {
         XCTAssertTrue(PeopleDuplicates.isDistinct(renamed, among: PeopleStore(directory: paths.people).people), "the pair does not come back after a rename")
     }
 }
+
+extension PeopleLocalTests {
+    func testAnEditWithMatchesReadBeforeARenameKeepsTheRenamedPersonsMatch() throws {
+        let (people, sam, dana) = try store()
+        var m = OrgMatches()
+        m.set("Sam Carter", to: "carter, sam")
+        try m.save(paths: paths)
+        var stale = OrgMatches.load(paths: paths)
+        try people.rename(sam, to: "Sam Brooks")
+        // An edit of another person with the map of before the rename.
+        stale.setOutside("Dana Lee")
+        try stale.save(paths: paths)
+        XCTAssertEqual(PeopleLocal.load(paths: paths)?.org[sam.rawValue], "carter, sam")
+        XCTAssertEqual(PeopleLocal.load(paths: paths)?.org[dana.rawValue], OrgMatches.outside)
+        XCTAssertEqual(OrgMatches.load(paths: paths).personID(for: "Sam Brooks"), "carter, sam")
+    }
+
+    func testTheLaunchPutsTheNameOfNowInTheFileByNameAfterACopy() throws {
+        let (people, sam, _) = try store()
+        var m = OrgMatches()
+        m.set("Sam Carter", to: "carter, sam")
+        try m.save(paths: paths)
+        let before = try Data(contentsOf: OrgMatches.url(paths))
+        try people.rename(sam, to: "Sam Brooks")
+        XCTAssertTrue(try OrgMatches.linkPeople(paths: paths))
+        XCTAssertEqual(OrgMatches.loadByName(paths: paths).personID(for: "Sam Brooks"), "carter, sam", "an older build finds it too")
+        XCTAssertEqual(try Data(contentsOf: ReferenceBackup.folder(paths).appendingPathComponent("org-matches.json")), before)
+        XCTAssertFalse(try OrgMatches.linkPeople(paths: paths), "a second run writes nothing")
+    }
+}

@@ -116,11 +116,25 @@ final class PersonReferencesTests: XCTestCase {
     }
 
     func testAStopBeforeTheLabelsChangedIsFinishedFromTheOldName() {
-        // The rename reached the people file; the records still have the old name and no ids.
+        // The records had their ids; the rename reached the people file and stopped before the records.
+        let before = PersonReferences(people: people).refresh(record())
         sam.rename(to: "Sam Brooks", source: .owner, at: t0)
-        let out = PersonReferences(people: people).refresh(record())
+        let out = PersonReferences(people: people).refresh(before)
         XCTAssertEqual(out.speakerNames["them:A"], "Sam Brooks", "one person, not two")
         XCTAssertEqual(out.speakerPeople?["them:A"], "id-sam")
+    }
+
+    func testANameOfBeforeWithNoIdIsNotPulledToThePerson() {
+        // The owner named a voice with the old name of a renamed person: it can be another person, who is not saved.
+        sam.rename(to: "Sam Brooks", source: .owner, at: t0)
+        let out = PersonReferences(people: people).refresh(record())
+        XCTAssertNil(out.speakerPeople?["them:A"])
+        XCTAssertEqual(out.speakerNames["them:A"], "Sam Carter", "the owner's name for the voice stays")
+        // A deleted person's label does not go to a live person who had that name before.
+        var r = record()
+        r.speakerNames["them:A"] = "Old Name"
+        dana.forms.append(NameForm(text: "Old Name", kind: .former, source: .owner, confirmed: true, at: t0))
+        XCTAssertNil(PersonReferences(people: people).refresh(r).speakerPeople?["them:A"])
     }
 
     func testAFormerNameThatIsAnotherPersonsNameNowIsThatPerson() {
@@ -235,5 +249,55 @@ extension PersonReferencesTests {
     func testTheAnswerDoesNotDependOnTheOrderOfThePeople() {
         let r = record()
         XCTAssertEqual(PersonReferences(people: people).refresh(r), PersonReferences(people: people.reversed()).refresh(r))
+    }
+}
+
+extension PersonReferencesTests {
+    func testTheOwnersLinesNeverTakeAnotherPersonsName() {
+        // Step 1: "Your name" holds Dana Lee's name for a moment. The store keeps the owner's name.
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PeopleStore(directory: dir)
+        try? store.replaceAll(people)
+        try? store.setOwnerName("Dana Lee")
+        XCTAssertEqual(store.owner?.displayName, "Avery Webb")
+        // Even with such a rename in the file, a label never becomes a name that another live person has.
+        let before = PersonReferences(people: people).refresh(record())
+        owner.rename(to: "Dana Lee", source: .owner, at: t0)
+        let after = PersonReferences(people: people).refresh(before)
+        XCTAssertEqual(after.speakerNames["me:A"], "Avery Webb")
+        XCTAssertEqual(after.speakerPeople?["me:A"], "id-owner")
+        // Step 2: the name is corrected. The owner's lines stay the owner's.
+        owner.rename(to: "Avery Webb", source: .owner, at: t0)
+        let fixed = PersonReferences(people: people).refresh(after)
+        XCTAssertEqual(fixed.speakerPeople?["me:A"], "id-owner")
+        XCTAssertEqual(fixed.speakerNames["me:A"], "Avery Webb")
+    }
+
+    func testAnAddressOfAnOlderMeetingCountsForTheShortNamesOfTheCall() {
+        var r = record()
+        r.invitees = nil
+        r.speakerNames = ["me:A": "Avery Webb"]
+        r.attendees = ["sam.carter@example.com", "Riley <riley@nowhere.example.com>"]
+        let out = PersonReferences(people: people).refresh(r)
+        XCTAssertEqual(out.actionItems[0].ownerID, "id-sam", "\"Sam\" is the one Sam the invite's address names")
+        XCTAssertNil(out.invitees, "an older meeting gets no calendar pairs")
+    }
+
+    func testTheCopyWithTheIdWinsAtTheSameTimeInBothOrders() {
+        var mac = Commitment(text: "Send it", to: "Sam Brooks", callID: nil, callTitle: nil, madeAt: t0, due: nil, created: t0)
+        var phone = mac
+        phone.to = "Sam Carter"
+        mac.toID = "id-sam"
+        var a = CommitmentBook(), b = CommitmentBook()
+        a.items = [mac]
+        b.items = [phone]
+        XCTAssertEqual(a.merged(with: b).items.first?.toID, "id-sam")
+        XCTAssertEqual(b.merged(with: a).items.first?.toID, "id-sam")
+        XCTAssertEqual(b.merged(with: a).items.first?.to, "Sam Brooks")
+        // A newer change of the owner's still wins.
+        phone.updated = t0.addingTimeInterval(60)
+        b.items = [phone]
+        XCTAssertNil(a.merged(with: b).items.first?.toID)
     }
 }

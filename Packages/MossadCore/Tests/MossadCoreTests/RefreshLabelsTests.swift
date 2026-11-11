@@ -51,10 +51,9 @@ extension PipelineTests {
     func testAStopAfterTheRenameIsFinishedByTheNextStartWithOnePerson() async throws {
         let people = identity()
         let (_, id) = try await namedCall()
-        // The app stopped after the rename and before any record changed. An older build drops the ids too.
+        // The app stopped after the rename and before any record changed.
         try library.rename("Alex Rivera", to: "Alex Stone")
         var old = try load(id)
-        old = PersonReferences.withoutIDs(old)
         old.speakerNames["them:A"] = "Alex Rivera"
         try old.save(to: paths.callDirectory(id))
         let changed = await pipeline().refreshLabels()
@@ -63,6 +62,37 @@ extension PipelineTests {
         XCTAssertEqual(r.speakerNames["them:A"], "Alex Stone")
         XCTAssertEqual(r.speakerPeople?["them:A"], people.id(forVoiceName: "Alex Stone")?.rawValue)
         XCTAssertEqual(people.people.filter(\.isLive).filter { $0.displayName.hasPrefix("Alex") }.count, 1, "one person, not two")
+    }
+
+    func testIdsThatComeBackLeaveTheNoteAsItIs() async throws {
+        _ = identity()
+        let (p, id) = try await namedCall()
+        let full = try load(id)
+        // An older build saved the record and dropped the ids. The owner edited the note by hand.
+        try PersonReferences.withoutIDs(full).save(to: paths.callDirectory(id))
+        let note = try XCTUnwrap(full.markdownPath)
+        try (String(contentsOfFile: note, encoding: .utf8) + "\nMy own line.\n").write(toFile: note, atomically: true, encoding: .utf8)
+        let bytes = try Data(contentsOf: URL(fileURLWithPath: note))
+        let changed = await p.refreshLabels()
+        XCTAssertEqual(changed, 1)
+        XCTAssertEqual(try load(id).speakerPeople, full.speakerPeople)
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: note)), bytes, "only ids: the note is not written")
+    }
+
+    func testANoteThatIsWrittenAgainHasACopyFirst() async throws {
+        _ = identity()
+        let (p, id) = try await namedCall()
+        let note = try XCTUnwrap(try load(id).markdownPath)
+        let bytes = try Data(contentsOf: URL(fileURLWithPath: note))
+        try library.rename("Alex Rivera", to: "Alex Stone")
+        _ = await p.refreshLabels()
+        let copy = ReferenceBackup.folder(paths).appendingPathComponent("notes/\(URL(fileURLWithPath: note).lastPathComponent)")
+        XCTAssertEqual(try Data(contentsOf: copy), bytes)
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: copy.deletingLastPathComponent().path).contains { $0.hasSuffix(".part") })
+        // A deleted meeting takes the copy of its record with it.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ReferenceBackup.folder(paths).appendingPathComponent("calls/\(id).json").path))
+        _ = await p.delete(callID: id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: ReferenceBackup.folder(paths).appendingPathComponent("calls/\(id).json").path))
     }
 
     func testWithNoPeopleStoreARenameChangesTheLabelsAsBefore() async throws {

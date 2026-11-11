@@ -118,7 +118,14 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
         var byID: [UUID: Commitment] = [:]
         var order: [UUID] = []
         for c in items + other.items {
-            if let old = byID[c.id] { if c.updated > old.updated { byID[c.id] = c } } else { byID[c.id] = c; order.append(c.id) }
+            if let old = byID[c.id] {
+                // At the same time, the copy with the person's id wins: the Mac adds ids and names of now without a
+                // change of the time, so both new devices agree, and an older device keeps its copy.
+                if c.updated > old.updated || (c.updated == old.updated && old.toID == nil && c.toID != nil) { byID[c.id] = c }
+            } else {
+                byID[c.id] = c
+                order.append(c.id)
+            }
         }
         out.items = order.compactMap { byID[$0] }
         out.checked = checked.union(other.checked)

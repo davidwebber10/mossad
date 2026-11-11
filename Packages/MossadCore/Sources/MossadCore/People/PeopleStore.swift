@@ -332,9 +332,21 @@ public final class PeopleStore: @unchecked Sendable {
             }
             let old = people[i].displayName
             guard old != name else { return [] }
+            // Another live person's name is that person's: the owner keeps their own, so no label of the owner's
+            // ever becomes the other person's name.
+            guard !Self.isOtherPersonsName(name, owner: people[i].id, in: people) else {
+                Log.error("People: \"Your name\" is the name of another saved person, so the owner keeps the name \(old)")
+                return []
+            }
             people[i].rename(to: name, source: .owner, at: date)
             return [PeopleLogEntry(at: date, kind: "ownerName", actor: "owner", subject: people[i].id, before: old, after: name)]
         }
+    }
+
+    /// Whether a name is the name of now of a live person other than the owner.
+    static func isOtherPersonsName(_ name: String, owner: PersonID, in people: [Person]) -> Bool {
+        let key = PersonNames.key(name)
+        return people.contains { $0.isLive && $0.id != owner && PersonNames.key($0.displayName) == key }
     }
 
     /// Replaces the whole list: the migration's write.

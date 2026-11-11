@@ -445,7 +445,12 @@ public actor Pipeline {
     private func store(_ r: CallRecord, dir: URL) throws {
         var r = r
         // The ids of its people go with each save. The labels change only where the note is written too.
-        if let refs = references() { r = refs.refresh(r, relabel: false) }
+        if let refs = references() {
+            let next = refs.refresh(r, relabel: false)
+            // A written meeting that gets ids here for the first time keeps a copy of how it was.
+            if next != r, r.status == .written { ReferenceBackup.keep(record: dir, paths: paths) }
+            r = next
+        }
         try r.save(to: dir)
         onStep(r)
     }
@@ -467,14 +472,36 @@ public actor Pipeline {
         var changed = 0
         if let refs = references() {
             for record in ProcessingQueue(paths: paths).allRecords() {
+                // A first look at the record in memory: most runs change nothing, and then no file is read again.
+                guard refs.refresh(record) != record else { continue }
                 let dir = paths.callDirectory(record.id)
+                var refused = false, relabeled = false
                 guard var r = edit(record.id, { r in
                     let next = refs.refresh(r)
-                    guard next != r, refs.changesOnlyReferences(from: r, to: next) else { return false }
+                    guard next != r else { return false }
+                    guard refs.changesOnlyReferences(from: r, to: next) else {
+                        refused = true
+                        return false
+                    }
+                    relabeled = next.speakerNames != r.speakerNames || next.actionItems.map(\.owner) != r.actionItems.map(\.owner)
                     r = next
                     return true
-                }), ReferenceBackup.keep(record: dir, paths: paths) else { continue }
-                save(&r, dir: dir)
+                }) else {
+                    if refused { Log.error("People: \(record.id) is left as it is: the refresh would change more than the references") }
+                    continue
+                }
+                guard ReferenceBackup.keep(record: dir, paths: paths) else { continue }
+                if relabeled, r.status == .written {
+                    // A label changed: the note is written again, after a copy of it as it was.
+                    if let note = r.markdownPath, !ReferenceBackup.keep(note: note, paths: paths) { continue }
+                    save(&r, dir: dir)
+                } else {
+                    // Only ids: the note does not change, so it is not written.
+                    do { try store(r, dir: dir) } catch {
+                        Log.error("People: the ids of \(r.id) were not saved: \(error)")
+                        continue
+                    }
+                }
                 changed += 1
             }
             if changed > 0 { Log.info("People: \(changed) meetings have their people's ids and names of now") }
@@ -493,6 +520,8 @@ public actor Pipeline {
         let dir = paths.callDirectory(callID)
         guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed else { return nil }
         if let note = r.markdownPath { try? FileManager.default.removeItem(atPath: note) }
+        // The copy of the record from before the ids goes with the meeting.
+        ReferenceBackup.forget(callID: callID, paths: paths)
         do { try FileManager.default.removeItem(at: dir) } catch {
             Log.error("Deleting \(callID) failed: \(error)")
             return nil
@@ -1151,7 +1180,11 @@ public actor Pipeline {
 
 
     private func save(_ r: inout CallRecord, dir: URL) {
-        if let refs = references() { r = refs.refresh(r) }
+        if let refs = references() {
+            let next = refs.refresh(r)
+            if next != r, r.status == .written { ReferenceBackup.keep(record: dir, paths: paths) }
+            r = next
+        }
         do {
             if r.status == .written {
                 let url = MarkdownWriter.noteURL(for: r, in: paths.meetings)

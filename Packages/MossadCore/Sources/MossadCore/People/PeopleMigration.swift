@@ -74,6 +74,9 @@ public struct MigrationReport: Codable, Equatable, Sendable {
         public var speakersWithID = 0
         public var invitees = 0
         public var inviteesWithID = 0
+        /// Invited texts of older meetings (`attendees` with no calendar pairs): they have no place for an id.
+        public var olderInvited = 0
+        public var olderInvitedMeetings = 0
         /// Action items with an owner.
         public var actionItems = 0
         public var actionItemsWithID = 0
@@ -294,7 +297,11 @@ public enum PeopleMigration {
         }
         // The owner is a person, also with no voice profile.
         if !input.ownerName.isEmpty {
-            if let i = people.firstIndex(where: { $0.isOwner && $0.isLive }) {
+            if let i = people.firstIndex(where: { $0.isOwner && $0.isLive }),
+               PeopleStore.isOtherPersonsName(input.ownerName, owner: people[i].id, in: people) {
+                // The owner keeps their name: a label of the owner's must never become another person's name.
+                report.notes.append("\"Your name\" in Settings is the name of another saved person, so the owner keeps the name \"\(people[i].displayName)\".")
+            } else if let i = people.firstIndex(where: { $0.isOwner && $0.isLive }) {
                 people[i].rename(to: input.ownerName, source: .owner, at: now)
             } else {
                 people.append(Person(id: makeID(), displayName: input.ownerName, isOwner: true, origin: .owner, at: now))
@@ -641,6 +648,10 @@ public enum PeopleMigration {
             let named = next.speakerNames.filter { !$0.value.hasPrefix("Speaker ") }
             out.speakers += named.count
             out.speakersWithID += named.keys.filter { next.speakerPeople?[$0] != nil }.count
+            if next.invitees == nil, !next.attendees.isEmpty {
+                out.olderInvited += next.attendees.count
+                out.olderInvitedMeetings += 1
+            }
             out.invitees += next.invitees?.count ?? 0
             out.inviteesWithID += next.invitees?.filter { $0.personID != nil }.count ?? 0
             let owned = next.actionItems.filter { $0.owner?.nonBlank != nil }
@@ -721,7 +732,7 @@ public enum PeopleMigration {
                 result.commitments = zip(book.items, next.items).filter { $0 != $1 }.count
             }
         }
-        result.org = try OrgMatches.load(paths: paths).saveByPerson(paths: paths)
+        result.org = try OrgMatches.linkPeople(paths: paths)
         return result
     }
 
@@ -896,7 +907,9 @@ public enum PeopleMigration {
                 if mode == "revert-references" {
                     do {
                         let n = try revertReferences(paths: paths)
-                        return (n == 0 ? "There were no ids to remove." : "Removed the ids from \(n) files. The labels stay; the backup folder has each file as it was.", 0)
+                        return (n == 0 ? "There were no ids to remove." : "Removed the ids from \(n) files. This does not restore the files: a label that became a name of now, "
+                            + "a note, and the people on the phone stay, and this build writes the ids again at its next launch. Use it before a return to an older build. "
+                            + "The backup folder has each file as it was: \(ReferenceBackup.folder(paths).path)", 0)
                     } catch { return ("Revert of the references failed: \(error)", 1) }
                 }
                 if mode == "revert" {
@@ -943,9 +956,12 @@ public enum PeopleMigration {
             "Org matches: \(t.orgMatchesResolved) of \(t.orgMatches) resolve",
         ]
         if let x = plan.report.references {
-            lines.append("References: \(x.recordsToChange) of \(x.records) \(x.records == 1 ? "meeting changes" : "meetings change"); ids for speakers \(x.speakersWithID) of \(x.speakers), invited \(x.inviteesWithID) of \(x.invitees), "
+            lines.append("References: \(x.recordsToChange) of \(x.records) \(x.records == 1 ? "meeting changes" : "meetings change"); ids for speakers \(x.speakersWithID) of \(x.speakers), invited with a calendar pair \(x.inviteesWithID) of \(x.invitees), "
                 + "action item owners \(x.actionItemsWithID) of \(x.actionItems), commitments \(x.commitmentsWithID) of \(x.commitments) (\(x.commitmentsToChange) change), "
                 + "org matches \(x.orgMatchesWithID) of \(x.orgMatches); \(x.labels.count) \(x.labels.count == 1 ? "label becomes" : "labels become") a name of now")
+            if x.olderInvited > 0 {
+                lines.append("Invited in older meetings: \(x.olderInvited) texts in \(x.olderInvitedMeetings) meetings have no place for an id; they stay text, and their addresses count for the action items of the call")
+            }
             if !x.refused.isEmpty { lines.append("References left as they are: \(x.refused.count) meetings") }
         }
         if !plan.report.errors.isEmpty { lines.insert("ERRORS: " + plan.report.errors.joined(separator: "; "), at: 0) }

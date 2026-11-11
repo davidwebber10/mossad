@@ -73,7 +73,7 @@ final class OwnerIdentityTests: XCTestCase {
         _ = try people.ensure(voiceName: "Pat Moreno", isOwner: false, origin: .voiceNaming)
         try people.setOwnerName("Pat Moreno")
         try people.setOwnerName("Avery Webb")
-        XCTAssertEqual(Set(people.ownerNames), ["Pat Moreno", "Avery Webb"], "the store keeps what was typed")
+        XCTAssertEqual(people.ownerNames, ["Avery Webb"], "another saved person's name never becomes the owner's")
         let owner = OwnerIdentity.read(name: "Avery Webb", paths: paths)
         XCTAssertFalse(owner.isOwner("Pat Moreno"))
         XCTAssertTrue(owner.isOwner("Avery Webb"))

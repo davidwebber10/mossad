@@ -145,13 +145,17 @@ public struct PersonReferences: Sendable {
     private func reference(_ id: String?, label: String?, email: String? = nil, in context: ResolutionContext?, former: Bool) -> String? {
         if let id, fits(label, email: email, id: id, in: context, former: former) { return canonical(id) }
         if let email, let hit = resolve("", email: email) { return hit }
-        return label.flatMap { resolve($0, in: context, former: former) }
+        // A name a person had before counts only for a reference that has that person's id already: a new label
+        // with an old name can be another person, and the owner's correction must stay.
+        return label.flatMap { resolve($0, in: context) }
     }
 
     /// The label after a rename or a merge: the person's name of now, where the label is a name the person had. A
     /// short name ("Sam") and another written form stay as they are.
     private func label(_ label: String, id: String?, was old: String? = nil) -> String {
-        guard let id, let person = person(id), let now = person.displayName.nonBlank, label != now else { return label }
+        guard let id, let person = person(id), let now = person.displayName.nonBlank, label != now,
+              // A name of now that another live person has too would make two people one label.
+              byDisplay[now]?.count == 1 else { return label }
         let key = PersonNames.nameKey(label)
         guard key != PersonNames.nameKey(now), renamedKeys(id).union(old.map(renamedKeys) ?? []).contains(key) else { return label }
         return now
@@ -178,7 +182,14 @@ public struct PersonReferences: Sendable {
         }
         // A record with no pairs: each invited name by itself.
         if r.invitees == nil {
-            for text in r.attendees where !text.contains("@") {
+            for text in r.attendees {
+                let o = PersonObservation(text: text)
+                // An address, alone or next to a name, says who it is; a bare address is no other name of the call.
+                if let email = o.email, let id = resolve("", email: email) {
+                    if !context.roster.contains(PersonID(rawValue: id)) { context.roster.append(PersonID(rawValue: id)) }
+                    continue
+                }
+                guard !text.contains("@") else { continue }
                 if let id = resolve(text) {
                     if !context.roster.contains(PersonID(rawValue: id)) { context.roster.append(PersonID(rawValue: id)) }
                 } else {

@@ -178,7 +178,8 @@ public actor CloudSync {
             payloads.append(.commitments(book))
         }
         // Only a people file that reads: a damaged or newer one is not sent, and the phone keeps the copy it has.
-        if sendPeople, let people = PeopleStore.peek(in: paths.people), !people.isEmpty,
+        // Only to the owner's server: an iCloud store needs the record type in its production schema first.
+        if sendPeople, store.wantsMeetingView, let people = PeopleStore.peek(in: paths.people), !people.isEmpty,
            let data = try? Data(contentsOf: paths.people.appendingPathComponent(PeopleStore.fileName)),
            (PeopleStore.version(of: data) ?? 1) <= PeopleStore.currentVersion {
             payloads.append(.people(people))

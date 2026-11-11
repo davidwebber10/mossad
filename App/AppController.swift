@@ -795,7 +795,7 @@ final class AppController: ObservableObject {
             let changed = await pipeline.refreshLabels(renamed: renamed)
             let people = library.identity?.people.people ?? []
             let records = await Task.detached(priority: .utility) { () -> [CallRecord] in
-                do { try OrgMatches.load(paths: paths).saveByPerson(paths: paths) } catch { Log.error("People: the org matches by id were not saved: \(error)") }
+                do { try OrgMatches.linkPeople(paths: paths) } catch { Log.error("People: the org matches by id were not saved: \(error)") }
                 return ProcessingQueue(paths: paths).allRecords()
             }.value
             linkCommitmentPeople(people, records: records)

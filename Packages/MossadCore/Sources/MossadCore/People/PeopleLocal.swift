@@ -45,13 +45,19 @@ public struct PeopleLocal: Codable, Equatable, Sendable {
 
 extension OrgMatches {
     /// The matches by person id, from the matches by name: each live person whose name no other live person has.
-    /// A person with no match by the name of now keeps no entry; an entry of another id stays as it is.
+    /// A person whose name the owner cleared loses the entry; a person with no match only by the name (a rename after
+    /// the matches were read) keeps it. An entry of another id stays as it is.
     public func byPerson(_ people: [Person], keeping old: [String: String] = [:]) -> [String: String] {
         var out = old
         let live = people.filter(\.isLive)
         let counts = Dictionary(grouping: live, by: { OrgChart.normalize($0.displayName) }).mapValues(\.count)
         for p in live where counts[OrgChart.normalize(p.displayName)] == 1 {
-            out[p.id.rawValue] = byName[OrgChart.normalize(p.displayName)]
+            let key = OrgChart.normalize(p.displayName)
+            if let value = byName[key] {
+                out[p.id.rawValue] = value
+            } else if cleared.contains(key) {
+                out[p.id.rawValue] = nil
+            }
         }
         return out
     }
