@@ -52,7 +52,7 @@ private struct PhoneGoalsScreen: View {
         let p = store.profile
         let goals = p.goalHistory
         Group {
-            if goals.current == nil, goals.offered.isEmpty, goals.finished.isEmpty {
+            if goals.current == nil, goals.offered.isEmpty, goals.ended.isEmpty, goals.finished.isEmpty {
                 ContentUnavailableView("No goal yet", systemImage: "scope",
                                        description: Text("After a few reviewed calls the coach offers one goal, as a card in Findings. When you take it, how each call went on it shows here."))
             } else {
@@ -78,6 +78,9 @@ private struct PhoneGoalsScreen: View {
                     }
                     if !goals.finished.isEmpty {
                         Section("Learned") { ForEach(goals.finished) { Label($0.plan, systemImage: "checkmark.seal.fill") } }
+                    }
+                    if !goals.ended.isEmpty {
+                        Section("Ended") { ForEach(goals.ended) { Text($0.plan).foregroundStyle(.secondary) } }
                     }
                     if !goals.offered.isEmpty {
                         Section("Not taken") { ForEach(goals.offered) { Text($0.plan).foregroundStyle(.secondary) } }

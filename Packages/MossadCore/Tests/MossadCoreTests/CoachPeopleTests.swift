@@ -398,4 +398,42 @@ final class CoachPeopleTests: XCTestCase {
         XCTAssertEqual(profile.learnings(named: "Sam Carter").map(\.text), ["Sam reports to you."])
         XCTAssertEqual(profile.learnings(named: "Riley Chen"), [])
     }
+
+    // MARK: Second review fixes
+
+    func testAFirstNameLinkGoesToAFactOnlyThroughTheCardThatShowsTheWholeName() {
+        var q = question(about: "Sam")
+        let subject = saved.subject(of: q.statement, about: q.about, in: call(speakers: ["Sam Carter"]), firstName: true)
+        q.person = subject?.id
+        q.personName = subject?.name
+        XCTAssertEqual(q.person, sam.id.rawValue)
+        // A yes on a question row, which does not show the person: the fact gets no id, also at the next launch.
+        var row = CoachProfile()
+        row.ask([q])
+        row.answer(q.id, .confirmed, note: nil, at: base)
+        row.linkPeople(saved, records: [call(speakers: ["Sam Carter"])])
+        XCTAssertEqual(row.facts.map(\.person), [nil])
+        // A yes on the card, which shows "About Sam Carter": the fact has the id.
+        var card = CoachProfile()
+        card.ask([q])
+        card.answer(deck(card)[0], .yes, at: base)
+        card.linkPeople(saved, records: [call(speakers: ["Sam Carter"])])
+        XCTAssertEqual(card.facts.map(\.person), [sam.id.rawValue])
+        // A whole name from the model is a sure match on any path.
+        var whole = CoachProfile()
+        var w = question()
+        w.person = sam.id.rawValue
+        whole.ask([w])
+        whole.answer(w.id, .confirmed, note: nil, at: base)
+        whole.linkPeople(saved, records: [call()])
+        XCTAssertEqual(whole.facts.map(\.person), [sam.id.rawValue])
+    }
+
+    func testAnInvitedPersonWithOnlyAnAddressCountsForTheFirstName() {
+        var r = call(speakers: ["Sam Carter"])
+        r.invitees = [Invitee(name: nil, email: "sam.ortiz@example.com")]
+        XCTAssertNil(saved.subject(of: "Sam reports to you.", about: "Sam", in: r, firstName: true))
+        r.invitees = [Invitee(name: nil, email: "sam.carter@example.com")]
+        XCTAssertEqual(saved.subject(of: "Sam reports to you.", about: "Sam", in: r, firstName: true)?.id, sam.id.rawValue, "the speaker's own address")
+    }
 }
