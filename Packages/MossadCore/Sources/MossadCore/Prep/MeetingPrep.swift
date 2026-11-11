@@ -367,11 +367,13 @@ public struct MeetingPrep: Sendable, Equatable {
     ///   series of a small invite. Its invite list is compared with this one; a meeting with no list kept has
     ///   only its voices.
     /// With no people to compare on one side, the title decides, unless both links are known and differ.
+    /// A meeting whose invite has the same series id from Google is in the series whatever its title.
     static func series(of meeting: UpcomingMeeting, invited: [Invited], in past: [CallRecord], owner: String, directory: PersonDirectory,
                        ownerEmails: [String] = []) -> [CallRecord] {
         let key = PeopleDuplicates.normalized(meeting.title)
         let link = meeting.link.map { ($0.absoluteString.removingPercentEncoding ?? $0.absoluteString).lowercased() }
         return past.filter { r in
+            if let id = meeting.seriesID, let theirs = r.calendarSeriesID { return id == theirs }
             guard r.titleSource == .calendar || r.titleSource == .custom, PeopleDuplicates.normalized(r.title) == key else { return false }
             let listed = Set(Self.invited(r.attendees, owner: owner, directory: directory, ownerEmails: ownerEmails).map { PeopleDuplicates.normalized($0.name) })
             let voices = Set(r.speakerNames.values.filter { !$0.hasPrefix("Speaker ") && PeopleDuplicates.normalized($0) != PeopleDuplicates.normalized(owner) }

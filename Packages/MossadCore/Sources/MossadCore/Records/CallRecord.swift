@@ -210,6 +210,10 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// The invited people with the name and the address apart, when the calendar gave them. `attendees` has one
     /// text for each; this has both, so the address can say who a name is. Nil in records from before it.
     public var invitees: [Invitee]?
+    /// The id of the calendar series the invite belongs to, when the calendar said (Google). Nil for a single event.
+    public var calendarSeriesID: String?
+    /// Who sent the invite, when the calendar said (Google).
+    public var organizer: Invitee?
     public var utterances: [Utterance] = []
     /// Per-track results, kept so a failed track does not force the other one to be transcribed again.
     public var meUtterances: [Utterance]?
@@ -312,6 +316,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
         calendarTitle = event.title
         attendees = event.attendees
         invitees = event.participants.isEmpty ? nil : event.participants
+        calendarSeriesID = event.seriesID
+        organizer = event.organizer
         plannedStart = event.isAllDay ? nil : event.start
         plannedEnd = event.isAllDay ? nil : event.end
     }
@@ -369,6 +375,8 @@ extension CallRecord {
         plannedEnd = try c.decodeIfPresent(Date.self, forKey: .plannedEnd)
         attendees = try c.decodeIfPresent([String].self, forKey: .attendees) ?? []
         invitees = try c.decodeIfPresent([Invitee].self, forKey: .invitees)
+        calendarSeriesID = try c.decodeIfPresent(String.self, forKey: .calendarSeriesID)
+        organizer = try c.decodeIfPresent(Invitee.self, forKey: .organizer)
         utterances = try c.decodeIfPresent([Utterance].self, forKey: .utterances) ?? []
         meUtterances = try c.decodeIfPresent([Utterance].self, forKey: .meUtterances)
         themUtterances = try c.decodeIfPresent([Utterance].self, forKey: .themUtterances)

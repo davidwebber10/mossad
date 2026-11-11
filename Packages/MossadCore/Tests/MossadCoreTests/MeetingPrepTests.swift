@@ -212,6 +212,18 @@ final class MeetingPrepTests: XCTestCase {
 
     // MARK: The series
 
+    func testGooglesSeriesIDDecidesTheSeriesWhenBothSidesHaveOne() {
+        var renamed = call("r1", daysAgo: 7, title: "Design review (moved)", speakers: [owner, sam], headline: "Renamed once.")
+        renamed.calendarSeriesID = "series-1"
+        var other = call("o1", daysAgo: 3, title: "Weekly sync", speakers: [owner, sam, jo], headline: "Same title, other series.")
+        other.calendarSeriesID = "series-2"
+        var meeting = upcoming("Weekly sync")
+        meeting.seriesID = "series-1"
+        let p = prep(meeting, records: [other, renamed])
+        XCTAssertEqual(p.lastTime?.meeting.id, "r1")
+        XCTAssertEqual(p.lastTime?.headline, "Renamed once.")
+    }
+
     func testTwoSeriesWithOneTitleAreTwoSeries() {
         let withSam = (1...3).map { call("s\($0)", daysAgo: Double($0) * 7, title: "1:1", speakers: [owner, sam], headline: "With Sam.",
                                          attendees: ["dana@example.com", "sam.carter@example.com"]) }

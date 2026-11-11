@@ -10,6 +10,8 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
     /// The call app its link is for; nil for an event with no call link.
     public var platform: Platform?
     public var link: URL?
+    /// The calendar series it belongs to, when the calendar said (Google).
+    public var seriesID: String?
 
     public static let days = 7
     public static let limit = 12
@@ -30,7 +32,8 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
                 // Only calls: an event without a call link (lunch, a focus block) is not one.
                 let (platform, link) = callLink(in: e.text)
                 guard platform != nil else { return nil }
-                return UpcomingMeeting(title: e.title, start: e.start, end: e.end, attendees: e.attendees, platform: platform, link: link)
+                return UpcomingMeeting(title: e.title, start: e.start, end: e.end, attendees: e.attendees, platform: platform,
+                                       link: e.meetingLink.flatMap { callLink(in: $0.absoluteString).0 == nil ? nil : $0 } ?? link, seriesID: e.seriesID)
             }
             .prefix(limit).map { $0 }
     }
