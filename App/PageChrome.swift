@@ -188,15 +188,18 @@ final class TrafficLights {
 
 /// A list column: its own title row (15 pt semibold, 36 pt), then the list. The trailing edge drags to resize it;
 /// the width is kept per page.
-struct ListColumn<Content: View>: View {
+struct ListColumn<Accessory: View, Content: View>: View {
     let title: String
     @AppStorage private var width: Double
+    /// A small control at the trailing end of the title row, such as the Meetings filter.
+    @ViewBuilder let accessory: Accessory
     @ViewBuilder let content: Content
     @State private var dragStart: Double?
 
-    init(_ title: String, widthKey: String, @ViewBuilder content: () -> Content) {
+    init(_ title: String, widthKey: String, @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
         self.title = title
         _width = AppStorage(wrappedValue: Double(Chrome.listWidth), "listWidth.\(widthKey)")
+        self.accessory = accessory()
         self.content = content()
     }
 
@@ -212,14 +215,19 @@ struct ListColumn<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
-                .foregroundStyle(Palette.ink)
-                .padding(.leading, Chrome.listTitleLeading)
-                .frame(maxWidth: .infinity, minHeight: Chrome.listTitleHeight, maxHeight: Chrome.listTitleHeight, alignment: .leading)
-                .background { WindowDragArea() }
-                .padding(.top, Chrome.listTop)
-                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: Space.s) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
+                    .foregroundStyle(Palette.ink)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+                accessory
+            }
+            .padding(.leading, Chrome.listTitleLeading)
+            .padding(.trailing, Space.m)
+            .frame(maxWidth: .infinity, minHeight: Chrome.listTitleHeight, maxHeight: Chrome.listTitleHeight, alignment: .leading)
+            .background { WindowDragArea() }
+            .padding(.top, Chrome.listTop)
             VStack(spacing: 0) { content }.frame(maxHeight: .infinity, alignment: .top)
         }
         .frame(width: clamped)
@@ -246,6 +254,12 @@ struct ListColumn<Content: View>: View {
                     .onEnded { _ in dragStart = nil }
             )
             .accessibilityHidden(true)
+    }
+}
+
+extension ListColumn where Accessory == EmptyView {
+    init(_ title: String, widthKey: String, @ViewBuilder content: () -> Content) {
+        self.init(title, widthKey: widthKey, accessory: { EmptyView() }, content: content)
     }
 }
 

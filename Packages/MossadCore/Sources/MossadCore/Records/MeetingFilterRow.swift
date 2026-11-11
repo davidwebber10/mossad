@@ -8,13 +8,16 @@ public struct MeetingFilterPeople: Sendable {
     /// a saved person is then found by the saved name.
     public let ids: [String: String]
     public let owner: String
+    /// The keys of every name the owner has or had: the owner's lines in an old meeting can be under an older name.
+    let ownerKeys: Set<String>
     /// Changes when the saved people, their ids, or the owner do: rows made with another one are made again.
     let stamp: Int
 
-    public init(directory: PersonDirectory = PersonDirectory(), ids: [String: String] = [:], owner: String = "") {
+    public init(directory: PersonDirectory = PersonDirectory(), ids: [String: String] = [:], owner: String = "", ownerNames: [String] = []) {
         self.directory = directory
         self.ids = ids
         self.owner = owner
+        ownerKeys = Set(([owner] + ownerNames).map(PersonNames.key).filter { !$0.isEmpty })
         var h = Hasher()
         for p in directory.people {
             h.combine(p.name)
@@ -22,6 +25,7 @@ public struct MeetingFilterPeople: Sendable {
         }
         h.combine(ids)
         h.combine(owner)
+        h.combine(ownerKeys)
         stamp = h.finalize()
     }
 
@@ -31,7 +35,8 @@ public struct MeetingFilterPeople: Sendable {
         if let store {
             for p in profiles { ids[p.name] = store.id(forVoiceName: p.name, isOwner: p.isOwner)?.rawValue }
         }
-        self.init(directory: PersonDirectory(profiles: profiles), ids: ids, owner: owner)
+        self.init(directory: PersonDirectory(profiles: profiles), ids: ids, owner: owner,
+                  ownerNames: profiles.filter(\.isOwner).map(\.name) + (store?.ownerNames ?? []))
     }
 
     private func who(saved name: String) -> MeetingFilter.Who { MeetingFilter.Who(id: ids[name], name: name) }
@@ -41,10 +46,9 @@ public struct MeetingFilterPeople: Sendable {
     /// (`PersonDirectory.link`); any other invited name is a person by that name, and an address of nobody saved
     /// is nobody. Unnamed voices and the owner are left out.
     func people(of r: CallRecord) -> [MeetingFilter.Who] {
-        let ownerKey = PersonNames.key(owner)
         var out: [MeetingFilter.Who] = [], seen: Set<String> = []
         func add(_ who: MeetingFilter.Who) {
-            guard PersonNames.key(who.name) != ownerKey || ownerKey.isEmpty, seen.insert(who.key).inserted else { return }
+            guard !ownerKeys.contains(PersonNames.key(who.name)), seen.insert(who.key).inserted else { return }
             out.append(who)
         }
         var spoke: [String] = []

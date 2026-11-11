@@ -7,6 +7,7 @@ struct MeetingsView: View {
     enum Mode: String, CaseIterable { case split = "Split", calendar = "Calendar" }
 
     @EnvironmentObject var controller: AppController
+    @EnvironmentObject var filters: MeetingFilterModel
     @AppStorage("meetingsMode") private var savedMode = Mode.split
     /// A preview's mode, kept out of the owner's saved choice.
     @State private var previewMode: Mode?
@@ -21,9 +22,14 @@ struct MeetingsView: View {
     @State private var lastInvite = InviteHolder()
     @StateObject private var calendarState = CalendarState()
 
+    /// The meetings that the search text and the filter leave. The call that records now stays under any filter:
+    /// it has no length, people, or summary to filter by yet, and the owner must see that it records.
     private var results: [CallRecord] {
-        guard let matches = controller.meetingMatches else { return controller.meetings }
-        return controller.meetings.filter { matches.contains($0.id) }
+        let found = controller.meetingMatches, kept = filters.matches
+        guard found != nil || kept != nil else { return controller.meetings }
+        return controller.meetings.filter { r in
+            (found?.contains(r.id) ?? true) && (kept?.contains(r.id) ?? true || r.status == .recording)
+        }
     }
 
     private var selected: CallRecord? {
@@ -50,11 +56,17 @@ struct MeetingsView: View {
                                 UpcomingDetailView(meeting: m)
                             }
                         } else {
-                            // Invites show only without a search: a search narrows what was recorded.
-                            CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting,
-                                         upcoming: controller.meetingQuery.isEmpty ? controller.calendarUpcoming : [],
-                                         openUpcoming: { m in openedFrom = calendarState.title; openedUpcoming = m }) { r, period in
-                                open(r, from: period)
+                            VStack(spacing: 0) {
+                                MeetingFilterChips()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, Chrome.toolbarInsets.leading).padding(.trailing, Chrome.toolbarInsets.trailing)
+                                    .padding(.bottom, Space.s)
+                                // Invites show only without a search or a filter: both narrow what was recorded.
+                                CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting,
+                                             upcoming: controller.meetingQuery.isEmpty && !filters.isActive ? controller.calendarUpcoming : [],
+                                             openUpcoming: { m in openedFrom = calendarState.title; openedUpcoming = m }) { r, period in
+                                    open(r, from: period)
+                                }
                             }
                         }
                     }
@@ -123,7 +135,9 @@ struct MeetingsView: View {
                 calendarState.anchor = d.addingTimeInterval(12 * 3600)
             }
         }
-        .onChange(of: mode) { _, _ in opened = nil; openedUpcoming = nil }
+        .onChange(of: mode) { _, _ in opened = nil; openedUpcoming = nil; filters.isOpen = false }
+        // The flyout belongs to this page's button; it must not come back by itself with the page.
+        .onDisappear { filters.isOpen = false }
     }
 
     // MARK: List
@@ -144,6 +158,11 @@ struct MeetingsView: View {
     private var splitBody: some View {
         HStack(spacing: 0) {
             ListColumn("Meetings", widthKey: "meetings") {
+                MeetingFilterButton()
+            } content: {
+                MeetingFilterChips()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10).padding(.top, 2).padding(.bottom, Space.xs)
                 CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, Space.s)
                 MeetingList(days: MeetingGroups.byDay(results.filter { $0.status != .recording }),
                             live: results.filter { $0.status == .recording },
@@ -169,6 +188,8 @@ struct MeetingsView: View {
         } trailing: {
             ModePicker(mode: Binding(get: { mode }, set: { previewMode = nil; savedMode = $0 }))
             ToolbarSearchField(prompt: "Search titles and transcripts", query: $controller.meetingQuery)
+            // Calendar mode has no list column to carry the filter's button.
+            if mode == .calendar, opened == nil, openedUpcoming == nil, !controller.meetings.isEmpty { MeetingFilterButton(place: .toolbar) }
             if mode == .split || opened != nil {
                 let record = opened.flatMap { id in controller.meetings.first { $0.id == id } } ?? selected
                 ToolbarCapsule {

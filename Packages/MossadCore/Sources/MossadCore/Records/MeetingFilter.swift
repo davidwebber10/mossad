@@ -220,6 +220,16 @@ public struct MeetingFilter: Equatable, Sendable {
 // MARK: Words
 
 extension MeetingFilter.Length {
+    /// Inside the group "Length", which says "minutes".
+    public var option: String {
+        switch self {
+        case .under15: "Under 15"
+        case .to30: "15–30"
+        case .to60: "30–60"
+        case .over60: "Over 60"
+        }
+    }
+
     public var label: String {
         switch self {
         case .under15: "Under 15 min"

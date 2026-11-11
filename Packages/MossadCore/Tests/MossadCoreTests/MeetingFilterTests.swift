@@ -304,6 +304,23 @@ final class MeetingFilterTests: XCTestCase {
         XCTAssertEqual(MeetingFilterPeople(profiles: profiles, store: nil, owner: "Dana Lee").ids, [:])
     }
 
+    func testEveryNameOfTheOwnerIsTheOwner() throws {
+        // The owner had another name when the older meeting was recorded.
+        let before = MeetingFilterPeople(directory: people.directory, ids: people.ids, owner: "Dana Lee", ownerNames: ["Dana Whitfield", "Dana Lee"])
+        let r = record("old", voices: [("me:A", 100), ("them:A", 100)], names: ["me:A": "Dana Whitfield", "them:A": "Sam Carter"],
+                       attendees: ["dana whitfield", "Sam Carter"])
+        XCTAssertEqual(MeetingFilterRow(record: r, people: before, rating: nil)?.people.map(\.name), ["Sam Carter"])
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("filter-owner-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = PeopleStore(directory: dir)
+        try store.ensure(voiceName: "Dana Whitfield", isOwner: true, origin: .voiceNaming)
+        try store.setOwnerName("Dana Lee")
+        let known = MeetingFilterPeople(profiles: [VoiceProfile(name: "Dana Lee", isOwner: true, embeddings: [])], store: store, owner: "Dana Lee")
+        XCTAssertEqual(MeetingFilterRow(record: r, people: known, rating: nil)?.people.map(\.name), ["Sam Carter"])
+    }
+
     func testPeopleAnyAndAll() {
         let sam = MeetingFilter.Who(id: "id-sam", name: "Sam Carter"), riley = MeetingFilter.Who(id: "id-riley", name: "Riley Park")
         let all = rows([record("both", voices: [("them:A", 100), ("them:B", 100)], names: ["them:A": "Sam Carter", "them:B": "Riley Park"]),
@@ -448,6 +465,8 @@ final class MeetingFilterTests: XCTestCase {
         XCTAssertEqual(label(.customLength(.init(min: 0, max: 10))), "Up to 10 min")
         XCTAssertEqual(label(.period(.custom(from: at(11, 3, 9), to: at(11, 5, 9)))), "Nov 3 – Nov 5")
         XCTAssertEqual(label(.period(.custom(from: at(11, 3, 9), to: at(11, 3, 12)))), "Nov 3")
+        XCTAssertEqual(MeetingFilter.Length.allCases.map(\.option), ["Under 15", "15–30", "30–60", "Over 60"])
+        XCTAssertEqual(label(.length(.to60)), "30–60 min")
         XCTAssertEqual(label(.size(.small)), "3–5 people")
         XCTAssertEqual(label(.size(.large)), "6+ people")
         XCTAssertEqual(label(.value(.high)), "High value")

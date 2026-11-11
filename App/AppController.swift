@@ -201,6 +201,8 @@ final class AppController: ObservableObject {
     /// The meetings that match `meetingQuery`; nil while it is empty, when every meeting matches. A text search
     /// reads every transcript, so it runs off the main thread, a moment after the last key press.
     @Published private(set) var meetingMatches: Set<String>?
+    /// The Meetings filter: the owner's choices and what the meetings offer.
+    let meetingFilter = MeetingFilterModel()
     private var filterTask: Task<Void, Never>?
     private var makingRecordings = false
 
@@ -401,6 +403,7 @@ final class AppController: ObservableObject {
         calendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         rebuildPipeline()
         observeForSearch()
+        meetingFilter.attach(self)
 
         // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
         // processing, so the screens can be checked while the installed copy records a call.
@@ -1695,7 +1698,7 @@ final class AppController: ObservableObject {
             w.titlebarAppearsTransparent = true
             w.titleVisibility = .hidden
             w.isReleasedWhenClosed = false
-            let host = NSHostingController(rootView: MainWindow().environmentObject(self).environmentObject(permissions))
+            let host = NSHostingController(rootView: MainWindow().environmentObject(self).environmentObject(permissions).environmentObject(meetingFilter))
             // Without this, every view update re-measures the whole window to set its size limits.
             host.sizingOptions = []
             w.contentViewController = host

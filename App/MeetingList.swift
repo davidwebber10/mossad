@@ -5,6 +5,7 @@ import SwiftUI
 /// window, and the selected one sits on a quiet fill; the arrow keys move the selection.
 struct MeetingList: View {
     @EnvironmentObject var controller: AppController
+    @EnvironmentObject var filters: MeetingFilterModel
     let days: [MeetingGroups.Day]
     let live: [CallRecord]
     @Binding var selection: String?
@@ -20,8 +21,9 @@ struct MeetingList: View {
     /// The arrow keys, Home, End, and typing scroll on their own; their selection change must not scroll again.
     @State private var scrolledHere: String?
 
+    /// Invites show only without a search or a filter: both narrow what was recorded.
     private var upcoming: [UpcomingMeeting] {
-        controller.meetingQuery.isEmpty ? Array(controller.upcoming.prefix(UpcomingRow.shown)) : []
+        controller.meetingQuery.isEmpty && !filters.isActive ? Array(controller.upcoming.prefix(UpcomingRow.shown)) : []
     }
 
     /// Every row's id in the order shown, for the arrow keys.
@@ -57,9 +59,11 @@ struct MeetingList: View {
                                 .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
                         }
                     }
-                    if order.isEmpty, !controller.meetingQuery.isEmpty {
-                        Text("No meetings match “\(controller.meetingQuery)”.")
+                    if order.isEmpty, !controller.meetingQuery.isEmpty || filters.isActive {
+                        // "Clear all" is just above, at the end of the filter's chips.
+                        Text(nothingText)
                             .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 10).padding(.top, Space.m)
                     }
                 }
@@ -99,6 +103,12 @@ struct MeetingList: View {
                 focused = true
             }
         }
+    }
+
+    private var nothingText: String {
+        let query = controller.meetingQuery
+        if query.isEmpty { return "No meetings match these filters." }
+        return filters.isActive ? "No meetings match “\(query)” with these filters." : "No meetings match “\(query)”."
     }
 
     /// Only a row off screen: scrolling to one already in view moved the list under the toolbar.
