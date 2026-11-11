@@ -65,7 +65,33 @@ public struct MigrationReport: Codable, Equatable, Sendable {
         public var why: String
     }
 
+    /// Phase 2: the ids that records, commitments, and org matches get, and the labels that become a name of now.
+    public struct References: Codable, Equatable, Sendable {
+        public var records = 0
+        public var recordsToChange = 0
+        /// Named voices: not "Speaker B".
+        public var speakers = 0
+        public var speakersWithID = 0
+        public var invitees = 0
+        public var inviteesWithID = 0
+        /// Action items with an owner.
+        public var actionItems = 0
+        public var actionItemsWithID = 0
+        /// Commitments to someone.
+        public var commitments = 0
+        public var commitmentsWithID = 0
+        public var commitmentsToChange = 0
+        public var orgMatches = 0
+        public var orgMatchesWithID = 0
+        /// "Old → New" with the meeting, for each label that becomes the person's name of now.
+        public var labels: [String] = []
+        /// Meetings where a refresh would change more than the references. They are left as they are.
+        public var refused: [String] = []
+    }
+
     public var totals = Totals()
+    /// Nil in a plan from before phase 2.
+    public var references: References?
     public var newLinks: [Link] = []
     public var notResolved: [Unresolved] = []
     public var orphans: [Orphan] = []
@@ -147,6 +173,8 @@ public enum PeopleMigration {
         public var coachPeople: [String] = []
         /// The keys of `org-matches.json`: normalized saved names.
         public var orgMatches: [String] = []
+        /// `org-matches.json` with its values.
+        public var orgByName = OrgMatches()
         /// The pairs the owner called two people, as "Name|Name".
         public var notDuplicates: [String] = []
         public var errors: [String] = []
@@ -223,7 +251,8 @@ public enum PeopleMigration {
            let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let notes = json["people"] as? [String: Any] {
             input.coachPeople = notes.keys.sorted()
         }
-        input.orgMatches = OrgMatches.load(paths: paths).byName.keys.sorted()
+        input.orgByName = OrgMatches.loadByName(paths: paths)
+        input.orgMatches = input.orgByName.byName.keys.sorted()
         input.basis = basis.finalize().prefix(12).map { String(format: "%02x", $0) }.joined()
         return input
     }
@@ -505,6 +534,8 @@ public enum PeopleMigration {
             people[i].addEmail(email, state: .seen, source: .calendar, at: now)
         }
 
+        report.references = references(people: people, records: input.records, commitments: input.commitments, org: input.orgByName)
+
         // Totals.
         report.totals.people = people.filter(\.isLive).count
         report.totals.owners = people.filter { $0.isOwner && $0.isLive }.count
@@ -591,6 +622,130 @@ public enum PeopleMigration {
                 }
             }
         }
+    }
+
+    // MARK: References (phase 2)
+
+    /// What the refresh of references would do on this data: the same pure step as the launch and the command.
+    static func references(people: [Person], records: [CallRecord], commitments: [Commitment], org: OrgMatches) -> MigrationReport.References {
+        var out = MigrationReport.References()
+        let refs = PersonReferences(people: people)
+        out.records = records.count
+        var refreshed: [CallRecord] = []
+        for r in records {
+            let next = refs.refresh(r)
+            refreshed.append(next)
+            if next != r {
+                if refs.changesOnlyReferences(from: r, to: next) { out.recordsToChange += 1 } else { out.refused.append(r.id) }
+            }
+            let named = next.speakerNames.filter { !$0.value.hasPrefix("Speaker ") }
+            out.speakers += named.count
+            out.speakersWithID += named.keys.filter { next.speakerPeople?[$0] != nil }.count
+            out.invitees += next.invitees?.count ?? 0
+            out.inviteesWithID += next.invitees?.filter { $0.personID != nil }.count ?? 0
+            let owned = next.actionItems.filter { $0.owner?.nonBlank != nil }
+            out.actionItems += owned.count
+            out.actionItemsWithID += owned.filter { $0.ownerID != nil }.count
+            for (key, name) in next.speakerNames.sorted(by: { $0.key < $1.key }) where r.speakerNames[key] != name {
+                out.labels.append("\(r.speakerNames[key] ?? "") → \(name) (\(r.id))")
+            }
+            for (a, b) in zip(r.actionItems, next.actionItems) where a.owner != b.owner {
+                out.labels.append("\(a.owner ?? "") → \(b.owner ?? "") (\(r.id), action item)")
+            }
+        }
+        let calls = Dictionary(refreshed.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for c in commitments where !c.deleted && c.to?.nonBlank != nil {
+            let next = refs.refresh(c, call: c.callID.flatMap { calls[$0] })
+            out.commitments += 1
+            if next.toID != nil { out.commitmentsWithID += 1 }
+            if next != c { out.commitmentsToChange += 1 }
+        }
+        out.orgMatches = org.byName.count
+        out.orgMatchesWithID = org.byPerson(people).values.count
+        return out
+    }
+
+    /// What the command's apply of references did.
+    public struct ReferenceResult: Equatable, Sendable {
+        public var records = 0
+        public var commitments = 0
+        public var org = false
+        /// Meetings left as they are: a refresh would change more than the references, there was no backup, or the
+        /// file read back was not what was written.
+        public var notChanged: [String] = []
+    }
+
+    /// Gives the records, the commitments, and the org matches the ids of their people, and makes a label the name
+    /// of now after a rename. Each file is copied to the backup folder before its first change, written whole, and
+    /// read back: a file that does not read back as written is reported. A stop in the middle is finished by the
+    /// next run, because each change is compared before it is written. Only with Mossad closed.
+    public static func applyReferences(paths: Paths, people: [Person]) throws -> ReferenceResult {
+        var result = ReferenceResult()
+        let refs = PersonReferences(people: people)
+        guard !refs.isEmpty else { return result }
+        var records: [CallRecord] = []
+        for r in ProcessingQueue(paths: paths).allRecords() {
+            let dir = paths.callDirectory(r.id)
+            var next = refs.refresh(r)
+            guard next != r else {
+                records.append(r)
+                continue
+            }
+            guard refs.changesOnlyReferences(from: r, to: next), ReferenceBackup.keep(record: dir, paths: paths) else {
+                result.notChanged.append(r.id)
+                records.append(r)
+                continue
+            }
+            // A new label is in the note too.
+            if next.speakerNames != r.speakerNames || next.actionItems.map(\.owner) != r.actionItems.map(\.owner), next.status == .written {
+                let url = MarkdownWriter.noteURL(for: next, in: paths.meetings)
+                try MarkdownWriter.render(next).write(to: url, atomically: true, encoding: .utf8)
+                if let old = next.markdownPath, old != url.path { try? FileManager.default.removeItem(atPath: old) }
+                next.markdownPath = url.path
+            }
+            try next.save(to: dir)
+            guard (try? CallRecord.load(from: dir)) == next else {
+                result.notChanged.append(r.id)
+                continue
+            }
+            records.append(next)
+            result.records += 1
+        }
+        let bookFile = paths.commitments.appendingPathComponent(CommitmentBook.fileName)
+        if FileManager.default.fileExists(atPath: bookFile.path), !StoredFile.awaitsMerge(bookFile) {
+            let book = try CommitmentBook.load(from: paths.commitments)
+            let next = refs.refresh(book, records: records)
+            if next != book, ReferenceBackup.keep(bookFile, as: CommitmentBook.fileName, paths: paths) {
+                try next.save(to: paths.commitments)
+                guard (try? CommitmentBook.load(from: paths.commitments)) == next else { throw MigrationError("commitments.json did not read back as written") }
+                result.commitments = zip(book.items, next.items).filter { $0 != $1 }.count
+            }
+        }
+        result.org = try OrgMatches.load(paths: paths).saveByPerson(paths: paths)
+        return result
+    }
+
+    /// Takes the ids away from the records and the commitments, and removes `local.json`. The labels stay as they
+    /// are: a name of now is still a right name. The backup folder has each file as it was before the first change.
+    @discardableResult
+    public static func revertReferences(paths: Paths) throws -> Int {
+        var changed = 0
+        for r in ProcessingQueue(paths: paths).allRecords() {
+            let bare = PersonReferences.withoutIDs(r)
+            guard bare != r else { continue }
+            try bare.save(to: paths.callDirectory(r.id))
+            changed += 1
+        }
+        let bookFile = paths.commitments.appendingPathComponent(CommitmentBook.fileName)
+        if FileManager.default.fileExists(atPath: bookFile.path), !StoredFile.awaitsMerge(bookFile) {
+            var book = try CommitmentBook.load(from: paths.commitments)
+            let before = book
+            book.items = book.items.map { var c = $0; c.toID = nil; return c }
+            if book != before { try book.save(to: paths.commitments); changed += 1 }
+        }
+        let local = PeopleLocal.url(paths)
+        if FileManager.default.fileExists(atPath: local.path) { try FileManager.default.removeItem(at: local); changed += 1 }
+        return changed
     }
 
     // MARK: Apply and revert
@@ -705,7 +860,7 @@ public enum PeopleMigration {
     /// folder: it writes the plan and the report only into the `--out` folder. Returns the text to print and the
     /// exit code.
     public static func command(_ arguments: [String], paths: Paths, ownerName: String, notDuplicates: [String], now: Date = Date()) -> (text: String, status: Int32) {
-        let usage = "Usage: Mossad --people-migration dry-run | apply | revert [--out <folder>]"
+        let usage = "Usage: Mossad --people-migration dry-run | apply | revert | apply-references | revert-references [--out <folder>]"
         guard let at = arguments.firstIndex(of: "--people-migration"), arguments.count > at + 1 else { return (usage, 2) }
         let mode = arguments[at + 1]
         let out = arguments.firstIndex(of: "--out").flatMap { $0 + 1 < arguments.count ? URL(fileURLWithPath: arguments[$0 + 1]) : nil }
@@ -718,13 +873,32 @@ public enum PeopleMigration {
             }
             do { try write(plan, to: out) } catch { return ("The plan could not be saved in \(out.path): \(error)", 1) }
             return (summary(plan) + "\nNothing was changed. The plan and the report are in \(out.path).", plan.report.errors.isEmpty ? 0 : 1)
-        case "apply", "revert":
+        case "apply", "revert", "apply-references", "revert-references":
             // One writer: the app holds these files in memory while it runs.
             switch InstanceLock.acquire(root: paths.root) {
             case .taken: return ("Mossad is open. Quit Mossad first: it holds these files.", 1)
             case .failed(let code): return ("Could not lock \(paths.root.path): \(String(cString: strerror(code)))", 1)
             case .held(let lock):
                 defer { withExtendedLifetime(lock) {} }
+                if mode == "apply-references" {
+                    // Phase 2 needs the people of phase 1: it makes no person.
+                    let store = PeopleStore(directory: paths.people)
+                    guard store.loadError == nil, !store.isReadOnly else { return ("people.json cannot be used: \(store.loadError.map(String.init(describing:)) ?? "it is from a newer Mossad"). Nothing was changed.", 1) }
+                    guard !store.people.isEmpty else { return ("There are no people yet. Run apply first. Nothing was changed.", 1) }
+                    do {
+                        let refs = try applyReferences(paths: paths, people: store.people)
+                        var text = "References written: \(refs.records) \(refs.records == 1 ? "meeting" : "meetings"), \(refs.commitments) \(refs.commitments == 1 ? "commitment" : "commitments")" + (refs.org ? ", the org matches by id" : "") + "."
+                        text += " A copy of each changed file is in \(ReferenceBackup.folder(paths).path)."
+                        if !refs.notChanged.isEmpty { text += "\nLeft as they are: " + refs.notChanged.joined(separator: ", ") }
+                        return (text, refs.notChanged.isEmpty ? 0 : 1)
+                    } catch { return ("Apply of the references failed: \(error)", 1) }
+                }
+                if mode == "revert-references" {
+                    do {
+                        let n = try revertReferences(paths: paths)
+                        return (n == 0 ? "There were no ids to remove." : "Removed the ids from \(n) files. The labels stay; the backup folder has each file as it was.", 0)
+                    } catch { return ("Revert of the references failed: \(error)", 1) }
+                }
                 if mode == "revert" {
                     do {
                         let removed = try revert(paths: paths)
@@ -768,6 +942,12 @@ public enum PeopleMigration {
             "Coach notes: \(t.coachNotesResolved) of \(t.coachNotes) resolve; \(plan.report.orphans.count) orphans",
             "Org matches: \(t.orgMatchesResolved) of \(t.orgMatches) resolve",
         ]
+        if let x = plan.report.references {
+            lines.append("References: \(x.recordsToChange) of \(x.records) meetings change; ids for speakers \(x.speakersWithID) of \(x.speakers), invited \(x.inviteesWithID) of \(x.invitees), "
+                + "action item owners \(x.actionItemsWithID) of \(x.actionItems), commitments \(x.commitmentsWithID) of \(x.commitments) (\(x.commitmentsToChange) change), "
+                + "org matches \(x.orgMatchesWithID) of \(x.orgMatches); \(x.labels.count) labels become a name of now")
+            if !x.refused.isEmpty { lines.append("References left as they are: \(x.refused.count) meetings") }
+        }
         if !plan.report.errors.isEmpty { lines.insert("ERRORS: " + plan.report.errors.joined(separator: "; "), at: 0) }
         return lines.joined(separator: "\n")
     }
@@ -788,6 +968,11 @@ public enum PeopleMigration {
         }
         out += ["", "## Orphans", "", "Notes of the coach under a name that is no saved person."]
         out += r.orphans.isEmpty ? ["- None."] : r.orphans.map { "- \($0.key): \($0.why)" }
+        if let x = r.references {
+            out += ["", "## References", "", "Ids next to the names in records and commitments. A name stays as a label; no label changes, except a name a person had before a rename, which becomes the name of now."]
+            out += x.labels.isEmpty ? ["- No label changes."] : x.labels.map { "- \($0)" }
+            if !x.refused.isEmpty { out += ["", "Left as they are, because a refresh would change more than the references: " + x.refused.joined(separator: ", ")] }
+        }
         out += ["", "## Samples with no provenance", "", "Voice samples that no call record explains. They stay, with no call."]
         out += r.samplesWithoutProvenance.isEmpty ? ["- None."] : r.samplesWithoutProvenance.map { "- \($0.person): \($0.count), \($0.why)" }
         return out.joined(separator: "\n") + "\n"

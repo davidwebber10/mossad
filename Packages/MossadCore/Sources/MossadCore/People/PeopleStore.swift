@@ -294,6 +294,17 @@ public final class PeopleStore: @unchecked Sendable {
         }
     }
 
+    /// The owner said these two are other people. It holds through a rename of either, on each device.
+    public func setDistinct(_ a: PersonID, _ b: PersonID) throws {
+        try change { people, date in
+            guard a != b, let i = people.firstIndex(where: { $0.id == a && $0.isLive }), let j = people.firstIndex(where: { $0.id == b && $0.isLive }) else { return [] }
+            var changed = false
+            if !people[i].distinctFrom.contains(b) { people[i].distinctFrom.append(b); people[i].updated = date; changed = true }
+            if !people[j].distinctFrom.contains(a) { people[j].distinctFrom.append(a); people[j].updated = date; changed = true }
+            return changed ? [PeopleLogEntry(at: date, kind: "distinct", actor: "owner", subject: a, other: b)] : []
+        }
+    }
+
     /// Leaves a marker with no personal data: the id and the date.
     public func delete(_ id: PersonID) throws {
         try change { people, date in

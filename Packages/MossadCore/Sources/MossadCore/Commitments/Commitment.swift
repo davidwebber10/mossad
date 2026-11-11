@@ -268,6 +268,8 @@ public actor CommitmentRunner {
             try? book.save(to: paths.commitments)
             Log.info("Commitments: removed \(before - book.visible.count) made by other people")
         }
+        // Who a promise was to, by the id of the person, where the people of the call surely say.
+        let refs = PersonReferences(people: PeopleStore.peek(in: paths.people) ?? [])
         var ledger = RetryLedger.load(from: paths.commitments)
         var done = cleaned ? 1 : 0
         for r in Self.pending(records, since: since, checked: book.checked) {
@@ -281,7 +283,7 @@ public actor CommitmentRunner {
                 // Read again: the owner may have edited a commitment while this one ran. A book that cannot be
                 // read now stops the run; the older copy must not be saved over the owner's edits.
                 var fresh = try CommitmentBook.load(from: paths.commitments)
-                fresh.add(found: found, callID: r.id, at: Date())
+                fresh.add(found: found.map { refs.refresh($0, call: refs.refresh(r, relabel: false)) }, callID: r.id, at: Date())
                 try fresh.save(to: paths.commitments)
                 done += 1
                 if ledger.entries[r.id] != nil { ledger.clear(r.id); ledger.save(to: paths.commitments) }

@@ -13,6 +13,23 @@ public enum PeopleDuplicates {
         public var id: String { [first, second].sorted().joined(separator: "|") }
     }
 
+    /// The two people of a pair as saved people: each the one live person with that name. Nil when a name is not
+    /// exactly one person.
+    public static func people(of pair: Pair, among people: [Person]) -> (PersonID, PersonID)? {
+        func one(_ name: String) -> PersonID? {
+            let hits = people.filter { $0.isLive && $0.displayName == name }
+            return hits.count == 1 ? hits[0].id : nil
+        }
+        guard let a = one(pair.first), let b = one(pair.second), a != b else { return nil }
+        return (a, b)
+    }
+
+    /// Whether the owner called the two people of a pair other people, by their ids: it stays through a rename.
+    public static func isDistinct(_ pair: Pair, among people: [Person]) -> Bool {
+        guard let (a, b) = Self.people(of: pair, among: people) else { return false }
+        return people.contains { ($0.id == a && $0.distinctFrom.contains(b)) || ($0.id == b && $0.distinctFrom.contains(a)) }
+    }
+
     /// Two voice fingerprints this close are one voice.
     static let sameVoice: Float = 0.9
 
