@@ -12,6 +12,8 @@ struct AnalyticsView: View {
     @AppStorage("analyticsEnd") private var endStamp = Date().timeIntervalSince1970
     @AppStorage("analyticsCompare") private var compare = true
     @State private var data: (now: AnalyticsReport, before: AnalyticsReport)?
+    /// The charts of "How you communicate". They come after the page: the first time, every meeting is read.
+    @State private var trends: CommunicationTrends?
 
     private static let preview = CommandLine.arguments.contains("--ui-preview")
     /// Development hook for screenshots: MOSSAD_DATE_PICKER=1 shows the period panel on the page, where a window
@@ -57,7 +59,8 @@ struct AnalyticsView: View {
                                        message: "Pick a longer period, or wait for your next call.")
                                 .padding(.top, 60)
                         } else {
-                            AnalyticsPage(report: data.now, before: compare ? data.before : nil)
+                            AnalyticsPage(report: data.now, before: compare ? data.before : nil,
+                                          trends: trends?.interval == data.now.interval ? trends : nil)
                         }
                     } else {
                         Color.clear.frame(height: 400)
@@ -69,12 +72,10 @@ struct AnalyticsView: View {
                 .frame(maxWidth: Self.maxContentWidth + 72, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // Development hook for screenshots: MOSSAD_SCROLL_TO names a section label, such as "Who you meet with".
-            .onChange(of: data?.now.calls) { _, _ in
-                if let target = ProcessInfo.processInfo.environment["MOSSAD_SCROLL_TO"] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { proxy.scrollTo(target, anchor: .top) }
-                }
-            }
+            // Development hook for screenshots: MOSSAD_SCROLL_TO names a section label, such as "Who you meet with",
+            // or a chart of "How you communicate", such as "Pace". The charts come after the page.
+            .onChange(of: data?.now.calls) { _, _ in scrollToHook(proxy) }
+            .onChange(of: trends?.interval) { _, _ in scrollToHook(proxy) }
         }
         .overlay(alignment: .topTrailing) {
             if Self.pickerPreview, let data {
@@ -85,6 +86,11 @@ struct AnalyticsView: View {
                     .padding(.top, 2).padding(.trailing, 16)
             }
         }
+    }
+
+    private func scrollToHook(_ proxy: ScrollViewProxy) {
+        guard let target = ProcessInfo.processInfo.environment["MOSSAD_SCROLL_TO"] else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { proxy.scrollTo(target, anchor: .top) }
     }
 
     /// Says so when the period before is empty, because then no figure shows a change.
@@ -116,6 +122,15 @@ struct AnalyticsView: View {
                     AnalyticsReport(records: records, usage: events, owner: owner, interval: before, commitments: commitments))
         }.value
         withAnimation(.smooth) { data = result }
+
+        // The second step: the meetings as facts, from the cache that the meeting pages fill.
+        let facts = MeetingAnalyticsStore.shared.facts, interval = result.0.interval
+        let made = await Task.detached(priority: .userInitiated) {
+            CommunicationTrends(facts: facts.facts(for: records, owner: owner), interval: interval)
+        }.value
+        // The owner can have picked another period in the meantime; its own task brings its own charts.
+        guard !Task.isCancelled else { return }
+        withAnimation(.smooth) { trends = made }
     }
 }
 
@@ -123,6 +138,7 @@ struct AnalyticsView: View {
 private struct AnalyticsPage: View {
     let report: AnalyticsReport
     let before: AnalyticsReport?
+    let trends: CommunicationTrends?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -134,7 +150,7 @@ private struct AnalyticsPage: View {
                 AnalyticsGroup("Your week") { YourWeekSection(report: report) }
                 AnalyticsGroup("What you meet about") { TopicsSection(report: report) }
                 AnalyticsGroup("Who you meet with") { PeopleSection(report: report) }
-                AnalyticsGroup("How you communicate") { CommunicationSection(report: report, before: before) }
+                AnalyticsGroup("How you communicate") { CommunicationSection(report: report, before: before, trends: trends) }
                 AnalyticsGroup("Outcomes") { OutcomesSection(report: report) }
                 AnalyticsGroup("Costs") { CostsSection(report: report) }
             }

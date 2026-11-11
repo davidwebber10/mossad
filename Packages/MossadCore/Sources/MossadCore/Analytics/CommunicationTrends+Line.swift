@@ -24,7 +24,7 @@ extension CommunicationTrends {
         // The period's last day ends the last step, so "the last 90 days" does not cut today in two.
         let lastDay = calendar.startOfDay(for: max(interval.start, interval.end.addingTimeInterval(-1)))
         let end = calendar.date(byAdding: .day, value: 1, to: lastDay) ?? interval.end
-        let days = max(1, Int((end.timeIntervalSince(interval.start) / 86_400).rounded()))
+        let days = self.days(interval, calendar: calendar)
 
         func buckets(_ width: Int) -> [[Double]]? {
             let count = max(1, Int((Double(days) / Double(width)).rounded()))

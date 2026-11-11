@@ -155,83 +155,51 @@ private struct TrendBars: View {
 
 // MARK: How you communicate
 
+/// The finding, then one full-width chart per number: talk share, questions, cut-ins, and pace across the period.
 struct CommunicationSection: View {
+    @EnvironmentObject var controller: AppController
     let report: AnalyticsReport
     let before: AnalyticsReport?
+    /// Nil while the meetings' numbers are read.
+    let trends: CommunicationTrends?
+    @AppStorage("analyticsTrendSplit") private var splitRaw = CommunicationTrends.Split.all.rawValue
+
+    /// The size the owner picked, while the period has both sizes to pick from.
+    private var split: CommunicationTrends.Split {
+        guard let trends, !trends.splits.isEmpty else { return .all }
+        return CommunicationTrends.Split(rawValue: splitRaw) ?? .all
+    }
 
     var body: some View {
         let c = report.communication
-        let days = before.map { max(1, Int(($0.interval.duration / 86_400).rounded())) } ?? 0
-        let pace = report.delivery.isEmpty ? nil : report.delivery.map(\.wordsPerMinute).reduce(0, +) / Double(report.delivery.count)
-        VStack(alignment: .leading, spacing: 12) {
-            if let finding = AnalyticsFindings.communication(c, talkShare: report.talkShare, before: before?.communication, beforeDays: days) {
-                Finding(finding)
-            }
-            HStack(alignment: .top, spacing: 24) {
-                TrendFigure(title: "Talk share", value: report.talkShare.map(percentText) ?? "–",
-                            detail: [c.oneOnOneShare.map { "1:1 \(percentText($0))" }, c.groupShare.map { "groups \(percentText($0))" }]
-                                .compactMap { $0 }.joined(separator: " · "),
-                            points: c.points.compactMap { p in p.talkShare.map { (p.date, $0 * 100) } })
-                TrendFigure(title: "Questions you ask", value: rate(c.questionsPerHour), detail: "an hour of calls",
-                            points: c.points.map { ($0.date, $0.questionsPerHour) })
-                TrendFigure(title: "You cut in", value: rate(c.interruptionsMadePerHour),
-                            detail: "an hour · others \(rate(c.interruptionsReceivedPerHour))",
-                            points: c.points.map { ($0.date, $0.interruptionsPerHour) })
-                TrendFigure(title: "Pace", value: pace.map { "\(Int($0.rounded()))" } ?? "–", detail: "words a minute",
-                            points: report.delivery.map { ($0.date, $0.wordsPerMinute) })
-            }
-        }
-    }
-
-    private func rate(_ v: Double?) -> String { v.map { String(format: "%.1f", $0) } ?? "–" }
-}
-
-/// One number with its line across the period's calls, and a hairline at the median.
-private struct TrendFigure: View {
-    let title: String
-    let value: String
-    let detail: String
-    let points: [(Date, Double)]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(value).font(.system(size: 20, weight: .semibold)).tracking(-0.4).monospacedDigit().contentTransition(.numericText())
-                Text(detail).font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(2)
-            }
-            .accessibilityElement(children: .combine)
-            Group {
-                if points.count >= 2 {
-                    // The median, not the mean: one long monologue or a burst of questions would pull a mean away.
-                    let median = points.map(\.1).sorted()[points.count / 2]
-                    Chart {
-                        RuleMark(y: .value("Median", median))
-                            .foregroundStyle(Palette.hairline)
-                            .lineStyle(StrokeStyle(lineWidth: 1))
-                        // One step per call, in order: calls hours apart would bunch up on a time axis.
-                        ForEach(Array(points.enumerated()), id: \.offset) { i, p in
-                            LineMark(x: .value("Call", i), y: .value(title, p.1))
-                                .foregroundStyle(Palette.accentFill)
-                                .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-                        }
-                    }
-                    .chartXAxis(.hidden)
-                    .chartYAxis(.hidden)
-                    .chartXScale(domain: 0...(points.count - 1))
-                    .accessibilityChartDescriptor(DateSeriesDescriptor(title: title, unit: detail, points: points))
-                    .accessibilityLabel("\(title) over the period's calls")
-                } else {
-                    Text("Shows after a few calls.").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
-                        .frame(maxHeight: .infinity, alignment: .top)
+        // Days of the calendar, as the charts' sentences count them: "the last 90 days" is not 89.
+        let days = before.map { CommunicationTrends.days($0.interval) } ?? 0
+        let finding = AnalyticsFindings.communication(c, talkShare: report.talkShare, before: before?.communication, beforeDays: days)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center) {
+                if let finding { Finding(finding) }
+                Spacer(minLength: 12)
+                if let trends, !trends.splits.isEmpty {
+                    FillSegmented(selection: Binding { split } set: { splitRaw = $0.rawValue }, choices: trends.splits.map { ($0, $0.title) })
+                        .help("A talk share and cut-ins follow the size of the meeting. Pick one size to read its own trend.")
+                        .accessibilityLabel("Meetings in the charts")
                 }
             }
-            .frame(height: 34)
-            .padding(.top, 8)
+            .padding(.bottom, 14)
+            if let trends {
+                ForEach(trends.series(split)) { series in
+                    TrendPanel(series: series, interval: trends.interval) { controller.openMeeting($0) }
+                        .padding(.top, 14)
+                        .padding(.bottom, 22)
+                        .hairline(.top)
+                        // MOSSAD_SCROLL_TO takes a chart's title too, such as "Pace".
+                        .id(CommunicationTrends.title(series.metric))
+                }
+            } else {
+                // The space the charts take, so the groups below do not jump when they come.
+                Color.clear.frame(height: CGFloat(CommunicationTrends.metrics.count) * (TrendPanel.chartHeight + TrendPanel.chrome + 36))
+            }
         }
-        .padding(.top, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .hairline(.top)
     }
 }
 

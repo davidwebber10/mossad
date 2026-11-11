@@ -15,49 +15,23 @@ extension CommunicationTrends {
     /// - the difference is `Reading.minimumScore` times what chance gives two medians of such meetings, with the
     ///   baselines' spread (the larger of the scaled median deviation and the standard deviation, never under
     ///   half the margin) and their allowance for a short history.
-    ///
-    /// A talk share and cut-ins follow the size of the meeting. With both sizes in `rows` (`mixed`), the part
-    /// of the difference that more 1:1s or more groups alone would give is taken off first; a difference that
-    /// does not hold without it is `.mixed`.
-    static func change(_ metric: PersonMetric, _ rows: [Row], interval: DateInterval, days: Int, mixed: Bool) -> Change {
+    static func change(_ metric: PersonMetric, _ rows: [Row], interval: DateInterval, days: Int) -> Change {
         guard days >= minimumDays else { return .tooShort }
         let third = interval.duration / 3
-        let early = rows.filter { $0.point.date < interval.start.addingTimeInterval(third) }
-        let late = rows.filter { $0.point.date >= interval.end.addingTimeInterval(-third) }
+        let early = rows.filter { $0.point.date < interval.start.addingTimeInterval(third) }.map(\.point.value)
+        let late = rows.filter { $0.point.date >= interval.end.addingTimeInterval(-third) }.map(\.point.value)
         typealias Usual = MeetingAnalytics.Usual
-        guard let first = Usual(early.map(\.point.value)), let last = Usual(late.map(\.point.value)), first.isFirm, last.isFirm else { return .tooFew }
+        guard let first = Usual(early), let last = Usual(late), first.isFirm, last.isFirm else { return .tooFew }
 
-        let difference = last.median - first.median
+        let difference = abs(last.median - first.median)
         let margin = metric.margin(first)
         let spread = max(((first.spread * first.spread + last.spread * last.spread) / 2).squareRoot(), margin / 2)
         // What chance gives the difference of two medians: a median of n values is 1.2533 times less sure than
         // their mean.
         let chance = spread * 1.2533 * (1 / Double(first.samples) + 1 / Double(last.samples)).squareRoot()
             * Usual.student(first.samples + last.samples - 2) / 1.96
-        func holds(_ d: Double) -> Bool { abs(d) >= margin && abs(d) / chance >= MeetingAnalytics.Reading.minimumScore }
-        guard holds(difference) else { return .steady }
-
-        if mixed, metric.followsSize {
-            let own = difference - mixEffect(rows, early: early, late: late)
-            guard holds(own), (own < 0) == (difference < 0) else { return .mixed }
-        }
+        guard difference >= margin, difference / chance >= MeetingAnalytics.Reading.minimumScore else { return .steady }
         return .moved(from: first.median, to: last.median)
-    }
-
-    /// The difference that the mix of sizes alone gives: how much more of the last third's meetings are 1:1s,
-    /// times how far the owner's number in 1:1s is from the one in groups. 0 when one of the sizes has too few
-    /// meetings to say what it is like.
-    static func mixEffect(_ rows: [Row], early: [Row], late: [Row]) -> Double {
-        func values(_ size: Split) -> [Double] { rows.filter { $0.size == size }.map(\.point.value) }
-        let ones = values(.oneOnOne), groups = values(.group)
-        guard ones.count >= MeetingAnalytics.Usual.minimumSamples, groups.count >= MeetingAnalytics.Usual.minimumSamples,
-              let one = median(of: ones), let group = median(of: groups) else { return 0 }
-        func share(_ part: [Row]) -> Double? {
-            let sized = part.filter { $0.size != nil }
-            return sized.isEmpty ? nil : Double(sized.filter { $0.size == .oneOnOne }.count) / Double(sized.count)
-        }
-        guard let before = share(early), let after = share(late) else { return 0 }
-        return (after - before) * (one - group)
     }
 }
 
@@ -137,23 +111,44 @@ extension CommunicationTrends.Series {
     /// The chart's subtitle: "Down from 68% to 59% over 90 days", or that there is no clear change, or why
     /// nothing can be said.
     public var sentence: String {
+        let over = "over \(T.span(days: days))"
+        func values(_ from: Double, _ to: Double) -> String { "from \(T.short(metric, from)) to \(T.text(metric, to))" }
+        func direction(_ from: Double, _ to: Double) -> String { to > from ? "up" : "down" }
+        func capital(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
         switch change {
-        case .tooShort: "The period is too short to show a trend"
-        case .tooFew: "Too few meetings to show a trend"
-        case .steady: "No clear change"
-        case .mixed: "No clear change apart from the mix of 1:1s and groups"
-        case .moved(let from, let to):
-            "\(to > from ? "Up" : "Down") from \(T.short(metric, from)) to \(T.text(metric, to)) over \(T.span(days: days))"
+        case .tooShort: return "The period is too short to show a trend"
+        case .tooFew: return "Too few meetings to show a trend"
+        case .steady: return "No clear change"
+        case .moved(let from, let to): return capital("\(direction(from, to)) \(values(from, to)) \(over)")
+        case .bySize(let one, let group):
+            switch (one, group) {
+            case (.moved(let a, let b), .moved(let c, let d)):
+                // "from 1.0 to 3.0 an hour": the unit one time, at the end.
+                func short(_ from: Double, _ to: Double) -> String { "from \(T.short(metric, from)) to \(T.short(metric, to))" }
+                let unit = T.unit(metric).isEmpty ? "" : " \(T.unit(metric))"
+                if direction(a, b) == direction(c, d) {
+                    return capital("\(direction(a, b)) \(over): 1:1s \(short(a, b)), groups \(short(c, d))\(unit)")
+                }
+                return capital("\(direction(a, b)) in 1:1s \(short(a, b)), \(direction(c, d)) in groups \(short(c, d))\(unit) \(over)")
+            case (.moved(let a, let b), let other), (let other, .moved(let a, let b)):
+                let size = one.moved ? "1:1s" : "groups", rest = one.moved ? "groups" : "1:1s"
+                let said = capital("\(direction(a, b)) in \(size) \(values(a, b)) \(over)")
+                return other == .steady ? "\(said); no clear change in \(rest)" : said
+            case (.steady, _), (_, .steady): return "No clear change"
+            case (.tooShort, _), (_, .tooShort): return "The period is too short to show a trend"
+            default: return "Too few meetings of one size to show a trend"
+            }
         }
     }
 
     /// How the sentence was reached, for a tooltip.
     public var basis: String {
+        let rule = "The typical meeting (the median) of the first third of the period against the last third. A change is said only when it is larger than chance gives."
         switch change {
-        case .tooShort: "A trend needs a period of at least \(T.minimumDays) days."
-        case .tooFew: "A trend needs \(MeetingAnalytics.Usual.firmSamples) meetings in the first third of the period and in the last."
-        case .mixed: "The typical meeting moved, but only because the last third of the period has a different mix of 1:1s and groups. Pick one size to see its own trend."
-        case .steady, .moved: "The typical meeting (the median) of the first third of the period against the last third. A change is said only when it is larger than chance gives."
+        case .tooShort: return "A trend needs a period of at least \(T.minimumDays) days."
+        case .tooFew: return "A trend needs \(MeetingAnalytics.Usual.firmSamples) meetings in the first third of the period and in the last."
+        case .steady, .moved: return rule
+        case .bySize: return "This number follows the size of the meeting, so 1:1s and groups are compared apart. \(rule)"
         }
     }
 

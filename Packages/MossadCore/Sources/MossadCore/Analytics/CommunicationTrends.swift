@@ -46,16 +46,27 @@ public struct CommunicationTrends: Sendable, Equatable {
     }
 
     /// The first third of the period against the last third.
-    public enum Change: Sendable, Equatable {
+    public indirect enum Change: Sendable, Equatable {
         /// The period is shorter than `minimumDays`.
         case tooShort
         /// One of the two thirds has fewer than `Usual.firmSamples` meetings.
         case tooFew
         case steady
-        /// The number moved, and the mix of 1:1s and groups explains it.
-        case mixed
         /// The medians of the first and the last third.
         case moved(from: Double, to: Double)
+        /// For a number that follows the size of the meeting, over meetings of both sizes: each size's own
+        /// change. More 1:1s and fewer groups raise a talk share with no change in how the owner talks, so the
+        /// two sizes are never compared as one, as in the baselines.
+        case bySize(oneOnOne: Change, group: Change)
+
+        /// True when the number moved, in one size at least.
+        public var moved: Bool {
+            switch self {
+            case .moved: true
+            case .bySize(let one, let group): one.moved || group.moved
+            default: false
+            }
+        }
     }
 
     /// The value axis: its ends and the distance between its marks.
@@ -78,7 +89,7 @@ public struct CommunicationTrends: Sendable, Equatable {
         public var change: Change
         /// The median of the points; nil without points.
         public var typical: Double?
-        /// The whole days of the period.
+        /// The days of the calendar that the period covers.
         public var days: Int
         public var scale: Scale
     }
@@ -101,10 +112,18 @@ public struct CommunicationTrends: Sendable, Equatable {
     /// A meeting of two main voices is a 1:1 and one of more is a group; one voice alone is neither.
     static func size(_ facts: MeetingFacts) -> Split? { facts.mainVoices == 2 ? .oneOnOne : facts.mainVoices > 2 ? .group : nil }
 
+    /// The days of the calendar that the period covers: 90 for "the last 90 days", which begins at the start
+    /// of a day and ends now.
+    public static func days(_ interval: DateInterval, calendar: Calendar = .current) -> Int {
+        let first = calendar.startOfDay(for: interval.start)
+        let last = calendar.startOfDay(for: max(interval.start, interval.end.addingTimeInterval(-1)))
+        return (calendar.dateComponents([.day], from: first, to: last).day ?? 0) + 1
+    }
+
     /// `facts` is every written meeting, in any order: the ones before `interval` say what is usual.
     public init(facts: [MeetingFacts], interval: DateInterval, calendar: Calendar = .current) {
         self.interval = interval
-        let days = max(1, Int((interval.duration / 86_400).rounded()))
+        let days = Self.days(interval, calendar: calendar)
         let sorted = facts.sorted { ($0.start, $0.id) < ($1.start, $1.id) }
         var all: [Split: [Series]] = [:]
         for split in Split.allCases {
@@ -113,7 +132,7 @@ public struct CommunicationTrends: Sendable, Equatable {
                 let rows = meetings.compactMap { f in
                     f.owner?.values[metric].map { Row(point: Point(id: f.id, date: f.start, value: $0, title: f.title), size: Self.size(f)) }
                 }
-                return Series(metric, rows: rows, interval: interval, days: days, mixed: split == .all, calendar: calendar)
+                return Series(metric, rows: rows, interval: interval, days: days, calendar: calendar)
             }
         }
         self.all = all
@@ -125,8 +144,8 @@ public struct CommunicationTrends: Sendable, Equatable {
 extension CommunicationTrends.Series {
     typealias T = CommunicationTrends
 
-    /// `rows` is every meeting with the number, oldest first. `mixed` says that they are of both sizes.
-    init(_ metric: PersonMetric, rows: [T.Row], interval: DateInterval, days: Int, mixed: Bool, calendar: Calendar) {
+    /// `rows` is every meeting with the number, oldest first.
+    init(_ metric: PersonMetric, rows: [T.Row], interval: DateInterval, days: Int, calendar: Calendar) {
         self.metric = metric
         self.days = days
         let inside = rows.filter { interval.contains($0.point.date) }
@@ -146,7 +165,12 @@ extension CommunicationTrends.Series {
         }
 
         (line, lineDays) = T.line(points, interval: interval, calendar: calendar)
-        change = T.change(metric, inside, interval: interval, days: days, mixed: mixed)
+        let ones = inside.filter { $0.size == .oneOnOne }, groups = inside.filter { $0.size == .group }
+        if metric.followsSize, !ones.isEmpty, !groups.isEmpty {
+            change = .bySize(oneOnOne: T.change(metric, ones, interval: interval, days: days), group: T.change(metric, groups, interval: interval, days: days))
+        } else {
+            change = T.change(metric, inside, interval: interval, days: days)
+        }
         scale = T.Scale(metric, values: values, usual: usual, line: line)
     }
 }

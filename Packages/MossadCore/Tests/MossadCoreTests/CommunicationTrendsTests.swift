@@ -153,6 +153,16 @@ final class CommunicationTrendsTests: XCTestCase {
         XCTAssertEqual(s.line.map(\.meetings), [7, 7, 7, 7])
     }
 
+    func testThePeriodIsCountedInDaysOfTheCalendar() {
+        // "The last 90 days" begins at the start of a day 89 days back and ends now: 90 days of the calendar.
+        let interval = DateInterval(start: start, end: start.addingTimeInterval(89 * 86_400 + 9 * 3600))
+        let facts = spread("m", count: 30) { $0 < 30 ? 0.68 : $0 < 60 ? 0.64 : 0.59 }.filter { interval.contains($0.start) }
+        let s = T(facts: facts, interval: interval, calendar: calendar).series(.talkShare, .all)
+        XCTAssertEqual(s.days, 90)
+        XCTAssertEqual(s.sentence, "Down from 68% to 59% over 90 days")
+        XCTAssertEqual(share(trends([], days: 14)).days, 14)
+    }
+
     // MARK: The usual band
 
     func testTheUsualBandComesFromTheMeetingsBeforeThePeriod() {
@@ -261,43 +271,59 @@ final class CommunicationTrendsTests: XCTestCase {
     }
 
     func testAChangeOfMixIsNotAChangeOfTalkShare() {
-        // 1:1s at 60% early, groups at 30% late: each as it always was, only the mix moved.
-        let facts = spread("o", count: 12, from: 0, to: 30, voices: 2) { _ in 0.60 }
-            + spread("mo", count: 6, from: 30, to: 60, voices: 2) { _ in 0.60 } + spread("mg", count: 6, from: 30, to: 60, voices: 5) { _ in 0.30 }
-            + spread("g", count: 12, from: 60, to: 90, voices: 5) { _ in 0.30 }
+        // 60% in every 1:1 and 30% in every group; the 1:1s go from a quarter of the meetings to three quarters.
+        // The typical meeting of all goes from 30% to 60%, and the owner talks as ever.
+        let facts = spread("o1", count: 5, from: 0, to: 30, voices: 2) { _ in 0.60 } + spread("g1", count: 15, from: 0, to: 30, voices: 5) { _ in 0.30 }
+            + spread("o2", count: 10, from: 30, to: 60, voices: 2) { _ in 0.60 } + spread("g2", count: 10, from: 30, to: 60, voices: 5) { _ in 0.30 }
+            + spread("o3", count: 15, from: 60, to: 90, voices: 2) { _ in 0.60 } + spread("g3", count: 5, from: 60, to: 90, voices: 5) { _ in 0.30 }
         let t = trends(facts)
-        XCTAssertEqual(share(t, .all).change, .mixed)
-        XCTAssertEqual(share(t, .all).sentence, "No clear change apart from the mix of 1:1s and groups")
-        XCTAssertEqual(share(t, .oneOnOne).change, .tooFew)
-        XCTAssertEqual(share(t, .group).change, .tooFew)
+        XCTAssertEqual(share(t, .all).change, .bySize(oneOnOne: .steady, group: .steady))
+        XCTAssertEqual(share(t, .all).sentence, "No clear change")
+        XCTAssertFalse(share(t, .all).change.moved)
+        XCTAssertEqual(share(t, .oneOnOne).change, .steady)
+        XCTAssertEqual(share(t, .group).change, .steady)
     }
 
-    func testAShiftInBothSizesWithOneMixIsAChange() {
+    func testOneSizeAtEachEndSaysNothing() {
+        // 1:1s early and groups late: no size has both ends, so nothing can be compared.
+        let facts = spread("o", count: 12, from: 0, to: 30, voices: 2) { _ in 0.60 } + spread("g", count: 12, from: 60, to: 90, voices: 5) { _ in 0.30 }
+        let s = share(trends(facts))
+        XCTAssertEqual(s.change, .bySize(oneOnOne: .tooFew, group: .tooFew))
+        XCTAssertEqual(s.sentence, "Too few meetings of one size to show a trend")
+    }
+
+    func testAShiftInBothSizesIsSaidForEach() {
         func half(_ prefix: String, voices: Int, _ high: Double) -> [MeetingFacts] {
             spread(prefix, count: 30, voices: voices) { $0 < 30 ? high : $0 < 60 ? high - 0.06 : high - 0.12 }
         }
-        let t = trends(half("o", voices: 2, 0.60) + half("g", voices: 5, 0.50))
-        guard case .moved(let from, let to) = share(t, .all).change else { return XCTFail("\(share(t, .all).change)") }
-        XCTAssertEqual(from, 0.55, accuracy: 0.0001)
-        XCTAssertEqual(to, 0.43, accuracy: 0.0001)
-        assertMoved(share(t, .oneOnOne).change, from: 0.60, to: 0.48)
-        XCTAssertEqual(share(t, .group).sentence, "Down from 50% to 38% over 90 days")
-    }
-
-    func testASplitShowsAShiftThatSizesFarApartHide() {
-        // 1:1s near 70% and groups near 40% make every meeting far from the middle: the whole says nothing
-        // firm, and each size says its own change.
-        func half(_ prefix: String, voices: Int, _ high: Double) -> [MeetingFacts] {
-            spread(prefix, count: 30, voices: voices) { $0 < 30 ? high : $0 < 60 ? high - 0.06 : high - 0.12 }
-        }
+        // Sizes far apart, as they are: the typical meeting of all would sit between them and say nothing.
         let t = trends(half("o", voices: 2, 0.70) + half("g", voices: 5, 0.40))
-        XCTAssertEqual(share(t, .all).change, .steady)
+        XCTAssertEqual(share(t, .all).sentence, "Down over 90 days: 1:1s from 70% to 58%, groups from 40% to 28%")
+        XCTAssertTrue(share(t, .all).change.moved)
         assertMoved(share(t, .oneOnOne).change, from: 0.70, to: 0.58)
         XCTAssertEqual(share(t, .group).sentence, "Down from 40% to 28% over 90 days")
     }
 
-    func testPaceDoesNotFollowTheMix() {
-        // A pace is a pace in any size: the mix test is for the numbers that follow the size.
+    func testAShiftInOneSizeNamesTheSize() {
+        let ones = spread("o", count: 30, voices: 2) { $0 < 30 ? 0.70 : $0 < 60 ? 0.64 : 0.58 }
+        let t = trends(ones + spread("g", count: 30, voices: 5) { _ in 0.30 })
+        XCTAssertEqual(share(t, .all).sentence, "Down in 1:1s from 70% to 58% over 90 days; no clear change in groups")
+        let few = trends(ones + spread("g", count: 3, voices: 5) { _ in 0.30 })
+        XCTAssertEqual(share(few, .all).sentence, "Down in 1:1s from 70% to 58% over 90 days")
+        let rising = trends(ones + spread("g", count: 30, voices: 5) { $0 < 30 ? 0.20 : $0 < 60 ? 0.26 : 0.32 })
+        XCTAssertEqual(share(rising, .all).sentence, "Down in 1:1s from 70% to 58%, up in groups from 20% to 32% over 90 days")
+    }
+
+    func testCutInsOfBothSizesReadWithOneUnit() {
+        let facts = (0..<60).map { i -> MeetingFacts in
+            let part = i / 20, rate: Double = part == 0 ? 1 : part == 1 ? 2 : 4
+            return meeting("m\(i)", day: Double(i) * 1.5, share: nil, voices: i % 2 == 0 ? 2 : 5, cutIns: i % 2 == 0 ? rate : rate + 2)
+        }
+        XCTAssertEqual(trends(facts).series(.cutInsPerHour, .all).sentence, "Up over 90 days: 1:1s from 1.0 to 4.0, groups from 3.0 to 6.0 an hour")
+    }
+
+    func testAPaceIsComparedOverAllSizes() {
+        // A pace is a pace in any size: only the numbers that follow the size are compared apart.
         let facts = (0..<30).map { i -> MeetingFacts in
             let pace: Double = i < 10 ? 170 : i < 20 ? 160 : 140
             return meeting("m\(i)", day: Double(i * 3), share: nil, voices: i < 15 ? 2 : 5, pace: pace)
