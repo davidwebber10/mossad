@@ -62,19 +62,39 @@ final class PeopleStoreTests: XCTestCase {
         XCTAssertEqual(s.resolver.resolve(PersonObservation(name: "Carter, Sam")).person, PersonID(rawValue: "abc"), "with no forms, the display name resolves")
     }
 
-    func testAnUnreadableFileIsSetAsideAndNotReplaced() throws {
+    func testAnUnreadableFileIsSetAsideAndNoNewOneIsMade() throws {
         try Data("not json".utf8).write(to: file)
         let s = store()
         XCTAssertNotNil(s.loadError)
+        XCTAssertNotNil(s.setAside)
         XCTAssertTrue(s.people.isEmpty)
         let kept = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.contains(".unreadable-") }
-        XCTAssertEqual(kept.count, 1, "the damaged file is kept beside it")
-        XCTAssertTrue(StoredFile.takeUntold(in: [dir]).isEmpty, "the owner gets no notification: the file is made again from the voice library")
+        XCTAssertEqual(kept, [try XCTUnwrap(s.setAside)], "the damaged file is kept beside it")
+        XCTAssertTrue(StoredFile.takeUntold(in: [dir]).isEmpty, "with no notification")
         XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent(kept[0]), encoding: .utf8), "not json")
-        // The file was moved, so a save starts clean and the old data stays on disk.
-        _ = try s.ensure(voiceName: "Sam Carter", isOwner: false, origin: .voiceNaming)
-        XCTAssertEqual(store().people.count, 1)
-        XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent(kept[0]), encoding: .utf8), "not json")
+        // A new file would give each person a new id. No save is made until the owner puts the file back or starts again.
+        XCTAssertThrowsError(try s.ensure(voiceName: "Sam Carter", isOwner: false, origin: .voiceNaming))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        // The next start knows it too: the file is gone, and that is not "no people yet".
+        let next = store()
+        XCTAssertEqual(next.setAside, kept[0])
+        XCTAssertThrowsError(try next.ensure(voiceName: "Sam Carter", isOwner: false, origin: .voiceNaming))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testAFileThatIsPutBackIsReadAgain() throws {
+        let first = store()
+        let id = try first.ensure(voiceName: "Sam Carter", isOwner: false, origin: .voiceNaming)
+        let good = try Data(contentsOf: file)
+        try Data("not json".utf8).write(to: file)
+        XCTAssertNotNil(store().setAside)
+        try good.write(to: file)
+        let back = store()
+        XCTAssertNil(back.setAside)
+        XCTAssertNil(back.loadError)
+        XCTAssertEqual(back.people.map(\.id), [id], "the same people with the same ids")
+        _ = try back.ensure(voiceName: "Dana Lee", isOwner: false, origin: .voiceNaming)
+        XCTAssertNil(store().setAside)
     }
 
     func testAFileOfANewerVersionIsReadAndNeverSaved() throws {
@@ -213,6 +233,17 @@ final class PeopleStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: file), before)
         // The owner's voice profile keeps its old name in the voice file: it is still the owner.
         XCTAssertEqual(s.id(forVoiceName: "Avery Webb", isOwner: true), me)
+    }
+
+    func testAnotherPersonWithTheOwnersNameOfTheMomentIsStillThatPerson() throws {
+        let s = store()
+        try s.setOwnerName("Avery Webb")
+        let pat = try s.ensure(voiceName: "Pat Moreno", isOwner: false, origin: .voiceNaming)
+        // A wrong name in "Your name", for a moment.
+        try s.setOwnerName("Pat Moreno")
+        XCTAssertEqual(s.id(forVoiceName: "Pat Moreno"), pat, "a voice of that person does not go to the owner")
+        XCTAssertEqual(s.id(forVoiceName: "Pat Moreno", isOwner: true), s.owner?.id)
+        XCTAssertNotEqual(s.owner?.id, pat)
     }
 
     func testAnOwnerNameWithNoOwnerYetMakesTheOwner() throws {

@@ -763,7 +763,7 @@ public actor Pipeline {
             chosen[key] = name
             // "That was not Sam": what this speaker of this call taught Sam's profile is taken back.
             if let old = current.speakerNames[key], old != name {
-                do { try library.forget(callID: callID, speakerKey: key, from: old) } catch { Log.error("Taking the voice back from \(old) failed: \(error)") }
+                do { try library.forget(callID: callID, speakerKey: key, from: old, voice: current.speakerEmbeddings[key]) } catch { Log.error("Taking the voice back from \(old) failed: \(error)") }
             }
             if let e = current.speakerEmbeddings[key] {
                 let detail = current.speakerSamples?[key]

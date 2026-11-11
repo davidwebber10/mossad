@@ -223,11 +223,13 @@ final class PeopleMigrationTests: XCTestCase {
         XCTAssertTrue(result.text.contains("Nothing was changed."))
     }
 
-    func testADryRunWithNoOtherFolderWritesOnlyThePlanAndTheReport() throws {
+    func testADryRunWithNoOtherFolderWritesNothing() throws {
         let before = try snapshot()
-        XCTAssertEqual(run("dry-run").status, 0)
-        let added = Set(try snapshot().keys).subtracting(before.keys)
-        XCTAssertEqual(added, ["/People/" + PeopleMigration.planName, "/People/" + PeopleMigration.reportName])
+        let result = run("dry-run")
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(try snapshot(), before, "the app can be open, and its own plan and report stay")
+        XCTAssertTrue(result.text.contains("People: 6 (6 new)"), result.text)
+        XCTAssertTrue(result.text.contains("--out"), "it says how to keep the plan and the report")
     }
 
     func testApplyDoesWhatTheDryRunSaid() throws {
@@ -351,12 +353,140 @@ final class PeopleMigrationTests: XCTestCase {
         XCTAssertNoThrow(try library.add([0.2, 0.2, 0, 0], to: "Sam Carter"))
     }
 
-    func testADamagedPeopleFileIsSetAsideAndMadeAgainFromTheVoiceLibrary() throws {
+    /// A damaged `people.json` must never give each person a new id. It is set aside, the people store is off, the
+    /// voice library works alone as before, and nothing is written until the file is back or the owner starts again.
+    func testADamagedPeopleFileIsSetAsideAndNoNewIdsAreMade() throws {
+        let file = paths.people.appendingPathComponent(PeopleStore.fileName), samplesFile = paths.voices.appendingPathComponent(VoiceSampleStore.fileName)
+        let first = try XCTUnwrap(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now))
+        let ids = Set(first.people.people.map(\.id)), good = try Data(contentsOf: file), samplesBefore = try Data(contentsOf: samplesFile)
+        // One bad field is enough.
+        try Data(String(decoding: good, as: UTF8.self).replacingOccurrences(of: "\"id\"", with: "\"idd\"").utf8).write(to: file)
+
+        for launch in 1...2 {
+            let library = VoiceLibrary(directory: paths.voices)
+            XCTAssertNil(PeopleMigration.runAtLaunch(paths: paths, library: library, ownerName: "Avery Webb", notDuplicates: [], now: now.addingTimeInterval(Double(launch) * 86_400)),
+                         "launch \(launch)")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "no new people file, launch \(launch)")
+            XCTAssertEqual(try Data(contentsOf: samplesFile), samplesBefore, "the samples keep their people, launch \(launch)")
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: paths.people.path).filter { $0.contains(".unreadable-") }.count, 1)
+            // The app works as before the people store.
+            XCTAssertNoThrow(try library.add([0.1, Float(launch), 0, 0.4], to: "Sam Carter"))
+            XCTAssertEqual(library.existingName(name: "Carter, Sam", email: nil), "Sam Carter")
+        }
+        XCTAssertTrue(StoredFile.takeUntold(in: [paths.people, paths.voices]).isEmpty, "with no notification")
+        // The command says why, and applies nothing.
+        let dry = run("dry-run", out: out)
+        XCTAssertEqual(dry.status, 1)
+        XCTAssertTrue(dry.text.contains("ERRORS: people.json could not be read and was set aside"), dry.text)
+        XCTAssertEqual(run("apply").status, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+
+        // The file is put back: the same people, with the same ids, and the voices learned meanwhile.
+        try good.write(to: file)
+        let back = try XCTUnwrap(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now.addingTimeInterval(4 * 86_400)))
+        XCTAssertEqual(Set(back.people.people.map(\.id)), ids)
+        let sam = try XCTUnwrap(back.people.id(forVoiceName: "Sam Carter"))
+        XCTAssertEqual(back.samples.samples(of: sam).count, 5)
+        XCTAssertTrue(back.samples.samples.allSatisfy { $0.personID.map(ids.contains) == true }, "no sample of a person who is not there")
+    }
+
+    func testAfterRevertAPeopleFileThatWasSetAsideIsMadeAgain() throws {
         try Data("nope".utf8).write(to: paths.people.appendingPathComponent(PeopleStore.fileName))
+        XCTAssertNil(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now))
+        // The owner's own choice to start again.
+        XCTAssertEqual(run("revert").status, 0)
         let identity = try XCTUnwrap(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now))
         XCTAssertEqual(identity.people.people.filter(\.isLive).count, 6)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: paths.people.path).filter { $0.contains(".unreadable-") }.count, 1)
-        XCTAssertTrue(StoredFile.takeUntold(in: [paths.people, paths.voices]).isEmpty, "with no notification")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: paths.people.path).filter { $0.contains(".unreadable-") }.count, 1, "the damaged copy stays for a look")
+    }
+
+    // MARK: Exact copies of a fingerprint
+
+    /// The voice file can hold the same fingerprint two times in one profile (a merge of two profiles keeps both).
+    /// It is one sample, and a later launch with nothing new writes nothing.
+    func testExactCopiesInAProfileAreOneSampleAndALaterLaunchWritesNothing() throws {
+        let voices = paths.voices.appendingPathComponent("voices.json")
+        var profiles = try JSONDecoder().decode([VoiceProfile].self, from: Data(contentsOf: voices))
+        profiles[0].embeddings += [owner1, [0.7, 0.7, 0, 0], [0.7, 0.7, 0, 0]]
+        profiles[1].embeddings.append(sam2)
+        try JSONEncoder().encode(profiles).write(to: voices)
+        let copies = try Data(contentsOf: voices)
+
+        let library = VoiceLibrary(directory: paths.voices)
+        let first = try XCTUnwrap(PeopleMigration.runAtLaunch(paths: paths, library: library, ownerName: "Avery Webb", notDuplicates: [], now: now))
+        XCTAssertEqual(try Data(contentsOf: voices), copies, "the voice file is an old file: it is not changed")
+        XCTAssertEqual(first.samples.samples.count, 7, "6 distinct fingerprints of before, and 1 new one")
+        XCTAssertEqual(Set(first.samples.samples.map(\.id)).count, 7)
+        let report = try String(contentsOf: paths.people.appendingPathComponent(PeopleMigration.reportName), encoding: .utf8)
+        XCTAssertTrue(report.contains("3 exact copies of a fingerprint inside a profile are one sample each"), report)
+
+        // A call teaches the owner's profile, as each call does.
+        library.identity = first
+        try library.add([0.9, 0.1, 0, 0], to: "Avery Webb", source: VoiceSampleSource(callID: "20261107-100000", speakerKey: "me:A", origin: .autoMatch(0.9)))
+        XCTAssertEqual(first.samples.samples.count, 8)
+        XCTAssertEqual(Set(first.samples.samples.map(\.id)).count, 8, "one row for each id")
+        XCTAssertEqual(library.profiles[0].embeddings.count, 5, "the copies stay in the voice file")
+
+        let before = try snapshot()
+        let second = try XCTUnwrap(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [],
+                                                               now: now.addingTimeInterval(86_400)))
+        XCTAssertEqual(try snapshot(), before, "nothing changed, so nothing is written")
+        XCTAssertEqual(second.samples.samples.count, 8)
+        let third = PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now.addingTimeInterval(172_800))
+        XCTAssertNotNil(third)
+        XCTAssertEqual(try snapshot(), before)
+    }
+
+    func testANewerSamplesFileStopsTheLaunchStep() throws {
+        let newer = #"{"version":7,"samples":[]}"#
+        try Data(newer.utf8).write(to: paths.voices.appendingPathComponent(VoiceSampleStore.fileName))
+        let before = try snapshot()
+        let library = VoiceLibrary(directory: paths.voices)
+        XCTAssertNil(PeopleMigration.runAtLaunch(paths: paths, library: library, ownerName: "Avery Webb", notDuplicates: [], now: now))
+        XCTAssertEqual(try snapshot(), before, "no people file is made next to samples that this build must not change")
+        XCTAssertNoThrow(try library.add([0.2, 0.2, 0, 0], to: "Sam Carter"))
+        let dry = run("dry-run", out: out)
+        XCTAssertEqual(dry.status, 1)
+        XCTAssertTrue(dry.text.contains("samples.json is from a newer Mossad"), dry.text)
+        XCTAssertEqual(run("apply").status, 1)
+        XCTAssertEqual(try String(contentsOf: paths.voices.appendingPathComponent(VoiceSampleStore.fileName), encoding: .utf8), newer)
+    }
+
+    // MARK: A name next to an address
+
+    /// A shared address or an assistant's address: the address says who the entry is, and the name next to it is
+    /// not that person's name. It never becomes a form of the person.
+    func testANameNextToAnAddressIsAFormOnlyWhenTheNameItselfIsThatPerson() throws {
+        var c = CallRecord(id: "20261107-100000", platform: .meet, bundleID: "b", start: t0.addingTimeInterval(172_800), end: t0.addingTimeInterval(174_600), status: .written)
+        c.attendees = ["Front Desk <sam.carter@example.com>", "Lee, Dana <dana@example.org>", "Reed, Michael (Notetaker)"]
+        var d = CallRecord(id: "20261108-100000", platform: .meet, bundleID: "b", start: t0.addingTimeInterval(259_200), end: t0.addingTimeInterval(261_000), status: .written)
+        d.attendees = ["Pat Assistant", "Reed, Michael (Notetaker)"]
+        d.invitees = [Invitee(name: "Pat Assistant", email: "sam.carter@example.com"), Invitee(name: "Reed, Michael (Notetaker)", email: "notes@notetaker.example")]
+        for r in [c, d] {
+            try FileManager.default.createDirectory(at: paths.callDirectory(r.id), withIntermediateDirectories: true)
+            try r.save(to: paths.callDirectory(r.id))
+        }
+        let plan = plan()
+        let sam = try XCTUnwrap(person("Sam Carter", in: plan)), dana = try XCTUnwrap(person("Dana Lee", in: plan)), reed = try XCTUnwrap(person("Michael Reed", in: plan))
+        XCTAssertEqual(sam.forms.map(\.text), ["Sam Carter", "Carter, Sam"], "\"Front Desk\" and \"Pat Assistant\" are not Sam's names")
+        XCTAssertFalse(plan.people.contains { $0.forms.contains { $0.key.contains("front") || $0.key.contains("assistant") } })
+        // The entry is still that person in its meeting: the address says so.
+        XCTAssertNil(plan.report.notResolved.first { $0.label.hasPrefix("Front Desk") || $0.label == "Pat Assistant" })
+        // A name that is the person's own, next to an address nobody has: the form is kept without the address.
+        XCTAssertEqual(dana.forms.map(\.text), ["Dana Lee", "Lee, Dana"])
+        XCTAssertEqual(dana.emails.map(\.address), [], "an address read out of one text is not kept as the person's")
+        // A name with a part in brackets resolves, and its address is not the person's: one such address serves many.
+        XCTAssertEqual(reed.forms.map(\.text), ["Michael Reed", "Reed, Michael"])
+        XCTAssertEqual(reed.emails.map(\.address), ["mreed@example.com"])
+        XCTAssertFalse(plan.people.contains { $0.emails.contains { $0.address.contains("notetaker") } })
+    }
+
+    func testThePeopleWithNoProfileAreInTheReport() throws {
+        _ = try XCTUnwrap(PeopleMigration.runAtLaunch(paths: paths, library: VoiceLibrary(directory: paths.voices), ownerName: "Avery Webb", notDuplicates: [], now: now))
+        // An older build deletes a profile. It has no people store.
+        try VoiceLibrary(directory: paths.voices).delete("Dana Lee")
+        let plan = plan()
+        XCTAssertTrue(plan.report.notes.contains("1 saved person has no profile in the voice library now: Dana Lee."), "\(plan.report.notes)")
     }
 
     func testTheOwnerIsAPersonAlsoWithNoVoiceProfile() throws {

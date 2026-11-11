@@ -27,7 +27,10 @@ public struct OwnerIdentity: Sendable, Equatable, ExpressibleByStringLiteral {
     /// The identity from what is on disk: the owner's names in the people store and the name of the owner's voice
     /// profile. It only reads; a file that does not decode stays where it is and adds nothing.
     public static func read(name: String, paths: Paths) -> OwnerIdentity {
-        var names = PeopleStore.peek(in: paths.people)?.first { $0.isOwner && $0.isLive }?.forms.map(\.text) ?? []
+        let people = PeopleStore.peek(in: paths.people)?.filter(\.isLive) ?? []
+        // A name typed in "Your name" by mistake can be another saved person's name. That person's lines are theirs.
+        let others = Set(people.filter { !$0.isOwner }.map { PersonNames.key($0.displayName) })
+        var names = people.first(where: \.isOwner)?.forms.map(\.text).filter { !others.contains(PersonNames.key($0)) } ?? []
         if let data = try? Data(contentsOf: paths.voices.appendingPathComponent("voices.json")),
            let voice = (try? JSONDecoder().decode([VoiceProfile].self, from: data))?.first(where: \.isOwner) { names.append(voice.name) }
         return OwnerIdentity(name: name, also: names)

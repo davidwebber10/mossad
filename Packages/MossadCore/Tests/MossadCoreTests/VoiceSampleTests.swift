@@ -75,7 +75,7 @@ final class VoiceSampleTests: XCTestCase {
         let plain = VoiceLibrary(directory: root.appendingPathComponent("Plain"))
         try plain.add(voice(0), to: "Sam Carter", source: source("call-1", "them:B"))
         try plain.add(voice(1), to: "Sam Carter", source: source("call-1", "them:B"))
-        try plain.forget(callID: "call-1", speakerKey: "them:B", from: "Sam Carter")
+        try plain.forget(callID: "call-1", speakerKey: "them:B", from: "Sam Carter", voice: voice(1))
         XCTAssertEqual(plain.profiles.first?.embeddings.count, 2)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Plain/samples.json").path))
     }
@@ -146,16 +146,109 @@ final class VoiceSampleTests: XCTestCase {
     func testThatWasNotSamTakesTheSampleBackFromSam() throws {
         try library.add(voice(0), to: "Sam Carter", source: source("call-1", "them:A"))
         try library.add(voice(60), to: "Sam Carter", source: source("call-2", "them:B"))
-        try library.forget(callID: "call-2", speakerKey: "them:B", from: "Sam Carter")
+        try library.forget(callID: "call-2", speakerKey: "them:B", from: "Sam Carter", voice: voice(60))
         try library.add(voice(60), to: "Dana Lee", source: source("call-2", "them:B"))
         XCTAssertEqual(library.profiles.first { $0.name == "Sam Carter" }?.embeddings, [voice(0)])
         XCTAssertEqual(library.profiles.first { $0.name == "Dana Lee" }?.embeddings, [voice(60)])
         XCTAssertEqual(mine("Sam Carter").map(\.callID), ["call-1"])
         XCTAssertEqual(mine("Dana Lee").map(\.callID), ["call-2"])
         // A call that taught nothing changes nothing.
-        try library.forget(callID: "call-9", speakerKey: "them:B", from: "Sam Carter")
-        try library.forget(callID: "call-1", speakerKey: "them:A", from: "Nobody Saved")
+        try library.forget(callID: "call-9", speakerKey: "them:B", from: "Sam Carter", voice: voice(0))
+        try library.forget(callID: "call-1", speakerKey: "them:A", from: "Nobody Saved", voice: voice(0))
         XCTAssertEqual(library.profiles.first { $0.name == "Sam Carter" }?.embeddings, [voice(0)])
+    }
+
+    /// "Transcribe again" can give the speaker key to another voice. A correction of that key must not take a
+    /// good sample that the first voice taught under the same key.
+    func testACorrectionTakesBackOnlyTheVoiceThatTheKeyHasNow() throws {
+        try library.add(voice(0), to: "Sam Carter", source: source("call-1", "them:B"))
+        try library.forget(callID: "call-1", speakerKey: "them:B", from: "Sam Carter", voice: voice(50))
+        XCTAssertEqual(library.profiles.first?.embeddings, [voice(0)], "the key has another voice now: Sam's sample stays")
+        try library.forget(callID: "call-1", speakerKey: "them:B", from: "Sam Carter", voice: nil)
+        XCTAssertEqual(library.profiles.first?.embeddings, [voice(0)], "with no fingerprint of the key, nothing is known")
+        try library.forget(callID: "call-1", speakerKey: "them:B", from: "Sam Carter", voice: voice(4))
+        XCTAssertEqual(library.profiles.first?.embeddings, [], "the same voice, a little different after a new transcript")
+    }
+
+    // MARK: Exact copies, and two profiles of one person
+
+    func testAnExactCopyInAProfileIsOneSample() throws {
+        // A merge of two profiles keeps equal fingerprints in the voice file.
+        try library.add(voice(0), to: "Sam Carter", source: source("call-1", "them:A"))
+        try library.add(voice(0), to: "Carter, Sam", source: source("call-1", "them:A"))
+        try library.add(voice(40), to: "Carter, Sam", source: source("call-2", "them:A"))
+        try library.merge("Carter, Sam", into: "Sam Carter")
+        XCTAssertEqual(library.profiles.first?.embeddings, [voice(0), voice(0), voice(40)], "the voice file is as before")
+        try library.add(voice(80), to: "Sam Carter", source: source("call-3", "them:A"))
+        let mine = mine("Sam Carter")
+        XCTAssertEqual(mine.map(\.vector), [voice(0), voice(40), voice(80)], "one sample for each distinct fingerprint")
+        XCTAssertEqual(Set(samples.samples.map(\.id)).count, samples.samples.count, "one row for each id")
+    }
+
+    func testTwoProfilesOfOnePersonKeepTheSamplesOfBoth() throws {
+        // "Your name" is new, the owner's profile has the old name, and the owner named a voice with the new name.
+        try library.add(voice(0), to: "Avery Webb", isOwner: true, source: source("call-1", "me:A", origin: .ownerEnrollment))
+        try people.setOwnerName("Avery Webb-Stone")
+        try library.add(voice(30), to: "Avery Webb-Stone", source: source("call-2", "me:B"))
+        try library.add(voice(60), to: "Avery Webb", source: source("call-3", "me:A", origin: .autoMatch(0.9)))
+        let owner = try XCTUnwrap(people.owner?.id)
+        XCTAssertEqual(people.people.filter(\.isLive).count, 1)
+        XCTAssertEqual(Set(samples.samples(of: owner).compactMap(\.callID)), ["call-1", "call-2", "call-3"], "a change of one profile keeps the samples of the other")
+    }
+
+    func testASampleThatTheOwnerConfirmsIsOwnerNamed() throws {
+        try library.add(voice(0), to: "Sam Carter", source: source("call-1", "them:A", origin: .autoMatch(0.85)))
+        let id = mine("Sam Carter").first?.id
+        try library.add(voice(0), to: "Sam Carter", source: source("call-1", "them:A", origin: .ownerNamed))
+        XCTAssertEqual(mine("Sam Carter").map(\.origin), [.ownerNamed])
+        XCTAssertEqual(mine("Sam Carter").first?.id, id)
+        // An automatic match never takes the owner's word away.
+        try library.add(voice(0), to: "Sam Carter", source: source("call-1", "them:A", origin: .autoMatch(0.9)))
+        XCTAssertEqual(mine("Sam Carter").map(\.origin), [.ownerNamed])
+    }
+
+    func testADeleteOfTheOwnersProfileKeepsTheOwner() throws {
+        try library.add(voice(0), to: "Avery Webb", isOwner: true, source: source("call-1", "me:A", origin: .ownerEnrollment))
+        try people.setOwnerName("Avery Webb-Stone")
+        let owner = try XCTUnwrap(people.owner?.id)
+        try library.delete("Avery Webb")
+        XCTAssertTrue(samples.samples.isEmpty)
+        XCTAssertEqual(people.owner?.id, owner, "the owner is a person with or with no voice")
+        XCTAssertEqual(people.ownerNames, ["Avery Webb", "Avery Webb-Stone"], "and each name of the owner stays")
+    }
+
+    // MARK: A newer samples file
+
+    func testASamplesFileOfANewerVersionIsReadAndNeverSaved() throws {
+        let dir = root.appendingPathComponent("Later")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent(VoiceSampleStore.fileName)
+        let newer = #"{"version":7,"samples":[{"id":"7B0E5A3C-6C0E-4B6B-9B1E-0D9E2C1D4F10","vector":"AACAPwAAAAA=","newField":1}],"index":{}}"#
+        try Data(newer.utf8).write(to: file)
+        let store = VoiceSampleStore(directory: dir)
+        XCTAssertTrue(store.isReadOnly)
+        XCTAssertNil(store.loadError)
+        XCTAssertEqual(store.samples.map(\.vector), [[1, 0]], "it reads what it knows")
+        XCTAssertThrowsError(try store.replaceAll([]))
+        XCTAssertThrowsError(try store.change { $0.removeAll() })
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), newer)
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: dir.path).allSatisfy { !$0.contains(".unreadable-") }, "newer is not unreadable")
+        // The voice library still works with such a file next to it.
+        library.identity = VoiceIdentity(people: people, samples: store)
+        XCTAssertNoThrow(try library.add(voice(0), to: "Sam Carter", source: source("call-1", "them:A")))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), newer)
+    }
+
+    func testANewerSamplesFileThatThisBuildCannotReadIsNotSetAside() throws {
+        let dir = root.appendingPathComponent("Later")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent(VoiceSampleStore.fileName)
+        try Data(#"{"version":7,"samples":"a new shape"}"#.utf8).write(to: file)
+        let store = VoiceSampleStore(directory: dir)
+        XCTAssertTrue(store.isReadOnly)
+        XCTAssertNotNil(store.loadError)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertThrowsError(try store.replaceAll([]))
     }
 
     // MARK: Rename, merge, delete

@@ -64,7 +64,7 @@ public final class VoiceLibrary: @unchecked Sendable {
                 // The same call identified again ("Transcribe again") gives the same sample; one copy is enough.
                 if storage[i].embeddings.contains(embedding) {
                     if isOwner, !storage[i].isOwner { storage[i].isOwner = true; try save() }
-                    if let source { attached?.sync(storage[i], new: (embedding, source)) }
+                    if let source { attached?.sync(storage[i], new: (embedding, source), among: storage) }
                     return
                 }
                 // A new transcript gives a fingerprint that is a little different: it replaces that call's old one.
@@ -80,20 +80,21 @@ public final class VoiceLibrary: @unchecked Sendable {
                 storage.append(VoiceProfile(name: name, isOwner: isOwner, embeddings: [embedding]))
             }
             try save()
-            attached?.sync(storage[i], new: (embedding, source ?? VoiceSampleSource(origin: .migrated)))
+            attached?.sync(storage[i], new: (embedding, source ?? VoiceSampleSource(origin: .migrated)), among: storage)
         }
     }
 
     /// Takes back what was learned from one speaker of one call, when the owner says that speaker is someone
-    /// else. Needs the samples' own record of where they came from; without it nothing changes.
-    public func forget(callID: String, speakerKey: String, from name: String) throws {
+    /// else. `voice` is the fingerprint the call has for that speaker now: only a sample of that voice goes. Needs
+    /// the samples' own record of where they came from; without it, or with no fingerprint, nothing changes.
+    public func forget(callID: String, speakerKey: String, from name: String, voice: [Float]?) throws {
         try lock.withLock {
-            guard let attached, let i = storage.firstIndex(where: { $0.name == name }) else { return }
-            let gone = attached.vectors(of: storage[i], callID: callID, speakerKey: speakerKey)
+            guard let attached, let voice, let i = storage.firstIndex(where: { $0.name == name }) else { return }
+            let gone = attached.vectors(of: storage[i], callID: callID, speakerKey: speakerKey, voice: voice)
             guard storage[i].embeddings.contains(where: { gone.contains($0) }) else { return }
             storage[i].embeddings.removeAll { gone.contains($0) }
             try save()
-            attached.sync(storage[i])
+            attached.sync(storage[i], among: storage)
         }
     }
 
@@ -135,11 +136,11 @@ public final class VoiceLibrary: @unchecked Sendable {
                 let joined = storage[j]
                 storage.remove(at: i)
                 try save()
-                attached?.merged(from, wasOwner: wasOwner, into: joined)
+                attached?.merged(from, wasOwner: wasOwner, into: joined, among: storage)
             } else {
                 storage[i].name = to
                 try save()
-                if from != to { attached?.renamed(from: from, to: storage[i]) }
+                if from != to { attached?.renamed(from: from, to: storage[i], among: storage) }
             }
         }
     }
@@ -162,7 +163,7 @@ public final class VoiceLibrary: @unchecked Sendable {
             let gone = storage.filter { $0.name == name }
             storage.removeAll { $0.name == name }
             try save()
-            for profile in gone { attached?.deleted(profile) }
+            for profile in gone { attached?.deleted(profile, among: storage) }
         }
     }
 

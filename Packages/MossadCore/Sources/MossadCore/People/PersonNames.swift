@@ -67,6 +67,11 @@ public enum PersonNames {
     /// The key of the name in a written entry: "Sam Carter (Acme) <sam@acme.com>" gives "sam carter".
     public static func nameKey(_ text: String) -> String { key(withoutBrackets(text)) }
 
+    /// The name of a written entry with no part in brackets: "Carter, Sam (Acme) <sam@acme.com>" gives "Carter, Sam".
+    public static func plain(_ text: String) -> String {
+        withoutBrackets(text).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
     /// The address in "Sam Carter <sam@acme.com>", in lowercase.
     public static func email(in text: String) -> String? {
         guard let open = text.firstIndex(of: "<"), let close = text[open...].firstIndex(of: ">") else { return nil }

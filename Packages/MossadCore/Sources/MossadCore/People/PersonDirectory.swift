@@ -147,24 +147,28 @@ public struct PersonDirectory: Sendable, Equatable {
         }
     }
 
-    /// The saved person a typed name or a picked email stands for, when a voice is named. As `link`, and also a
-    /// name that only one saved person fits in the other order or by a short first name ("Mike Reed" for Michael
-    /// Reed), and a person saved under exactly that one word. The naming sheet shows the owner who it joins.
-    public func existing(name: String, email: String?) -> String? {
-        let email = email?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let email, !email.isEmpty {
-            switch resolver.resolve(PersonObservation(email: email)) {
-            case .resolved(let id, _, _): return names[id]
-            case .ambiguous(let ids, _): return ids.first.flatMap { names[$0] }
-            default: break
-            }
+    /// The saved person a typed name or a picked email stands for, when a voice is named: a join of the voice to
+    /// that person. Only a sure match joins: the email, or the whole name in either order ("Carter, Sam", "Carter
+    /// Sam", "Dr. Sam Carter" for Sam Carter). A short first name, a middle name on one side, a name a letter off,
+    /// and a name that two saved people fit are guesses: they give nil, and the voice gets the name as typed. A
+    /// part in brackets ("Sam Carter (Acme)") is the owner's way to name another person, so it is never read away.
+    /// Two saved people with one email, or with one name in another case, are the first one, as before.
+    public static func existing(name: String, email: String?, among people: [Person]) -> String? {
+        if let email = email.map(EmailIdentity.normalized), !email.isEmpty,
+           let hit = people.first(where: { $0.email.map(EmailIdentity.normalized) == email }) { return hit.name }
+        let key = PersonNames.key(name)
+        guard !key.isEmpty else { return nil }
+        if let hit = people.first(where: { PersonNames.key($0.name) == key }) { return hit.name }
+        guard !name.contains(where: { "(<[".contains($0) }) else { return nil }
+        let typed = PersonNames.parse(name)
+        guard typed.isName, typed.words.count >= 2 else { return nil }
+        let words = typed.words.sorted()
+        let hits = people.filter { p in
+            let saved = PersonNames.parse(p.name)
+            return saved.isName && saved.words.sorted() == words
         }
-        switch resolver.resolve(PersonObservation(name: name), in: ResolutionContext()) {
-        case .resolved(let id, _, _): return names[id]
-        // Two saved people with this name: the first one, so a third is not made.
-        case .ambiguous(let ids, let rule) where Self.sure.contains(rule): return ids.first.flatMap { names[$0] }
-        case .suggestion(let id, let rule, _) where rule == .swappedName || rule == .nickname: return names[id]
-        default: return nil
-        }
+        return hits.count == 1 ? hits[0].name : nil
     }
+
+    public func existing(name: String, email: String?) -> String? { Self.existing(name: name, email: email, among: people) }
 }

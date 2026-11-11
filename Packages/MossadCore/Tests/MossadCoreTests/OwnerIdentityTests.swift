@@ -65,6 +65,21 @@ final class OwnerIdentityTests: XCTestCase {
         XCTAssertFalse(owner.isOwner("Pat Moreno"))
     }
 
+    /// The owner typed another person's name in "Your name" by mistake, pressed Return, and corrected it. That
+    /// person's lines are not the owner's.
+    func testAFormerNameThatIsAnotherSavedPersonsNameIsNotTheOwners() throws {
+        let people = PeopleStore(directory: paths.people)
+        try people.setOwnerName("Avery Webb")
+        _ = try people.ensure(voiceName: "Pat Moreno", isOwner: false, origin: .voiceNaming)
+        try people.setOwnerName("Pat Moreno")
+        try people.setOwnerName("Avery Webb")
+        XCTAssertEqual(Set(people.ownerNames), ["Pat Moreno", "Avery Webb"], "the store keeps what was typed")
+        let owner = OwnerIdentity.read(name: "Avery Webb", paths: paths)
+        XCTAssertFalse(owner.isOwner("Pat Moreno"))
+        XCTAssertTrue(owner.isOwner("Avery Webb"))
+        XCTAssertEqual(owner.speakerKeys(in: record()), ["me:A"])
+    }
+
     func testReadingTheIdentityMovesNoDamagedFileAside() throws {
         try Data("nope".utf8).write(to: paths.people.appendingPathComponent(PeopleStore.fileName))
         try Data("nope".utf8).write(to: paths.voices.appendingPathComponent("voices.json"))

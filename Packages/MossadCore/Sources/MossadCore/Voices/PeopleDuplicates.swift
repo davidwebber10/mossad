@@ -70,9 +70,9 @@ public enum PeopleDuplicates {
 }
 
 extension VoiceLibrary {
-    /// The saved person a new name stands for: the same email (any case), or the same name in another written
-    /// form: other case or spacing, last name first, a middle name, or a short first name. Nil for someone new.
+    /// The saved person a new name stands for, when a voice is named: the same email (any case), or the whole
+    /// name in any case, spacing, or order. Nil for someone new, and for a guess (`PersonDirectory.existing`).
     public func existingName(name: String, email: String?) -> String? {
-        PersonDirectory(profiles: profiles).existing(name: name, email: email)
+        PersonDirectory.existing(name: name, email: email, among: profiles.map { PersonDirectory.Person(name: $0.name, email: $0.email) })
     }
 }

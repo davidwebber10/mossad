@@ -217,9 +217,37 @@ public final class VoiceSampleStore: @unchecked Sendable {
     private var storage: [VoiceSample]
     /// Set when `samples.json` was there and could not be read; a damaged file is moved aside first.
     public let loadError: Error?
+    /// True for a file from a newer build: it is read, and never saved.
+    public let isReadOnly: Bool
+    private let newerVersion: Int?
+
+    private struct VersionOnly: Decodable { var version: Int? }
+
+    /// The file was written by a newer build. This build reads it and does not save.
+    public struct NewerFile: Error, CustomStringConvertible {
+        public let version: Int
+        public var description: String { "samples.json is from a newer Mossad (version \(version)); this build does not change it" }
+    }
+
+    static func version(of data: Data) -> Int? { (try? JSONDecoder().decode(VersionOnly.self, from: data))?.version }
 
     public init(directory: URL) {
         url = directory.appendingPathComponent(Self.fileName)
+        // Newer is not unreadable: a file with a higher version is never moved aside and never replaced.
+        if let data = try? Data(contentsOf: url), let v = Self.version(of: data), v > Self.currentVersion {
+            isReadOnly = true
+            newerVersion = v
+            do {
+                storage = try JSONDecoder.callRecord.decode(File.self, from: data).samples
+                loadError = nil
+            } catch {
+                storage = []
+                loadError = error
+            }
+            return
+        }
+        isReadOnly = false
+        newerVersion = nil
         do {
             // No note for the owner: the samples are made again from the voice library at the next launch.
             storage = try StoredFile.load(File.self, from: url, decoder: .callRecord)?.samples ?? []
@@ -241,6 +269,7 @@ public final class VoiceSampleStore: @unchecked Sendable {
             var copy = storage
             body(&copy)
             guard copy != storage else { return }
+            if let newerVersion { throw NewerFile(version: newerVersion) }
             if let loadError, (loadError as? UnreadableFile)?.kept == nil { throw loadError }
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder.callRecord.encode(File(version: Self.currentVersion, samples: copy)).write(to: url, options: .atomic)
@@ -249,6 +278,7 @@ public final class VoiceSampleStore: @unchecked Sendable {
     }
 
     public func replaceAll(_ samples: [VoiceSample]) throws {
+        if let newerVersion { throw NewerFile(version: newerVersion) }
         try change { $0 = samples }
     }
 }
@@ -277,26 +307,42 @@ public final class VoiceIdentity: @unchecked Sendable {
         return VoiceSamples.replaced(by: vector, callID: source.callID, speakerKey: source.speakerKey, among: samples.samples(of: id)).map(\.vector)
     }
 
-    /// The vectors of this profile that came from one speaker of one call.
-    func vectors(of profile: VoiceProfile, callID: String, speakerKey: String) -> [[Float]] {
+    /// The vectors of this profile that one speaker of one call taught, and that are the voice `voice`: the
+    /// fingerprint the call has for that speaker now. "Transcribe again" can give the key to another voice, so the
+    /// key alone is not proof.
+    func vectors(of profile: VoiceProfile, callID: String, speakerKey: String, voice: [Float]) -> [[Float]] {
         guard let id = people.id(forVoiceName: profile.name, isOwner: profile.isOwner) else { return [] }
-        return samples.samples(of: id).filter { $0.callID == callID && $0.speakerKey == speakerKey }.map(\.vector)
+        return samples.samples(of: id).filter {
+            $0.callID == callID && $0.speakerKey == speakerKey && VoiceLibrary.cosine($0.vector, voice) >= VoiceSamples.sameSample
+        }.map(\.vector)
     }
 
-    /// Makes the samples of the profile's person the profile's vectors, in its order: a vector that left the
-    /// profile leaves, and one with no sample gets one. `new` is the sample that was learned just now.
-    func sync(_ profile: VoiceProfile, new: (vector: [Float], source: VoiceSampleSource)? = nil) {
+    /// Makes the samples of the profile's person the fingerprints of the person's profiles: one sample for each
+    /// distinct fingerprint, a fingerprint that left leaves, and one with no sample gets one. `new` is the sample
+    /// that was learned just now. `profiles` is the whole library: two profiles can be one person (the owner's
+    /// profile under an old name, and a voice named with the new one), and a change of one keeps the other's.
+    func sync(_ profile: VoiceProfile, new: (vector: [Float], source: VoiceSampleSource)? = nil, among profiles: [VoiceProfile]) {
         attempt("a voice of \(profile.name)") {
             let id = try people.ensure(voiceName: profile.name, isOwner: profile.isOwner, origin: .voiceNaming)
             let date = now()
+            var vectors: [[Float]] = []
+            for p in profiles where p.name == profile.name || people.id(forVoiceName: p.name, isOwner: p.isOwner) == id {
+                // The voice file can hold one fingerprint two times. It is one sample.
+                for v in p.embeddings where !vectors.contains(v) { vectors.append(v) }
+            }
             try samples.change { all in
                 var mine = all.filter { $0.personID == id }
                 all.removeAll { $0.personID == id }
                 if let new, let i = mine.firstIndex(where: { $0.vector == new.vector }) {
-                    // The same sample learned again: what is known now of its call fills what was not known.
-                    if mine[i].callID == nil, new.source.callID != nil { mine[i].take(new.source) }
+                    // The same sample learned again: what is known now of its call fills what was not known, and
+                    // the owner's word for the name stays when a match comes later.
+                    if mine[i].callID == nil, new.source.callID != nil {
+                        mine[i].take(new.source)
+                    } else if new.source.origin == .ownerNamed, mine[i].origin != .ownerNamed, mine[i].callID == new.source.callID {
+                        mine[i].origin = .ownerNamed
+                    }
                 }
-                all += profile.embeddings.map { vector in
+                all += vectors.map { vector in
                     if let known = mine.first(where: { $0.vector == vector }) { return known }
                     if let new, new.vector == vector { return VoiceSample(personID: id, vector: vector, source: new.source, learned: date) }
                     return VoiceSample(personID: id, vector: vector, source: VoiceSampleSource(origin: .migrated), learned: date)
@@ -312,15 +358,15 @@ public final class VoiceIdentity: @unchecked Sendable {
         }
     }
 
-    func renamed(from old: String, to profile: VoiceProfile) {
+    func renamed(from old: String, to profile: VoiceProfile, among profiles: [VoiceProfile]) {
         attempt("the new name of \(old)") {
             if let id = people.id(forVoiceName: old, isOwner: profile.isOwner) { try people.rename(id, to: profile.name) }
         }
-        sync(profile)
+        sync(profile, among: profiles)
     }
 
     /// `old` was joined into `profile`. The person of `old` becomes a redirect, and its samples go to the other.
-    func merged(_ old: String, wasOwner: Bool, into profile: VoiceProfile) {
+    func merged(_ old: String, wasOwner: Bool, into profile: VoiceProfile, among profiles: [VoiceProfile]) {
         attempt("the merge of \(old)") {
             let survivor = try people.ensure(voiceName: profile.name, isOwner: profile.isOwner && !wasOwner, origin: .voiceNaming)
             guard let absorbed = people.id(forVoiceName: old, isOwner: wasOwner), absorbed != survivor else { return }
@@ -329,12 +375,19 @@ public final class VoiceIdentity: @unchecked Sendable {
                 for i in all.indices where all[i].personID == absorbed { all[i].personID = survivor }
             }
         }
-        sync(profile)
+        sync(profile, among: profiles)
     }
 
-    func deleted(_ profile: VoiceProfile) {
+    func deleted(_ profile: VoiceProfile, among profiles: [VoiceProfile]) {
         attempt("the delete of \(profile.name)") {
             guard let id = people.id(forVoiceName: profile.name, isOwner: profile.isOwner) else { return }
+            // The owner is a person with or with no voice: their names stay, and so do the samples of another
+            // profile of theirs.
+            if people.person(id)?.isOwner == true {
+                let left = profiles.filter { people.id(forVoiceName: $0.name, isOwner: $0.isOwner) == id }.flatMap(\.embeddings)
+                try samples.change { $0.removeAll { $0.personID == id && !left.contains($0.vector) } }
+                return
+            }
             try samples.change { $0.removeAll { $0.personID == id } }
             try people.delete(id)
         }

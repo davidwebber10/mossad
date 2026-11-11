@@ -12,6 +12,8 @@ public struct MigrationReport: Codable, Equatable, Sendable {
         public var samplesWithProvenance = 0
         /// Pairs of samples of one person that are near copies. They stay in this phase.
         public var nearCopies = 0
+        /// Fingerprints that a profile of the voice library has two times. Each is one sample.
+        public var exactCopies = 0
         public var meetings = 0
         public var meetingsUnreadable = 0
         public var speakerNames = 0
@@ -184,9 +186,18 @@ public enum PeopleMigration {
             } else {
                 input.errors.append("people.json cannot be read")
             }
+        } else if let kept = PeopleStore.setAside(in: paths.people) {
+            // A new file would give each person a new id.
+            input.errors.append("people.json could not be read and was set aside as \(kept); put it back, or run revert to start again")
         }
         if let d = data(paths.voices.appendingPathComponent(VoiceSampleStore.fileName)) {
-            if let samples = VoiceSampleStore.decode(d) { input.samples = samples } else { input.errors.append("samples.json cannot be read") }
+            if let v = VoiceSampleStore.version(of: d), v > VoiceSampleStore.currentVersion {
+                input.errors.append("samples.json is from a newer Mossad (version \(v)); this build does not change it")
+            } else if let samples = VoiceSampleStore.decode(d) {
+                input.samples = samples
+            } else {
+                input.errors.append("samples.json cannot be read")
+            }
         }
         if let scan = try? ProcessingQueue(paths: paths).scan() {
             input.records = scan.records.sorted { $0.start < $1.start }
@@ -310,13 +321,24 @@ public enum PeopleMigration {
                 samples.append(PlannedSample(sample))
             }
             for (why, count) in loose.sorted(by: { $0.key < $1.key }) { report.samplesWithoutProvenance.append(.init(person: profile.name, count: count, why: why)) }
-            for (i, a) in profile.embeddings.enumerated() {
-                for b in profile.embeddings[(i + 1)...] where VoiceLibrary.cosine(a, b) >= VoiceSamples.sameSample { report.totals.nearCopies += 1 }
+            // The voice file can hold one fingerprint two times in a profile. It is one sample; the file stays as it is.
+            var distinct: [[Float]] = []
+            for v in profile.embeddings where !distinct.contains(v) { distinct.append(v) }
+            report.totals.exactCopies += profile.embeddings.count - distinct.count
+            for (i, a) in distinct.enumerated() {
+                for b in distinct[(i + 1)...] where VoiceLibrary.cosine(a, b) >= VoiceSamples.sameSample { report.totals.nearCopies += 1 }
             }
         }
         // A sample with no person, or of a person this plan does not know, is kept: never deleted here.
         let known = Set(people.map(\.id))
-        samples += input.samples.filter { $0.personID.map { !known.contains($0) } ?? true }.map(PlannedSample.init)
+        var ids = Set(samples.map(\.id))
+        samples += input.samples.filter { $0.personID.map { !known.contains($0) } ?? true }.filter { ids.insert($0.id).inserted }.map(PlannedSample.init)
+        // A person whose profile an older build deleted or merged away stays a person. The report says so.
+        let withProfile = Set(profilePerson)
+        let bare = people.filter { $0.isLive && !$0.isOwner && !withProfile.contains($0.id) }.map(\.displayName).sorted()
+        if !bare.isEmpty {
+            report.notes.append("\(bare.count) saved \(bare.count == 1 ? "person has" : "people have") no profile in the voice library now: \(bare.joined(separator: ", ")).")
+        }
 
         // Steps 3 to 9: who each written name is. The new files do not hold these links yet; the report shows them.
         // Forms that a calendar showed before are left out, so the report gives the same rule on each run.
@@ -327,6 +349,7 @@ public enum PeopleMigration {
         })
         let display = Dictionary(people.map { ($0.id, $0.displayName) }, uniquingKeysWith: { a, _ in a })
         let strong: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .externalID, .nameForm, .provedOrder, .sameName]
+        let byNameOnly: Set<Resolution.Rule> = [.ownerLink, .nameForm, .provedOrder, .sameName]
         var labels = Labels()
         var links: [String: (person: PersonID, rule: Resolution.Rule, meetings: Int)] = [:]
         var seenForms: [(PersonID, String)] = [], seenEmails: [(PersonID, String)] = []
@@ -388,12 +411,18 @@ public enum PeopleMigration {
                 guard let id = answer.person, let rule = answer.rule else { continue }
                 if !there.contains(id) { there.append(id) }
                 loose.removeAll { $0 == written }
-                // By the name alone: a name that only the address explains is not a form of this person.
-                let byName = resolve(PersonObservation(name: written, source: .calendar), in: nil)
-                let named = byName.person == id && byName.rule.map(strong.contains) == true
+                // By the name alone, with no part in brackets, so no address in the text can answer for it. A name
+                // that only the address explains (a shared address, an assistant who sends the invite) is not a
+                // form of this person.
+                let plain = PersonNames.plain(written)
+                let byName = resolve(PersonObservation(name: plain, source: .calendar), in: nil)
+                let named = byName.person == id && byName.rule.map(byNameOnly.contains) == true
                 if named {
-                    if PersonNames.nameKey(written) != PersonNames.nameKey(display[id] ?? "") { seenForms.append((id, written)) }
-                    if let email = o.email, resolver.resolve(PersonObservation(email: email)) == .unknown { seenEmails.append((id, email)) }
+                    if PersonNames.key(plain) != PersonNames.nameKey(display[id] ?? "") { seenForms.append((id, plain)) }
+                    // An address is kept only from a pair of the calendar whose name is the bare name: the address
+                    // next to "Sam Carter (Notetaker)" serves many people.
+                    if r.invitees != nil, plain == written.trimmingCharacters(in: .whitespacesAndNewlines), let email = o.email,
+                       resolver.resolve(PersonObservation(email: email)) == .unknown { seenEmails.append((id, email)) }
                 }
                 if !oldRule(written, id) { links[written] = (id, named ? byName.rule ?? rule : rule, (links[written]?.meetings ?? 0) + 1) }
             }
@@ -474,6 +503,10 @@ public enum PeopleMigration {
             .sorted { ($0.person, $0.written) < ($1.person, $1.written) }
         if report.totals.owners > 1 { report.errors.append("\(report.totals.owners) people are marked as the owner") }
         if input.unreadableRecords > 0 { report.notes.append("\(input.unreadableRecords) meetings could not be read and are not in the numbers.") }
+        if report.totals.exactCopies > 0 {
+            let n = report.totals.exactCopies
+            report.notes.append("\(n) exact \(n == 1 ? "copy" : "copies") of a fingerprint inside a profile \(n == 1 ? "is one sample" : "are one sample each"): the voice library has \(report.totals.samples + n) fingerprints, and the samples are \(report.totals.samples). The voice library is not changed.")
+        }
         if report.totals.nearCopies > 0 { report.notes.append("\(report.totals.nearCopies) pairs of samples of one person are near copies. They stay; a sample learned again from one call replaces the old one from now on.") }
 
         // The order of the samples in the file is not a change.
@@ -559,7 +592,7 @@ public enum PeopleMigration {
     public static func revert(paths: Paths) throws -> [String] {
         var removed: [String] = []
         let files = [paths.people.appendingPathComponent(PeopleStore.fileName), paths.people.appendingPathComponent(PeopleStore.logName),
-                     paths.people.appendingPathComponent(planName), paths.people.appendingPathComponent(reportName),
+                     PeopleStore.marker(in: paths.people), paths.people.appendingPathComponent(planName), paths.people.appendingPathComponent(reportName),
                      paths.voices.appendingPathComponent(VoiceSampleStore.fileName)]
         for file in files + files.map({ $0.appendingPathExtension("recovered") }) where FileManager.default.fileExists(atPath: file.path) {
             try FileManager.default.removeItem(at: file)
@@ -595,11 +628,20 @@ public enum PeopleMigration {
             return nil
         }
         let people = PeopleStore(directory: paths.people), samples = VoiceSampleStore(directory: paths.voices)
-        // A file that was damaged is set aside by its store, and the plan below makes it again from the voice library.
-        if people.isReadOnly || (people.loadError as? UnreadableFile).map({ $0.kept == nil }) ?? (people.loadError != nil) {
-            Log.error("People: people.json cannot be changed by this build, so the people store waits")
+        if people.isReadOnly || samples.isReadOnly {
+            Log.error("People: \(people.isReadOnly ? PeopleStore.fileName : VoiceSampleStore.fileName) is from a newer Mossad. This build does not change it; the people store is off and the voice library works alone")
             return nil
         }
+        // A damaged people file must never give each person a new id. It is set aside, and nothing is made in its place.
+        if let kept = people.setAside {
+            Log.error("People: people.json could not be read and was set aside as \(kept). The people store is off and Mossad works as before it; no person gets a new id. Put the file back, or run Mossad --people-migration revert to start again")
+            return nil
+        }
+        if people.loadError != nil {
+            Log.error("People: people.json cannot be read, so the people store waits")
+            return nil
+        }
+        // The samples have no ids that another file holds: a damaged file is set aside and made again below.
         if let error = samples.loadError, (error as? UnreadableFile)?.kept == nil {
             Log.error("People: samples.json cannot be read, so the people store waits")
             return nil
@@ -609,7 +651,8 @@ public enum PeopleMigration {
         input.profiles = library.profiles
         input.people = people.people
         input.samples = samples.samples
-        input.errors.removeAll { $0.hasPrefix("people.json") || $0.hasPrefix("samples.json") }
+        // A damaged samples file was set aside by its store just now, and is made again here.
+        input.errors.removeAll { $0.hasPrefix("samples.json cannot be read") }
         let plan = plan(input)
         guard plan.report.errors.isEmpty else {
             Log.error("People: the migration waits: \(plan.report.errors.joined(separator: "; "))")
@@ -632,7 +675,7 @@ public enum PeopleMigration {
     // MARK: The command
 
     /// `Mossad --people-migration dry-run | apply | revert [--out <folder>]`. A dry run changes nothing in the data
-    /// folder when `--out` names another folder for the plan and the report. Returns the text to print and the
+    /// folder: it writes the plan and the report only into the `--out` folder. Returns the text to print and the
     /// exit code.
     public static func command(_ arguments: [String], paths: Paths, ownerName: String, notDuplicates: [String], now: Date = Date()) -> (text: String, status: Int32) {
         let usage = "Usage: Mossad --people-migration dry-run | apply | revert [--out <folder>]"
@@ -642,9 +685,12 @@ public enum PeopleMigration {
         switch mode {
         case "dry-run":
             let plan = plan(read(paths: paths, ownerName: ownerName, notDuplicates: notDuplicates, now: now))
-            let folder = out ?? paths.people
-            do { try write(plan, to: folder) } catch { return ("The plan could not be saved in \(folder.path): \(error)", 1) }
-            return (summary(plan) + "\nNothing was changed. The plan and the report are in \(folder.path).", plan.report.errors.isEmpty ? 0 : 1)
+            // With no folder of its own, a dry run writes nothing: the app can be open, and its plan and report stay.
+            guard let out else {
+                return (summary(plan) + "\nNothing was changed. Give --out <folder> to keep the plan and the report.", plan.report.errors.isEmpty ? 0 : 1)
+            }
+            do { try write(plan, to: out) } catch { return ("The plan could not be saved in \(out.path): \(error)", 1) }
+            return (summary(plan) + "\nNothing was changed. The plan and the report are in \(out.path).", plan.report.errors.isEmpty ? 0 : 1)
         case "apply", "revert":
             // One writer: the app holds these files in memory while it runs.
             switch InstanceLock.acquire(root: paths.root) {

@@ -73,6 +73,8 @@ public final class PeopleStore: @unchecked Sendable {
     public let loadError: Error?
     /// True for a file from a newer build: it is read, and never saved.
     public let isReadOnly: Bool
+    /// The name of the copy when the file could not be read and was set aside. The store then saves nothing.
+    public let setAside: String?
     private let newerVersion: Int?
 
     public init(directory: URL, now: @escaping @Sendable () -> Date = Date.init) {
@@ -84,6 +86,7 @@ public final class PeopleStore: @unchecked Sendable {
         if let data = try? Data(contentsOf: url), let v = Self.version(of: data), v > Self.currentVersion {
             isReadOnly = true
             newerVersion = v
+            setAside = nil
             do {
                 storage = try JSONDecoder.callRecord.decode(File.self, from: data).people
                 loadError = nil
@@ -95,16 +98,43 @@ public final class PeopleStore: @unchecked Sendable {
         }
         isReadOnly = false
         newerVersion = nil
+        let marker = Self.marker(in: directory)
         do {
-            // No note for the owner: in this phase the file is made again from the voice library at the next launch.
-            storage = try StoredFile.load(File.self, from: url, decoder: .callRecord)?.people ?? []
-            loadError = nil
+            if let people = try StoredFile.load(File.self, from: url, decoder: .callRecord)?.people {
+                storage = people
+                loadError = nil
+                setAside = nil
+                // The file is back and reads.
+                try? FileManager.default.removeItem(at: marker)
+            } else if let kept = try? String(contentsOf: marker, encoding: .utf8) {
+                // The file is gone because an earlier start set it aside. That is not "no people yet".
+                storage = []
+                setAside = kept
+                loadError = UnreadableFile(url: url, kept: nil, reason: "it was set aside as \(kept)")
+            } else {
+                storage = []
+                loadError = nil
+                setAside = nil
+            }
         } catch {
-            // Unreadable is not empty: a read error keeps the file, and saves are refused until a restart reads it.
+            // Unreadable is not empty. A new file would give each person a new id, so no save is made until the file
+            // is back or the owner starts again.
             storage = []
             loadError = error
             onDisk = FileManager.default.fileExists(atPath: url.path)
+            setAside = (error as? UnreadableFile)?.kept?.lastPathComponent
+            if let setAside { try? Data(setAside.utf8).write(to: marker, options: .atomic) }
         }
+    }
+
+    /// The note that `people.json` was set aside, with the name of the copy. While it is there and the file is
+    /// not, the store makes no new file.
+    static func marker(in directory: URL) -> URL { directory.appendingPathComponent("people.set-aside") }
+
+    /// The name of the copy, when `people.json` could not be read and was set aside, now or at an earlier start.
+    public static func setAside(in directory: URL) -> String? {
+        guard !FileManager.default.fileExists(atPath: directory.appendingPathComponent(fileName).path) else { return nil }
+        return try? String(contentsOf: marker(in: directory), encoding: .utf8)
     }
 
     // MARK: Reading
@@ -149,7 +179,9 @@ public final class PeopleStore: @unchecked Sendable {
 
     static func id(forVoiceName name: String, isOwner: Bool, in people: [Person]) -> PersonID? {
         if isOwner, let owner = people.first(where: { $0.isOwner && $0.isLive }) { return owner.id }
-        return people.first { $0.isLive && $0.displayName == name }?.id
+        // Another person with this name comes before the owner: "Your name" can hold another person's name for a moment.
+        let hits = people.filter { $0.isLive && $0.displayName == name }
+        return (hits.first { !$0.isOwner } ?? hits.first)?.id
     }
 
     // MARK: Changes
@@ -169,8 +201,8 @@ public final class PeopleStore: @unchecked Sendable {
 
     private func save(_ people: [Person]) throws {
         if let newerVersion { throw NewerPeopleFile(version: newerVersion) }
-        // A file that is still there but could not be read must not be replaced by what this copy knows.
-        if let loadError, (loadError as? UnreadableFile)?.kept == nil { throw loadError }
+        // A file that could not be read must not be replaced by what this copy knows, also after it was set aside.
+        if let loadError { throw loadError }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

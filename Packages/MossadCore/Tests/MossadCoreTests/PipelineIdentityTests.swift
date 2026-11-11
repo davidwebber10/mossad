@@ -66,6 +66,19 @@ extension PipelineTests {
         XCTAssertEqual(library.profiles.first { $0.name == "Alex Rivera" }?.embeddings, [[0, 1, 0, 0]])
     }
 
+    /// A short first name is a guess. The voice gets the name as typed and its own profile, as before; it does not
+    /// go into the profile of a saved person with another first name.
+    func testAVoiceNamedWithAShortNameDoesNotJoinAnotherPerson() async throws {
+        try library.add([0, 0, 1, 0], to: "Alexandra Rivera")
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        await p.applyNames(callID: id, names: ["them:A": "Alex Rivera"])
+        XCTAssertEqual(try load(id).speakerNames["them:A"], "Alex Rivera")
+        XCTAssertEqual(library.profiles.first { $0.name == "Alexandra Rivera" }?.embeddings, [[0, 0, 1, 0]])
+        XCTAssertEqual(library.profiles.first { $0.name == "Alex Rivera" }?.embeddings, [[0, 1, 0, 0]])
+    }
+
     func testTranscribeAgainDoesNotGiveAPersonASecondSampleOfOneCall() async throws {
         let stores = attachIdentity()
         let id = try makeRecord()

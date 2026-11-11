@@ -97,21 +97,58 @@ final class IdentityCorpusTests: XCTestCase {
 
     // MARK: Naming a voice
 
-    func testANameInAnotherWrittenFormJoinsTheSavedPerson() throws {
+    private func library(_ names: [String], _ body: (VoiceLibrary) throws -> Void) throws {
         let dir = tempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
         let library = VoiceLibrary(directory: dir)
-        try library.add([1, 0, 0, 0], to: "Sam Carter")
-        try library.add([0, 1, 0, 0], to: "Michael Reed")
-        try library.add([0, 0, 1, 0], to: "Jo")
-        for typed in ["Carter, Sam", "CARTER Sam", "Carter Sam", "Sam A. Carter", "sam  carter", "Dr. Sam Carter"] {
-            XCTAssertEqual(library.existingName(name: typed, email: nil), "Sam Carter", typed)
+        for (i, name) in names.enumerated() { try library.add([Float(i + 1), 1, 0, 0], to: name) }
+        try body(library)
+    }
+
+    /// A voice joins a saved person only on a sure match: the whole name, in either order, or the email.
+    func testAVoiceJoinsASavedPersonOnTheWholeNameInEitherOrder() throws {
+        try library(["Sam Carter", "Michael Reed", "Jo", "Maria De La Cruz"]) { library in
+            try library.setEmail("sam.carter@example.com", for: "Sam Carter")
+            for typed in ["sam  carter", "SAM CARTER", "Carter, Sam", "CARTER Sam", "Carter Sam", "Dr. Sam Carter", "Sam Carter Jr."] {
+                XCTAssertEqual(library.existingName(name: typed, email: nil), "Sam Carter", typed)
+            }
+            XCTAssertEqual(library.existingName(name: "De La Cruz, Maria", email: nil), "Maria De La Cruz")
+            XCTAssertEqual(library.existingName(name: "jo", email: nil), "Jo", "a person saved under one word, as before")
+            XCTAssertEqual(library.existingName(name: "Someone Else", email: " Sam.Carter@Example.com "), "Sam Carter", "the email the owner picked")
         }
-        XCTAssertEqual(library.existingName(name: "Mike Reed", email: nil), "Michael Reed", "the naming sheet says who the voice joins")
-        XCTAssertEqual(library.existingName(name: "jo", email: nil), "Jo")
-        XCTAssertNil(library.existingName(name: "Sam", email: nil), "a first name alone joins nobody")
-        XCTAssertNil(library.existingName(name: "Sam B. Reed", email: nil))
-        XCTAssertNil(library.existingName(name: "Sam Carver", email: nil), "a name a letter off is a suggestion, not the same person")
+    }
+
+    /// A short first name, a middle name, a name a letter off, and a first name alone are guesses. The voice then
+    /// gets the name as typed, as before this resolver, and the People page can offer the pair to merge.
+    func testAVoiceNeverJoinsASavedPersonOnAGuess() throws {
+        try library(["Sam Carter", "Michael Reed", "Jo"]) { library in
+            for typed in ["Mike Reed", "Reed, Mike", "Sam A. Carter", "Carter, Sam A.", "Sam Carver", "Sam", "Sam C.", "Sam Carter (Acme)", "Jo Park", "Riley Chen", ""] {
+                XCTAssertNil(library.existingName(name: typed, email: nil), typed)
+            }
+            XCTAssertNil(library.existingName(name: "Sam Carter-Reed", email: "nobody@example.com"))
+        }
+    }
+
+    /// Review scenario A: Samantha Carter is saved, and a new person, Samuel Carter, is named "Sam Carter".
+    func testAShortNameOfANewPersonDoesNotGoIntoAnotherPersonsProfile() throws {
+        try library(["Samantha Carter", "Alexandra Smith", "Patricia Lee", "Christopher Nair"]) { library in
+            for typed in ["Sam Carter", "Alex Smith", "Pat Lee", "Chris Nair"] { XCTAssertNil(library.existingName(name: typed, email: nil), typed) }
+        }
+    }
+
+    /// Review scenario B: two saved people fit the typed name. Two who fit are nobody.
+    func testANameThatTwoSavedPeopleFitJoinsNobody() throws {
+        try library(["Riley A. Chen", "Riley B. Chen"]) { library in
+            XCTAssertNil(library.existingName(name: "Riley Chen", email: nil))
+            XCTAssertEqual(library.existingName(name: "riley b chen", email: nil), "Riley B. Chen", "the whole name of one of them")
+        }
+        try library(["Dr. Sam Carter", "Carter, Sam"]) { library in
+            XCTAssertNil(library.existingName(name: "Sam Carter", email: nil), "each of the two is this name in another written form")
+        }
+        // Two profiles with the same name in another case were one person before this resolver: the first one.
+        try library(["Sam Carter", "sam carter"]) { library in
+            XCTAssertEqual(library.existingName(name: "SAM CARTER", email: nil), "Sam Carter")
+        }
     }
 
     func testTwoProfilesOfOneNameWrittenTwoWaysAreAPossibleDuplicate() {
