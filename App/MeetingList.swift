@@ -21,9 +21,10 @@ struct MeetingList: View {
     /// The arrow keys, Home, End, and typing scroll on their own; their selection change must not scroll again.
     @State private var scrolledHere: String?
 
-    /// Invites show only without a search or a filter: both narrow what was recorded.
+    /// Invites show only without a search or a filter: both narrow what was recorded. The soonest few, latest on top,
+    /// so time runs one way down the whole list and the next meeting sits just above the ones that happened.
     private var upcoming: [UpcomingMeeting] {
-        controller.meetingQuery.isEmpty && !filters.isActive ? Array(controller.upcoming.prefix(UpcomingRow.shown)) : []
+        controller.meetingQuery.isEmpty && !filters.isActive ? Array(controller.upcoming.prefix(UpcomingRow.shown).reversed()) : []
     }
 
     /// Every row's id in the order shown, for the arrow keys.
