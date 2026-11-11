@@ -58,6 +58,8 @@ public struct MeetingFacts: Sendable, Equatable {
     /// A named speaker. A voice with no name cannot be followed from one meeting to the next.
     public struct Person: Sendable, Equatable {
         public var name: String
+        /// The id in `people.json`, when the record has it: two people with one name have their own history.
+        public var personID: String? = nil
         public var isOwner: Bool
         /// False for a voice that said almost nothing; see `MeetingFacts.isMain`.
         public var isMain = true
@@ -90,6 +92,8 @@ public struct MeetingFacts: Sendable, Equatable {
 
     public var size: Size { Size(voices: mainVoices) }
     public func person(_ name: String) -> Person? { people.first { $0.name == name } }
+    /// The same person in this meeting: by the id when both have one, else by the name.
+    public func person(_ p: Person) -> Person? { people.first { $0.isSame(as: p) } }
     public var owner: Person? { people.first(where: \.isOwner) }
     /// The other person of a meeting of two main voices, both named.
     public var partner: Person? {
@@ -150,7 +154,7 @@ public struct MeetingFacts: Sendable, Equatable {
             // Nil in a call that cannot show who talked over whom.
             values[.cutInsPerHour] = s.interruptionsMade.map { Double($0) / hours }
             values[.cutOffsPerHour] = s.interruptionsReceived.map { Double($0) / hours }
-            return Person(name: s.name, isOwner: s.isOwner, isMain: Self.isMain(seconds: s.seconds, share: s.share), values: values)
+            return Person(name: s.name, personID: r.speakerPeople?[s.id], isOwner: s.isOwner, isMain: Self.isMain(seconds: s.seconds, share: s.share), values: values)
         }
         // A joined meeting's end minus its start holds the time between its recordings; its audio does not.
         var values: [MeetingMetric: Double] = [
@@ -213,5 +217,14 @@ public final class MeetingFactsCache: @unchecked Sendable {
             reads += read
         }
         return out
+    }
+}
+
+extension MeetingFacts.Person {
+    /// One person in two meetings: the same id when both have one, else the same name. A record from before ids
+    /// counts by the name.
+    public func isSame(as other: MeetingFacts.Person) -> Bool {
+        if let a = personID, let b = other.personID { return a == b }
+        return name == other.name
     }
 }

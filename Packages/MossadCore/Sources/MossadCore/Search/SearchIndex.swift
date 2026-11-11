@@ -94,6 +94,8 @@ struct MeetingEntry: Sendable {
 
 struct PersonEntry: Sendable {
     var name: IndexedField
+    /// The person's other names: a name of before a rename, and a form a calendar showed. The old name finds them.
+    var others: [IndexedField] = []
     var email: IndexedField?
     var isOwner: Bool
     var meetings: Int
@@ -138,6 +140,8 @@ public struct SearchIndex: Sendable {
 
     var profiles: [VoiceProfile] = []
     var people: [PersonEntry] = []
+    /// Each saved person's other names, by the name of now.
+    private var otherNames: [String: [String]] = [:]
     var tasks: [TaskEntry] = []
     var chats: [ChatEntry] = []
 
@@ -179,6 +183,19 @@ public struct SearchIndex: Sendable {
     public mutating func setPeople(_ profiles: [VoiceProfile]) {
         self.profiles = profiles
         rebuildPeople()
+    }
+
+    /// The other names of the saved people, from the people store: a person is found by a name of before a rename.
+    public mutating func setOtherNames(_ people: [Person]) {
+        var out: [String: [String]] = [:]
+        for p in people where p.isLive {
+            let others = p.forms.map(\.text).filter { PersonNames.nameKey($0) != PersonNames.nameKey(p.displayName) }
+            if !others.isEmpty { out[p.displayName, default: []] += others }
+        }
+        guard out != otherNames else { return }
+        otherNames = out
+        rebuildPeople()
+        vocab.sort()
     }
 
     /// The commitment book's items; deleted ones are left out.
@@ -329,8 +346,8 @@ public struct SearchIndex: Sendable {
         var seen: Set<String> = []
         for p in profiles where !p.name.hasPrefix("Speaker ") && seen.insert(p.name).inserted {
             let c = counts[p.name]
-            out.append(PersonEntry(name: field(p.name, names: true), email: p.email.map { personField($0, names: false) }, isOwner: p.isOwner,
-                                   meetings: c?.meetings ?? 0, lastMet: c?.last))
+            out.append(PersonEntry(name: field(p.name, names: true), others: (otherNames[p.name] ?? []).map { field($0, names: true) },
+                                   email: p.email.map { personField($0, names: false) }, isOwner: p.isOwner, meetings: c?.meetings ?? 0, lastMet: c?.last))
         }
         for (name, c) in counts.sorted(by: { $0.key < $1.key }) where seen.insert(name).inserted {
             out.append(PersonEntry(name: field(name, names: true), email: nil, isOwner: false, meetings: c.meetings, lastMet: c.last))

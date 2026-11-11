@@ -333,7 +333,7 @@ extension MeetingAnalytics {
         a.id == b.id && a.status == b.status && a.start == b.start && a.end == b.end
             && a.customTitle == b.customTitle && a.calendarTitle == b.calendarTitle && a.generatedTitle == b.generatedTitle
             && a.utterances.count == b.utterances.count && a.utterances.last?.end == b.utterances.last?.end
-            && a.speakerNames == b.speakerNames && a.attendees == b.attendees && a.actionItems == b.actionItems
+            && a.speakerNames == b.speakerNames && a.speakerPeople == b.speakerPeople && a.attendees == b.attendees && a.actionItems == b.actionItems
             && a.decisions.count == b.decisions.count && a.parts.count == b.parts.count && a.kind == b.kind && a.tags == b.tags
             && a.plannedStart == b.plannedStart && a.plannedEnd == b.plannedEnd && (a.summary == nil) == (b.summary == nil)
             && a.screens == b.screens
@@ -351,6 +351,7 @@ extension MeetingAnalytics {
         h.combine(r.utterances.count)
         h.combine(r.utterances.last?.end)
         h.combine(r.speakerNames)
+        h.combine(r.speakerPeople)
         h.combine(r.attendees)
         h.combine(r.invitees)
         h.combine(r.actionItems)

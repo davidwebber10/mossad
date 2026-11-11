@@ -230,8 +230,13 @@ struct PersonView: View {
             guard name != store.owner else { return }
             let records = store.meetings, owner = store.owner, name = name, commitments = store.commitments.visible
             let reviews = Dictionary(uniqueKeysWithValues: records.filter { $0.speakerNames.values.contains(name) }.compactMap { r in store.coach(r.id).map { (r.id, $0) } })
+            let people = store.paths.people
             let r = await Task.detached(priority: .userInitiated) {
-                PersonRelation(name: name, owner: owner, records: records, reviews: reviews, commitments: commitments)
+                // By the person's id when the Mac sent its people: two people with one first name stay apart.
+                let saved = PeopleStore.peek(in: people) ?? []
+                let same = saved.filter { $0.isLive && $0.displayName == name }
+                return PersonRelation(name: name, personID: PeopleStore.id(forVoiceName: name, isOwner: false, in: saved)?.rawValue, owner: owner,
+                                      records: records, reviews: reviews, commitments: commitments, nameIsUnique: same.count <= 1)
             }.value
             withAnimation(.smooth) { relation = r }
         }

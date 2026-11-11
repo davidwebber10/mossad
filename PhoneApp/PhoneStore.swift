@@ -17,7 +17,7 @@ final class PhoneStore {
     private(set) var meetings: [CallRecord] = []
     /// The meetings by day for the list, as small rows made off the main thread when the meetings change.
     private(set) var days: [MeetingDay] = []
-    /// The owner: the name most often on the mic track, which is the Mac owner's own.
+    /// The owner: the owner of the Mac's people, or else the name most often on the mic track.
     private(set) var owner = ""
     /// False until the first read of the folder, so an empty list does not say "No meetings yet" too soon.
     private(set) var loaded = false
@@ -182,7 +182,9 @@ final class PhoneStore {
             s.days = MeetingGroups.byDay(meetings).map { MeetingDay(date: $0.date, title: $0.title, rows: $0.records.map(MeetingRow.init)) }
             var counts: [String: Int] = [:]
             for r in meetings { for (key, name) in r.speakerNames where key.hasPrefix("me:") { counts[name, default: 0] += 1 } }
-            s.owner = counts.max { $0.value < $1.value }?.key ?? ""
+            // The owner as the Mac's people say, else the name most often on the mic track (a Mac from before ids).
+            let owner = PeopleStore.peek(in: paths.people)?.first { $0.isOwner && $0.isLive && !$0.displayName.isEmpty }?.displayName
+            s.owner = owner ?? counts.max { $0.value < $1.value }?.key ?? ""
             // Only the reviews whose file changed are read again.
             let coach = PhoneStore.coachScores.read(ids: meetings.map(\.id)) { paths.callDirectory($0) }
             s.scores = coach.scores

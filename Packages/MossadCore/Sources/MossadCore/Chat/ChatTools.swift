@@ -31,11 +31,23 @@ public struct ChatTools: Sendable {
     /// The call recording now, if any, for current_call.
     let live: CallRecord?
 
-    public init(records: [CallRecord], owner: String, paths: Paths? = nil) {
+    /// The saved people, so a name or an id finds a person under any name the records have: an old name after a
+    /// rename, or "Carter, Sam". Empty without the people store; then names match as text, as before ids.
+    let saved: PersonReferences
+
+    public init(records: [CallRecord], owner: String, paths: Paths? = nil, people: [Person]? = nil) {
         self.records = records.filter { $0.status == .written }.sorted { $0.start > $1.start }
         live = records.filter { $0.status == .recording }.max { $0.start < $1.start }
         self.owner = owner
         self.paths = paths
+        self.saved = PersonReferences(people: people ?? paths.flatMap { PeopleStore.peek(in: $0.people) } ?? [])
+    }
+
+    /// Whether a name or an id that the model gave is someone of this meeting.
+    private func has(_ query: String, in r: CallRecord, names here: [String]) -> Bool {
+        if here.contains(where: { Self.name(query, matches: $0) }) { return true }
+        guard let id = saved.id(for: query) else { return false }
+        return PersonReferences.ids(in: r).contains { saved.canonical($0) == id }
     }
 
     // MARK: Names
@@ -71,7 +83,7 @@ public struct ChatTools: Sendable {
             if let to, r.start >= to { return false }
             if let tag, !r.tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) { return false }
             let here = people(r)
-            if !names.allSatisfy({ n in here.contains { Self.name(n, matches: $0) } }) { return false }
+            if !names.allSatisfy({ has($0, in: r, names: here) }) { return false }
             if let q = query?.trimmingCharacters(in: .whitespaces), !q.isEmpty, !MeetingSearch.matches(r, q),
                !(r.summary ?? "").localizedCaseInsensitiveContains(q) { return false }
             return true
@@ -104,6 +116,8 @@ public struct ChatTools: Sendable {
         guard let r = records.first(where: { $0.id == id }) else { return nil }
         var parts = [header(r)]
         if !r.attendees.isEmpty { parts.append("Invited: \(r.attendees.joined(separator: ", "))") }
+        // The ids let a later call name the person under any name: "people" in find_meetings takes them.
+        if let persons = MeetingView.persons(r) { parts.append("person_ids: " + persons.map { "\($0.name)=\($0.id)" }.joined(separator: "; ")) }
         if let s = r.summary { parts.append("Summary:\n\(s)") }
         for t in r.topics { parts.append("### \(t.title)\n\(t.summary)") }
         if !r.decisions.isEmpty { parts.append("Decisions:\n" + r.decisions.map { "- \($0.text)" }.joined(separator: "\n")) }
@@ -118,6 +132,7 @@ public struct ChatTools: Sendable {
         findMeetings(from: from, to: to, limit: Self.maxLimit * 10).flatMap { r in
             r.actionItems.filter { item in
                 guard let name else { return true }
+                if let id = item.ownerID, let wanted = saved.id(for: name), saved.canonical(id) == wanted { return true }
                 return item.owner.map { Self.name(name, matches: $0) } ?? false
             }.map { Item(callID: r.id, title: r.title, date: r.start, owner: $0.owner, task: $0.task) }
         }
@@ -142,7 +157,7 @@ public struct ChatTools: Sendable {
 
     public static var definitions: [ToolSpec] { [
         ToolSpec(name: "find_meetings",
-                 description: "Lists meetings, newest first, with call_id, title, date, length, people, tags, and a one-line summary. Every filter is optional and they combine. people matches first names, short forms (\"Jen\" finds Jennifer), last names, or full names; every person listed must be in the meeting. Dates are YYYY-MM-DD in local time; to is inclusive.",
+                 description: "Lists meetings, newest first, with call_id, title, date, length, people, tags, and a one-line summary. Every filter is optional and they combine. people matches first names, short forms (\"Jen\" finds Jennifer), last names, full names, or a person id from a person_ids line of read_meeting; every person listed must be in the meeting. Dates are YYYY-MM-DD in local time; to is inclusive.",
                  schema: ["type": "object", "properties": [
                     "query": ["type": "string", "description": "Words in the title, tags, summary, or transcript."],
                     "people": ["type": "array", "items": ["type": "string"]],

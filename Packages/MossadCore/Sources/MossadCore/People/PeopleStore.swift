@@ -177,7 +177,7 @@ public final class PeopleStore: @unchecked Sendable {
         lock.withLock { Self.id(forVoiceName: name, isOwner: isOwner, in: storage) }
     }
 
-    static func id(forVoiceName name: String, isOwner: Bool, in people: [Person]) -> PersonID? {
+    public static func id(forVoiceName name: String, isOwner: Bool, in people: [Person]) -> PersonID? {
         if isOwner, let owner = people.first(where: { $0.isOwner && $0.isLive }) { return owner.id }
         // Another person with this name comes before the owner: "Your name" can hold another person's name for a moment.
         let hits = people.filter { $0.isLive && $0.displayName == name }

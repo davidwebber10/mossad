@@ -175,7 +175,7 @@ extension AppController {
                 do {
                     let changed = try await cloud.push()
                     received = try await cloud.pull(includeMeetings: false)
-                    let shared = try await cloud.pushShared()
+                    let shared = try await cloud.pushShared(people: true)
                     if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
                     if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
                 } catch {

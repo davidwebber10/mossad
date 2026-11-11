@@ -55,6 +55,16 @@ describe('tools', () => {
     expect(tools.run('read_meeting', { call_id: 'x' })).toBe('No meeting with that call_id.');
   });
 
+  it('finds a person by id and lists the ids of a meeting from a Mac with ids', () => {
+    const t = new MeetingTools([
+      meeting('p', '2026-11-03T15:00:00Z', { persons: [{ id: 'id-jen', name: 'Jennifer Lee' }] }),
+      meeting('q', '2026-11-04T15:00:00Z'),
+    ], 'Dana');
+    expect(t.find({ people: ['id-jen'] }).map((m) => m.id)).toEqual(['p']);
+    expect(t.run('read_meeting', { call_id: 'p' })).toContain('person_ids: Jennifer Lee=id-jen');
+    expect(t.run('read_meeting', { call_id: 'q' })).not.toContain('person_ids');
+  });
+
   it('reads decisions from both the old string form and the timed form', () => {
     const t = new MeetingTools([meeting('d', '2026-11-03T15:00:00Z', { decisions: ['Ship Friday', { text: 'Hire two', at: 3128 }, { text: 'Skip it' }] })], 'Dana');
     expect(t.run('read_meeting', { call_id: 'd' })).toContain('Decisions:\n- Ship Friday\n- [00:52:08] Hire two\n- Skip it');

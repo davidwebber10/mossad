@@ -93,6 +93,20 @@ public struct PersonReferences: Sendable {
         return ids[0].rawValue
     }
 
+    /// The saved person a name or an id that someone typed is, on a sure match: an id of the store, the name of
+    /// now, a whole name in another written form, an address, or a name the person had before a rename.
+    public func id(for query: String) -> String? {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if knows(query) { return person(query)?.id.rawValue }
+        if query.contains("@"), !query.contains(" ") { return resolve("", email: query) }
+        return resolve(query, former: true)
+    }
+
+    /// The ids of the people of a record: the voices and the invited people, as the record has them now.
+    public static func ids(in r: CallRecord) -> Set<String> {
+        Set((r.speakerPeople ?? [:]).values).union((r.invitees ?? []).compactMap(\.personID))
+    }
+
     /// Whether a label (or an address) still fits the person an id stands for: one of the person's names, the name
     /// of the record that was taken in, or a name that resolves to that person.
     private func fits(_ label: String?, email: String? = nil, id: String, in context: ResolutionContext?, former: Bool) -> Bool {

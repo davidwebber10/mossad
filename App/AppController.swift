@@ -1268,8 +1268,11 @@ final class AppController: ObservableObject {
     }
 
     /// Opens the People page on one person; the page picks the name up when it loads.
+    /// Opens a person's page by the name, or by the id in the people store: an id gives the person's name of now,
+    /// and any other name a saved person surely is gives that person.
     func openPerson(_ name: String) {
-        personToOpen = name
+        let refs = PersonReferences(people: library.identity?.people.people ?? [])
+        personToOpen = refs.id(for: name).flatMap(refs.name(of:)) ?? name
         personRequests += 1
         open(.people)
     }

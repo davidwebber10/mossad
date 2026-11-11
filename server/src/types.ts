@@ -24,6 +24,8 @@ export interface Line {
   at: number;
   speaker: string;
   text: string;
+  /** The speaker's person id, from a Mac with person ids. Never on a share page. */
+  speakerId?: string;
 }
 
 export interface ActionItem {
@@ -31,6 +33,14 @@ export interface ActionItem {
   owner?: string;
   /** "Owner: task", as the notes write it. */
   text: string;
+  /** The owner's person id, from a Mac with person ids. Never on a share page. */
+  ownerId?: string;
+}
+
+/** A saved person of a meeting: the id stays through a rename; the name is the name of now. */
+export interface PersonRef {
+  id: string;
+  name: string;
 }
 
 /** A meeting as the MCP reads it. The Mac builds it, so the naming rules live in one place. */
@@ -45,6 +55,8 @@ export interface MeetingView {
   headline?: string;
   tags: string[];
   people: string[];
+  /** The saved people with their ids; absent from older Macs and from records with no ids. */
+  persons?: PersonRef[];
   attendees: string[];
   summary?: string;
   topics: { title: string; summary: string }[];
