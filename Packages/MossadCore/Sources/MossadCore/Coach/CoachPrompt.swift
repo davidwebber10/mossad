@@ -54,10 +54,13 @@ enum CoachPrompt {
         Questions. When you conclude something about \(owner)'s world that would change your advice, and the \
         material does not say it, ask: at most 2, often none. A plain claim to answer yes or no, at most 15 words \
         ("Sam reports to you."). kind is relationship, role, meeting_purpose, preference, or this_call. evidence \
-        is the quote behind it, with its time. Never ask what is a fact, waiting for an answer, or marked not \
-        true, and do not treat an open question as true.
+        is the quote behind it, with its time. person is the full name of the one person the claim is about, \
+        exactly as their lines are labeled in the transcript, or "" when it is about no one person. Never ask what \
+        is a fact, waiting for an answer, not confirmed, or marked not true, and do not treat an open question as true.
 
-        \(owner)'s guidance is standing instruction: follow it. Do not repeat advice they rejected.
+        \(owner)'s guidance is standing instruction: follow it. Do not repeat advice they rejected. \(owner) also \
+        answers your findings with yes, no, or never again: the material says which skills were useful to them, \
+        which were less useful (give those only for a clear moment), and which to never coach, praise, or offer again.
 
         The full review, which \(owner) opens only for more: strengths and improvements hold at most 1 point \
         each, the evidence behind did_well and try_next, each observation under 40 words with a quote and its \
@@ -100,10 +103,37 @@ enum CoachPrompt {
     /// the model must not give again. The focus that waits for an answer is one of them.
     static func earlierAdvice(_ p: CoachProfile, record r: CallRecord, kinds: Set<CoachLine.Kind> = [.tryNext, .again]) -> [CoachAdvice] {
         var seen = Set<String>()
+        // A skill that the owner said no to a few times waits longer, as in `CoachLineRules`.
+        let training = p.training(asOf: r.start)
         return AdviceRules.said(p).sorted { $0.date > $1.date }.filter { a in
-            guard !a.held, a.shown, kinds.contains(a.kind), a.callID != r.id, abs(a.date.timeIntervalSince(r.start)) <= AdviceRules.repeatDays * 86_400 else { return false }
+            guard !a.held, a.shown, kinds.contains(a.kind), a.callID != r.id,
+                  abs(a.date.timeIntervalSince(r.start)) <= training.repeatDays(a.skill) * 86_400 else { return false }
             return seen.insert(AdviceRules.key(a.skill)).inserted
         }
+    }
+
+    private static func named(_ skill: String) -> String {
+        if skill.hasPrefix("other:") { return "other, skill_label \"\(skill.dropFirst(6))\"" }
+        if skill.hasPrefix("pattern:") { return "the pattern \"\(skill.dropFirst(8))\"" }
+        if skill.hasPrefix("number:") { return "the number \(skill.dropFirst(7))" }
+        return skill
+    }
+
+    /// What the owner's answers to the cards say for this review: the skills that were useful, the ones that were
+    /// less useful, and what was blocked for good. Empty with no such answer.
+    static func trainingText(_ p: CoachProfile, record r: CallRecord) -> String {
+        let training = p.training(asOf: r.start)
+        // The ids as they were written, by their key.
+        var ids: [String: String] = [:]
+        for a in p.answers where a.verdict != nil { ids[AdviceRules.key(a.skill)] = ids[AdviceRules.key(a.skill)] ?? a.skill }
+        func list(_ keys: some Sequence<String>) -> String { keys.sorted().map { named(ids[$0] ?? $0) }.joined(separator: "; ") }
+        var parts: [String] = []
+        let useful = training.weights.filter { $0.value >= CoachTraining.raised }.keys, less = training.weights.filter { $0.value <= CoachTraining.lowered }.keys
+        if !useful.isEmpty { parts.append("Useful to them: \(list(useful)).") }
+        if !less.isEmpty { parts.append("Less useful to them, only for a clear moment: \(list(less)).") }
+        if !training.blocked.isEmpty { parts.append("Never again, do not coach, praise, or mention: \(list(training.blocked)).") }
+        if !training.blockedGoals.isEmpty { parts.append("Never offer as a focus: \(list(training.blockedGoals)).") }
+        return parts.joined(separator: "\n")
     }
 
     private static func named(_ a: CoachAdvice) -> String {
@@ -117,14 +147,16 @@ enum CoachPrompt {
         return parts.joined(separator: "\n")
     }
 
+    /// `saved` are the saved people: with them, what the coach knows of a person in the call is read by that
+    /// person's id, under any name.
     static func user(record r: CallRecord, owner: String, profile: CoachProfile, delivery: DeliveryStats? = nil,
-                     people titles: [String] = [], measured: CoachMeasured = CoachMeasured()) -> String {
+                     people titles: [String] = [], measured: CoachMeasured = CoachMeasured(), saved: CoachPeople = .none) -> String {
         let delivery = delivery ?? DeliveryStats(record: r, owner: owner)
         var parts: [String] = []
         if !profile.facts.isEmpty {
             var about: [String] = profile.facts(.role).map { "Role: \($0.text)" }
-            for kind in [CoachFact.Kind.responsibility, .goal, .relationship] where !profile.facts(kind).isEmpty {
-                let label = switch kind { case .responsibility: "Responsible for:"; case .goal: "Goals:"; default: "Relationships:" }
+            for kind in [CoachFact.Kind.responsibility, .goal, .relationship, .context] where !profile.facts(kind).isEmpty {
+                let label = switch kind { case .responsibility: "Responsible for:"; case .goal: "Goals:"; case .context: "Confirmed context:"; default: "Relationships:" }
                 about.append(label + "\n" + profile.facts(kind).map { "- \($0.text)" }.joined(separator: "\n"))
             }
             parts.append("## Who \(owner) is\n" + about.joined(separator: "\n"))
@@ -149,19 +181,30 @@ enum CoachPrompt {
         if !profile.guidance.isEmpty {
             parts.append("## What \(owner) told you about your coaching (follow this)\n" + profile.guidance.map { "- \($0.text)" }.joined(separator: "\n"))
         }
+        let answered = trainingText(profile, record: r)
+        if !answered.isEmpty { parts.append("## How \(owner) answered your findings (follow this)\n" + answered) }
         if !profile.rated.isEmpty {
             parts.append("## \(owner)'s ratings of your recent points\n" + profile.rated.suffix(15).map {
                 "- \($0.agree ? "Right" : "Wrong"): \"\($0.title)\" (\($0.principle), \($0.callTitle))" + ($0.note.map { ". They said: \($0)" } ?? "")
             }.joined(separator: "\n"))
         }
 
-        let here = Set(r.speakerNames.values).subtracting([owner])
-        let people = profile.people.filter { here.contains($0.key) }.sorted { $0.key < $1.key }
-        if !people.isEmpty {
-            parts.append("## Your notes on the people in this call\n" + people.map {
-                "- \($0.key) (\($0.value.calls) earlier calls): \($0.value.note)"
-            }.joined(separator: "\n"))
+        // What is known of each person who spoke: the note, and what the owner confirmed or said about them.
+        let people = Set(r.speakerNames.values).subtracting([owner]).sorted().compactMap { name -> String? in
+            let id = saved.id(of: name)
+            var lines: [String] = []
+            if let note = profile.note(on: name, people: saved)?.value, note.note.nonBlank != nil {
+                lines.append("- \(name) (\(note.calls) earlier calls): \(note.note)")
+            }
+            if let id {
+                lines += profile.learnings(about: id, people: saved).map { "  Confirmed by \(owner): \($0.text)" }
+                lines += profile.guidance(about: id, people: saved).map { "  \(owner) told you: \($0.text)" }
+            }
+            guard !lines.isEmpty else { return nil }
+            if !lines[0].hasPrefix("- ") { lines.insert("- \(name)", at: 0) }
+            return lines.joined(separator: "\n")
         }
+        if !people.isEmpty { parts.append("## Your notes on the people in this call\n" + people.joined(separator: "\n")) }
 
         if !titles.isEmpty { parts.append("## Job titles\n" + titles.map { "- \($0)" }.joined(separator: "\n")) }
 
@@ -197,6 +240,9 @@ enum CoachPrompt {
         var parts: [String] = []
         let open = p.openQuestions
         if !open.isEmpty { parts.append("Waiting for an answer:\n" + open.map { "- \($0.statement)" }.joined(separator: "\n")) }
+        // A plain no to a card: one signal. It is not "not true", and it is not to be asked again now.
+        let unsure = p.questions.filter { $0.status == .open && $0.dismissed != nil }.suffix(10)
+        if !unsure.isEmpty { parts.append("Not confirmed (do not treat as true, and do not ask again now):\n" + unsure.map { "- \($0.statement)" }.joined(separator: "\n")) }
         let denied = p.questions.filter { $0.status == .rejected }.suffix(15)
         if !denied.isEmpty { parts.append("Not true:\n" + denied.map { "- \($0.statement)" }.joined(separator: "\n")) }
         return parts.joined(separator: "\n")

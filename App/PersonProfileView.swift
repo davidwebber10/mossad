@@ -20,7 +20,8 @@ struct PersonProfileView: View {
     @State private var refreshing = false
 
     private var first: String { profile.name.split(separator: " ").first.map(String.init) ?? profile.name }
-    private var brief: PersonBrief? { controller.shownCoachProfile.people[profile.name]?.brief }
+    /// By the person's id when the people store has one, so the read stays with the person through a new name.
+    private var brief: PersonBrief? { controller.shownCoachProfile.note(on: profile.name, people: controller.shownCoachPeople)?.value.brief }
 
     var body: some View {
         ScrollView {

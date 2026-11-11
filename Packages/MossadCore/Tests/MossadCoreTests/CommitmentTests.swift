@@ -72,7 +72,7 @@ final class CommitmentTests: XCTestCase {
         XCTAssertEqual(try CommitmentBook.load(from: dir.appendingPathComponent("none")), CommitmentBook())
     }
 
-    // MARK: Finding them
+    // MARK: CoachFinding them
 
     private func reply(_ text: String) -> Data {
         json(["stop_reason": "end_turn", "content": [["type": "text", "text": text]]])

@@ -93,6 +93,23 @@ public enum CoachSkill: String, Codable, Sendable, CaseIterable {
         return label.prefix(1).uppercased() + label.dropFirst()
     }
 
+    /// What an id of a card is about, for the owner: a skill's name, a pattern's name, or the number.
+    public static func subject(of id: String) -> String {
+        func label(_ text: Substring) -> String { text.prefix(1).uppercased() + text.dropFirst() }
+        if id.hasPrefix("pattern:") { return label(id.dropFirst(8)) }
+        if id.hasPrefix("number:") {
+            switch String(id.dropFirst(7)) {
+            case PersonMetric.talkShare.rawValue: return "Your share of the talk"
+            case PersonMetric.longestTurn.rawValue: return "Your longest turn"
+            case PersonMetric.averageTurn.rawValue: return "The length of your turns"
+            case PersonMetric.cutInsPerHour.rawValue: return "How often you cut in"
+            default: return label(id.dropFirst(7))
+            }
+        }
+        if id.hasPrefix("focus:") { return "Your focus" }
+        return title(of: id)
+    }
+
     // MARK: Older reviews
 
     /// Words that name a day by themselves.

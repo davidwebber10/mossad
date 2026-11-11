@@ -93,7 +93,19 @@ public actor CoachRunner {
                 let written = try await UsageContext.$callID.withValue(r.id) {
                     try await coach.review(record: r, profile: current, tone: tone, people: titles(Array(Set(r.speakerNames.values)).sorted()), measured: measured)
                 }
-                let result = CoachLineRules.settle(written, record: r, owner: owner, profile: current, measured: measured)
+                var result = CoachLineRules.settle(written, record: r, owner: owner, profile: current, measured: measured)
+                // Who each conclusion and each note is about, as a saved person: only on a sure match.
+                let saved = CoachPeople.read(paths: paths)
+                result.questions = result.questions.map { q in
+                    var q = q
+                    if let subject = saved.subject(of: q.statement, about: q.about, in: r) {
+                        q.person = subject.id
+                        q.personName = subject.name
+                    }
+                    return q
+                }
+                var ids: [String: String] = [:]
+                for p in result.update.people { ids[p.name] = saved.id(of: p.name) }
                 if !result.dropped.isEmpty { Log.info("The coach's review of \(r.id) lost \(result.dropped.count) notes. \(result.dropped.joined(separator: "; "))") }
                 // Deleted or merged away during the review: no review file, and nothing learned from it.
                 guard FileManager.default.fileExists(atPath: paths.callDirectory(r.id).appendingPathComponent(CallRecord.fileName).path) else {
@@ -105,7 +117,8 @@ public actor CoachRunner {
                 // cannot be read now stops the run; saving the older copy would write the owner's changes away.
                 var fresh = try CoachProfile.load(from: paths.coach)
                 if let seed, fresh.adviceVersion < CoachSkill.version { fresh.seed(seed) }
-                fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start, proposal: result.proposal, advice: result.advice)
+                fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start, proposal: result.proposal, advice: result.advice,
+                            people: ids)
                 fresh.ask(result.questions)
                 try fresh.save(to: paths.coach)
                 profile = fresh

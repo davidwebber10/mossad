@@ -32,6 +32,9 @@ public struct CoachPerson: Codable, Equatable, Sendable, Hashable {
     public var lastSeen: Date
     /// The coach's fuller read on them across calls; written separately from the reviews.
     public var brief: PersonBrief?
+    /// The id of this person in the people store, when the name is one saved person on a sure match. The key in
+    /// `CoachProfile.people` is then only the person's name of the time: the id says who it is.
+    public var person: String?
 
     public init(note: String, calls: Int, lastSeen: Date) {
         self.note = note
@@ -163,11 +166,14 @@ public struct CoachFact: Codable, Equatable, Sendable, Hashable, Identifiable {
     public var text: String
     /// When it was added, so a later removal on another device wins and an earlier one does not.
     public var date: Date?
+    /// The id of the saved person the fact is about, on a sure match only. The words can name them any way.
+    public var person: String?
 
-    public init(kind: Kind, text: String, date: Date? = nil) {
+    public init(kind: Kind, text: String, date: Date? = nil, person: String? = nil) {
         self.kind = kind
         self.text = text
         self.date = date
+        self.person = person
     }
 }
 
@@ -176,6 +182,10 @@ public struct CoachGuidance: Codable, Equatable, Sendable, Identifiable, Hashabl
     public var id: String { text }
     public var text: String
     public var date: Date
+    /// For the reason the owner gave for a no to a card: the card's id, its skill, and the id of its person.
+    public var finding: String? = nil
+    public var skill: String? = nil
+    public var person: String? = nil
 }
 
 /// The coach's memory across calls, kept in `~/Mossad/Coach/profile.json`. Each review reads it and updates it,
@@ -208,6 +218,8 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     public var advice: [CoachAdvice] = []
     /// What each call showed of each pattern, oldest first. Entries are added and never rewritten.
     public var observations: [CoachObservation] = []
+    /// The owner's answers to the cards of the findings deck: see `CoachTraining`.
+    public var answers: [FindingAnswer] = []
 
     /// The version of `CoachSkill` that the advice log was last read against. 0 for a memory from before the
     /// log: the runner then fills the log one time from the review files.
@@ -227,6 +239,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice, questions, advice, observations, adviceVersion
+        case answers
     }
 
     /// Profiles from before feedback existed have no guidance or ratings.
@@ -249,6 +262,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         advice = try c.decodeIfPresent(LossyArray<CoachAdvice>.self, forKey: .advice)?.values ?? []
         observations = try c.decodeIfPresent(LossyArray<CoachObservation>.self, forKey: .observations)?.values ?? []
         adviceVersion = try c.decodeIfPresent(Int.self, forKey: .adviceVersion) ?? 0
+        answers = try c.decodeIfPresent(LossyArray<FindingAnswer>.self, forKey: .answers)?.values ?? []
     }
 
     public func facts(_ kind: CoachFact.Kind) -> [CoachFact] { facts.filter { $0.kind == kind } }
@@ -261,7 +275,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         for fact in add {
             guard let text = fact.text.nonBlank,
                   !facts.contains(where: { $0.kind == fact.kind && $0.text.caseInsensitiveCompare(text) == .orderedSame }) else { continue }
-            facts.append(CoachFact(kind: fact.kind, text: text, date: date))
+            facts.append(CoachFact(kind: fact.kind, text: text, date: date, person: fact.person))
             forgotten[text.lowercased()] = nil
         }
     }
@@ -279,7 +293,11 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         var facts: [String: CoachFact] = [:]
         for f in self.facts + other.facts where kept(f.text, f.date) {
             let key = "\(f.kind.rawValue):\(f.text.lowercased())"
-            if (facts[key]?.date ?? .distantPast) <= (f.date ?? .distantPast) || facts[key] == nil { facts[key] = f }
+            guard let old = facts[key] else { facts[key] = f; continue }
+            var keep = (old.date ?? .distantPast) <= (f.date ?? .distantPast) ? f : old
+            // A copy that a build from before person ids saved has none: the other copy's id stays.
+            keep.person = keep.person ?? old.person ?? f.person
+            facts[key] = keep
         }
         out.facts = (self.facts + other.facts).compactMap { f in
             let key = "\(f.kind.rawValue):\(f.text.lowercased())"
@@ -287,7 +305,12 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         }
         var guidance: [String: CoachGuidance] = [:]
         for g in self.guidance + other.guidance where kept(g.text, g.date) {
-            if (guidance[g.text.lowercased()]?.date ?? .distantPast) <= g.date { guidance[g.text.lowercased()] = g }
+            guard let old = guidance[g.text.lowercased()] else { guidance[g.text.lowercased()] = g; continue }
+            var keep = old.date <= g.date ? g : old
+            keep.finding = keep.finding ?? old.finding ?? g.finding
+            keep.skill = keep.skill ?? old.skill ?? g.skill
+            keep.person = keep.person ?? old.person ?? g.person
+            guidance[g.text.lowercased()] = keep
         }
         out.guidance = (self.guidance + other.guidance).compactMap { guidance.removeValue(forKey: $0.text.lowercased()) }
         var rated: [String: RatedPoint] = [:]
@@ -296,6 +319,8 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         // The owner answers proposals on either device, so foci merge by their own dates, not by who coaches.
         out.foci = Self.mergedFoci(foci, other.foci)
         out.questions = Self.mergedQuestions(questions, other.questions)
+        // The owner answers cards on either device.
+        out.answers = Self.mergedAnswers(answers, other.answers)
         out.focus = out.activeFocus?.plan ?? (out.foci.isEmpty ? out.focus : "")
         return out
     }
@@ -322,8 +347,10 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     /// Folds one review in. The focus changes only through the owner: a proposal waits for them, and a result
     /// counts only for the focus they accepted. The memory adds: a call gives each pattern one observation and
     /// the log its lines, and it does not rewrite the summary or what a pattern is.
+    /// `ids` gives the person id of a name in this call, where the name is one saved person on a sure match: the
+    /// note then goes to that person, under whatever name an earlier call wrote it.
     public mutating func apply(_ update: CoachProfileUpdate, review: CoachReview, callID: String, title: String, at: Date,
-                               proposal: CoachFocus? = nil, advice said: [CoachAdvice] = []) {
+                               proposal: CoachFocus? = nil, advice said: [CoachAdvice] = [], people ids: [String: String] = [:]) {
         // One call says little about a person. The summary is written across calls, not by each of them.
         if summary.nonBlank == nil, let s = update.summary.nonBlank { summary = s }
         // Older coaching (before agreed foci) set the focus text directly.
@@ -355,8 +382,15 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         advice = Array((advice + said).sorted { $0.date < $1.date }.suffix(Self.adviceLimit))
         for p in update.people {
             guard let note = p.note.nonBlank else { continue }
+            let id = ids[p.name]
+            // The same person under an earlier name: the note moves to the name of now.
+            if let id, people[p.name]?.person != id, let old = people.first(where: { $0.value.person == id })?.key {
+                let moved = people.removeValue(forKey: old)
+                if people[p.name] == nil { people[p.name] = moved }
+            }
             var person = CoachPerson(note: note, calls: (people[p.name]?.calls ?? 0) + 1, lastSeen: at)
             person.brief = people[p.name]?.brief
+            person.person = id ?? people[p.name]?.person
             people[p.name] = person
         }
         // A call reviewed again replaces its earlier entry.
@@ -384,6 +418,8 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         history.removeAll { $0.callID == callID }
         for i in foci.indices { foci[i].results.removeAll { $0.callID == callID } }
         questions.removeAll { $0.callID == callID && $0.status == .open }
+        // What the owner blocked for good is the owner's decision, like a fact: it stays.
+        answers.removeAll { $0.callID == callID && $0.verdict != .never }
     }
 
     /// What the log holds of one pattern, the newest first.

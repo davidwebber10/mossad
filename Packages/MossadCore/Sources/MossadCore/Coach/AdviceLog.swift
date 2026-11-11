@@ -71,22 +71,23 @@ public enum AdviceRules {
     /// not the advice about it: "you did it" after "try it" is news.
     private static func family(_ kind: CoachLine.Kind) -> CoachLine.Kind { kind == .again ? .tryNext : kind }
 
-    private static func near(_ e: CoachAdvice, _ kind: CoachLine.Kind, _ skill: String, _ callID: String, _ date: Date) -> Bool {
-        e.callID != callID && family(e.kind) == family(kind) && key(e.skill) == key(skill) && abs(e.date.timeIntervalSince(date)) <= repeatDays * 86_400
+    private static func near(_ e: CoachAdvice, _ kind: CoachLine.Kind, _ skill: String, _ callID: String, _ date: Date, _ days: Double) -> Bool {
+        e.callID != callID && family(e.kind) == family(kind) && key(e.skill) == key(skill) && abs(e.date.timeIntervalSince(date)) <= days * 86_400
     }
 
     /// The newest line about this skill that the owner got within `repeatDays` of `date`, in another call. Nil
     /// when this one is new. The focus is the owner's own goal and its result may come each call, so a focus
-    /// line is never a repeat.
-    static func earlier(kind: CoachLine.Kind, skill: String, in log: [CoachAdvice], callID: String, date: Date) -> CoachAdvice? {
+    /// line is never a repeat. `days` is longer than `repeatDays` for a skill that the owner said no to a few
+    /// times (`CoachTraining.repeatDays`).
+    static func earlier(kind: CoachLine.Kind, skill: String, in log: [CoachAdvice], callID: String, date: Date, days: Double = repeatDays) -> CoachAdvice? {
         guard kind != .focus, !key(skill).isEmpty else { return nil }
-        return log.filter { !$0.held && $0.shown && near($0, kind, skill, callID, date) }.max { $0.date < $1.date }
+        return log.filter { !$0.held && $0.shown && near($0, kind, skill, callID, date, days) }.max { $0.date < $1.date }
     }
 
     /// True when a note about this skill already waits in the full review of another call of the last
     /// `repeatDays`. It can become the line, but it is not written into a second full review.
-    static func waits(kind: CoachLine.Kind, skill: String, in log: [CoachAdvice], callID: String, date: Date) -> Bool {
-        log.contains { !$0.held && !$0.shown && near($0, kind, skill, callID, date) }
+    static func waits(kind: CoachLine.Kind, skill: String, in log: [CoachAdvice], callID: String, date: Date, days: Double = repeatDays) -> Bool {
+        log.contains { !$0.held && !$0.shown && near($0, kind, skill, callID, date, days) }
     }
 
     /// How many calls showed the skill again since its last line, with the call that is being reviewed, of how

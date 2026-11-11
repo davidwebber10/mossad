@@ -16,7 +16,8 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", commitments = "Tasks", chat = "Chat", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
+        case meetings = "Meetings", commitments = "Tasks", chat = "Chat", people = "People", analytics = "Analytics", coach = "Coach",
+             settings = "Settings", log = "Log"
         var id: String { rawValue }
         var icon: Icon {
             switch self {
@@ -25,6 +26,7 @@ final class AppController: ObservableObject {
             case .chat: .sparkle
             case .people: .people
             case .analytics: .analytics
+            case .coach: .coach
             case .settings: .settings
             case .log: .log
             }
@@ -255,6 +257,11 @@ final class AppController: ObservableObject {
     let keyCache = VersionedCache<APIKey, Bool>()
     let coachProfileCache = VersionedCache<Int, CoachProfile>()
     let coachReviewCache = VersionedCache<String, CoachReview?>()
+    let coachPeopleCache = VersionedCache<Int, CoachPeople>()
+    /// The cards of all calls that wait for an answer, the newest call first (+Findings).
+    @Published var findings: [CoachFinding] = []
+    /// Counts the reads of the cards, so an older read never replaces a newer one.
+    var findingsAsk = 0
     /// Every billed AssemblyAI and Claude request, for the costs in Analytics.
     let usage = UsageLog(directory: Paths.live.usage)
     let permissions = PermissionsMonitor()
@@ -337,7 +344,7 @@ final class AppController: ObservableObject {
     @AppStorage("coachLastEmail") var coachLastEmail: Double = 0
     @Published var coaching = false
     /// Bumped after each review so open Coach tabs reload from disk.
-    @Published var coachVersion = 0
+    @Published var coachVersion = 0 { didSet { refreshFindings() } }
     /// Bumped when chats change on another device, so the Chat list reloads.
     @Published var chatsVersion = 0
     @Published var commitmentsVersion = 0
@@ -592,7 +599,7 @@ final class AppController: ObservableObject {
             // The coach's reads on people: a minute after launch, so a call being processed goes first.
             Task {
                 try? await Task.sleep(for: .seconds(60))
-                if coachEnabled { await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName)) }
+                if coachEnabled { await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName, saved: shownCoachPeople)) }
             }
         }
         DevHooks.run(self, inert: inert)
@@ -723,6 +730,8 @@ final class AppController: ObservableObject {
         Task.detached(priority: .utility) {
             guard let identity = PeopleMigration.runAtLaunch(paths: paths, library: library, ownerName: owner, notDuplicates: notDuplicates) else { return }
             library.identity = identity
+            // The people have their ids: what the coach knows of a person goes to that person.
+            await MainActor.run { self.linkCoachPeople() }
         }
     }
 

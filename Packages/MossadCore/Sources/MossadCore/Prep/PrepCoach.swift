@@ -15,6 +15,8 @@ public struct PrepCoach: Sendable, Equatable {
         public var brief: PersonBrief?
         /// The coach's own short note on them from the reviews (`CoachPerson.note`), when it has words.
         public var note: String?
+        /// What the owner confirmed about them, read by the person's id.
+        public var learnings: [String] = []
 
         /// The brief's one line: the best way to work with them.
         public var headline: String? { brief?.headline.nonBlank }
@@ -36,6 +38,18 @@ public struct PrepCoach: Sendable, Equatable {
             let note = known.note.nonBlank
             guard known.brief != nil || note != nil else { return nil }
             return Person(name: name, brief: known.brief, note: note)
+        }
+    }
+
+    /// The same from the coach's memory, read by the person's id where the name is one saved person on a sure
+    /// match: a name written last name first, and a person with a new name, read what was learned of them.
+    public init(people names: [String], profile: CoachProfile, saved: CoachPeople) {
+        people = names.compactMap { name in
+            let known = profile.note(on: name, people: saved)?.value
+            let learnings = saved.id(of: name).map { profile.learnings(about: $0, people: saved).map(\.text) } ?? []
+            let note = known?.note.nonBlank
+            guard known?.brief != nil || note != nil || !learnings.isEmpty else { return nil }
+            return Person(name: name, brief: known?.brief, note: note, learnings: learnings)
         }
     }
 }

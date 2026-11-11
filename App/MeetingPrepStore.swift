@@ -70,7 +70,8 @@ final class MeetingPrepStore {
         let owner: String
         let records: [CallRecord]
         let profiles: [VoiceProfile]
-        let coach: [String: CoachPerson]
+        let coach: CoachProfile
+        let people: URL
         let ownerEmails: [String]
         let commitments: URL
         let keep: Set<UUID>
@@ -78,14 +79,15 @@ final class MeetingPrepStore {
         func prep(facts: [MeetingFacts]?) -> MeetingPrep {
             // Nil when the file is there and cannot be read: the page then says so, not "no tasks".
             MeetingPrep(meeting: meeting, owner: owner, records: records, facts: facts, commitments: CommitmentBook.peek(in: commitments)?.items,
-                        people: PersonDirectory(profiles: profiles), coach: coach, ownerEmails: ownerEmails, keep: keep)
+                        people: PersonDirectory(profiles: profiles), ownerEmails: ownerEmails, keep: keep,
+                        memory: coach, saved: CoachPeople(people: PeopleStore.peek(in: people) ?? []))
         }
     }
 
     private func inputs(_ meeting: UpcomingMeeting, key: Key, controller: AppController) -> Inputs {
         // The coach's memory as the other pages show it: read one time for each change of it.
         Inputs(meeting: meeting, owner: key.owner, records: controller.meetings, profiles: controller.library.profiles,
-               coach: controller.shownCoachProfile.people, ownerEmails: [UserDefaults.standard.string(forKey: "ownerEmail") ?? ""],
+               coach: controller.shownCoachProfile, people: controller.paths.people, ownerEmails: [UserDefaults.standard.string(forKey: "ownerEmail") ?? ""],
                commitments: controller.paths.commitments, keep: key.keep)
     }
 

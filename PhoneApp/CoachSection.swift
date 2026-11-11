@@ -8,17 +8,35 @@ struct CoachSection: View {
     @Environment(PhoneStore.self) private var store
     let record: CallRecord
     let review: CoachReview
+    /// Opens the transcript at a moment: the audio stays on the Mac.
+    var read: ((TimeInterval) -> Void)?
     /// Development hook for screenshots: `MOSSAD_COACH_FULL=1` opens the full review.
     @State private var more = PhoneStore.hook("MOSSAD_COACH_FULL") != nil
+    /// A card was answered on this page: the deck stays for Undo and for the line about a no.
+    @State private var answeredHere = false
 
     var body: some View {
         let profile = store.profile
         let line = review.shownLine
+        // The cards of this call that wait for an answer. A conclusion or a proposed focus that is a card is
+        // answered there, and not a second time below.
+        let cards = store.findings(for: record, review: review)
+        let asked = Set(cards.compactMap(\.questionID))
+        let lineIsTopCard = line.map { l in cards.first.map { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text } ?? false } ?? false
         VStack(alignment: .leading, spacing: 14) {
-            QuestionsPanel(questions: profile.openQuestions.filter { $0.callID == record.id },
+            if !cards.isEmpty || answeredHere {
+                VStack(alignment: .leading, spacing: Space.m) {
+                    PhoneLabel(cards.isEmpty ? "Findings" : "Findings \u{00B7} \(cards.count)")
+                    FindingsDeck(cards: cards, play: read.map { read in { f in if let at = f.at { read(at) } } }, showsEmpty: false, preview: FindingsScreen.deckPreview,
+                                 answer: { store.answerFinding($0, $1); answeredHere = true }, undo: { store.takeBackFinding($0) },
+                                 explain: { store.explainFinding($0, note: $1) })
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            QuestionsPanel(questions: profile.openQuestions.filter { $0.callID == record.id && !asked.contains($0.id) && ($0.at == nil || $0.evidence.isEmpty) },
                            answer: { store.answerQuestion($0, $1, note: $2) })
-            Card { CoachLineView(review: review) }
-            if FocusPanel.belongs(to: record, profile: profile) {
+            if !lineIsTopCard { Card { CoachLineView(review: review) } }
+            if FocusPanel.belongs(to: record, profile: profile), !cards.contains(where: { $0.kind == .goalOffer }) {
                 Card {
                     // The line already says how this call went on the focus.
                     FocusPanel(profile: profile, callID: record.id, result: line?.kind == .focus ? nil : review.focusResult, compact: true,

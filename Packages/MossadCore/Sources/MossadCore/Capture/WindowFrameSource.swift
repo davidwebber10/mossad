@@ -177,7 +177,7 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         windowChanged(chosen.id, searchNow: false)
     }
 
-    // MARK: Finding the window
+    // MARK: CoachFinding the window
 
     /// Looks at the windows again when there is no window, when the window is hidden or is only a small view
     /// (the meeting's own window may be back), and now and then for a better window (a popped-out share).

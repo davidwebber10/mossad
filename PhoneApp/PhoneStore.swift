@@ -42,6 +42,9 @@ final class PhoneStore {
     var error: FriendlyError? { syncStatus.shown }
     /// Bumped when a coach review changes here, so open reviews read it again.
     private(set) var coachVersion = 0
+    /// The cards of all calls that wait for an answer, the newest call first.
+    private(set) var findings: [CoachFinding] = []
+    @ObservationIgnored private var findingsAsk = 0
     /// Bumped when a read of the folder finds the meetings changed, so pages that compute from them run again.
     private(set) var meetingsVersion = 0
     var tab = PhoneTab.meetings
@@ -226,7 +229,10 @@ final class PhoneStore {
         if profile != s.profile { profile = s.profile }
         if chats != s.chats { chats = s.chats }
         if commitments != s.commitments { commitments = s.commitments }
-        if coachChanged { coachVersion += 1 }
+        if coachChanged {
+            coachVersion += 1
+            refreshFindings()
+        }
         refreshSearch()
     }
 
@@ -818,6 +824,58 @@ final class PhoneStore {
     func acceptFocus(_ id: UUID, plan: String?) {
         let now = Date()
         changeProfile { $0.acceptFocus(id, plan: plan, at: now) }
+    }
+
+    // MARK: Findings
+
+    /// The cards of one call that wait for an answer.
+    func findings(for record: CallRecord, review: CoachReview) -> [CoachFinding] {
+        FindingRules.deck(callID: record.id, date: record.start, review: review, profile: profile)
+    }
+
+    /// Reads the cards of all calls again, off the main thread. Only the calls of the last two weeks can have one.
+    func refreshFindings() {
+        let now = Date(), paths = paths, profile = profile
+        let recent = meetings.filter { now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }.map { ($0.id, $0.start) }
+        findingsAsk += 1
+        let ask = findingsAsk
+        Task {
+            let cards = await Task.detached(priority: .utility) {
+                FindingRules.deck(reviews: recent.compactMap { id, start in
+                    CoachReview.load(in: paths.callDirectory(id)).map { (callID: id, date: start, review: $0) }
+                }, profile: profile, now: now)
+            }.value
+            if ask == findingsAsk, cards != findings { findings = cards }
+        }
+    }
+
+    /// Saves the owner's answer to a card: in the coach's memory, which goes to the Mac, and next to the call's review.
+    func answerFinding(_ finding: CoachFinding, _ verdict: FindingVerdict) {
+        let now = Date()
+        changeFindings { $0.answer(finding, verdict, at: now) }
+    }
+
+    func takeBackFinding(_ id: String) {
+        let now = Date()
+        changeFindings { $0.takeBack(id, at: now) }
+    }
+
+    /// Why the owner said no to a card: guidance for that card.
+    func explainFinding(_ id: String, note: String) {
+        let now = Date()
+        changeFindings { $0.explain(id, note: note, at: now) }
+    }
+
+    private func changeFindings(_ change: @escaping @Sendable (inout CoachProfile) -> Void) {
+        change(&profile)
+        let file = paths.coach, paths = paths
+        write("the coach's memory") {
+            var p = (try? CoachProfile.load(from: file)) ?? CoachProfile()
+            change(&p)
+            try p.save(to: file)
+            FindingStore.mirror(p.answers, paths: paths)
+        }
+        refreshFindings()
     }
 
     func answerQuestion(_ id: UUID, _ status: CoachQuestion.Status, note: String?) {

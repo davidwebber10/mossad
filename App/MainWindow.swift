@@ -18,6 +18,7 @@ struct MainWindow: View {
                 case .chat: ChatView()
                 case .people: PeopleView()
                 case .analytics: AnalyticsView()
+                case .coach: CoachView()
                 case .settings: SettingsView()
                 case .log: LogView()
                 }
@@ -185,6 +186,11 @@ private struct Sidebar: View {
                 .font(.system(size: 11)).monospacedDigit()
                 .foregroundStyle(Palette.tertiary)
                 .accessibilityLabel("\(openCommitments) open")
+        case .coach where !controller.findings.isEmpty:
+            Text("\(controller.findings.count)")
+                .font(.system(size: 11)).monospacedDigit()
+                .foregroundStyle(Palette.tertiary)
+                .accessibilityLabel("\(controller.findings.count) to review")
         case .settings where !permissions.allGood:
             Text("\(permissions.problemCount)")
                 .font(.system(size: 11, weight: .semibold)).monospacedDigit()

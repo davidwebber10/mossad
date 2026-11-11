@@ -165,6 +165,9 @@ public struct CoachReview: Codable, Equatable, Sendable {
     public var line: CoachLine?
     /// Advice of the last 30 days that this call showed again: the moment, kept as evidence and not said again.
     public var seenAgain: CoachNote?
+    /// The cards this call gives about how the owner acted, each with proof (`FindingRules`). Nil for a review
+    /// from before the cards: its cards are then made from its line and its notes.
+    public var findings: [CoachFinding]?
 
     public init(headline: String, overview: String, strengths: [CoachPoint], improvements: [CoachPoint],
                 focusProgress: String?, value: MeetingValue? = nil, delivery: DeliveryStats? = nil, scorecard: Scorecard? = nil) {
@@ -180,7 +183,7 @@ public struct CoachReview: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case headline, overview, strengths, improvements, focusProgress, value, delivery, feedback, thread, scorecard
-        case didWell, improving, tryNext, focusID, focusResult, quiet, version, line, seenAgain
+        case didWell, improving, tryNext, focusID, focusResult, quiet, version, line, seenAgain, findings
     }
 
     /// Reviews from before feedback existed have no feedback or thread.
@@ -206,6 +209,8 @@ public struct CoachReview: Codable, Equatable, Sendable {
         // A line of a kind from a later build is no line here, not a review that cannot be read.
         line = (try? c.decodeIfPresent(CoachLine.self, forKey: .line)) ?? nil
         seenAgain = (try? c.decodeIfPresent(CoachNote.self, forKey: .seenAgain)) ?? nil
+        // One card that does not decode is left out; the review still reads.
+        findings = ((try? c.decodeIfPresent(LossyArray<CoachFinding>.self, forKey: .findings)) ?? nil)?.values
     }
 
     /// This review with another device's ratings and conversation added: the newer rating of a point wins,

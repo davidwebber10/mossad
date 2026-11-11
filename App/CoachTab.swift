@@ -10,6 +10,8 @@ struct CoachTab: View {
     let people: MeetingPeople
     @ObservedObject var player: AudioPlayer
     @State private var more = CoachTab.previewOpen
+    /// A card was answered on this page: the deck stays for Undo and for the line about a no.
+    @State private var answeredHere = false
 
     /// Development hook, in a preview only: `MOSSAD_COACH_FULL=1` opens the full review for a screenshot.
     private static var previewOpen: Bool {
@@ -37,12 +39,28 @@ struct CoachTab: View {
         let profile = controller.shownCoachProfile
         let line = review.shownLine
         let others = review.others
-        let questions = profile.openQuestions.filter { $0.callID == record.id }
+        // The cards of this call that wait for an answer. A conclusion or a proposed focus that is a card is
+        // answered there, and not a second time below.
+        let cards = controller.findings(for: record)
+        let asked = Set(cards.compactMap(\.questionID))
+        let questions = profile.openQuestions.filter { $0.callID == record.id && !asked.contains($0.id) && ($0.at == nil || $0.evidence.isEmpty) }
+        let offered = cards.contains { $0.kind == .goalOffer }
+        // While the line waits as the top card, the card is the line: the same words are not shown two times.
+        let lineIsTopCard = line.map { l in cards.first.map { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text } ?? false } ?? false
         return LabelColumnStack(spacing: 18) {
             if let line {
-                LabelColumn(label: line.heading) { LineRow(line: line, strong: true, long: record.isLong, player: player) }
+                if !lineIsTopCard { LabelColumn(label: line.heading) { LineRow(line: line, strong: true, long: record.isLong, player: player) } }
             } else {
                 LabelColumn(label: "The coach\u{2019}s read") { read(review, nothing: review.saysNothing) }
+            }
+            if !cards.isEmpty || answeredHere {
+                LabelColumn(label: cards.isEmpty ? "Findings" : "Findings \u{00B7} \(cards.count)", labelTopPadding: 4) {
+                    FindingsDeck(cards: cards, play: player.isAvailable ? { f in f.at.map { player.play(from: max(0, $0 - 1)) } } : nil,
+                                 showsEmpty: false, preview: CoachView.deckPreview,
+                                 answer: { controller.answerFinding($0, $1); answeredHere = true }, undo: { controller.takeBackFinding($0) },
+                                 explain: { controller.explainFinding($0, note: $1) })
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             if people.speakers.contains(where: { $0.seconds > 0 }) {
                 LabelColumn(label: "Talk share") { TalkShare(people: people) }
@@ -54,7 +72,7 @@ struct CoachTab: View {
                                    openMoment: { controller.showMoment($0, at: $1) })
                 }
             }
-            if FocusPanel.belongs(to: record, profile: profile) {
+            if FocusPanel.belongs(to: record, profile: profile), !offered {
                 LabelColumn(label: "Focus") {
                     // The line already says how this call went on the focus.
                     FocusPanel(profile: profile, callID: record.id, result: line?.kind == .focus ? nil : review.focusResult, compact: true,

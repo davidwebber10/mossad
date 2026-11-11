@@ -51,7 +51,7 @@ struct MeetingView: View {
                     case .transcript:
                         TranscriptSection(record: record, lanes: lanes, query: $query, moment: moment)
                     case .coach:
-                        if let review { CoachSection(record: record, review: review) } else {
+                        if let review { CoachSection(record: record, review: review) { read(at: $0) } } else {
                             EmptyState(symbol: "text.bubble", title: "No review for this call",
                                        message: "The coach reviews calls on your Mac. Its review appears here once it syncs.")
                         }

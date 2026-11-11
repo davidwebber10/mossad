@@ -42,10 +42,13 @@ extension Coaching {
 public struct LLMCoach: Coaching {
     private let llm: any LanguageModel
     private let ownerName: String
+    /// The saved people, read for each review: what the coach knows of a person is read by the person's id.
+    private let saved: @Sendable () -> CoachPeople
 
-    public init(llm: any LanguageModel, ownerName: String) {
+    public init(llm: any LanguageModel, ownerName: String, people saved: @escaping @Sendable () -> CoachPeople = { .none }) {
         self.llm = llm
         self.ownerName = ownerName
+        self.saved = saved
     }
 
     public init(apiKey: String, model: String = "claude-opus-5-5", session: URLSession = .shared, ownerName: String, usage: UsageLog? = nil) {
@@ -78,7 +81,7 @@ public struct LLMCoach: Coaching {
                                                       "skill_label": Schema.string])),
             "questions": Schema.array(Schema.object([
                 "statement": Schema.string, "kind": Schema.oneOf(CoachQuestion.Kind.allCases.map(\.rawValue)),
-                "evidence": Schema.string, "at_seconds": Schema.nullableNumber,
+                "evidence": Schema.string, "at_seconds": Schema.nullableNumber, "person": Schema.string,
             ])),
             "strengths": Schema.array(point),
             "improvements": Schema.array(point),
@@ -118,7 +121,7 @@ public struct LLMCoach: Coaching {
         delivery.tone = tone
         let out = try await llm.json(system: CoachPrompt.system(owner: ownerName, voice: profile.voice),
                                      user: CoachPrompt.user(record: record, owner: ownerName, profile: profile, delivery: delivery, people: people,
-                                                            measured: measured),
+                                                            measured: measured, saved: saved()),
                                      schema: Self.schema, effort: .high, purpose: .coach, as: Output.self)
         let focus = profile.activeFocus
         var review = CoachReview(headline: out.headline, overview: "", strengths: Array(out.strengths.prefix(Self.detailPoints).map(\.point)),
@@ -144,8 +147,10 @@ public struct LLMCoach: Coaching {
             CoachPatternUpdate(name: $0.name, kind: $0.kind, note: $0.note, result: $0.result, quote: $0.quote?.nonBlank, at: $0.at_seconds)
         }
         let update = CoachProfileUpdate(summary: "", focus: "", patterns: Array(patterns), people: out.profile.people)
-        let questions = (out.questions ?? []).prefix(2).map {
-            CoachQuestion(statement: $0.statement, kind: $0.kind, evidence: $0.evidence, callID: record.id, at: $0.at_seconds, asked: record.end)
+        let questions = (out.questions ?? []).prefix(2).map { asked -> CoachQuestion in
+            var q = CoachQuestion(statement: asked.statement, kind: asked.kind, evidence: asked.evidence, callID: record.id, at: asked.at_seconds, asked: record.end)
+            q.about = asked.person?.nonBlank
+            return q
         }
         return CoachResult(review: review, update: update, proposal: proposal, questions: Array(questions))
     }
@@ -209,6 +214,7 @@ public struct LLMCoach: Coaching {
         let statement, evidence: String
         let kind: CoachQuestion.Kind
         let at_seconds: Double?
+        let person: String?
     }
 
     private struct Point: Decodable {

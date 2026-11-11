@@ -84,11 +84,15 @@ public struct CoachMeasured: Equatable, Sendable {
         /// What follows "You": "talked 81% of the time; usually 62 to 70% in your 1:1s with Sam".
         public var text: String
         public var at: TimeInterval?
+        /// Whether the number is above what is usual. Nil when that is not known: nothing is then said about
+        /// whether it is good.
+        public var above: Bool?
 
-        public init(id: String, text: String, at: TimeInterval?) {
+        public init(id: String, text: String, at: TimeInterval?, above: Bool? = nil) {
             self.id = id
             self.text = text
             self.at = at
+            self.above = above
         }
     }
 
@@ -98,12 +102,16 @@ public struct CoachMeasured: Equatable, Sendable {
     public var commitments: CommitmentShare?
     /// The owner's longest turn, by the definition of a turn that the baselines use.
     public var longestTurn: TimeInterval?
+    /// The owner and one other person: more talk of the owner is then less room for that person.
+    public var oneOnOne: Bool
 
-    public init(standouts: [Standout] = [], trend: CoachTrend? = nil, commitments: CommitmentShare? = nil, longestTurn: TimeInterval? = nil) {
+    public init(standouts: [Standout] = [], trend: CoachTrend? = nil, commitments: CommitmentShare? = nil, longestTurn: TimeInterval? = nil,
+                oneOnOne: Bool = false) {
         self.standouts = standouts
         self.trend = trend
         self.commitments = commitments
         self.longestTurn = longestTurn
+        self.oneOnOne = oneOnOne
     }
 
     /// Numbers the coach does not make a line of: filler words are not coached, the count of questions counts
@@ -119,8 +127,13 @@ public struct CoachMeasured: Equatable, Sendable {
         standouts = analytics.baselines.standouts.filter { s in s.subject != nil && s.subject == me && !left.contains { s.id.hasSuffix($0) } }.map { s in
             var at: TimeInterval?
             if case .moment(let t) = s.evidence { at = t }
-            return Standout(id: s.id.hasPrefix("with.") ? "talkShare" : String(s.id.split(separator: ".").last ?? ""), text: s.text, at: at)
+            let metric = String(s.id.split(separator: ".").last ?? "")
+            let reading = s.id.hasPrefix("with.") ? analytics.baselines.ownerWith.first { "with.\($0.id)" == s.id }?.reading
+                : PersonMetric(rawValue: metric).flatMap { m in me.flatMap { analytics.baselines.person($0)?.readings[m] } }
+            return Standout(id: s.id.hasPrefix("with.") ? "talkShare" : metric, text: s.text, at: at,
+                            above: reading.flatMap { r in r.usual.map { r.value > $0.median } })
         }
+        oneOnOne = analytics.facts.partner != nil
         longestTurn = analytics.owner?.longestTurn?.seconds
         trend = CoachTrend.oneOnOneShare(this: analytics.facts, history: history)
         self.commitments = CommitmentShare(commitments, asOf: record.end)

@@ -75,7 +75,7 @@ public struct PersonBriefWriter: Sendable {
 
     /// People with a call since their brief (or no brief yet), and no brief written in the last day, most
     /// recent first. The owner is one of them: their read is how other people can best work with them.
-    public static func due(profile: CoachProfile, records: [CallRecord], owner: String, now: Date = Date()) -> [String] {
+    public static func due(profile: CoachProfile, records: [CallRecord], owner: String, now: Date = Date(), saved: CoachPeople = .none) -> [String] {
         var latest: [String: Date] = [:], count: [String: Int] = [:]
         for r in records where r.status == .written {
             for name in Set(r.speakerNames.values) where !name.hasPrefix("Speaker ") && !name.contains(":") {
@@ -85,18 +85,20 @@ public struct PersonBriefWriter: Sendable {
         }
         return latest.filter { name, last in
             guard (count[name] ?? 0) >= minimumCalls else { return false }
-            guard let brief = profile.people[name]?.brief else { return true }
+            guard let brief = profile.note(on: name, people: saved)?.value.brief else { return true }
             if (brief.style ?? 1) < PersonBrief.currentStyle { return true }
             return last > brief.updated && now.timeIntervalSince(brief.updated) >= minimumGap
         }
         .sorted { $0.value > $1.value }.prefix(perRun).map(\.key)
     }
 
-    public func brief(for name: String, records: [CallRecord], profile: CoachProfile, now: Date = Date()) async throws -> PersonBrief {
+    /// `saved` are the saved people: with them, the note and what the owner confirmed about this person are read
+    /// by the person's id, under any name.
+    public func brief(for name: String, records: [CallRecord], profile: CoachProfile, now: Date = Date(), saved: CoachPeople = .none) async throws -> PersonBrief {
         let shared = records.filter { $0.status == .written && $0.speakerNames.values.contains(name) }.sorted { $0.start > $1.start }
         let used = Array(shared.prefix(Self.maxCalls))
         let ids = Set(used.map(\.id))
-        let out = try await llm.json(system: system(name), user: user(name, used, profile: profile), schema: Self.schema,
+        let out = try await llm.json(system: system(name), user: user(name, used, profile: profile, saved: saved), schema: Self.schema,
                                      effort: .medium, purpose: .coach, as: Output.self)
         let sections = out.sections.prefix(Self.maxSections).map { s in
             PersonBrief.Section(title: s.title, points: s.points.prefix(Self.maxPoints).map {
@@ -145,7 +147,7 @@ public struct PersonBriefWriter: Sendable {
         """
     }
 
-    private func user(_ name: String, _ calls: [CallRecord], profile: CoachProfile) -> String {
+    private func user(_ name: String, _ calls: [CallRecord], profile: CoachProfile, saved: CoachPeople) -> String {
         let first = name.split(separator: " ").first.map(String.init) ?? name
         var parts: [String] = []
         if name == ownerName {
@@ -159,11 +161,16 @@ public struct PersonBriefWriter: Sendable {
             parts.append(callsText(name, calls))
             return parts.joined(separator: "\n\n")
         }
-        let known = profile.facts.filter { $0.text.localizedCaseInsensitiveContains(first) }.map { "- \($0.text)" }
+        // What names them, and what is theirs by the person's id, whatever name the words use.
+        let id = saved.id(of: name)
+        let theirs = id.map { profile.learnings(about: $0, people: saved) } ?? []
+        let known = profile.facts.filter { $0.text.localizedCaseInsensitiveContains(first) || theirs.contains($0) }.map { "- \($0.text)" }
         if !known.isEmpty { parts.append("## What \(ownerName) confirmed\n" + known.joined(separator: "\n")) }
+        let told = id.map { profile.guidance(about: $0, people: saved) } ?? []
+        if !told.isEmpty { parts.append("## What \(ownerName) told you about them\n" + told.map { "- \($0.text)" }.joined(separator: "\n")) }
         let denied = profile.questions.filter { $0.status == .rejected && $0.statement.localizedCaseInsensitiveContains(first) }
         if !denied.isEmpty { parts.append("## Not true\n" + denied.map { "- \($0.statement)" }.joined(separator: "\n")) }
-        if let person = profile.people[name] {
+        if let person = profile.note(on: name, people: saved)?.value {
             if let note = person.note.nonBlank { parts.append("## Your note on \(first)\n" + note) }
             if let brief = person.brief { parts.append("## Your earlier read\n" + brief.text) }
         }

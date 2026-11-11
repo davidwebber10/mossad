@@ -12,6 +12,15 @@ struct CoachMemoryView: View {
         NavigationStack {
             List {
                 let p = store.profile
+                if !store.findings.isEmpty {
+                    Section {
+                        NavigationLink {
+                            FindingsScreen(close: { dismiss() })
+                        } label: {
+                            LabeledContent("Findings", value: "\(store.findings.count) to review")
+                        }
+                    }
+                }
                 if p.activeFocus != nil || p.proposedFocus != nil {
                     Section {
                         FocusPanel(profile: p, accept: { store.acceptFocus($0, plan: $1) }, dismiss: { store.dismissFocus($0) })

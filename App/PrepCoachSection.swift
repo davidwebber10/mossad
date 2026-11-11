@@ -23,6 +23,11 @@ struct PrepCoachSection: View {
                     if let note = person.note {
                         Text(note).foregroundStyle(person.headline == nil ? Palette.ink : Palette.secondary).fixedSize(horizontal: false, vertical: true)
                     }
+                    // What the owner confirmed about this person in the findings deck.
+                    ForEach(person.learnings, id: \.self) { learning in
+                        Label(learning, systemImage: "checkmark.circle").labelStyle(.titleAndIcon)
+                            .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }

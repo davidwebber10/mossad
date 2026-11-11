@@ -44,12 +44,13 @@ extension AppController {
         guard !isInert else { return }
         guard coachEnabled, !coaching, let llm = languageModel else { return }
         coaching = true
-        let runner = CoachRunner(paths: paths, coach: LLMCoach(llm: llm, ownerName: ownerName), owner: ownerName,
+        linkCoachPeople()
+        let runner = CoachRunner(paths: paths, coach: LLMCoach(llm: llm, ownerName: ownerName, people: { [paths] in CoachPeople.read(paths: paths) }), owner: ownerName,
                                  since: Date(timeIntervalSince1970: coachSince),
                                  titles: { [paths] in OrgChart.contextLines(for: $0, paths: paths) }, facts: MeetingAnalyticsStore.shared.facts)
         Task {
             await runner.run { _ in await MainActor.run { self.coachVersion += 1 } }
-            await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName))
+            await writePersonBriefs(PersonBriefWriter.due(profile: coachProfile, records: meetings, owner: ownerName, saved: shownCoachPeople))
             coaching = false
             syncNow()
             await sendCoachEmail()
@@ -63,12 +64,10 @@ extension AppController {
         let writer = PersonBriefWriter(llm: llm, ownerName: ownerName), records = meetings
         for name in names {
             do {
-                let brief = try await writer.brief(for: name, records: records, profile: coachProfile)
-                try changeCoachProfile { profile in
-                    var person = profile.people[name] ?? CoachPerson(note: "", calls: 0, lastSeen: brief.updated)
-                    person.brief = brief
-                    profile.people[name] = person
-                }
+                let saved = shownCoachPeople
+                let brief = try await writer.brief(for: name, records: records, profile: coachProfile, saved: saved)
+                // With the person: under the name of now, with the note an earlier name had.
+                try changeCoachProfile { $0.setBrief(brief, for: name, people: saved) }
                 coachVersion += 1
             } catch {
                 Log.error("The coach's read on a person failed: \(error)")

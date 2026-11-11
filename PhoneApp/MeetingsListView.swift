@@ -12,6 +12,28 @@ struct MeetingsListView: View {
     @State private var removing: String?
     /// A meeting opens out of its row.
     @Namespace private var zoom
+    /// The coach's findings deck. Development hook for screenshots: `MOSSAD_FINDINGS=1` opens it.
+    @State private var findings = PhoneStore.hook("MOSSAD_FINDINGS") != nil
+
+    /// One quiet row above the meetings while cards wait for an answer.
+    private var findingsRow: some View {
+        Button { findings = true } label: {
+            HStack(spacing: Space.m) {
+                Image(systemName: "rectangle.stack").foregroundStyle(Palette.accent).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(store.findings.count == 1 ? "1 finding to review" : "\(store.findings.count) findings to review").textRole(.headline).foregroundStyle(Palette.ink)
+                    Text("From the coach. Swipe right for yes, left for no.").textRole(.secondary).foregroundStyle(Palette.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.tertiaryMark).accessibilityHidden(true)
+            }
+            .padding(.horizontal, Space.l).padding(.vertical, Space.m)
+            .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.top, Space.s)
+    }
 
     var body: some View {
         @Bindable var store = store
@@ -24,6 +46,7 @@ struct MeetingsListView: View {
                             .padding(.vertical, Space.s)
                     }
                     if !store.outbox.entries.isEmpty { outbox }
+                    if !store.findings.isEmpty { findingsRow }
                     ForEach(store.days, id: \.date) { day in
                         PhoneLabel(day.title).padding(.top, Space.l).padding(.bottom, 2)
                         ForEach(Array(day.rows.enumerated()), id: \.element.id) { i, r in
@@ -55,6 +78,12 @@ struct MeetingsListView: View {
             }
             .fullScreenCover(isPresented: $recording) { RecordingView() }
             .sheet(isPresented: $settings) { PhoneSettingsView() }
+            .sheet(isPresented: $findings) {
+                NavigationStack {
+                    FindingsScreen(close: { findings = false })
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { findings = false } } }
+                }
+            }
             .refreshable { await store.sync() }
             .navigationDestination(for: String.self) { id in
                 MeetingPage(id: id).navigationTransition(.zoom(sourceID: id, in: zoom))

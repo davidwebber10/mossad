@@ -46,6 +46,7 @@ struct CoachSettings: View {
                     }
                 }
                 CoachKnowledge(profile: profile)
+                NeverAgain(profile: profile)
             }
             SettingsGroup(label: "Emails", footer: "Mossad only ever emails you, at one address.") { emails }
             if controller.coachEnabled, controller.coachEmailEnabled || controller.coachMonthlyEmail {
@@ -256,6 +257,42 @@ private struct QuestionProse: View {
         correcting = false
         note = ""
         controller.answerQuestion(q.id, status, note: status == .corrected ? text : nil)
+    }
+}
+
+/// What the owner blocked with "No, never again" on a card of the findings deck. Each can be allowed again.
+private struct NeverAgain: View {
+    @EnvironmentObject var controller: AppController
+    let profile: CoachProfile
+
+    private func effect(_ a: FindingAnswer) -> String {
+        switch a.kind {
+        case .learning: "The coach does not ask this again."
+        case .goalOffer: "The coach does not offer this goal again."
+        default: "The coach says nothing more about this subject."
+        }
+    }
+
+    var body: some View {
+        let blocked = profile.neverAgain
+        if !blocked.isEmpty {
+            SettingsGroup(label: "Never again", footer: "From \u{201C}No, never again\u{201D} on a card in Coach \u{203A} Findings.") {
+                ForEach(blocked) { a in
+                    HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(a.kind.isBehavior || a.kind == .goalOffer ? CoachSkill.subject(of: a.skill) : a.text)
+                                .font(.system(size: 12.5)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                            Text(effect(a)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Allow again") { controller.takeBackFinding(a.id) }
+                            .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .semibold))
+                            .accessibilityLabel("Allow again: \(a.text)")
+                    }
+                    .padding(.vertical, 7)
+                }
+            }
+        }
     }
 }
 

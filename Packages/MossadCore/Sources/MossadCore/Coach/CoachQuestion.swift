@@ -36,6 +36,14 @@ public struct CoachQuestion: Codable, Equatable, Sendable, Identifiable, Hashabl
     public var asked: Date
     /// When asked or answered; the newer copy wins between devices.
     public var updated: Date
+    /// When the owner said a plain no to its card: this one card is gone, and the question is not "not true".
+    /// The coach can ask it again from another call after the days of the repeat rule.
+    public var dismissed: Date?
+    /// The person the conclusion is about, as the model named the speaker.
+    public var about: String?
+    /// The id of that person in the people store, on a sure match only, and the person's name at that time.
+    public var person: String?
+    public var personName: String?
 
     public init(statement: String, kind: Kind, evidence: String, callID: String?, at: TimeInterval?, asked: Date) {
         self.statement = statement
@@ -57,14 +65,23 @@ extension CoachProfile {
     /// More would turn a few good questions into homework.
     public static let openQuestionLimit = 10
 
-    public var openQuestions: [CoachQuestion] { questions.filter { $0.status == .open } }
+    /// The questions that wait for an answer. One that got a plain no to its card does not wait.
+    public var openQuestions: [CoachQuestion] { questions.filter { $0.status == .open && $0.dismissed == nil } }
 
-    /// Adds the coach's new questions, skipping any asked before in any form and any past the limit.
+    /// Adds the coach's new questions, skipping any asked before in any form and any past the limit. A question
+    /// that got a plain no comes back one time when another call brings it after `AdviceRules.repeatDays`; one
+    /// that the owner called not true never does.
     public mutating func ask(_ new: [CoachQuestion]) {
         for q in new where q.statement.nonBlank != nil {
-            guard openQuestions.count < Self.openQuestionLimit, !questions.contains(where: { $0.key == q.key }),
+            guard openQuestions.count < Self.openQuestionLimit,
                   !facts.contains(where: { $0.text.lowercased().trimmingCharacters(in: .punctuationCharacters) == q.key }) else { continue }
-            questions.append(q)
+            guard let i = questions.firstIndex(where: { $0.key == q.key }) else { questions.append(q); continue }
+            guard questions[i].status == .open, let no = questions[i].dismissed, q.callID != questions[i].callID,
+                  q.asked.timeIntervalSince(no) >= AdviceRules.repeatDays * 86_400 else { continue }
+            var again = q
+            again.id = questions[i].id
+            again.updated = q.asked
+            questions[i] = again
         }
     }
 
@@ -84,7 +101,16 @@ extension CoachProfile {
 
     static func mergedQuestions(_ a: [CoachQuestion], _ b: [CoachQuestion]) -> [CoachQuestion] {
         var byID: [UUID: CoachQuestion] = [:]
-        for q in a + b where (byID[q.id]?.updated ?? .distantPast) <= q.updated { byID[q.id] = q }
+        for q in a + b {
+            guard let old = byID[q.id] else { byID[q.id] = q; continue }
+            var keep = old.updated <= q.updated ? q : old
+            // A copy that a build from before these fields saved has none: the other copy's stay.
+            let other = old.updated <= q.updated ? old : q
+            keep.person = keep.person ?? other.person
+            keep.personName = keep.personName ?? other.personName
+            keep.about = keep.about ?? other.about
+            byID[q.id] = keep
+        }
         var seen = Set<UUID>()
         return (a + b).compactMap { seen.insert($0.id).inserted ? byID[$0.id] : nil }
     }

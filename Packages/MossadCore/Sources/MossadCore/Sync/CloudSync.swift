@@ -472,6 +472,8 @@ public actor CloudSync {
             let merged = local.merged(with: remote, takeCoaching: includeMeetings || StoredFile.awaitsMerge(Self.syncedFiles(paths)[0]))
             guard merged != local else { return false }
             try merged.save(to: paths.coach)
+            // The answers to the cards that came from the other device are kept with their calls too.
+            if merged.answers != local.answers { FindingStore.mirror(merged.answers, paths: paths) }
         case Self.chatType:
             let remote = try await decoded(Chat.self)
             let chats = ChatStore(directory: paths.chats)
