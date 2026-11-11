@@ -170,8 +170,6 @@ struct AnalyticsScreen: View {
     @ViewBuilder
     private func content(_ r: AnalyticsReport, _ b: AnalyticsReport) -> some View {
         let weeks = max(1, r.interval.duration / (7 * 86_400))
-        // Days of the calendar, as the charts' sentences count them: "the last 90 days" is not 89.
-        let days = CommunicationTrends.days(b.interval)
         HStack(alignment: .top, spacing: Space.l) {
             StatTile(value: duration(r.callSeconds), label: "Time in calls", detail: "\(duration(r.callSeconds / weeks)) a week")
             StatTile(value: "\(r.calls)", label: "Calls", detail: change(Double(r.calls), Double(b.calls)) ?? "\(Int((Double(r.calls) / weeks).rounded())) a week")
@@ -208,7 +206,7 @@ struct AnalyticsScreen: View {
         heading("Who you meet with", AnalyticsFindings.people(r))
         people(r)
 
-        heading("How you communicate", AnalyticsFindings.communication(r.communication, talkShare: r.talkShare, before: b.communication, beforeDays: days))
+        heading("How you communicate", AnalyticsFindings.communication(r.communication, talkShare: r.talkShare))
         if let trends, trends.interval == r.interval {
             communication(trends)
         } else {

@@ -20,16 +20,19 @@ final class CommunicationTrendsTests: XCTestCase {
 
     /// A meeting `day` days into the period (negative: before it) with the owner's numbers. `voices` people spoke.
     private func meeting(_ id: String, day: Double, share: Double? = 0.5, voices: Int = 3, questions: Double? = nil, cutIns: Double? = nil,
-                         pace: Double? = nil, title: String = "Sync", withOwner: Bool = true) -> MeetingFacts {
+                         pace: Double? = nil, title: String = "Sync", withOwner: Bool = true, ownerMain: Bool = true,
+                         wordTimes: Bool = true) -> MeetingFacts {
         var values: [PersonMetric: Double] = [:]
         values[.talkShare] = share
         values[.questionsPerHour] = questions
         values[.cutInsPerHour] = cutIns
         values[.wordsPerMinute] = pace
         var people = (1..<max(voices, 1)).map { MeetingFacts.Person(name: "Person \($0)", isOwner: false, values: [.talkShare: 0.2]) }
-        if withOwner { people.insert(MeetingFacts.Person(name: owner, isOwner: true, values: values), at: 0) }
-        return MeetingFacts(id: id, stamp: 0, start: start.addingTimeInterval(day * 86_400 + 10 * 3600), title: title, series: nil, kind: nil, tags: [],
-                            voices: voices, people: people, values: [:])
+        if withOwner { people.insert(MeetingFacts.Person(name: owner, isOwner: true, isMain: ownerMain, values: values), at: 0) }
+        var f = MeetingFacts(id: id, stamp: 0, start: start.addingTimeInterval(day * 86_400 + 10 * 3600), title: title, series: nil, kind: nil, tags: [],
+                             voices: voices, mainVoices: ownerMain ? voices : voices - 1, people: people, values: [:])
+        f.hasWordTimes = wordTimes
+        return f
     }
 
     /// `count` meetings spread evenly over the days `from..<to`, with the share that `value` gives for each day.
@@ -41,7 +44,7 @@ final class CommunicationTrendsTests: XCTestCase {
     }
 
     private func trends(_ facts: [MeetingFacts], days: Double = 90) -> T { T(facts: facts, interval: period(days), calendar: calendar) }
-    private func share(_ t: T, _ split: T.Split = .all) -> T.Series { t.series(.talkShare, split) }
+    private func share(_ t: T, _ split: T.Split = .all) -> T.Series { t.series(.talkShare, split)! }
 
     private func assertMoved(_ change: T.Change, from: Double, to: Double, file: StaticString = #filePath, line: UInt = #line) {
         guard case .moved(let a, let b) = change else { return XCTFail("\(change)", file: file, line: line) }
@@ -79,22 +82,43 @@ final class CommunicationTrendsTests: XCTestCase {
         XCTAssertEqual(points[1].value, 0.6)
         XCTAssertEqual(points[1].title, "Budget review")
         XCTAssertEqual(points[1].date, start.addingTimeInterval(40 * 86_400 + 10 * 3600))
-        XCTAssertEqual(t.series(.wordsPerMinute, .all).points.map(\.id), ["no-share"])
-        XCTAssertEqual(t.series(.cutInsPerHour, .all).points.map(\.value), [2], "a call that cannot show a cut-in has no point, not a 0")
-        XCTAssertTrue(t.series(.questionsPerHour, .all).points.isEmpty)
+        XCTAssertEqual(t.series(.wordsPerMinute, .all)!.points.map(\.id), ["no-share"])
+        XCTAssertEqual(t.series(.cutInsPerHour, .all)!.points.map(\.value), [2], "a call that cannot show a cut-in has no point, not a 0")
+        XCTAssertTrue(t.series(.questionsPerHour, .all)!.points.isEmpty)
         XCTAssertEqual(t.series(.all).map(\.metric), [.talkShare, .questionsPerHour, .cutInsPerHour, .wordsPerMinute])
     }
 
     func testASplitKeepsTheMeetingsOfItsSize() {
         let t = trends([
             meeting("one", day: 1, voices: 2), meeting("three", day: 2, voices: 3), meeting("nine", day: 3, voices: 9),
-            meeting("alone", day: 4, voices: 1),
+            meeting("alone", day: 4, voices: 1, pace: 150),
         ])
-        XCTAssertEqual(share(t, .all).points.map(\.id), ["one", "three", "nine", "alone"])
+        XCTAssertEqual(share(t, .all).points.map(\.id), ["one", "three", "nine"], "a talk share of one voice alone is no share of a talk")
+        XCTAssertEqual(t.series(.wordsPerMinute, .all)!.points.map(\.id), ["alone"], "its pace is still a pace")
         XCTAssertEqual(share(t, .oneOnOne).points.map(\.id), ["one"])
         XCTAssertEqual(share(t, .group).points.map(\.id), ["three", "nine"])
         XCTAssertEqual(t.splits, [.all, .oneOnOne, .group])
         XCTAssertEqual(trends([meeting("three", day: 2, voices: 3)]).splits, [], "one size only: nothing to split")
+    }
+
+    func testAOneOnOneHasTheOwnerAsOneOfItsTwoVoices() {
+        // Two others talk and the owner says almost nothing: three people, not a 1:1 of the owner at 1%.
+        let quiet = meeting("quiet", day: 1, share: 0.01, voices: 3, ownerMain: false)
+        let t = trends([quiet, meeting("one", day: 2, voices: 2)])
+        XCTAssertEqual(share(t, .group).points.map(\.id), ["quiet"])
+        XCTAssertEqual(share(t, .oneOnOne).points.map(\.id), ["one"])
+    }
+
+    func testCutInsNeedWordTimes() {
+        // Without word times (a synced copy on the iPhone) a pause inside a line is speech, and more overlaps
+        // count as cut-ins than on the Mac: that number is not known, so it has no point.
+        let t = trends([meeting("mac", day: 1, cutIns: 2), meeting("phone", day: 2, cutIns: 5, wordTimes: false)])
+        XCTAssertEqual(t.series(.cutInsPerHour, .all)!.points.map(\.id), ["mac"])
+        XCTAssertEqual(share(t).points.count, 2, "the other numbers do not need word times")
+    }
+
+    func testAMetricThatIsNotInTheSectionHasNoSeries() {
+        XCTAssertNil(trends([]).series(.longestTurn, .all))
     }
 
     // MARK: The line
@@ -124,6 +148,7 @@ final class CommunicationTrendsTests: XCTestCase {
         facts += [meeting("x1", day: 14), meeting("x2", day: 15)]
         let s = share(trends(facts, days: 28))
         XCTAssertEqual(s.line.map(\.date), [3.5, 10.5, 24.5].map { start.addingTimeInterval($0 * 86_400) })
+        XCTAssertEqual(s.line.map(\.segment), [0, 0, 1], "the line breaks where a week has no step")
         XCTAssertEqual(s.points.count, 17, "the meetings are still points")
     }
 
@@ -152,6 +177,43 @@ final class CommunicationTrendsTests: XCTestCase {
         XCTAssertEqual(year.line.count, 26)
     }
 
+    func testTheLineStartsAtTheFirstMeeting() {
+        // "Year to date" in a library of nine weeks: the empty weeks before the first meeting do not count.
+        let facts = (0..<45).map { i in meeting("m\(i)", day: 301 + Double(i / 5) * 7 + Double(i % 5)) }
+        let s = share(trends(facts, days: 364))
+        XCTAssertEqual(s.lineDays, 7)
+        XCTAssertEqual(s.line.count, 9)
+        XCTAssertEqual(s.line.map(\.meetings), Array(repeating: 5, count: 9))
+    }
+
+    func testAVeryLongPeriodStillHasALine() {
+        let facts = (0..<1_000).map { i in meeting("m\(i)", day: Double(i) * 3) }
+        let s = share(trends(facts, days: 3_000))
+        XCTAssertFalse(s.line.isEmpty)
+        XCTAssertLessThanOrEqual(s.line.count, T.maximumSteps)
+    }
+
+    func testTheWeeksFollowTheCalendarAcrossAClockChange() {
+        // New York moves its clocks on 14 March 2027. A meeting at 23:30 on the evening before a week's first day
+        // and one at 00:30 on that day fall in their own weeks, not an hour over.
+        var ny = Calendar(identifier: .gregorian)
+        ny.timeZone = TimeZone(identifier: "America/New_York")!
+        let first = ny.date(from: DateComponents(year: 2027, month: 2, day: 21))!
+        let interval = DateInterval(start: first, end: ny.date(from: DateComponents(year: 2027, month: 3, day: 21))!)
+        var facts: [MeetingFacts] = []
+        for day in 0..<28 {
+            for (n, minute) in [30, 23 * 60 + 30].enumerated() {
+                let at = ny.date(byAdding: .minute, value: minute, to: ny.date(byAdding: .day, value: day, to: first)!)!
+                var f = meeting("d\(day)-\(n)", day: 0)
+                f.start = at
+                facts.append(f)
+            }
+        }
+        let s = T(facts: facts, interval: interval, calendar: ny).series(.talkShare, .all)!
+        XCTAssertEqual(s.lineDays, 7)
+        XCTAssertEqual(s.line.map(\.meetings), [14, 14, 14, 14])
+    }
+
     func testOneWeekHasNoLine() {
         let s = share(trends((0..<6).map { meeting("m\($0)", day: Double($0)) }, days: 7))
         XCTAssertTrue(s.line.isEmpty, "one step is not a line")
@@ -162,7 +224,7 @@ final class CommunicationTrendsTests: XCTestCase {
         // "Last 30 days" ends now, in the middle of a day: the weeks still end with that whole day.
         let interval = DateInterval(start: start, end: start.addingTimeInterval(27 * 86_400 + 15 * 3600))
         let facts = (0..<28).map { meeting("m\($0)", day: Double($0), share: 0.5) }.filter { interval.contains($0.start) }
-        let s = T(facts: facts, interval: interval, calendar: calendar).series(.talkShare, .all)
+        let s = T(facts: facts, interval: interval, calendar: calendar).series(.talkShare, .all)!
         XCTAssertEqual(s.line.map(\.meetings), [7, 7, 7, 7])
     }
 
@@ -170,7 +232,7 @@ final class CommunicationTrendsTests: XCTestCase {
         // "The last 90 days" begins at the start of a day 89 days back and ends now: 90 days of the calendar.
         let interval = DateInterval(start: start, end: start.addingTimeInterval(89 * 86_400 + 9 * 3600))
         let facts = spread("m", count: 30) { $0 < 30 ? 0.68 : $0 < 60 ? 0.64 : 0.59 }.filter { interval.contains($0.start) }
-        let s = T(facts: facts, interval: interval, calendar: calendar).series(.talkShare, .all)
+        let s = T(facts: facts, interval: interval, calendar: calendar).series(.talkShare, .all)!
         XCTAssertEqual(s.days, 90)
         XCTAssertEqual(s.sentence, "Down from 68% to 59% over 90 days")
         XCTAssertEqual(share(trends([], days: 14)).days, 14)
@@ -213,8 +275,8 @@ final class CommunicationTrendsTests: XCTestCase {
         let t = trends(ones + groups + [meeting("n1", day: 1, voices: 2), meeting("n2", day: 2, voices: 5)])
         XCTAssertEqual(share(t, .oneOnOne).usual?.low, 0.6)
         XCTAssertEqual(share(t, .group).usual?.high, 0.2)
-        XCTAssertEqual(share(t, .all).usual?.low, 0.2)
-        XCTAssertEqual(share(t, .all).usual?.high, 0.6)
+        XCTAssertNil(share(t, .all).usual, "a usual range across 1:1s and groups is no one's usual")
+        XCTAssertNil(share(t, .all).typical)
     }
 
     // MARK: The change
@@ -295,6 +357,12 @@ final class CommunicationTrendsTests: XCTestCase {
         XCTAssertFalse(share(t, .all).change.moved)
         XCTAssertEqual(share(t, .oneOnOne).change, .steady)
         XCTAssertEqual(share(t, .group).change, .steady)
+        // The chart of all meetings draws one line for each size, which stay flat as the sentence says.
+        XCTAssertTrue(share(t, .all).line.isEmpty)
+        XCTAssertEqual(share(t, .all).parts.map(\.split), [.oneOnOne, .group])
+        XCTAssertEqual(share(t, .all).parts.map(\.line), [share(t, .oneOnOne).line, share(t, .group).line])
+        XCTAssertEqual(share(t, .all).parts.map(\.typical), [0.60, 0.30])
+        XCTAssertEqual(Set(share(t, .all).parts.flatMap { $0.line.map(\.value) }), [0.60, 0.30])
     }
 
     func testOneSizeAtEachEndSaysNothing() {
@@ -332,7 +400,7 @@ final class CommunicationTrendsTests: XCTestCase {
             let part = i / 20, rate: Double = part == 0 ? 1 : part == 1 ? 2 : 4
             return meeting("m\(i)", day: Double(i) * 1.5, share: nil, voices: i % 2 == 0 ? 2 : 5, cutIns: i % 2 == 0 ? rate : rate + 2)
         }
-        XCTAssertEqual(trends(facts).series(.cutInsPerHour, .all).sentence, "Up over 90 days: 1:1s from 1.0 to 4.0, groups from 3.0 to 6.0 an hour")
+        XCTAssertEqual(trends(facts).series(.cutInsPerHour, .all)!.sentence, "Up over 90 days: 1:1s from 1.0 to 4.0, groups from 3.0 to 6.0 an hour")
     }
 
     func testAPaceIsComparedOverAllSizes() {
@@ -341,7 +409,7 @@ final class CommunicationTrendsTests: XCTestCase {
             let pace: Double = i < 10 ? 170 : i < 20 ? 160 : 140
             return meeting("m\(i)", day: Double(i * 3), share: nil, voices: i < 15 ? 2 : 5, pace: pace)
         }
-        XCTAssertEqual(trends(facts).series(.wordsPerMinute, .all).change, .moved(from: 170, to: 140))
+        XCTAssertEqual(trends(facts).series(.wordsPerMinute, .all)!.change, .moved(from: 170, to: 140))
     }
 
     // MARK: Words
@@ -353,9 +421,9 @@ final class CommunicationTrendsTests: XCTestCase {
             return meeting("m\(i)", day: Double(i * 3), share: 0.4, questions: questions, cutIns: 1.26, pace: pace)
         }
         let t = trends(facts)
-        XCTAssertEqual(t.series(.questionsPerHour, .all).sentence, "Up from 3.0 to 8.5 an hour over 90 days")
-        XCTAssertEqual(t.series(.wordsPerMinute, .all).sentence, "Down from 172 to 148 words a minute over 90 days")
-        XCTAssertEqual(t.series(.cutInsPerHour, .all).sentence, "No clear change")
+        XCTAssertEqual(t.series(.questionsPerHour, .all)!.sentence, "Up from 3.0 to 8.5 an hour over 90 days")
+        XCTAssertEqual(t.series(.wordsPerMinute, .all)!.sentence, "Down from 172 to 148 words a minute over 90 days")
+        XCTAssertEqual(t.series(.cutInsPerHour, .all)!.sentence, "No clear change")
         XCTAssertEqual(T.title(.talkShare), "Talk share")
         XCTAssertEqual(T.title(.questionsPerHour), "Questions you ask")
         XCTAssertEqual(T.title(.cutInsPerHour), "You cut in")
@@ -374,7 +442,7 @@ final class CommunicationTrendsTests: XCTestCase {
     func testTheSpokenLineSaysTheSentenceAndTheNumbers() {
         let before = (0..<6).map { meeting("b\($0)", day: -Double($0 + 1), share: 0.5 + Double($0) * 0.04) }
         let s = share(trends(before + spread("m", count: 30) { $0 < 30 ? 0.68 : $0 < 60 ? 0.64 : 0.59 }))
-        XCTAssertEqual(s.spoken, "Talk share. Down from 68% to 59% over 90 days. Typical meeting 64%, in 30 meetings. Usual before this period 50 to 70%.")
+        XCTAssertEqual(s.spoken, "Talk share. Down from 68% to 59% over 90 days. Typical meeting 64%, in 30 meetings. Usual before this period 50 to 70%. " + s.basis)
         XCTAssertEqual(share(trends([])).spoken, "Talk share. No meetings with this number in the period.")
     }
 
@@ -399,16 +467,16 @@ final class CommunicationTrendsTests: XCTestCase {
             return meeting("m\(i)", day: Double(i * 3), questions: 4 + part, pace: 140 + part * 10)
         }
         let t = trends(facts)
-        XCTAssertEqual(t.series(.questionsPerHour, .all).scale.lower, 0)
-        XCTAssertEqual(t.series(.questionsPerHour, .all).scale.upper, 8)
-        XCTAssertEqual(t.series(.wordsPerMinute, .all).scale.lower, 140)
-        XCTAssertEqual(t.series(.wordsPerMinute, .all).scale.upper, 180)
+        XCTAssertEqual(t.series(.questionsPerHour, .all)!.scale.lower, 0)
+        XCTAssertEqual(t.series(.questionsPerHour, .all)!.scale.upper, 8)
+        XCTAssertEqual(t.series(.wordsPerMinute, .all)!.scale.lower, 140)
+        XCTAssertEqual(t.series(.wordsPerMinute, .all)!.scale.upper, 180)
     }
 
     func testOneFarMeetingDoesNotFlattenTheRest() {
         var facts = (0..<40).map { i -> MeetingFacts in meeting("m\(i)", day: Double(i * 2), questions: Double(3 + i % 4)) }
         facts.append(meeting("burst", day: 50, questions: 60))
-        let s = trends(facts).series(.questionsPerHour, .all)
+        let s = trends(facts).series(.questionsPerHour, .all)!
         XCTAssertLessThan(s.scale.upper, 20, "the chart draws the far meeting at its edge")
         XCTAssertEqual(s.points.count, 41, "and the meeting is still a point")
     }

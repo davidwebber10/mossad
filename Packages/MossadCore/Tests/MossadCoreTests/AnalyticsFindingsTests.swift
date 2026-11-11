@@ -139,25 +139,17 @@ final class AnalyticsFindingsTests: XCTestCase {
         XCTAssertEqual(AnalyticsFindings.people(r), "Sam Park is 57% of your call time")
     }
 
-    func testCommunicationComparesGroupsAndCuttingIn() {
+    func testCommunicationSaysTheLevelAndLeavesAChangeToTheCharts() {
+        // The charts under the sentence say whether a number moved, by the trend's rules; the sentence over them
+        // never says a change by a looser rule.
         var c = AnalyticsReport.Communication()
         c.groupShare = 0.23
         c.interruptionsMadePerHour = 6.1
         c.interruptionsReceivedPerHour = 4.2
-        var before = AnalyticsReport.Communication()
-        before.groupShare = 0.3
-        XCTAssertEqual(AnalyticsFindings.communication(c, talkShare: 0.29, before: before, beforeDays: 30),
-                       "You talk less in groups than in the 30 days before; you cut in more than others do")
-        XCTAssertEqual(AnalyticsFindings.communication(c, talkShare: 0.29, before: nil, beforeDays: 30),
-                       "You talk 29% of the time; you cut in more than others do")
-        var close = AnalyticsReport.Communication()
-        close.groupShare = 0.25
-        XCTAssertEqual(AnalyticsFindings.communication(c, talkShare: 0.29, before: close, beforeDays: 30),
-                       "You talk 29% of the time; you cut in more than others do", "under 3 points is no change")
+        XCTAssertEqual(AnalyticsFindings.communication(c, talkShare: 0.29), "You talk 29% of the time; you cut in more than others do")
         c.interruptionsMadePerHour = 4
-        XCTAssertEqual(AnalyticsFindings.communication(c, talkShare: nil, before: nil, beforeDays: 30),
-                       "You cut in about as often as others do")
-        XCTAssertNil(AnalyticsFindings.communication(AnalyticsReport.Communication(), talkShare: nil, before: nil, beforeDays: 30))
+        XCTAssertEqual(AnalyticsFindings.communication(c, talkShare: nil), "You cut in about as often as others do")
+        XCTAssertNil(AnalyticsFindings.communication(AnalyticsReport.Communication(), talkShare: nil))
     }
 
     func testOutcomes() {

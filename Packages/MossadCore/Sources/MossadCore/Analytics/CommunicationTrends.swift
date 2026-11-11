@@ -30,6 +30,22 @@ public struct CommunicationTrends: Sendable, Equatable {
         public var date: Date
         public var value: Double
         public var meetings: Int
+        /// The piece of the line the step is in: a step left out between two steps breaks the line, so the line
+        /// does not cross a week as if it had a value there.
+        public var segment: Int = 0
+    }
+
+    /// In the chart of all meetings, one size's own line, for a number that follows the size: the line of all
+    /// sizes would move with the mix of 1:1s and groups and say something other than the sentence.
+    public struct Part: Sendable, Equatable, Identifiable {
+        public var id: Split { split }
+        public var split: Split
+        public var line: [Step]
+        public var lineDays: Int
+        /// The median of the size's meetings.
+        public var typical: Double?
+        /// See `Series.held`.
+        public var held: Bool
     }
 
     /// What is usual for the number, by the rule of the meeting baselines (`MeetingAnalytics.Usual`).
@@ -56,7 +72,8 @@ public struct CommunicationTrends: Sendable, Equatable {
         case moved(from: Double, to: Double)
         /// For a number that follows the size of the meeting, over meetings of both sizes: each size's own
         /// change. More 1:1s and fewer groups raise a talk share with no change in how the owner talks, so the
-        /// two sizes are never compared as one, as in the baselines.
+        /// two sizes are never compared as one, as in the baselines. Inside the groups, each group size and
+        /// each kind of meeting is compared with itself (`Mix`).
         case bySize(oneOnOne: Change, group: Change)
 
         /// True when the number moved, in one size at least.
@@ -81,13 +98,19 @@ public struct CommunicationTrends: Sendable, Equatable {
         public var metric: PersonMetric
         /// The period's meetings with this number, oldest first.
         public var points: [Point]
-        /// Empty with fewer than two steps.
+        /// Empty with fewer than two steps, and in the chart of all meetings when it has `parts`.
         public var line: [Step]
         /// How many days one step of the line covers.
         public var lineDays: Int
+        /// True when the line is of more than one kind of meeting, each moved to the typical level (`Mix`): it
+        /// moves when the owner changes, not when the mix of meetings does, and so does the sentence.
+        public var held: Bool
+        /// The line of each size, in place of `line`, `usual`, and `typical`, when the chart of all meetings
+        /// holds 1:1s and groups and the number follows the size.
+        public var parts: [Part]
         public var usual: Band?
         public var change: Change
-        /// The median of the points; nil without points.
+        /// The median of the points; nil without points, and nil when the chart has `parts`.
         public var typical: Double?
         /// The days of the calendar that the period covers.
         public var days: Int
@@ -101,16 +124,39 @@ public struct CommunicationTrends: Sendable, Equatable {
 
     /// One series per number of `metrics`, in that order.
     public func series(_ split: Split) -> [Series] { all[split] ?? [] }
-    public func series(_ metric: PersonMetric, _ split: Split) -> Series { series(split).first { $0.metric == metric }! }
+    /// Nil for a number that is not in `metrics`.
+    public func series(_ metric: PersonMetric, _ split: Split) -> Series? { series(split).first { $0.metric == metric } }
 
-    /// One meeting's number, with the size the meeting counts for.
+    /// One meeting's number, with the size the meeting counts for and the kind of meeting it is compared within.
     struct Row {
         var point: Point
         var size: Split?
+        /// Its kind of meeting: the group size when the number follows it, and the series or else the kind.
+        var kind: String
+        /// The same with only the group size, for a kind of meeting that is not in the two thirds compared.
+        var sizeKind: String
     }
 
-    /// A meeting of two main voices is a 1:1 and one of more is a group; one voice alone is neither.
-    static func size(_ facts: MeetingFacts) -> Split? { facts.mainVoices == 2 ? .oneOnOne : facts.mainVoices > 2 ? .group : nil }
+    /// The people of the meeting, with the owner counted when the owner said too little to be a main voice: two
+    /// others who talk while the owner listens are a group of three, not a 1:1 of the owner at 1%.
+    static func voices(_ facts: MeetingFacts) -> Int { facts.mainVoices + (facts.owner?.isMain == false ? 1 : 0) }
+
+    /// A meeting of two people is a 1:1 and one of more is a group; one voice alone is neither.
+    static func size(_ facts: MeetingFacts) -> Split? {
+        let voices = voices(facts)
+        return voices == 2 ? .oneOnOne : voices > 2 ? .group : nil
+    }
+
+    static func row(_ f: MeetingFacts, _ metric: PersonMetric) -> Row? {
+        guard let value = f.owner?.values[metric] else { return nil }
+        let size = size(f)
+        // One voice alone has no share of a talk; a cut-in needs the word times that only the Mac keeps.
+        if metric == .talkShare, size == nil { return nil }
+        if metric.isCount, metric != .questionsPerHour, !f.hasWordTimes { return nil }
+        let sizeKind = metric.followsSizeInTrend ? "\(size == nil ? "alone" : MeetingFacts.Size(voices: voices(f)).words)|" : "|"
+        let kind = sizeKind + (f.series ?? f.kind?.lowercased() ?? "")
+        return Row(point: Point(id: f.id, date: f.start, value: value, title: f.title), size: size, kind: kind, sizeKind: sizeKind)
+    }
 
     /// The days of the calendar that the period covers: 90 for "the last 90 days", which begins at the start
     /// of a day and ends now.
@@ -129,10 +175,8 @@ public struct CommunicationTrends: Sendable, Equatable {
         for split in Split.allCases {
             let meetings = sorted.filter { split == .all || Self.size($0) == split }
             all[split] = Self.metrics.map { metric in
-                let rows = meetings.compactMap { f in
-                    f.owner?.values[metric].map { Row(point: Point(id: f.id, date: f.start, value: $0, title: f.title), size: Self.size(f)) }
-                }
-                return Series(metric, rows: rows, interval: interval, days: days, calendar: calendar)
+                Series(metric, rows: meetings.compactMap { Self.row($0, metric) }, interval: interval, days: days, calendar: calendar,
+                       split: split)
             }
         }
         self.all = all
@@ -145,7 +189,7 @@ extension CommunicationTrends.Series {
     typealias T = CommunicationTrends
 
     /// `rows` is every meeting with the number, oldest first.
-    init(_ metric: PersonMetric, rows: [T.Row], interval: DateInterval, days: Int, calendar: Calendar) {
+    init(_ metric: PersonMetric, rows: [T.Row], interval: DateInterval, days: Int, calendar: Calendar, split: T.Split) {
         self.metric = metric
         self.days = days
         let inside = rows.filter { interval.contains($0.point.date) }
@@ -164,13 +208,35 @@ extension CommunicationTrends.Series {
             usual = nil
         }
 
-        (line, lineDays) = T.line(points, interval: interval, calendar: calendar)
         let ones = inside.filter { $0.size == .oneOnOne }, groups = inside.filter { $0.size == .group }
-        if metric.followsSize, !ones.isEmpty, !groups.isEmpty {
-            change = .bySize(oneOnOne: T.change(metric, ones, interval: interval, days: days), group: T.change(metric, groups, interval: interval, days: days))
+        if split == .all, metric.followsSize, !ones.isEmpty, !groups.isEmpty {
+            // 1:1s and groups sit far apart: a line, a range, or a typical meeting of the two together moves
+            // with their mix. Each size has its own line, and the sentence compares each size with itself.
+            let one = T.Mix(ones, interval: interval), group = T.Mix(groups, interval: interval)
+            parts = [(T.Split.oneOnOne, one), (.group, group)].map { size, mix in
+                let (line, width) = T.line(mix.points, interval: interval, calendar: calendar)
+                return T.Part(split: size, line: line, lineDays: width, typical: median(of: mix.points.map(\.value)), held: mix.held)
+            }
+            line = []
+            lineDays = parts[0].lineDays
+            held = false
+            usual = nil
+            typical = nil
+            change = .bySize(oneOnOne: T.change(metric, one, interval: interval, days: days), group: T.change(metric, group, interval: interval, days: days))
         } else {
-            change = T.change(metric, inside, interval: interval, days: days)
+            let mix = T.Mix(inside, interval: interval)
+            (line, lineDays) = T.line(mix.points, interval: interval, calendar: calendar)
+            held = mix.held
+            parts = []
+            change = T.change(metric, mix, interval: interval, days: days)
         }
-        scale = T.Scale(metric, values: values, usual: usual, line: line)
+        scale = T.Scale(metric, values: values, usual: usual, line: line + parts.flatMap(\.line))
     }
+}
+
+extension PersonMetric {
+    /// A number that a trend compares only within one group size: the ones that follow the size, and the
+    /// questions, which are counted per hour of the call, and the owner talks more of a 1:1's hour than of a
+    /// group's.
+    var followsSizeInTrend: Bool { followsSize || self == .questionsPerHour }
 }

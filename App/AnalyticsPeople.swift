@@ -159,7 +159,6 @@ private struct TrendBars: View {
 struct CommunicationSection: View {
     @EnvironmentObject var controller: AppController
     let report: AnalyticsReport
-    let before: AnalyticsReport?
     /// Nil while the meetings' numbers are read.
     let trends: CommunicationTrends?
     @AppStorage("analyticsTrendSplit") private var splitRaw = CommunicationTrends.Split.all.rawValue
@@ -171,17 +170,14 @@ struct CommunicationSection: View {
     }
 
     var body: some View {
-        let c = report.communication
-        // Days of the calendar, as the charts' sentences count them: "the last 90 days" is not 89.
-        let days = before.map { CommunicationTrends.days($0.interval) } ?? 0
-        let finding = AnalyticsFindings.communication(c, talkShare: report.talkShare, before: before?.communication, beforeDays: days)
+        let finding = AnalyticsFindings.communication(report.communication, talkShare: report.talkShare)
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center) {
                 if let finding { Finding(finding) }
                 Spacer(minLength: 12)
                 if let trends, !trends.splits.isEmpty {
                     FillSegmented(selection: Binding { split } set: { splitRaw = $0.rawValue }, choices: trends.splits.map { ($0, $0.title) })
-                        .help("A talk share and cut-ins follow the size of the meeting. Pick one size to read its own trend.")
+                        .help("A talk share, questions, and cut-ins follow the size of the meeting. Pick one size to read its own trend.")
                         .accessibilityLabel("Meetings in the charts")
                 }
             }
@@ -196,8 +192,13 @@ struct CommunicationSection: View {
                         .id(CommunicationTrends.title(series.metric))
                 }
             } else {
-                // The space the charts take, so the groups below do not jump when they come.
-                Color.clear.frame(height: CGFloat(CommunicationTrends.metrics.count) * (TrendPanel.chartHeight + TrendPanel.chrome + 36))
+                // The space the charts take, so the groups below do not jump when they come, with a mark that
+                // says they are on the way: the first load after a launch reads every meeting.
+                ProgressView().controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(.top, 40)
+                    .frame(height: CGFloat(CommunicationTrends.metrics.count) * (TrendPanel.chartHeight + TrendPanel.chrome + 36), alignment: .top)
+                    .accessibilityLabel("Loading the charts")
             }
         }
     }

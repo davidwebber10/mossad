@@ -152,7 +152,7 @@ private struct AnalyticsPage: View {
                 AnalyticsGroup("Your week") { YourWeekSection(report: report) }
                 AnalyticsGroup("What you meet about") { TopicsSection(report: report) }
                 AnalyticsGroup("Who you meet with") { PeopleSection(report: report) }
-                AnalyticsGroup("How you communicate") { CommunicationSection(report: report, before: before, trends: trends) }
+                AnalyticsGroup("How you communicate") { CommunicationSection(report: report, trends: trends) }
                 AnalyticsGroup("Outcomes") { OutcomesSection(report: report) }
                 AnalyticsGroup("Costs") { CostsSection(report: report) }
             }
