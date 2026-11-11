@@ -65,7 +65,7 @@ public struct SpeakerIdentifier: Sendable {
                                      quality: result.details[key]?.quality, origin: origin)
         }
 
-        // Without an enrolled owner, the speaker who talks most on the mic is David.
+        // Without an enrolled owner, the speaker who talks most on the mic is the owner.
         if library.owner == nil {
             let meKeys = keys.filter { $0.hasPrefix("me:") }
             // The fingerprint uses all of the speaker's audio, so most of it must be clean too.

@@ -18,7 +18,7 @@ extension PipelineTests {
         XCTAssertEqual(r.speakerSamples?["them:B"]?.seconds, 7)
         XCTAssertNotNil(r.speakerSamples?["me:A"]?.quality)
         let owner = try XCTUnwrap(stores.people.owner)
-        XCTAssertEqual(owner.displayName, "David Webber")
+        XCTAssertEqual(library.owner?.name, owner.displayName, "the owner's profile and the owner are one")
         let sample = try XCTUnwrap(stores.samples.samples(of: owner.id).first)
         XCTAssertEqual(sample.callID, id)
         XCTAssertEqual(sample.speakerKey, "me:A")
@@ -79,6 +79,24 @@ extension PipelineTests {
         XCTAssertEqual(stores.samples.samples.count, before)
         for profile in library.profiles { XCTAssertEqual(profile.embeddings.count, 1, profile.name) }
         XCTAssertEqual(Set(stores.samples.samples.compactMap(\.callID)), [id])
+    }
+
+    /// "Your name" in Settings is new, and the owner's voice profile still has the old name. The owner's voice is
+    /// also on the call audio (a second device in the room). The mic lines are the owner's, not an echo of a guest.
+    func testTheOwnersMicLinesStayWhenTheProfileHasTheOwnersOldName() async throws {
+        try library.add([1, 0, 0, 0], to: "Avery Webb", isOwner: true)
+        let id = "20261020-143000", dir = paths.callDirectory(id)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 30, [(0, 10, 200)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 30, [(11, 20, 200)])
+        try CallRecord(id: id, platform: .meet, bundleID: "com.google.Chrome", start: start, end: start.addingTimeInterval(1800), status: .recorded).save(to: dir)
+        transcriber.result = [.me: [Utterance(track: .me, speakerLabel: "A", start: 0, end: 10, text: "Where is the shipment?")],
+                              .them: [Utterance(track: .them, speakerLabel: "A", start: 11, end: 20, text: "It leaves Friday.")]]
+        // The pipeline of these tests has another owner name than the profile.
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.speakerNames["me:A"], "Avery Webb")
+        XCTAssertTrue(r.utterances.contains { $0.track == .me }, "the owner's own lines are not dropped as an echo")
     }
 
     func testADeletedMeetingKeepsItsVoiceSamples() async throws {
