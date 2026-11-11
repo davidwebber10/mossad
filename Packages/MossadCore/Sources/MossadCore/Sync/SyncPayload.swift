@@ -50,6 +50,7 @@ public struct SyncPayload: Sendable {
         var slim = r
         // Voice fingerprints, word timings, and the per-track copies are large and only matter on the Mac.
         slim.speakerEmbeddings = [:]
+        slim.speakerSamples = nil
         slim.meUtterances = nil
         slim.themUtterances = nil
         slim.utterances = r.utterances.map { var u = $0; u.words = nil; return u }

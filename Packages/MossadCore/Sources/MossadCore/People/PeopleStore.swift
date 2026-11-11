@@ -1,0 +1,301 @@
+import Foundation
+
+/// One line of `people-log.jsonl`: what changed on a person, so a later build can show the history and undo.
+/// The log is evidence, not the store.
+public struct PeopleLogEntry: Codable, Equatable, Sendable {
+    public var id = UUID()
+    public var at: Date
+    /// "create", "rename", "email", "merge", "delete", "ownerName", or "migrate".
+    public var kind: String
+    /// "owner", "migration", or "voices" for a change that followed the voice library.
+    public var actor: String
+    /// The person's id.
+    public var subject: String
+    /// The other person of a merge.
+    public var other: String?
+    public var before: String?
+    public var after: String?
+
+    public init(at: Date, kind: String, actor: String, subject: PersonID, other: PersonID? = nil, before: String? = nil, after: String? = nil) {
+        self.at = at
+        self.kind = kind
+        self.actor = actor
+        self.subject = subject.rawValue
+        self.other = other?.rawValue
+        self.before = before
+        self.after = after
+    }
+}
+
+/// The store was written by a newer build. This build reads it and does not save.
+public struct NewerPeopleFile: Error, CustomStringConvertible {
+    public let version: Int
+    public var description: String { "people.json is from a newer Mossad (version \(version)); this build does not change it" }
+}
+
+/// The people, in `~/Mossad/People/people.json`. One whole file for each save. Only the main Mac app writes it.
+///
+/// In this phase the voice library (`voices.json`) is still what the app reads. This store follows it: each
+/// person has an id that stays through a rename, and keeps each written form and address.
+public final class PeopleStore: @unchecked Sendable {
+    public static let fileName = "people.json"
+    public static let logName = "people-log.jsonl"
+    public static let currentVersion = 1
+
+    private struct File: Codable {
+        var version: Int
+        var people: [Person]
+
+        init(version: Int, people: [Person]) {
+            self.version = version
+            self.people = people
+        }
+
+        enum CodingKeys: String, CodingKey { case version, people }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+            people = try c.decodeIfPresent([Person].self, forKey: .people) ?? []
+        }
+    }
+
+    private struct VersionOnly: Decodable { var version: Int? }
+
+    private let url: URL
+    private let logURL: URL
+    private let lock = NSLock()
+    private var storage: [Person]
+    private var onDisk: Bool
+    private let now: @Sendable () -> Date
+
+    /// Set when `people.json` was there and could not be read; a damaged file is moved aside first.
+    public let loadError: Error?
+    /// True for a file from a newer build: it is read, and never saved.
+    public let isReadOnly: Bool
+    private let newerVersion: Int?
+
+    public init(directory: URL, now: @escaping @Sendable () -> Date = Date.init) {
+        url = directory.appendingPathComponent(Self.fileName)
+        logURL = directory.appendingPathComponent(Self.logName)
+        self.now = now
+        onDisk = FileManager.default.fileExists(atPath: url.path)
+        // Newer is not unreadable: a file with a higher version is never moved aside and never replaced.
+        if let data = try? Data(contentsOf: url), let v = (try? JSONDecoder().decode(VersionOnly.self, from: data))?.version, v > Self.currentVersion {
+            isReadOnly = true
+            newerVersion = v
+            do {
+                storage = try JSONDecoder.callRecord.decode(File.self, from: data).people
+                loadError = nil
+            } catch {
+                storage = []
+                loadError = error
+            }
+            return
+        }
+        isReadOnly = false
+        newerVersion = nil
+        do {
+            storage = try StoredFile.load(File.self, from: url, decoder: .callRecord, recovery: .local)?.people ?? []
+            loadError = nil
+        } catch {
+            // Unreadable is not empty: a read error keeps the file, and saves are refused until a restart reads it.
+            storage = []
+            loadError = error
+            onDisk = FileManager.default.fileExists(atPath: url.path)
+        }
+    }
+
+    // MARK: Reading
+
+    public var people: [Person] { lock.withLock { storage } }
+    /// Whether `people.json` is on disk: false before the first save.
+    public var exists: Bool { lock.withLock { onDisk } }
+    public var owner: Person? { people.first { $0.isOwner && $0.isLive } }
+    public func person(_ id: PersonID) -> Person? { people.first { $0.id == id } }
+    public var resolver: PersonResolver { PersonResolver(people: people) }
+
+    /// Each name the owner has or had, the current one last.
+    public var ownerNames: [String] { owner?.forms.map(\.text) ?? [] }
+
+    /// The person an id stands for now: a merged record points to the one that took it in.
+    public func canonical(_ id: PersonID) -> PersonID {
+        let all = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var current = id
+        var seen: Set<PersonID> = [id]
+        while let next = all[current]?.mergedInto {
+            // A loop in the file must not hang the app.
+            guard seen.insert(next).inserted else { return id }
+            current = next
+        }
+        return current
+    }
+
+    /// The person of a profile in the voice library. The owner's profile is the owner, under any name; another
+    /// profile is the person with exactly that display name.
+    public func id(forVoiceName name: String, isOwner: Bool = false) -> PersonID? {
+        lock.withLock { Self.id(forVoiceName: name, isOwner: isOwner, in: storage) }
+    }
+
+    static func id(forVoiceName name: String, isOwner: Bool, in people: [Person]) -> PersonID? {
+        if isOwner, let owner = people.first(where: { $0.isOwner && $0.isLive }) { return owner.id }
+        return people.first { $0.isLive && $0.displayName == name }?.id
+    }
+
+    // MARK: Changes
+
+    /// Changes the people and saves. `body` returns the log lines of what it did; none means nothing changed, and
+    /// then nothing is written.
+    private func change(_ body: (inout [Person], Date) throws -> [PeopleLogEntry]) throws {
+        try lock.withLock {
+            var copy = storage
+            let entries = try body(&copy, now())
+            guard !entries.isEmpty || copy != storage else { return }
+            try save(copy)
+            storage = copy
+            append(entries)
+        }
+    }
+
+    private func save(_ people: [Person]) throws {
+        if let newerVersion { throw NewerPeopleFile(version: newerVersion) }
+        // A file that is still there but could not be read must not be replaced by what this copy knows.
+        if let loadError, (loadError as? UnreadableFile)?.kept == nil { throw loadError }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(File(version: Self.currentVersion, people: people)).write(to: url, options: .atomic)
+        onDisk = true
+    }
+
+    private func append(_ entries: [PeopleLogEntry]) {
+        guard !entries.isEmpty else { return }
+        do {
+            var text = Data()
+            for e in entries {
+                text.append(try JSONEncoder.callRecord.encode(e))
+                text.append(Data("\n".utf8))
+            }
+            if let handle = try? FileHandle(forWritingTo: logURL) {
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: text)
+            } else {
+                try text.write(to: logURL, options: .atomic)
+            }
+        } catch {
+            Log.error("Could not write the people log: \(error)")
+        }
+    }
+
+    /// The person of a voice profile, made when there is none.
+    @discardableResult
+    public func ensure(voiceName name: String, isOwner: Bool, origin: SourceKind) throws -> PersonID {
+        var id: PersonID?
+        try change { people, date in
+            if let known = Self.id(forVoiceName: name, isOwner: isOwner, in: people) {
+                id = known
+                return []
+            }
+            let person = Person(displayName: name, isOwner: isOwner, origin: origin, at: date)
+            people.append(person)
+            id = person.id
+            return [PeopleLogEntry(at: date, kind: "create", actor: "voices", subject: person.id, after: name)]
+        }
+        guard let id else { throw CocoaError(.fileWriteUnknown) }
+        return id
+    }
+
+    public func rename(_ id: PersonID, to new: String, actor: String = "owner") throws {
+        try change { people, date in
+            guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }) else { return [] }
+            let old = people[i].displayName
+            people[i].rename(to: new, source: .owner, at: date)
+            guard people[i].displayName != old else { return [] }
+            return [PeopleLogEntry(at: date, kind: "rename", actor: actor, subject: id, before: old, after: people[i].displayName)]
+        }
+    }
+
+    /// One verified address, as the People page keeps it today: a new one replaces the old one, and a blank one
+    /// clears it.
+    public func setEmail(_ email: String?, for id: PersonID) throws {
+        try change { people, date in
+            guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }) else { return [] }
+            let address = email.map(EmailIdentity.normalized).flatMap { $0.contains("@") ? $0 : nil }
+            let old = people[i].email
+            guard address != old else { return [] }
+            people[i].emails.removeAll { $0.state == .verified }
+            if let address {
+                people[i].emails.removeAll { $0.address == address }
+                people[i].emails.insert(EmailIdentity(address: address, state: .verified, source: .owner, at: date), at: 0)
+            }
+            people[i].updated = date
+            return [PeopleLogEntry(at: date, kind: "email", actor: "owner", subject: id, before: old, after: address)]
+        }
+    }
+
+    /// Joins `absorbed` into `survivor`. The absorbed record stays as a redirect, so its id continues to resolve;
+    /// the survivor gets its forms and its addresses.
+    public func merge(_ absorbed: PersonID, into survivor: PersonID) throws {
+        try change { people, date in
+            guard absorbed != survivor, let a = people.firstIndex(where: { $0.id == absorbed && $0.isLive }),
+                  let s = people.firstIndex(where: { $0.id == survivor && $0.isLive }) else { return [] }
+            let gone = people[a]
+            for form in gone.forms {
+                people[s].addForm(form.text, kind: form.kind == .display ? .alias : form.kind, source: form.source, confirmed: form.confirmed, at: date)
+            }
+            for email in gone.emails where !people[s].emails.contains(where: { $0.address == email.address }) { people[s].emails.append(email) }
+            for identity in gone.identities where !people[s].identities.contains(where: { $0.isSame(identity) }) { people[s].identities.append(identity) }
+            people[s].isOwner = people[s].isOwner || gone.isOwner
+            people[s].mergedFrom.append(absorbed)
+            people[s].updated = date
+            people[a].mergedInto = survivor
+            people[a].isOwner = false
+            people[a].updated = date
+            let whole = (try? JSONEncoder.callRecord.encode(gone)).map { String(decoding: $0, as: UTF8.self) }
+            // The whole absorbed record, so the merge can be undone.
+            return [PeopleLogEntry(at: date, kind: "merge", actor: "owner", subject: survivor, other: absorbed, before: whole)]
+        }
+    }
+
+    /// Leaves a marker with no personal data: the id and the date.
+    public func delete(_ id: PersonID) throws {
+        try change { people, date in
+            guard let i = people.firstIndex(where: { $0.id == id && $0.deleted == nil }) else { return [] }
+            var marker = Person(id: id, displayName: "", origin: people[i].origin, at: people[i].created)
+            marker.forms = []
+            marker.name = PersonName()
+            marker.updated = date
+            marker.deleted = date
+            people[i] = marker
+            return [PeopleLogEntry(at: date, kind: "delete", actor: "owner", subject: id)]
+        }
+    }
+
+    /// The name in Settings is the owner's display name. A new one renames the owner's record, and the old name
+    /// stays as a form, so the owner's lines in old meetings are still the owner's.
+    public func setOwnerName(_ name: String) throws {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        try change { people, date in
+            guard let i = people.firstIndex(where: { $0.isOwner && $0.isLive }) else {
+                let person = Person(displayName: name, isOwner: true, origin: .owner, at: date)
+                people.append(person)
+                return [PeopleLogEntry(at: date, kind: "create", actor: "owner", subject: person.id, after: name)]
+            }
+            let old = people[i].displayName
+            guard old != name else { return [] }
+            people[i].rename(to: name, source: .owner, at: date)
+            return [PeopleLogEntry(at: date, kind: "ownerName", actor: "owner", subject: people[i].id, before: old, after: name)]
+        }
+    }
+
+    /// Replaces the whole list: the migration's write.
+    public func replaceAll(_ people: [Person], log entries: [PeopleLogEntry] = []) throws {
+        try change { current, _ in
+            current = people
+            return entries
+        }
+    }
+}

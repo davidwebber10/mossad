@@ -33,6 +33,14 @@ public final class VoiceLibrary: @unchecked Sendable {
         }
     }
 
+    /// The people and the samples that follow this library, once the app has them. Without it the library works
+    /// as before, on `voices.json` alone.
+    public var identity: VoiceIdentity? {
+        get { lock.withLock { attached } }
+        set { lock.withLock { attached = newValue } }
+    }
+    private var attached: VoiceIdentity?
+
     public var profiles: [VoiceProfile] { lock.withLock { storage } }
     public var owner: VoiceProfile? { profiles.first { $0.isOwner } }
 
@@ -46,21 +54,46 @@ public final class VoiceLibrary: @unchecked Sendable {
         return best
     }
 
-    public func add(_ embedding: [Float], to name: String, isOwner: Bool = false) throws {
+    /// `source` says which call and speaker the sample came from. With it, a sample learned again from the same
+    /// call replaces the one before, and the sample can be taken back when the owner corrects that speaker.
+    public func add(_ embedding: [Float], to name: String, isOwner: Bool = false, source: VoiceSampleSource? = nil) throws {
         try lock.withLock {
-            if let i = storage.firstIndex(where: { $0.name == name }) {
+            let i: Int
+            if let known = storage.firstIndex(where: { $0.name == name }) {
+                i = known
                 // The same call identified again ("Transcribe again") gives the same sample; one copy is enough.
                 if storage[i].embeddings.contains(embedding) {
                     if isOwner, !storage[i].isOwner { storage[i].isOwner = true; try save() }
+                    if let source { attached?.sync(storage[i], new: (embedding, source)) }
                     return
+                }
+                // A new transcript gives a fingerprint that is a little different: it replaces that call's old one.
+                if let attached, let source {
+                    let old = attached.replaced(by: embedding, in: storage[i], source: source)
+                    storage[i].embeddings.removeAll { old.contains($0) }
                 }
                 storage[i].embeddings.append(embedding)
                 storage[i].embeddings = Array(storage[i].embeddings.suffix(Self.maxEmbeddings))
                 if isOwner { storage[i].isOwner = true }
             } else {
+                i = storage.count
                 storage.append(VoiceProfile(name: name, isOwner: isOwner, embeddings: [embedding]))
             }
             try save()
+            attached?.sync(storage[i], new: (embedding, source ?? VoiceSampleSource(origin: .migrated)))
+        }
+    }
+
+    /// Takes back what was learned from one speaker of one call, when the owner says that speaker is someone
+    /// else. Needs the samples' own record of where they came from; without it nothing changes.
+    public func forget(callID: String, speakerKey: String, from name: String) throws {
+        try lock.withLock {
+            guard let attached, let i = storage.firstIndex(where: { $0.name == name }) else { return }
+            let gone = attached.vectors(of: storage[i], callID: callID, speakerKey: speakerKey)
+            guard storage[i].embeddings.contains(where: { gone.contains($0) }) else { return }
+            storage[i].embeddings.removeAll { gone.contains($0) }
+            try save()
+            attached.sync(storage[i])
         }
     }
 
@@ -70,14 +103,18 @@ public final class VoiceLibrary: @unchecked Sendable {
         let trimmed = email?.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = trimmed?.isEmpty == false ? trimmed : nil
         try lock.withLock {
-            if let i = storage.firstIndex(where: { $0.name == name }) {
+            let i: Int
+            if let known = storage.firstIndex(where: { $0.name == name }) {
+                i = known
                 storage[i].email = value
             } else if let value {
+                i = storage.count
                 storage.append(VoiceProfile(name: name, isOwner: false, embeddings: [], email: value))
             } else {
                 return
             }
             try save()
+            attached?.emailChanged(storage[i])
         }
     }
 
@@ -91,14 +128,19 @@ public final class VoiceLibrary: @unchecked Sendable {
         try lock.withLock {
             guard let i = storage.firstIndex(where: { $0.name == from }) else { return }
             if let j = storage.firstIndex(where: { $0.name == to }), j != i {
+                let wasOwner = storage[i].isOwner
                 storage[j].embeddings = Array((storage[j].embeddings + storage[i].embeddings).suffix(Self.maxEmbeddings))
                 storage[j].isOwner = storage[j].isOwner || storage[i].isOwner
                 storage[j].email = storage[j].email ?? storage[i].email
+                let joined = storage[j]
                 storage.remove(at: i)
+                try save()
+                attached?.merged(from, wasOwner: wasOwner, into: joined)
             } else {
                 storage[i].name = to
+                try save()
+                if from != to { attached?.renamed(from: from, to: storage[i]) }
             }
-            try save()
         }
     }
 
@@ -111,13 +153,16 @@ public final class VoiceLibrary: @unchecked Sendable {
         try lock.withLock {
             storage = []
             try save()
+            attached?.deletedAll()
         }
     }
 
     public func delete(_ name: String) throws {
         try lock.withLock {
+            let gone = storage.filter { $0.name == name }
             storage.removeAll { $0.name == name }
             try save()
+            for profile in gone { attached?.deleted(profile) }
         }
     }
 

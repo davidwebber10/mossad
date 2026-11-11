@@ -291,6 +291,7 @@ public actor Pipeline {
         r.speakerNames = [:]
         r.unknownSpeakers = []
         r.speakerEmbeddings = [:]
+        r.speakerSamples = nil
         r.status = .recorded
         r.failedStep = nil
         r.failureReason = nil
@@ -616,15 +617,17 @@ public actor Pipeline {
             for u in r.utterances where u.speakerKey != owner && !keys.contains(u.speakerKey) { keys.append(u.speakerKey) }
             r.unknownSpeakers = keys
             r.speakerEmbeddings = [:]
+            r.speakerSamples = nil
             r.status = .identified
             return
         }
         await waitForQuiet(r.id)
         let result = try await identifier.identify(utterances: r.utterances, meURL: dir.appendingPathComponent(Track.me.fileName),
-                                                   themURL: dir.appendingPathComponent(Track.them.fileName))
+                                                   themURL: dir.appendingPathComponent(Track.them.fileName), call: (r.id, r.start))
         r.speakerNames = result.names
         r.unknownSpeakers = result.unknown
         r.speakerEmbeddings = result.embeddings
+        r.speakerSamples = result.details.isEmpty ? nil : result.details
         dropNamedEcho(&r)
         r.status = .identified
     }
@@ -640,6 +643,7 @@ public actor Pipeline {
         for key in echo {
             r.speakerNames[key] = nil
             r.speakerEmbeddings[key] = nil
+            r.speakerSamples?[key] = nil
         }
         r.unknownSpeakers.removeAll { echo.contains($0) }
         Log.info("Dropped \(echo.count) mic voices that are people on the call audio")
@@ -755,8 +759,15 @@ public actor Pipeline {
             let name = library.existingName(name: typed, email: emails[key]) ?? typed
             if let old = before[key], old != name, current.speakerNames[key] == nil { renamed[old] = name }
             chosen[key] = name
+            // "That was not Sam": what this speaker of this call taught Sam's profile is taken back.
+            if let old = current.speakerNames[key], old != name {
+                do { try library.forget(callID: callID, speakerKey: key, from: old) } catch { Log.error("Taking the voice back from \(old) failed: \(error)") }
+            }
             if let e = current.speakerEmbeddings[key] {
-                do { try library.add(e, to: name) } catch { Log.error("Saving voice for \(name) failed: \(error)") }
+                let detail = current.speakerSamples?[key]
+                let source = VoiceSampleSource(callID: callID, speakerKey: key, recorded: current.start, seconds: detail?.seconds,
+                                               quality: detail?.quality, origin: .ownerNamed)
+                do { try library.add(e, to: name, source: source) } catch { Log.error("Saving voice for \(name) failed: \(error)") }
             }
         }
         for (key, email) in emails {
