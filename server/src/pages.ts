@@ -172,7 +172,7 @@ body{font-size:1.125rem}
 :root{--paper:#fff;--ink:#000;--soft:#333;--faint:#555;--rule:#999;--hair:#ccc;--mark:transparent}
 body{font-size:10.5pt;line-height:1.5}
 .doc{max-width:none;padding:0;left:0}
-.row{display:grid;grid-template-columns:7rem minmax(0,1fr);column-gap:1.5rem}
+.row{display:grid;grid-template-columns:8.5rem minmax(0,1fr);column-gap:1.5rem}
 .row > .side{grid-column:1;grid-row:1}
 .row > .main{grid-column:2;grid-row:1;min-width:0}
 .head .meta{display:block;margin-top:0;padding-top:.45rem}

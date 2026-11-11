@@ -58,6 +58,7 @@ extension AppController {
                 if hello.authorized {
                     if let mcp = hello.mcp?.absoluteString, mcp != serverMCP { serverMCP = mcp }
                     if hello.chat != serverHasChat { serverHasChat = hello.chat }
+                    if hello.shares != serverShares { serverShares = hello.shares }
                     let limit = Double(hello.recordingLimit ?? 0)
                     if limit != serverRecordingLimit { serverRecordingLimit = limit }
                     if let id = hello.id, id != serverID { serverID = id }

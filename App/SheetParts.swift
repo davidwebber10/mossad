@@ -7,33 +7,61 @@ struct SheetHeader: View {
     let icon: Icon
     let title: String
     var subtitle: String?
+    /// With this, the header has a close control in its corner, and Escape and Command-period close the sheet.
+    var close: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 12) {
-            IconImage(icon, size: 16)
-                .foregroundStyle(Palette.accent)
-                .frame(width: 36, height: 36)
-                .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .tracking(-0.15)
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Palette.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: 12) {
+            HStack(spacing: 12) {
+                IconImage(icon, size: 16)
+                    .foregroundStyle(Palette.accent)
+                    .frame(width: 36, height: 36)
+                    .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .tracking(-0.15)
+                        .foregroundStyle(Palette.ink)
+                        .lineLimit(1)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
+            if let close { SheetCloseButton(action: close) }
         }
-        .padding(EdgeInsets(top: 20, leading: 22, bottom: 16, trailing: 22))
+        .padding(EdgeInsets(top: 20, leading: 22, bottom: 16, trailing: close == nil ? 22 : 16))
         .hairline(.bottom)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The close control in a sheet's corner: a small X on the fill. Escape presses it, and so does Command-period.
+struct SheetCloseButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9.5, weight: .bold))
+                .foregroundStyle(hovering ? Palette.ink : Palette.secondary)
+                .frame(width: 22, height: 22)
+                .background(hovering ? Palette.selection : Palette.fill, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .keyboardShortcut(.cancelAction)
+        .background { Button("Close", action: action).keyboardShortcut(".", modifiers: .command).opacity(0).accessibilityHidden(true) }
+        .accessibilityLabel("Close")
+        .help("Close (Esc)")
     }
 }
 

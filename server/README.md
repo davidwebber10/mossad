@@ -11,7 +11,7 @@ Nobody else can use your server. Every call needs your secret, and only your dev
 
 ## What it costs
 
-Cloudflare's free plan covers one person's use: Workers, D1, R2 (10 GB free), and KV. With the recording backup on, a recording takes about 14 MB an hour, so the free 10 GB hold about 700 hours. Share links that were made with the AI chat (before Mossad 2.17) use your Anthropic key, so you pay for those questions. Each link allows 60 questions a day.
+Cloudflare's free plan covers one person's use: Workers, D1, R2 (10 GB free), and KV. With the recording backup on, a recording takes about 14 MB an hour, so the free 10 GB hold about 700 hours. The server calls no paid service. (Share links that were made with the AI chat, before Mossad 2.17, are the one exception: see "The chat of older links" below.)
 
 ## Set it up
 
@@ -34,20 +34,17 @@ You need a Cloudflare account with a domain on it, and Node.js.
 
    For the MCP host, add a proxied DNS record in Cloudflare (an `AAAA` record to `100::` is enough), and the three routes in the example file.
 
-3. Make the tables. The files in `migrations/` run in order, and Wrangler remembers which ones ran:
+3. Make the tables. The files in `migrations/` run in order, and Wrangler remembers in the database which ones ran, so the same command is also the update step later:
 
    ```sh
    npx wrangler d1 migrations apply mossad --remote
    ```
 
-4. Set the secrets. Mossad > Settings > Storage & Sync makes the owner secret for you and copies this command:
+4. Set the secret. Mossad > Settings > Storage & Sync makes the owner secret for you and copies this command:
 
    ```sh
    npx wrangler secret put OWNER_SECRET
-   npx wrangler secret put ANTHROPIC_API_KEY   # optional: only for share links that were made with the AI chat
    ```
-
-   Use a separate Anthropic key with a spending limit for the share chat. New share links have no chat: the page has a "Copy for your AI" button in its place.
 
 5. Deploy:
 
@@ -117,7 +114,7 @@ A link with a wrong signature is counted apart from wrong secrets (20 an hour fo
 
 ## Update your server
 
-After you update Mossad, update the Worker too. It keeps your data and your secrets. Update the database first: the new columns do not disturb the Worker that runs now, and the new Worker needs them for PINs and views.
+After you update Mossad, update the Worker too. It keeps your data and your secrets. Mossad tells you when this is due: the Shares page and Settings > Storage & Sync show "Update your server" when the server is older than the app.
 
 ```sh
 git pull
@@ -127,7 +124,16 @@ npx wrangler d1 migrations apply mossad --remote
 npx wrangler deploy
 ```
 
-A database that was made with `schema.sql` (before Mossad 2.17) takes the same command: the first migration is that file, and it changes nothing that is already there.
+Run the two `wrangler` steps in this order. Every migration only adds tables and columns, so the Worker that runs now is not disturbed by the new database, and the new Worker finds what it needs when it starts.
+
+- **A server from before Mossad 2.17** made its tables with `schema.sql`. It takes the same command: the first migration is that file, word for word, and it changes nothing that is already there. The second one adds the columns and tables for PINs and views. A new install and an old one end with the same tables.
+- **If you deploy first**, nothing breaks: share links open as before and views count the old way. Mossad then shows "Finish the update of your server" until you run the migration step.
+- **Your `wrangler.jsonc`** needs no change for this update: no binding, variable, or secret is new. Wrangler finds `migrations/` next to the file. (`wrangler.example.jsonc` now names it with `migrations_dir`, which you can copy.)
+- Wrangler lists the migrations that are due and asks before it applies them.
+
+### The chat of older links
+
+Mossad 2.16 and earlier could put an AI chat on a share page. New links have no chat: the page has a "Copy for your AI" button, which costs nothing. A link that was made with the chat keeps it as long as the Worker has `ANTHROPIC_API_KEY` (`npx wrangler secret put ANTHROPIC_API_KEY`, a separate key with a spending limit). Without the secret, the chat on such a link says that it is not set up. Each link allows 60 questions a day.
 
 ## Develop
 

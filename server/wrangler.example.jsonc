@@ -19,7 +19,8 @@
     "REPO_URL": "https://github.com/davidwebber10/mossad"
     // Optional: "RECORDING_MAX_MB": "190" on a Cloudflare plan with a request limit above 100 MB. Without it, 95.
   },
-  "d1_databases": [{ "binding": "DB", "database_name": "mossad", "database_id": "<from wrangler d1 create mossad>" }],
+  // The tables come from the numbered files in migrations/: `npx wrangler d1 migrations apply mossad --remote`.
+  "d1_databases": [{ "binding": "DB", "database_name": "mossad", "database_id": "<from wrangler d1 create mossad>", "migrations_dir": "migrations" }],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "mossad-files" }],
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "<from wrangler kv namespace create OAUTH_KV>" }]
 }

@@ -16,7 +16,8 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", commitments = "Tasks", chat = "Chat", people = "People", analytics = "Analytics", settings = "Settings", log = "Log"
+        case meetings = "Meetings", commitments = "Tasks", chat = "Chat", people = "People", analytics = "Analytics", shares = "Shares",
+             settings = "Settings", log = "Log"
         var id: String { rawValue }
         var icon: Icon {
             switch self {
@@ -25,6 +26,7 @@ final class AppController: ObservableObject {
             case .chat: .sparkle
             case .people: .people
             case .analytics: .analytics
+            case .shares: .link
             case .settings: .settings
             case .log: .log
             }
@@ -310,6 +312,10 @@ final class AppController: ObservableObject {
     @AppStorage("serverMCP") var serverMCP = ""
     /// Whether the server has an AI key for the chat on share pages.
     @AppStorage("serverHasChat") var serverHasChat = false
+    /// What the server's share calls can do, as it reported: 2 has the PIN, the views, and the change of an expiry.
+    @AppStorage("serverShares") var serverShares = 0
+    /// A link that its owner just stopped and may still bring back; the Shares page shows Undo meanwhile.
+    @Published var stoppedShare: MeetingLink?
     @AppStorage("shareAIKey") var shareAIKey = true
     var syncRunning = false
     /// The server learns the owner's name and time zone once a launch, for the MCP's answers and dates.

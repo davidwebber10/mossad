@@ -10,3 +10,5 @@ export interface Database {
 }
 /** SQLite in memory with the first `migrations` migration files applied; all of them by default. */
 export function openDatabase(migrations?: number): Database;
+/** The migration files in the order Wrangler applies them. */
+export function migrationFiles(): { name: string; sql: string }[];

@@ -18,6 +18,7 @@ struct MainWindow: View {
                 case .chat: ChatView()
                 case .people: PeopleView()
                 case .analytics: AnalyticsView()
+                case .shares: SharesView()
                 case .settings: SettingsView()
                 case .log: LogView()
                 }

@@ -2,9 +2,15 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
+const dir = new URL('../migrations/', import.meta.url);
+
+/** The migration files in the order Wrangler applies them. */
+export function migrationFiles() {
+  return readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().map((name) => ({ name, sql: readFileSync(new URL(name, dir), 'utf8') }));
+}
+
 export function openDatabase(migrations = Infinity) {
   const db = new DatabaseSync(':memory:');
-  const dir = new URL('../migrations/', import.meta.url);
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().slice(0, migrations)) db.exec(readFileSync(new URL(file, dir), 'utf8'));
+  for (const file of migrationFiles().slice(0, migrations)) db.exec(file.sql);
   return db;
 }

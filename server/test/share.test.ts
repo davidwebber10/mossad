@@ -5,6 +5,7 @@ import { handleShareHost } from '../src/share';
 import type { Share } from '../src/types';
 import { sha256Hex } from '../src/util';
 import { cookies, fakeContext, fakeEnv } from './fakes';
+import { migrationFiles, openDatabase } from './sqlite.mjs';
 
 const host = 'https://notes.example.com';
 const auth = { Authorization: 'Bearer owner-secret' };
@@ -309,6 +310,11 @@ describe('views of a share', () => {
     expect((await row(w)).views).toBe(1);
   });
 
+  it('makes the owner\'s mark the same way the Mac does', async () => {
+    // The same numbers are in SharesTests.swift: the two sides must agree.
+    expect(await ownerMark('owner-secret', 1_900_000_000)).toBe('1900000000.9fdf58efd4b92221f7302285c0fb95c79766610af09165cf88fc57ed87ff2305');
+  });
+
   it('does not count the owner, who comes with a mark that the app signed', async () => {
     const w = world();
     await share(w);
@@ -452,6 +458,37 @@ describe('the owner API for shares', () => {
     expect(w.db.raw.prepare('SELECT count(*) AS n FROM shares').get()).toMatchObject({ n: 1 });
     expect((await visit(w, `/${token}`)).status).toBe(404);
     expect((await api(w, 'GET', `shares/${id}`)).status).toBe(404);
+  });
+});
+
+describe('the migrations', () => {
+  const tables = (db: ReturnType<typeof openDatabase>) => db.prepare(`SELECT name, sql FROM sqlite_master WHERE type IN ('table', 'index') AND sql IS NOT NULL ORDER BY name`).all();
+  const columns = (db: ReturnType<typeof openDatabase>) => (db.prepare(`SELECT name, type, "notnull", dflt_value FROM pragma_table_info('shares') ORDER BY name`).all());
+
+  it('are numbered, and only add: no file drops, renames, or rewrites what an older Worker reads', () => {
+    const files = migrationFiles();
+    expect(files.map((f) => f.name)).toEqual([...files.map((f) => f.name)].sort());
+    files.forEach((f, i) => expect(f.name.startsWith(String(i + 1).padStart(4, '0') + '_'), f.name).toBe(true));
+    for (const f of files) expect(f.sql.replace(/--.*$/gm, ''), f.name).not.toMatch(/\b(DROP|RENAME|DELETE|UPDATE)\b/i);
+  });
+
+  it('bring an install that was made with the old schema.sql to the same tables as a new install, and keep its shares', () => {
+    const files = migrationFiles();
+    const fresh = openDatabase();
+    // An old install: schema.sql is the first migration word for word, and it ran once by hand, outside the migrations.
+    const old = openDatabase(0);
+    old.exec(files[0].sql);
+    old.prepare(`INSERT INTO shares (id, title, created, expires, audio, chat, views, questions) VALUES ('abc', 'Old share', '2026-10-01T00:00:00Z', NULL, 0, 1, 7, 2)`).run();
+    for (const f of files) old.exec(f.sql);
+    expect(tables(old)).toEqual(tables(fresh));
+    expect(columns(old)).toEqual(columns(fresh));
+    expect(old.prepare('SELECT * FROM shares').get()).toEqual({ id: 'abc', title: 'Old share', created: '2026-10-01T00:00:00Z', expires: null, audio: 0, chat: 1,
+      views: 7, questions: 2, pin_hash: null, pin_set: null, viewers: 0, first_view: null, last_view: null, gone: 0 });
+  });
+
+  it('leave the first file as schema.sql was: it must stay safe to run on a database that has the tables', () => {
+    const first = migrationFiles()[0].sql;
+    for (const statement of first.replace(/--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean)) expect(statement).toMatch(/^CREATE (TABLE|INDEX) IF NOT EXISTS /);
   });
 });
 
