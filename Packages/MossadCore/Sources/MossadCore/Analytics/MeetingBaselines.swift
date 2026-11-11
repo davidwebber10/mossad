@@ -481,7 +481,8 @@ extension MeetingAnalytics.Baselines {
         }
         self.meeting = meeting
 
-        if let plannedStart = r.plannedStart, let plannedEnd = r.plannedEnd, plannedEnd > plannedStart {
+        // A notes-only meeting takes its times from the invite: it cannot say when the owner joined.
+        if !r.isNotesOnly, let plannedStart = r.plannedStart, let plannedEnd = r.plannedEnd, plannedEnd > plannedStart {
             schedule = A.Schedule(plannedStart: plannedStart, plannedEnd: plannedEnd, startDelay: r.start.timeIntervalSince(plannedStart),
                                   overrun: r.end.timeIntervalSince(plannedEnd))
         } else {

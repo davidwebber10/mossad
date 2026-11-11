@@ -275,7 +275,7 @@ struct GooglePartRows: View {
     }
 
     private func detail(_ scope: GoogleScope) -> String {
-        let pending = controller.googleConnected && controller.google.scopes.contains(scope) != controller.googleConnector.scopes.contains(scope)
+        let pending = controller.google.isConnected && controller.google.scopes.contains(scope) != controller.googleConnector.scopes.contains(scope)
         return scope.detail + (pending ? " Press Check to apply." : "")
     }
 }

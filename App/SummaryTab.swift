@@ -46,7 +46,8 @@ struct SummaryTab: View {
                         }
                     }
                 }
-                if people.speakers.contains(where: { $0.seconds > 0 }) {
+                // Gemini's notes give words, not times: the share by words is on the Analytics tab.
+                if !record.isNotesOnly, people.speakers.contains(where: { $0.seconds > 0 }) {
                     LabelColumn(label: "Talk share") { TalkShare(people: people) }
                 }
                 if !people.attendees.isEmpty {

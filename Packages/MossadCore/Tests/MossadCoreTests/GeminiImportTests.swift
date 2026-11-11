@@ -236,6 +236,7 @@ final class GeminiImportTests: XCTestCase {
         }
         XCTAssertNil(a.flow)
         XCTAssertTrue(a.floor.isEmpty)
+        XCTAssertNil(a.baselines.schedule, "the times come from the invite: no late start or overrun")
         // In the history: the size and the outcomes, nobody's numbers.
         XCTAssertTrue(a.facts.people.allSatisfy { $0.values.isEmpty })
         XCTAssertNil(a.facts.values[.wordsPerMinute])
