@@ -87,6 +87,9 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     private var refusedPage: Refusal?
     private var lastPageWalk = Date.distantPast
     private var loggedNoContent = false
+    private var restarts = StreamRestarts()
+    /// "<window> <loss>" once logged: a window that is lost the same way again says nothing new.
+    private var loggedLosses: Set<String> = []
 
     public init(platform: Platform, bundleID: String, meetingID: String?) {
         self.platform = platform
@@ -128,11 +131,12 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     /// window's frame and the page's; eight when they do not agree at first); the recorder asks each 3 s.
     public var windowSight: WindowSight? {
         guard let chosen else { return nil }
-        guard let now = Self.describe(chosen.id), stillMeeting(chosen, now), !pageMoved(chosen) else {
-            queue.async { [weak self] in self?.windowChanged(chosen.id) }
+        let now = Self.describe(chosen.id)
+        if let loss = check(chosen, now) {
+            queue.async { [weak self] in self?.windowChanged(chosen.id, loss: loss) }
             return nil
         }
-        guard now.onScreen else { return .hidden }
+        guard let now, now.onScreen else { return .hidden }
         return WindowCover.isCovered(now.frame, by: Self.framesAbove(chosen.id)) ? .covered : .visible
     }
 
@@ -244,6 +248,8 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
             return
         }
         if let old = chosen { windowChanged(old.id, searchNow: false) }
+        // A window whose streams the check ended at once waits; its refusal was logged then.
+        guard restarts.allows(best.id, at: Date()) else { return }
         // Of a browser window only the page is kept. Without the page's frame, or with two pages in the window,
         // nothing is captured; the read is tried again later, not at each search.
         var page: Page?
@@ -313,6 +319,7 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
             return
         }
         self.stream = stream
+        restarts.began(candidate.id, at: Date())
         let chosen = Chosen(id: candidate.id, owner: candidate.bundleID, kind: kind, size: window.frame.size, crop: crop, title: candidate.title, page: page)
         shared.withLock { sharedState.chosen = chosen }
         Log.info("Capturing the meeting window (\(candidate.bundleID), \(Int(window.frame.width)) x \(Int(window.frame.height)))")
@@ -330,14 +337,25 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     }
 
     /// The window is gone or shows something else: stop now, tell the recorder, and look for the meeting's window again.
-    private func windowChanged(_ id: CGWindowID, searchNow: Bool = true) {
+    /// `loss` is set when the check of a frame or a tick ended the stream.
+    private func windowChanged(_ id: CGWindowID, loss: MeetingWindow.Loss? = nil, searchNow: Bool = true) {
         guard chosen?.id == id else { return }
+        if let loss {
+            if loggedLosses.insert("\(id) \(loss)").inserted { Log.info("The meeting window is no longer captured: \(loss.reason)") }
+            switch restarts.lost(id, at: Date()) {
+            case .none: break
+            case .refused(let wait):
+                Log.info("The meeting window is not captured for \(Int(wait)) s: its capture ended at once (\(loss.reason))")
+            case .refusedForTheCall:
+                Log.info("The meeting window is not captured for the rest of the call: its capture ended at once again (\(loss.reason))")
+            }
+        }
         dropStream()
         handler?(.lost)
         if searchNow { search() }
     }
 
-    private struct Described {
+    struct Described {
         var title: String
         var onScreen: Bool
         var frame: CGRect
@@ -351,10 +369,16 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
     }
 
     /// The window as it is now, with one cheap request for this window only. Nil when it is gone.
-    private static func describe(_ id: CGWindowID) -> Described? {
-        let ids = [id as CFNumber] as CFArray
-        guard let list = CGWindowListCreateDescriptionFromArray(ids) as? [[CFString: Any]], let info = list.first else { return nil }
+    static func describe(_ id: CGWindowID) -> Described? {
+        guard let list = CGWindowListCreateDescriptionFromArray(idList([id])) as? [[CFString: Any]], let info = list.first else { return nil }
         return described(info)
+    }
+
+    /// The window server reads this list as bare window numbers, not as CFNumbers: with CFNumbers it lists no
+    /// window, and each frame's check said the window was gone.
+    static func idList(_ ids: [CGWindowID]) -> CFArray {
+        var values = ids.map { UnsafeRawPointer(bitPattern: UInt($0)) }
+        return values.withUnsafeMutableBufferPointer { CFArrayCreate(nil, $0.baseAddress, $0.count, nil) }
     }
 
     /// The frames of the normal windows in front of a window.
@@ -383,13 +407,15 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         }
     }
 
-    private func stillMeeting(_ chosen: Chosen, _ now: Described) -> Bool {
-        let window = WindowCandidate(id: chosen.id, bundleID: chosen.owner, title: now.title, width: now.frame.width,
-                                     height: now.frame.height, onScreen: now.onScreen, layer: now.layer)
+    /// Why the chosen window is no longer kept, from the window as it is `now`; nil while it still is the meeting's.
+    private func check(_ chosen: Chosen, _ now: Described?) -> MeetingWindow.Loss? {
+        let window = now.map {
+            WindowCandidate(id: chosen.id, bundleID: chosen.owner, title: $0.title, width: $0.frame.width,
+                            height: $0.frame.height, onScreen: $0.onScreen, layer: $0.layer)
+        }
         let names = shared.withLock { sharedState.teamsNames }
-        guard MeetingWindow.stillMeeting(window, platform: platform, bundleID: bundleID, meetingNames: names) else { return false }
-        // A window that changed its size, on either edge, gets a new stream, with the page's place read again.
-        return !MeetingWindow.sizeChanged(from: chosen.size, to: now.frame.size)
+        return MeetingWindow.loss(of: window, size: chosen.size, platform: platform, bundleID: bundleID, meetingNames: names,
+                                  pageMoved: { pageMoved(chosen) })
     }
 
     // MARK: Frames
@@ -401,8 +427,11 @@ public final class WindowFrameSource: NSObject, FrameSource, SCStreamOutput, SCS
         case .complete:
             // Checked for each frame: one click on another tab makes the same window show something else, and a
             // bar or a panel of the browser moves the page out of the kept part.
-            guard let now = Self.describe(chosen.id), stillMeeting(chosen, now), !pageMoved(chosen) else {
-                windowChanged(chosen.id)
+            // At most one frame each 3 s comes here, and an idle frame does not: the check is a request to the window
+            // server and, for a browser, four reads of Accessibility. It must run for each frame that may be kept:
+            // a frame of the tab the owner just chose is the owner's own data.
+            if let loss = check(chosen, Self.describe(chosen.id)) {
+                windowChanged(chosen.id, loss: loss)
                 return
             }
             guard let buffer = sampleBuffer.imageBuffer else { return }

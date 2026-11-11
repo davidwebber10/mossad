@@ -113,6 +113,32 @@ public enum MeetingWindow {
         }
     }
 
+    /// Why the window that is captured is no longer kept.
+    public enum Loss: Equatable, Sendable {
+        case gone, notMeeting, resized, pageMoved
+
+        public var reason: String {
+            switch self {
+            case .gone: "the window server no longer lists it"
+            case .notMeeting: "its title no longer shows the meeting"
+            case .resized: "its size changed"
+            case .pageMoved: "the page moved in the browser window, or its place could not be read"
+            }
+        }
+    }
+
+    /// The check for each frame and each tick: nil while the window is the meeting's as it was when its stream
+    /// began. `now` is the window as the window server lists it now (nil when it is not listed) and `size` its size
+    /// when the stream began. `pageMoved` asks Accessibility, so it is asked last and only when the rest holds.
+    public static func loss(of now: WindowCandidate?, size: CGSize, platform: Platform, bundleID: String,
+                            meetingNames: Set<String> = [], pageMoved: () -> Bool) -> Loss? {
+        guard let now else { return .gone }
+        guard stillMeeting(now, platform: platform, bundleID: bundleID, meetingNames: meetingNames) else { return .notMeeting }
+        // A window that changed its size, on either edge, gets a new stream, with the page's place read again.
+        guard !sizeChanged(from: size, to: CGSize(width: now.width, height: now.height)) else { return .resized }
+        return pageMoved() ? .pageMoved : nil
+    }
+
     /// "Zoom Meeting", "Zoom Webinar", and their forms with more words ("Zoom Meeting 40-Minutes"). Zoom's small
     /// tool windows have lower-case names ("zoom share toolbar window").
     static func zoomTitleIsMeeting(_ title: String) -> Bool {
