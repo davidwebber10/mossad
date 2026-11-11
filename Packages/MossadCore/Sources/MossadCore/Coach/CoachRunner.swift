@@ -55,7 +55,8 @@ public actor CoachRunner {
         // A profile that was set aside starts empty; reviews wait until the other device's copy is merged in.
         guard !StoredFile.awaitsMerge(paths.coach.appendingPathComponent(CoachProfile.fileName)) else { return 0 }
         let records = ProcessingQueue(paths: paths).allRecords()
-        let reviewed = Set(records.map(\.id).filter { CoachReview.load(in: paths.callDirectory($0)) != nil })
+        let reviews = records.compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (callID: r.id, date: r.start, review: $0) } }
+        let reviewed = Set(reviews.map(\.callID))
         var profile: CoachProfile
         do { profile = try CoachProfile.load(from: paths.coach) } catch {
             Log.error("The coach profile could not be read: \(error)")
@@ -63,7 +64,15 @@ public actor CoachRunner {
         }
         var ledger = RetryLedger.load(from: paths.coach)
         var done = 0
-        for r in Self.pending(records, owner: owner, since: since, reviewed: reviewed) {
+        let pending = Self.pending(records, owner: owner, since: since, reviewed: reviewed)
+        guard !pending.isEmpty else { return 0 }
+        // A memory from before the advice log starts with what the owner saw in the last 30 days, so the first
+        // review after the update does not say it once more. It is saved with the first review.
+        let seed = profile.advice.isEmpty ? AdviceRules.seed(from: reviews, now: now()) : []
+        profile.advice = seed
+        // Each written meeting as a row of history, for what is usual: read once for the run.
+        let history = MeetingFactsCache().facts(for: records, owner: owner)
+        for r in pending {
             switch ledger.state(r.id, now: now()) {
             case .gaveUp: continue
             case .waiting: return done
@@ -71,7 +80,12 @@ public actor CoachRunner {
             }
             do {
                 let current = profile, tone = measureTone(r)
-                let result = try await UsageContext.$callID.withValue(r.id) { try await coach.review(record: r, profile: current, tone: tone, people: titles(Array(Set(r.speakerNames.values)).sorted())) }
+                let measured = CoachMeasured(record: r, owner: owner, history: history, commitments: CommitmentBook.peek(in: paths.commitments)?.visible ?? [])
+                let written = try await UsageContext.$callID.withValue(r.id) {
+                    try await coach.review(record: r, profile: current, tone: tone, people: titles(Array(Set(r.speakerNames.values)).sorted()), measured: measured)
+                }
+                let result = CoachLineRules.settle(written, record: r, owner: owner, profile: current, measured: measured)
+                if result.unproven > 0 { Log.info("The coach's review of \(r.id) lost \(result.unproven) notes: their quotes are not in the owner's lines") }
                 // Deleted or merged away during the review: no review file, and nothing learned from it.
                 guard FileManager.default.fileExists(atPath: paths.callDirectory(r.id).appendingPathComponent(CallRecord.fileName).path) else {
                     Log.info("\(r.id) was removed during its review; the review is dropped")
@@ -81,7 +95,8 @@ public actor CoachRunner {
                 // Read again before saving: the owner may have added guidance while the review ran. A profile that
                 // cannot be read now stops the run; saving the older copy would write the owner's changes away.
                 var fresh = try CoachProfile.load(from: paths.coach)
-                fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start, proposal: result.proposal)
+                if fresh.advice.isEmpty { fresh.advice = seed }
+                fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start, proposal: result.proposal, advice: result.advice)
                 fresh.ask(result.questions)
                 try fresh.save(to: paths.coach)
                 profile = fresh

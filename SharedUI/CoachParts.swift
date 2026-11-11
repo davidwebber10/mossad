@@ -102,52 +102,94 @@ struct FocusPanel: View {
     }
 }
 
-/// Did well, improving, try next time.
-struct CoachLines: View {
+extension CoachLine {
+    var symbol: String {
+        switch kind {
+        case .focus: "scope"
+        case .progress: "chart.line.uptrend.xyaxis"
+        case .tryNext: "arrow.forward.circle.fill"
+        case .again: "arrow.triangle.2.circlepath"
+        case .number: "chart.bar.fill"
+        case .didWell: "hand.thumbsup.fill"
+        }
+    }
+
+    var tint: Color {
+        switch kind {
+        case .focus: outcome?.tint ?? .accentColor
+        case .progress: .teal
+        case .tryNext, .again: .orange
+        case .number: .blue
+        case .didWell: .green
+        }
+    }
+
+    /// The title, with the result for the focus: "Your focus · Hit".
+    var heading: String { outcome.map { "\(title) · \($0.label)" } ?? title }
+}
+
+/// The coach's one line for a call, or that there is nothing to say. The rest of the review is the full review.
+struct CoachLineView: View {
     let review: CoachReview
     /// Plays the call from a time, where the audio is here.
     var play: ((TimeInterval) -> Void)?
 
     var body: some View {
-        let l = review.lines
-        VStack(alignment: .leading, spacing: 14) {
-            if l.didWell == nil && l.improving == nil && l.tryNext == nil {
+        if let line = review.shownLine {
+            CoachLineRow(line: line, play: play)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(review.headline).font(.headline)
-                if review.quiet { Text("You mostly listened, or nothing stood out. Nothing to work on from this one.").font(.subheadline).foregroundStyle(.secondary) }
+                if review.saysNothing {
+                    Text(CoachLineView.nothing).font(.subheadline).foregroundStyle(.secondary)
+                } else if !review.overview.isEmpty, review.overview != review.headline {
+                    Text(review.overview).font(.subheadline).foregroundStyle(.secondary)
+                }
             }
-            if let n = l.didWell { line("Did well", "hand.thumbsup.fill", .green, n) }
-            if let n = l.improving { line("Improving", "chart.line.uptrend.xyaxis", .teal, n) }
-            if let n = l.tryNext { line("Try next time", "arrow.forward.circle.fill", .orange, n) }
         }
     }
 
-    private func line(_ title: String, _ symbol: String, _ tint: Color, _ n: CoachNote) -> some View {
+    /// A review with no line is a good review: said in one sentence, the same on each surface.
+    static let nothing = "Nothing to work on from this one."
+}
+
+/// One line: what it is, the text, its proof (the owner's words with their time, or a measured number), and the
+/// words to say.
+struct CoachLineRow: View {
+    let line: CoachLine
+    var play: ((TimeInterval) -> Void)?
+
+    var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(tint).frame(width: 18)
+            Image(systemName: line.symbol).foregroundStyle(line.tint).frame(width: 18)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title.uppercased()).font(.caption2.weight(.semibold)).kerning(0.5).foregroundStyle(tint)
-                Text(n.text)
-                if let q = n.quote {
+                Text(line.heading.uppercased()).font(.caption2.weight(.semibold)).kerning(0.5).foregroundStyle(line.tint)
+                Text(line.text).fixedSize(horizontal: false, vertical: true)
+                if line.quote != nil || line.at != nil {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        if let at = n.at {
+                        if let at = line.at {
                             if let play {
                                 Button(coachClock(at)) { play(at) }.buttonStyle(.plain).foregroundStyle(Color.accentColor)
                             } else {
                                 Text(coachClock(at)).foregroundStyle(.secondary)
                             }
                         }
-                        Text("“\(q)”").italic().foregroundStyle(.secondary)
+                        if let q = line.quote { Text("“\(q)”").italic().foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
                     }
                     .font(.caption).monospacedDigit()
                 }
-                if let say = n.say {
-                    Text("Say: “\(say)”").font(.subheadline)
+                if let number = line.number {
+                    Text(number).font(.caption).foregroundStyle(.secondary).monospacedDigit().fixedSize(horizontal: false, vertical: true)
+                }
+                if let say = line.say {
+                    Text("Say: “\(say)”").font(.subheadline).fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 10).padding(.vertical, 7)
-                        .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(line.tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             }
         }
         .textSelection(.enabled)
+        .accessibilityElement(children: .combine)
     }
 }
 

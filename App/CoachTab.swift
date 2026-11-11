@@ -2,14 +2,19 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// The coach's review of one call in the label column: its read, the talk share, what worked and what to change
-/// with times that play the moment, open questions, and the focus. The rest waits behind More from the coach.
+/// The coach's review of one call in the label column: one line with its proof, or that there is nothing to
+/// say, then the talk share, open questions, and the focus. Everything else waits behind Full review.
 struct CoachTab: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
     let people: MeetingPeople
     @ObservedObject var player: AudioPlayer
-    @State private var more = false
+    @State private var more = CoachTab.previewOpen
+
+    /// Development hook, in a preview only: `MOSSAD_COACH_FULL=1` opens the full review for a screenshot.
+    private static var previewOpen: Bool {
+        CommandLine.arguments.contains("--ui-preview") && ProcessInfo.processInfo.environment["MOSSAD_COACH_FULL"] == "1"
+    }
 
     var body: some View {
         // Read on each coach run, so a review that lands while the tab is open shows at once.
@@ -18,7 +23,7 @@ struct CoachTab: View {
             content(review)
         } else if !controller.coachEnabled {
             EmptyState(symbol: "person.wave.2", title: "The coach is off",
-                       message: "Turn on the communication coach in Settings. It reviews each call and tracks your progress over time.")
+                       message: "Turn on the communication coach in Settings. After a call it leaves one line with its proof, or nothing.")
         } else if controller.coaching || record.status != .written {
             EmptyState(symbol: "hourglass", title: "The coach is reviewing calls",
                        message: "The review shows here when it is done.")
@@ -30,44 +35,17 @@ struct CoachTab: View {
 
     private func content(_ review: CoachReview) -> some View {
         let profile = controller.shownCoachProfile
-        let metrics = CallMetrics(record: record, owner: controller.ownerName,
-                                  history: profile.history.filter { $0.callID != record.id }.compactMap(\.delivery))
-        // The stored lines only: `review.lines` stands in the first strength and improvement for an older review,
-        // which the sections below list in full already.
-        let worked = [review.didWell].compactMap { $0 }
-        let change = [review.improving, review.tryNext].compactMap { $0 }
+        let line = review.shownLine
+        let others = review.others
         let questions = profile.openQuestions.filter { $0.callID == record.id }
         return LabelColumnStack(spacing: 18) {
-            LabelColumn(label: "The coach\u{2019}s read") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(review.headline).font(.system(size: 16, weight: .medium)).lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if review.quiet, worked.isEmpty, change.isEmpty {
-                        Text("You mostly listened, or nothing stood out. Nothing to work on from this one.").foregroundStyle(Palette.secondary)
-                    } else if !review.overview.isEmpty, review.overview != review.headline {
-                        Text(review.overview).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .textSelection(.enabled)
+            if let line {
+                LabelColumn(label: line.heading) { LineRow(line: line, strong: true, long: record.isLong, player: player) }
+            } else {
+                LabelColumn(label: "The coach\u{2019}s read") { read(review, nothing: review.saysNothing) }
             }
             if people.speakers.contains(where: { $0.seconds > 0 }) {
                 LabelColumn(label: "Talk share") { TalkShare(people: people) }
-            }
-            if !worked.isEmpty || !review.strengths.isEmpty {
-                LabelColumn(label: "What worked") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(worked.enumerated()), id: \.offset) { _, n in NoteRow(note: n, long: record.isLong, player: player) }
-                        ForEach(Array(review.strengths.enumerated()), id: \.offset) { _, p in point(p, review) }
-                    }
-                }
-            }
-            if !change.isEmpty || !review.improvements.isEmpty {
-                LabelColumn(label: "What to change") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(change.enumerated()), id: \.offset) { _, n in NoteRow(note: n, long: record.isLong, player: player) }
-                        ForEach(Array(review.improvements.enumerated()), id: \.offset) { _, p in point(p, review) }
-                    }
-                }
             }
             if !questions.isEmpty {
                 LabelColumn(label: "Open questions") {
@@ -78,7 +56,8 @@ struct CoachTab: View {
             }
             if profile.activeFocus != nil || profile.proposedFocus != nil {
                 LabelColumn(label: "Focus") {
-                    FocusPanel(profile: profile, callID: record.id, result: review.focusResult,
+                    // The line already says how this call went on the focus.
+                    FocusPanel(profile: profile, callID: record.id, result: line?.kind == .focus ? nil : review.focusResult,
                                accept: { controller.acceptFocus($0, plan: $1) }, dismiss: { controller.dismissFocus($0) })
                 }
             }
@@ -86,33 +65,73 @@ struct CoachTab: View {
                 Button {
                     withAnimation(.snappy) { more.toggle() }
                 } label: {
-                    Label(more ? "Less" : "More from the coach", systemImage: more ? "chevron.up" : "chevron.down")
+                    Label(more ? "Less" : "Full review", systemImage: more ? "chevron.up" : "chevron.down")
                         .font(.system(size: 12, weight: .semibold))
                 }
                 .buttonStyle(.plain).foregroundStyle(Palette.accent)
+                .accessibilityHint("Shows the rest of the coach\u{2019}s review of this call")
             }
-            if more {
-                if !metrics.checks.isEmpty {
-                    LabelColumn(label: "Against your goals") {
-                        VStack(alignment: .leading, spacing: 16) {
-                            GoalsGrid(metrics: metrics, focus: profile.activeFocus?.metric)
-                            CallStrip(metrics: metrics)
-                        }
-                    }
-                }
-                if let value = review.value { ValueCard(value: value) }
-                if let card = review.scorecard { ScorecardView(card: card) }
-                CoachThread(callID: record.id, thread: review.thread)
-                if review.didWell == nil && review.tryNext == nil && !review.quiet {
-                    LabelColumn(label: "") {
-                        Button("Review this call again with the new coach") { controller.reviewAgain(record.id) }
-                            .controlSize(.small).disabled(controller.coaching)
-                    }
-                }
-            }
+            if more { full(review, line: line, others: others, profile: profile) }
         }
         .font(.system(size: 13))
         .foregroundStyle(Palette.ink)
+    }
+
+    private func read(_ review: CoachReview, nothing: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(review.headline).font(.system(size: 16, weight: .medium)).lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+            if nothing {
+                Text(CoachLineView.nothing).foregroundStyle(Palette.secondary)
+            } else if !review.overview.isEmpty, review.overview != review.headline {
+                Text(review.overview).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .textSelection(.enabled)
+    }
+
+    /// The rest of the review: the coach's read, what else it noted, the detail points, the numbers, the
+    /// meeting's value, and the conversation with the coach.
+    @ViewBuilder
+    private func full(_ review: CoachReview, line: CoachLine?, others: [CoachLine], profile: CoachProfile) -> some View {
+        let metrics = CallMetrics(record: record, owner: controller.ownerName,
+                                  history: profile.history.filter { $0.callID != record.id }.compactMap(\.delivery))
+        let worked = others.filter { $0.kind == .didWell }
+        let change = others.filter { $0.kind != .didWell }
+        if line != nil { LabelColumn(label: "The coach\u{2019}s read") { read(review, nothing: false) } }
+        if !worked.isEmpty || !review.strengths.isEmpty {
+            LabelColumn(label: "What worked") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(worked.enumerated()), id: \.offset) { _, l in LineRow(line: l, long: record.isLong, player: player) }
+                    ForEach(Array(review.strengths.enumerated()), id: \.offset) { _, p in point(p, review) }
+                }
+            }
+        }
+        if !change.isEmpty || !review.improvements.isEmpty {
+            LabelColumn(label: "What to change") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(change.enumerated()), id: \.offset) { _, l in LineRow(line: l, titled: l.kind == .again, long: record.isLong, player: player) }
+                    ForEach(Array(review.improvements.enumerated()), id: \.offset) { _, p in point(p, review) }
+                }
+            }
+        }
+        if !metrics.checks.isEmpty {
+            LabelColumn(label: "Against your goals") {
+                VStack(alignment: .leading, spacing: 16) {
+                    GoalsGrid(metrics: metrics, focus: profile.activeFocus?.metric)
+                    CallStrip(metrics: metrics)
+                }
+            }
+        }
+        if let value = review.value { ValueCard(value: value) }
+        if let card = review.scorecard { ScorecardView(card: card) }
+        CoachThread(callID: record.id, thread: review.thread)
+        if review.version < CoachReview.currentVersion {
+            LabelColumn(label: "") {
+                Button("Review this call again with the new coach") { controller.reviewAgain(record.id) }
+                    .controlSize(.small).disabled(controller.coaching)
+            }
+        }
     }
 
     private func point(_ p: CoachPoint, _ review: CoachReview) -> some View {
@@ -122,18 +141,28 @@ struct CoachTab: View {
     }
 }
 
-/// A did well, improving, or try next line: what the coach saw, the quote, and what to say instead.
-private struct NoteRow: View {
-    let note: CoachNote
+/// One line of the coach: what it saw, the proof (the owner's words at a time that plays, or a measured number),
+/// and what to say.
+private struct LineRow: View {
+    let line: CoachLine
+    /// The line of the page: a size larger than the notes in the full review.
+    var strong = false
+    /// Says what kind of note it is, where the label column does not.
+    var titled = false
     var long = false
     @ObservedObject var player: AudioPlayer
 
     var body: some View {
-        TimedRow(at: note.at, long: long, player: player) {
+        TimedRow(at: line.at, long: long, player: player) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(note.text).fixedSize(horizontal: false, vertical: true)
-                if let q = note.quote { Text("\u{201C}\(q)\u{201D}").italic().foregroundStyle(Palette.secondary) }
-                if let say = note.say {
+                Text(titled ? "\(line.title): \(line.text)" : line.text)
+                    .font(.system(size: strong ? 16 : 13, weight: strong ? .medium : .regular)).lineSpacing(strong ? 3 : 0)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let q = line.quote { Text("\u{201C}\(q)\u{201D}").italic().foregroundStyle(Palette.secondary) }
+                if let number = line.number {
+                    Text(number).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                if let say = line.say {
                     Text("Say: \u{201C}\(say)\u{201D}")
                         .padding(.horizontal, 10).padding(.vertical, 7)
                         .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

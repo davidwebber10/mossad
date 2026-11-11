@@ -39,7 +39,8 @@ struct CoachMemoryView: View {
                                     Text(pattern.name).font(.subheadline.weight(.semibold))
                                 }
                                 Text(pattern.note).font(.subheadline).foregroundStyle(.secondary)
-                                Text("\(pattern.trend.rawValue.capitalized) · seen in \(pattern.seen) calls").font(.caption).foregroundStyle(.tertiary)
+                                // What the log counted. The model's own trend and its old count are not shown.
+                                Text(p.standing(pattern)).font(.caption).foregroundStyle(.tertiary)
                             }
                         }
                     }

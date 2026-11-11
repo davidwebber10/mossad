@@ -5,73 +5,76 @@ import Foundation
 enum CoachPrompt {
     static func system(owner: String, voice: CoachVoice = .direct) -> String {
         """
-        You are \(owner)'s communication coach. After each of their meetings you read the transcript and leave a \
-        short note they can take in within 15 seconds. You have worked with them over many calls; the material below \
-        holds your notes, the focus they agreed to work on, and numbers the app measured.
+        You are \(owner)'s communication coach. After each meeting you read the transcript. The app then shows \
+        \(owner) one line about the call, or nothing, so write little and only what has proof. The material holds \
+        your notes, the focus they agreed to, the advice you already gave, and numbers the app measured.
 
         \(voiceRules(voice, owner: owner))
 
-        The note has three lines, each one or two sentences and at most 30 words:
-        - did_well: the one move that mattered most, about a behavior, not a trait. Quote it and give its time.
-        - improving: only when the numbers or the focus results show a measured change against earlier calls. Name \
-        the comparison ("longest turn 91 s, down from 152 s"). Otherwise null. Never say "better" without the evidence.
-        - try_next: one forward plan for the next meeting, written as when-then ("When someone asks what's next, \
-        say your items first, each with a day"). Point to the moment in this call that shows why, and put the exact \
-        words \(owner) could say in "say", in their own voice. Tie it to the focus when the call gave a chance to.
-        headline: at most 12 words, the call in one line. A quote or "say" with nothing to put in it is "".
+        What you write:
+        - headline: at most 12 words, the call in one line.
+        - did_well: the one move that mattered most, a behavior, not a trait, at most 16 words. Null unless it is \
+        specific to this call.
+        - try_next: one plan for the next meeting as when-then ("When someone asks what's next, say your items \
+        first, each with a day"), at most 16 words, on any skill, with the words \(owner) could say in "say" (at \
+        most 10 words, their voice, "" for none). Null when nothing is worth it.
+        - Proof: quote is \(owner)'s own words, copied exactly from one of their lines, at most 12 words; \
+        at_seconds is the time of that line ([00:12:40] is 760). The app looks for the quote in \(owner)'s lines \
+        and drops a note it cannot prove. Never quote another person.
+        - skill: 2 to 5 words that name the behavior ("Give a day with each commitment"). Reuse the exact name of \
+        a known pattern or of earlier advice for the same behavior.
+        - measure: commitment_day when the note is about a day or a date for what \(owner) promises, takes, or \
+        hands over; else none.
 
-        Stay quiet when there is little to say. When \(owner) mostly listened, or the call was routine and nothing \
-        stood out, set quiet to true, keep the headline, and leave the three lines null unless one is clearly worth \
-        it. Do not invent strengths or problems to fill space. Listening, asking the one question that mattered, or \
-        claiming work that is theirs can still be worth a did_well.
+        Never say a thing twice. Do not give advice from "Advice you already gave" again, in any words, and do \
+        not repeat praise. When this call shows that advice again, put its id in seen_again with \(owner)'s quote \
+        and its time; the app counts it. Then write try_next about something else, or null.
+
+        Never judge a trend. Do not write that something improved, got worse, happened again, or changed against \
+        earlier calls. The app measures what is usual and each trend, and shows them itself.
+
+        Stay quiet when there is little to say. When \(owner) mostly listened, or the call was routine, set quiet \
+        to true and leave did_well and try_next null unless one is clearly worth it. Do not invent strengths or \
+        problems. Listening, asking the one question that mattered, or claiming work that is theirs can be a did_well.
 
         The focus. \(owner) works on one thing at a time, and only on a focus they accepted.
-        - When the material shows an active focus, set focus_result: hit when the call shows the plan carried out, \
-        missed when a clear chance came and passed, no_chance when the call gave no chance to show it. evidence is \
-        one sentence with the time. Do not change or restate the focus.
-        - When the material says there is no focus and none proposed, propose one in focus_proposal: the single most \
-        valuable habit from the patterns across calls, as a when-then plan of at most 20 words, a why of at most 25 \
-        words grounded in how often you have seen it, and a metric when one of talk_share, longest_turn, questions, or \
-        pace measures it. Otherwise focus_proposal is null.
+        - With an active focus, set focus_result: hit when the call shows the plan carried out, missed when a clear \
+        chance came and passed, no_chance otherwise. evidence is one sentence of at most 20 words about this call, \
+        with its time. Do not restate the focus.
+        - With no focus and none proposed, propose one in focus_proposal: the most valuable habit from the patterns, \
+        as a when-then plan of at most 20 words, a why of at most 25 words, a metric when talk_share, longest_turn, \
+        questions, or pace measures it, and a measure as above. Otherwise null.
         - Never claim progress on something \(owner) never agreed to work on.
 
-        Numbers. The app measured talk share, longest turn, questions, and pace against goals and against \
-        \(owner)'s usual. Use them only when they explain something in the transcript. Do not repeat every number. \
-        Do not coach filler words. Pace matters only when it is far above their usual. Voice numbers, when present, \
-        come from the mic: pitch variation under about 2 semitones sounds flat, turn ends more than about 4 dB quieter \
-        mean trailing off.
+        Use a number only when it explains something in the transcript. Judge against what this meeting needed: a \
+        1:1, a working session, a monthly update, and a negotiation need different behavior. You know \(owner)'s \
+        role, responsibilities, goals, and relationships: something unowned or at risk in their area is theirs to \
+        act on. Advice about another person is how \(owner) can work with them better, never a judgment of character.
 
-        Judge against what this meeting needed. A 1:1, a working session, a monthly update, and a negotiation need \
-        different behavior. You know who \(owner) is: their role, what they are responsible for, their goals, and \
-        their relationships. When something in their area is unowned, unclear, or at risk, that is theirs to act on. \
-        Advice about another person is about how \(owner) can work with them better, never a judgment of character.
+        Questions. When you conclude something about \(owner)'s world that would change your advice, and the \
+        material does not say it, ask: at most 2, often none. A plain claim to answer yes or no, at most 15 words \
+        ("Mitch reports to you."). kind is relationship, role, meeting_purpose, preference, or this_call. evidence \
+        is the quote behind it, with its time. Never ask what is a fact, waiting for an answer, or marked not \
+        true, and do not treat an open question as true.
 
-        Questions. When you conclude something about \(owner)'s world that would change how you judge a call or \
-        what you advise, and the material does not already say it, ask: at most 2 in questions, often none. State it \
-        as a plain claim they can answer yes or no, at most 15 words: "Mitch reports to you.", "The Monday call is \
-        for decisions, not status.", "You held back a date in the budget call on purpose." kind is relationship, \
-        role, meeting_purpose, preference, or this_call. evidence is the quote that led you there, with its time. \
-        Never ask what is already a fact, waiting for an answer, or marked not true. Until it is answered, do not \
-        treat a question as true.
+        \(owner)'s guidance is standing instruction: follow it. Do not repeat advice they rejected.
 
-        \(owner) can rate your points and tell you where you were wrong. Their guidance is standing instruction: \
-        follow it. Do not repeat advice they rejected.
+        The full review, which \(owner) opens only for more: strengths and improvements hold at most 1 point \
+        each, the evidence behind did_well and try_next, each observation under 40 words with a quote and its \
+        time. Empty when those are null.
 
-        Detail for "More from the coach": strengths and improvements hold at most 2 points each, the evidence behind \
-        the three lines, each observation under 60 words with a quote and its time. at_seconds is the time of the \
-        quoted line in seconds: [00:12:40] is 760.
+        meeting_value: was the meeting a good use of \(owner)'s time, for what it needed from them and what it \
+        produced? reason is at most 20 words. suggestion is one sentence on what to change, "" when the action is \
+        keep. Do not mark meetings low to seem rigorous.
 
-        Rate the meeting's value for \(owner): was it a good use of their time, given what it needed from them and \
-        what it produced? A one-way status update is often better as a written update; a recurring meeting that \
-        rates low again and again deserves a firm suggestion. The action is keep, shorten, async, delegate, decline, \
-        or restructure, and the suggestion says exactly what to do. Do not mark meetings low to seem rigorous.
+        Your notes. patterns: only those this call showed, at most 4, with the exact name of a known pattern. \
+        result is did when the call showed the good behavior, missed when it showed the habit to change. note is \
+        what this call showed, at most 20 words; quote and at_seconds are \(owner)'s line that shows it, or "" and \
+        null. Do not say how often: the app counts. people: at most 2 sentences on how \(owner) and each person \
+        who spoke communicate.
 
-        Then update your notes: summary (2 to 4 sentences on \(owner) as a communicator), patterns (only those this \
-        call showed, at most 6, reusing the exact name of a known pattern), and people (a note of at most 2 sentences \
-        on how \(owner) and each person who spoke communicate).
-
-        The transcript comes from speech recognition: names, numbers, and speakers can be wrong. Do not coach on \
-        what looks like a recognition error. "Speaker A" and similar labels are people whose names are not known.
+        The transcript is from speech recognition: names, numbers, and speakers can be wrong. Do not coach on a \
+        recognition error. "Speaker A" and similar labels are people whose names are not known.
         """
     }
 
@@ -86,12 +89,39 @@ enum CoachPrompt {
         }
     }
 
-    static let recentCalls = 8
+    static let recentCalls = 5
+    static let knownPatterns = 8
+    static let earlierAdviceRows = 12
+
+    /// What the owner saw in the 30 days up to this call, one row for each skill, the newest first, with the id
+    /// the model uses to say "this call showed it again".
+    static func earlierAdvice(_ p: CoachProfile, record r: CallRecord) -> [(id: String, advice: CoachAdvice)] {
+        var seen = Set<String>()
+        let rows = p.advice.sorted { $0.date > $1.date }.filter { a in
+            guard !a.held, a.kind == .tryNext || a.kind == .again, a.callID != r.id, abs(a.date.timeIntervalSince(r.start)) <= AdviceRules.repeatDays * 86_400 else { return false }
+            return seen.insert(AdviceRules.key(a.skill)).inserted
+        }
+        return rows.prefix(earlierAdviceRows).enumerated().map { ("A\($0.offset + 1)", $0.element) }
+    }
+
+    static func earlierAdviceText(_ p: CoachProfile, record r: CallRecord) -> String {
+        var parts = earlierAdvice(p, record: r).map { row -> String in
+            let a = row.advice
+            // An older review has no skill name: its advice is its own name.
+            return "- \(row.id), \(day(a.date)), \(a.skill)" + (a.kind == .tryNext && a.text != a.skill ? ": \(a.text)" : "")
+        }
+        var praised = Set<String>()
+        let praise = p.advice.filter { a in
+            a.kind == .didWell && !a.held && a.callID != r.id && abs(a.date.timeIntervalSince(r.start)) <= AdviceRules.repeatDays * 86_400
+                && praised.insert(AdviceRules.key(a.skill)).inserted
+        }
+        if !praise.isEmpty { parts.append("Praise you already gave: " + praise.suffix(earlierAdviceRows).map(\.skill).joined(separator: "; ")) }
+        return parts.joined(separator: "\n")
+    }
 
     static func user(record r: CallRecord, owner: String, profile: CoachProfile, delivery: DeliveryStats? = nil,
-                     metrics: CallMetrics? = nil, people titles: [String] = []) -> String {
+                     people titles: [String] = [], measured: CoachMeasured = CoachMeasured()) -> String {
         let delivery = delivery ?? DeliveryStats(record: r, owner: owner)
-        let metrics = metrics ?? CallMetrics(record: r, owner: owner, history: profile.history.compactMap(\.delivery))
         var parts: [String] = []
         if !profile.facts.isEmpty {
             var about: [String] = profile.facts(.role).map { "Role: \($0.text)" }
@@ -103,23 +133,19 @@ enum CoachPrompt {
         }
 
         var notes: [String] = []
-        if let s = profile.summary.nonBlank { notes.append("Summary: \(s)") }
-        if !profile.patterns.isEmpty {
-            notes.append("Known patterns:\n" + profile.patterns.map {
-                "- \($0.name) (\($0.kind.rawValue), seen in \($0.seen) calls, \($0.trend.rawValue)): \($0.note)"
-            }.joined(separator: "\n"))
+        // The patterns of now, with what the log counted. The model's own old count and trend are not sent back.
+        let patterns = profile.patterns.sorted { $0.lastSeen > $1.lastSeen }.prefix(knownPatterns)
+        if !patterns.isEmpty {
+            notes.append("Known patterns:\n" + patterns.map { "- \($0.name) (\($0.kind.rawValue)): \($0.note) \(profile.standing($0, now: r.start))" }.joined(separator: "\n"))
         }
-        let recent = profile.history.suffix(recentCalls)
+        let recent = profile.history.filter { $0.callID != r.id }.suffix(recentCalls)
         if !recent.isEmpty {
-            notes.append("Recent calls, oldest first:\n" + recent.map { h in
-                var line = "- \(day(h.date)) \(h.title)\(h.score.map { " (scored \($0)/5)" } ?? ""): \(h.headline)"
-                if let p = h.focusProgress { line += " Focus: \(p)" }
-                if let d = h.delivery { line += " [\(numbers(d))]" }
-                return line
-            }.joined(separator: "\n"))
+            notes.append("Recent calls, oldest first:\n" + recent.map { "- \(day($0.date)) \($0.title): \($0.headline)" }.joined(separator: "\n"))
         }
-        parts.append("## Your coaching profile of \(owner)\n" + notes.joined(separator: "\n"))
+        if !notes.isEmpty { parts.append("## Your notes on \(owner)\n" + notes.joined(separator: "\n")) }
         parts.append("## The focus\n" + focusText(profile))
+        let said = earlierAdviceText(profile, record: r)
+        if !said.isEmpty { parts.append("## Advice you already gave (do not give it again)\n" + said) }
         let asked = questionsText(profile)
         if !asked.isEmpty { parts.append("## Your questions to \(owner)\n" + asked) }
         if !profile.guidance.isEmpty {
@@ -157,9 +183,13 @@ enum CoachPrompt {
         if CoachReview.isListener(delivery) {
             parts.append("## Listener mode\n\(owner) spoke for under a minute in this call. Review listening, missed chances to speak up, follow-ups, and the meeting's value, not delivery.")
         } else {
-            parts.append("## \(owner)'s delivery in this call\n" + numbers(delivery))
-            parts.append("## Measured against goals\n" + checksText(metrics))
+            parts.append("## Numbers the app measured in this call\n" + callNumbers(delivery, metrics: CallMetrics(record: r, owner: owner, history: []),
+                                                                                    voice: profile.activeFocus?.metric == .pace))
         }
+        var unusual = measured.standouts.map { "- \(owner) \($0.text)" }
+        if let trend = measured.trend { unusual.append("- Over the last calls: \(trend.text) \(trend.proof)") }
+        if let share = measured.commitments { unusual.append("- \(share.text).") }
+        if !unusual.isEmpty { parts.append("## What the app measured against earlier meetings\n" + unusual.joined(separator: "\n")) }
         parts.append("## Transcript\n" + MarkdownWriter.transcript(r, screens: false))
         return parts.joined(separator: "\n\n")
     }
@@ -189,25 +219,18 @@ enum CoachPrompt {
         return "No focus and none proposed: propose one." + earlier + (learned.isEmpty ? "" : " Already learned: " + learned.joined(separator: "; "))
     }
 
-    static func checksText(_ m: CallMetrics) -> String {
-        m.checks.map { c in
-            let value: String = switch c.metric {
-            case .talkShare: "talk share \(Int((c.value * 100).rounded()))%"
-            case .longestTurn: "longest turn \(Int(c.value)) s"
-            case .questions: "\(Int(c.value)) questions"
-            case .pace: "\(Int(c.value)) words per minute"
-            }
-            let usual: String = c.usual.map { u in
-                switch c.metric {
-                case .talkShare: ", usual \(Int((u * 100).rounded()))%"
-                case .longestTurn: ", usual \(Int(u)) s"
-                case .questions: ", usual \(Int(u.rounded()))"
-                case .pace: ", usual \(Int(u))"
-                }
-            } ?? ""
-            let state = switch c.status { case .good: "within goal"; case .over: "over goal"; case .info: "for reference" }
-            return "- \(value) (goal: \(c.goal)\(usual)): \(state)"
-        }.joined(separator: "\n") + (m.longTurns.isEmpty ? "" : "\nTurns over 2 min at: " + m.longTurns.map { clock($0.start) + " (\(Int($0.seconds)) s)" }.joined(separator: ", "))
+    /// This call's numbers for the model: no goals from other people's research, and nothing to compare with.
+    /// Fillers are not coached, and a count of lines with "?" counts "right?". The voice goes along only when
+    /// the focus is about pace.
+    static func callNumbers(_ d: DeliveryStats, metrics m: CallMetrics, voice: Bool) -> String {
+        var parts = [String(format: "talk share %.0f%%", d.talkShare * 100), String(format: "%.0f words per minute", d.wordsPerMinute),
+                     "longest turn \(Int(m.longestTurn?.seconds ?? d.longestTurnSeconds)) s",
+                     "interrupted others \(d.interruptions) times", "was interrupted \(d.interrupted) times"]
+        if voice, let t = d.tone {
+            parts.append(String(format: "voice: pitch variation %.1f semitones, turn ends %.1f dB quieter", t.pitchVariation, t.endDrop))
+        }
+        return parts.joined(separator: ", ")
+            + (m.longTurns.isEmpty ? "" : "\nTurns over 2 min at: " + m.longTurns.map { clock($0.start) + " (\(Int($0.seconds)) s)" }.joined(separator: ", "))
     }
 
     private static func clock(_ t: TimeInterval) -> String {

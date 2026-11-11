@@ -51,18 +51,57 @@ public struct CoachHistoryEntry: Codable, Equatable, Sendable, Hashable {
     public var score: Int?
 }
 
+/// What one call showed of a pattern. Each call adds one; none replaces another, so the moments stay.
+public struct CoachObservation: Codable, Equatable, Sendable, Hashable {
+    /// `did` when the call showed the good behavior, `missed` when it showed the habit to change.
+    public enum Result: String, Codable, Sendable, CaseIterable { case did, missed }
+
+    public var callID: String
+    public var date: Date
+    /// The pattern's name, as the memory lists it.
+    public var pattern: String
+    public var result: Result
+    public var note: String
+    /// The owner's own words only, found in the transcript by code.
+    public var quote: String?
+    public var at: TimeInterval?
+
+    public init(callID: String, date: Date, pattern: String, result: Result, note: String, quote: String? = nil, at: TimeInterval? = nil) {
+        self.callID = callID
+        self.date = date
+        self.pattern = pattern
+        self.result = result
+        self.note = note
+        self.quote = quote
+        self.at = at
+    }
+}
+
 public struct CoachPatternUpdate: Codable, Equatable, Sendable {
     public var name: String
     public var kind: CoachPattern.Kind
+    /// What this call showed, in one sentence.
     public var note: String
+    /// The model's own view of a trend, from before the log. Not used: code counts.
     public var trend: CoachPattern.Trend
+    /// Nil from a review before the log: the call showed the pattern, as its kind says.
+    public var result: CoachObservation.Result?
+    public var quote: String?
+    public var at: TimeInterval?
 
-    public init(name: String, kind: CoachPattern.Kind, note: String, trend: CoachPattern.Trend) {
+    public init(name: String, kind: CoachPattern.Kind, note: String, trend: CoachPattern.Trend = .steady, result: CoachObservation.Result? = nil,
+                quote: String? = nil, at: TimeInterval? = nil) {
         self.name = name
         self.kind = kind
         self.note = note
         self.trend = trend
+        self.result = result
+        self.quote = quote
+        self.at = at
     }
+
+    /// What the call showed: the habit itself unless the model said the opposite.
+    var shown: CoachObservation.Result { result ?? (kind == .strength ? .did : .missed) }
 }
 
 public struct CoachPersonUpdate: Codable, Equatable, Sendable {
@@ -165,13 +204,24 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     public var voice = CoachVoice.direct
     /// Conclusions the coach asked the owner to confirm, with their answers.
     public var questions: [CoachQuestion] = []
+    /// What the coach said, and the calls that showed earlier advice again: see `AdviceRules`.
+    public var advice: [CoachAdvice] = []
+    /// What each call showed of each pattern, oldest first. Entries are added and never rewritten.
+    public var observations: [CoachObservation] = []
 
     public static let ratedLimit = 30
     public static let guidanceLimit = 25
+    /// About a year of calls. The rules read the last 30 days.
+    public static let adviceLimit = 400
+    public static let observationLimit = 1000
+    /// A pattern that no call showed for this long is not a pattern of now.
+    public static let patternDays = 30.0
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice, questions }
+    enum CodingKeys: String, CodingKey {
+        case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice, questions, advice, observations
+    }
 
     /// Profiles from before feedback existed have no guidance or ratings.
     public init(from decoder: Decoder) throws {
@@ -188,6 +238,9 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         foci = try c.decodeIfPresent([CoachFocus].self, forKey: .foci) ?? []
         voice = try c.decodeIfPresent(CoachVoice.self, forKey: .voice) ?? .direct
         questions = try c.decodeIfPresent([CoachQuestion].self, forKey: .questions) ?? []
+        // A log that a later build wrote in another shape is an empty log here, not a memory that cannot be read.
+        advice = (try? c.decodeIfPresent([CoachAdvice].self, forKey: .advice)) ?? []
+        observations = (try? c.decodeIfPresent([CoachObservation].self, forKey: .observations)) ?? []
     }
 
     public func facts(_ kind: CoachFact.Kind) -> [CoachFact] { facts.filter { $0.kind == kind } }
@@ -259,25 +312,35 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     }
 
     /// Folds one review in. The focus changes only through the owner: a proposal waits for them, and a result
-    /// counts only for the focus they accepted.
+    /// counts only for the focus they accepted. The memory adds: a call gives each pattern one observation and
+    /// the log its lines, and it does not rewrite the summary or what a pattern is.
     public mutating func apply(_ update: CoachProfileUpdate, review: CoachReview, callID: String, title: String, at: Date,
-                               proposal: CoachFocus? = nil) {
-        if let s = update.summary.nonBlank { summary = s }
+                               proposal: CoachFocus? = nil, advice said: [CoachAdvice] = []) {
+        // One call says little about a person. The summary is written across calls, not by each of them.
+        if summary.nonBlank == nil, let s = update.summary.nonBlank { summary = s }
         // Older coaching (before agreed foci) set the focus text directly.
         if foci.isEmpty, let f = update.focus.nonBlank { focus = f }
         if let id = review.focusID, let result = review.focusResult { record(result, focus: id) }
         if let proposal, proposedFocus == nil { propose(proposal, at: at) }
+        // A call reviewed again replaces its own entries, and only those.
+        let again = observations.contains { $0.callID == callID }
+        observations.removeAll { $0.callID == callID }
         for p in update.patterns {
+            let shows = p.shown == (p.kind == .strength ? .did : .missed)
             if let i = patterns.firstIndex(where: { $0.name.caseInsensitiveCompare(p.name) == .orderedSame }) {
-                patterns[i].kind = p.kind
-                patterns[i].note = p.note
-                patterns[i].trend = p.trend
-                patterns[i].seen += 1
-                patterns[i].lastSeen = at
+                if shows {
+                    if !again { patterns[i].seen += 1 }
+                    patterns[i].lastSeen = max(patterns[i].lastSeen, at)
+                }
             } else {
-                patterns.append(CoachPattern(name: p.name, kind: p.kind, note: p.note, seen: 1, firstSeen: at, lastSeen: at, trend: p.trend))
+                patterns.append(CoachPattern(name: p.name, kind: p.kind, note: p.note, seen: shows ? 1 : 0, firstSeen: at, lastSeen: at, trend: .steady))
             }
+            let name = patterns.first { $0.name.caseInsensitiveCompare(p.name) == .orderedSame }?.name ?? p.name
+            observations.append(CoachObservation(callID: callID, date: at, pattern: name, result: p.shown, note: p.note, quote: p.quote, at: p.at))
         }
+        observations = Array(observations.sorted { $0.date < $1.date }.suffix(Self.observationLimit))
+        advice.removeAll { $0.callID == callID }
+        advice = Array((advice + said).sorted { $0.date < $1.date }.suffix(Self.adviceLimit))
         for p in update.people {
             guard let note = p.note.nonBlank else { continue }
             var person = CoachPerson(note: note, calls: (people[p.name]?.calls ?? 0) + 1, lastSeen: at)
@@ -290,6 +353,37 @@ public struct CoachProfile: Codable, Equatable, Sendable {
                                          focusProgress: review.focusResult?.evidence ?? review.focusProgress, delivery: review.delivery, value: review.value?.rating,
                                          score: review.scorecard?.score))
         history = Array(history.suffix(Self.historyLimit))
+    }
+
+    /// Removes what the memory holds of a deleted meeting: its lines, its moments, and its place in the history.
+    public mutating func forget(callID: String) {
+        advice.removeAll { $0.callID == callID }
+        observations.removeAll { $0.callID == callID }
+        history.removeAll { $0.callID == callID }
+    }
+
+    /// What the log holds of one pattern, the newest first.
+    public func evidence(for pattern: CoachPattern) -> [CoachObservation] {
+        observations.filter { $0.pattern.caseInsensitiveCompare(pattern.name) == .orderedSame }.sorted { $0.date > $1.date }
+    }
+
+    /// In how many of the calls that the log has for a pattern the call showed it. A call that showed the good
+    /// behavior in place of a habit is a call, and not one that showed the habit.
+    public func count(_ pattern: CoachPattern) -> (calls: Int, showed: Int) {
+        let all = evidence(for: pattern)
+        let own: CoachObservation.Result = pattern.kind == .strength ? .did : .missed
+        return (Set(all.map(\.callID)).count, Set(all.filter { $0.result == own }.map(\.callID)).count)
+    }
+
+    /// One line on where a pattern stands, from the log: "In 4 of 6 calls since Oct 23. Last on Nov 9." A
+    /// pattern from before the log has only the day it was last seen: its old count grew each time the model
+    /// used its name, and the model's own "improving" was one call's opinion.
+    public func standing(_ pattern: CoachPattern, now: Date = Date()) -> String {
+        let day = Date.FormatStyle().month(.abbreviated).day()
+        guard now.timeIntervalSince(pattern.lastSeen) <= Self.patternDays * 86_400 else { return "Not seen since \(pattern.lastSeen.formatted(day))." }
+        let n = count(pattern)
+        guard n.calls > 0, let first = evidence(for: pattern).last else { return "Last seen on \(pattern.lastSeen.formatted(day))." }
+        return "In \(n.showed) of \(n.calls) calls since \(first.date.formatted(day)). Last on \(pattern.lastSeen.formatted(day))."
     }
 
     public static func load(from dir: URL) throws -> CoachProfile {

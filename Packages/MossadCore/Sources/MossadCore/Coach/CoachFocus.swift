@@ -39,13 +39,23 @@ public struct CoachFocus: Codable, Equatable, Sendable, Identifiable, Hashable {
     public var results: [FocusResult] = []
     /// The last change on any device; the newer copy wins when devices merge.
     public var updated: Date
+    /// The raw name of `measure`. Text, so a measure from a later build is no measure here and the memory
+    /// still reads.
+    public var measureName: String?
 
-    public init(plan: String, why: String, metric: FocusMetric?, proposed: Date) {
+    /// The number the app counts for this focus, when it is not one of the call's own numbers in `metric`.
+    public var measure: CoachMeasure? {
+        get { measureName.flatMap(CoachMeasure.init(rawValue:)) }
+        set { measureName = newValue?.rawValue }
+    }
+
+    public init(plan: String, why: String, metric: FocusMetric?, proposed: Date, measure: CoachMeasure? = nil) {
         self.plan = plan
         self.why = why
         self.metric = metric
         self.proposed = proposed
         updated = proposed
+        measureName = measure?.rawValue
     }
 
     /// The calls where the focus could show, oldest first.

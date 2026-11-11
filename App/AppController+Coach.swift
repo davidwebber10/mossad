@@ -22,6 +22,21 @@ extension AppController {
 
     func coachReview(_ callID: String) -> CoachReview? { CoachReview.load(in: paths.callDirectory(callID)) }
 
+    /// The coach's memory keeps nothing of a meeting that is gone: not its lines, and not its moments. Saved only
+    /// when the memory held something of it.
+    func forgetCoaching(of callID: String) {
+        do {
+            var profile = try CoachProfile.load(from: paths.coach)
+            let before = profile
+            profile.forget(callID: callID)
+            guard profile != before else { return }
+            try profile.save(to: paths.coach)
+            coachVersion += 1
+        } catch {
+            Log.error("The coach's memory still has \(callID): \(error)")
+        }
+    }
+
     /// Reviews the calls that are due, one at a time, then sends the weekly email when it is due.
     func runCoach() {
         guard !isInert else { return }

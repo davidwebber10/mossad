@@ -57,10 +57,9 @@ extension ChatTools {
                 if let value = v.value { line += " | value \(value.rating.rawValue)" }
                 if let c = v.scorecard { line += (c.positives.map { "\n  + \($0)" } + c.negatives.map { "\n  - \($0)" }).joined() } else { line += " | \(v.headline)" }
                 if v.scorecard == nil {
-                    let l = v.lines
-                    line += [l.didWell.map { "\n  Did well: \($0.text)" }, l.improving.map { "\n  Improving: \($0.text)" },
-                             l.tryNext.map { "\n  Try next: \($0.text)" }, v.focusResult.map { "\n  Focus: \($0.outcome.rawValue). \($0.evidence)" }]
-                        .compactMap { $0 }.joined()
+                    // The line the owner saw, then the result on the focus when that was not the line.
+                    if let l = v.shownLine { line += "\n  \(l.title): \(l.text)" + (l.number.map { " (\($0))" } ?? "") }
+                    if let f = v.focusResult, v.shownLine?.kind != .focus { line += "\n  Focus: \(f.outcome.rawValue). \(f.evidence)" }
                 }
                 return line
             }.prefix(min(limit, Self.maxLimit))
@@ -124,7 +123,7 @@ extension ChatTools {
         let learned = p.foci.filter { $0.status == .learned }.map(\.plan)
         if !learned.isEmpty { parts.append("Learned habits: " + learned.joined(separator: "; ")) }
         if !p.patterns.isEmpty {
-            parts.append("Patterns:\n" + p.patterns.map { "- \($0.name) (\($0.kind.rawValue), \($0.trend.rawValue), seen in \($0.seen) calls): \($0.note)" }.joined(separator: "\n"))
+            parts.append("Patterns:\n" + p.patterns.map { "- \($0.name) (\($0.kind.rawValue)): \($0.note) \(p.standing($0))" }.joined(separator: "\n"))
         }
         if !p.people.isEmpty {
             parts.append("Notes on people:\n" + p.people.sorted { $0.key < $1.key }.map { "- \($0.key): \($0.value.note)" }.joined(separator: "\n"))
@@ -169,11 +168,12 @@ extension ChatTools {
 
     func reviewText(_ v: CoachReview, title: String) -> String {
         var parts = ["\(title): \(v.headline)"] + [v.overview].compactMap(\.nonBlank)
-        let l = v.lines
-        if let n = l.didWell { parts.append("Did well: \(n.text)" + (n.quote.map { " Quote: \"\($0)\"" } ?? "")) }
-        if let n = l.improving { parts.append("Improving: \(n.text)") }
-        if let n = l.tryNext { parts.append("Try next time: \(n.text)" + (n.say.map { " Say: \"\($0)\"" } ?? "")) }
-        if let r = v.focusResult { parts.append("Focus result: \(r.outcome.rawValue). \(r.evidence)") }
+        func text(_ l: CoachLine) -> String {
+            "\(l.title): \(l.text)" + (l.number.map { " \($0)." } ?? "") + (l.quote.map { " Quote: \"\($0)\"" } ?? "") + (l.say.map { " Say: \"\($0)\"" } ?? "")
+        }
+        if let l = v.shownLine { parts.append("The one line the owner saw. " + text(l)) } else { parts.append("The owner saw no line for this call: nothing had proof, or nothing stood out.") }
+        parts += v.others.map(text)
+        if let r = v.focusResult, v.shownLine?.kind != .focus { parts.append("Focus result: \(r.outcome.rawValue). \(r.evidence)") }
         if let c = v.scorecard {
             parts.append("Score \(c.score)/5: \(c.reason). " + c.dimensions.map { "\($0.name) \($0.score)" }.joined(separator: ", "))
         }
