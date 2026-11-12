@@ -151,9 +151,8 @@ enum Chrome {
     static let controlPadding: CGFloat = 3
     static let segment = CGSize(width: 32, height: 24)
     static let iconCell = CGSize(width: 30, height: 24)
-    /// 240 and 12 pt padding on each side; it narrows to the minimum before any other control would clip.
+    /// A list search field under a toolbar row is at most this wide, plus its inset.
     static let searchWidth: CGFloat = 264
-    static let searchMinWidth: CGFloat = 150
     static let groupGap: CGFloat = 8
 }
 

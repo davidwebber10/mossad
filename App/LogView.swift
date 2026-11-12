@@ -67,7 +67,7 @@ struct LogView: View {
                             .padding(.top, 14).padding(.bottom, 6)
                             .accessibilityAddTraits(.isHeader)
                     }
-                    ForEach(group.lines, id: \.id) { LogRow(line: $0.line) }
+                    ForEach(group.lines, id: \.id) { LogRow(line: $0.line, query: filter) }
                 }
                 if visible.isEmpty, !lines.isEmpty {
                     Text("No lines match.").font(.system(size: 12)).foregroundStyle(Palette.tertiary).padding(.top, 14)
@@ -142,6 +142,8 @@ struct LogView: View {
 
 private struct LogRow: View {
     let line: LogLine
+    /// The filter, whose words show in bold.
+    var query = ""
     private var error: Bool { line.level == .error }
 
     var body: some View {
@@ -154,7 +156,8 @@ private struct LogRow: View {
                 .fontWeight(.bold)
                 .foregroundStyle(error ? Palette.recording : Palette.tertiary)
                 .frame(width: 48, alignment: .leading)
-            Text(line.message)
+            Text(query.isEmpty ? AttributedString(line.message)
+                 : SearchText.marking(line.message, query: query).boldMatches(size: 11.5, design: .monospaced))
                 .foregroundStyle(error ? Palette.ink : Palette.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)

@@ -244,7 +244,8 @@ final class AppController: ObservableObject {
     func filterMeetings(debounce: Bool) {
         filterTask?.cancel()
         let query = meetingQuery
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+        // `#`, `@`, or punctuation alone is no search yet: every meeting stays.
+        guard SearchIndex.isSearch(query) else {
             if meetingMatches != nil { meetingMatches = nil }
             if !meetingListMatches.isEmpty { meetingListMatches = [:] }
             return
@@ -444,6 +445,8 @@ final class AppController: ObservableObject {
     var listSearches = 0
     /// Bumped by Command-F on a page with a list search: its field comes down and takes the focus.
     @Published var findRequest = 0
+    /// Bumped by Return or Down Arrow in a list's search field, and when it closes: the list takes the focus.
+    @Published var listFocusRequest = 0
     /// Bumped by `openPerson`, so a People page already open selects the person too.
     @Published var personRequests = 0
     /// A task or a chat to select when its page shows; the page clears it.
@@ -1479,7 +1482,8 @@ final class AppController: ObservableObject {
 
     /// Shows every meeting with this tag.
     func showTag(_ tag: String) {
-        meetingQuery = "#\(tag)"
+        // Quoted when it has more words, so they are read as one tag and not as words to search for.
+        meetingQuery = TagToken.query(tag)
         open(.meetings)
     }
 

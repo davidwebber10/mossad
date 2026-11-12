@@ -190,6 +190,80 @@ final class ListSearchTests: XCTestCase {
         XCTAssertEqual(index.listMatches(" ?! "), [:])
     }
 
+    func testATagClickOfMoreWordsFindsExactlyThatTag() {
+        let a = meeting("a", title: "One", tags: ["Budget review"])
+        let b = meeting("b", title: "Two", tags: ["Budget"], turns: [("them:A", "please review the numbers")])
+        let c = meeting("c", title: "Three", tags: ["Budget"])
+        let index = SearchIndex(records: [a, b, c])
+        let multi = TagToken.query("Budget review")
+        XCTAssertEqual(multi, "#\"Budget review\"")
+        XCTAssertEqual(Set(index.listMatches(multi).keys), ["a"])
+        XCTAssertEqual(MeetingSearch.matchingIDs([a, b, c], multi), ["a"], "The search before the index agrees")
+        let single = TagToken.query("Budget")
+        XCTAssertEqual(single, "#Budget")
+        XCTAssertEqual(Set(index.listMatches(single).keys), ["b", "c"])
+        XCTAssertEqual(MeetingSearch.matchingIDs([a, b, c], single), ["b", "c"])
+        let palette = index.search(multi, now: now)
+        var shown = palette.meetings.map(\.callID)
+        if case .meeting(let m)? = palette.topHit { shown.append(m.callID) }
+        XCTAssertEqual(shown, ["a"], "The palette reads the tag whole too")
+        XCTAssertEqual(Set(index.listMatches("#\"Budget review\" numbers").keys), [], "Words after the tag still narrow it")
+        XCTAssertEqual(Set(index.listMatches("#\"Budget\" numbers").keys), ["b"])
+    }
+
+    func testTheCallThatRecordsStaysUnderAnySearchAndFilter() {
+        var live = meeting("live", title: "Current call")
+        live.status = .recording
+        let a = meeting("a", title: "One"), b = meeting("b", title: "Two")
+        let all = [live, a, b]
+        XCTAssertEqual(MeetingListRows.visible(all, found: nil, kept: nil).map(\.id), ["live", "a", "b"])
+        XCTAssertEqual(MeetingListRows.visible(all, found: ["a"], kept: nil).map(\.id), ["live", "a"])
+        XCTAssertEqual(MeetingListRows.visible(all, found: nil, kept: ["b"]).map(\.id), ["live", "b"])
+        XCTAssertEqual(MeetingListRows.visible(all, found: ["a"], kept: ["b"]).map(\.id), ["live"])
+        XCTAssertEqual(MeetingListRows.visible(all, found: [], kept: []).map(\.id), ["live"])
+    }
+
+    func testTheLineCentersOnTheWordTheTitleLacks() {
+        var r = meeting("1", title: "Freight sync")
+        r.summary = "Freight " + String(repeating: "and some other words ", count: 14) + "until the pallets arrive on time."
+        let m = SearchIndex(records: [r]).listMatches("freight pallets")["1"]
+        XCTAssertEqual(m?.source, .field("Summary"))
+        XCTAssertTrue(m?.context?.matchedStrings.contains("pallets") ?? false, m?.context?.text ?? "")
+        let note = "Freight " + String(repeating: "and some other words ", count: 14) + "the pallets"
+        let p = ListSearch("freight pallets").match(title: "Freight lead", fields: [ListField("Note", note)])
+        XCTAssertEqual(p?.context?.matchedStrings, ["pallets"])
+    }
+
+    func testASnippetNeverSplitsAMatchedWord() {
+        let text = String(repeating: "x", count: 40) + " pallet " + String(repeating: "y ", count: 20) + "forklift " + String(repeating: "z ", count: 60)
+        let ranges = ["pallet", "forklift"].compactMap { text.range(of: $0) }
+        let s = Snippet.make(text, matches: ranges, length: 70)
+        for m in s.matchedStrings { XCTAssertTrue(["pallet", "forklift"].contains(m), "Split: \(m)") }
+        XCTAssertEqual(Set(s.matchedStrings), ["pallet", "forklift"], "The window with both words wins")
+    }
+
+    func testMarkingFindsWordsInsideWords() {
+        let t = SearchText.marking("Call with Jóhnson about the Johnson file", query: "johnson")
+        XCTAssertEqual(t.matchedStrings, ["Jóhnson", "Johnson"])
+        XCTAssertEqual(SearchText.marking("Rack 12 in the north", query: "ack nor").matchedStrings, ["ack", "nor"])
+        XCTAssertEqual(SearchText.marking("abc", query: "").matches, [])
+    }
+
+    func testAQueryWithNoWordsIsNoSearch() {
+        XCTAssertFalse(SearchIndex.isSearch("#"))
+        XCTAssertFalse(SearchIndex.isSearch("@ ?!"))
+        XCTAssertFalse(SearchIndex.isSearch("#\"\""))
+        XCTAssertTrue(SearchIndex.isSearch("#budget"))
+        XCTAssertTrue(SearchIndex.isSearch("pallet"))
+    }
+
+    func testGeminiNotesOfANotesOnlyMeetingAreSearched() {
+        var r = meeting("1", title: "Planning")
+        r.gemini = GeminiNotesRef(docID: "d", title: "Notes", url: nil, eventID: nil, imported: now, notes: "Agreed to trial the forklift rental.")
+        let m = SearchIndex(records: [r]).listMatches("forklift")["1"]
+        XCTAssertEqual(m?.source, .field("Notes"))
+    }
+
     // MARK: The palette
 
     func testBookmarkNotesHaveTheirOwnGroup() {
@@ -272,7 +346,8 @@ final class ListSearchTests: XCTestCase {
             records.append(r)
         }
         let index = SearchIndex(records: records)
-        let queries = ["\(words[17]) \(words[905])", "the \(words[2000])", String(words[33].prefix(3)), "review"]
+        // "and" is spoken in most lines and is in no field: each meeting scores its lines.
+        let queries = ["\(words[17]) \(words[905])", "the \(words[2000])", String(words[33].prefix(3)), "review", "and"]
         _ = index.listMatches(queries[0])
         let clock = ContinuousClock()
         var worst = Duration.zero

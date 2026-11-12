@@ -36,6 +36,9 @@ struct CommitmentRow<Trailing: View>: View {
     var showSource = true
     /// Off under a person's group heading, where the person is already clear.
     var showPerson = true
+    /// The text with a search's words in bold, and a line under the row that says why it matched.
+    var marked: AttributedString?
+    var matchLine: AttributedString?
     /// What a click on the text does: the Mac opens the meeting at the moment. Nil leaves the text inert.
     var open: (() -> Void)?
     let toggleDone: () -> Void
@@ -59,7 +62,7 @@ struct CommitmentRow<Trailing: View>: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(commitment.text)
+            Text(marked ?? AttributedString(commitment.text))
                 .font(.system(size: textSize, weight: .medium))
                 .cssLineHeight(size: textSize)
                 .strikethrough(commitment.done != nil, color: Palette.secondary)
@@ -75,6 +78,13 @@ struct CommitmentRow<Trailing: View>: View {
                 .font(.system(size: detailSize))
                 .foregroundStyle(Palette.secondary)
                 .cssLineHeight(size: detailSize)
+            }
+            if let matchLine {
+                Text(matchLine)
+                    .font(.system(size: detailSize))
+                    .foregroundStyle(Palette.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

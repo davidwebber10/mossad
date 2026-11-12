@@ -36,14 +36,10 @@ struct MeetingsView: View {
 
     private static let searchPrompt = "Search titles, transcripts, people"
 
-    /// The meetings that the search text and the filter leave. The call that records now stays under any filter:
-    /// it has no length, people, or summary to filter by yet, and the owner must see that it records.
+    /// The meetings that the search text and the filter leave. The call that records now stays under any search and
+    /// filter: it has no transcript, people, or summary to match yet, and the owner must see that it records.
     private var results: [CallRecord] {
-        let found = controller.meetingMatches, kept = filters.matches
-        guard found != nil || kept != nil else { return controller.meetings }
-        return controller.meetings.filter { r in
-            (found?.contains(r.id) ?? true) && (kept?.contains(r.id) ?? true || r.status == .recording)
-        }
+        MeetingListRows.visible(controller.meetings, found: controller.meetingMatches, kept: filters.matches)
     }
 
     private var selected: CallRecord? {
@@ -204,7 +200,7 @@ struct MeetingsView: View {
     private var toolbar: some View {
         PageToolbar(search: calendarShown ? search : nil, searchPrompt: Self.searchPrompt) {
             if calendarShown {
-                MeetingFilterButton(place: .title)
+                MeetingFilterButton(edge: .bottom)
                 CalendarControls(state: calendarState).padding(.leading, Space.s)
             }
         } trailing: {

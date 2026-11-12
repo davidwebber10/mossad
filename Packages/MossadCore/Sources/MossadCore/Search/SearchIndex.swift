@@ -88,6 +88,8 @@ struct MeetingEntry: Sendable {
     var outcomes: [OutcomeEntry]
     /// The summary's overview and each topic, for the Meetings list search.
     var summaryFields: [IndexedField] = []
+    /// Gemini's own notes, for a notes-only meeting with no transcript.
+    var notes: IndexedField?
     var utterances: [Utterance]
     var displayNames: [String: String]
     /// The meeting's first turn in the index's turn arrays; its turns follow in order.
@@ -294,6 +296,9 @@ public struct SearchIndex: Sendable {
         entry.emails = people.compactMap(SearchIndex.normalizedEmail)
         entry.outcomes = (decisions + actions + bookmarks).map { OutcomeEntry(kind: $0.0, position: $0.1, time: $0.2, field: field($0.3)) }
         entry.summaryFields = SearchIndex.summaryTexts(r).map { field($0) }
+        if r.utterances.isEmpty, let notes = r.gemini?.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            entry.notes = field(notes)
+        }
         for u in turns {
             for t in SearchTokenizer.tokens(u.text) { termStore.append(vocab.intern(t.term)) }
             appendTurn(slot: slot)

@@ -71,6 +71,7 @@ extension SearchIndex {
         out += e.tagFields.map { ListPlace(field: $0, source: .field("Tag")) }
         if let kind = e.kindField { out.append(ListPlace(field: kind, source: .field("Kind"))) }
         out += e.summaryFields.map { ListPlace(field: $0, source: .field("Summary")) }
+        if let notes = e.notes { out.append(ListPlace(field: notes, source: .field("Notes"))) }
         out += e.outcomes.map { o in
             let label = switch o.kind {
             case .decision: "Decision"
@@ -85,29 +86,34 @@ extension SearchIndex {
     private func place(_ e: MeetingEntry, words: [QueryWord], byRarity: [QueryWord], fields: [ListPlace], counts: [Int]) -> ListMatch {
         let title = SearchText(e.title.text, matches: highlights(e.title, words, typos: true))
         if counts[0] == words.count { return ListMatch(title: title) }
+        // The words that the title lacks: the line under the row centers on them.
+        let missing = words.filter { best(e.title, $0, typos: true) == nil }
         if let j = fields.indices.dropFirst().first(where: { counts[$0] == words.count }) {
-            return fieldMatch(title, fields[j], words)
+            return fieldMatch(title, fields[j], words, missing: missing)
         }
         // The line that holds every word with the best score, the earliest on a tie, among the lines of the rarest word.
         let base = Int(e.turnBase)
         if let rarest = byRarity.first {
             var bestTurn: (g: Int, score: Double)?
+            // No line can score more than every word whole and together: the first such line ends the look.
+            let most = (Double(words.count) + (words.count > 1 ? SearchWeight.phrase * Double(words.count) : 0)) * SearchWeight.transcript
             for g in turns(of: rarest, in: e) {
-                if let s = momentScore(turn: g, words), s > (bestTurn?.score ?? -1) { bestTurn = (g, s) }
+                guard let s = momentScore(turn: g, words), s > (bestTurn?.score ?? -1) else { continue }
+                bestTurn = (g, s)
+                if s >= most { break }
             }
-            if let (g, _) = bestTurn { return turnMatch(title, e, turn: g - base, words) }
+            if let (g, _) = bestTurn { return turnMatch(title, e, turn: g - base, words, missing: missing) }
         }
         // No one place holds every word: show where the words that the title lacks are.
-        let missing = words.filter { best(e.title, $0, typos: true) == nil }
         let held = fields.indices.dropFirst().map { j in
             (j, missing.filter { best(fields[j].field, $0, names: fields[j].names, typos: fields[j].typos) != nil }.count)
         }
-        if let (j, _) = held.first(where: { $0.1 == missing.count }) { return fieldMatch(title, fields[j], words) }
+        if let (j, _) = held.first(where: { $0.1 == missing.count }) { return fieldMatch(title, fields[j], words, missing: missing) }
         let rarestMissing = byRarity.first { w in missing.contains { $0.text == w.text } && !turns(of: w, in: e).isEmpty }
         let candidates = rarestMissing.map { turns(of: $0, in: e) } ?? []
-        if let g = candidates.first(where: { momentScore(turn: $0, missing) != nil }) { return turnMatch(title, e, turn: g - base, words) }
-        if let (j, n) = held.max(by: { ($0.1, -$0.0) < ($1.1, -$1.0) }), n > 0 { return fieldMatch(title, fields[j], words) }
-        if let g = candidates.first { return turnMatch(title, e, turn: g - base, words) }
+        if let g = candidates.first(where: { momentScore(turn: $0, missing) != nil }) { return turnMatch(title, e, turn: g - base, words, missing: missing) }
+        if let (j, n) = held.max(by: { ($0.1, -$0.0) < ($1.1, -$1.0) }), n > 0 { return fieldMatch(title, fields[j], words, missing: missing) }
+        if let g = candidates.first { return turnMatch(title, e, turn: g - base, words, missing: missing) }
         return ListMatch(title: title)
     }
 
@@ -127,16 +133,27 @@ extension SearchIndex {
         return w.prefixIDs.count > 1 ? Array(Set(out)).sorted() : out
     }
 
-    private func fieldMatch(_ title: SearchText, _ p: ListPlace, _ words: [QueryWord]) -> ListMatch {
-        let text = Snippet.make(p.field.text, matches: highlights(p.field, words, names: p.names, typos: p.typos),
-                                length: ListSearch.snippetLength)
+    private func fieldMatch(_ title: SearchText, _ p: ListPlace, _ words: [QueryWord], missing: [QueryWord]) -> ListMatch {
+        var ranges: [Range<Int>] = [], weights: [Int] = []
+        for (id, span) in zip(p.field.terms, p.field.spans) where words.contains(where: { $0.quality(id, names: p.names, typos: p.typos) != nil }) {
+            ranges.append(span)
+            weights.append(missing.contains { $0.quality(id, names: p.names, typos: p.typos) != nil } ? 2 : 1)
+        }
+        let text = Snippet.make(p.field.text, matches: p.field.text.searchRanges(ranges), length: ListSearch.snippetLength, weights: weights)
         return ListMatch(title: title, source: p.source, context: text, time: p.time)
     }
 
-    private func turnMatch(_ title: SearchText, _ e: MeetingEntry, turn: Int, _ words: [QueryWord]) -> ListMatch {
+    private func turnMatch(_ title: SearchText, _ e: MeetingEntry, turn: Int, _ words: [QueryWord], missing: [QueryWord]) -> ListMatch {
         let u = e.utterances[turn]
-        let ranges = SearchTokenizer.tokens(u.text).filter { t in vocab.id(t.term).map { id in words.contains { $0.matchesPrefix(id) } } ?? false }
-        let snippet = Snippet.make(u.text, matches: u.text.searchRanges(ranges.map(\.range)), length: ListSearch.snippetLength)
+        // One-letter words match titles and names only, never a line.
+        let spoken = words.filter { !$0.isShort }
+        var ranges: [Range<Int>] = [], weights: [Int] = []
+        for t in SearchTokenizer.tokens(u.text) {
+            guard let id = vocab.id(t.term), spoken.contains(where: { $0.matchesPrefix(id) }) else { continue }
+            ranges.append(t.range)
+            weights.append(missing.contains { !$0.isShort && $0.matchesPrefix(id) } ? 2 : 1)
+        }
+        let snippet = Snippet.make(u.text, matches: u.text.searchRanges(ranges), length: ListSearch.snippetLength, weights: weights)
         return ListMatch(title: title, source: .transcript(speaker: e.displayNames[u.speakerKey] ?? u.speakerKey), context: snippet, time: u.start)
     }
 

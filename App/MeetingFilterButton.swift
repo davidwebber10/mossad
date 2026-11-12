@@ -2,13 +2,12 @@ import MossadCore
 import SwiftUI
 
 /// The Meetings filter's button: three shortening lines, and the number of choices in the accent once there is
-/// one. It opens the flyout. In the list's title row it is a quiet mark; in the toolbar (Calendar mode has no
-/// list) it is a glass capsule like its neighbors.
+/// one. It opens the flyout. It is a quiet mark beside the list's search glass, in the list's title row or, in
+/// Calendar mode, at the start of the toolbar row.
 struct MeetingFilterButton: View {
-    enum Place { case title, toolbar }
-
     @EnvironmentObject var filters: MeetingFilterModel
-    var place = Place.title
+    /// Where the flyout opens: beside the list, or below the toolbar row in Calendar mode, over the calendar.
+    var edge = Edge.trailing
     @State private var hovering = false
 
     var body: some View {
@@ -23,8 +22,8 @@ struct MeetingFilterButton: View {
             }
             .foregroundStyle(count > 0 ? Palette.accent : hovering || filters.isOpen ? Palette.ink : Palette.secondary)
             .padding(.horizontal, count > 0 ? 9 : 0)
-            .frame(minWidth: place == .toolbar ? Chrome.controlHeight : 28, minHeight: place == .toolbar ? Chrome.controlHeight : 24)
-            .background { ground(active: count > 0) }
+            .frame(minWidth: 28, minHeight: 24)
+            .background { Capsule().fill(count > 0 ? Palette.accentTint : hovering || filters.isOpen ? Palette.fill : .clear) }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -34,21 +33,10 @@ struct MeetingFilterButton: View {
         .accessibilityLabel("Filter meetings")
         .accessibilityValue(count == 0 ? "No filters" : "\(count) \(count == 1 ? "filter" : "filters") on")
         // Beside the list in its title row, so the list it filters stays in view; below the toolbar in Calendar mode.
-        .popover(isPresented: $filters.isOpen, arrowEdge: place == .title ? .trailing : .bottom) {
+        .popover(isPresented: $filters.isOpen, arrowEdge: edge) {
             MeetingFilterPanel().environmentObject(filters)
         }
         .animation(.snappy(duration: 0.2), value: count)
-    }
-
-    @ViewBuilder
-    private func ground(active: Bool) -> some View {
-        switch place {
-        case .title:
-            Capsule().fill(active ? Palette.accentTint : hovering || filters.isOpen ? Palette.fill : .clear)
-        case .toolbar:
-            Color.clear.chromeGlass(in: Capsule())
-                .overlay { if active { Capsule().fill(Palette.accentTint) } }
-        }
     }
 }
 

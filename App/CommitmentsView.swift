@@ -13,17 +13,27 @@ struct CommitmentsView: View {
     @State private var mode = Mode.open
     @State private var search = ListSearchState()
     private var query: String { search.trimmed }
+    /// Why each task is in the searched list; nil with no search. Made once per change of the text or the tasks.
+    @State private var matches: [UUID: ListMatch]?
     /// A task opened from search: marked with the selection fill and scrolled to.
     @State private var opened: UUID?
 
-    /// The task's words, then whom it is for, the meeting, and the words it came from.
     private var matching: [Commitment] {
+        guard let matches else { return book.visible }
+        return book.visible.filter { matches[$0.id] != nil }
+    }
+
+    /// The task's words, then whom it is for, the meeting, and the words it came from. A row found by any but its
+    /// own words shows them in a line under it.
+    private func refilter() {
         let words = ListSearch(query)
-        guard !words.isEmpty else { return book.visible }
-        return book.visible.filter { c in
+        guard !words.isEmpty else { matches = nil; return }
+        var out: [UUID: ListMatch] = [:]
+        for c in book.visible {
             let fields = [ListField("To", c.to ?? ""), ListField("Meeting", c.callTitle ?? ""), ListField("Said", c.quote ?? "")]
-            return words.match(title: c.text, fields: fields) != nil
+            out[c.id] = words.match(title: c.text, fields: fields)
         }
+        matches = out
     }
 
     private var groups: [CommitmentGroup] { CommitmentGroup.make(matching) }
@@ -34,8 +44,10 @@ struct CommitmentsView: View {
         DetailColumn { toolbar } content: { page }
         .task(id: controller.commitmentsVersion) {
             book = controller.commitmentBook
+            refilter()
             takeOpenedTask()
         }
+        .onChange(of: search.query) { _, _ in refilter() }
         .onChange(of: controller.taskToOpen) { _, _ in takeOpenedTask() }
         .onAppear {
             // Development hook for screenshots: MOSSAD_COMMITMENTS=done opens the Done view.
@@ -147,7 +159,9 @@ struct CommitmentsView: View {
     // MARK: Rows
 
     private func row(_ c: Commitment, showPerson: Bool) -> some View {
-        CommitmentRow(commitment: c, showPerson: showPerson, open: { activate(c) }, toggleDone: { controller.toggleDone(c.id) }) {
+        let match = matches?[c.id]
+        return CommitmentRow(commitment: c, showPerson: showPerson, marked: match?.title.boldMatches(size: 13),
+                             matchLine: match?.line(size: 12), open: { activate(c) }, toggleDone: { controller.toggleDone(c.id) }) {
             trailing(c)
         }
         .padding(.vertical, c.status() == .overdue ? 11 : 10)

@@ -61,7 +61,7 @@ struct AllScreensView: View {
                             ForEach(group.screens) { screen in
                                 AllScreensTile(url: frameURL(group.callID, screen),
                                                time: (group.times[screen.file] ?? group.start).formatted(date: .omitted, time: .shortened),
-                                               text: screen.text, matches: !trimmed.isEmpty) {
+                                               text: screen.text, query: trimmed) {
                                     controller.openScreen(group.callID, file: screen.file)
                                 }
                             }
@@ -104,8 +104,16 @@ private struct AllScreensTile: View {
     let url: URL
     let time: String
     let text: String
-    let matches: Bool
+    /// The search: its words show in bold in the line under the frame.
+    let query: String
     let open: () -> Void
+    private var matches: Bool { !query.isEmpty }
+
+    private var line: AttributedString {
+        guard matches else { return AttributedString(ScreenText.excerpt(text)) }
+        let flat = text.split(whereSeparator: \.isNewline).joined(separator: " ")
+        return SearchText.marking(flat, query: query).excerpt(length: 48).boldMatches(size: 11.5)
+    }
     @State private var hovered = false
 
     var body: some View {
@@ -120,7 +128,7 @@ private struct AllScreensTile: View {
                     }
                     .opacity(hovered ? 0.88 : 1)
                 Text(time).font(.system(size: 11.5)).monospacedDigit().foregroundStyle(Palette.tertiary)
-                Text(ScreenText.excerpt(text)).font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(1)
+                Text(line).font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(matches ? 2 : 1)
             }
             .contentShape(Rectangle())
         }

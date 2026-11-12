@@ -11,7 +11,13 @@ struct ParsedQuery: Equatable {
     var email: String?
 
     init(_ text: String) {
-        var chunks = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        var rest = Substring(text)
+        // `#"Budget review"`: a tag of more words, kept whole, as a tag click writes it.
+        while let (tag, after) = TagToken.read(rest) {
+            if !tag.isEmpty { self.tag = tag }
+            rest = after
+        }
+        var chunks = rest.split(whereSeparator: \.isWhitespace).map(String.init)
         while let c = chunks.first, c.hasPrefix("#") || c.hasPrefix("@") {
             if c.hasPrefix("#") {
                 let key = SearchTokenizer.key(String(c.dropFirst()))
@@ -26,6 +32,41 @@ struct ParsedQuery: Equatable {
     }
 
     var isEmpty: Bool { words.isEmpty && tag == nil && person.isEmpty && email == nil }
+}
+
+/// A tag as a search: `#Budget` for a tag of one word, `#"Budget review"` for one of more, so the words of the
+/// tag are never read as words to search for.
+public enum TagToken {
+    public static func query(_ tag: String) -> String {
+        let t = tag.trimmingCharacters(in: .whitespaces)
+        return t.contains(where: \.isWhitespace) || t.contains("\"") ? "#\"\(t.replacingOccurrences(of: "\"", with: ""))\"" : "#\(t)"
+    }
+
+    /// The key of a leading quoted tag and the text after it, or nil when the text does not start with one.
+    static func read(_ text: Substring) -> (String, Substring)? {
+        let t = text.drop { $0.isWhitespace }
+        guard t.hasPrefix("#\"") else { return nil }
+        let inner = t.dropFirst(2)
+        let end = inner.firstIndex(of: "\"") ?? inner.endIndex
+        return (SearchTokenizer.key(String(inner[..<end])), end == inner.endIndex ? inner[end...] : inner[inner.index(after: end)...])
+    }
+
+    /// The tag of a query that is a tag and nothing else (`#Budget`, `#"Budget review"`), as typed.
+    public static func whole(_ query: String) -> String? {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        if q.hasPrefix("#\""), q.count > 2 {
+            var inner = q.dropFirst(2)
+            if inner.hasSuffix("\"") { inner = inner.dropLast() }
+            return inner.contains("\"") ? nil : String(inner)
+        }
+        guard q.hasPrefix("#"), !q.contains(where: \.isWhitespace) else { return nil }
+        return String(q.dropFirst())
+    }
+}
+
+extension SearchIndex {
+    /// Whether a text asks for anything: `#`, `@`, or punctuation alone is no search, and every meeting stays.
+    public static func isSearch(_ query: String) -> Bool { !ParsedQuery(query).isEmpty }
 }
 
 /// How each vocabulary word matches one query word: a code per word id, the best kind of match it allows.

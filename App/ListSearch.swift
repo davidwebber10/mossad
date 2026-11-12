@@ -46,7 +46,11 @@ struct ListSearchToggle: View {
         .onHover { hovering = $0 }
         .help(state.isShown ? "Close the search" : "Search this list (⌘F)")
         .accessibilityLabel(state.isShown ? "Close the search" : "Search this list")
-        .onAppear { controller.listSearches += 1 }
+        .onAppear {
+            controller.listSearches += 1
+            // Development hook for screenshots: MOSSAD_LIST_QUERY types into the page's list search.
+            if DevHooks.preview, state.query.isEmpty, let q = ProcessInfo.processInfo.environment["MOSSAD_LIST_QUERY"] { state.query = q }
+        }
         .onDisappear { controller.listSearches -= 1 }
         .onChange(of: controller.findRequest) { _, _ in
             withAnimation(.snappy(duration: 0.2)) { state.open() }
@@ -56,9 +60,11 @@ struct ListSearchToggle: View {
 
 /// The field that comes down under a list's title. Escape or the cross closes it and clears it.
 struct ListSearchField: View {
+    @EnvironmentObject var controller: AppController
     let prompt: String
     @Binding var state: ListSearchState
     @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 6) {
@@ -69,6 +75,12 @@ struct ListSearchField: View {
                 .foregroundStyle(Palette.ink)
                 .focused($focused)
                 .onExitCommand(perform: close)
+                // Return or Down Arrow goes to the rows, where the arrow keys move.
+                .onSubmit { controller.listFocusRequest += 1 }
+                .onKeyPress(.downArrow) {
+                    controller.listFocusRequest += 1
+                    return .handled
+                }
                 .accessibilityLabel(prompt)
             Button(action: close) {
                 Image(systemName: "xmark.circle.fill").font(.system(size: 13)).foregroundStyle(Palette.tertiaryMark)
@@ -88,12 +100,13 @@ struct ListSearchField: View {
         .onTapGesture { focused = true }
         .onAppear { if state.isOpen { focus() } }
         .onChange(of: state.focusTick) { _, _ in focus() }
-        .transition(.move(edge: .top).combined(with: .opacity))
+        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
     }
 
     private func close() {
         withAnimation(.snappy(duration: 0.2)) { state.close() }
         focused = false
+        controller.listFocusRequest += 1
     }
 
     /// A field that has just come into the view does not always take the focus at once on macOS.
@@ -123,22 +136,35 @@ struct ListMatchLine: View {
         }
     }
 
-    private var lead: String {
-        switch match.source {
+    private var lead: String { match.lead }
+}
+
+extension ListMatch {
+    /// "Note: ", "Dana Reyes 7:17: ": what comes before the matched text in a row's line.
+    var lead: String {
+        switch source {
         case .title: ""
         case .field(let label): "\(label): "
-        case .transcript(let speaker): match.time.map { "\(speaker) \(clock($0)): " } ?? "\(speaker): "
+        case .transcript(let speaker): time.map { "\(speaker) \(clock($0)): " } ?? "\(speaker): "
         }
+    }
+
+    /// The line under a row as one text: the lead, then the context with its matched words in bold.
+    func line(size: CGFloat) -> AttributedString? {
+        guard let context else { return nil }
+        var lead = AttributedString(lead)
+        lead.foregroundColor = Palette.tertiary
+        return lead + context.boldMatches(size: size)
     }
 }
 
 extension SearchText {
     /// The text with the matched words in a bold font of their own: a weight set on the `Text` wins over an inline
     /// bold.
-    func boldMatches(size: CGFloat) -> AttributedString {
+    func boldMatches(size: CGFloat, design: Font.Design = .default) -> AttributedString {
         var out = attributed
         for run in out.runs where run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
-            out[run.range].font = .system(size: size, weight: .bold)
+            out[run.range].font = .system(size: size, weight: .bold, design: design)
         }
         return out
     }

@@ -317,6 +317,7 @@ extension PeopleSort {
 
 /// The list column: "You", then everyone else in the sort's order. The arrow keys move the selection.
 private struct PeopleList: View {
+    @EnvironmentObject var controller: AppController
     let owner: [VoiceProfile]
     let people: [VoiceProfile]
     let stats: [String: PersonStats]
@@ -361,6 +362,11 @@ private struct PeopleList: View {
             .focusEffectDisabled()
             .onKeyPress(.downArrow) { move(1, proxy) }
             .onKeyPress(.upArrow) { move(-1, proxy) }
+            // Return or Down Arrow in the search field, or its close, gives the keys back to the list.
+            .onChange(of: controller.listFocusRequest) { _, _ in
+                focused = true
+                if selection.map({ !order.contains($0) }) ?? true, let first = order.first { selection = first }
+            }
         }
     }
 

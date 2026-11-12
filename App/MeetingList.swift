@@ -104,10 +104,15 @@ struct MeetingList: View {
                 // The arrow keys work as soon as the window opens, without a click in the list first.
                 focused = true
             }
+            // Return or Down Arrow in the search field, or its close, gives the keys back to the list.
+            .onChange(of: controller.listFocusRequest) { _, _ in
+                focused = true
+                if selection.map({ !order.contains($0) }) ?? true, let first = order.first { _ = jump(to: first, proxy) }
+            }
         }
     }
 
-    private var searching: Bool { !controller.meetingQuery.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var searching: Bool { SearchIndex.isSearch(controller.meetingQuery) }
 
     /// A row found by its transcript, a screen, a bookmark, or a decision opens the meeting at that moment.
     private func open(_ id: String, at time: TimeInterval?) {

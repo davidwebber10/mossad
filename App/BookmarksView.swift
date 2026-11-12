@@ -62,7 +62,7 @@ struct BookmarksView: View {
                         }
                         .padding(.top, i == 0 ? 0 : 32)
                         ForEach(group.bookmarks) { mark in
-                            BookmarkRow(mark: mark) { controller.openMeeting(mark.callID, at: mark.offset) }
+                            BookmarkRow(mark: mark, query: query) { controller.openMeeting(mark.callID, at: mark.offset) }
                         }
                     }
                 }
@@ -105,6 +105,8 @@ struct MomentGroupHeading: View {
 /// One bookmark: play, the time of day and the place in the call, the note, and the line that was said then.
 private struct BookmarkRow: View {
     let mark: BookmarkIndex.Entry
+    /// The search, whose words show in bold.
+    var query = ""
     let play: () -> Void
     @State private var hovered = false
 
@@ -125,10 +127,11 @@ private struct BookmarkRow: View {
                     Text("at \(clock(mark.offset))").font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.tertiary)
                 }
                 if let note = mark.note {
-                    Text(note).font(.system(size: 13)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                    Text(SearchText.marking(note, query: query).boldMatches(size: 13))
+                        .font(.system(size: 13)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                 }
                 if let said = mark.said {
-                    Text("\(Text(said.speaker + ":").fontWeight(.medium)) “\(said.text)”")
+                    Text("\(Text(said.speaker + ":").fontWeight(.medium)) “\(Text(SearchText.marking(said.text, query: query).boldMatches(size: 12.5)))”")
                         .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).lineLimit(2)
                 } else if mark.note == nil {
                     Text("No note").font(.system(size: 12.5)).foregroundStyle(Palette.tertiary)

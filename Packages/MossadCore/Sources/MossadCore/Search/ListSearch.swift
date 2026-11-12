@@ -70,7 +70,11 @@ public struct ListSearch: Sendable {
             if n > (pick?.2 ?? 0) { pick = (field, tokens, n) }
         }
         guard let (field, tokens, _) = pick else { return ListMatch(title: marked) }
-        let context = Snippet.make(field.text, matches: field.text.searchRanges(spans(tokens)), length: Self.snippetLength)
+        // The words that the title lacks count more where the line is cut.
+        let lacking = words.indices.filter { !titleWords.contains($0) }.map { words[$0] }
+        let hits = tokens.filter { t in words.contains { t.term.hasPrefix($0) } }
+        let weights = hits.map { t in lacking.contains { t.term.hasPrefix($0) } ? 2 : 1 }
+        let context = Snippet.make(field.text, matches: field.text.searchRanges(hits.map(\.range)), length: Self.snippetLength, weights: weights)
         return ListMatch(title: marked, source: .field(field.label), context: context)
     }
 

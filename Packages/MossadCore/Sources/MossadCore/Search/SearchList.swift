@@ -60,7 +60,7 @@ public struct SearchList: Sendable, Equatable {
     /// Before anything is typed: the owner's recent searches, then recent meetings and the people met most.
     public init(suggestions: SearchSuggestions, recent: [String] = []) {
         let all = [
-            Section(id: "searches", title: "Recent searches", group: .topHit, rows: recent.map { .recent($0) }),
+            Section(id: "searches", title: "Recent searches", group: .meetings, rows: recent.map { .recent($0) }),
             Section(id: "recent", title: "Recent meetings", group: .meetings, rows: suggestions.meetings.map { .hit(.meeting($0)) }),
             Section(id: "frequent", title: "People you meet most", group: .people, rows: suggestions.people.map { .hit(.person($0)) }),
         ]

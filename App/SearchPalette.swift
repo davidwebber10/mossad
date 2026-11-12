@@ -76,6 +76,10 @@ struct SearchPalette: View {
             if !trimmed.isEmpty { AccessibilityNotification.Announcement(new.announcement).post() }
         }
         .onChange(of: showsSuggestions) { _, _ in selection = list.first }
+        // After "Clear", the first row that is left.
+        .onChange(of: model.recent) { _, _ in
+            if showsSuggestions, selection.map({ list.row($0) == nil }) ?? true { selection = list.first }
+        }
         // The suggestions can arrive after the palette opens, when the index is still being built.
         .onChange(of: model.suggestions) { _, _ in
             if showsSuggestions, selection.map({ list.row($0) == nil }) ?? true { selection = list.first }

@@ -18,8 +18,17 @@ final class SearchModel: ObservableObject {
     /// Bumped after each update of the index, so the Meetings list search runs again on the new one.
     @Published private(set) var version = 0
     /// The owner's searches that led to a result, newest first, for the empty field.
-    @Published private(set) var recent = RecentSearches(UserDefaults.standard.stringArray(forKey: SearchModel.recentKey) ?? [])
+    @Published private(set) var recent = SearchModel.readRecent()
     private static let recentKey = "searchRecent"
+
+    /// A preview never reads or writes the owner's own recent searches: it starts from `MOSSAD_RECENT_SEARCHES`
+    /// (separated by "|"), made-up words for a screenshot, and keeps them in memory.
+    private static func readRecent() -> RecentSearches {
+        if DevHooks.preview {
+            return RecentSearches((ProcessInfo.processInfo.environment["MOSSAD_RECENT_SEARCHES"] ?? "").split(separator: "|").map(String.init))
+        }
+        return RecentSearches(UserDefaults.standard.stringArray(forKey: recentKey) ?? [])
+    }
 
     private var index = SearchIndex()
     private var results = SearchResults.empty
@@ -60,7 +69,8 @@ final class SearchModel: ObservableObject {
         async -> (SearchIndex, [String: CallRecord]) {
         let tasks = ((try? CommitmentBook.load(from: s.paths.commitments)) ?? CommitmentBook()).items
         let chats = ChatStore(directory: s.paths.chats).all()
-        // The people file as it is until the store is attached at launch.
+        // The people file as it is until the store is attached at launch. The palette shows the directory's job
+        // title only; the People list also reads the org chart, which this index does not load.
         let people = s.library.identity?.people.people ?? PeopleStore.peek(in: s.paths.people) ?? []
         let records = Dictionary(s.records.map { ($0.id, $0) }, uniquingKeysWith: { _, b in b })
         // One by one costs more than a fresh build once many meetings change, as at launch.
@@ -115,12 +125,12 @@ final class SearchModel: ObservableObject {
     /// Keeps the typed query among the recent searches: a result was opened from it.
     func remember(_ query: String) {
         recent.add(query)
-        UserDefaults.standard.set(recent.items, forKey: Self.recentKey)
+        if !DevHooks.preview { UserDefaults.standard.set(recent.items, forKey: Self.recentKey) }
     }
 
     func forgetRecent() {
         recent.clear()
-        UserDefaults.standard.removeObject(forKey: Self.recentKey)
+        if !DevHooks.preview { UserDefaults.standard.removeObject(forKey: Self.recentKey) }
     }
 
     /// The Meetings list search on the newest index, off the main actor; nil until the index is first built.

@@ -385,13 +385,7 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
     }
 }
 
-/// Marks the toolbar control that narrows when the row is short of room: the search field.
-private struct Compressible: LayoutValueKey {
-    static let defaultValue = false
-}
-
-/// The toolbar's trailing controls, 8 pt apart, at their own sizes. When the row is short of room the
-/// compressible control (the search) gives up width down to its minimum; the others never shrink or clip.
+/// The toolbar's trailing controls, 8 pt apart, at their own sizes; they never shrink or clip.
 private struct ToolbarTrailing: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let widths = self.widths(for: proposal.width, subviews)
@@ -411,16 +405,7 @@ private struct ToolbarTrailing: Layout {
     private func gaps(_ subviews: Subviews) -> CGFloat { CGFloat(max(subviews.count - 1, 0)) * Chrome.groupGap }
 
     private func widths(for available: CGFloat?, _ subviews: Subviews) -> [CGFloat] {
-        var widths = subviews.map { $0.sizeThatFits(.unspecified).width }
-        guard let available else { return widths }
-        var short = widths.reduce(0, +) + gaps(subviews) - available
-        for i in subviews.indices where short > 0 && subviews[i][Compressible.self] {
-            let least = subviews[i].sizeThatFits(ProposedViewSize(width: 0, height: nil)).width
-            let give = min(short, max(widths[i] - least, 0))
-            widths[i] -= give
-            short -= give
-        }
-        return widths
+        subviews.map { $0.sizeThatFits(.unspecified).width }
     }
 }
 

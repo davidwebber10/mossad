@@ -23,6 +23,9 @@ public enum MeetingSearch {
     public static func matches(_ r: CallRecord, _ query: String) -> Bool {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return true }
+        if let tag = TagToken.whole(q) {
+            return r.tags.contains { SearchTokenizer.key($0) == SearchTokenizer.key(tag) }
+        }
         if q.hasPrefix("#") {
             let tag = q.dropFirst().trimmingCharacters(in: .whitespaces)
             return r.tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame }
