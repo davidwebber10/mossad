@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.22.0",
+      "date": "2026-11-12",
+      "notes": [
+        "Ask the call you are on: a chat with the live call, with quick questions. A new chat design with times that open the moment. More accurate names in the live transcript. A finding's audio stops when you answer the card."
+      ]
+    },
+    {
       "version": "2.21.0",
       "date": "2026-11-12",
       "notes": [
