@@ -317,19 +317,35 @@ struct PersonNextTimeSection: View {
 
     var body: some View {
         let title = "Next time I see \(SeriesNames.first(name))"
-        if inColumn {
-            LabelColumn(label: title) { list }
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title).textRole(.label).foregroundStyle(Palette.secondary).accessibilityAddTraits(.isHeader)
-                list
+        Group {
+            if inColumn {
+                LabelColumn(label: title) { list }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).textRole(.label).foregroundStyle(Palette.secondary).accessibilityAddTraits(.isHeader)
+                    list
+                }
+            }
+        }
+        .task(id: controller.peopleStamp) { controller.refreshSeries() }
+        .task {
+            // Chat, the MCP, and the phone write the points too.
+            while !Task.isCancelled {
+                controller.series.reload(controller.paths)
+                try? await Task.sleep(for: .seconds(5))
             }
         }
     }
 
     private var list: some View {
-        let refs = controller.series.people
-        let points = controller.series.book.points(forPerson: personID, canonical: { refs.canonical($0) })
+        // The people as saved now: a merge on the People page shows before the catalog is made again.
+        let points: [NextTimePoint]
+        if let people = controller.library.identity?.people.people {
+            points = controller.series.book.points(forPerson: personID, people: people)
+        } else {
+            let refs = controller.series.people
+            points = controller.series.book.points(forPerson: personID, canonical: { refs.canonical($0) })
+        }
         return NextTimeList(points: points, add: { text in controller.changeNextTime { $0.add(text, personID: personID, personName: name) } },
                             placeholder: "Add a point for \(SeriesNames.first(name))")
     }

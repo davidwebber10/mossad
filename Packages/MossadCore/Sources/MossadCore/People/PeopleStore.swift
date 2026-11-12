@@ -301,7 +301,10 @@ public final class PeopleStore: @unchecked Sendable {
         try change { people, date in
             guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }) else { return [] }
             let old = people[i].emails.filter { $0.state == .verified }.map(\.address)
-            guard people[i].setVerifiedEmails(emails, at: date) else { return [] }
+            // Only the owner takes back their own "Not their address".
+            let rejected = Set(people[i].emails.filter { $0.state == .rejected }.map(\.address))
+            let given = actor == "owner" ? emails : emails.filter { !rejected.contains(EmailIdentity.normalized($0)) }
+            guard people[i].setVerifiedEmails(given, at: date) else { return [] }
             let new = people[i].emails.filter { $0.state == .verified }.map(\.address)
             return [PeopleLogEntry(at: date, kind: "email", actor: actor, subject: id, before: old.joined(separator: ", "), after: new.joined(separator: ", "))]
         }

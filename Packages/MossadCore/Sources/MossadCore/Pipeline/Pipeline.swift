@@ -988,8 +988,8 @@ public actor Pipeline {
             guard let name = chosen[key] ?? current.speakerNames[key] else { continue }
             // One more address of the person; one that another person has stays with them.
             do {
-                if case .belongsTo(let other) = try library.addEmail(email, for: name) {
-                    Log.info("An address picked for a voice is another person's; it stays with \(other)")
+                if case .belongsTo = try library.addEmail(email, for: name) {
+                    Log.info("An address picked for a voice is another person's; it stays with them")
                 }
             } catch { Log.error("Saving email for \(name) failed: \(error)") }
         }

@@ -15,7 +15,8 @@ struct MossadEntry {
             print(stored.isEmpty ? "No keys found in the environment." : "Stored: " + stored.map(\.rawValue).joined(separator: ", "))
             exit(stored.isEmpty ? 1 : 0)
         }
-        // `--mcp` serves the meetings to other AI apps over stdio, read-only, with no UI and no recording.
+        // `--mcp` serves the meetings to other AI apps over stdio, with no UI and no recording. Its one write is
+        // `add_next_time_point`, to the owner's own list.
         if CommandLine.arguments.contains("--mcp") {
             // Rehearsal never serves the meetings.
             if Rehearsal.isOn { print("Mossad Rehearsal does not serve MCP."); exit(1) }

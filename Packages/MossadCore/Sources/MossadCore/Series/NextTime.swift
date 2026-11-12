@@ -138,6 +138,18 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         return visible.filter { p in p.isOpen && p.personID.map(canonical) == wanted }.sorted { ($0.rank, $0.created) < ($1.rank, $1.created) }
     }
 
+    /// The open points for one person by the people as saved now, not as a catalog made earlier saw them: a point
+    /// saved for a person merged into this one shows at once.
+    public func points(forPerson id: String, people: [Person]) -> [NextTimePoint] {
+        let next = Dictionary(people.compactMap { p in p.mergedInto.map { (p.id.rawValue, $0.rawValue) } }, uniquingKeysWith: { a, _ in a })
+        return points(forPerson: id) { start in
+            var current = start
+            var seen: Set<String> = [start]
+            while let n = next[current], seen.insert(n).inserted { current = n }
+            return current
+        }
+    }
+
     /// The open points for an upcoming meeting: its series' first, then the ones for each invited person.
     /// `people` are the saved ids of the invited people.
     public func points(for series: MeetingSeries?, people: [String], canonical: (String) -> String = { $0 }) -> [NextTimePoint] {

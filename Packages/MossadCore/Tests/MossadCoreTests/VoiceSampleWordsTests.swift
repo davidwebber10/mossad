@@ -8,6 +8,7 @@ final class VoiceSampleWordsTests: XCTestCase {
         XCTAssertEqual(VoiceSample.Origin.ownerEnrollment.words, "Your voice on the microphone")
         XCTAssertEqual(VoiceSample.Origin.migrated.words, "From the older voice library")
         XCTAssertEqual(VoiceSample.Origin.autoMatch(0.874).words, "Matched by voice (0.87)")
+        XCTAssertEqual(VoiceSample.Origin.inviteInference.words, "Named from a call’s invite")
         XCTAssertEqual(VoiceSample.Origin(kind: "fromANewerBuild").words, "Learned from a call", "a kind from a newer build still reads")
     }
 

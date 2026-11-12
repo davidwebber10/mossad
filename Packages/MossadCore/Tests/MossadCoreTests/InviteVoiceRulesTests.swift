@@ -223,6 +223,19 @@ final class InviteVoiceRulesTests: XCTestCase {
         XCTAssertTrue(byName.invited.contains("Mira Stone"))
     }
 
+    // An old id from a company domain rule is not proof: the person must have the guest's address or whole name.
+    func testAnOldPersonIDNeedsTheGuestsAddressOrWholeName() {
+        var dale = Person(id: PersonID(rawValue: "p-dale"), displayName: "Dale Fenwick", origin: .voiceNaming, at: .distantPast)
+        dale.addEmail("dale@acme.test", state: .verified, source: .owner, at: .distantPast)
+        let other = InviteRoster(invite: CallInvite(guests: [Guest(email: "d.f@acme-group.test", personID: "p-dale")]), profiles: profiles, people: [dale])
+        XCTAssertFalse(other.invited.contains("Dale Fenwick"))
+        let own = InviteRoster(invite: CallInvite(guests: [Guest(email: "dale@acme.test", personID: "p-dale")]), profiles: profiles, people: [dale])
+        XCTAssertTrue(own.invited.contains("Dale Fenwick"))
+        let named = InviteRoster(invite: CallInvite(guests: [Guest(name: "Fenwick, Dale", email: "d.f@acme-group.test", personID: "p-dale")]),
+                                 profiles: profiles, people: [dale])
+        XCTAssertTrue(named.invited.contains("Dale Fenwick"))
+    }
+
     func testAFirstNameAloneIsNotASureMatch() {
         let roster = InviteRoster(invite: CallInvite(guests: [Guest(name: "Mira")]), profiles: profiles, people: [])
         XCTAssertFalse(roster.invited.contains("Mira Stone"))

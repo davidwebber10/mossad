@@ -17,20 +17,20 @@ final class PeopleDuplicatesTests: XCTestCase {
     }
 
     func testFindsTheSameEmailTheSameNameASimilarNameAndTheSameVoice() throws {
-        try library.add([1, 0, 0, 0], to: "Ben Spiegel")
-        try library.setEmail("bspiegel@example.com", for: "Ben Spiegel")
+        try library.add([1, 0, 0, 0], to: "Ben Hollis")
+        try library.setEmail("bhollis@example.com", for: "Ben Hollis")
         // The library gives an address to one person only; two profiles with one address come from older files.
-        XCTAssertEqual(try library.setEmail("BSpiegel@example.com", for: "Ben S"), .belongsTo("Ben Spiegel"))
+        XCTAssertEqual(try library.setEmail("BHollis@example.com", for: "Ben S"), .belongsTo("Ben Hollis"))
         try library.add([0, 1, 0, 0], to: "Zach Sampson")
         try library.add([0, 0, 1, 0], to: "Zach Samson")
         try library.add([0, 0, 0, 1], to: "Mia Long")
         try library.add([0.02, 0, 0, 1], to: "Speaker voice 2")
         try library.add([0, 0.7, 0.7, 0], to: "Ann Lee")
-        let found = PeopleDuplicates.find(library.profiles + [VoiceProfile(name: "Ben S", isOwner: false, embeddings: [], email: "BSpiegel@example.com")])
+        let found = PeopleDuplicates.find(library.profiles + [VoiceProfile(name: "Ben S", isOwner: false, embeddings: [], email: "BHollis@example.com")])
         func reason(_ a: String, _ b: String) -> PeopleDuplicates.Reason? {
             found.first { Set([$0.first, $0.second]) == Set([a, b]) }?.reason
         }
-        XCTAssertEqual(reason("Ben Spiegel", "Ben S"), .sameEmail)
+        XCTAssertEqual(reason("Ben Hollis", "Ben S"), .sameEmail)
         XCTAssertEqual(reason("Zach Sampson", "Zach Samson"), .similarName)
         XCTAssertEqual(reason("Mia Long", "Speaker voice 2"), .sameVoice)
         XCTAssertNil(reason("Ann Lee", "Mia Long"))

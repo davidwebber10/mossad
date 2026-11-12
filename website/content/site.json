@@ -255,11 +255,12 @@
           "body": "Mossad uses the call's invite to name voices: a person who was not invited needs a much closer match.",
           "details": [
             "When one invited person has no saved voice and one voice is left, Mossad names it and learns it",
+            "A voice named from the invite names nobody on a call that does not invite that person, until a later call confirms it",
+            "Any of a person's addresses on the invite finds their voice",
             "Calls with no invite keep the usual rules"
           ],
           "icon": "envelope.badge.person.crop",
-          "comingSoon": true,
-          "branch": "fix/invite-aware-voices",
+          "comingSoon": false,
           "sources": ["Packages/MossadCore/Sources/MossadCore/Voices/InviteVoiceRules.swift", "Packages/MossadCore/Sources/MossadCore/Voices/SpeakerIdentifier.swift"]
         },
         {
@@ -278,14 +279,14 @@
         {
           "id": "person-tabs",
           "title": "Person pages with tabs",
-          "body": "A person's page splits into tabs, and every address they use finds them.",
+          "body": "A person's page has tabs for the overview, meetings, tasks, analytics, knowledge, and voice, and every address they use finds them.",
           "details": [
-            "More than one email for each person",
-            "Your company's domains and directory aliases count as theirs"
+            "More than one email for each person, and \"Not their address\" for one that is wrong",
+            "Your company's domains and directory aliases count as theirs",
+            "Your points for the next time you see them, on the overview"
           ],
           "icon": "rectangle.split.3x1",
-          "comingSoon": true,
-          "branch": "feature/person-tabs",
+          "comingSoon": false,
           "sources": ["Packages/MossadCore/Sources/MossadCore/People/PersonMeetings.swift", "Packages/MossadCore/Sources/MossadCore/People/CompanyDomains.swift", "Packages/MossadCore/Sources/MossadCore/People/Person.swift"]
         },
         {
@@ -416,11 +417,11 @@
           "details": [
             "A point counts as discussed only with a quote from the transcript",
             "The coach suggests points from open action items, open decisions, and unanswered questions",
-            "Add a point from Chat or from another AI app"
+            "Add a point from Chat or from another AI app",
+            "Points for a person show on that person's page"
           ],
           "icon": "repeat",
-          "comingSoon": true,
-          "branch": "feature/series",
+          "comingSoon": false,
           "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift"]
         },
         {
@@ -447,15 +448,14 @@
         {
           "id": "list-search",
           "title": "A search in every list",
-          "body": "Each list gets its own search under its title, and each meeting shows where your words matched.",
+          "body": "The Meetings, People, Tasks, Bookmarks, and Screens pages get their own search, and each meeting shows where your words matched.",
           "details": [
-            "A search button in every toolbar",
+            "Command-F opens the page's search",
             "Recent searches before you type",
             "Bookmark notes and job titles in the results"
           ],
           "icon": "text.magnifyingglass",
-          "comingSoon": true,
-          "branch": "feature/search",
+          "comingSoon": false,
           "sources": ["Packages/MossadCore/Sources/MossadCore/Search/ListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Search/MeetingListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Search/RecentSearches.swift", "App/ListSearch.swift"]
         },
         {

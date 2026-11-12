@@ -8,6 +8,7 @@ extension VoiceSample.Origin {
         case Self.ownerNamed.kind: "You named this voice"
         case Self.ownerEnrollment.kind: "Your voice on the microphone"
         case Self.migrated.kind: "From the older voice library"
+        case Self.inviteInference.kind: "Named from a call’s invite"
         case "autoMatch": score.map { String(format: "Matched by voice (%.2f)", $0) } ?? "Matched by voice"
         default: "Learned from a call"
         }

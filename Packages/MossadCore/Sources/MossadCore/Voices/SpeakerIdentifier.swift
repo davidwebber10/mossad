@@ -106,7 +106,8 @@ public struct SpeakerIdentifier: Sendable {
                 try library.add(e, to: name, source: source(v.key, .inviteInference))
                 // The address ties this voice to the invite's person, so the next invite finds the voice by it.
                 if let email = decision.inferred?.guest.email, library.profiles.first(where: { $0.name == name })?.email == nil,
-                   library.name(forEmail: email) == nil {
+                   library.name(forEmail: email) == nil,
+                   !(people.flatMap { s in s.id(forVoiceName: name).flatMap(s.person) }.map { InviteRoster.refuses($0, email) } ?? false) {
                     try library.setEmail(email, for: name, actor: "invite")
                 }
             case .withheld, .unknown:

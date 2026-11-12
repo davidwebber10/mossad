@@ -229,6 +229,18 @@ final class SeriesTests: XCTestCase {
         XCTAssertEqual(merged.points(forPerson: "p1").count, 1)
     }
 
+    func testThePersonPageShowsThePointsOfAPersonMergedIntoThisOne() {
+        var book = NextTimeBook()
+        book.add("Hiring plan", personID: "p1", personName: "Sam Carter", at: now)
+        book.add("Budget", personID: "p2", personName: "S. Carter", at: now.addingTimeInterval(1))
+        var a = Person(id: PersonID(rawValue: "p1"), displayName: "Sam Carter", origin: .voiceNaming, at: now)
+        let b = Person(id: PersonID(rawValue: "p2"), displayName: "S. Carter", origin: .voiceNaming, at: now)
+        XCTAssertEqual(book.points(forPerson: "p2", people: [a, b]).map(\.text), ["Budget"])
+        a.mergedInto = b.id
+        XCTAssertEqual(book.points(forPerson: "p2", people: [a, b]).map(\.text), ["Hiring plan", "Budget"])
+        XCTAssertEqual(book.points(forPerson: "p1", people: [a, b]).map(\.text), ["Hiring plan", "Budget"])
+    }
+
     func testTheBookSavesAndReads() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("series-\(UUID())")
         defer { try? FileManager.default.removeItem(at: dir) }

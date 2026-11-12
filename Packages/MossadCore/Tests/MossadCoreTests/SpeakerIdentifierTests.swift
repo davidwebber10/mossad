@@ -166,6 +166,41 @@ final class SpeakerIdentifierTests: XCTestCase {
         XCTAssertEqual(library.profiles.first { $0.name == "Dale Fenwick" }?.embeddings.count, 1)
     }
 
+    /// Jo has no voice sample, and the owner said that the invite's address is not Jo's.
+    func notTheirAddressCall(profile: Bool) async throws -> (SpeakerIdentification, VoiceSampleStore, PeopleStore, PersonID) {
+        let (samples, people) = try savedVoices()
+        if profile {
+            try library.setEmail("jo@example.com", for: "Jo Fenwick")
+            try library.setEmail(nil, for: "Jo Fenwick")
+        }
+        let jo = try people.ensure(voiceName: "Jo Fenwick", isOwner: false, origin: .voiceNaming)
+        try people.rejectEmail("jo.fenwick@vendor.test", for: jo)
+        try writeSegments(meURL, total: 60, [(0, 5, 200)])
+        try writeSegments(themURL, total: 60, [(6, 12, 800), (13, 40, 400)])
+        let invite = CallInvite(guests: [CallInvite.Guest(name: "Mira Stone", email: "mira@example.com"),
+                                         CallInvite.Guest(name: "Jo Fenwick", email: "jo.fenwick@vendor.test")])
+        let result = try await identify([u(.me, "A", 0, 5), u(.them, "A", 6, 12), u(.them, "B", 13, 40)], invite: invite)
+        return (result, samples, people, jo)
+    }
+
+    func assertNotTheirAddressStays(profile: Bool) async throws {
+        let (result, samples, people, jo) = try await notTheirAddressCall(profile: profile)
+        XCTAssertNil(result.names["them:B"])
+        XCTAssertEqual(result.unknown, ["them:B"])
+        XCTAssertEqual(library.profiles.first { $0.name == "Jo Fenwick" }?.emails ?? [], [])
+        XCTAssertNil(library.name(forEmail: "jo.fenwick@vendor.test"))
+        XCTAssertEqual(people.person(jo)?.emails.map(\.state), [.rejected])
+        XCTAssertEqual(samples.samples(of: jo), [])
+    }
+
+    func testAnAddressMarkedNotTheirsIsNeverGivenBackByTheInvite() async throws {
+        try await assertNotTheirAddressStays(profile: false)
+    }
+
+    func testAnAddressMarkedNotTheirsIsNeverGivenBackToAProfileWithNoVoice() async throws {
+        try await assertNotTheirAddressStays(profile: true)
+    }
+
     func testIdentifyingTheSameCallAgainKeepsTheVoiceFromTheInvite() async throws {
         let (samples, people) = try savedVoices()
         _ = try await ownerCaseCall()

@@ -90,9 +90,13 @@ public struct InviteRoster: Sendable, Equatable {
         }
         let directory = profiles.map { PersonDirectory.Person(name: $0.name, email: $0.email) }
         func profile(for g: CallInvite.Guest) -> VoiceProfile? {
+            // A guest at an address the owner said is not this person's is not this person.
+            found(g).flatMap { p in personID(of: p).flatMap { id in live.first { $0.id == id } }.map { Self.refuses($0, g.email) } == true ? nil : p }
+        }
+        func found(_ g: CallInvite.Guest) -> VoiceProfile? {
             if let raw = g.personID {
                 let id = Self.canonical(PersonID(rawValue: raw), in: people)
-                if let hit = profiles.first(where: { personID(of: $0) == id }) { return hit }
+                if live.first(where: { $0.id == id }).map({ Self.backs($0, g) }) ?? true, let hit = profiles.first(where: { personID(of: $0) == id }) { return hit }
             }
             if let email = g.email, let hit = profiles.first(where: { emails(of: $0).contains(email) }) { return hit }
             guard let name = g.name, let hit = PersonDirectory.existing(name: name, email: nil, among: directory) else { return nil }
@@ -147,6 +151,21 @@ public struct InviteRoster: Sendable, Equatable {
         Set(p.emails.filter { $0.state != .rejected && !$0.shared }.map { EmailIdentity.normalized($0.address) })
     }
 
+    /// The owner said that this address is not the person's ("Not their address").
+    static func refuses(_ p: Person, _ email: String?) -> Bool {
+        guard let email = email.map(EmailIdentity.normalized) else { return false }
+        return p.emails.contains { $0.address == email && $0.state == .rejected }
+    }
+
+    /// A saved id on an invite entry is the person only when the entry's address is theirs or its name is their
+    /// whole name: an id an older rule gave by the company's domain alone is no proof of who it is.
+    static func backs(_ p: Person, _ g: CallInvite.Guest) -> Bool {
+        guard let email = g.email else { return true }
+        if addresses(of: p).contains(email) { return true }
+        guard let name = g.name else { return false }
+        return PersonDirectory.existing(name: name, email: nil, among: [PersonDirectory.Person(name: p.displayName, email: nil)]) != nil
+    }
+
     private static func canonical(_ id: PersonID, in people: [Person]) -> PersonID {
         var current = id
         var seen: Set<PersonID> = []
@@ -163,10 +182,16 @@ public struct InviteRoster: Sendable, Equatable {
     /// A saved person's name on a sure match, else the invite's name in the order first, family, else a
     /// "first.last" address as a name. Never the address itself: a speaker's name shows in the note and the summary.
     static func label(of g: CallInvite.Guest, among people: [Person]) -> (String, SourceKind)? {
-        if let raw = g.personID, let p = people.first(where: { $0.id == canonical(PersonID(rawValue: raw), in: people) }) {
+        // A person who refused this address is not who it is, and their name is no label for a stranger with it.
+        let refused = people.filter { refuses($0, g.email) }
+        if let written = g.name ?? g.email.flatMap(name(fromAddress:)),
+           PersonDirectory.existing(name: written, email: nil, among: refused.map { PersonDirectory.Person(name: $0.displayName, email: nil) }) != nil {
+            return nil
+        }
+        if let raw = g.personID, let p = people.first(where: { $0.id == canonical(PersonID(rawValue: raw), in: people) }), !refuses(p, g.email), backs(p, g) {
             return p.displayName.contains("@") ? nil : (p.displayName, .voiceNaming)
         }
-        let directory = people.filter { !$0.isOwner }.flatMap { p in
+        let directory = people.filter { !$0.isOwner && !refuses($0, g.email) }.flatMap { p in
             let own = addresses(of: p)
             return own.isEmpty ? [PersonDirectory.Person(name: p.displayName, email: nil)]
                 : own.sorted().map { PersonDirectory.Person(name: p.displayName, email: $0) }

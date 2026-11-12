@@ -148,6 +148,16 @@ final class PersonEmailsReviewTests: XCTestCase {
         XCTAssertNil(PersonResolver(people: store.people, domains: domains).resolve(PersonObservation(name: "Sam Carter", email: "sc@acmeinc.test")).person)
     }
 
+    func testOnlyTheOwnerTakesBackNotTheirAddress() throws {
+        let store = PeopleStore(directory: temp())
+        let id = try store.ensure(voiceName: "Sam Carter", isOwner: false, origin: .voiceNaming)
+        try store.rejectEmail("sc@acmeinc.test", for: id)
+        try store.setEmails(["sc@acmeinc.test"], for: id, actor: "invite")
+        XCTAssertEqual(store.person(id)?.emails.map(\.state), [.rejected])
+        try store.setEmails(["sc@acmeinc.test"], for: id)
+        XCTAssertEqual(store.person(id)?.emails.map(\.state), [.verified])
+    }
+
     // MARK: The iPhone: job, team, and domains; no photo
 
     func testThePhoneGetsTheJobTheTeamAndTheDomainsAndNoPhoto() throws {
