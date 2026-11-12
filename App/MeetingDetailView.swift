@@ -297,6 +297,8 @@ struct MeetingPeople {
         let seconds: TimeInterval
         /// The saved person this speaker is, whose profile the name opens; nil for a voice Mossad has not saved.
         var person: String?
+        /// The name came from the call's invite, not from a voice the owner named.
+        var fromInvite = false
     }
 
     let speakers: [Speaker]
@@ -326,7 +328,8 @@ struct MeetingPeople {
             let keys = known ? allKeys.filter { record.speakerNames[$0] != nil && names[$0] == lane.name } : [lane.key]
             let s = Speaker(key: lane.key, keys: keys, name: lane.name, email: profiles.first { $0.name == lane.name }?.email,
                             color: Palette.speaker(i), isOwner: lane.name == ownerName, isUnknown: !known, seconds: lane.seconds,
-                            person: known ? directory.link(for: lane.name, in: knownNames) : nil)
+                            person: known ? directory.link(for: lane.name, in: knownNames) : nil,
+                            fromInvite: !Set(keys).isDisjoint(with: record.fromInvite ?? []))
             for k in keys { byKey[k] = s }
             return s
         }
@@ -398,7 +401,8 @@ struct SpeakerNamingPopover: View {
         .frame(width: 300)
         .onAppear {
             name = speaker.isUnknown ? "" : speaker.name
-            email = speaker.email ?? ""
+            // A name from the invite: the address is the invited person's, not proof of whoever the voice is.
+            email = speaker.fromInvite ? "" : speaker.email ?? ""
         }
     }
 }

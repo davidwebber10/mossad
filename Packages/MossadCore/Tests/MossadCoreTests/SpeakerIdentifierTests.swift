@@ -115,4 +115,134 @@ final class SpeakerIdentifierTests: XCTestCase {
         XCTAssertEqual(result.names["them:A"], "Alex Rivera")
         XCTAssertEqual(library.profiles.first { $0.name == "Alex Rivera" }?.embeddings.count, 1)
     }
+
+    // The invite.
+
+    func identify(_ utterances: [Utterance], invite: CallInvite?) async throws -> SpeakerIdentification {
+        try await SpeakerIdentifier(library: library, provider: provider, ownerName: "Avery Lane")
+            .identify(utterances: utterances, meURL: meURL, themURL: themURL, call: (id: "call-1", start: .distantPast), invite: invite)
+    }
+
+    /// The owner, an invited colleague at 800 Hz, and the brother of the voiceless invitee, close to the 400 Hz voice.
+    func savedVoices() throws -> (VoiceSampleStore, PeopleStore) {
+        let people = PeopleStore(directory: dir.appendingPathComponent("People"))
+        let samples = VoiceSampleStore(directory: dir.appendingPathComponent("Voices"))
+        library.identity = VoiceIdentity(people: people, samples: samples)
+        try library.add([1, 0, 0, 0], to: "Avery Lane", isOwner: true)
+        try library.add([0, 0, 0, 1], to: "Mira Stone")
+        try library.setEmail("mira@example.com", for: "Mira Stone")
+        try library.add([0.7, 0.71, 0, 0], to: "Dale Fenwick")
+        return (samples, people)
+    }
+
+    let ownerCase = CallInvite(guests: [CallInvite.Guest(name: "Mira Stone", email: "mira@example.com"),
+                                        CallInvite.Guest(email: "jo.fenwick@example.com")])
+
+    /// The owner on the mic, Mira at 800 Hz, and Jo at 400 Hz for 27 s, with a copy of Jo on the mic.
+    func ownerCaseCall() async throws -> SpeakerIdentification {
+        try writeSegments(meURL, total: 60, [(0, 5, 200), (45, 50, 400)])
+        try writeSegments(themURL, total: 60, [(6, 12, 800), (13, 40, 400)])
+        return try await identify([u(.me, "A", 0, 5), u(.them, "A", 6, 12), u(.them, "B", 13, 40), u(.me, "B", 45, 50)], invite: ownerCase)
+    }
+
+    func testTheUninvitedBrotherIsNotNamedAndTheVoicelessInviteeIs() async throws {
+        let (samples, people) = try savedVoices()
+        let result = try await ownerCaseCall()
+        XCTAssertEqual(result.names["me:A"], "Avery Lane")
+        XCTAssertEqual(result.names["them:A"], "Mira Stone")
+        XCTAssertEqual(result.names["them:B"], "Jo Fenwick")
+        XCTAssertEqual(result.fromInvite, ["them:B"])
+        // The mic copy of the person named from the invite gets their name, so the pipeline drops it as echo.
+        XCTAssertEqual(result.names["me:B"], "Jo Fenwick")
+        XCTAssertTrue(result.unknown.isEmpty)
+        let jo = try XCTUnwrap(library.profiles.first { $0.name == "Jo Fenwick" })
+        XCTAssertEqual(jo.embeddings, [[0, 1, 0, 0]])
+        XCTAssertEqual(jo.email, "jo.fenwick@example.com")
+        XCTAssertEqual(jo.provisional, "call-1")
+        let id = try XCTUnwrap(people.id(forVoiceName: "Jo Fenwick"))
+        XCTAssertEqual(people.person(id)?.origin, .address)
+        XCTAssertEqual(samples.samples(of: id).map(\.origin), [.inviteInference])
+        XCTAssertEqual(samples.samples(of: id).first?.callID, "call-1")
+        XCTAssertEqual(library.profiles.first { $0.name == "Dale Fenwick" }?.embeddings.count, 1)
+    }
+
+    func testIdentifyingTheSameCallAgainKeepsTheVoiceFromTheInvite() async throws {
+        let (samples, people) = try savedVoices()
+        _ = try await ownerCaseCall()
+        let again = try await ownerCaseCall()
+        XCTAssertEqual(again.names["them:B"], "Jo Fenwick")
+        // The mic copy is that voice too; the pipeline drops it as echo.
+        XCTAssertEqual(again.fromInvite, ["them:B", "me:B"])
+        let id = try XCTUnwrap(people.id(forVoiceName: "Jo Fenwick"))
+        XCTAssertEqual(samples.samples(of: id).map(\.origin), [.inviteInference])
+        XCTAssertEqual(library.profiles.first { $0.name == "Jo Fenwick" }?.provisional, "call-1")
+    }
+
+    func testAVoiceFromTheInviteNamesNobodyOnACallThatDoesNotInviteThem() async throws {
+        _ = try savedVoices()
+        _ = try await ownerCaseCall()
+        try writeSegments(meURL, total: 60, [(0, 5, 200)])
+        try writeSegments(themURL, total: 60, [(13, 40, 400)])
+        let result = try await SpeakerIdentifier(library: library, provider: provider, ownerName: "Avery Lane")
+            .identify(utterances: [u(.me, "A", 0, 5), u(.them, "B", 13, 40)], meURL: meURL, themURL: themURL,
+                      call: (id: "call-2", start: .distantPast), invite: CallInvite(guests: [CallInvite.Guest(name: "Mira Stone")]))
+        XCTAssertNil(result.names["them:B"])
+        XCTAssertEqual(result.unknown, ["them:B"])
+    }
+
+    func testTheOwnersCorrectionTakesTheInvitesSampleBack() async throws {
+        _ = try savedVoices()
+        _ = try await ownerCaseCall()
+        try library.forget(callID: "call-1", speakerKey: "them:B", from: "Jo Fenwick", voice: [0, 1, 0, 0])
+        let jo = library.profiles.first { $0.name == "Jo Fenwick" }
+        XCTAssertEqual(jo?.embeddings, [])
+        XCTAssertNil(jo?.provisional)
+    }
+
+    func testWithoutAnInviteTheBrotherIsNamedAsBefore() async throws {
+        _ = try savedVoices()
+        try writeSegments(meURL, total: 30, [(0, 5, 200)])
+        try writeSegments(themURL, total: 30, [(13, 20, 400)])
+        let result = try await identify([u(.me, "A", 0, 5), u(.them, "B", 13, 20)], invite: nil)
+        XCTAssertEqual(result.names["them:B"], "Dale Fenwick")
+    }
+
+    func testTwoVoicelessInviteesLeaveTheVoiceToBeNamed() async throws {
+        _ = try savedVoices()
+        try writeSegments(meURL, total: 30, [(0, 5, 200)])
+        try writeSegments(themURL, total: 30, [(13, 20, 400)])
+        let invite = CallInvite(guests: [CallInvite.Guest(email: "jo.fenwick@example.com"), CallInvite.Guest(name: "Pat Quill")])
+        // Seven seconds would not be learned anyway; the point is that nobody is named.
+        let result = try await identify([u(.me, "A", 0, 5), u(.them, "B", 13, 20)], invite: invite)
+        XCTAssertNil(result.names["them:B"])
+        XCTAssertEqual(result.unknown, ["them:B"])
+        XCTAssertEqual(library.profiles.map(\.name), ["Avery Lane", "Mira Stone", "Dale Fenwick"])
+    }
+
+    func testAStrongUninvitedMatchNamesButNeverTeaches() async throws {
+        try library.add([0, 0.995, 0.1, 0], to: "Dale Fenwick")
+        try library.add([0, 0, 0, 1], to: "Mira Stone")
+        try writeSegments(meURL, total: 20, [(0, 5, 200)])
+        try writeSegments(themURL, total: 20, [(6, 12, 400)])
+        let result = try await identify([u(.me, "A", 0, 5), u(.them, "A", 6, 12)], invite: CallInvite(guests: [CallInvite.Guest(name: "Mira Stone")]))
+        XCTAssertEqual(result.names["them:A"], "Dale Fenwick")
+        XCTAssertEqual(library.profiles.first { $0.name == "Dale Fenwick" }?.embeddings.count, 1)
+    }
+
+    func testAnInvitedSureMatchStillTeaches() async throws {
+        try library.add([0, 0.995, 0.1, 0], to: "Dale Fenwick")
+        try writeSegments(meURL, total: 20, [(0, 5, 200)])
+        try writeSegments(themURL, total: 20, [(6, 12, 400)])
+        _ = try await identify([u(.me, "A", 0, 5), u(.them, "A", 6, 12)], invite: CallInvite(guests: [CallInvite.Guest(name: "Dale Fenwick")]))
+        XCTAssertEqual(library.profiles.first { $0.name == "Dale Fenwick" }?.embeddings.count, 2)
+    }
+
+    func testTheOwnersVoiceIsNamedWhenTheInviteDoesNotListThem() async throws {
+        try library.add([1, 0, 0, 0], to: "Avery Lane", isOwner: true)
+        try writeSegments(meURL, total: 20, [(0, 5, 200)])
+        try writeSegments(themURL, total: 20, [])
+        let result = try await identify([u(.me, "A", 0, 5)], invite: CallInvite(guests: [CallInvite.Guest(name: "Mira Stone")]))
+        XCTAssertEqual(result.names["me:A"], "Avery Lane")
+        XCTAssertEqual(library.owner?.embeddings.count, 1)
+    }
 }

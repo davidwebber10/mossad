@@ -5,8 +5,14 @@ public struct VoiceProfile: Codable, Equatable, Sendable {
     public var isOwner: Bool
     /// Newest last; at most `VoiceLibrary.maxEmbeddings`.
     public var embeddings: [[Float]]
-    /// Picked by the owner from the call's attendees when naming the speaker.
+    /// Picked by the owner from the call's attendees when naming the speaker, or the invite's address of a voice
+    /// named from the invite.
     public var email: String? = nil
+    /// The call whose invite named this voice, while that is all the proof there is. Nil once the owner named the
+    /// voice or another call confirmed it. An older build reads the profile as firm.
+    public var provisional: String? = nil
+    /// When the call that made a provisional voice started: only a meeting on another day confirms it.
+    public var provisionalStart: Date? = nil
 }
 
 /// Known voices, stored as `voices.json` in the Voices directory.
@@ -43,15 +49,23 @@ public final class VoiceLibrary: @unchecked Sendable {
 
     public var profiles: [VoiceProfile] { lock.withLock { storage } }
     public var owner: VoiceProfile? { profiles.first { $0.isOwner } }
+    /// Each provisional voice with the call that made it.
+    public var provisional: [String: String] {
+        Dictionary(profiles.compactMap { p in p.provisional.map { (p.name, $0) } }, uniquingKeysWith: { a, _ in a })
+    }
 
     /// The closest profile by cosine similarity to its centroid, when above the threshold.
     public func bestMatch(_ embedding: [Float]) -> (name: String, score: Float)? {
-        let scored = profiles.compactMap { p -> (String, Float)? in
+        guard let best = ranked(embedding).first, best.score >= matchThreshold else { return nil }
+        return (best.name, best.score)
+    }
+
+    /// Every profile with a voice by cosine similarity to its centroid, best first.
+    public func ranked(_ embedding: [Float]) -> [VoiceScore] {
+        profiles.compactMap { p -> VoiceScore? in
             guard let centroid = Self.centroid(p.embeddings) else { return nil }
-            return (p.name, Self.cosine(embedding, centroid))
-        }
-        guard let best = scored.max(by: { $0.1 < $1.1 }), best.1 >= matchThreshold else { return nil }
-        return best
+            return VoiceScore(name: p.name, score: Self.cosine(embedding, centroid))
+        }.sorted { $0.score > $1.score }
     }
 
     /// `source` says which call and speaker the sample came from. With it, a sample learned again from the same
@@ -61,9 +75,10 @@ public final class VoiceLibrary: @unchecked Sendable {
             let i: Int
             if let known = storage.firstIndex(where: { $0.name == name }) {
                 i = known
+                let firmed = settle(&storage[i], embedding, source)
                 // The same call identified again ("Transcribe again") gives the same sample; one copy is enough.
                 if storage[i].embeddings.contains(embedding) {
-                    if isOwner, !storage[i].isOwner { storage[i].isOwner = true; try save() }
+                    if isOwner, !storage[i].isOwner { storage[i].isOwner = true; try save() } else if firmed { try save() }
                     if let source { attached?.sync(storage[i], new: (embedding, source), among: storage) }
                     return
                 }
@@ -77,11 +92,59 @@ public final class VoiceLibrary: @unchecked Sendable {
                 if isOwner { storage[i].isOwner = true }
             } else {
                 i = storage.count
-                storage.append(VoiceProfile(name: name, isOwner: isOwner, embeddings: [embedding]))
+                let invited = source?.origin == .inviteInference
+                storage.append(VoiceProfile(name: name, isOwner: isOwner, embeddings: [embedding],
+                                            provisional: invited ? source?.callID ?? "" : nil,
+                                            provisionalStart: invited ? source?.recorded : nil))
             }
             try save()
             attached?.sync(storage[i], new: (embedding, source ?? VoiceSampleSource(origin: .migrated)), among: storage)
         }
+    }
+
+    /// What a new sample does to a provisional voice. The owner's name for a voice makes it firm, and when that voice
+    /// is not the one the invite gave, the invite's sample goes. A sure match on another call makes it firm. A voice
+    /// with no sample named from the invite becomes provisional. True when the profile changed here.
+    private func settle(_ p: inout VoiceProfile, _ embedding: [Float], _ source: VoiceSampleSource?) -> Bool {
+        guard let source else { return false }
+        if p.embeddings.isEmpty {
+            guard source.origin == .inviteInference, p.provisional == nil else { return false }
+            p.provisional = source.callID ?? ""
+            p.provisionalStart = source.recorded
+            return true
+        }
+        guard let made = p.provisional else { return false }
+        switch source.origin.kind {
+        case VoiceSample.Origin.ownerNamed.kind:
+            if let centroid = Self.centroid(p.embeddings), Self.cosine(embedding, centroid) < matchThreshold { p.embeddings = [] }
+        case "autoMatch":
+            // Another record of the same meeting, or the join of its parts, is the same proof again.
+            guard source.callID != made, let start = p.provisionalStart, let at = source.recorded,
+                  !Calendar.current.isDate(at, inSameDayAs: start) else { return false }
+        default:
+            return false
+        }
+        p.provisional = nil
+        p.provisionalStart = nil
+        return true
+    }
+
+    /// A join of two profiles where one is provisional: the invite's samples that are not the other voice go, and
+    /// the joined profile is as firm as the firm one.
+    private static func joined(_ survivor: inout VoiceProfile, _ absorbed: VoiceProfile, threshold: Float) {
+        let (guess, firm) = survivor.provisional != nil ? (survivor.embeddings, absorbed.embeddings) : (absorbed.embeddings, survivor.embeddings)
+        guard survivor.provisional != nil || absorbed.provisional != nil else {
+            survivor.embeddings = Array((survivor.embeddings + absorbed.embeddings).suffix(maxEmbeddings))
+            return
+        }
+        if survivor.provisional != nil, absorbed.provisional != nil {
+            survivor.embeddings = Array((survivor.embeddings + absorbed.embeddings).suffix(maxEmbeddings))
+            return
+        }
+        let kept = centroid(firm).map { c in guess.filter { cosine($0, c) >= threshold } } ?? guess
+        survivor.embeddings = Array((firm + kept).suffix(maxEmbeddings))
+        survivor.provisional = nil
+        survivor.provisionalStart = nil
     }
 
     /// Takes back what was learned from one speaker of one call, when the owner says that speaker is someone
@@ -93,6 +156,7 @@ public final class VoiceLibrary: @unchecked Sendable {
             let gone = attached.vectors(of: storage[i], callID: callID, speakerKey: speakerKey, voice: voice)
             guard storage[i].embeddings.contains(where: { gone.contains($0) }) else { return }
             storage[i].embeddings.removeAll { gone.contains($0) }
+            if storage[i].embeddings.isEmpty { storage[i].provisional = nil; storage[i].provisionalStart = nil }
             try save()
             attached.sync(storage[i], among: storage)
         }
@@ -100,7 +164,7 @@ public final class VoiceLibrary: @unchecked Sendable {
 
     /// A blank email clears it. A name with no profile gets one without voice samples, so the email is kept
     /// even when voice fingerprints are off.
-    public func setEmail(_ email: String?, for name: String) throws {
+    public func setEmail(_ email: String?, for name: String, actor: String = "owner") throws {
         let trimmed = email?.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = trimmed?.isEmpty == false ? trimmed : nil
         try lock.withLock {
@@ -115,7 +179,7 @@ public final class VoiceLibrary: @unchecked Sendable {
                 return
             }
             try save()
-            attached?.emailChanged(storage[i])
+            attached?.emailChanged(storage[i], actor: actor)
         }
     }
 
@@ -130,7 +194,7 @@ public final class VoiceLibrary: @unchecked Sendable {
             guard let i = storage.firstIndex(where: { $0.name == from }) else { return }
             if let j = storage.firstIndex(where: { $0.name == to }), j != i {
                 let wasOwner = storage[i].isOwner
-                storage[j].embeddings = Array((storage[j].embeddings + storage[i].embeddings).suffix(Self.maxEmbeddings))
+                Self.joined(&storage[j], storage[i], threshold: matchThreshold)
                 storage[j].isOwner = storage[j].isOwner || storage[i].isOwner
                 storage[j].email = storage[j].email ?? storage[i].email
                 let joined = storage[j]
@@ -148,6 +212,25 @@ public final class VoiceLibrary: @unchecked Sendable {
     /// Moves `name`'s voice samples into `target` (one person split into two profiles).
     public func merge(_ name: String, into target: String) throws {
         try rename(name, to: target)
+    }
+
+    /// Fills the people from Google's directory and contacts. Returns how many people changed.
+    @discardableResult
+    public func applyDirectory(_ directory: [GoogleProfile]) throws -> Int {
+        guard let people = identity?.people else { return 0 }
+        let before = Dictionary(people.people.map { ($0.id, $0.displayName) }, uniquingKeysWith: { a, _ in a })
+        let changed = try people.applyDirectory(directory)
+        // A person with a voice whose name the directory gave: the voice takes the name too, so one person keeps one
+        // name and the next save of the voice finds them.
+        for p in people.people where p.isLive && !p.isOwner {
+            guard let old = before[p.id], old != p.displayName, profiles.contains(where: { $0.name == old }) else { continue }
+            guard !profiles.contains(where: { $0.name == p.displayName }) else {
+                Log.info("Google People: a directory name is already another voice's; the voice keeps its name")
+                continue
+            }
+            try rename(old, to: p.displayName)
+        }
+        return changed
     }
 
     public func deleteAll() throws {

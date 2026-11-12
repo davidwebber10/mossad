@@ -23,6 +23,8 @@ public struct SourceKind: RawRepresentable, Hashable, Codable, Sendable {
     /// Google's company directory or the owner's Google contacts.
     public static let googleDirectory = SourceKind(rawValue: "googleDirectory")
     public static let googleContacts = SourceKind(rawValue: "googleContacts")
+    /// A name read from an email address, such as "Robin Ash" from "robin.ash@": a directory's name replaces it.
+    public static let address = SourceKind(rawValue: "address")
 }
 
 /// What a directory says about a person: the job, the team, and the photo. Filled again at each read; the owner's

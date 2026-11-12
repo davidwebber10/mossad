@@ -9,6 +9,8 @@ public struct SpeakerIdentification: Sendable, Equatable {
     public var embeddings: [String: [Float]] = [:]
     /// How much clear speech each fingerprint was made from, and how good it is.
     public var details: [String: SpeakerSampleDetail] = [:]
+    /// Speaker keys whose name came from the call's invite and not yet from the owner or a second call.
+    public var fromInvite: Set<String> = []
 }
 
 /// Puts names on diarized speakers using the voice library.
@@ -33,8 +35,10 @@ public struct SpeakerIdentifier: Sendable {
         self.ownerName = ownerName
     }
 
-    /// `call` is the call's id and start, kept with each voice sample that the call teaches.
-    public func identify(utterances: [Utterance], meURL: URL, themURL: URL, call: (id: String, start: Date)? = nil) async throws -> SpeakerIdentification {
+    /// `call` is the call's id and start, kept with each voice sample that the call teaches. `invite` is the call's
+    /// invite, nil when it has none; `InviteVoiceRules` says what it changes.
+    public func identify(utterances: [Utterance], meURL: URL, themURL: URL, call: (id: String, start: Date)? = nil,
+                         invite: CallInvite? = nil) async throws -> SpeakerIdentification {
         var result = SpeakerIdentification()
         var keys: [String] = []
         for u in utterances where !keys.contains(u.speakerKey) { keys.append(u.speakerKey) }
@@ -76,15 +80,57 @@ public struct SpeakerIdentifier: Sendable {
             }
         }
 
-        for key in keys where result.names[key] == nil {
-            guard let e = result.embeddings[key], let match = library.bestMatch(e) else {
-                result.unknown.append(key)
-                continue
-            }
-            result.names[key] = match.name
-            if match.score >= Self.learnThreshold { try library.add(e, to: match.name, source: source(key, .autoMatch(match.score))) }
+        let voices = keys.filter { result.names[$0] == nil }.map { key in
+            InviteVoiceRules.Voice(key: key, scores: result.embeddings[key].map(library.ranked) ?? [],
+                                   fingerprint: result.embeddings[key] != nil, seconds: result.details[key]?.seconds)
         }
+        let people = library.identity?.people
+        let roster = invite.map { InviteRoster(invite: $0, profiles: library.profiles, people: people?.people ?? []) }
+        let decision = InviteVoiceRules.decide(voices, roster: roster, owner: library.owner?.name, provisional: library.provisional,
+                                               callID: call?.id, matchThreshold: library.matchThreshold, learnThreshold: Self.learnThreshold)
+        for v in voices {
+            switch decision.verdicts[v.key] ?? .unknown {
+            case .named(let name, let score, let learn):
+                result.names[v.key] = name
+                if learn, let e = result.embeddings[v.key] { try library.add(e, to: name, source: source(v.key, .autoMatch(score))) }
+            case .inferred(let name, let learn):
+                result.names[v.key] = name
+                guard learn, let e = result.embeddings[v.key] else { continue }
+                // The person the invite's name makes says where the name came from, so a directory can correct it.
+                if let guest = decision.inferred, let people, people.id(forVoiceName: name) == nil {
+                    // A people store that refuses a write must not stop the call: the voice's own save makes the person.
+                    do { try people.ensure(voiceName: name, isOwner: false, origin: guest.source) } catch {
+                        Log.error("People: the person named from the invite was not saved: \(error)")
+                    }
+                }
+                try library.add(e, to: name, source: source(v.key, .inviteInference))
+                // The address ties this voice to the invite's person, so the next invite finds the voice by it.
+                if let email = decision.inferred?.guest.email, library.profiles.first(where: { $0.name == name })?.email == nil,
+                   library.name(forEmail: email) == nil {
+                    try library.setEmail(email, for: name, actor: "invite")
+                }
+            case .withheld, .unknown:
+                result.unknown.append(v.key)
+            }
+        }
+        result.fromInvite = decision.fromInvite
+        if roster != nil { nameMicCopies(&result) }
+        Log.info(call.map { "\(decision.logLine) (call \($0.id))" } ?? decision.logLine)
         return result
+    }
+
+    /// A mic voice left unknown that is the voice of someone this call named on the call audio gets that name, so the
+    /// pipeline drops it as echo. A person held back from the invite rules otherwise stays on the mic as a letter.
+    private func nameMicCopies(_ result: inout SpeakerIdentification) {
+        let remote = result.names.filter { $0.key.hasPrefix("them:") && $0.value != library.owner?.name }
+        for key in result.unknown where key.hasPrefix("me:") {
+            guard let e = result.embeddings[key] else { continue }
+            let near = remote.compactMap { k, name in result.embeddings[k].map { (name, VoiceLibrary.cosine(e, $0)) } }
+                .filter { $0.1 >= library.matchThreshold }.max { $0.1 < $1.1 }
+            guard let near else { continue }
+            result.names[key] = near.0
+            result.unknown.removeAll { $0 == key }
+        }
     }
 
     /// A fingerprint with what it was made from.

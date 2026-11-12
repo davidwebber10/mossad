@@ -13,21 +13,28 @@ public struct Invitee: Codable, Equatable, Sendable, Hashable {
     /// Their answer to the invite as Google gives it: "accepted", "declined", "tentative", or "needsAction". Nil from
     /// a source that does not say.
     public var response: String?
+    /// "room", "resource", or "group" when the calendar says the entry is not one person; nil for a person, and from
+    /// a source that does not say.
+    public var kind: String?
 
-    public init(name: String?, email: String?, isSelf: Bool? = nil, personID: String? = nil, response: String? = nil) {
+    public init(name: String?, email: String?, isSelf: Bool? = nil, personID: String? = nil, response: String? = nil, kind: String? = nil) {
         self.name = name
         self.email = email
         self.isSelf = isSelf
         self.personID = personID
         self.response = response
+        self.kind = kind
     }
+
+    /// False for a room, a resource, or a group.
+    public var isPerson: Bool { kind == nil }
 
     public var declined: Bool { response == "declined" }
 
     /// From what the calendar gives for a participant. `address` is its URL as text: "mailto:sam@example.com" for
     /// most accounts. An Exchange account can give a directory path there; that is not an address, so the email
     /// is unknown. Nil when neither a name nor an address is known.
-    public static func make(name: String?, address: String?, isCurrentUser: Bool) -> Invitee? {
+    public static func make(name: String?, address: String?, isCurrentUser: Bool, response: String? = nil, kind: String? = nil) -> Invitee? {
         var name = name?.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank
         var email: String?
         if let address, address.lowercased().hasPrefix("mailto:") {
@@ -40,7 +47,7 @@ public struct Invitee: Codable, Equatable, Sendable, Hashable {
             name = nil
         }
         guard name != nil || email != nil else { return nil }
-        return Invitee(name: name, email: email, isSelf: isCurrentUser ? true : nil)
+        return Invitee(name: name, email: email, isSelf: isCurrentUser ? true : nil, response: response, kind: kind)
     }
 
     /// The text when it is one address and nothing else, in lowercase.
@@ -205,20 +212,31 @@ public enum CalendarMatcher {
     /// meeting, so it never matches.
     public static func bestEvent(for platform: Platform, meetingID: String?, start: Date, end: Date,
                                  in events: [CalendarEventInfo]) -> CalendarEventInfo? {
+        match(for: platform, meetingID: meetingID, start: start, end: end, in: events)?.event
+    }
+
+    /// The best event, and whether it is surely the call's: the call's own meeting id is in it, or it is the only
+    /// event that could be the call.
+    public static func match(for platform: Platform, meetingID: String?, start: Date, end: Date,
+                             in events: [CalendarEventInfo]) -> (event: CalendarEventInfo, sure: Bool)? {
         func overlap(_ e: CalendarEventInfo) -> TimeInterval { min(end, e.end).timeIntervalSince(max(start, e.start)) }
         func text(_ e: CalendarEventInfo) -> String { (e.text.removingPercentEncoding ?? e.text).lowercased() }
         let timed = events.filter { !$0.isAllDay }
+        let candidates: [CalendarEventInfo]
         if let meetingID {
             let id = meetingID.lowercased()
-            return timed.filter { text($0).contains(id) }.max { overlap($0) < overlap($1) }
-        }
-        // In a room there is no link to match: the overlapping event without a call link is the meeting.
-        if platform == .inPerson {
+            candidates = timed.filter { text($0).contains(id) }
+        } else if platform == .inPerson {
+            // In a room there is no link to match: the overlapping event without a call link is the meeting.
             let callMarkers = Platform.callApps.flatMap(linkMarkers)
-            return timed.filter { e in overlap(e) > 0 && !callMarkers.contains { text(e).contains($0) } }.max { overlap($0) < overlap($1) }
+            candidates = timed.filter { e in overlap(e) > 0 && !callMarkers.contains { text(e).contains($0) } }
+        } else {
+            let markers = linkMarkers(platform)
+            candidates = timed.filter { e in overlap(e) > 0 && markers.contains { text(e).contains($0) } }
         }
-        let markers = linkMarkers(platform)
-        return timed.filter { e in overlap(e) > 0 && markers.contains { text(e).contains($0) } }.max { overlap($0) < overlap($1) }
+        guard let best = candidates.max(by: { overlap($0) < overlap($1) }) else { return nil }
+        // A personal room has one id for all its meetings: only an event at the call's time is surely the call's.
+        return (best, overlap(best) > 0 && (meetingID != nil || candidates.count == 1))
     }
 }
 
@@ -237,6 +255,26 @@ struct CalendarAccess {
 
 /// Reads events from the Mac's calendars.
 public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
+    /// The answer in Google's words, so one rule reads both sources.
+    static func response(_ status: EKParticipantStatus) -> String? {
+        switch status {
+        case .accepted: "accepted"
+        case .declined: "declined"
+        case .tentative: "tentative"
+        case .pending: "needsAction"
+        default: nil
+        }
+    }
+
+    static func kind(_ type: EKParticipantType) -> String? {
+        switch type {
+        case .room: "room"
+        case .resource: "resource"
+        case .group: "group"
+        default: nil
+        }
+    }
+
     private let lock = NSLock()
     private var store = EKEventStore()
     private var access = CalendarAccess(allowedAtStart: EKEventStore.authorizationStatus(for: .event) == .fullAccess)
@@ -284,7 +322,10 @@ public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
                 attendees: (e.attendees ?? []).compactMap { $0.name ?? $0.url.absoluteString.replacingOccurrences(of: "mailto:", with: "") },
                 text: [e.location, e.notes, e.url?.absoluteString].compactMap { $0 }.joined(separator: "\n"),
                 isAllDay: e.isAllDay,
-                participants: (e.attendees ?? []).compactMap { Invitee.make(name: $0.name, address: $0.url.absoluteString, isCurrentUser: $0.isCurrentUser) })
+                participants: (e.attendees ?? []).compactMap {
+                    Invitee.make(name: $0.name, address: $0.url.absoluteString, isCurrentUser: $0.isCurrentUser,
+                                 response: Self.response($0.participantStatus), kind: Self.kind($0.participantType))
+                })
                 .from(eventKit: e.calendarItemExternalIdentifier, account: e.calendar?.source?.title)
         }
     }

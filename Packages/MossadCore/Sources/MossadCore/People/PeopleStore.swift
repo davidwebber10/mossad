@@ -287,12 +287,12 @@ public final class PeopleStore: @unchecked Sendable {
 
     /// One verified address, as the People page keeps it today: a new one replaces the old one, and a blank one
     /// clears it.
-    public func setEmail(_ email: String?, for id: PersonID) throws {
+    public func setEmail(_ email: String?, for id: PersonID, actor: String = "owner") throws {
         try change { people, date in
             guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }) else { return [] }
             let old = people[i].email
             guard people[i].setVerifiedEmail(email, at: date) else { return [] }
-            return [PeopleLogEntry(at: date, kind: "email", actor: "owner", subject: id, before: old, after: people[i].email)]
+            return [PeopleLogEntry(at: date, kind: "email", actor: actor, subject: id, before: old, after: people[i].email)]
         }
     }
 

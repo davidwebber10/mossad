@@ -65,7 +65,9 @@ struct LanesPlayer: View {
             LazyVStack(alignment: .leading, spacing: Self.laneGap) {
                 ForEach(Array(lanes.enumerated()), id: \.element.key) { _, lane in
                     // Equatable, so a tick of the player redraws only the rows whose state changed.
-                    LaneRow(lane: lane, speaker: people.speaker(forKey: lane.key), callID: record.id,
+                    let speaker = people.speaker(forKey: lane.key)
+                    LaneRow(lane: lane, speaker: speaker, callID: record.id,
+                            fromInvite: speaker?.fromInvite ?? false,
                             editable: record.status == .written, current: lane.key == current,
                             duration: duration, enabled: player.isAvailable,
                             scrub: { dragging = $0 }, seek: { dragging = nil; player.seek(to: $0) })
@@ -164,6 +166,8 @@ private struct LaneRow: View, @MainActor Equatable {
     let lane: SpeakerLanes.Lane
     let speaker: MeetingPeople.Speaker?
     let callID: String
+    /// The name came from the call's invite, not from a voice the owner named.
+    let fromInvite: Bool
     let editable: Bool
     let current: Bool
     let duration: TimeInterval
@@ -178,7 +182,7 @@ private struct LaneRow: View, @MainActor Equatable {
 
     /// The closures only reach the player, which never changes for a row, so they are left out.
     static func == (a: LaneRow, b: LaneRow) -> Bool {
-        a.lane == b.lane && a.current == b.current && a.duration == b.duration && a.enabled == b.enabled
+        a.lane == b.lane && a.current == b.current && a.fromInvite == b.fromInvite && a.duration == b.duration && a.enabled == b.enabled
             && a.editable == b.editable && a.callID == b.callID && a.speaker?.name == b.speaker?.name
             && a.speaker?.isUnknown == b.speaker?.isUnknown && a.speaker?.keys == b.speaker?.keys
             && a.speaker?.color == b.speaker?.color && a.speaker?.email == b.speaker?.email && a.speaker?.person == b.speaker?.person
@@ -191,6 +195,12 @@ private struct LaneRow: View, @MainActor Equatable {
                     .popover(isPresented: $naming, arrowEdge: .bottom) {
                         if let speaker { SpeakerNamingPopover(speaker: speaker, callID: callID, isPresented: $naming) }
                     }
+                if fromInvite {
+                    Image(systemName: "envelope")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Palette.tertiary)
+                        .help("Named from the invite")
+                }
                 Text(minutes).foregroundStyle(Palette.tertiary).frame(width: 30, alignment: .trailing)
             }
             .font(.system(size: 12)).monospacedDigit()
@@ -223,7 +233,7 @@ private struct LaneRow: View, @MainActor Equatable {
         }
         .frame(height: LanesPlayer.laneHeight)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(lane.name), \(minutes)")
+        .accessibilityLabel(fromInvite ? "\(lane.name), named from the invite, \(minutes)" : "\(lane.name), \(minutes)")
     }
 
     /// A saved person's name opens their profile. "Change who this is" is then the pencil that shows beside the

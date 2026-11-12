@@ -292,6 +292,7 @@ public actor Pipeline {
         r.unknownSpeakers = []
         r.speakerEmbeddings = [:]
         r.speakerSamples = nil
+        r.fromInvite = nil
         r.status = .recorded
         r.failedStep = nil
         r.failureReason = nil
@@ -735,8 +736,8 @@ public actor Pipeline {
     }
 
     private func identify(_ r: inout CallRecord, dir: URL) async throws {
-        detail(r.id, "Identifying speakers")
         guard voiceFingerprints else {
+            detail(r.id, "Identifying speakers")
             // No fingerprints: the speaker who talks most on the mic is the owner; everyone else stays a letter.
             let talk = Dictionary(r.utterances.map { ($0.speakerKey, $0.end - $0.start) }, uniquingKeysWith: +)
             let owner = talk.filter { $0.key.hasPrefix("me:") }.max { $0.value < $1.value }?.key
@@ -746,21 +747,30 @@ public actor Pipeline {
             r.unknownSpeakers = keys
             r.speakerEmbeddings = [:]
             r.speakerSamples = nil
+            r.fromInvite = nil
             r.status = .identified
             return
         }
+        // Who was invited decides whose voice may be named on a call. The invite found when the call started was
+        // matched to a guessed end, and can have changed since: it is matched again with the call's real times. A
+        // room recording keeps the rules of before.
+        let onCall = r.platform != .inPerson && !r.isNotesOnly
+        let sure = onCall ? await matchInvite(&r) : false
+        let invite = onCall ? CallInvite(record: r, sure: sure) : nil
+        detail(r.id, "Identifying speakers")
         // Short pieces of each voice, at most a minute per speaker, through the one copy of the voice models that the
         // live transcript's namer also uses; so it runs behind a call.
         let plan = await clearance(r.id, .voiceIdentification)
         let identifier = identifier, utterances = r.utterances, call = (id: r.id, start: r.start)
         let me = dir.appendingPathComponent(Track.me.fileName), them = dir.appendingPathComponent(Track.them.fileName)
         let result = try await runHeavy(r.id, .voiceIdentification, plan) {
-            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call)
+            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite)
         }
         r.speakerNames = result.names
         r.unknownSpeakers = result.unknown
         r.speakerEmbeddings = result.embeddings
         r.speakerSamples = result.details.isEmpty ? nil : result.details
+        r.fromInvite = result.fromInvite.isEmpty ? nil : result.fromInvite.sorted()
         dropNamedEcho(&r)
         r.status = .identified
     }
@@ -781,19 +791,24 @@ public actor Pipeline {
             r.speakerSamples?[key] = nil
         }
         r.unknownSpeakers.removeAll { echo.contains($0) }
+        r.fromInvite = r.fromInvite.map { $0.filter { !echo.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
         Log.info("Dropped \(echo.count) mic voices that are people on the call audio")
+    }
+
+    /// True when the event found is surely the call's.
+    @discardableResult
+    private func matchInvite(_ r: inout CallRecord) async -> Bool {
+        detail(r.id, "Finding the calendar invite")
+        let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return false }
+        r.setInvite(match.event)
+        return match.sure
     }
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
         // A notes-only meeting was made from its invite.
-        if quietRuns[r.id] == nil, !r.isNotesOnly {
-            detail(r.id, "Finding the calendar invite")
-            let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
-            if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
-                r.setInvite(event)
-            }
-        }
+        if quietRuns[r.id] == nil, !r.isNotesOnly { await matchInvite(&r) }
         // After the calendar, so a presenter's name can be matched to the invited people.
         await readScreens(&r)
         if summarizer != nil, !r.utterances.isEmpty { detail(r.id, "Claude is writing the summary") }
@@ -944,9 +959,16 @@ public actor Pipeline {
         let before = MarkdownWriter.displayNames(current)
         var chosen: [String: String] = [:]
         var renamed: [String: String] = [:]
+        var emails = emails
         for (key, raw) in names {
             let typed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !typed.isEmpty else { continue }
+            // A new name over the old one, with the old person's address still in the field: a correction, and the
+            // address is not the new person's.
+            if let old = current.speakerNames[key], PersonNames.key(typed) != PersonNames.key(old),
+               let email = emails[key], library.name(forEmail: email) == old {
+                emails[key] = nil
+            }
             // Someone saved already, by email or by name in other case or spacing, stays one person.
             let name = library.existingName(name: typed, email: emails[key]) ?? typed
             if let old = before[key], old != name, current.speakerNames[key] == nil { renamed[old] = name }
@@ -973,6 +995,8 @@ public actor Pipeline {
                 r.speakerNames[key] = name
                 r.unknownSpeakers.removeAll { $0 == key }
             }
+            // The owner's word: the name no longer comes from the invite.
+            r.fromInvite = r.fromInvite.map { $0.filter { chosen[$0] == nil } }.flatMap { $0.isEmpty ? nil : $0 }
             r.replaceSpeakerLabels(renamed)
             return true
         }) else { return }
