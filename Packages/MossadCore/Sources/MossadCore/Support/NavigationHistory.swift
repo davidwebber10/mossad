@@ -26,18 +26,19 @@ public struct NavigationPlace: Codable, Equatable, Sendable {
     }
 
     /// The same view of the window: the section, its page, and the tab. Only the selection or the view state differ.
+    /// A place with nothing open has no tab to show, so a first item that opens is the same view.
     public func sameView(as other: NavigationPlace) -> Bool {
-        section == other.section && page == other.page && tab == other.tab
+        section == other.section && page == other.page && (tab == other.tab || item == nil || other.item == nil)
     }
 }
 
 /// The main window's Back and Forward, as a browser has them: the places behind, the current one, and the places
 /// ahead. For the app's life only.
-public struct NavigationHistory: Sendable {
+public struct NavigationHistory: Equatable, Sendable {
     /// At most this many places, with the current one; the oldest goes first.
     public static let cap = 100
 
-    public enum Step: Sendable {
+    public enum Step: Equatable, Sendable {
         /// A move the owner made to somewhere: a sidebar click, a link, a search result, a tab. Always a step.
         case jump
         /// A change inside the view that shows: another row of the same list, the search text, the filter. It
@@ -78,6 +79,9 @@ public struct NavigationHistory: Sendable {
         ahead.removeAll()
     }
 
+    /// The current place as the window shows it now, with no step.
+    public mutating func replaceCurrent(_ place: NavigationPlace) { current = place }
+
     /// Goes back `steps` live places. `resolve` gives a place as it is now (a merged person's id of now) or nil when
     /// it is gone; a gone place is dropped. Nil, and nothing moves, when no live place is far enough behind.
     public mutating func goBack(steps: Int = 1, resolve: (NavigationPlace) -> NavigationPlace?) -> NavigationPlace? {
@@ -112,5 +116,81 @@ public struct NavigationHistory: Sendable {
             passed.append(live)
         }
         return nil
+    }
+}
+
+/// Turns the window's changes into steps. The app takes each change a moment later as one place and passes it here
+/// with the time.
+///
+/// - A jump mark (a link, a click on a row, the sidebar) waits until the place changes, as a page can take its new
+///   item a moment later; a mark that nothing took ends after `jumpLife`.
+/// - Within `settle` after a jump, the late parts of the same move (the tab a link asked for) join the jump's step.
+/// - After Back or Forward, nothing is a step until the window shows the place. A place that does not come within
+///   `restoreLife` gives way to what the window shows, in the same entry.
+public struct NavigationRecorder: Equatable, Sendable {
+    public static let jumpLife: TimeInterval = 1.5
+    public static let settle: TimeInterval = 0.5
+    public static let restoreLife: TimeInterval = 1
+
+    public private(set) var history = NavigationHistory()
+    /// The place that Back or Forward shows, until the window shows it.
+    public private(set) var pending: NavigationPlace?
+    private var pendingSince = Date.distantPast
+    private var jumpSince: Date?
+    private var settleUntil: Date?
+
+    public init() {}
+
+    public mutating func markJump(at now: Date) { jumpSince = now }
+
+    public mutating func record(_ place: NavigationPlace, at now: Date) {
+        if let target = pending {
+            if place == target {
+                pending = nil
+                return
+            }
+            guard now.timeIntervalSince(pendingSince) > Self.restoreLife else { return }
+            pending = nil
+            history.replaceCurrent(place)
+            return
+        }
+        if let since = jumpSince {
+            if now.timeIntervalSince(since) <= Self.jumpLife {
+                guard place != history.current else { return }
+                jumpSince = nil
+                history.visit(place, .jump)
+                settleUntil = now.addingTimeInterval(Self.settle)
+                return
+            }
+            jumpSince = nil
+        }
+        if let until = settleUntil, now <= until, place.section == history.current?.section {
+            history.replaceCurrent(place)
+            return
+        }
+        settleUntil = nil
+        history.visit(place, .refine)
+    }
+
+    /// Ends a Back or Forward that the window never showed.
+    public mutating func expire(at now: Date) {
+        if pending != nil, now.timeIntervalSince(pendingSince) > Self.restoreLife { pending = nil }
+    }
+
+    public mutating func back(steps: Int = 1, at now: Date, resolve: (NavigationPlace) -> NavigationPlace?) -> NavigationPlace? {
+        restored(history.goBack(steps: steps, resolve: resolve), at: now)
+    }
+
+    public mutating func forward(steps: Int = 1, at now: Date, resolve: (NavigationPlace) -> NavigationPlace?) -> NavigationPlace? {
+        restored(history.goForward(steps: steps, resolve: resolve), at: now)
+    }
+
+    private mutating func restored(_ place: NavigationPlace?, at now: Date) -> NavigationPlace? {
+        guard let place else { return nil }
+        pending = place
+        pendingSince = now
+        jumpSince = nil
+        settleUntil = nil
+        return place
     }
 }

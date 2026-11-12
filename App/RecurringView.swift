@@ -53,6 +53,7 @@ private struct SeriesList: View {
     let series: [MeetingSeries]
     let book: NextTimeBook
     @Binding var selection: String?
+    @Environment(\.navigation) private var navigation
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -61,6 +62,7 @@ private struct SeriesList: View {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(series) { s in
                         SeriesRow(series: s, open: book.points(of: s).open.count, selected: selection == s.id) {
+                            if selection != s.id { navigation?.jumpNext() }
                             selection = s.id
                             focused = true
                         }

@@ -156,3 +156,112 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertEqual(back, p)
     }
 }
+
+/// How the window's changes become steps: a jump mark waits for its place, a jump's late parts join it, and Back
+/// or Forward waits for the window to show the place before anything is a step again.
+final class NavigationRecorderTests: XCTestCase {
+    func place(_ section: String, _ item: String? = nil, tab: String? = nil) -> NavigationPlace {
+        NavigationPlace(section: section, item: item, tab: tab)
+    }
+
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    func at(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }
+    let keep: (NavigationPlace) -> NavigationPlace? = { $0 }
+
+    func testAPageWithNothingOpenThatOpensItsFirstItemIsOneStep() {
+        var r = NavigationRecorder()
+        r.record(place("Meetings"), at: at(0))
+        r.record(place("Meetings", "m1", tab: "Summary"), at: at(1))
+        XCTAssertFalse(r.history.canGoBack)
+        // And back again: a deleted selection, then another row.
+        r.record(place("Meetings"), at: at(2))
+        r.record(place("Meetings", "m2", tab: "Summary"), at: at(3))
+        XCTAssertFalse(r.history.canGoBack)
+        XCTAssertEqual(r.history.current, place("Meetings", "m2", tab: "Summary"))
+    }
+
+    func testAClickOnARowIsAStepAndTheArrowKeysAreNot() {
+        var r = NavigationRecorder()
+        r.record(place("People", "a", tab: "Overview"), at: at(0))
+        r.markJump(at: at(10))
+        r.record(place("People", "b", tab: "Overview"), at: at(10.1))
+        XCTAssertEqual(r.history.backPlaces, [place("People", "a", tab: "Overview")])
+        // The arrow keys, after the jump has settled.
+        r.record(place("People", "c", tab: "Overview"), at: at(12))
+        r.record(place("People", "d", tab: "Overview"), at: at(13))
+        XCTAssertEqual(r.history.backPlaces, [place("People", "a", tab: "Overview")])
+        XCTAssertEqual(r.history.current, place("People", "d", tab: "Overview"))
+    }
+
+    func testAJumpMarkWaitsForAPlaceThatComesLate() {
+        var r = NavigationRecorder()
+        r.record(place("People", "a", tab: "Overview"), at: at(0))
+        r.markJump(at: at(10))
+        // The page has not taken the new person yet.
+        r.record(place("People", "a", tab: "Overview"), at: at(10.08))
+        r.record(place("People", "b", tab: "Overview"), at: at(10.9))
+        XCTAssertEqual(r.history.backPlaces, [place("People", "a", tab: "Overview")])
+    }
+
+    func testAJumpMarkThatNothingTookEnds() {
+        var r = NavigationRecorder()
+        r.record(place("People", "a", tab: "Overview"), at: at(0))
+        r.markJump(at: at(10))
+        r.record(place("People", "a", tab: "Overview"), at: at(10.1))
+        r.record(place("People", "b", tab: "Overview"), at: at(10 + NavigationRecorder.jumpLife + 1))
+        XCTAssertFalse(r.history.canGoBack)
+    }
+
+    func testTheLatePartsOfAJumpJoinItsStep() {
+        var r = NavigationRecorder()
+        r.record(place("Chat"), at: at(0))
+        r.markJump(at: at(10))
+        r.record(place("Meetings", "m1", tab: "Summary"), at: at(10.08))
+        // The detail view turns to the Transcript tab a moment later, for the moment the link named.
+        r.record(place("Meetings", "m1", tab: "Transcript"), at: at(10.3))
+        XCTAssertEqual(r.history.backPlaces, [place("Chat")])
+        XCTAssertEqual(r.history.current, place("Meetings", "m1", tab: "Transcript"))
+        // After the settle time a tab is a step again.
+        r.record(place("Meetings", "m1", tab: "Summary"), at: at(12))
+        XCTAssertEqual(r.history.backPlaces.count, 2)
+    }
+
+    func testBackWaitsForTheWindowAndMakesNoStep() {
+        var r = NavigationRecorder()
+        r.record(place("Recurring", "s1", tab: "History"), at: at(0))
+        r.markJump(at: at(5))
+        r.record(place("Meetings", "m1", tab: "Summary"), at: at(5.1))
+        XCTAssertEqual(r.back(at: at(10), resolve: keep), place("Recurring", "s1", tab: "History"))
+        XCTAssertNotNil(r.pending)
+        // On the way: the section changed but the series is not open yet.
+        r.record(place("Recurring", nil), at: at(10.08))
+        r.record(place("Recurring", "s1", tab: "History"), at: at(10.3))
+        XCTAssertNil(r.pending)
+        XCTAssertTrue(r.history.canGoForward)
+        XCTAssertEqual(r.history.current, place("Recurring", "s1", tab: "History"))
+    }
+
+    func testABackThatDoesNotSettleTakesWhatTheWindowShowsAndKeepsForward() {
+        var r = NavigationRecorder()
+        r.record(place("Meetings", "m1", tab: "Transcript"), at: at(0))
+        r.markJump(at: at(5))
+        r.record(place("People", "p1", tab: "Overview"), at: at(5.1))
+        _ = r.back(at: at(10), resolve: keep)
+        r.record(place("Meetings", "m1", tab: "Summary"), at: at(10 + NavigationRecorder.restoreLife + 0.1))
+        XCTAssertNil(r.pending)
+        XCTAssertEqual(r.history.current, place("Meetings", "m1", tab: "Summary"))
+        XCTAssertEqual(r.history.forwardPlaces, [place("People", "p1", tab: "Overview")])
+        XCTAssertFalse(r.history.canGoBack)
+    }
+
+    func testAPendingPlaceEndsByItself() {
+        var r = NavigationRecorder()
+        r.record(place("A"), at: at(0))
+        r.record(place("B"), at: at(1))
+        _ = r.back(at: at(10), resolve: keep)
+        r.expire(at: at(10.5))
+        XCTAssertNotNil(r.pending)
+        r.expire(at: at(10 + NavigationRecorder.restoreLife + 0.1))
+        XCTAssertNil(r.pending)
+    }
+}

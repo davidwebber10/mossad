@@ -16,6 +16,11 @@ extension AppController {
         return s
     }
 
+    /// The people store as it is now, as `openPerson` reads it; the catalog's copy can be older.
+    private var navigationPeople: PersonReferences {
+        library.identity.map { PersonReferences(people: $0.people.people) } ?? series.people
+    }
+
     var currentPlace: NavigationPlace {
         let part = navigation.part(section)
         var place = NavigationPlace(section: section.rawValue, page: part?.page, item: part?.item, search: Self.text(part?.search))
@@ -25,12 +30,15 @@ extension AppController {
             if part?.page == nil { place.item = selectedMeetingID }
             place.search = Self.text(meetingQuery)
             place.filter = meetingFilter.filter.isEmpty ? nil : meetingFilter.filter
-            if let moment = lastMoment, moment.callID == place.item { place.time = moment.at }
+            // The moment belongs to the Transcript tab: another tab of the meeting comes back as it was.
+            if let moment = lastMoment, moment.callID == place.item,
+               (UserDefaults.standard.string(forKey: "detailTab") ?? "") == MeetingDetailView.Tab.transcript.rawValue { place.time = moment.at }
         case .recurring:
             place.item = part?.item ?? series.selected
         case .people:
-            // By the person's id where the name is a saved person, so a merge or a rename still finds them.
-            if let name = part?.item { place.item = series.people.id(for: name) ?? name }
+            // The person asked for, before the page has read its list; by the id where the name is a saved person,
+            // so a merge or a rename still finds them.
+            if let name = personToOpen ?? part?.item { place.item = navigationPeople.id(for: name) ?? name }
         case .coach:
             place.page = coachPage.rawValue
         case .settings:
@@ -53,10 +61,15 @@ extension AppController {
         case .meetings:
             return meetings.contains(where: { $0.id == item }) || calendarUpcoming.contains(where: { $0.id == item }) ? place : nil
         case .recurring:
-            return series.series(item) == nil && !series.all.isEmpty ? nil : place
+            guard !series.all.isEmpty else { return place }
+            guard let now = series.series(item) else { return nil }
+            var moved = place
+            moved.item = now.id
+            return moved
         case .people:
-            guard series.people.knows(item) else { return place }
-            guard let person = series.people.person(item) else { return nil }
+            let people = navigationPeople
+            guard people.knows(item) else { return place }
+            guard let person = people.person(item) else { return nil }
             var now = place
             now.item = person.id.rawValue
             return now
@@ -76,14 +89,15 @@ extension AppController {
             if meetingFilter.filter != filter { meetingFilter.filter = filter }
             if place.page == nil, let id = place.item { selectedMeetingID = id }
             if let id = place.item, let at = place.time {
-                lastMoment = (id, at)
                 seekRequest = SeekRequest(callID: id, at: at, play: false)
+            } else {
+                lastMoment = nil
             }
         case .recurring:
             if let id = place.item { series.selected = id }
         case .people:
             if let item = place.item {
-                personToOpen = series.people.name(of: item) ?? item
+                personToOpen = navigationPeople.name(of: item) ?? item
                 personRequests += 1
             }
         case .coach:
@@ -106,7 +120,7 @@ extension AppController {
         case .recurring:
             name = series.series(place.item)?.title
         case .people:
-            name = place.item.map { series.people.name(of: $0) ?? $0 }
+            name = place.item.map { navigationPeople.name(of: $0) ?? $0 }
         case .coach:
             name = place.page.flatMap(CoachPage.init(rawValue:)).map { "Coach › \($0.title)" }
         case .settings:
@@ -118,11 +132,5 @@ extension AppController {
         if let tab = place.tab, place.item != nil, tab != Self.tabKeys[section]?.first { return "\(base) · \(tab)" }
         if let search = place.search { return "\(base) · “\(search)”" }
         return base
-    }
-
-    /// The findings deck takes the swipe: the Coach's Findings page, and a meeting's Coach tab.
-    var showsFindingsDeck: Bool {
-        (section == .coach && coachPage == .findings)
-            || (section == .meetings && UserDefaults.standard.string(forKey: "detailTab") == MeetingDetailView.Tab.coach.rawValue)
     }
 }

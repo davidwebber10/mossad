@@ -103,6 +103,7 @@ private struct ShareList: View {
     let rows: [ShareRow]
     let matches: [String: ListMatch]
     @Binding var selection: String?
+    @Environment(\.navigation) private var navigation
     @FocusState private var focused: Bool
 
     private var current: String? { selection }
@@ -118,6 +119,7 @@ private struct ShareList: View {
                                 .accessibilityAddTraits(.isHeader)
                         }
                         ShareListRow(row: row, selected: current == row.id, match: matches[row.id]) {
+                            if current != row.id { navigation?.jumpNext() }
                             selection = row.id
                             focused = true
                         }

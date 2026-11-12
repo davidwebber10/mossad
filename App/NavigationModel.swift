@@ -5,8 +5,9 @@ import SwiftUI
 
 /// Back and Forward in the main window. Each change of where the window is (the section, its page, the item, the
 /// tab, the list's search, the Meetings filter) is taken a moment later as one place, so the changes of one move go
-/// in as one step. A link, a search result, the Go menu, or a notification marks its move as a jump; a row clicked
-/// in the list that shows is a refinement and takes the place of the current step (`NavigationHistory`).
+/// in as one step. A link, a search result, the sidebar, the Go menu, or a click on a row marks its move as a jump;
+/// the arrow keys in a list, the search text, and the filter take the place of the current step. The rules are
+/// `NavigationRecorder`'s.
 @MainActor
 final class NavigationModel: ObservableObject {
     /// What a page that keeps its own state says of itself: its mode or view, the item open, and its search text.
@@ -16,18 +17,21 @@ final class NavigationModel: ObservableObject {
         var search: String?
     }
 
-    @Published private(set) var history = NavigationHistory()
+    @Published private(set) var recorder = NavigationRecorder()
     /// Bumped when Back or Forward shows a place, so the page on screen takes its part.
     @Published private(set) var restoreTick = 0
-    /// The place that Back or Forward shows, until the window shows it: no change meanwhile is a step.
-    private(set) var pending: NavigationPlace?
-    private var pendingSince = Date.distantPast
+    var history: NavigationHistory { recorder.history }
+    /// The place that Back or Forward shows, until the window shows it.
+    var pending: NavigationPlace? { recorder.pending }
     private var parts: [AppController.Section: Part] = [:]
-    private var jump = false
     private var noting: Task<Void, Never>?
+    private var expiring: Task<Void, Never>?
     private var observers: [AnyCancellable] = []
+    private var savedKeys: [String?] = []
     private var monitor: Any?
     private weak var controller: AppController?
+    /// The saved choices that are part of a place: the tabs and Settings' page (AppStorage).
+    private static let keys = ["detailTab", "personTab", "recurringTab", "settingsPage", "meetingsMode", "peopleMode"]
 
     func part(_ section: AppController.Section) -> Part? { parts[section] }
 
@@ -46,22 +50,32 @@ final class NavigationModel: ObservableObject {
     func attach(_ controller: AppController) {
         self.controller = controller
         let poke: (Any) -> Void = { [weak self] _ in MainActor.assumeIsolated { self?.note() } }
+        savedKeys = Self.keys.map { UserDefaults.standard.string(forKey: $0) }
         observers = [
             controller.$section.sink(receiveValue: poke),
             controller.$coachPage.sink(receiveValue: poke),
             controller.$selectedMeetingID.sink(receiveValue: poke),
             controller.$meetingQuery.sink(receiveValue: poke),
+            controller.$windowVisible.sink(receiveValue: poke),
             controller.meetingFilter.$filter.sink(receiveValue: poke),
             controller.series.$selected.sink(receiveValue: poke),
-            // The tabs and Settings' page are the owner's saved choices (AppStorage).
-            NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main).sink(receiveValue: poke),
+            NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)
+                .sink { [weak self] _ in MainActor.assumeIsolated { self?.savedChoicesChanged() } },
         ]
         installMonitor()
     }
 
-    /// The next step is a jump: another meeting from a link is a step even when Meetings is open.
+    /// Any saved choice changes this; only the ones that are part of a place are a change of place.
+    private func savedChoicesChanged() {
+        let now = Self.keys.map { UserDefaults.standard.string(forKey: $0) }
+        guard now != savedKeys else { return }
+        savedKeys = now
+        note()
+    }
+
+    /// The next change of place is a step: another meeting from a link, or a click on another row.
     func jumpNext() {
-        jump = true
+        mutate { $0.markJump(at: Date()) }
         note()
     }
 
@@ -82,40 +96,57 @@ final class NavigationModel: ObservableObject {
 
     private func record() {
         noting = nil
-        guard let c = controller else { return }
+        // Nothing is a place before the window shows: a page with nothing selected yet would be a step of its own.
+        guard let c = controller, c.mainWindow?.isVisible == true else { return }
         let place = c.currentPlace
-        let step: NavigationHistory.Step = jump ? .jump : .refine
-        jump = false
-        if let target = pending {
-            // A page that loads its list a moment later settles into the place; until it does, nothing is a step.
-            if place == target || Date().timeIntervalSince(pendingSince) > 1 { pending = nil }
-            if pending != nil || place == target { return }
-        }
-        history.visit(place, step)
+        mutate { $0.record(place, at: Date()) }
+    }
+
+    /// Publishes only a real change, so the buttons and the Go menu are not made again for nothing.
+    private func mutate(_ change: (inout NavigationRecorder) -> Void) {
+        var next = recorder
+        change(&next)
+        if next != recorder { recorder = next }
+    }
+
+    /// Back and Forward act only in the main window when it is in front, with no sheet and no search palette over
+    /// it: a sheet's typed words would go with the page under it.
+    var canNavigate: Bool {
+        guard let c = controller, let main = c.mainWindow else { return false }
+        return main.isKeyWindow && main.attachedSheet == nil && !c.search.isOpen
     }
 
     func back(steps: Int = 1) {
-        guard let c = controller, let place = history.goBack(steps: steps, resolve: c.resolve) else { return }
-        show(place)
+        guard canNavigate, let c = controller else { return }
+        var place: NavigationPlace?
+        mutate { place = $0.back(steps: steps, at: Date(), resolve: c.resolve) }
+        if let place { show(place) }
     }
 
     func forward(steps: Int = 1) {
-        guard let c = controller, let place = history.goForward(steps: steps, resolve: c.resolve) else { return }
-        show(place)
+        guard canNavigate, let c = controller else { return }
+        var place: NavigationPlace?
+        mutate { place = $0.forward(steps: steps, at: Date(), resolve: c.resolve) }
+        if let place { show(place) }
     }
 
     private func show(_ place: NavigationPlace) {
         noting?.cancel()
         noting = nil
-        jump = false
-        pending = place
-        pendingSince = Date()
         controller?.apply(place)
         restoreTick += 1
+        // A place the window never shows must not hold the next moves.
+        expiring?.cancel()
+        expiring = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(NavigationRecorder.restoreLife + 0.1))
+            guard !Task.isCancelled, let self else { return }
+            self.mutate { $0.expire(at: Date()) }
+            self.note()
+        }
     }
 
-    /// Mouse buttons 4 and 5, and the three-finger swipe between pages, in the main window. The findings deck has
-    /// its own swipe, so a swipe over it is left to it.
+    /// Mouse buttons 4 and 5, and the three-finger swipe between pages, in the main window. The findings deck reads
+    /// two-finger scrolls, not this swipe, so the two never meet.
     private func installMonitor() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.otherMouseDown, .swipe]) { [weak self] event in
@@ -127,12 +158,11 @@ final class NavigationModel: ObservableObject {
     }
 
     private func handle(_ type: NSEvent.EventType, button: Int, deltaX: CGFloat, in window: ObjectIdentifier?) -> Bool {
-        guard let c = controller, let main = c.mainWindow, window == ObjectIdentifier(main), main.attachedSheet == nil,
-              !c.search.isOpen else { return false }
+        guard let main = controller?.mainWindow, window == ObjectIdentifier(main), canNavigate else { return false }
         switch type {
         case .otherMouseDown where button == 3: back()
         case .otherMouseDown where button == 4: forward()
-        case .swipe where !c.showsFindingsDeck && deltaX != 0: deltaX > 0 ? back() : forward()
+        case .swipe where deltaX != 0: deltaX > 0 ? back() : forward()
         default: return false
         }
         return true

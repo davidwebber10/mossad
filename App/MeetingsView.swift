@@ -22,6 +22,8 @@ struct MeetingsView: View {
     @State private var lastInvite = InviteHolder()
     @StateObject private var calendarState = CalendarState()
     @State private var searchOpen = false
+    /// The pane that Back or Forward opens once the mode it asked for is in place; `.some(nil)` is the calendar.
+    @State private var restoringPane: String??
     @State private var searchFocus = 0
 
     /// The list search: its text is the controller's, so a tag click or another page can set it.
@@ -74,7 +76,7 @@ struct MeetingsView: View {
                                 // Invites show only without a search or a filter: both narrow what was recorded.
                                 CalendarPane(state: calendarState, records: controller.meetings, matches: Set(results.map(\.id)), deleting: $deleting,
                                              upcoming: controller.meetingQuery.isEmpty && !filters.isActive ? controller.calendarUpcoming : [],
-                                             openUpcoming: { m in openedFrom = calendarState.title; openedUpcoming = m }) { r, period in
+                                             openUpcoming: { m in controller.navigation.jumpNext(); openedFrom = calendarState.title; openedUpcoming = m }) { r, period in
                                     open(r, from: period)
                                 }
                             }
@@ -145,12 +147,17 @@ struct MeetingsView: View {
                 calendarState.anchor = d.addingTimeInterval(12 * 3600)
             }
         }
-        .onChange(of: mode) { _, _ in opened = nil; openedUpcoming = nil; filters.isOpen = false }
+        .onChange(of: mode) { _, _ in
+            // Back or Forward to the other mode opens its pane here, after the change; any other change closes it.
+            if let restoring = restoringPane { show(pane: restoring) } else { opened = nil; openedUpcoming = nil }
+            restoringPane = nil
+            filters.isOpen = false
+        }
         .onAppear(perform: takeOpenRequest)
         .onChange(of: controller.meetingToOpen) { _, _ in takeOpenRequest() }
         // The flyout belongs to this page's button; it must not come back by itself with the page.
         .onDisappear { filters.isOpen = false }
-        .navigationPart(.meetings, .init(page: mode == .calendar ? "calendar" : nil, item: opened), restore: restore)
+        .navigationPart(.meetings, .init(page: mode == .calendar ? "calendar" : nil, item: opened ?? openedUpcoming?.id), restore: restore)
     }
 
     // MARK: List
@@ -223,14 +230,21 @@ struct MeetingsView: View {
         }
     }
 
-    /// Back or Forward: the mode, and in Calendar mode the meeting open full-pane. The controller sets the rest.
+    /// Back or Forward: the mode, and in Calendar mode the meeting or the invite open full-pane. The controller
+    /// sets the rest.
     private func restore(_ p: NavigationPlace) {
         let wanted: Mode = p.page == "calendar" ? .calendar : .split
-        let open = { opened = wanted == .calendar ? p.item : nil; openedUpcoming = nil }
-        guard wanted != mode else { return open() }
+        let pane = wanted == .calendar ? p.item : nil
+        guard wanted != mode else { return show(pane: pane) }
+        restoringPane = .some(pane)
         if previewMode != nil { previewMode = wanted } else { savedMode = wanted }
-        // A change of mode closes the full pane (`onChange(of: mode)`); the meeting opens after it.
-        DispatchQueue.main.async(execute: open)
+    }
+
+    /// One full pane of Calendar mode: a recorded meeting, an invite, or none (the calendar).
+    private func show(pane id: String?) {
+        opened = id.flatMap { id in controller.meetings.first { $0.id == id }?.id }
+        openedUpcoming = opened == nil ? id.flatMap { id in controller.calendarUpcoming.first { $0.id == id } } : nil
+        if id != nil { openedFrom = "Meetings" }
     }
 
     // MARK: Calendar
@@ -247,6 +261,7 @@ struct MeetingsView: View {
     }
 
     private func open(_ r: CallRecord, from crumb: String) {
+        controller.navigation.jumpNext()
         controller.selectedMeetingID = r.id
         openedFrom = crumb
         opened = r.id

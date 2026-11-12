@@ -179,7 +179,9 @@ final class AppController: ObservableObject {
     @Published var coachPage: CoachPage = .findings
     /// The main window is in full screen, where the traffic lights leave the sidebar.
     @Published private(set) var fullScreen = false
-    @Published var selectedMeetingID: String?
+    @Published var selectedMeetingID: String? {
+        didSet { if lastMoment?.callID != selectedMeetingID { lastMoment = nil } }
+    }
     @Published var namingCallID: String?
     var personToOpen: String?
     /// The one controller, for the app delegate's Dock handling.
@@ -274,7 +276,12 @@ final class AppController: ObservableObject {
     lazy var chats = ChatStore(directory: paths.chats)
     /// A meeting to open and play from a time; the meeting view takes it when it appears.
     @Published var seekRequest: SeekRequest? {
-        didSet { if let s = seekRequest, s.mark, s.screen == nil { lastMoment = (s.callID, s.at) } }
+        didSet {
+            guard let s = seekRequest else { return }
+            if s.mark, s.screen == nil { lastMoment = (s.callID, s.at) }
+            // The tab the meeting will open on, now, so the step has it before the page turns to it.
+            UserDefaults.standard.set((s.screen == nil ? MeetingDetailView.Tab.transcript : .screens).rawValue, forKey: "detailTab")
+        }
     }
     /// The moment the open meeting was last opened at, for Back and Forward.
     var lastMoment: (callID: String, at: TimeInterval)?

@@ -359,7 +359,8 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
 
     private var row: some View {
         HStack(spacing: 10) {
-            if leads { HistorySlot() }
+            // At the list title's inset, so the buttons stay under the pointer from a list page to a full page.
+            if leads { HistorySlot().padding(.leading, Chrome.listTitleLeading - Chrome.toolbarInsets.leading) }
             if let title {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.system(size: 15, weight: .semibold)).tracking(-0.15).foregroundStyle(Palette.ink)
