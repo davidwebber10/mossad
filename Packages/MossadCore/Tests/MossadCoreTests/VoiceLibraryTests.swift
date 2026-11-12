@@ -93,14 +93,53 @@ final class VoiceLibraryTests: XCTestCase {
         VoiceSampleSource(callID: call, speakerKey: key, origin: .inviteInference)
     }
 
-    func testAVoiceFromTheInviteIsProvisionalUntilAnotherCallConfirmsIt() throws {
+    func testAVoiceFromTheInviteIsProvisionalUntilAnotherMeetingConfirmsIt() throws {
+        let library = VoiceLibrary(directory: tempDirectory())
+        let day = Date(timeIntervalSince1970: 1_800_000_000)
+        func match(_ call: String, _ at: Date) -> VoiceSampleSource {
+            VoiceSampleSource(callID: call, speakerKey: "them:A", recorded: at, origin: .autoMatch(0.95))
+        }
+        try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: VoiceSampleSource(callID: "call-1", speakerKey: "them:B", recorded: day, origin: .inviteInference))
+        XCTAssertEqual(library.provisional, ["Jo Fenwick": "call-1"])
+        try library.add([0, 0.99, 0.1, 0], to: "Jo Fenwick", source: match("call-1", day))
+        XCTAssertEqual(library.provisional, ["Jo Fenwick": "call-1"])
+        // A second record of the same meeting, after the call dropped and started again: no new proof.
+        try library.add([0, 0.98, 0.2, 0], to: "Jo Fenwick", source: match("call-1b", day.addingTimeInterval(600)))
+        XCTAssertEqual(library.provisional, ["Jo Fenwick": "call-1"])
+        try library.add([0, 0.97, 0.2, 0.1], to: "Jo Fenwick", source: match("call-2", day.addingTimeInterval(7 * 86_400)))
+        XCTAssertEqual(library.provisional, [:])
+    }
+
+    func testJoiningAProvisionalVoiceIntoAnotherKeepsOnlyWhatIsThatVoice() throws {
         let library = VoiceLibrary(directory: tempDirectory())
         try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: invited("call-1"))
-        XCTAssertEqual(library.provisional, ["Jo Fenwick": "call-1"])
-        try library.add([0, 0.99, 0.1, 0], to: "Jo Fenwick", source: VoiceSampleSource(callID: "call-1", speakerKey: "them:B", origin: .autoMatch(0.99)))
-        XCTAssertEqual(library.provisional, ["Jo Fenwick": "call-1"])
-        try library.add([0, 0.98, 0.2, 0], to: "Jo Fenwick", source: VoiceSampleSource(callID: "call-2", speakerKey: "them:A", origin: .autoMatch(0.98)))
+        try library.add([0, 0, 1, 0], to: "Dale Fenwick")
+        try library.merge("Jo Fenwick", into: "Dale Fenwick")
+        XCTAssertEqual(library.profiles.first { $0.name == "Dale Fenwick" }?.embeddings, [[0, 0, 1, 0]])
         XCTAssertEqual(library.provisional, [:])
+        try library.add([0, 1, 0, 0], to: "Pat Quill", source: invited("call-2"))
+        try library.add([0, 0.99, 0.1, 0], to: "Robin Ash")
+        try library.merge("Robin Ash", into: "Pat Quill")
+        XCTAssertEqual(library.profiles.first { $0.name == "Pat Quill" }?.embeddings.count, 2)
+        XCTAssertEqual(library.provisional, [:])
+    }
+
+    func testADirectoryNameForAPersonWithAVoiceRenamesTheVoice() throws {
+        let dir = tempDirectory()
+        let library = VoiceLibrary(directory: dir)
+        let people = PeopleStore(directory: dir.appendingPathComponent("People"))
+        library.identity = VoiceIdentity(people: people, samples: VoiceSampleStore(directory: dir))
+        try people.ensure(voiceName: "Robin Ash", isOwner: false, origin: .address)
+        try library.add([0, 1, 0, 0], to: "Robin Ash", source: invited("call-1"))
+        try library.setEmail("robin.ash@example.com", for: "Robin Ash", actor: "invite")
+        let changed = try library.applyDirectory([GoogleProfile(emails: ["robin.ash@example.com"], name: "Rob Ashworth", source: .directory)])
+        XCTAssertEqual(changed, 1)
+        XCTAssertEqual(library.profiles.map(\.name), ["Rob Ashworth"])
+        XCTAssertEqual(library.provisional, ["Rob Ashworth": "call-1"])
+        XCTAssertEqual(people.people.filter(\.isLive).map(\.displayName), ["Rob Ashworth"])
+        // A later save of the voice finds the same person.
+        try library.setEmail("robin.ash@example.com", for: "Rob Ashworth")
+        XCTAssertEqual(people.people.filter(\.isLive).count, 1)
     }
 
     func testTheOwnersNameForTheSameVoiceMakesItFirm() throws {

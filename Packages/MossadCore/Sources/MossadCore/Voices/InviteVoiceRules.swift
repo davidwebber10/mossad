@@ -164,14 +164,16 @@ public struct InviteRoster: Sendable, Equatable {
     /// "first.last" address as a name. Never the address itself: a speaker's name shows in the note and the summary.
     static func label(of g: CallInvite.Guest, among people: [Person]) -> (String, SourceKind)? {
         if let raw = g.personID, let p = people.first(where: { $0.id == canonical(PersonID(rawValue: raw), in: people) }) {
-            return (p.displayName, .voiceNaming)
+            return p.displayName.contains("@") ? nil : (p.displayName, .voiceNaming)
         }
         let directory = people.filter { !$0.isOwner }.flatMap { p in
             let own = addresses(of: p)
             return own.isEmpty ? [PersonDirectory.Person(name: p.displayName, email: nil)]
                 : own.sorted().map { PersonDirectory.Person(name: p.displayName, email: $0) }
         }
-        if let hit = PersonDirectory.existing(name: g.name ?? "", email: g.email, among: directory) { return (hit, .voiceNaming) }
+        if let hit = PersonDirectory.existing(name: g.name ?? "", email: g.email, among: directory) {
+            return hit.contains("@") ? nil : (hit, .voiceNaming)
+        }
         if let name = g.name.flatMap(natural) { return (name, .calendar) }
         return g.email.flatMap(name(fromAddress:)).map { ($0, .address) }
     }
@@ -288,6 +290,16 @@ public enum InviteVoiceRules {
             verdicts[v.key] = best.score >= uninvitedScore && best.score - next >= uninvitedMargin
                 ? .named(best.name, score: best.score, learn: false)
                 : .withheld(suggestion: best)
+        }
+
+        // On the call that made a provisional voice, one voice of the call audio is that voice again; a mic copy or a
+        // second key is named and teaches nothing.
+        let again = voices.filter { v in
+            if case .inferred? = verdicts[v.key] { return true } else { return false }
+        }
+        let first = again.filter { $0.key.hasPrefix("them:") }.max { ($0.scores.first?.score ?? 0) < ($1.scores.first?.score ?? 0) }
+        for v in again where v.key != first?.key {
+            if let best = v.scores.first { verdicts[v.key] = .named(best.name, score: best.score, learn: false) }
         }
 
         var inferred: InviteRoster.Voiceless?

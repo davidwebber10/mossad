@@ -67,7 +67,7 @@ struct LanesPlayer: View {
                     // Equatable, so a tick of the player redraws only the rows whose state changed.
                     let speaker = people.speaker(forKey: lane.key)
                     LaneRow(lane: lane, speaker: speaker, callID: record.id,
-                            fromInvite: !Set(speaker?.keys ?? [lane.key]).isDisjoint(with: record.fromInvite ?? []),
+                            fromInvite: speaker?.fromInvite ?? false,
                             editable: record.status == .written, current: lane.key == current,
                             duration: duration, enabled: player.isAvailable,
                             scrub: { dragging = $0 }, seek: { dragging = nil; player.seek(to: $0) })

@@ -1090,6 +1090,58 @@ final class PipelineTests: XCTestCase {
         XCTAssertNil(try load(id).fromInvite)
     }
 
+    /// A call where the invite named `them:B`: Jo Fenwick's provisional voice, learned from this call, with the
+    /// invite's address on the profile. Dale Fenwick, not invited, has a saved voice.
+    func callNamedFromTheInvite() throws -> (String, VoiceSampleStore, PeopleStore) {
+        let people = PeopleStore(directory: paths.root.appendingPathComponent("People"))
+        let samples = VoiceSampleStore(directory: paths.root.appendingPathComponent("Voices"))
+        library.identity = VoiceIdentity(people: people, samples: samples)
+        try library.add([0, 0, 1, 0], to: "Dale Fenwick")
+        let id = try makeRecord()
+        var r = try load(id)
+        r.status = .written
+        r.speakerNames = ["me:A": "Avery Lane", "them:B": "Jo Fenwick"]
+        r.speakerEmbeddings = ["them:B": [0, 1, 0, 0]]
+        r.fromInvite = ["them:B"]
+        try r.save(to: paths.callDirectory(id))
+        try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: VoiceSampleSource(callID: id, speakerKey: "them:B", recorded: start, origin: .inviteInference))
+        try library.setEmail("jo.fenwick@example.com", for: "Jo Fenwick", actor: "invite")
+        return (id, samples, people)
+    }
+
+    func testTheOwnersCorrectionOfANameFromTheInviteIsNotTheInvitesPersonAgain() async throws {
+        let (id, samples, people) = try callNamedFromTheInvite()
+        // The lane's popover held the invite's address; the owner typed another name over the old one.
+        await pipeline().applyNames(callID: id, names: ["them:B": "Dale Fenwick"], emails: ["them:B": "jo.fenwick@example.com"])
+        let r = try load(id)
+        XCTAssertEqual(r.speakerNames["them:B"], "Dale Fenwick")
+        XCTAssertNil(r.fromInvite)
+        let jo = library.profiles.first { $0.name == "Jo Fenwick" }
+        XCTAssertEqual(jo?.embeddings, [])
+        XCTAssertEqual(jo?.email, "jo.fenwick@example.com")
+        XCTAssertEqual(library.profiles.first { $0.name == "Dale Fenwick" }?.embeddings.count, 2)
+        XCTAssertNil(library.profiles.first { $0.name == "Dale Fenwick" }?.email)
+        let jo_ = try XCTUnwrap(people.id(forVoiceName: "Jo Fenwick"))
+        XCTAssertTrue(samples.samples(of: jo_).isEmpty)
+    }
+
+    func testTheOwnersCorrectionToTheInvitedPersonGivesThemTheVoice() async throws {
+        let (id, samples, people) = try callNamedFromTheInvite()
+        // The other way: the call named the voice Dale Fenwick, and it was Jo Fenwick of the invite.
+        try library.forget(callID: id, speakerKey: "them:B", from: "Jo Fenwick", voice: [0, 1, 0, 0])
+        var r = try load(id)
+        r.speakerNames["them:B"] = "Dale Fenwick"
+        r.fromInvite = nil
+        try r.save(to: paths.callDirectory(id))
+        try library.add([0, 1, 0, 0], to: "Dale Fenwick", source: VoiceSampleSource(callID: id, speakerKey: "them:B", recorded: start, origin: .autoMatch(0.9)))
+        await pipeline().applyNames(callID: id, names: ["them:B": "Jo"], emails: ["them:B": "jo.fenwick@example.com"])
+        XCTAssertEqual(try load(id).speakerNames["them:B"], "Jo Fenwick")
+        XCTAssertEqual(library.profiles.first { $0.name == "Dale Fenwick" }?.embeddings, [[0, 0, 1, 0]])
+        XCTAssertEqual(library.profiles.first { $0.name == "Jo Fenwick" }?.embeddings, [[0, 1, 0, 0]])
+        let jo = try XCTUnwrap(people.id(forVoiceName: "Jo Fenwick"))
+        XCTAssertEqual(samples.samples(of: jo).map(\.origin), [.ownerNamed])
+    }
+
     func testTheInviteIsMatchedAgainWithTheCallsRealTimes() async throws {
         try library.add([0, 1, 0, 0], to: "Alex Rivera")
         let id = try makeRecord()

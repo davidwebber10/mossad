@@ -299,4 +299,28 @@ final class InviteVoiceRulesTests: XCTestCase {
         XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: "222", start: t0, end: end, in: [a, b])?.event.title, "B")
         XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: "222", start: t0, end: end, in: [a, b])?.sure, true)
     }
+
+    func testAMeetingIdAloneDoesNotMakeAnEventFromAnotherTimeSure() {
+        // A personal room has one id for all its meetings: an event that ended before the call is not the call's.
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let earlier = CalendarEventInfo(title: "A", start: t0.addingTimeInterval(-3600), end: t0.addingTimeInterval(-300),
+                                        attendees: [], text: "https://zoom.us/j/111", isAllDay: false)
+        XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: "111", start: t0, end: t0.addingTimeInterval(1800), in: [earlier])?.sure, false)
+    }
+
+    func testOnTheCallThatMadeItOnlyOneVoiceOfTheCallAudioIsTheInvitesAgain() {
+        let profiles = self.profiles + [profile("Jo Fenwick", email: "jo.fenwick@example.com")]
+        let d = decide([voice("them:B", [("Jo Fenwick", 1)]), voice("them:C", [("Jo Fenwick", 0.8)]), voice("me:B", [("Jo Fenwick", 0.99)])],
+                       CallInvite(guests: [Guest(email: "jo.fenwick@example.com")]), profiles: profiles,
+                       provisional: ["Jo Fenwick": "call-1"], call: "call-1")
+        XCTAssertEqual(d.verdicts["them:B"], .inferred("Jo Fenwick", learn: true))
+        XCTAssertEqual(d.verdicts["them:C"], .named("Jo Fenwick", score: 0.8, learn: false))
+        XCTAssertEqual(d.verdicts["me:B"], .named("Jo Fenwick", score: 0.99, learn: false))
+    }
+
+    func testASavedPersonShownAsAnAddressIsNoLabel() {
+        let saved = Person(id: PersonID(rawValue: "p-x"), displayName: "pq@example.com", origin: .calendar, at: .distantPast)
+        let roster = InviteRoster(invite: CallInvite(guests: [Guest(personID: "p-x")]), profiles: [], people: [saved])
+        XCTAssertNil(roster.voiceless.first?.label)
+    }
 }

@@ -241,8 +241,8 @@ extension AppController {
             do { try cache.save(paths) } catch { Log.error("Google People: the directory copy was not saved: \(error)") }
             names.set(cache.names)
             var changed = 0
-            if let store = library.identity?.people {
-                do { changed = try store.applyDirectory(fresh.values.flatMap { $0 }) } catch { Log.error("Google People: the people were not filled: \(error)") }
+            if library.identity?.people != nil {
+                do { changed = try library.applyDirectory(fresh.values.flatMap { $0 }) } catch { Log.error("Google People: the people were not filled: \(error)") }
             }
             Log.info("Google People: read \(fresh.values.map(\.count).reduce(0, +)) entries; \(changed) people filled")
             await MainActor.run {

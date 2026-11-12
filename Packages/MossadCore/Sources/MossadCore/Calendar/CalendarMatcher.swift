@@ -235,7 +235,8 @@ public enum CalendarMatcher {
             candidates = timed.filter { e in overlap(e) > 0 && markers.contains { text(e).contains($0) } }
         }
         guard let best = candidates.max(by: { overlap($0) < overlap($1) }) else { return nil }
-        return (best, meetingID != nil || candidates.count == 1)
+        // A personal room has one id for all its meetings: only an event at the call's time is surely the call's.
+        return (best, overlap(best) > 0 && (meetingID != nil || candidates.count == 1))
     }
 }
 

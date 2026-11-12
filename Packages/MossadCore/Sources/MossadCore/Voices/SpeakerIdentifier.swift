@@ -98,7 +98,10 @@ public struct SpeakerIdentifier: Sendable {
                 guard learn, let e = result.embeddings[v.key] else { continue }
                 // The person the invite's name makes says where the name came from, so a directory can correct it.
                 if let guest = decision.inferred, let people, people.id(forVoiceName: name) == nil {
-                    try people.ensure(voiceName: name, isOwner: false, origin: guest.source)
+                    // A people store that refuses a write must not stop the call: the voice's own save makes the person.
+                    do { try people.ensure(voiceName: name, isOwner: false, origin: guest.source) } catch {
+                        Log.error("People: the person named from the invite was not saved: \(error)")
+                    }
                 }
                 try library.add(e, to: name, source: source(v.key, .inviteInference))
                 // The address ties this voice to the invite's person, so the next invite finds the voice by it.
