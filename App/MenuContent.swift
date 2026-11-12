@@ -48,6 +48,10 @@ struct MenuContent: View {
                             .accessibilityLabel("Join \(next.title)")
                     }
                 }
+                NextPointsRows(points: controller.nextTimePoints(for: next)) {
+                    go { controller.selectedMeetingID = next.id; controller.open(.meetings) }
+                }
+                .task(id: controller.meetingsVersion) { controller.refreshSeries() }
             }
             if !recent.isEmpty {
                 PanelHeader(text: "Recent").padding(.top, next == nil ? 0 : 2)
@@ -206,6 +210,35 @@ struct MenuContent: View {
 }
 
 /// The top row: a dot, what Mossad is doing, a quiet line under it, and the one action as a capsule.
+/// The owner's points for the next meeting, under it: what they wanted to raise.
+private struct NextPointsRows: View {
+    let points: [NextTimePoint]
+    let open: () -> Void
+
+    var body: some View {
+        Group {
+        if !points.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Your points").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary)
+                ForEach(points.prefix(3)) { p in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Circle().strokeBorder(Palette.ring, lineWidth: 1).frame(width: 7, height: 7)
+                        Text(p.text).lineLimit(1).truncationMode(.tail)
+                    }
+                }
+                if points.count > 3 {
+                    Button("and \(points.count - 3) more", action: open).buttonStyle(.plain).foregroundStyle(Palette.accent)
+                }
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(Palette.ink)
+            .padding(.leading, 32).padding(.trailing, 12).padding(.bottom, 6)
+            .accessibilityElement(children: .combine)
+        }
+        }
+    }
+}
+
 private struct StatusRow<Dot: View, Action: View>: View {
     let title: String
     let detail: String

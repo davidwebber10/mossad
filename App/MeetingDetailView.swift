@@ -207,10 +207,11 @@ extension View {
     }
 }
 
-/// Summary, Transcript, Coach, Chat: a glass segmented control centered on the band's lower edge.
-private struct DetailTabs: View {
-    @Binding var tab: MeetingDetailView.Tab
-    var tabs = MeetingDetailView.Tab.allCases
+/// Summary, Transcript, Coach, Chat: a glass segmented control centered on the band's lower edge. Any page with a
+/// band and tabs uses it (the recurring meeting's page too).
+struct DetailTabs<Tab: Hashable & RawRepresentable>: View where Tab.RawValue == String {
+    @Binding var tab: Tab
+    var tabs: [Tab]
     @Namespace private var selection
 
     var body: some View {

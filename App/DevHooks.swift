@@ -76,13 +76,18 @@ enum DevHooks {
             let minutes: Double
             let attendees: [String]
             let link: String
+            /// A made-up calendar series id, for a recurring invite.
+            let seriesID: String?
         }
         guard preview, let path = env["MOSSAD_UPCOMING"], let data = FileManager.default.contents(atPath: path),
               let invites = try? JSONDecoder().decode([Invite].self, from: data) else { return nil }
         return invites.map { i in
             let start = launch.addingTimeInterval(i.inMinutes * 60)
-            return CalendarEventInfo(title: i.title, start: start, end: start.addingTimeInterval(i.minutes * 60), attendees: i.attendees,
-                                     text: i.link, isAllDay: false)
+            var e = CalendarEventInfo(title: i.title, start: start, end: start.addingTimeInterval(i.minutes * 60), attendees: i.attendees,
+                                      text: i.link, isAllDay: false)
+            e.seriesID = i.seriesID
+            e.isRecurring = i.seriesID != nil
+            return e
         }
     }
 

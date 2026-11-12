@@ -53,6 +53,7 @@ struct UpcomingDetailView: View {
         .environment(\.openURL, OpenURLAction { url in controller.openLink(url) ? .handled : .systemAction })
         .environment(\.analyticsWide, wide)
         .onGeometryChange(for: Bool.self) { $0.size.width >= Self.wideWidth } action: { wide = $0 }
+        .task(id: controller.meetingsVersion) { controller.refreshSeries() }
         .task(id: key) {
             slow = false
             let waiting = Task { @MainActor in
@@ -85,6 +86,11 @@ struct UpcomingDetailView: View {
         min(8, max(2, Int((height - bandWithoutPeople - Detail.lanesReserve) / personRow)))
     }
 
+    /// The meeting has a recurring series or points of the owner's.
+    private var hasPoints: Bool {
+        SeriesCatalog.series(of: meeting, in: controller.series.all) != nil || !controller.nextTimePoints(for: meeting).isEmpty
+    }
+
     /// Marks a task done or open again. A task marked done here stays on the page.
     private func toggle(_ task: Commitment) {
         var tasks = doneHere.id == meeting.id ? doneHere.tasks : []
@@ -96,12 +102,14 @@ struct UpcomingDetailView: View {
     @ViewBuilder
     private func content(_ prep: MeetingPrep?) -> some View {
         if let prep {
-            if prep.lastTime == nil, prep.promises.isEmpty, prep.series == nil, prep.coach.isEmpty, prep.tasksKnown {
+            if prep.lastTime == nil, prep.promises.isEmpty, prep.series == nil, prep.coach.isEmpty, prep.tasksKnown, !hasPoints {
                 EmptyState(symbol: "calendar.badge.clock", title: "Nothing to prepare yet",
                            message: prep.people.isEmpty ? "Mossad has no earlier meeting with this title, and it does not know the invited people yet."
                                : "Mossad has no earlier meeting of this series or with these people.")
             } else {
                 VStack(alignment: .leading, spacing: 26) {
+                    // The owner's own points first: what they wanted to raise.
+                    PrepYourPoints(meeting: meeting)
                     if let line = prep.inOneLine {
                         MeetingAnalyticsGroup("Before this meeting") {
                             Text(line).font(.system(size: 16, weight: .medium)).lineSpacing(3).foregroundStyle(Palette.ink)

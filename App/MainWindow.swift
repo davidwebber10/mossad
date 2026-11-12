@@ -17,6 +17,7 @@ struct MainWindow: View {
                 case .bookmarks: BookmarksView()
                 case .screens: AllScreensView()
                 case .commitments: CommitmentsView()
+                case .recurring: RecurringView(model: controller.series)
                 case .chat: ChatView()
                 case .people: PeopleView()
                 case .analytics: AnalyticsView()
