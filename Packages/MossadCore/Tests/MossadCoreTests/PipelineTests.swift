@@ -1125,6 +1125,23 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(samples.samples(of: jo_).isEmpty)
     }
 
+    func testACorrectionWithTheOldPersonsSecondAddressDoesNotGiveItToTheNewName() async throws {
+        let (id, _, _) = try callNamedFromTheInvite()
+        XCTAssertEqual(try library.addEmail("jo@example-group.test", for: "Jo Fenwick"), .added)
+        await pipeline().applyNames(callID: id, names: ["them:B": "Dale Fenwick"], emails: ["them:B": "jo@example-group.test"])
+        XCTAssertEqual(try load(id).speakerNames["them:B"], "Dale Fenwick")
+        XCTAssertEqual(library.profiles.first { $0.name == "Jo Fenwick" }?.emails, ["jo.fenwick@example.com", "jo@example-group.test"])
+        XCTAssertEqual(library.profiles.first { $0.name == "Dale Fenwick" }?.emails, [])
+    }
+
+    func testNamingAVoiceFromTheInviteAddsTheOwnersAddressAndKeepsTheInvites() async throws {
+        let (id, _, _) = try callNamedFromTheInvite()
+        await pipeline().applyNames(callID: id, names: ["them:B": "Jo Fenwick"], emails: ["them:B": "jo@example-group.test"])
+        XCTAssertNil(try load(id).fromInvite)
+        XCTAssertEqual(library.provisional, [:])
+        XCTAssertEqual(library.profiles.first { $0.name == "Jo Fenwick" }?.emails, ["jo.fenwick@example.com", "jo@example-group.test"])
+    }
+
     func testTheOwnersCorrectionToTheInvitedPersonGivesThemTheVoice() async throws {
         let (id, samples, people) = try callNamedFromTheInvite()
         // The other way: the call named the voice Dale Fenwick, and it was Jo Fenwick of the invite.

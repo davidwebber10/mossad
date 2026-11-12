@@ -41,11 +41,9 @@ final class MeetingPrepStore {
             invite.combine(meeting.end)
             invite.combine(meeting.attendees)
             invite.combine(meeting.link)
-            var people = Hasher()
-            for p in controller.library.profiles { people.combine(p.name); people.combine(p.email) }
             self.meeting = invite.finalize()
             owner = controller.ownerName
-            self.people = people.finalize()
+            self.people = controller.peopleStamp
             coach = controller.coachVersion
             var reads = Hasher()
             for (id, r) in controller.personaReads.sorted(by: { $0.key < $1.key }) { reads.combine(id); reads.combine(r.updated); reads.combine(r.card?.lines.count) }
@@ -86,7 +84,7 @@ final class MeetingPrepStore {
         func prep(facts: [MeetingFacts]?) -> MeetingPrep {
             // Nil when the file is there and cannot be read: the page then says so, not "no tasks".
             MeetingPrep(meeting: meeting, owner: owner, records: records, facts: facts, commitments: CommitmentBook.peek(in: commitments)?.items,
-                        people: PersonDirectory(profiles: profiles), ownerEmails: ownerEmails, keep: keep,
+                        people: PersonDirectory(profiles: profiles, people: PeopleStore.peek(in: people)), ownerEmails: ownerEmails, keep: keep,
                         memory: coach, saved: CoachPeople(people: PeopleStore.peek(in: people) ?? []), reads: reads)
         }
     }

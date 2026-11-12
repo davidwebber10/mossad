@@ -37,8 +37,8 @@ enum PeopleSearch {
 
     /// Strongest first: a tie between two fields shows the earlier one.
     private static func fields(_ profile: VoiceProfile, _ person: Person?, _ chart: OrgChart.Person?) -> [ListField] {
-        var emails = profile.email.map { [$0] } ?? []
-        for e in person?.emails ?? [] where !emails.contains(where: { $0.caseInsensitiveCompare(e.address) == .orderedSame }) {
+        var emails = profile.emails
+        for e in person?.emails ?? [] where e.state != .rejected && !emails.contains(where: { $0.caseInsensitiveCompare(e.address) == .orderedSame }) {
             emails.append(e.address)
         }
         var out = emails.map { ListField("Email", $0) }

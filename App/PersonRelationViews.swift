@@ -2,114 +2,55 @@ import Charts
 import MossadCore
 import SwiftUI
 
-/// A person's numbers in relation to the owner, as label column rows: time together, talk balance, how you talk
-/// together, cadence, open items both ways, topics, and how the meetings went.
-struct RelationSections: View {
+/// The person page's Analytics tab: talk balance, how the two of you talk, how often, talk time by meeting, and how
+/// the meetings went.
+struct PersonAnalyticsTab: View {
     @EnvironmentObject var controller: AppController
+    let profile: VoiceProfile
+    let stats: PersonStats
     let relation: PersonRelation
-    let owner: String
-    let color: Color
 
     private var first: String { relation.name.split(separator: " ").first.map(String.init) ?? relation.name }
 
     var body: some View {
         let r = relation
-        LabelColumn(label: "Together") {
-            FigureRow(figures: [
-                ("\(r.calls)", r.seconds > 0 ? "meetings · \(hours(r.seconds))" : "meetings"),
-                (r.lastMet.map(shortDay) ?? "None",
-                 r.averageGapDays.map { "last met · about every \(max(1, Int($0.rounded()))) days" } ?? "last met"),
-                (r.usualSlot.map(slotText) ?? "None", "usual time"),
-                ((r.oneOnOne ?? r.group)?.share.map(percent) ?? "None", "your talk share"),
-            ])
-        }
-        LabelColumn(label: "Talk balance") {
-            VStack(alignment: .leading, spacing: Space.m) {
-                balance("One to one", r.oneOnOne)
-                balance("In groups", r.group)
-            }
-            .frame(maxWidth: 680, alignment: .leading)
-        }
-        LabelColumn(label: "How you talk") {
-            Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 7) {
-                GridRow {
-                    Text("").gridCellUnsizedAxes(.horizontal)
-                    Text("You").textRole(.label).foregroundStyle(Palette.secondary)
-                    Text(first).textRole(.label).foregroundStyle(Palette.secondary).lineLimit(1)
-                }
-                pair("Speaks first", "\(r.ownerFirst)", "\(r.theyFirst)", help: "Calls each of you opened")
-                pair("Questions an hour", rate(r.myQuestionsPerHour), rate(r.theirQuestionsPerHour))
-                pair("Cuts in an hour", rate(r.iInterruptPerHour), rate(r.theyInterruptPerHour),
-                     help: "Starting while the other is still talking, and taking the floor")
-                pair("Usual reply", seconds(r.myReply), seconds(r.theirReply), help: "The pause before answering the other")
-            }
-            .font(.system(size: 13)).monospacedDigit()
-        }
-        LabelColumn(label: "How often") {
-            WeeklyChart(weeks: r.weekly).frame(maxWidth: 680)
-        }
-        LabelColumn(label: "\(first) owes you") {
-            if r.theirItems.isEmpty {
-                quiet("No action items for \(first) in your meetings.")
+        LabelColumnStack(spacing: 18) {
+            if r.calls == 0 {
+                EmptyState(symbol: "chart.bar", title: "Nothing to measure yet",
+                           message: "After a recorded call where \(first) speaks, how the two of you talk shows here.")
+                    .frame(maxWidth: .infinity).padding(.top, Space.xl)
             } else {
-                items(r.theirItems.prefix(6).map { item in
-                    (item.task, "\(item.title) · \(dayWord(item.date))", nil, { controller.openMeeting(item.callID) })
-                })
-            }
-        }
-        LabelColumn(label: "You promised") {
-            if r.myCommitments.isEmpty {
-                quiet("No tasks for \(first).")
-            } else {
-                items(r.myCommitments.prefix(6).map { c in
-                    (c.text, c.due.map { "Due " + $0.formatted(.dateTime.month(.abbreviated).day()) } ?? (c.callTitle ?? ""),
-                     c.done != nil, { if let id = c.callID { controller.showMoment(id, at: c.at ?? 0) } })
-                })
-            }
-        }
-        if !r.topics.isEmpty {
-            LabelColumn(label: "Topics", labelTopPadding: 4) {
-                FlowLayout(spacing: 6) {
-                    ForEach(r.topics, id: \.self) { t in
-                        Button { controller.showTag(t) } label: { TagChip(text: t) }
-                            .buttonStyle(.plain)
-                            .help("Meetings about \(t)")
+                LabelColumn(label: "Talk balance") {
+                    VStack(alignment: .leading, spacing: Space.m) {
+                        balance("One to one", r.oneOnOne)
+                        balance("In groups", r.group)
                     }
+                    .frame(maxWidth: 680, alignment: .leading)
                 }
-                .frame(maxWidth: 680, alignment: .leading)
-            }
-        }
-        LabelColumn(label: "How it went") { ValueStrip(value: r.value).frame(maxWidth: 680, alignment: .leading) }
-    }
-
-    private func quiet(_ text: String) -> some View {
-        Text(text).font(.system(size: 13)).foregroundStyle(Palette.secondary)
-    }
-
-    private func items(_ rows: [(String, String, Bool?, () -> Void)]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                Button(action: row.3) {
-                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
-                        Image(systemName: row.2 == true ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 11)).foregroundStyle(row.2 == true ? Palette.ok : Palette.tertiaryMark)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(row.0).foregroundStyle(Palette.ink).strikethrough(row.2 == true).multilineTextAlignment(.leading)
-                            if !row.1.isEmpty { Text(row.1).font(.system(size: 12)).foregroundStyle(Palette.secondary) }
+                LabelColumn(label: "How you talk") {
+                    Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 7) {
+                        GridRow {
+                            Text("").gridCellUnsizedAxes(.horizontal)
+                            Text("You").textRole(.label).foregroundStyle(Palette.secondary)
+                            Text(first).textRole(.label).foregroundStyle(Palette.secondary).lineLimit(1)
                         }
-                        Spacer(minLength: 0)
+                        pair("Speaks first", "\(r.ownerFirst)", "\(r.theyFirst)", help: "Calls each of you opened")
+                        pair("Questions an hour", rate(r.myQuestionsPerHour), rate(r.theirQuestionsPerHour))
+                        pair("Cuts in an hour", rate(r.iInterruptPerHour), rate(r.theyInterruptPerHour),
+                             help: "Starting while the other is still talking, and taking the floor")
+                        pair("Usual reply", seconds(r.myReply), seconds(r.theirReply), help: "The pause before answering the other")
                     }
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
+                    .font(.system(size: 13)).monospacedDigit()
                 }
-                .buttonStyle(.plain)
-                .accessibilityValue(row.2 == true ? "Done" : "")
-                if i < rows.count - 1 { Hairline() }
+                LabelColumn(label: "How often") {
+                    WeeklyChart(weeks: r.weekly).frame(maxWidth: 680)
+                }
+                if !stats.meetings.isEmpty {
+                    LabelColumn(label: "Talk time by meeting") { PersonTalkByMeeting(profile: profile, stats: stats) }
+                }
+                LabelColumn(label: "How it went") { ValueStrip(value: r.value).frame(maxWidth: 680, alignment: .leading) }
             }
         }
-        .font(.system(size: 13))
-        .frame(maxWidth: 680, alignment: .leading)
     }
 
     @ViewBuilder
@@ -138,15 +79,138 @@ struct RelationSections: View {
         }
     }
 
-    private func slotText(_ s: PersonRelation.Slot) -> String {
-        let day = Calendar.current.shortWeekdaySymbols[s.weekday - 1]
-        let time = Calendar.current.date(bySettingHour: s.hour, minute: 0, second: 0, of: Date()).map { $0.formatted(.dateTime.hour()) } ?? "\(s.hour)"
-        return "\(day) \(time)"
-    }
-
     private func rate(_ v: Double?) -> String { v.map { String(format: "%.1f", $0) } ?? "–" }
     private func seconds(_ v: TimeInterval?) -> String { v.map { String(format: "%.1f s", $0) } ?? "–" }
-    private func percent(_ v: Double) -> String { "\(Int((v * 100).rounded()))%" }
+}
+
+func percent(_ v: Double) -> String { "\(Int((v * 100).rounded()))%" }
+
+/// Each meeting's talk time as a bar, the newest 8.
+struct PersonTalkByMeeting: View {
+    @EnvironmentObject var controller: AppController
+    let profile: VoiceProfile
+    let stats: PersonStats
+
+    var body: some View {
+        let shown = Array(stats.meetings.filter { $0.talk > 0 }.prefix(8))
+        let longest = max(shown.map(\.talk).max() ?? 0, 1)
+        let hue = profile.isOwner ? Palette.speaker(0) : PersonMark.color(for: profile.name)
+        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: Space.s) {
+            ForEach(shown, id: \.id) { m in
+                GridRow {
+                    Button { controller.openMeeting(m.id) } label: {
+                        Text(m.title).lineLimit(1).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .help("\(m.title), \(dayWord(m.start))")
+                    Capsule().fill(Palette.fill)
+                        .frame(width: 220, height: 8)
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(hue).frame(width: max(4, 220 * m.talk / longest))
+                        }
+                        .accessibilityHidden(true)
+                    Text(talkText(m.talk)).foregroundStyle(Palette.secondary).monospacedDigit()
+                        .frame(minWidth: 44, alignment: .trailing)
+                }
+            }
+        }
+        .font(.system(size: 12.5))
+        .frame(maxWidth: 680, alignment: .leading)
+    }
+}
+
+/// The person page's Tasks tab: what the owner promised them, what they owe the owner, and the owner's items from
+/// the 1:1s. An action item has no state of its own; only a task of the owner's is open or done.
+struct PersonTasksTab: View {
+    @EnvironmentObject var controller: AppController
+    let profile: VoiceProfile
+    let stats: PersonStats
+    let relation: PersonRelation?
+    @State private var showsDone = false
+
+    private var first: String { profile.name.split(separator: " ").first.map(String.init) ?? profile.name }
+
+    var body: some View {
+        LabelColumnStack(spacing: 18) {
+            if profile.isOwner {
+                if stats.actionItems.isEmpty {
+                    empty("No action items for you yet.")
+                } else {
+                    LabelColumn(label: "Your action items") {
+                        items(stats.actionItems.prefix(30).map { a in (a.item.task, "\(a.meetingTitle) · \(dayWord(a.start))", nil, { controller.openMeeting(a.meetingID) }) })
+                    }
+                }
+            } else if let r = relation {
+                let open = r.myCommitments.filter { $0.done == nil }, done = r.myCommitments.filter { $0.done != nil }
+                if open.isEmpty, done.isEmpty, r.theirItems.isEmpty, r.myItems.isEmpty {
+                    empty("No tasks between you and \(first) yet. What you promise \(first) in a call, and what \(first) takes on, shows here.")
+                } else {
+                    LabelColumn(label: "You promised \(first)") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if open.isEmpty { quiet("Nothing open for \(first).") } else { items(open.map(commitment)) }
+                            if !done.isEmpty {
+                                Button(showsDone ? "Hide done" : "\(done.count) done") { withAnimation(.snappy) { showsDone.toggle() } }
+                                    .buttonStyle(SettingsTextButtonStyle(color: Palette.accent))
+                                if showsDone { items(done.map(commitment)) }
+                            }
+                        }
+                    }
+                    LabelColumn(label: "\(first) owes you") {
+                        if r.theirItems.isEmpty { quiet("No action items for \(first) in your meetings.") }
+                        else { items(r.theirItems.map { item in (item.task, "\(item.title) · \(dayWord(item.date))", nil, { controller.openMeeting(item.callID) }) }) }
+                    }
+                    LabelColumn(label: "Yours from your 1:1s") {
+                        if r.myItems.isEmpty { quiet("No action items for you in your 1:1s with \(first).") }
+                        else { items(r.myItems.map { item in (item.task, "\(item.title) · \(dayWord(item.date))", nil, { controller.openMeeting(item.callID) }) }) }
+                    }
+                }
+            } else {
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func commitment(_ c: Commitment) -> (String, String, Bool?, () -> Void) {
+        (c.text, c.due.map { "Due " + $0.formatted(.dateTime.month(.abbreviated).day()) } ?? (c.callTitle ?? ""),
+         c.done != nil, { if let id = c.callID { controller.showMoment(id, at: c.at ?? 0) } })
+    }
+
+    private func empty(_ text: String) -> some View {
+        EmptyState(symbol: "checklist", title: "No tasks", message: text).frame(maxWidth: .infinity).padding(.top, Space.xl)
+    }
+
+    private func quiet(_ text: String) -> some View {
+        Text(text).font(.system(size: 13)).foregroundStyle(Palette.secondary)
+    }
+
+    private func items(_ rows: [(String, String, Bool?, () -> Void)]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+                Button(action: row.3) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                        // An action item has no state of its own: no circle, so it does not look like an open task.
+                        if let done = row.2 {
+                            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 11)).foregroundStyle(done ? Palette.ok : Palette.tertiaryMark)
+                                .accessibilityHidden(true)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.0).foregroundStyle(Palette.ink).strikethrough(row.2 == true).multilineTextAlignment(.leading)
+                            if !row.1.isEmpty { Text(row.1).font(.system(size: 12)).foregroundStyle(Palette.secondary) }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(row.2 == true ? "Done" : "")
+                if i < rows.count - 1 { Hairline() }
+            }
+        }
+        .font(.system(size: 13))
+        .frame(maxWidth: 680, alignment: .leading)
+    }
 }
 
 /// Calls a week over the last six months, with the value under the pointer on glass.

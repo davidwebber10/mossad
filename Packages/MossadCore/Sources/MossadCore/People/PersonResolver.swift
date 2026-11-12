@@ -48,6 +48,8 @@ public enum Resolution: Equatable, Sendable {
         case ownerLink = "0"
         case verifiedEmail = "1"
         case seenEmail = "1b"
+        /// The same name before the @ on another of the company's domains, and only one person has it.
+        case companyEmail = "1c"
         case externalID = "2"
         case nameForm = "3a"
         case provedOrder = "3b"
@@ -63,6 +65,7 @@ public enum Resolution: Equatable, Sendable {
             case .ownerLink: "the owner's own link"
             case .verifiedEmail: "email"
             case .seenEmail: "an email seen with this person"
+            case .companyEmail: "an email on another domain of the company"
             case .externalID: "the id of the source"
             case .nameForm: "a known written form"
             case .provedOrder: "last name first"
@@ -126,8 +129,12 @@ public struct PersonResolver: Sendable {
     /// fit only a person it has a word in common with, so most people are never compared.
     private let byWord: [String: [Int]]
     private let byEmail: [String: [Int]]
+    /// The entries by the name before the @ of each of their addresses on a company domain.
+    private let byLocal: [String: [Int]]
+    private let domains: CompanyDomains
 
-    public init(people: [Person]) {
+    public init(people: [Person], domains: CompanyDomains = .current) {
+        self.domains = domains
         // Sorted, so the answer never depends on the order of the people.
         let entries = people.filter(\.isLive).sorted { $0.id < $1.id }.map { p in
             let texts = p.forms.isEmpty ? [p.displayName] : p.forms.map(\.text)
@@ -136,7 +143,7 @@ public struct PersonResolver: Sendable {
         }
         self.entries = entries
         index = Dictionary(entries.enumerated().map { ($1.person.id, $0) }, uniquingKeysWith: { a, _ in a })
-        var byWord: [String: [Int]] = [:], byEmail: [String: [Int]] = [:]
+        var byWord: [String: [Int]] = [:], byEmail: [String: [Int]] = [:], byLocal: [String: [Int]] = [:]
         for (i, e) in entries.enumerated() {
             var words: Set<String> = []
             for name in e.names {
@@ -145,12 +152,28 @@ public struct PersonResolver: Sendable {
             }
             for w in words { byWord[w, default: []].append(i) }
             for address in Set(e.person.emails.map(\.address)) { byEmail[address, default: []].append(i) }
+            let company = e.person.emails.filter { $0.state != .rejected && !$0.shared && domains.contains($0.address) }
+            for local in Set(company.compactMap { CompanyDomains.split($0.address)?.local }) { byLocal[local, default: []].append(i) }
         }
         self.byWord = byWord
         self.byEmail = byEmail
+        self.byLocal = byLocal
     }
 
     public func person(_ id: PersonID) -> Person? { index[id].map { entries[$0].person } }
+
+    /// "sam.carter", "carter", "scarter", "samcarter": the family name of the person is in the name before the @.
+    private static func holdsFamilyName(_ local: String, _ entry: Entry) -> Bool {
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).filter { $0.isLetter } }
+        let parts = local.split(whereSeparator: { !$0.isLetter }).map { fold(String($0)) }
+        let joined = fold(local)
+        return entry.names.contains { name in
+            guard let family = name.family.map(fold), family.count >= 2 else { return false }
+            if parts.contains(family) { return true }
+            let given = name.given.map(fold) ?? ""
+            return joined == given + family || (given.first.map { joined == String($0) + family } ?? false)
+        }
+    }
 
     /// The best relation of a written name to any form of a person. A conflict with one form blocks the others.
     private func fit(_ written: ParsedName, _ entry: Entry) -> NameFit {
@@ -187,6 +210,26 @@ public struct PersonResolver: Sendable {
             // Rule 2.
             let holders = entries.enumerated().filter { i, e in !blocked.contains(i) && e.person.identities.contains { $0.isSame(identity) } }.map(\.element)
             if let r = Self.one(holders, rule: .externalID, confidence: .certain) { return r }
+        }
+        // Rule 1c: nobody has the address itself, and one saved person has its name before the @ on another company
+        // domain. One saved person is not one person: the names must agree, a name on the invite that does not fit
+        // blocks it, and with no name only the family name before the @ links. A role address never does.
+        if let email, !email.isEmpty, (byEmail[email] ?? []).isEmpty, domains.contains(email),
+           let local = CompanyDomains.split(email)?.local, !CompanyDomains.isRole(local) {
+            let hits = (byLocal[local] ?? []).filter { !blocked.contains($0) }
+            if hits.count == 1 {
+                let entry = entries[hits[0]]
+                let named = PersonNames.parse(written)
+                if named.isName {
+                    let f = fit(named, entry)
+                    if f != .conflict, f != .none { return .resolved(entry.person.id, rule: .companyEmail, confidence: .strong) }
+                    blocked.insert(hits[0])
+                } else if Self.holdsFamilyName(local, entry) {
+                    return .resolved(entry.person.id, rule: .companyEmail, confidence: .strong)
+                } else {
+                    return .suggestion(entry.person.id, rule: .companyEmail, evidence: [email])
+                }
+            }
         }
 
         let name = PersonNames.parse(written)

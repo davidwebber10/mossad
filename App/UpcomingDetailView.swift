@@ -25,7 +25,7 @@ struct UpcomingDetailView: View {
         let shown = MeetingPrepStore.shared.cached(meeting.id, key: key) ?? (data?.id == meeting.id ? data?.prep : nil)
         // The band names the invited people at once; the numbers can take a moment the first time.
         let invited = shown?.invited ?? invitedCache.get(key) {
-            MeetingPrep.invited(meeting.attendees, owner: controller.ownerName, directory: PersonDirectory(profiles: controller.library.profiles),
+            MeetingPrep.invited(meeting.attendees, owner: controller.ownerName, directory: PersonDirectory(profiles: controller.library.profiles, people: controller.library.identity?.people.people),
                                 ownerEmails: [UserDefaults.standard.string(forKey: "ownerEmail") ?? ""])
         }
         GeometryReader { g in

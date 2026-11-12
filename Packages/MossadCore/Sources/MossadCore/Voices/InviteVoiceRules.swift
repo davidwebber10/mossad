@@ -84,7 +84,7 @@ public struct InviteRoster: Sendable, Equatable {
         let ownerPerson = live.first { $0.isOwner }
         func personID(of p: VoiceProfile) -> PersonID? { PeopleStore.id(forVoiceName: p.name, isOwner: p.isOwner, in: live) }
         func emails(of p: VoiceProfile) -> Set<String> {
-            var out = Set(p.email.map { [EmailIdentity.normalized($0)] } ?? [])
+            var out = Set(p.emails.map(EmailIdentity.normalized))
             if let id = personID(of: p), let person = live.first(where: { $0.id == id }) { out.formUnion(Self.addresses(of: person)) }
             return out
         }

@@ -6,13 +6,31 @@ public struct VoiceProfile: Codable, Equatable, Sendable {
     /// Newest last; at most `VoiceLibrary.maxEmbeddings`.
     public var embeddings: [[Float]]
     /// Picked by the owner from the call's attendees when naming the speaker, or the invite's address of a voice
-    /// named from the invite.
+    /// named from the invite: the first address, which older builds read.
     public var email: String? = nil
+    /// The person's other addresses, after `email`.
+    public var moreEmails: [String]? = nil
     /// The call whose invite named this voice, while that is all the proof there is. Nil once the owner named the
     /// voice or another call confirmed it. An older build reads the profile as firm.
     public var provisional: String? = nil
     /// When the call that made a provisional voice started: only a meeting on another day confirms it.
     public var provisionalStart: Date? = nil
+
+    /// Every address, the first one first.
+    public var emails: [String] { (email.map { [$0] } ?? []) + (moreEmails ?? []) }
+
+    mutating func setEmails(_ list: [String]) {
+        email = list.first
+        moreEmails = list.count > 1 ? Array(list.dropFirst()) : nil
+    }
+}
+
+/// What an added address did.
+public enum EmailAddResult: Equatable, Sendable {
+    case added, alreadyTheirs
+    /// Another person has it: an address is one person's only, so the owner chooses to merge or not.
+    case belongsTo(String)
+    case notAnAddress
 }
 
 /// Known voices, stored as `voices.json` in the Voices directory.
@@ -162,31 +180,97 @@ public final class VoiceLibrary: @unchecked Sendable {
         }
     }
 
-    /// A blank email clears it. A name with no profile gets one without voice samples, so the email is kept
-    /// even when voice fingerprints are off.
-    public func setEmail(_ email: String?, for name: String, actor: String = "owner") throws {
+    /// The first address of a person, as the edit sheet sets it. A blank one clears the first address; the others
+    /// stay. An address the person has already becomes the first, and none goes. An address another person has
+    /// stays theirs: the answer says whose, and nothing changes. A name with no profile gets one without voice
+    /// samples, so the address is kept even when voice fingerprints are off.
+    @discardableResult
+    public func setEmail(_ email: String?, for name: String, actor: String = "owner") throws -> EmailAddResult {
         let trimmed = email?.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = trimmed?.isEmpty == false ? trimmed : nil
-        try lock.withLock {
+        if let value, CompanyDomains.split(value) == nil { return .notAnAddress }
+        return try lock.withLock {
             let i: Int
             if let known = storage.firstIndex(where: { $0.name == name }) {
                 i = known
-                storage[i].email = value
+                let mine = storage[i].emails
+                if let value {
+                    if let at = mine.firstIndex(where: { $0.lowercased() == value.lowercased() }) {
+                        guard at > 0 else { return .alreadyTheirs }
+                        storage[i].setEmails([mine[at]] + mine.enumerated().filter { $0.offset != at }.map(\.element))
+                        try save()
+                        attached?.emailChanged(storage[i], actor: actor)
+                        return .alreadyTheirs
+                    }
+                    if let other = holder(of: value, except: name, profile: storage[i]) { return .belongsTo(other) }
+                    storage[i].setEmails([value] + mine.dropFirst())
+                } else {
+                    guard !mine.isEmpty else { return .alreadyTheirs }
+                    storage[i].setEmails(Array(mine.dropFirst()))
+                }
             } else if let value {
+                if let other = holder(of: value, except: name, profile: nil) { return .belongsTo(other) }
                 i = storage.count
                 storage.append(VoiceProfile(name: name, isOwner: false, embeddings: [], email: value))
             } else {
-                return
+                return .alreadyTheirs
             }
             try save()
             attached?.emailChanged(storage[i], actor: actor)
+            return .added
         }
     }
 
-    /// The profile name stored with this email, ignoring case.
+    /// The person other than `name` who has an address: another profile, else another saved person.
+    public func holder(of address: String, except name: String) -> String? {
+        lock.withLock { holder(of: address, except: name, profile: storage.first { $0.name == name }) }
+    }
+
+    /// Who else has an address: another profile, else another saved person. Call it inside the lock.
+    private func holder(of address: String, except name: String, profile: VoiceProfile?) -> String? {
+        let a = EmailIdentity.normalized(address)
+        if let other = storage.first(where: { $0.name != name && $0.emails.contains { $0.lowercased() == a } }) { return other.name }
+        if let other = attached?.holder(of: a, for: profile), other != name { return other }
+        return nil
+    }
+
+    /// The profile name stored with this email, any of a profile's addresses, ignoring case.
     public func name(forEmail email: String) -> String? {
         let key = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return profiles.first { $0.email?.lowercased() == key }?.name
+        return profiles.first { $0.emails.contains { $0.lowercased() == key } }?.name
+    }
+
+    /// One more address for a person. An address is one person's only: one that another profile or another saved
+    /// person has is left where it is, and the answer says whose it is.
+    public func addEmail(_ email: String, for name: String, actor: String = "owner") throws -> EmailAddResult {
+        let address = EmailIdentity.normalized(email)
+        guard CompanyDomains.split(address) != nil else { return .notAnAddress }
+        return try lock.withLock {
+            let i = storage.firstIndex { $0.name == name }
+            if let i, storage[i].emails.contains(where: { $0.lowercased() == address }) { return .alreadyTheirs }
+            if let other = holder(of: address, except: name, profile: i.map { storage[$0] }) { return .belongsTo(other) }
+            let j: Int
+            if let i {
+                j = i
+                storage[j].setEmails(storage[j].emails + [address])
+            } else {
+                j = storage.count
+                storage.append(VoiceProfile(name: name, isOwner: false, embeddings: [], email: address))
+            }
+            try save()
+            attached?.emailChanged(storage[j], actor: actor)
+            return .added
+        }
+    }
+
+    public func removeEmail(_ email: String, for name: String) throws {
+        let address = EmailIdentity.normalized(email)
+        try lock.withLock {
+            guard let i = storage.firstIndex(where: { $0.name == name }), storage[i].emails.contains(where: { $0.lowercased() == address }) else { return }
+            storage[i].setEmails(storage[i].emails.filter { $0.lowercased() != address })
+            try save()
+            attached?.emailChanged(storage[i])
+        }
     }
 
     public func rename(_ from: String, to: String) throws {
@@ -196,7 +280,8 @@ public final class VoiceLibrary: @unchecked Sendable {
                 let wasOwner = storage[i].isOwner
                 Self.joined(&storage[j], storage[i], threshold: matchThreshold)
                 storage[j].isOwner = storage[j].isOwner || storage[i].isOwner
-                storage[j].email = storage[j].email ?? storage[i].email
+                let kept = storage[j].emails.map { $0.lowercased() }
+                storage[j].setEmails(storage[j].emails + storage[i].emails.filter { !kept.contains($0.lowercased()) })
                 let joined = storage[j]
                 storage.remove(at: i)
                 try save()

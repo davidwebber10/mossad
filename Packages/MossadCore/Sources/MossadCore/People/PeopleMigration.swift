@@ -109,6 +109,13 @@ public struct MigrationReport: Codable, Equatable, Sendable {
 /// executes the plan, so a dry run and a real run are the same decisions. The same step runs at each launch and
 /// brings the new files in step with the voice library again.
 public enum PeopleMigration {
+    /// No person has the address itself. A guess by the company domains is no owner of it: the pair of the invite
+    /// gives the true person the address.
+    static func nobodyHas(_ email: String, _ resolver: PersonResolver) -> Bool {
+        let answer = resolver.resolve(PersonObservation(email: email))
+        return answer == .unknown || answer.rule == .companyEmail
+    }
+
     public static let planName = "migration-plan.json"
     public static let reportName = "migration-report.md"
 
@@ -292,7 +299,7 @@ public enum PeopleMigration {
                 id = person.id
             }
             // The email of the profile is the one the owner picked: verified.
-            if let i = people.firstIndex(where: { $0.id == id }) { people[i].setVerifiedEmail(profile.email, at: now) }
+            if let i = people.firstIndex(where: { $0.id == id }) { people[i].setVerifiedEmails(profile.emails, at: now) }
             profilePerson.append(id)
         }
         // The owner is a person, also with no voice profile.
@@ -480,7 +487,7 @@ public enum PeopleMigration {
                     let current = currentNames.resolve(PersonObservation(name: plain, source: .calendar), in: nil)
                     if r.invitees != nil, plain == written.trimmingCharacters(in: .whitespacesAndNewlines), let email = o.email,
                        current.person == id, current.rule.map(byNameOnly.contains) == true,
-                       resolver.resolve(PersonObservation(email: email)) == .unknown { seenEmails.append((id, email)) }
+                       PeopleMigration.nobodyHas(email, resolver) { seenEmails.append((id, email)) }
                 }
                 if !oldRule(written, id) { links[written] = (id, named ? byName.rule ?? rule : rule, (links[written]?.meetings ?? 0) + 1) }
             }

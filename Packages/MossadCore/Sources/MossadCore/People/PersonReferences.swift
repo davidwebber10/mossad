@@ -10,7 +10,7 @@ import Foundation
 public struct PersonReferences: Sendable {
     /// The rules that say who a name is: an address, the id of a source, a written form of the person, or the whole
     /// name in either order with proof. Never a short name, a nickname, or a name that is almost right.
-    static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .externalID, .nameForm, .provedOrder, .sameName]
+    static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .companyEmail, .externalID, .nameForm, .provedOrder, .sameName]
     /// Inside the people of one call, a short name or a nickname is sure too when one person there fits it.
     static let inCall: Set<Resolution.Rule> = sure.union([.swappedName, .nickname, .shortName])
 
@@ -27,7 +27,7 @@ public struct PersonReferences: Sendable {
     /// The owner's names, without one that is another live person's display name.
     private let ownerKeys: Set<String>
 
-    public init(people: [Person]) {
+    public init(people: [Person], domains: CompanyDomains = .current) {
         all = Dictionary(people.map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
         let live = people.filter(\.isLive)
         byDisplay = Dictionary(grouping: live, by: \.displayName)
@@ -40,8 +40,8 @@ public struct PersonReferences: Sendable {
             var p = p
             p.forms.removeAll { $0.kind == .former }
             return p
-        })
-        everyName = PersonResolver(people: people)
+        }, domains: domains)
+        everyName = PersonResolver(people: people, domains: domains)
         let owner = live.first(where: \.isOwner)
         self.owner = owner
         let others = Set(live.filter { !$0.isOwner }.map { PersonNames.key($0.displayName) })
@@ -144,7 +144,9 @@ public struct PersonReferences: Sendable {
     /// An id of a merged record becomes the id of the record that took it in.
     private func reference(_ id: String?, label: String?, email: String? = nil, in context: ResolutionContext?, former: Bool) -> String? {
         if let id, fits(label, email: email, id: id, in: context, former: former) { return canonical(id) }
-        if let email, let hit = resolve("", email: email) { return hit }
+        // The address with the name next to it: a name that does not fit blocks the company domains' rule.
+        if let email, case .resolved(let id, let rule, _) = resolver.resolve(PersonObservation(name: label?.nonBlank, email: email)),
+           [.verifiedEmail, .seenEmail, .companyEmail].contains(rule) { return id.rawValue }
         // A name a person had before counts only for a reference that has that person's id already: a new label
         // with an old name can be another person, and the owner's correction must stay.
         return label.flatMap { resolve($0, in: context) }

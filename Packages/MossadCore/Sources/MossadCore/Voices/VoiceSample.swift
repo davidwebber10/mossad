@@ -356,8 +356,14 @@ public final class VoiceIdentity: @unchecked Sendable {
     func emailChanged(_ profile: VoiceProfile, actor: String = "owner") {
         attempt("an email") {
             let id = try people.ensure(voiceName: profile.name, isOwner: profile.isOwner, origin: .voiceNaming)
-            try people.setEmail(profile.email, for: id, actor: actor)
+            try people.setEmails(profile.emails, for: id, actor: actor)
         }
+    }
+
+    /// The saved person, other than the profile's own, who has this address.
+    func holder(of address: String, for profile: VoiceProfile?) -> String? {
+        let own = profile.flatMap { people.id(forVoiceName: $0.name, isOwner: $0.isOwner) }
+        return people.holder(of: address, except: own)?.displayName
     }
 
     func renamed(from old: String, to profile: VoiceProfile, among profiles: [VoiceProfile]) {

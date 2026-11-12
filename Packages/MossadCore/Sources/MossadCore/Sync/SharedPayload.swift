@@ -37,9 +37,9 @@ public struct SharedPayload: Sendable {
         SharedPayload(kind: .commitments, key: "commitments", data: (try? JSONEncoder.callRecord.encode(book)) ?? Data())
     }
 
-    /// The people, from the Mac to the phone: only the fields of `SyncedPeople`.
-    public static func people(_ people: [Person]) -> SharedPayload {
-        SharedPayload(kind: .people, key: "people", data: (try? JSONEncoder.callRecord.encode(SyncedPeople(people))) ?? Data())
+    /// The people, from the Mac to the phone: only the fields of `SyncedPeople`, with the company's domains.
+    public static func people(_ people: [Person], domains: CompanyDomains = .current) -> SharedPayload {
+        SharedPayload(kind: .people, key: "people", data: (try? JSONEncoder.callRecord.encode(SyncedPeople(people, domains: domains))) ?? Data())
     }
 
     public static func profile(_ profile: CoachProfile) -> SharedPayload {
@@ -65,8 +65,10 @@ extension SyncState {
 
 /// The people as they go from the Mac to the phone and the owner's server. Built from a list of allowed fields, not
 /// by removing fields from the whole record: a new private field of `Person` never syncs by accident. Never in it:
-/// voice samples, the org data, ids of other services, the owner's own note on a person. It reads as the people
-/// file (`version` and `people`), so the phone keeps it as its `people.json`.
+/// voice samples, the org data, ids of other services, the owner's own note on a person, a photo. The job title and
+/// the team from the directory go, by the owner's choice, to the owner's own devices and server. It reads as the
+/// people file (`version` and `people`, and `companyDomains` that the phone reads apart), so the phone keeps it as
+/// its `people.json`.
 public struct SyncedPeople: Codable, Equatable, Sendable {
     public struct Entry: Codable, Equatable, Sendable {
         public var id: PersonID
@@ -84,6 +86,8 @@ public struct SyncedPeople: Codable, Equatable, Sendable {
         public var created: Date
         public var updated: Date
         public var deleted: Date?
+        /// The job and the team; never the photo, which stays on the Mac.
+        public var directory: DirectoryDetails?
 
         init(_ p: Person) {
             id = p.id
@@ -101,15 +105,28 @@ public struct SyncedPeople: Codable, Equatable, Sendable {
             created = p.created
             updated = p.updated
             deleted = p.deleted
+            directory = p.directory.map { DirectoryDetails(jobTitle: $0.jobTitle, department: $0.department, photoURL: nil, source: $0.source, updated: $0.updated) }
+                .flatMap { $0.jobTitle == nil && $0.department == nil ? nil : $0 }
         }
     }
 
     /// The keys a person may have in the payload. A test fails when the payload has any other key.
     public static let allowedKeys: Set<String> = ["id", "displayName", "name", "forms", "emails", "isOwner", "company", "doNotProfile", "provisional",
-                                                  "distinctFrom", "mergedFrom", "mergedInto", "created", "updated", "deleted"]
+                                                  "distinctFrom", "mergedFrom", "mergedInto", "created", "updated", "deleted", "directory"]
 
     public var version = PeopleStore.currentVersion
     public var people: [Entry]
+    /// The company's domains, so the phone links an address as the Mac does. Nil when the owner listed none.
+    public var companyDomains: [String]?
 
-    public init(_ people: [Person]) { self.people = people.sorted { $0.id < $1.id }.map(Entry.init) }
+    public init(_ people: [Person], domains: CompanyDomains = .none) {
+        self.people = people.sorted { $0.id < $1.id }.map(Entry.init)
+        companyDomains = domains.isEmpty ? nil : domains.domains
+    }
+
+    /// The domains in a people file or payload; none when it has no list.
+    public static func domains(in data: Data) -> CompanyDomains {
+        struct Domains: Decodable { var companyDomains: [String]? }
+        return CompanyDomains((try? JSONDecoder.callRecord.decode(Domains.self, from: data))?.companyDomains ?? [])
+    }
 }

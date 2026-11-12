@@ -38,6 +38,27 @@ final class InviteVoiceRulesTests: XCTestCase {
         XCTAssertEqual(d.fromInvite, ["them:B"])
     }
 
+    // A person's second address on the invite is still that person: their saved voice is invited, so no other voice
+    // is taken for them.
+    func testAnInvitedPersonsSecondAddressFindsTheirVoice() {
+        var mira = profile("Mira Stone", email: "mira@example.com")
+        mira.moreEmails = ["m.stone@example-group.test"]
+        let invite = CallInvite(guests: [Guest(email: "m.stone@example-group.test")])
+        let d = decide([voice("them:A", [("Dale Fenwick", 0.5)])], invite, profiles: [profile(owner, owner: true), mira, profile("Dale Fenwick")])
+        XCTAssertNil(d.inferred)
+        XCTAssertEqual(d.verdicts["them:A"] ?? .unknown, .unknown)
+        let roster = InviteRoster(invite: invite, profiles: [mira], people: [])
+        XCTAssertTrue(roster.invited.contains("Mira Stone"))
+        XCTAssertTrue(roster.voiceless.isEmpty)
+    }
+
+    func testTheNamingFieldOpensEmptyForANameFromTheInviteEvenWithTwoAddresses() {
+        let both = ["jo.fenwick@example.com", "jo@example-group.test"]
+        XCTAssertEqual(NamingPrefill.email(fromInvite: true, addresses: both), "")
+        XCTAssertEqual(NamingPrefill.email(fromInvite: false, addresses: both), "jo.fenwick@example.com")
+        XCTAssertEqual(NamingPrefill.email(fromInvite: false, addresses: []), "")
+    }
+
     func testUninvitedWeakMatchIsWithheldAndSuggestedWhenNothingCanBeInferred() {
         let invite = CallInvite(guests: [Guest(name: "Mira Stone")])
         let d = decide([voice("them:A", [("Mira Stone", 0.9)]), voice("them:B", [("Dale Fenwick", 0.74), ("Mira Stone", 0.2)])], invite)

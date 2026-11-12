@@ -8,11 +8,21 @@ import Foundation
 public struct PersonDirectory: Sendable, Equatable {
     public struct Person: Sendable, Equatable {
         public var name: String
-        public var email: String?
+        /// Every address of the person, the first one first.
+        public var emails: [String]
+        public var email: String? { emails.first }
+        /// Addresses the owner said are not this person's: no rule gives them to the person.
+        public var rejected: [String]
 
         public init(name: String, email: String?) {
+            self.init(name: name, emails: email.map { [$0] } ?? [])
+        }
+
+        public init(name: String, emails: [String], rejected: [String] = []) {
             self.name = name
-            self.email = email
+            var seen: Set<String> = []
+            self.emails = emails.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty && seen.insert(EmailIdentity.normalized($0)).inserted }
+            self.rejected = rejected.map(EmailIdentity.normalized).filter { !seen.contains($0) }
         }
     }
 
@@ -23,14 +33,27 @@ public struct PersonDirectory: Sendable, Equatable {
 
     /// The address one meeting's invite gave with each name, by the key of the name.
     private var inviteEmails: [String: String] = [:]
+    /// The name one meeting's invite gave with each address.
+    private var inviteNames: [String: String] = [:]
+    /// Addresses that a saved person with no voice profile has: never someone else's by the company domains.
+    private var taken: Set<String> = []
 
-    public static func == (a: PersonDirectory, b: PersonDirectory) -> Bool { a.people == b.people && a.inviteEmails == b.inviteEmails }
+    public let domains: CompanyDomains
+
+    public static func == (a: PersonDirectory, b: PersonDirectory) -> Bool {
+        a.people == b.people && a.inviteEmails == b.inviteEmails && a.domains == b.domains && a.taken == b.taken
+    }
 
     /// The same people for one meeting's invite: an invited name carries the address the invite gave with it, so
     /// a name that fits nobody is still the saved person with that address.
     public func with(invitees: [Invitee]?) -> PersonDirectory {
         var copy = self
         copy.inviteEmails = Invitee.emails(byName: invitees)
+        var names: [String: String] = [:]
+        for i in invitees ?? [] {
+            if let e = i.email.map(EmailIdentity.normalized), let n = i.name?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty, !n.contains("@") { names[e] = n }
+        }
+        copy.inviteNames = names
         return copy
     }
 
@@ -38,26 +61,61 @@ public struct PersonDirectory: Sendable, Equatable {
     private func observation(_ text: String) -> PersonObservation {
         var o = PersonObservation(text: text)
         if o.email == nil, let name = o.name { o.email = inviteEmails[PersonNames.nameKey(name)] }
+        // An address alone carries the name the invite gave with it, so a name that does not fit blocks the company
+        // domains. That name answers nothing else (`answer`).
+        if o.name == nil, let e = o.email.map(EmailIdentity.normalized) { o.name = inviteNames[e] }
         return o
     }
 
-    public init(_ people: [Person] = []) {
+    /// The resolver's answer for a written entry, with the guards of this adapter: an address that a saved person
+    /// with no profile has is theirs, and a name from the invite only blocks.
+    private func answer(_ text: String, in meeting: [String]) -> Resolution {
+        let o = observation(text)
+        let answer = resolver.resolve(o, in: context(meeting))
+        let email = o.email.map(EmailIdentity.normalized)
+        if answer.rule == .companyEmail, let email, taken.contains(email) { return .unknown }
+        if PersonObservation(text: text).name == nil, o.name != nil, let rule = answer.rule, ![.verifiedEmail, .seenEmail, .companyEmail].contains(rule) { return .unknown }
+        return answer
+    }
+
+    public init(_ people: [Person] = [], domains: CompanyDomains = .current) {
         self.people = people
+        self.domains = domains
         var names: [PersonID: String] = [:]
         var records: [MossadCore.Person] = []
         for (i, p) in people.enumerated() {
             // The ids keep the order of the list, so "the first one" is the same person as before.
             var record = MossadCore.Person(id: PersonID(rawValue: String(format: "%08d", i)), displayName: p.name, origin: .voiceNaming, at: .distantPast)
-            if let email = p.email { record.addEmail(email, state: .verified, source: .voiceNaming, at: .distantPast) }
+            for email in p.emails { record.addEmail(email, state: .verified, source: .voiceNaming, at: .distantPast) }
+            for email in p.rejected { record.addEmail(email, state: .rejected, source: .owner, at: .distantPast) }
             names[record.id] = p.name
             records.append(record)
         }
         self.names = names
-        resolver = PersonResolver(people: records)
+        resolver = PersonResolver(people: records, domains: domains)
     }
 
     public init(profiles: [VoiceProfile]) {
-        self.init(profiles.map { Person(name: $0.name, email: $0.email) })
+        self.init(profiles.map { Person(name: $0.name, emails: $0.emails) })
+    }
+
+    /// The voice library's people with every address the people store has for each, as the store reads the
+    /// profile (`PeopleStore.id(forVoiceName:)`): an alias from Google's directory links as the first address does.
+    public init(profiles: [VoiceProfile], people saved: [MossadCore.Person]?, domains: CompanyDomains = .current) {
+        guard let saved, !saved.isEmpty else {
+            self.init(profiles.map { Person(name: $0.name, emails: $0.emails) }, domains: domains)
+            return
+        }
+        let byID = Dictionary(saved.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var used: Set<PersonID> = []
+        self.init(profiles.map { p in
+            let person = PeopleStore.id(forVoiceName: p.name, isOwner: p.isOwner, in: saved).flatMap { byID[$0] }
+            if let person { used.insert(person.id) }
+            let more = person?.emails.filter { $0.state != .rejected && !$0.shared }.map(\.address) ?? []
+            let rejected = person?.emails.filter { $0.state == .rejected }.map(\.address) ?? []
+            return Person(name: p.name, emails: p.emails + more, rejected: rejected)
+        }, domains: domains)
+        taken = Set(saved.filter { $0.isLive && !used.contains($0.id) }.flatMap { $0.emails.filter { $0.state != .rejected }.map(\.address) })
     }
 
     /// Lowercase words without the period of an initial: "Sam C." gives "sam", "c".
@@ -86,7 +144,7 @@ public struct PersonDirectory: Sendable, Equatable {
 
     /// The rules that are sure enough to open a profile: an email, a whole name in any written form, and the two
     /// names in the other order when that person is in the meeting. Never a first name or a short form.
-    private static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .externalID, .nameForm, .provedOrder, .sameName, .swappedName]
+    private static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .companyEmail, .externalID, .nameForm, .provedOrder, .sameName, .swappedName]
 
     /// The people of a meeting as the resolver wants them: the saved ones, and the names of the others. An email
     /// and a label such as "Speaker C" are not names.
@@ -122,7 +180,7 @@ public struct PersonDirectory: Sendable, Equatable {
     public func link(for text: String, in meeting: [String] = []) -> String? {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
-        switch resolver.resolve(observation(text), in: context(meeting)) {
+        switch answer(text, in: meeting) {
         case .resolved(let id, let rule, _) where Self.sure.contains(rule): return names[id]
         // Two saved people with one email: the first one, as before there were rules.
         case .ambiguous(let ids, .verifiedEmail): return ids.first.flatMap { names[$0] }
@@ -140,7 +198,7 @@ public struct PersonDirectory: Sendable, Equatable {
     public func match(_ text: String, among meeting: [String] = []) -> String? {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
-        switch resolver.resolve(observation(text), in: context(meeting)) {
+        switch answer(text, in: meeting) {
         case .resolved(let id, _, _): return names[id]
         case .ambiguous(let ids, .verifiedEmail): return ids.first.flatMap { names[$0] }
         default: return nil
@@ -155,7 +213,7 @@ public struct PersonDirectory: Sendable, Equatable {
     /// Two saved people with one email, or with one name in another case, are the first one, as before.
     public static func existing(name: String, email: String?, among people: [Person]) -> String? {
         if let email = email.map(EmailIdentity.normalized), !email.isEmpty,
-           let hit = people.first(where: { $0.email.map(EmailIdentity.normalized) == email }) { return hit.name }
+           let hit = people.first(where: { $0.emails.contains { EmailIdentity.normalized($0) == email } }) { return hit.name }
         let key = PersonNames.key(name)
         guard !key.isEmpty else { return nil }
         if let hit = people.first(where: { PersonNames.key($0.name) == key }) { return hit.name }

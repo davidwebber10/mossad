@@ -142,6 +142,41 @@ final class VoiceLibraryTests: XCTestCase {
         XCTAssertEqual(people.people.filter(\.isLive).count, 1)
     }
 
+    func testADirectoryRenameKeepsEveryAddressAndTheVoiceStaysProvisional() throws {
+        let dir = tempDirectory()
+        let library = VoiceLibrary(directory: dir)
+        let people = PeopleStore(directory: dir.appendingPathComponent("People"))
+        library.identity = VoiceIdentity(people: people, samples: VoiceSampleStore(directory: dir))
+        try people.ensure(voiceName: "Robin Ash", isOwner: false, origin: .address)
+        try library.add([0, 1, 0, 0], to: "Robin Ash", source: invited("call-1"))
+        try library.setEmail("robin.ash@example.com", for: "Robin Ash", actor: "invite")
+        XCTAssertEqual(try library.addEmail("rash@example-group.test", for: "Robin Ash"), .added)
+        // The directory knows the person by the second address only.
+        let changed = try library.applyDirectory([GoogleProfile(emails: ["rash@example-group.test"], name: "Rob Ashworth", source: .directory)])
+        XCTAssertEqual(changed, 1)
+        let p = try XCTUnwrap(library.profiles.first)
+        XCTAssertEqual(p.name, "Rob Ashworth")
+        XCTAssertEqual(p.emails, ["robin.ash@example.com", "rash@example-group.test"])
+        XCTAssertEqual(library.provisional, ["Rob Ashworth": "call-1"])
+        let live = people.people.filter(\.isLive)
+        XCTAssertEqual(live.map(\.displayName), ["Rob Ashworth"])
+        XCTAssertEqual(Set(live[0].emails.filter { $0.state == .verified }.map(\.address)), ["robin.ash@example.com", "rash@example-group.test"])
+    }
+
+    func testTheInvitesAddressNeverGoesToASecondPerson() throws {
+        let dir = tempDirectory()
+        let library = VoiceLibrary(directory: dir)
+        let people = PeopleStore(directory: dir.appendingPathComponent("People"))
+        library.identity = VoiceIdentity(people: people, samples: VoiceSampleStore(directory: dir))
+        // Sam has the address as a second one; a voice named "Jo" from the invite does not take it.
+        try library.setEmail("sam@example.com", for: "Sam Carter")
+        XCTAssertEqual(try library.addEmail("team-lead@example.com", for: "Sam Carter"), .added)
+        try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: invited("call-1"))
+        XCTAssertEqual(try library.setEmail("team-lead@example.com", for: "Jo Fenwick", actor: "invite"), .belongsTo("Sam Carter"))
+        XCTAssertEqual(library.profiles.first { $0.name == "Jo Fenwick" }?.emails, [])
+        XCTAssertEqual(library.name(forEmail: "team-lead@example.com"), "Sam Carter")
+    }
+
     func testTheOwnersNameForTheSameVoiceMakesItFirm() throws {
         let library = VoiceLibrary(directory: tempDirectory())
         try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: invited("call-1"))

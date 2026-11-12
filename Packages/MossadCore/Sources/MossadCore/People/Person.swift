@@ -361,6 +361,19 @@ extension Person {
         return true
     }
 
+    /// The addresses the owner gave, the first one first: each is verified, and a verified one not in the list goes.
+    /// An address another source gave stays, unless the owner gave it.
+    @discardableResult
+    public mutating func setVerifiedEmails(_ list: [String], at date: Date) -> Bool {
+        var seen: Set<String> = []
+        let addresses = list.map(EmailIdentity.normalized).filter { $0.contains("@") && seen.insert($0).inserted }
+        guard addresses != emails.filter({ $0.state == .verified }).map(\.address) else { return false }
+        emails.removeAll { $0.state == .verified || seen.contains($0.address) }
+        emails.insert(contentsOf: addresses.map { EmailIdentity(address: $0, state: .verified, source: .owner, at: date) }, at: 0)
+        updated = date
+        return true
+    }
+
     /// Gives the person a new display name. The old one stays as a former form, so it continues to resolve.
     public mutating func rename(to new: String, source: SourceKind, at date: Date) {
         let new = new.trimmingCharacters(in: .whitespacesAndNewlines)

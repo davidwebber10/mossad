@@ -17,6 +17,8 @@ struct PeopleView: View {
     @State private var editing: VoiceProfile?
     @State private var newName = ""
     @State private var newEmail = ""
+    /// The person who has the address typed in the edit sheet: an address is one person's only.
+    @State private var emailHolder: String?
     @State private var deleting: VoiceProfile?
     @State private var confirmDeleteAll = false
     @State private var reviewingDuplicates = false
@@ -147,24 +149,22 @@ struct PeopleView: View {
                            rename: startEditing, delete: { deleting = $0 })
             }
             DetailColumn { toolbar } content: {
-                VStack(spacing: 0) {
-                    Group {
+                Group {
                         if let p = selected {
                             PersonProfileView(profile: p, stats: stats[p.name] ?? PersonStats(),
                                               org: org.match(p.name), chart: org.chart,
                                               others: profiles.filter { $0.name != p.name },
                                               rename: { startEditing(p) }, merge: { merge(p, into: $0) },
-                                              delete: { deleting = p }, select: select)
+                                              delete: { deleting = p }, select: select,
+                                              deleteAllVoices: { confirmDeleteAll = true }, changed: { Task { await reload() } })
                                 .id(p.name)
                         } else {
                             EmptyState(symbol: "person.crop.circle", title: "Select a person",
-                                       message: "Their profile shows the coach's read, how much they talk, and who they meet with.")
+                                       message: "Their page shows how to present to them, your meetings together, your tasks, and their voice.")
                                 .frame(maxHeight: .infinity)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    footer
-                }
             }
         }
     }
@@ -190,25 +190,6 @@ struct PeopleView: View {
         }
     }
 
-    private var footer: some View {
-        HStack(spacing: Space.s) {
-            IconImage(.lock, size: 12)
-            Text("Voice fingerprints are biometric data. They stay on this Mac in the Voices folder and are never uploaded.")
-                // Two lines in a narrow window rather than cutting the promise that the voices stay here.
-                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: Space.m)
-            Button("Delete all saved voices…") { confirmDeleteAll = true }
-                .buttonStyle(.plain)
-                .fontWeight(.medium)
-                .foregroundStyle(Palette.recording)
-                .fixedSize()
-        }
-        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
-        .padding(.horizontal, 36).padding(.vertical, 6)
-        .frame(minHeight: 40)
-        .overlay(alignment: .top) { Hairline() }
-    }
-
     private func select(_ name: String) {
         if profiles.contains(where: { $0.name == name }) { selection = name }
     }
@@ -225,6 +206,19 @@ struct PeopleView: View {
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Name", text: $newName).textFieldStyle(SheetFieldStyle())
                 TextField("Email (optional)", text: $newEmail).textFieldStyle(SheetFieldStyle())
+                    .onChange(of: newEmail) { _, _ in emailHolder = nil }
+                if let other = emailHolder {
+                    Text("\(other) has this address. An address is one person’s only.")
+                        .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    if !p.isOwner, let target = profiles.first(where: { $0.name == other }) {
+                        Button("Merge \(p.name) into \(other)") {
+                            editing = nil
+                            merge(p, into: target)
+                        }
+                        .buttonStyle(.sheetSecondary)
+                        .help("They are one person: one page with every address and every voice sample")
+                    }
+                }
             }
             .padding(.horizontal, 22).padding(.vertical, 16)
             SheetFooter {
@@ -238,6 +232,11 @@ struct PeopleView: View {
     private func save(_ p: VoiceProfile) {
         let name = newName.trimmingCharacters(in: .whitespaces)
         let email = newEmail.trimmingCharacters(in: .whitespaces)
+        // Another person's address stays theirs: the sheet says whose and offers the merge.
+        if !email.isEmpty, let other = controller.library.holder(of: email, except: p.name) {
+            emailHolder = other
+            return
+        }
         edit {
             if !name.isEmpty, name != p.name { try controller.library.rename(p.name, to: name) }
             try controller.library.setEmail(email.isEmpty ? nil : email, for: name.isEmpty ? p.name : name)
@@ -253,6 +252,7 @@ struct PeopleView: View {
     private func startEditing(_ p: VoiceProfile) {
         newName = p.name
         newEmail = p.email ?? ""
+        emailHolder = nil
         editing = p
     }
 

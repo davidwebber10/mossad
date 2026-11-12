@@ -40,11 +40,7 @@ struct MeetingDetailView: View {
     }
 
     /// Names and emails of the library, so a rename or a new email in People reaches the open meeting.
-    private var profilesKey: Int {
-        var h = Hasher()
-        for p in controller.library.profiles { h.combine(p.name); h.combine(p.email) }
-        return h.finalize()
-    }
+    private var profilesKey: Int { controller.peopleStamp }
 
     /// Changes only when the words, the names, or the people library do, not on each tick of the player.
     private var cacheKey: String {
@@ -107,7 +103,7 @@ struct MeetingDetailView: View {
                           retentionDays: controller.deleteRecordings ? controller.recordingDays : nil,
                           maxLanes: maxLanes)
                 .overlay(alignment: .bottom) {
-                    if record.status != .recording, !processingFirstTime { DetailTabs(tab: tabBinding, tabs: tabs).offset(y: Self.underTabs) }
+                    if record.status != .recording, !processingFirstTime { DetailTabs(tab: tabBinding, tabs: tabs, accessibilityLabel: "Meeting tabs").offset(y: Self.underTabs) }
                 }
                 .zIndex(1)
             if record.status == .recording {
@@ -207,45 +203,6 @@ extension View {
     }
 }
 
-/// Summary, Transcript, Coach, Chat: a glass segmented control centered on the band's lower edge.
-private struct DetailTabs: View {
-    @Binding var tab: MeetingDetailView.Tab
-    var tabs = MeetingDetailView.Tab.allCases
-    @Namespace private var selection
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs, id: \.self) { t in
-                let on = t == tab
-                Button { withAnimation(.snappy(duration: 0.2)) { tab = t } } label: {
-                    Text(t.rawValue)
-                        .font(.system(size: 12.5, weight: on ? .semibold : .regular))
-                        .foregroundStyle(on ? Palette.ink : Palette.secondary)
-                        .padding(.horizontal, 14).padding(.vertical, 5)
-                        .background {
-                            if on {
-                                Capsule().fill(Palette.segmentOn)
-                                    .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
-                                    .matchedGeometryEffect(id: "on", in: selection)
-                            }
-                        }
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(on ? [.isSelected] : [])
-            }
-        }
-        .padding(3)
-        // Solid and raised: lighter than the header band, with an edge and a floating shadow, so the tabs read as
-        // their own control and nothing shows through them.
-        .background(Palette.raised, in: Capsule())
-        .chromeGlass(in: Capsule(), fill: .clear, shadow: .floating)
-        .overlay(Capsule().strokeBorder(Palette.bar, lineWidth: 1).allowsHitTesting(false))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Meeting tabs")
-    }
-}
-
 /// "Today", "Yesterday", "Mon" within the last 6 days, else "Oct 9" (with the year in a past year).
 func dayWord(_ date: Date) -> String {
     let cal = Calendar.current
@@ -318,7 +275,7 @@ struct MeetingPeople {
         for u in record.utterances where !allKeys.contains(u.speakerKey) { allKeys.append(u.speakerKey) }
         let profiles = library.profiles
         // With the invite's pairs, the address says who an invited name is.
-        let directory = PersonDirectory(profiles: profiles).with(invitees: record.invitees)
+        let directory = PersonDirectory(profiles: profiles, people: library.identity?.people.people).with(invitees: record.invitees)
         // Everyone the meeting names, saved or not: a second "Sam" among them makes a person saved as "Sam" unsure.
         let knownNames = lanes.filter { record.speakerNames[$0.key] != nil }.map(\.name) + record.attendees.filter { !$0.contains("@") }
         var byKey: [String: Speaker] = [:]
@@ -338,7 +295,9 @@ struct MeetingPeople {
         self.names = names
         attendees = record.attendees.map { a in
             guard a.contains("@") else { return (a, nil) }
-            return (library.name(forEmail: a) ?? a, library.name(forEmail: a) == nil ? nil : a)
+            // Any address of a saved person, also an alias or another domain of the company.
+            let name = library.name(forEmail: a) ?? directory.link(for: a)
+            return (name ?? a, name == nil ? nil : a)
         }
         links = PersonLinks(stamp: stamp, directory: directory, meeting: knownNames,
                             names: list.map(\.name) + record.attendees + attendees.map(\.name) + record.actionItems.compactMap(\.owner)
@@ -401,8 +360,7 @@ struct SpeakerNamingPopover: View {
         .frame(width: 300)
         .onAppear {
             name = speaker.isUnknown ? "" : speaker.name
-            // A name from the invite: the address is the invited person's, not proof of whoever the voice is.
-            email = speaker.fromInvite ? "" : speaker.email ?? ""
+            email = NamingPrefill.email(fromInvite: speaker.fromInvite, addresses: speaker.email.map { [$0] } ?? [])
         }
     }
 }

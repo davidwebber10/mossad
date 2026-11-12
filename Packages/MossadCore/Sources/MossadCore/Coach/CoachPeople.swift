@@ -11,7 +11,7 @@ public struct CoachPeople: Sendable {
     /// The rules of `PersonResolver` that say who a name is: an address, the id of a source, a written form of
     /// the person, or the whole name in either order. A short name, a nickname, and a name that is almost
     /// right only suggest, and make no link.
-    static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .externalID, .nameForm, .provedOrder, .sameName]
+    static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .companyEmail, .externalID, .nameForm, .provedOrder, .sameName]
 
     private let resolver: PersonResolver
     private let all: [PersonID: Person]

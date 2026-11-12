@@ -24,9 +24,7 @@ struct MeetingAnalyticsTab: View {
 
     /// Made here, not by the page: this body runs when something changed, the page's on each tick of the playback.
     private var key: MeetingAnalyticsStore.Key {
-        var people = Hasher()
-        for p in controller.library.profiles { people.combine(p.name); people.combine(p.email) }
-        return MeetingAnalyticsStore.Key(record: MeetingAnalytics.stamp(record), owner: controller.ownerName, people: people.finalize(),
+        return MeetingAnalyticsStore.Key(record: MeetingAnalytics.stamp(record), owner: controller.ownerName, people: controller.peopleStamp,
                                          coach: controller.coachVersion, commitments: controller.commitmentsVersion, meetings: controller.meetingsVersion)
     }
 

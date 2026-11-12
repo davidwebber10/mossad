@@ -61,7 +61,7 @@ final class MeetingAnalyticsStore {
         if let hit = cached(record.id, key: key) { return hit }
         if let now = running[record.id], now.key == key { return await now.task.value.1 }
         let records = controller.meetings, usage = controller.usage, paths = controller.paths
-        let profiles = controller.library.profiles, facts = facts
+        let profiles = controller.library.profiles, saved = controller.library.identity?.people.people, facts = facts
         let before = entries[record.id].map { ($0.inputs, $0.value) }
         let task = Task.detached(priority: .userInitiated) { () -> (Inputs, MeetingAnalytics) in
             let history = facts.facts(for: records, owner: key.owner)
@@ -82,7 +82,7 @@ final class MeetingAnalyticsStore {
                                         usage: logged.events, usageSince: logged.since, history: history,
                                         // Read for the few meetings of the series only, and only when the numbers are made.
                                         value: { CoachReview.load(in: paths.callDirectory($0))?.value?.rating },
-                                        people: PersonDirectory(profiles: profiles), commitments: book.items)
+                                        people: PersonDirectory(profiles: profiles, people: saved), commitments: book.items)
             return (inputs, made)
         }
         running[record.id] = (key, task)
