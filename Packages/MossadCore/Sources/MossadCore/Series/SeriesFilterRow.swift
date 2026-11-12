@@ -19,6 +19,7 @@ public struct SeriesFilterRow: Sendable, Equatable {
     /// Nil when the owner's tasks could not be read and nothing else is open.
     public var openItems: Bool?
     public var next: Date?
+    /// The newest meeting the owner was in.
     public var last: Date?
 
     /// `meetings` may hold every meeting's row; `invited` are the next invite's people on a sure match.
@@ -37,11 +38,14 @@ public struct SeriesFilterRow: Sendable, Equatable {
         platform = Self.usual(rows.map(\.platform)) ?? series.next?.platform
         let notesOnly = Set(series.meetings.filter(\.notesOnly).map(\.id))
         seconds = Self.median(rows.filter { !notesOnly.contains($0.id) && $0.seconds > 0 }.map(\.seconds))
-        size = Self.usual(rows.map(\.size).filter { $0 != .unknown }) ?? .unknown
-        value = Self.usual(rows.compactMap(\.value)).map { MeetingFilter.Value($0) } ?? .notRated
+        // "Usually" needs at least half of the meetings to say: one known value of twelve is no habit.
+        let sizes = rows.map(\.size).filter { $0 != .unknown }, ratings = rows.compactMap(\.value)
+        size = sizes.count * 2 >= rows.count ? Self.usual(sizes) ?? .unknown : .unknown
+        value = ratings.count * 2 >= rows.count ? Self.usual(ratings).map { MeetingFilter.Value($0) } ?? .notRated : .notRated
         self.openItems = openItems
         next = series.next?.start
-        last = series.last?.start
+        // The owner met them only where the owner was there: a notes-only meeting can be one the owner missed.
+        last = rows.first { $0.ownerPresent == true }?.start
     }
 
     /// The rows of every series, from every meeting's row. The next invite's people are read by the Meetings filter's

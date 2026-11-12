@@ -1,24 +1,31 @@
 import Foundation
 
 /// What the Recurring list's search reads of one series besides its meetings: the title, the cadence in words, and
-/// its people by name and by every address.
+/// its people by name and by address.
 public struct SeriesSearchRow: Sendable, Equatable {
     public var id: String
     public var title: String
     /// Strongest first: the cadence, the names, the addresses.
     public var fields: [ListField]
+    /// Every address, lowercased: a whole address in the search matches only these.
+    public var emails: Set<String>
     /// Its meetings, newest first.
     public var meetings: [String]
 
-    /// `records` may hold every meeting. `people` are the series' people on a sure match (`SeriesFilterRow.people`);
-    /// `cadence` is the cadence as the list shows it.
-    public init(series: MeetingSeries, records: [String: CallRecord], people: [MeetingFilter.Who], directory: PersonDirectory, cadence: String?) {
+    /// `records` may hold every meeting. `people` are the series' people on a sure match (`SeriesFilterRow.people`):
+    /// only they bring the addresses of a saved person. The invites' own addresses count as they are.
+    public init(series: MeetingSeries, records: [String: CallRecord], people: [MeetingFilter.Who], directory: PersonDirectory) {
         id = series.id
         title = series.title
         meetings = series.meetings.map(\.id)
+        // The day and the group only: the time and words such as "every" would match nearly every series.
         var cadenceWords: [String] = []
-        if let cadence { cadenceWords.append(cadence) } else if series.recurringInCalendar { cadenceWords.append("Repeats") }
+        switch series.cadence?.rhythm {
+        case .weekly(let d)?, .everyOtherWeek(let d)?: cadenceWords.append(SeriesCadence.weekdays[(d - 1) % 7])
+        default: break
+        }
         if let group = SeriesFilter.Cadence(series.cadence), group != .other { cadenceWords.append(group.option) }
+        if series.recurringInCalendar { cadenceWords.append("Repeats") }
 
         var names: [String] = [], nameKeys: Set<String> = []
         var emails: [String] = [], emailKeys: Set<String> = []
@@ -40,11 +47,13 @@ public struct SeriesSearchRow: Sendable, Equatable {
             if let n = i.name { name(n) }
             if let e = i.email { email(e) }
         }
-        // Every address of each named person.
-        for n in names {
-            let key = PersonNames.key(n)
-            for p in directory.people where PersonNames.key(p.name) == key { p.emails.forEach(email) }
+        // Every address of each sure person: the one saved person of that whole name. Two of one name are nobody.
+        let saved = Dictionary(grouping: directory.people, by: \.name)
+        for who in people {
+            guard let found = saved[who.name], found.count == 1 else { continue }
+            found[0].emails.forEach(email)
         }
+        self.emails = emailKeys
         fields = [ListField("Cadence", cadenceWords.joined(separator: " · ")), ListField("People", names.joined(separator: ", ")),
                   ListField("Email", emails.joined(separator: ", "))]
     }
@@ -66,11 +75,19 @@ public enum SeriesListSearch {
     }
 
     /// `meetings` are the Meetings search's places by meeting id, for the same query.
+    ///
+    /// A whole address matches only a series with that address, as the Meetings search reads one. A query with a
+    /// `#tag` or an `@person` is about meetings: the series' own words do not count.
     public static func matches(_ rows: [SeriesSearchRow], query: String, meetings: [String: ListMatch]) -> [String: Match] {
-        let search = ListSearch(query)
+        let parsed = ParsedQuery(query)
+        let email = parsed.tag == nil && parsed.person.isEmpty ? parsed.email : nil
+        let search = parsed.tag == nil && parsed.person.isEmpty && email == nil ? ListSearch(query) : ListSearch("")
         var out: [String: Match] = [:]
         for row in rows {
-            if !search.isEmpty, let own = search.match(title: row.title, fields: row.fields) {
+            if let email, row.emails.contains(email) {
+                out[row.id] = Match(match: ListMatch(title: SearchText(row.title), source: .field("Email"),
+                                                     context: SearchText(email, matches: [email.startIndex..<email.endIndex])))
+            } else if !search.isEmpty, let own = search.match(title: row.title, fields: row.fields) {
                 out[row.id] = Match(match: own)
             } else if let id = row.meetings.first(where: { meetings[$0] != nil }), let m = meetings[id] {
                 out[row.id] = Match(match: place(m, seriesTitle: row.title), meetingID: id)

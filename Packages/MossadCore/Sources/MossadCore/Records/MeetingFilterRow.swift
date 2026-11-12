@@ -161,6 +161,8 @@ public struct MeetingFilterRow: Sendable, Equatable {
     public var screens: Int?
     /// The coach's rating; nil when the coach gave none.
     public var value: MeetingValue.Rating?
+    /// Whether the owner was in it (`CallRecord.ownerPresent`); nil when not known.
+    public var ownerPresent: Bool?
 
     /// Nil for the call that records now: it has no length, people, or summary yet, and the list shows it apart.
     public init?(record r: CallRecord, people: MeetingFilterPeople, rating: MeetingValue.Rating?) {
@@ -188,6 +190,7 @@ public struct MeetingFilterRow: Sendable, Equatable {
         }
         screens = r.screens?.count
         value = rating
+        ownerPresent = r.ownerPresent
     }
 
     /// Equal, and each person under the same name. `Who` is equal on its key alone, so a new name of a saved

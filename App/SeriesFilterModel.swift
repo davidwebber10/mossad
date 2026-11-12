@@ -31,6 +31,7 @@ final class SeriesFilterModel: ObservableObject {
 
     private var gate = MeetingFilterFlyoutGate()
     private var day = MeetingFilterDay()
+    private var midnight: Task<Void, Never>?
     private weak var controller: AppController?
     private var observers: [AnyCancellable] = []
     private var rows: [SeriesFilterRow] = []
@@ -54,6 +55,9 @@ final class SeriesFilterModel: ObservableObject {
         guard self.controller == nil else { return }
         self.controller = controller
         observers = [
+            // A new summary can change what is open with the same counts in the meetings' rows.
+            controller.$meetings.dropFirst().debounce(for: .milliseconds(400), scheduler: RunLoop.main)
+                .sink { [weak self] _ in MainActor.assumeIsolated { self?.read() } },
             controller.series.$all.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in MainActor.assumeIsolated { self?.read() } },
             controller.meetingFilter.$rows.dropFirst().receive(on: RunLoop.main)
@@ -91,7 +95,13 @@ final class SeriesFilterModel: ObservableObject {
     func toggleOpen() {
         if !isOpen, !gate.mayOpen(at: Date()) { return }
         isOpen.toggle()
-        if isOpen { count() }
+        // The saved people can change with no signal (a new address in People): read them again, as the Meetings
+        // filter does.
+        if isOpen {
+            count()
+            controller?.meetingFilter.read()
+            read()
+        }
     }
 
     // MARK: Rows
@@ -131,7 +141,7 @@ final class SeriesFilterModel: ObservableObject {
         let rows = SeriesFilterRow.rows(series, meetings: meetingRows, people: people, openItems: open)
         let directory = PersonDirectory(profiles: profiles, people: store?.people)
         let search = zip(series, rows).map { s, row in
-            SeriesSearchRow(series: s, records: byID, people: row.people, directory: directory, cadence: s.cadence?.text(time: clockTime))
+            SeriesSearchRow(series: s, records: byID, people: row.people, directory: directory, )
         }
         return (rows, search)
     }
@@ -148,11 +158,20 @@ final class SeriesFilterModel: ObservableObject {
             count()
             return
         }
-        let rows = searchRows
+        let rows = searchRows, records = controller.meetings
         searching = Task {
             if debounce { try? await Task.sleep(for: .milliseconds(120)) }
             guard !Task.isCancelled else { return }
-            let meetings = await controller.search.listMatches(query) ?? [:]
+            // Until the index is first built, the plain search of the Meetings list, without the places.
+            var listed = await controller.search.listMatches(query)
+            if listed == nil {
+                listed = await Task.detached(priority: .userInitiated) {
+                    let ids = MeetingSearch.matchingIDs(records, query)
+                    return Dictionary(records.filter { ids.contains($0.id) }.map { ($0.id, ListMatch(title: SearchText($0.title))) },
+                                      uniquingKeysWith: { a, _ in a })
+                }.value
+            }
+            let meetings = listed ?? [:]
             let made = await Self.match(rows, query: query, meetings: meetings)
             guard !Task.isCancelled, query == self.query else { return }
             let ids = Set(made.keys)
@@ -181,6 +200,18 @@ final class SeriesFilterModel: ObservableObject {
             if answered != filter { answered = filter }
             day = MeetingFilterDay(calendar: calendar)
             day.counted(at: now)
+            waitForMidnight()
+        }
+    }
+
+    /// Counts again at the start of the next day, in case the system's notice of it does not come.
+    private func waitForMidnight() {
+        midnight?.cancel()
+        guard let next = day.nextChange else { return }
+        midnight = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(1, next.timeIntervalSinceNow + 1)))
+            guard !Task.isCancelled else { return }
+            self?.countIfNewDay()
         }
     }
 

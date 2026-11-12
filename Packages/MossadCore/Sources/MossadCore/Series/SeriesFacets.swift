@@ -34,13 +34,16 @@ public struct SeriesFacets: Sendable, Equatable {
     public init(rows: [SeriesFilterRow], filter: SeriesFilter, within: Set<String>? = nil, now: Date = Date(), calendar: Calendar = .current) {
         let chosenPeople = Set(filter.people.map(\.key))
         var people: [String: (who: MeetingFilter.Who, count: Int, overall: Int)] = [:]
+        // The date rules once, not for each row.
+        let nextDays = Dictionary(uniqueKeysWithValues: SeriesFilter.Next.allCases.map { ($0, $0.rule(now: now, calendar: calendar)) })
+        let lastDays = Dictionary(uniqueKeysWithValues: SeriesFilter.LastMet.allCases.map { ($0, $0.rule(now: now, calendar: calendar)) })
 
         for row in rows {
             // What this series has, group by group. An unknown value gives no choice.
             let rowPeople = Set(row.people.map(\.key))
             let length = row.seconds.flatMap { s in MeetingFilter.Length.allCases.first { $0.contains(seconds: s) } }
-            let nexts = SeriesFilter.Next.allCases.filter { $0.contains(row.next, now: now, calendar: calendar) }
-            let lasts = row.last.map { d in SeriesFilter.LastMet.allCases.filter { $0.contains(d, now: now, calendar: calendar) } } ?? []
+            let nexts = SeriesFilter.Next.allCases.filter { nextDays[$0]?.contains(row.next) ?? false }
+            let lasts = row.last.map { d in SeriesFilter.LastMet.allCases.filter { lastDays[$0]?.contains(d) ?? false } } ?? []
 
             var failed: Group = []
             if !chosenPeople.isEmpty {

@@ -21,38 +21,50 @@ public struct SeriesFilter: Equatable, Sendable {
         }
     }
 
+    /// The days a date choice holds: from `start` (in) to `end` (out); an open end has no limit. `none` holds only
+    /// a missing date.
+    public struct DateRule: Sendable {
+        var start: Date?
+        var end: Date?
+        var none = false
+
+        public func contains(_ date: Date?) -> Bool {
+            guard let date else { return none }
+            return !none && (start.map { date >= $0 } ?? true) && (end.map { date < $0 } ?? true)
+        }
+    }
+
     /// When the next meeting is, from the calendar. One at a time: "this week" is also in "next 2 weeks".
     public enum Next: Int, CaseIterable, Sendable {
         case thisWeek, twoWeeks, noneKnown
 
-        public func contains(_ next: Date?, now: Date, calendar: Calendar) -> Bool {
+        public func rule(now: Date, calendar: Calendar) -> DateRule {
             let today = calendar.startOfDay(for: now)
             switch self {
-            case .noneKnown: return next == nil
-            case .thisWeek:
-                guard let next, let week = calendar.dateInterval(of: .weekOfYear, for: now) else { return false }
-                return next >= today && next < week.end
-            case .twoWeeks:
-                guard let next else { return false }
-                let end = calendar.date(byAdding: .day, value: 14, to: today) ?? today.addingTimeInterval(14 * 86400)
-                return next >= today && next < end
+            case .noneKnown: return DateRule(none: true)
+            case .thisWeek: return DateRule(start: today, end: calendar.dateInterval(of: .weekOfYear, for: now)?.end ?? today)
+            case .twoWeeks: return DateRule(start: today, end: calendar.date(byAdding: .day, value: 14, to: today) ?? today.addingTimeInterval(14 * 86400))
             }
         }
+
+        public func contains(_ next: Date?, now: Date, calendar: Calendar) -> Bool { rule(now: now, calendar: calendar).contains(next) }
     }
 
-    /// When the last meeting was. One at a time, as the date of the Meetings filter.
+    /// When the owner last met in the series. One at a time, as the date of the Meetings filter.
     public enum LastMet: Int, CaseIterable, Sendable {
         case last7, last30, last90, earlier
 
-        public func contains(_ last: Date, now: Date, calendar: Calendar) -> Bool {
+        public func rule(now: Date, calendar: Calendar) -> DateRule {
             let period: MeetingFilter.Period = switch self {
             case .last7: .last7
             case .last30: .last30
             case .last90, .earlier: .last90
             }
             let days = period.interval(now: now, calendar: calendar)
-            return self == .earlier ? last < days.start : last >= days.start && last < days.end
+            return self == .earlier ? DateRule(end: days.start) : DateRule(start: days.start, end: days.end)
         }
+
+        public func contains(_ last: Date, now: Date, calendar: Calendar) -> Bool { rule(now: now, calendar: calendar).contains(last) }
     }
 
     public var people: [MeetingFilter.Who] = []

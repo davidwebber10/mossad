@@ -79,6 +79,41 @@ final class SeriesFilterTests: XCTestCase {
         XCTAssertEqual(r.value, .notRated)
     }
 
+    func testAUsualValueNeedsHalfOfTheMeetings() {
+        let m = [meeting("a", at(11, 3, 10), size: .small, value: .high), meeting("b", at(10, 27, 10)), meeting("c", at(10, 20, 10))]
+        let r = row(series("s", meetings: m), m)
+        XCTAssertEqual(r.size, .unknown)
+        XCTAssertEqual(r.value, .notRated)
+        let two = [meeting("a", at(11, 3, 10), size: .small, value: .high), meeting("b", at(10, 27, 10))]
+        XCTAssertEqual(row(series("s", meetings: two), two).size, .small)
+    }
+
+    func testLastMetIsTheNewestMeetingTheOwnerWasIn() {
+        var missed = meeting("new", at(11, 9, 10))
+        missed.ownerPresent = nil
+        let m = [missed, meeting("old", at(10, 20, 10))]
+        XCTAssertEqual(row(series("s", meetings: m), m).last, at(10, 20, 10))
+    }
+
+    func testTheNextInvitesPeopleAreSureMatchesOnly() {
+        let directory = PersonDirectory([.init(name: "Sam Carter", email: "sam@example.com")])
+        let people = MeetingFilterPeople(directory: directory, owner: "Dana Lee")
+        var s = series("s", next: at(11, 13, 10))
+        s.upcoming[0].attendees = ["sam@example.com", "stranger@example.org", "Dana Lee"]
+        XCTAssertEqual(SeriesFilterRow.rows([s], meetings: [], people: people, openItems: [:]).first?.people.map(\.name), ["Sam Carter"])
+    }
+
+    func testAnUnknownPlatformOrSizeMatchesNoChoice() {
+        let rows = [row(series("blank"), [])]
+        var filter = SeriesFilter()
+        filter.toggle(.platform(.zoom))
+        XCTAssertTrue(ids(rows, filter).isEmpty)
+        filter = SeriesFilter()
+        filter.toggle(.size(.small))
+        XCTAssertTrue(ids(rows, filter).isEmpty)
+        XCTAssertEqual(facets(rows).sizes.count(.unknown), 1)
+    }
+
     func testANotesOnlyMeetingHasNoLength() {
         let m = [meeting("a", at(11, 3, 10), minutes: 30), meeting("b", at(10, 27, 10), minutes: 90)]
         XCTAssertEqual(row(series("s", meetings: m, notesOnly: ["b"]), m).seconds, 30 * 60)
@@ -226,7 +261,7 @@ final class SeriesFilterTests: XCTestCase {
 
     func searchRow(_ s: MeetingSeries, records: [CallRecord] = [], people: [String] = [], directory: PersonDirectory = PersonDirectory()) -> SeriesSearchRow {
         SeriesSearchRow(series: s, records: Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) }), people: people.map { MeetingFilter.Who(name: $0) },
-                        directory: directory, cadence: s.cadence?.text)
+                        directory: directory)
     }
 
     func testASeriesIsFoundByItsTitleCadencePeopleAndEveryAddress() {
@@ -244,6 +279,51 @@ final class SeriesFilterTests: XCTestCase {
         XCTAssertEqual(found("scarter")?.match.source, .field("Email"))
         XCTAssertEqual(found("jo@example.com")?.match.source, .field("Email"))
         XCTAssertNil(found("dana"))
+    }
+
+    func testAWholeAddressFindsOnlyTheSeriesWithThatAddress() {
+        let directory = PersonDirectory([.init(name: "Sam Carter", emails: ["sam@example.com"]), .init(name: "Samantha Lee", emails: ["samantha@example.com"]),
+                                         .init(name: "Riley Park", emails: ["riley@example.com"])])
+        let a = searchRow(series("a", title: "Sales sync"), people: ["Sam Carter"], directory: directory)
+        let b = searchRow(series("b", title: "Sam planning"), people: ["Samantha Lee", "Riley Park"], directory: directory)
+        let hits = SeriesListSearch.matches([a, b], query: "sam@example.com", meetings: [:])
+        XCTAssertEqual(Set(hits.keys), ["a"])
+        XCTAssertEqual(hits["a"]?.match.source, .field("Email"))
+        // A meeting that the Meetings search found by the address still counts.
+        let s = series("c", title: "Board", meetings: [meeting("c1", at(11, 3, 10))])
+        let byMeeting = ListMatch(title: SearchText("Board"), source: .field("People"), context: SearchText("sam@example.com"))
+        XCTAssertEqual(Set(SeriesListSearch.matches([a, b, searchRow(s)], query: "sam@example.com", meetings: ["c1": byMeeting]).keys), ["a", "c"])
+    }
+
+    func testAddressesComeOnlyFromASurePerson() {
+        // Two saved people with one name: nobody, so neither address.
+        let twins = PersonDirectory([.init(name: "Sam Carter", emails: ["sam@example.com"]), .init(name: "Sam Carter", emails: ["scarter@example.org"])])
+        let row = searchRow(series("a"), people: ["Sam Carter"], directory: twins)
+        XCTAssertNil(SeriesListSearch.matches([row], query: "sam@example.com", meetings: [:])["a"])
+        // A name on the invite that is no sure person brings no saved address.
+        var r = CallRecord(id: "a1", platform: .meet, bundleID: "x", start: at(11, 3, 10), end: at(11, 3, 11), status: .written)
+        r.attendees = ["Riley Park"]
+        let saved = PersonDirectory([.init(name: "Riley Park", emails: ["riley@example.com"])])
+        let invited = searchRow(series("b", meetings: [meeting("a1", at(11, 3, 10))]), records: [r], directory: saved)
+        XCTAssertNil(SeriesListSearch.matches([invited], query: "riley@example.com", meetings: [:])["b"])
+        XCTAssertNotNil(SeriesListSearch.matches([invited], query: "riley", meetings: [:])["b"])
+    }
+
+    func testTheCadenceFieldHasOnlyTheDayAndTheGroup() {
+        let rows = [searchRow(series("a", title: "Board"))]
+        func found(_ q: String) -> Bool { SeriesListSearch.matches(rows, query: q, meetings: [:])["a"] != nil }
+        XCTAssertTrue(found("tuesday"))
+        XCTAssertTrue(found("weekly"))
+        XCTAssertFalse(found("10"))
+        XCTAssertFalse(found("every"))
+    }
+
+    func testATagOrAPersonQueryUsesOnlyTheMeetings() {
+        let s = series("a", title: "Budget review", meetings: [meeting("m", at(11, 3, 10))])
+        XCTAssertNil(SeriesListSearch.matches([searchRow(s)], query: "#budget", meetings: [:])["a"])
+        let tagged = ListMatch(title: SearchText("Budget review"), source: .field("Tag"), context: SearchText("Budget"))
+        XCTAssertEqual(SeriesListSearch.matches([searchRow(s)], query: "#budget", meetings: ["m": tagged])["a"]?.meetingID, "m")
+        XCTAssertNil(SeriesListSearch.matches([searchRow(s, people: ["Sam Carter"])], query: "@sam", meetings: [:])["a"])
     }
 
     func testASeriesMatchesWhenAnyOfItsMeetingsMatchesAndShowsTheNewestPlace() {

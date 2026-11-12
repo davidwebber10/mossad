@@ -38,7 +38,9 @@ struct RecurringView: View {
                 // Development hook for screenshots: MOSSAD_RECURRING_SERIES names the series to open.
                 let preview = DevHooks.preview ? ProcessInfo.processInfo.environment["MOSSAD_RECURRING_SERIES"] : nil
                 let visible = filters.visible(all)
-                let shown = model.series(model.selected) ?? preview.flatMap { t in all.first { $0.title == t } } ?? visible.first ?? all[0]
+                // The page shows a series of the list: the selected one while it is in the list, else the first one.
+                let selected = model.series(model.selected) ?? preview.flatMap { t in all.first { $0.title == t } }
+                let shown = selected.flatMap { s in visible.contains { $0.id == s.id } ? s : nil } ?? visible.first
                 HStack(spacing: 0) {
                     ListColumn("Recurring", widthKey: "recurring", search: search, searchPrompt: Self.searchPrompt) {
                         SeriesFilterButton(filters: filters)
@@ -54,14 +56,21 @@ struct RecurringView: View {
                                 .padding(.horizontal, 14).padding(.top, Space.m)
                         } else {
                             SeriesList(series: visible, book: model.book, places: filters.isSearching ? filters.places : [:],
-                                       selection: Binding(get: { shown.id }, set: { model.selected = $0 }))
+                                       selection: Binding(get: { shown?.id }, set: { model.selected = $0 }))
                         }
                     }
-                    RecurringPage(series: shown)
-                        // A key that stays while the series lives, so a point in edit is not lost when the id moves.
-                        .id(shown.meetings.last.map { "call:\($0.id)" } ?? shown.id)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .overlay(alignment: .leading) { Hairline(axis: .vertical) }
+                    Group {
+                        if let shown {
+                            RecurringPage(series: shown)
+                                // A key that stays while the series lives, so a point in edit is not lost when the id moves.
+                                .id(shown.meetings.last.map { "call:\($0.id)" } ?? shown.id)
+                        } else {
+                            // Nothing in the list: the page says so too, and shows no series that the list hides.
+                            DetailColumn { PageToolbar(title: "") {} } content: { Color.clear }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .leading) { Hairline(axis: .vertical) }
                 }
             }
         }
@@ -183,6 +192,8 @@ private struct SeriesRow: View {
         .background(selected ? Palette.selection : hovering ? Palette.fill.opacity(0.5) : .clear,
                     in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        // The padding around the row's button selects too: the whole row is one target, as before the place line.
+        .onTapGesture(perform: select)
         .onHover { hovering = $0 }
     }
 
@@ -198,7 +209,7 @@ private struct SeriesRow: View {
             .buttonStyle(.plain)
             .help(place.match.time == nil ? "Open this meeting" : "Open this meeting at this moment")
         } else {
-            ListMatchLine(match: place.match).contentShape(Rectangle()).onTapGesture(perform: select)
+            ListMatchLine(match: place.match)
         }
     }
 
