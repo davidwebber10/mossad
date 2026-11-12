@@ -158,6 +158,11 @@ public final class VoiceLibrary: @unchecked Sendable {
         }
     }
 
+    /// The person other than `name` who has an address: another profile, else another saved person.
+    public func holder(of address: String, except name: String) -> String? {
+        lock.withLock { holder(of: address, except: name, profile: storage.first { $0.name == name }) }
+    }
+
     /// Who else has an address: another profile, else another saved person. Call it inside the lock.
     private func holder(of address: String, except name: String, profile: VoiceProfile?) -> String? {
         let a = EmailIdentity.normalized(address)

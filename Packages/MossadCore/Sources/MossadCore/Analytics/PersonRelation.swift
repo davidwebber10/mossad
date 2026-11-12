@@ -117,7 +117,6 @@ public struct PersonRelation: Sendable {
         theirReply = median(of: theirs)
         topics = tags.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.prefix(5).map(\.key)
         theirItems = items.reversed()
-        myItems = mine1on1.reversed()
         myCommitments = commitments.filter { c in
             guard !c.deleted else { return false }
             if let personID {
@@ -128,6 +127,11 @@ public struct PersonRelation: Sendable {
             return c.to.map { $0 == name || firstWord($0) == firstWord(name) } == true
         }
         self.value = value
+        // An item of the owner's that is also a promise to this person, from the same call, shows once: as the promise.
+        let promised = myCommitments
+        myItems = mine1on1.reversed().filter { item in
+            !promised.contains { $0.callID == item.callID && Self.sameTask($0.text, item.task, name: name) }
+        }
 
         lastMet = shared.last?.start
         let gaps = zip(shared, shared.dropFirst()).map { $1.start.timeIntervalSince($0.start) / 86_400 }
@@ -142,6 +146,19 @@ public struct PersonRelation: Sendable {
             let end = calendar.date(byAdding: .weekOfYear, value: 1, to: start)!
             return Week(start: start, calls: shared.filter { $0.start >= start && $0.start < end }.count)
         }
+    }
+}
+
+extension PersonRelation {
+    /// "Send Sam the vendor draft" and "Send the vendor draft": the same words, without the person's name.
+    static func sameTask(_ a: String, _ b: String, name: String) -> Bool {
+        let theirs = Set(name.lowercased().split(separator: " ").map(String.init))
+        func words(_ s: String) -> Set<String> {
+            Set(s.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)).subtracting(theirs)
+        }
+        let x = words(a), y = words(b)
+        guard !x.isEmpty, !y.isEmpty else { return false }
+        return Double(x.intersection(y).count) / Double(x.union(y).count) >= 0.6
     }
 }
 

@@ -284,7 +284,7 @@ struct PersonVoiceTab: View {
                         Text("Voice fingerprints are biometric data. They stay on this Mac in the Voices folder and are never uploaded.")
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Button("Delete all saved voices…", action: deleteAll)
+                    Button("Delete every person’s saved voices…", action: deleteAll)
                         .buttonStyle(.plain).fontWeight(.medium).foregroundStyle(Palette.recording)
                 }
                 .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)

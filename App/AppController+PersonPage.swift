@@ -4,6 +4,15 @@ import MossadCore
 /// What a person's page reads of the people store and the voice samples. A preview has no running store: it reads
 /// the files and writes nothing.
 extension AppController {
+    /// Changes when a saved person's name or any address changes, or the company domains do: the pages' caches key on it.
+    var peopleStamp: Int {
+        var h = Hasher()
+        for p in library.profiles { h.combine(p.name); h.combine(p.emails) }
+        h.combine(CompanyDomains.current)
+        h.combine(library.identity?.people.people.map(\.updated))
+        return h.finalize()
+    }
+
     /// The saved person of a name on the People page.
     func savedPerson(of profile: VoiceProfile) -> Person? {
         if let store = library.identity?.people {

@@ -5,6 +5,8 @@ import MossadCore
 @main
 struct MossadEntry {
     static func main() {
+        // Before any resolver: the app, `--mcp`, and each command-line step read the same company domains.
+        CompanyDomains.loadSaved()
         // The build flag says what this copy does; the bundle id picks its folder and Keychain. They must agree.
         if let mismatch = AppIdentity.current.mismatch(rehearsalBuild: Rehearsal.isOn) { preconditionFailure(mismatch) }
         // `--import-keys` copies API keys from the environment (Doppler) into the Keychain and exits.

@@ -183,6 +183,8 @@ final class PhoneStore {
                              commitments: (try? CommitmentBook.load(from: paths.commitments)) ?? CommitmentBook())
             s.personas = SyncedPersonas.load(from: paths.coach)?.personas ?? []
             s.people = PeopleStore.peek(in: paths.people) ?? []
+            // The company's domains came with the people from the Mac: an address links on the phone as there.
+            CompanyDomains.current = (try? Data(contentsOf: paths.people.appendingPathComponent(PeopleStore.fileName))).map(SyncedPeople.domains(in:)) ?? .none
             guard readMeetings else { return s }
             let meetings = MeetingIndex(paths: paths).all()
             s.meetings = meetings

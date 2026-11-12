@@ -111,12 +111,18 @@ struct PersonHeader: View {
                     .contextMenu {
                         Button("Copy") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(email, forType: .string) }
                         Button("Remove \(email)", role: .destructive) { remove(email) }
+                        Button("Not \(first)’s address") { reject(email) }
+                            .help("Mossad never gives this address to \(first) again, also not by the company domains")
                     }
             }
             ForEach(directoryEmails, id: \.self) { email in
                 Text(email).font(.system(size: 12.5)).foregroundStyle(Palette.tertiary)
                     .textSelection(.enabled)
                     .help("From Google's directory")
+                    .contextMenu {
+                        Button("Copy") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(email, forType: .string) }
+                        Button("Not \(first)’s address") { reject(email) }
+                    }
             }
             Button { adding = true } label: {
                 Label(profile.emails.isEmpty ? "Add email" : "Add", systemImage: "plus")
@@ -132,6 +138,18 @@ struct PersonHeader: View {
         .frame(maxWidth: Detail.titleMax, alignment: .leading)
     }
 
+    /// "Not their address": gone from the person, and saved as not theirs, so no rule and no directory read gives
+    /// it back.
+    private func reject(_ email: String) {
+        do {
+            if profile.emails.contains(where: { $0.caseInsensitiveCompare(email) == .orderedSame }) { try controller.library.removeEmail(email, for: profile.name) }
+            if let store = controller.library.identity?.people, let id = store.id(forVoiceName: profile.name, isOwner: profile.isOwner) {
+                try store.rejectEmail(email, for: id)
+            }
+        } catch { Log.error("Saving an address as not the person's failed: \(error)") }
+        changed()
+    }
+
     private func remove(_ email: String) {
         do { try controller.library.removeEmail(email, for: profile.name) } catch { Log.error("Removing an address failed: \(error)") }
         changed()
@@ -144,6 +162,11 @@ struct PersonHeader: View {
             if !profile.emails.isEmpty {
                 Menu("Remove email") {
                     ForEach(profile.emails, id: \.self) { email in Button(email) { remove(email) } }
+                }
+            }
+            if !(profile.emails + directoryEmails).isEmpty {
+                Menu("Not \(first)’s address") {
+                    ForEach(profile.emails + directoryEmails, id: \.self) { email in Button(email) { reject(email) } }
                 }
             }
             Menu {
@@ -174,8 +197,7 @@ struct PersonHeader: View {
     private var figures: some View {
         let t = together
         let owner = profile.isOwner
-        let count: (String, String) = (t.map { "\($0.meetings)" } ?? "–",
-                                       owner ? "meetings recorded" : (t?.invitedOnly ?? 0) > 0 ? "meetings · \(t!.invitedOnly) only invited" : "meetings together")
+        let count: (String, String) = (t.map { "\($0.meetings)" } ?? "–", t.map { Self.countLabel($0, owner: owner) } ?? "meetings")
         let last: (String, String) = (t.map { $0.lastMet.map(shortDay) ?? ($0.meetings > 0 ? "Not known" : "Not yet") } ?? "–",
                                       owner ? "last meeting" : "last met")
         let often: (String, String) = {
@@ -185,6 +207,18 @@ struct PersonHeader: View {
         }()
         let time: (String, String) = (t.map { $0.seconds > 0 ? talkText($0.seconds) : "None" } ?? "–", owner ? "in meetings" : "time together")
         return FigureRow(figures: [count, last, often, time], ruled: false, maxWidth: Detail.titleMax)
+    }
+
+    /// "meetings together" only when each one proves it; else what they are: "meetings · 2 only invited · 1 from notes".
+    static func countLabel(_ t: PersonMeetings.Together, owner: Bool) -> String {
+        let word = t.meetings == 1 ? "meeting" : "meetings"
+        if owner { return word }
+        if t.met == t.meetings, t.meetings > 0 { return word + " together" }
+        var parts = [word]
+        if t.invitedOnly > 0 { parts.append("\(t.invitedOnly) only invited") }
+        let notes = t.meetings - t.met - t.invitedOnly
+        if notes > 0 { parts.append("\(notes) from notes") }
+        return parts.joined(separator: " · ")
     }
 }
 

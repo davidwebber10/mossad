@@ -17,6 +17,8 @@ struct PeopleView: View {
     @State private var editing: VoiceProfile?
     @State private var newName = ""
     @State private var newEmail = ""
+    /// The person who has the address typed in the edit sheet: an address is one person's only.
+    @State private var emailHolder: String?
     @State private var deleting: VoiceProfile?
     @State private var confirmDeleteAll = false
     @State private var reviewingDuplicates = false
@@ -198,6 +200,19 @@ struct PeopleView: View {
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Name", text: $newName).textFieldStyle(SheetFieldStyle())
                 TextField("Email (optional)", text: $newEmail).textFieldStyle(SheetFieldStyle())
+                    .onChange(of: newEmail) { _, _ in emailHolder = nil }
+                if let other = emailHolder {
+                    Text("\(other) has this address. An address is one person’s only.")
+                        .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    if !p.isOwner, let target = profiles.first(where: { $0.name == other }) {
+                        Button("Merge \(p.name) into \(other)") {
+                            editing = nil
+                            merge(p, into: target)
+                        }
+                        .buttonStyle(.sheetSecondary)
+                        .help("They are one person: one page with every address and every voice sample")
+                    }
+                }
             }
             .padding(.horizontal, 22).padding(.vertical, 16)
             SheetFooter {
@@ -211,6 +226,11 @@ struct PeopleView: View {
     private func save(_ p: VoiceProfile) {
         let name = newName.trimmingCharacters(in: .whitespaces)
         let email = newEmail.trimmingCharacters(in: .whitespaces)
+        // Another person's address stays theirs: the sheet says whose and offers the merge.
+        if !email.isEmpty, let other = controller.library.holder(of: email, except: p.name) {
+            emailHolder = other
+            return
+        }
         edit {
             if !name.isEmpty, name != p.name { try controller.library.rename(p.name, to: name) }
             try controller.library.setEmail(email.isEmpty ? nil : email, for: name.isEmpty ? p.name : name)
@@ -226,6 +246,7 @@ struct PeopleView: View {
     private func startEditing(_ p: VoiceProfile) {
         newName = p.name
         newEmail = p.email ?? ""
+        emailHolder = nil
         editing = p
     }
 

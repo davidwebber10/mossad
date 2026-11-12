@@ -41,11 +41,9 @@ final class MeetingPrepStore {
             invite.combine(meeting.end)
             invite.combine(meeting.attendees)
             invite.combine(meeting.link)
-            var people = Hasher()
-            for p in controller.library.profiles { people.combine(p.name); people.combine(p.email) }
             self.meeting = invite.finalize()
             owner = controller.ownerName
-            self.people = people.finalize()
+            self.people = controller.peopleStamp
             coach = controller.coachVersion
             var reads = Hasher()
             for (id, r) in controller.personaReads.sorted(by: { $0.key < $1.key }) { reads.combine(id); reads.combine(r.updated); reads.combine(r.card?.lines.count) }

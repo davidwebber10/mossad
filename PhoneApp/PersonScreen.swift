@@ -29,6 +29,9 @@ struct PersonView: View {
                     DetailTabs(tab: $tab, tabs: tabs, accessibilityLabel: "Person tabs")
                         .padding(.horizontal, Space.l).padding(.vertical, 4)
                 }
+                // A fade at the right edge says that more tabs are there.
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.86), .init(color: .clear, location: 1)],
+                                     startPoint: .leading, endPoint: .trailing))
                 .offset(y: -Detail.underTabs - 4)
                 .padding(.bottom, -Detail.underTabs)
                 VStack(alignment: .leading, spacing: Space.s) { content }
@@ -58,6 +61,11 @@ struct PersonView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name).textRole(.title).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
+                    // The job and the team from the Mac's directory; the photo stays on the Mac.
+                    let role = [person?.directory?.jobTitle, person?.directory?.department].compactMap { $0 }.joined(separator: " · ")
+                    if !role.isEmpty {
+                        Text(role).textRole(.body).fontWeight(.medium).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                    }
                     ForEach(emails, id: \.self) { e in
                         Text(e).textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1).textSelection(.enabled)
                     }
@@ -65,8 +73,7 @@ struct PersonView: View {
             }
             let t = meetings?.together
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .topLeading), GridItem(.flexible(), alignment: .topLeading)], alignment: .leading, spacing: 14) {
-                figure(t.map { "\($0.meetings)" } ?? "–",
-                       isOwner ? "meetings recorded" : (t?.invitedOnly ?? 0) > 0 ? "meetings · \(t!.invitedOnly) only invited" : "meetings together")
+                figure(t.map { "\($0.meetings)" } ?? "–", t.map { countLabel($0) } ?? "meetings")
                 figure(t.map { $0.lastMet.map(shortDay) ?? ($0.meetings > 0 ? "Not known" : "Not yet") } ?? "–", isOwner ? "last meeting" : "last met")
                 figure(t.map { $0.cadence.map(\.word) ?? "\($0.recent)" } ?? "–",
                        t.map { $0.cadence == nil ? "in the last 90 days" : "\($0.recent) in the last 90 days" } ?? "how often")
@@ -85,6 +92,18 @@ struct PersonView: View {
     private var emails: [String] {
         guard let person else { return [] }
         return person.emails.filter { $0.state != .rejected && !$0.shared }.map(\.address)
+    }
+
+    /// "meetings together" only when each one proves it, as on the Mac.
+    private func countLabel(_ t: PersonMeetings.Together) -> String {
+        let word = t.meetings == 1 ? "meeting" : "meetings"
+        if isOwner { return word }
+        if t.met == t.meetings, t.meetings > 0 { return word + " together" }
+        var parts = [word]
+        if t.invitedOnly > 0 { parts.append("\(t.invitedOnly) only invited") }
+        let notes = t.meetings - t.met - t.invitedOnly
+        if notes > 0 { parts.append("\(notes) from notes") }
+        return parts.joined(separator: " · ")
     }
 
     private func figure(_ value: String, _ label: String) -> some View {
@@ -160,7 +179,7 @@ struct PersonView: View {
             if rows.isEmpty {
                 Text("No meeting matches “\(query)”.").textRole(.secondary).foregroundStyle(Palette.secondary).padding(.top, Space.s)
             }
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { i, m in
                     NavigationLink(value: m.id) {
                         HairlineRow(divided: i < rows.count - 1) {
@@ -169,7 +188,9 @@ struct PersonView: View {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(m.title).textRole(.headline).foregroundStyle(Palette.ink).lineLimit(2).multilineTextAlignment(.leading)
                                     HStack(spacing: 6) {
-                                        Text(m.start.formatted(.dateTime.month(.abbreviated).day().year()))
+                                        Text(Calendar.current.isDate(m.start, equalTo: Date(), toGranularity: .year)
+                                             ? m.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                                             : m.start.formatted(.dateTime.month(.abbreviated).day().year()))
                                         if m.notesOnly { SourceMark(text: "Gemini notes") }
                                         if m.part == .invited, !isOwner { SourceMark(text: "Invited") }
                                     }
@@ -291,6 +312,7 @@ extension PersonMeetings.Cadence {
     var word: String {
         switch self {
         case .daily: "Daily"
+        case .severalAWeek: "Several a week"
         case .weekly: "Weekly"
         case .everyOtherWeek: "Every 2 weeks"
         case .monthly: "Monthly"

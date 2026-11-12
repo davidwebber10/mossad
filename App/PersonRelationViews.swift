@@ -188,9 +188,12 @@ struct PersonTasksTab: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
                 Button(action: row.3) {
                     HStack(alignment: .firstTextBaseline, spacing: Space.s) {
-                        Image(systemName: row.2 == true ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 11)).foregroundStyle(row.2 == true ? Palette.ok : Palette.tertiaryMark)
-                            .accessibilityHidden(true)
+                        // An action item has no state of its own: no circle, so it does not look like an open task.
+                        if let done = row.2 {
+                            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 11)).foregroundStyle(done ? Palette.ok : Palette.tertiaryMark)
+                                .accessibilityHidden(true)
+                        }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(row.0).foregroundStyle(Palette.ink).strikethrough(row.2 == true).multilineTextAlignment(.leading)
                             if !row.1.isEmpty { Text(row.1).font(.system(size: 12)).foregroundStyle(Palette.secondary) }

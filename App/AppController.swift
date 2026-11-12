@@ -465,8 +465,6 @@ final class AppController: ObservableObject {
     }
 
     init() {
-        // Before any resolver is made: the company's domains join a person's addresses on each.
-        CompanyDomains.current = .parse(UserDefaults.standard.string(forKey: CompanyDomainsSheet.key) ?? "")
         try? paths.ensureDirectories()
         Log.directory = paths.logs
         // A preview only looks: its lines would fill the owner's log with starts that recorded nothing.

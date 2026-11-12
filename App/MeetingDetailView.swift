@@ -40,11 +40,7 @@ struct MeetingDetailView: View {
     }
 
     /// Names and emails of the library, so a rename or a new email in People reaches the open meeting.
-    private var profilesKey: Int {
-        var h = Hasher()
-        for p in controller.library.profiles { h.combine(p.name); h.combine(p.email) }
-        return h.finalize()
-    }
+    private var profilesKey: Int { controller.peopleStamp }
 
     /// Changes only when the words, the names, or the people library do, not on each tick of the player.
     private var cacheKey: String {

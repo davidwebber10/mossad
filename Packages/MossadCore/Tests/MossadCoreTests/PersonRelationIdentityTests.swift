@@ -53,4 +53,13 @@ final class PersonRelationIdentityTests: XCTestCase {
         XCTAssertEqual(r.myItems.map(\.task), ["Send the plan"], "an item of the owner's in a group is not between the two")
         XCTAssertEqual(r.theirItems.map(\.task), ["Read it"])
     }
+
+    func testAnItemOfTheOwnersThatIsAlsoAPromiseShowsOnce() {
+        var one = call("a", "Sam Carter", person: "id-1")
+        one.actionItems = [ActionItem(owner: "Avery Webb", task: "Send the vendor draft"), ActionItem(owner: "Avery Webb", task: "Book the room")]
+        var promise = Commitment(text: "Send Sam the vendor draft", to: "Sam Carter", callID: "a", callTitle: nil, madeAt: t0, due: nil)
+        promise.toID = "id-1"
+        let r = PersonRelation(name: "Sam Carter", personID: "id-1", owner: "Avery Webb", records: [one], commitments: [promise])
+        XCTAssertEqual(r.myItems.map(\.task), ["Book the room"])
+    }
 }

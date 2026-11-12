@@ -51,7 +51,7 @@ struct PersonProfileView: View {
         }
         .background(Palette.window)
         .environment(\.openURL, OpenURLAction { url in controller.openLink(url) ? .handled : .systemAction })
-        .task(id: "\(profile.name)-\(profile.emails)-\(controller.meetings.count)-\(controller.commitmentsVersion)") { await load() }
+        .task(id: "\(profile.name)-\(controller.peopleStamp)-\(controller.meetingsVersion)-\(controller.commitmentsVersion)") { await load() }
         .onAppear {
             // Development hook for screenshots: MOSSAD_PERSON_TAB=overview|meetings|tasks|analytics|knowledge|voice.
             if CommandLine.arguments.contains("--ui-preview"),
@@ -160,6 +160,7 @@ extension PersonMeetings.Cadence {
     var word: String {
         switch self {
         case .daily: "Daily"
+        case .severalAWeek: "Several a week"
         case .weekly: "Weekly"
         case .everyOtherWeek: "Every 2 weeks"
         case .monthly: "Monthly"
