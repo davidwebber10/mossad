@@ -219,4 +219,24 @@ Mossad is a personal tool and is still being tested on real calls.
 
 ## License
 
-Mossad is released under the [MIT License](LICENSE). It is provided "as is", without warranty of any kind, and the authors are not liable for how it is used. You are responsible for following the recording, privacy, and biometric laws that apply to you and to the people on your calls.
+Mossad is free and open source software, released under the [MIT License](LICENSE). You may use, copy, change, and share it, including for commercial use, as the license describes.
+
+## Disclaimer
+
+Mossad is provided "as is", without warranty of any kind, express or implied, including the warranties of merchantability, fitness for a particular purpose, and non-infringement. The authors and contributors are not responsible or liable for any claim, damage, loss, or other liability that comes from the software or from its use, including lost or wrong recordings, transcripts, summaries, or notes, and costs charged by third-party services that you connect.
+
+Mossad gives no legal, medical, or professional advice. Summaries, action items, coaching, and person notes are made by software and can be wrong; check them before you act on them.
+
+## Lawful use
+
+Use Mossad only in a lawful way. You alone are responsible for your use of it, including:
+
+- **Consent to record.** Many places require the consent of one or of all people before a call is recorded. Tell the people on your calls, and get consent where the law requires it.
+- **Privacy and biometric laws.** Voice fingerprints and notes about people can be personal or biometric data under laws such as the GDPR, CCPA, or BIPA. Follow the laws that apply to you and to the people you record.
+- **Your organization's rules.** Follow your employer's policies and the terms of the services you connect (for example Zoom, Google, Microsoft, AssemblyAI, Anthropic, OpenAI, and Cloudflare).
+
+Do not use Mossad to record people secretly, to harass or monitor anyone, or for any purpose that is against the law.
+
+## Trademarks
+
+Zoom, Google Meet, Gemini, Microsoft Teams, and other names in this project belong to their owners. Mossad is not affiliated with, endorsed by, or sponsored by any of them.
