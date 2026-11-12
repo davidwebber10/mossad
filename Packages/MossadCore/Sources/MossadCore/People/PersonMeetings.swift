@@ -130,7 +130,7 @@ extension MeetingFilterPeople {
         let live = people.filter(\.isLive)
         var ids: [String: String] = [:]
         for p in live where ids[p.displayName] == nil { ids[p.displayName] = p.id.rawValue }
-        self.init(directory: PersonDirectory(live.map { PersonDirectory.Person(name: $0.displayName, email: $0.email) }), ids: ids, owner: owner,
+        self.init(directory: PersonDirectory(live.map { PersonDirectory.Person(name: $0.displayName, emails: $0.emails.filter { $0.state != .rejected && !$0.shared }.map(\.address)) }), ids: ids, owner: owner,
                   ownerNames: live.first(where: \.isOwner)?.forms.map(\.text) ?? [])
     }
 }

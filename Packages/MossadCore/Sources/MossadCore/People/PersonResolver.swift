@@ -48,6 +48,8 @@ public enum Resolution: Equatable, Sendable {
         case ownerLink = "0"
         case verifiedEmail = "1"
         case seenEmail = "1b"
+        /// The same name before the @ on another of the company's domains, and only one person has it.
+        case companyEmail = "1c"
         case externalID = "2"
         case nameForm = "3a"
         case provedOrder = "3b"
@@ -63,6 +65,7 @@ public enum Resolution: Equatable, Sendable {
             case .ownerLink: "the owner's own link"
             case .verifiedEmail: "email"
             case .seenEmail: "an email seen with this person"
+            case .companyEmail: "an email on another domain of the company"
             case .externalID: "the id of the source"
             case .nameForm: "a known written form"
             case .provedOrder: "last name first"
@@ -126,8 +129,12 @@ public struct PersonResolver: Sendable {
     /// fit only a person it has a word in common with, so most people are never compared.
     private let byWord: [String: [Int]]
     private let byEmail: [String: [Int]]
+    /// The entries by the name before the @ of each of their addresses on a company domain.
+    private let byLocal: [String: [Int]]
+    private let domains: CompanyDomains
 
-    public init(people: [Person]) {
+    public init(people: [Person], domains: CompanyDomains = .current) {
+        self.domains = domains
         // Sorted, so the answer never depends on the order of the people.
         let entries = people.filter(\.isLive).sorted { $0.id < $1.id }.map { p in
             let texts = p.forms.isEmpty ? [p.displayName] : p.forms.map(\.text)
@@ -136,7 +143,7 @@ public struct PersonResolver: Sendable {
         }
         self.entries = entries
         index = Dictionary(entries.enumerated().map { ($1.person.id, $0) }, uniquingKeysWith: { a, _ in a })
-        var byWord: [String: [Int]] = [:], byEmail: [String: [Int]] = [:]
+        var byWord: [String: [Int]] = [:], byEmail: [String: [Int]] = [:], byLocal: [String: [Int]] = [:]
         for (i, e) in entries.enumerated() {
             var words: Set<String> = []
             for name in e.names {
@@ -145,9 +152,12 @@ public struct PersonResolver: Sendable {
             }
             for w in words { byWord[w, default: []].append(i) }
             for address in Set(e.person.emails.map(\.address)) { byEmail[address, default: []].append(i) }
+            let company = e.person.emails.filter { $0.state != .rejected && !$0.shared && domains.contains($0.address) }
+            for local in Set(company.compactMap { CompanyDomains.split($0.address)?.local }) { byLocal[local, default: []].append(i) }
         }
         self.byWord = byWord
         self.byEmail = byEmail
+        self.byLocal = byLocal
     }
 
     public func person(_ id: PersonID) -> Person? { index[id].map { entries[$0].person } }
@@ -181,6 +191,11 @@ public struct PersonResolver: Sendable {
             // Rules 1 and 1b: the email beats the name.
             if let r = Self.one(having(.verified), rule: .verifiedEmail, confidence: .certain) { return r }
             if let r = Self.one(having(.seen), rule: .seenEmail, confidence: .strong) { return r }
+            // Rule 1c: nobody has the address itself, and one person has its name on another company domain.
+            if holders.isEmpty, domains.contains(email), let local = CompanyDomains.split(email)?.local {
+                let hits = (byLocal[local] ?? []).filter { !blocked.contains($0) }
+                if hits.count == 1 { return .resolved(entries[hits[0]].person.id, rule: .companyEmail, confidence: .strong) }
+            }
         }
         if let identity = o.identity {
             for (i, e) in entries.enumerated() where e.person.identities.contains(where: { $0.isSame(identity) && $0.state == .rejected }) { blocked.insert(i) }

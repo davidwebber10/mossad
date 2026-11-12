@@ -10,7 +10,7 @@ import Foundation
 public struct PersonReferences: Sendable {
     /// The rules that say who a name is: an address, the id of a source, a written form of the person, or the whole
     /// name in either order with proof. Never a short name, a nickname, or a name that is almost right.
-    static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .externalID, .nameForm, .provedOrder, .sameName]
+    static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .companyEmail, .externalID, .nameForm, .provedOrder, .sameName]
     /// Inside the people of one call, a short name or a nickname is sure too when one person there fits it.
     static let inCall: Set<Resolution.Rule> = sure.union([.swappedName, .nickname, .shortName])
 

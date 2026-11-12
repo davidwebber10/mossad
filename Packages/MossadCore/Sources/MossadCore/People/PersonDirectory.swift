@@ -8,11 +8,18 @@ import Foundation
 public struct PersonDirectory: Sendable, Equatable {
     public struct Person: Sendable, Equatable {
         public var name: String
-        public var email: String?
+        /// Every address of the person, the first one first.
+        public var emails: [String]
+        public var email: String? { emails.first }
 
         public init(name: String, email: String?) {
+            self.init(name: name, emails: email.map { [$0] } ?? [])
+        }
+
+        public init(name: String, emails: [String]) {
             self.name = name
-            self.email = email
+            var seen: Set<String> = []
+            self.emails = emails.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty && seen.insert(EmailIdentity.normalized($0)).inserted }
         }
     }
 
@@ -24,7 +31,11 @@ public struct PersonDirectory: Sendable, Equatable {
     /// The address one meeting's invite gave with each name, by the key of the name.
     private var inviteEmails: [String: String] = [:]
 
-    public static func == (a: PersonDirectory, b: PersonDirectory) -> Bool { a.people == b.people && a.inviteEmails == b.inviteEmails }
+    public let domains: CompanyDomains
+
+    public static func == (a: PersonDirectory, b: PersonDirectory) -> Bool {
+        a.people == b.people && a.inviteEmails == b.inviteEmails && a.domains == b.domains
+    }
 
     /// The same people for one meeting's invite: an invited name carries the address the invite gave with it, so
     /// a name that fits nobody is still the saved person with that address.
@@ -41,23 +52,39 @@ public struct PersonDirectory: Sendable, Equatable {
         return o
     }
 
-    public init(_ people: [Person] = []) {
+    public init(_ people: [Person] = [], domains: CompanyDomains = .current) {
         self.people = people
+        self.domains = domains
         var names: [PersonID: String] = [:]
         var records: [MossadCore.Person] = []
         for (i, p) in people.enumerated() {
             // The ids keep the order of the list, so "the first one" is the same person as before.
             var record = MossadCore.Person(id: PersonID(rawValue: String(format: "%08d", i)), displayName: p.name, origin: .voiceNaming, at: .distantPast)
-            if let email = p.email { record.addEmail(email, state: .verified, source: .voiceNaming, at: .distantPast) }
+            for email in p.emails { record.addEmail(email, state: .verified, source: .voiceNaming, at: .distantPast) }
             names[record.id] = p.name
             records.append(record)
         }
         self.names = names
-        resolver = PersonResolver(people: records)
+        resolver = PersonResolver(people: records, domains: domains)
     }
 
     public init(profiles: [VoiceProfile]) {
-        self.init(profiles.map { Person(name: $0.name, email: $0.email) })
+        self.init(profiles.map { Person(name: $0.name, emails: $0.emails) })
+    }
+
+    /// The voice library's people with every address the people store has for each, as the store reads the
+    /// profile (`PeopleStore.id(forVoiceName:)`): an alias from Google's directory links as the first address does.
+    public init(profiles: [VoiceProfile], people saved: [MossadCore.Person]?, domains: CompanyDomains = .current) {
+        guard let saved, !saved.isEmpty else {
+            self.init(profiles.map { Person(name: $0.name, emails: $0.emails) }, domains: domains)
+            return
+        }
+        let byID = Dictionary(saved.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        self.init(profiles.map { p in
+            let more = PeopleStore.id(forVoiceName: p.name, isOwner: p.isOwner, in: saved).flatMap { byID[$0] }?.emails
+                .filter { $0.state != .rejected && !$0.shared }.map(\.address) ?? []
+            return Person(name: p.name, emails: p.emails + more)
+        }, domains: domains)
     }
 
     /// Lowercase words without the period of an initial: "Sam C." gives "sam", "c".
@@ -86,7 +113,7 @@ public struct PersonDirectory: Sendable, Equatable {
 
     /// The rules that are sure enough to open a profile: an email, a whole name in any written form, and the two
     /// names in the other order when that person is in the meeting. Never a first name or a short form.
-    private static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .externalID, .nameForm, .provedOrder, .sameName, .swappedName]
+    private static let sure: Set<Resolution.Rule> = [.ownerLink, .verifiedEmail, .seenEmail, .companyEmail, .externalID, .nameForm, .provedOrder, .sameName, .swappedName]
 
     /// The people of a meeting as the resolver wants them: the saved ones, and the names of the others. An email
     /// and a label such as "Speaker C" are not names.
@@ -155,7 +182,7 @@ public struct PersonDirectory: Sendable, Equatable {
     /// Two saved people with one email, or with one name in another case, are the first one, as before.
     public static func existing(name: String, email: String?, among people: [Person]) -> String? {
         if let email = email.map(EmailIdentity.normalized), !email.isEmpty,
-           let hit = people.first(where: { $0.email.map(EmailIdentity.normalized) == email }) { return hit.name }
+           let hit = people.first(where: { $0.emails.contains { EmailIdentity.normalized($0) == email } }) { return hit.name }
         let key = PersonNames.key(name)
         guard !key.isEmpty else { return nil }
         if let hit = people.first(where: { PersonNames.key($0.name) == key }) { return hit.name }

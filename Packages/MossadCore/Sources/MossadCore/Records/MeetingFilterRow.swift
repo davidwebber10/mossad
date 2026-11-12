@@ -21,8 +21,9 @@ public struct MeetingFilterPeople: Sendable {
         var h = Hasher()
         for p in directory.people {
             h.combine(p.name)
-            h.combine(p.email)
+            h.combine(p.emails)
         }
+        h.combine(directory.domains)
         h.combine(ids)
         h.combine(owner)
         h.combine(ownerKeys)
@@ -35,7 +36,7 @@ public struct MeetingFilterPeople: Sendable {
         if let store {
             for p in profiles { ids[p.name] = store.id(forVoiceName: p.name, isOwner: p.isOwner)?.rawValue }
         }
-        self.init(directory: PersonDirectory(profiles: profiles), ids: ids, owner: owner,
+        self.init(directory: PersonDirectory(profiles: profiles, people: store?.people), ids: ids, owner: owner,
                   ownerNames: profiles.filter(\.isOwner).map(\.name) + (store?.ownerNames ?? []))
     }
 

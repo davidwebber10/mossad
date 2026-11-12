@@ -80,6 +80,16 @@ public enum DirectoryMerge {
                 // The log says that it was filled, never with what: the details stay on the person, and go with a sign-out.
                 log.append(PeopleLogEntry(at: date, kind: "directory", actor: "google", subject: out[i].id, after: "filled"))
             }
+            // The directory's other addresses of the person (aliases): seen, not verified, and only one nobody has.
+            // A profile with another person's address is no sure source of aliases.
+            if profile.source == .directory, profile.emails.allSatisfy({ (holders[$0] ?? [out[i].id]) == [out[i].id] }) {
+                for e in profile.emails where holders[e] == nil && !out[i].emails.contains(where: { $0.address == e }) {
+                    out[i].emails.append(EmailIdentity(address: e, state: .seen, source: .googleDirectory, at: date))
+                    holders[e] = [out[i].id]
+                    out[i].updated = date
+                    log.append(PeopleLogEntry(at: date, kind: "email", actor: "google", subject: out[i].id, after: "alias"))
+                }
+            }
             if out[i] != before { changed.append(out[i].id) }
         }
         return Result(people: out, log: log, changed: changed)
@@ -114,8 +124,13 @@ public enum DirectoryMerge {
     /// turned off. The names stay: a name is the person's now.
     public static func clear(_ sources: Set<GoogleProfile.Source>, from people: [Person], at date: Date) -> [Person] {
         people.map { p in
-            guard let d = p.directory, sources.contains(d.source == .googleDirectory ? .directory : .contacts) else { return p }
             var p = p
+            // The aliases the directory gave go with it; one the owner typed later is the owner's.
+            if sources.contains(.directory), p.emails.contains(where: { $0.source == .googleDirectory && $0.state == .seen }) {
+                p.emails.removeAll { $0.source == .googleDirectory && $0.state == .seen }
+                p.updated = date
+            }
+            guard let d = p.directory, sources.contains(d.source == .googleDirectory ? .directory : .contacts) else { return p }
             p.directory = nil
             p.updated = date
             return p

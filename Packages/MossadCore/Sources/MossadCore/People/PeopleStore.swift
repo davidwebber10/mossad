@@ -296,6 +296,23 @@ public final class PeopleStore: @unchecked Sendable {
         }
     }
 
+    /// Every address the owner gave the person, the first one first.
+    public func setEmails(_ emails: [String], for id: PersonID) throws {
+        try change { people, date in
+            guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }) else { return [] }
+            let old = people[i].emails.filter { $0.state == .verified }.map(\.address)
+            guard people[i].setVerifiedEmails(emails, at: date) else { return [] }
+            let new = people[i].emails.filter { $0.state == .verified }.map(\.address)
+            return [PeopleLogEntry(at: date, kind: "email", actor: "owner", subject: id, before: old.joined(separator: ", "), after: new.joined(separator: ", "))]
+        }
+    }
+
+    /// The live person, other than `except`, who has this address (not rejected, not a team address).
+    public func holder(of address: String, except: PersonID? = nil) -> Person? {
+        let a = EmailIdentity.normalized(address)
+        return people.first { $0.isLive && $0.id != except && $0.emails.contains { $0.address == a && $0.state != .rejected && !$0.shared } }
+    }
+
     /// Joins `absorbed` into `survivor`. The absorbed record stays as a redirect, so its id continues to resolve;
     /// the survivor gets its forms and its addresses.
     public func merge(_ absorbed: PersonID, into survivor: PersonID) throws {
