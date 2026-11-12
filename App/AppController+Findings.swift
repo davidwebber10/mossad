@@ -28,6 +28,10 @@ extension AppController {
     /// Reads the cards of all calls again, off the main thread: after each change of the coach's files and of
     /// the meetings. Only the calls of the last two weeks can have a card.
     func refreshFindings() {
+        if let sample = DevHooks.sampleCards() {
+            findings = sample
+            return
+        }
         guard coachEnabled else {
             if !findings.isEmpty { findings = [] }
             return

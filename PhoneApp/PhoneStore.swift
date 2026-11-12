@@ -858,6 +858,12 @@ final class PhoneStore {
 
     /// Reads the cards of all calls again, off the main thread. Only the calls of the last two weeks can have one.
     func refreshFindings() {
+        // Development hook for screenshots: `MOSSAD_DECK_CARDS=<file>` is a JSON list of made-up cards to show.
+        if let path = Self.hook("MOSSAD_DECK_CARDS"), let data = FileManager.default.contents(atPath: path),
+           let sample = try? JSONDecoder().decode([CoachFinding].self, from: data) {
+            findings = sample
+            return
+        }
         let now = Date(), paths = paths, profile = profile
         let recent = meetings.filter { now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }.map { ($0.id, $0.start) }
         let saved = CoachPeople(people: people)

@@ -60,6 +60,13 @@ enum DevHooks {
 
     private static let launch = Date()
 
+    /// `MOSSAD_DECK_CARDS=<file>` in a preview: a JSON list of made-up cards to show as the Findings deck, so a
+    /// picture of each kind of card needs no review files.
+    static func sampleCards() -> [CoachFinding]? {
+        guard preview, let path = env["MOSSAD_DECK_CARDS"], let data = FileManager.default.contents(atPath: path) else { return nil }
+        return try? JSONDecoder().decode([CoachFinding].self, from: data)
+    }
+
     /// `MOSSAD_UPCOMING=<file>` in a preview: a JSON list of made-up invites (`title`, `inMinutes` from the launch,
     /// `minutes`, `attendees`, `link`) to show in place of the calendar's, so a picture never holds a real invite.
     static func sampleInvites() -> [CalendarEventInfo]? {
