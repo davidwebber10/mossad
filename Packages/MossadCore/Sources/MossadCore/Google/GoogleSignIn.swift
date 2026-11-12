@@ -10,10 +10,13 @@ final class LoopbackReceiver: @unchecked Sendable {
     /// A callback that came before anyone waited for it.
     private var early: GoogleCallback?
     private var done = false
+    /// The sign-in's own state: an answer with another one is not this sign-in's, and the wait goes on.
+    private let expected: String?
     /// The start answered once; the listener's later states change nothing.
     private var started = false
 
-    init() throws {
+    init(state: String? = nil) throws {
+        expected = state
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
         parameters.acceptLocalOnly = true
@@ -43,6 +46,15 @@ final class LoopbackReceiver: @unchecked Sendable {
 
     /// The first callback the browser brings, or an error after `timeout`.
     func callback(timeout: Duration) async throws -> GoogleCallback {
+        // A Cancel in the app ends the wait at once.
+        try await withTaskCancellationHandler {
+            try await wait(timeout: timeout)
+        } onCancel: {
+            self.stop()
+        }
+    }
+
+    private func wait(timeout: Duration) async throws -> GoogleCallback {
         try await withThrowingTaskGroup(of: GoogleCallback.self) { group in
             group.addTask {
                 try await withCheckedThrowingContinuation { c in
@@ -84,6 +96,7 @@ final class LoopbackReceiver: @unchecked Sendable {
                 + "Content-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
             connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
             guard let callback else { return }
+            if let expected = self.expected, callback.state != expected { return }
             guard let waiting = self.waiting else {
                 if self.early == nil { self.early = callback }
                 return
@@ -113,18 +126,19 @@ public enum GoogleSignIn {
     public static func run(client: GoogleClient, scopes: Set<GoogleScope>, session: GoogleSession, transport: GoogleTransport = URLSessionTransport(),
                            loginHint: String? = nil, open: @escaping @Sendable (URL) async -> Void) async throws -> GoogleTokens {
         guard !client.id.isEmpty, !client.secret.isEmpty else { throw GoogleError.noClient }
-        let receiver = try LoopbackReceiver()
-        let redirect = try await receiver.start()
         let pkce = PKCE.make(), state = PKCE.state()
+        let receiver = try LoopbackReceiver(state: state)
+        let redirect = try await receiver.start()
         await open(GoogleOAuth.authorizationURL(client: client, redirect: redirect, scopes: scopes, pkce: pkce, state: state, loginHint: loginHint))
         let answer: GoogleCallback
         do { answer = try await receiver.callback(timeout: timeout) } catch {
             receiver.stop()
+            if error is CancellationError || Task.isCancelled { throw CancellationError() }
             throw GoogleError.from(error)
         }
         let code: String
         switch answer {
-        case .error(let reason):
+        case .error(let reason, _):
             throw GoogleError.oauth(reason) ?? .http(400)
         case .code(let c, let back):
             guard back == state else { throw GoogleError.stateMismatch }

@@ -322,8 +322,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
         calendarTitle = event.title
         attendees = event.attendees
         invitees = event.participants.isEmpty ? nil : event.participants
-        calendarSeriesID = event.seriesID
-        organizer = event.organizer
+        // A later match from a source that does not say (the Mac's copy) keeps what Google said.
+        calendarSeriesID = event.seriesID ?? calendarSeriesID
+        organizer = event.organizer ?? organizer
         plannedStart = event.isAllDay ? nil : event.start
         plannedEnd = event.isAllDay ? nil : event.end
     }
@@ -454,6 +455,13 @@ extension CallRecord {
 
     /// A meeting made from its Gemini notes: no audio, no voices, and nobody's numbers by time.
     public var isNotesOnly: Bool { source == Self.geminiNotesSource }
+
+    /// Whether the owner was in the meeting. A recording: yes. A notes-only meeting: yes when the owner has a line,
+    /// else not known (nil), never "no": the owner can listen without a word.
+    public var ownerPresent: Bool? {
+        guard isNotesOnly else { return true }
+        return utterances.contains { $0.track == .me } ? true : nil
+    }
 
     /// The words the lists show for a meeting that was not recorded; nil for a recording.
     public var sourceLabel: String? { isNotesOnly ? "Gemini notes" : nil }

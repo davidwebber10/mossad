@@ -17,6 +17,8 @@ public enum GoogleError: Error, Equatable, Sendable, CustomStringConvertible {
     case redirectMismatch
     /// The sign-in ran out or was revoked: sign in again.
     case expired
+    /// Google gave no lasting sign-in.
+    case noRefreshToken
     /// An Internal app used with an account outside the organization, or a Workspace admin blocks the app.
     case orgBlocked
     /// The API is not turned on in the project.
@@ -43,6 +45,7 @@ public enum GoogleError: Error, Equatable, Sendable, CustomStringConvertible {
         case .invalidClient: "invalidClient"
         case .redirectMismatch: "redirectMismatch"
         case .expired: "expired"
+        case .noRefreshToken: "noRefreshToken"
         case .orgBlocked: "orgBlocked"
         case .apiDisabled(let api): "apiDisabled(\(api?.rawValue ?? "?"))"
         case .scopeMissing(let s): "scopeMissing(\(s?.rawValue ?? "?"))"
@@ -66,6 +69,7 @@ public enum GoogleError: Error, Equatable, Sendable, CustomStringConvertible {
         case .invalidClient: "Google does not know this client"
         case .redirectMismatch: "The client is not a desktop app"
         case .expired: "The Google sign-in ran out"
+        case .noRefreshToken: "Google did not give a lasting sign-in"
         case .orgBlocked: "Your organization blocks this app"
         case .apiDisabled(let api): "\(api?.name ?? "An API") is off"
         case .scopeMissing(let scope): "Google did not give \(scope.map { "\"\($0.title)\"" } ?? "this permission")"
@@ -86,9 +90,10 @@ public enum GoogleError: Error, Equatable, Sendable, CustomStringConvertible {
         case .notConnected: "Press Check to sign in."
         case .denied: "Press Check again and choose Allow. If Google said that the app is in testing, add your account as a test user on the Audience page (step 3)."
         case .stateMismatch: "Close the browser tab and press Check again."
-        case .invalidClient: "Copy the client ID and the client secret again from the Credentials page. Make sure that both come from the same client."
+        case .invalidClient: "Copy the client ID again from the Clients page. Google shows a secret only when it is made: on the client's page, add a new secret and paste it."
         case .redirectMismatch: "Make a new OAuth client of the type \"Desktop app\" (step 5) and paste its ID and secret."
         case .expired: "Press Check to sign in again. Mossad keeps working with your Mac's calendars meanwhile."
+        case .noRefreshToken: "Remove Mossad on myaccount.google.com/permissions, then press Check again."
         case .orgBlocked: "With an Internal app, sign in with an account of your organization. Otherwise ask your Google Workspace admin to allow the app."
         case .apiDisabled(let api): "Open the \(api?.name ?? "API") page (step 2) and press Enable. Google can take a few minutes to start it."
         case .scopeMissing: "Press Check again and leave each box ticked on Google's page, or turn this part off here."

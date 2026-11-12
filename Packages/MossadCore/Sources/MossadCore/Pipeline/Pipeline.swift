@@ -516,6 +516,11 @@ public actor Pipeline {
     public func importNotes(_ record: CallRecord) async -> Bool {
         let dir = paths.callDirectory(record.id)
         guard !FileManager.default.fileExists(atPath: dir.path) else { return false }
+        // Each document once, also when two runs planned it: the check is here, on the one actor.
+        if let doc = record.gemini?.docID, queue.allRecords().contains(where: { $0.gemini?.docID == doc }) {
+            Log.info("Gemini notes: the document of \(record.id) is in another meeting already")
+            return false
+        }
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try store(record, dir: dir)
@@ -542,15 +547,30 @@ public actor Pipeline {
         return true
     }
 
+    /// A recording of a meeting that was made from its notes before: the notes go to the recording, and the
+    /// notes-only meeting goes without a mark, since its notes live on.
+    @discardableResult
+    public func moveNotes(from notesID: String, to callID: String) -> Bool {
+        guard let notes = try? CallRecord.load(from: paths.callDirectory(notesID)), notes.isNotesOnly, let ref = notes.gemini,
+              !inFlight.contains(notesID), attachNotes(callID: callID, ref) else { return false }
+        _ = remove(callID: notesID, keepNotes: true)
+        Log.info("Gemini notes: \(notesID) joined its recording \(callID)")
+        return true
+    }
+
     /// Deletes a finished or failed call: its note, audio, and record. A call that is still recording or
     /// processing is refused, so the pipeline never writes into a folder that is gone.
     public func delete(callID: String) -> Bool { remove(callID: callID) != nil }
 
     /// Deletes like `delete` and returns the record as it was on disk, so the caller can remove what the meeting
     /// has outside this Mac (its archived recording) from the record's own values, not from a list in memory.
-    public func remove(callID: String) -> CallRecord? {
+    public func remove(callID: String) -> CallRecord? { remove(callID: callID, keepNotes: false) }
+
+    /// `keepNotes` false marks a deleted notes-only meeting, so its notes are never imported or billed again.
+    func remove(callID: String, keepNotes: Bool) -> CallRecord? {
         let dir = paths.callDirectory(callID)
         guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed else { return nil }
+        if !keepNotes { RemovedNotes.add(r, paths: paths) }
         if let note = r.markdownPath { try? FileManager.default.removeItem(atPath: note) }
         // The copy of the record from before the ids goes with the meeting.
         ReferenceBackup.forget(callID: callID, paths: paths)
@@ -969,9 +989,10 @@ public actor Pipeline {
     /// A recording of the same meeting link that ended or started within `MeetingMerge.continuationGap`
     /// of this one is the same meeting, split by a restart or a crash: join them.
     func continueSplitMeeting(_ id: String) async {
-        guard let r = try? CallRecord.load(from: paths.callDirectory(id)), r.status == .written, let meetingID = r.meetingID else { return }
+        // A meeting made from Gemini's notes has no audio to join: it is never a part of a recording.
+        guard let r = try? CallRecord.load(from: paths.callDirectory(id)), r.status == .written, !r.isNotesOnly, let meetingID = r.meetingID else { return }
         let sibling = queue.allRecords().first { other in
-            other.id != r.id && other.status == .written && other.meetingID == meetingID
+            other.id != r.id && other.status == .written && !other.isNotesOnly && other.meetingID == meetingID
                 && (abs(r.start.timeIntervalSince(other.end)) <= MeetingMerge.continuationGap
                     || abs(other.start.timeIntervalSince(r.end)) <= MeetingMerge.continuationGap)
         }
@@ -984,7 +1005,7 @@ public actor Pipeline {
     /// link, so a long history is not read once per meeting.
     public func continueSplitMeetings() async {
         finishInterruptedMerges()
-        let byMeeting = Dictionary(grouping: queue.allRecords().filter { $0.status == .written && $0.meetingID != nil }, by: { $0.meetingID! })
+        let byMeeting = Dictionary(grouping: queue.allRecords().filter { $0.status == .written && !$0.isNotesOnly && $0.meetingID != nil }, by: { $0.meetingID! })
         for group in byMeeting.values where group.count > 1 {
             for r in group { await continueSplitMeeting(r.id) }
         }
@@ -997,6 +1018,10 @@ public actor Pipeline {
         let records = callIDs.compactMap { try? CallRecord.load(from: paths.callDirectory($0)) }.sorted { $0.start < $1.start }
         guard records.count >= 2, records.count == Set(callIDs).count,
               records.allSatisfy({ $0.status == .written || $0.status == .failed }) else { return nil }
+        if let notes = records.first(where: \.isNotesOnly) {
+            Log.info("Not joining \(notes.id): it was made from Gemini's notes and has no audio")
+            return nil
+        }
         // A call whose muted parts are not silenced yet would carry that speech into the joined audio.
         if let held = records.first(where: \.mutedAudioPending) {
             Log.info("Not joining \(held.id): its muted parts are not silenced yet")

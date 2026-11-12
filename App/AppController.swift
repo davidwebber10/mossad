@@ -489,6 +489,8 @@ final class AppController: ObservableObject {
         // The chosen calendars apply before anything matches a call to an invite.
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         loadGoogleNames()
+        // A part the owner turned off is not read, whatever the sign-in gave.
+        google.choose(googleConnector.scopes)
         rebuildPipeline()
         observeForSearch()
         // The Google step's state is drawn by views that watch the controller.

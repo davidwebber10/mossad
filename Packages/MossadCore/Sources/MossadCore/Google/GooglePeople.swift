@@ -100,27 +100,26 @@ extension GooglePeopleAPI {
     /// At most this many pages of 1,000 for one read.
     static let maxPages = 20
 
-    /// The directory and the contacts that the sign-in gives, or nil when no part could be read: then nothing
-    /// changes, as without Google.
-    public static func fetch(session: GoogleSession) async -> [GoogleProfile]? {
-        var all: [GoogleProfile] = []
-        var read = false
+    /// Each part that the sign-in gives and the owner has on, read to its end. A part that failed or stopped at the
+    /// page limit is not in the answer: its old copy stays, and nothing is made from a part of a list.
+    public static func fetch(session: GoogleSession) async -> [GoogleProfile.Source: [GoogleProfile]] {
+        var out: [GoogleProfile.Source: [GoogleProfile]] = [:]
         for (scope, source) in [(GoogleScope.directory, GoogleProfile.Source.directory), (.contacts, .contacts)] where session.has(scope) {
-            var token: String?
+            var token: String?, all: [GoogleProfile] = [], done = false
             do {
                 for _ in 0..<maxPages {
                     let url = source == .directory ? directoryURL(pageToken: token) : contactsURL(pageToken: token)
                     let p = try page(try await session.get(url, scope: scope), source: source)
                     all += p.profiles
                     token = p.nextPageToken
-                    if token == nil { break }
+                    if token == nil { done = true; break }
                 }
-                read = true
+                if done { out[source] = all } else { Log.error("Google People: the \(source.rawValue) read stopped at \(maxPages) pages") }
             } catch {
                 Log.error("Google People: the \(source.rawValue) read failed (\(GoogleError.from(error).logText))")
             }
         }
-        return read ? all : nil
+        return out
     }
 }
 
@@ -130,10 +129,19 @@ public struct GoogleDirectoryCache: Codable, Equatable, Sendable {
     public var profiles: [GoogleProfile]
     public var read: Date
 
+    /// Keeps only what the cache is for: the addresses and the name of each profile.
     public init(profiles: [GoogleProfile], read: Date) {
-        self.profiles = profiles
+        self.profiles = profiles.map { GoogleProfile(emails: $0.emails, name: $0.name, source: $0.source) }
         self.read = read
     }
+
+    /// The new read for each part that was read; the old copy for a part that was not.
+    public func replacing(_ fresh: [GoogleProfile.Source: [GoogleProfile]], read: Date) -> GoogleDirectoryCache {
+        let kept = profiles.filter { fresh[$0.source] == nil }
+        return GoogleDirectoryCache(profiles: kept + fresh.values.flatMap { $0 }, read: read)
+    }
+
+    public static func remove(_ paths: Paths) { try? FileManager.default.removeItem(at: url(paths)) }
 
     public static func url(_ paths: Paths) -> URL { paths.people.appendingPathComponent("google-directory.json") }
 

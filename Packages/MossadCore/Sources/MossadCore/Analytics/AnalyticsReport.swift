@@ -150,7 +150,8 @@ public struct AnalyticsReport: Sendable {
         self.interval = interval
         let span = interval.duration / 86_400
         bucket = span > 400 ? .month : span > 62 ? .week : .day
-        records = all.filter { $0.status != .recording && interval.contains($0.start) }.sorted { $0.start < $1.start }
+        // The owner's meetings: a meeting made from notes counts only where the owner surely was.
+        records = all.filter { $0.status != .recording && interval.contains($0.start) && $0.ownerPresent == true }.sorted { $0.start < $1.start }
         func length(_ r: CallRecord) -> TimeInterval { max(0, r.end.timeIntervalSince(r.start)) }
         callSeconds = records.map(length).reduce(0, +)
         let planned = records.filter { $0.calendarTitle != nil }, adHoc = records.filter { $0.calendarTitle == nil }

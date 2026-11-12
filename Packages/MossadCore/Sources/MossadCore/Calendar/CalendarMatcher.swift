@@ -100,6 +100,19 @@ public struct CalendarEventInfo: Sendable, Equatable {
         self.isAllDay = isAllDay
     }
 
+    /// The event's call link: the conference link that the calendar gave apart from the text when it is a call
+    /// link, else the first call link in the text. The one rule for the lists, the do-not-record choice, and its gate.
+    public var callLink: (platform: Platform?, url: URL?) {
+        if let link = meetingLink {
+            let found = UpcomingMeeting.callLink(in: link.absoluteString)
+            if found.0 != nil { return found }
+        }
+        return UpcomingMeeting.callLink(in: text)
+    }
+
+    /// The first call link in the text, which older builds keyed a do-not-record choice by.
+    var textLink: URL? { UpcomingMeeting.callLink(in: text).1 }
+
     /// The owner's own entry in the invite.
     public var ownEntry: Invitee? { participants.first { $0.isSelf == true } }
     /// True when the owner said no. A source that does not say is not a no.

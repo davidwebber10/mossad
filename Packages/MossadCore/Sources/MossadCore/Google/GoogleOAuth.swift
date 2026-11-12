@@ -139,6 +139,8 @@ public enum GoogleOAuth {
         guard let a = try? JSONDecoder().decode(Answer.self, from: data), !a.access_token.isEmpty else {
             throw GoogleError.unexpectedAnswer
         }
+        // A sign-in with no lasting token would end in an hour and start a new sign-in at each Check.
+        guard a.refresh_token != nil || previous?.refreshToken != nil else { throw GoogleError.noRefreshToken }
         return GoogleTokens(accessToken: a.access_token, refreshToken: a.refresh_token ?? previous?.refreshToken,
                             expiry: now.addingTimeInterval(a.expires_in ?? 3600),
                             scopes: a.scope.map(GoogleScope.granted) ?? previous?.scopes ?? [], account: previous?.account)
@@ -149,7 +151,13 @@ public enum GoogleOAuth {
 public enum GoogleCallback: Equatable, Sendable {
     case code(String, state: String)
     /// Google sent an error, such as `access_denied` when the owner pressed Cancel.
-    case error(String)
+    case error(String, state: String)
+
+    public var state: String {
+        switch self {
+        case .code(_, let state), .error(_, let state): state
+        }
+    }
 
     /// Reads the first line of the browser's request: `GET /?code=…&state=… HTTP/1.1`. Nil for anything else,
     /// such as the browser's request for an icon.
@@ -158,7 +166,7 @@ public enum GoogleCallback: Equatable, Sendable {
         guard parts.count >= 2, parts[0] == "GET", let c = URLComponents(string: "http://127.0.0.1" + parts[1]) else { return nil }
         let items = c.queryItems ?? []
         func value(_ name: String) -> String? { items.first { $0.name == name }?.value?.nonBlank }
-        if let error = value("error") { return .error(error) }
+        if let error = value("error") { return .error(error, state: value("state") ?? "") }
         guard let code = value("code") else { return nil }
         return .code(code, state: value("state") ?? "")
     }

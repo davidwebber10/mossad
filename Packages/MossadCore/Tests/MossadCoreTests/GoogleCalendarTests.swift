@@ -118,20 +118,71 @@ final class GoogleCalendarTests: XCTestCase {
             CalendarFixture.event("Weekly (Exchange)", start: t0, uid: "w1", account: "Exchange"),
             // Another occurrence of the same series that Google did not list in this window.
             CalendarFixture.event("Weekly next week", start: t0.addingTimeInterval(7 * 86_400), uid: "w1", account: "Exchange"),
-            // The Google account's own calendar on the Mac: Google has it, so the Mac's copy goes.
-            CalendarFixture.event("Lunch", start: t0.addingTimeInterval(3600), uid: "l1", account: "Owner@example.com"),
+            // A second calendar of the Google account (Google reads the primary one only): it stays.
+            CalendarFixture.event("Team calendar event", start: t0.addingTimeInterval(3600), uid: "l1", account: "Owner@example.com"),
             CalendarFixture.event("Dentist", start: t0.addingTimeInterval(7200), uid: "d1", account: "iCloud"),
         ]
         let page = GoogleCalendarAPI.Page(account: "owner@example.com", events: google, allUIDs: ["w1"], nextPageToken: nil)
         let merged = CalendarMerge.merge(mac: mac, google: page)
-        XCTAssertEqual(merged.map(\.title), ["Weekly (Google)", "Dentist", "Weekly next week"])
+        XCTAssertEqual(merged.map(\.title), ["Weekly (Google)", "Team calendar event", "Dentist", "Weekly next week"])
     }
 
-    func testADeclinedMeetingIsLeftOutWithItsMacCopy() {
-        let google = [CalendarFixture.event("Vendor pitch", start: t0, uid: "v1", source: .google, declined: true)]
-        let mac = [CalendarFixture.event("Vendor pitch", start: t0, uid: "v1", account: "Exchange")]
-        let page = GoogleCalendarAPI.Page(account: "owner@example.com", events: google, allUIDs: ["v1"], nextPageToken: nil)
-        XCTAssertTrue(CalendarMerge.merge(mac: mac, google: page).isEmpty)
+    func testADeclinedMeetingStaysForTheMatcherButNotInTheUpcomingList() {
+        let start = Date().addingTimeInterval(3600)
+        var google = CalendarFixture.event("Vendor pitch", start: start, uid: "v1", source: .google, declined: true)
+        google.text = "https://meet.google.com/abc-defg-hij"
+        let mac = [CalendarFixture.event("Vendor pitch", start: start, uid: "v1", account: "Exchange")]
+        let page = GoogleCalendarAPI.Page(account: "owner@example.com", events: [google], allUIDs: ["v1"], nextPageToken: nil)
+        let merged = CalendarMerge.merge(mac: mac, google: page)
+        XCTAssertEqual(merged.map(\.source), [.google], "once, and still there for a call that joins it")
+        XCTAssertNotNil(CalendarMatcher.bestEvent(for: .meet, meetingID: "abc-defg-hij", start: start, end: start.addingTimeInterval(600), in: merged))
+        XCTAssertTrue(UpcomingMeeting.from(merged).isEmpty)
+    }
+
+    func testAnEventGoogleCouldNotReadKeepsTheMacCopy() {
+        let mac = [CalendarFixture.event("Odd event", start: t0, uid: "x1", account: "Exchange")]
+        let page = GoogleCalendarAPI.Page(account: "owner@example.com", events: [], allUIDs: ["x1"], nextPageToken: nil)
+        XCTAssertEqual(CalendarMerge.merge(mac: mac, google: page).map(\.title), ["Odd event"])
+    }
+
+    func testTheRequestAsksForMeetingsOnly() {
+        let r = URLRequest(url: GoogleCalendarAPI.eventsURL(from: t0, to: t0))
+        XCTAssertEqual(r.query("eventTypes"), "default")
+    }
+
+    func testASlowGoogleDoesNotHoldTheCalendarAndALaterReadUsesItsAnswer() async throws {
+        struct Mac: CalendarSource {
+            func events(from: Date, to: Date) async -> [CalendarEventInfo] { [CalendarFixture.event("Dentist", start: from, uid: "d1")] }
+        }
+        final class Slow: GoogleTransport, @unchecked Sendable {
+            func send(_ request: URLRequest) async throws -> (Data, Int) {
+                try await Task.sleep(for: .milliseconds(400))
+                return (StubTransport.json(["summary": "owner@example.com", "items": [
+                    ["id": "g1", "iCalUID": "g1@google.com", "summary": "From Google",
+                     "start": ["dateTime": "2030-01-01T10:00:00Z"], "end": ["dateTime": "2030-01-01T10:30:00Z"]],
+                ]]), 200)
+            }
+        }
+        let secrets = MemorySecrets()
+        try secrets.setClient(testClient)
+        try secrets.setTokens(GoogleTokens(accessToken: "a", refreshToken: "r", expiry: Date().addingTimeInterval(3600), scopes: [.calendar]))
+        let session = GoogleSession(secrets: secrets, transport: Slow())
+        let source = MergedCalendarSource(mac: Mac(), google: { GoogleCalendarSource(session: session) }, waitLimit: .milliseconds(50))
+        let from = ISO8601DateFormatter().date(from: "2030-01-01T00:00:00Z")!, to = from.addingTimeInterval(86_400)
+        let first = await source.events(from: from, to: to)
+        XCTAssertEqual(first.map(\.title), ["Dentist"], "the Mac's events at once")
+        try await Task.sleep(for: .milliseconds(600))
+        let second = await source.events(from: from, to: to)
+        XCTAssertEqual(Set(second.map(\.title)), ["Dentist", "From Google"])
+    }
+
+    func testAMatchFromTheMacKeepsWhatGoogleSaid() throws {
+        let page = try GoogleCalendarAPI.page(StubTransport.json(CalendarFixture.page))
+        var r = CallRecord(id: "c1", platform: .meet, bundleID: "", start: page.events[0].start, end: page.events[0].end, status: .identified)
+        r.setInvite(page.events[0])
+        r.setInvite(CalendarFixture.event("Design review", start: r.start, uid: "series-1@google.com"))
+        XCTAssertEqual(r.calendarSeriesID, "evt1")
+        XCTAssertEqual(r.organizer?.email, "sam.carter@example.com")
     }
 
     func testTheMergedSourceAsksGoogleOnceForTwoMinutesAndNotAtAllWhenNotConnected() async throws {
@@ -150,7 +201,7 @@ final class GoogleCalendarTests: XCTestCase {
         XCTAssertTrue(transport.sent.isEmpty, "not connected: Google is not asked")
 
         try secrets.setClient(testClient)
-        try secrets.setTokens(GoogleTokens(accessToken: "a", refreshToken: "r", expiry: now.addingTimeInterval(3600), scopes: [.calendar]))
+        try await session.signedIn(GoogleTokens(accessToken: "a", refreshToken: "r", expiry: now.addingTimeInterval(3600), scopes: [.calendar]))
         events = await source.events(from: now, to: now.addingTimeInterval(3600))
         events = await source.events(from: now.addingTimeInterval(60), to: now.addingTimeInterval(1800))
         XCTAssertEqual(events.map(\.title), ["Dentist"])

@@ -19,10 +19,13 @@ public struct GeminiDoc: Equatable, Sendable {
         /// The named style, such as "HEADING_3" or "NORMAL_TEXT".
         public var style: String
         public var text: String
+        /// The bold text at the start of the paragraph, when there is some: Gemini writes each speaker's name in bold.
+        public var boldLead: String?
 
-        public init(style: String, text: String) {
+        public init(style: String, text: String, boldLead: String? = nil) {
             self.style = style
             self.text = text
+            self.boldLead = boldLead
         }
     }
 
@@ -44,8 +47,35 @@ public struct GeminiDoc: Equatable, Sendable {
     }
 
     private struct Answer: Decodable {
-        struct Run: Decodable { var content: String? }
-        struct Element: Decodable { var textRun: Run? }
+        struct TextStyle: Decodable { var bold: Bool? }
+        struct Run: Decodable {
+            var content: String?
+            var textStyle: TextStyle?
+        }
+        /// A smart chip: a person, a link, or a date, which is not a text run.
+        struct Person: Decodable {
+            struct Props: Decodable { var name: String?; var email: String? }
+            var personProperties: Props?
+        }
+        struct RichLink: Decodable {
+            struct Props: Decodable { var title: String?; var uri: String? }
+            var richLinkProperties: Props?
+        }
+        struct DateChip: Decodable {
+            struct Props: Decodable { var displayText: String? }
+            var dateElementProperties: Props?
+        }
+        struct Element: Decodable {
+            var textRun: Run?
+            var person: Person?
+            var richLink: RichLink?
+            var dateElement: DateChip?
+
+            var text: String {
+                textRun?.content ?? person?.personProperties.flatMap { $0.name ?? $0.email }
+                    ?? richLink?.richLinkProperties.flatMap { $0.title ?? $0.uri } ?? dateElement?.dateElementProperties?.displayText ?? ""
+            }
+        }
         struct Style: Decodable { var namedStyleType: String? }
         struct Para: Decodable {
             var elements: [Element]?
@@ -72,8 +102,16 @@ public struct GeminiDoc: Equatable, Sendable {
         guard let a = try? JSONDecoder().decode(Answer.self, from: data) else { throw GoogleError.unexpectedAnswer }
         func paragraphs(_ body: Answer.Body?) -> [Paragraph] {
             (body?.content ?? []).compactMap(\.paragraph).map { p in
-                let text = (p.elements ?? []).compactMap { $0.textRun?.content }.joined()
-                return Paragraph(style: p.paragraphStyle?.namedStyleType ?? "NORMAL_TEXT", text: text.trimmingCharacters(in: .whitespacesAndNewlines))
+                let elements = p.elements ?? []
+                let text = elements.map(\.text).joined()
+                // The leading runs that are bold, as one text.
+                var lead = ""
+                for e in elements {
+                    guard let run = e.textRun, run.textStyle?.bold == true, let content = run.content else { break }
+                    lead += content
+                }
+                return Paragraph(style: p.paragraphStyle?.namedStyleType ?? "NORMAL_TEXT", text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+                                 boldLead: lead.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank)
             }
         }
         var tabs: [Tab] = []
@@ -93,6 +131,11 @@ public struct GeminiDoc: Equatable, Sendable {
     /// The transcript's lines; empty when the document has no Transcript tab.
     public var transcript: [GeminiLine] {
         tab("Transcript").map { GeminiTranscript.parse($0.paragraphs) } ?? []
+    }
+
+    /// Whether the transcript has Gemini's end line: the document is complete.
+    public var transcriptEnded: Bool {
+        tab("Transcript")?.paragraphs.contains { GeminiTranscript.endLine($0.text) != nil } ?? false
     }
 
     /// Gemini's own notes as plain text: "Full notes", else "Quick notes", else the first tab that is not the
@@ -123,20 +166,29 @@ public enum GeminiTranscript {
         var blocks: [TimeInterval] = [0]
         var lines: [Pending] = []
         var ended: TimeInterval?
+        // After an end line, only a new time heading continues the transcript (a restart); the note under the end
+        // line is no one's words.
+        var afterEnd = false
+        // When the names are bold, only a bold name is a name: "One more thing: the date" stays a line of text.
+        let boldNames = paragraphs.contains { p in p.boldLead.map { speaker(bold: $0, in: p.text) != nil } ?? false }
         for p in paragraphs {
             let text = p.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
             if p.style.hasPrefix("HEADING") {
                 if let t = seconds(text) {
+                    afterEnd = false
                     if lines.isEmpty { blocks[0] = t } else { blocks.append(t) }
                 }
                 continue
             }
             if let end = endLine(text) {
-                ended = end
-                break
+                ended = max(ended ?? 0, end)
+                afterEnd = true
+                continue
             }
-            if let (name, said) = speaker(text) {
+            guard !afterEnd else { continue }
+            let found = boldNames ? p.boldLead.flatMap { speaker(bold: $0, in: text) } : speaker(text)
+            if let (name, said) = found {
                 lines.append(Pending(name: name, text: said, block: blocks.count - 1))
             } else if !lines.isEmpty {
                 lines[lines.count - 1].text += " " + text
@@ -163,6 +215,17 @@ public enum GeminiTranscript {
         return out
     }
 
+    /// A bold lead such as "Dr. Sam Carter:" names the speaker whatever marks the name has.
+    static func speaker(bold: String, in text: String) -> (String, String)? {
+        guard bold.hasSuffix(":") || text.dropFirst(bold.count).hasPrefix(":") else { return nil }
+        let name = bold.trimmingCharacters(in: CharacterSet(charactersIn: ": ")).trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, name.count <= 80, text.hasPrefix(name) else { return nil }
+        var rest = text.dropFirst(name.count).drop { $0 == ":" || $0.isWhitespace }
+        rest = rest.drop { $0.isWhitespace }
+        let said = String(rest).trimmingCharacters(in: .whitespaces)
+        return said.isEmpty ? nil : (name, said)
+    }
+
     static func words(_ text: String) -> Int { text.split(whereSeparator: \.isWhitespace).count }
 
     /// "00:01:13", "1:02:03", or "12:30" as seconds; nil for anything else.
@@ -186,7 +249,9 @@ public enum GeminiTranscript {
         let name = String(text[..<colon.lowerBound]).trimmingCharacters(in: .whitespaces)
         let said = String(text[colon.upperBound...]).trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, !said.isEmpty, name.count <= 60, words(name) <= 6, name.first?.isLetter == true,
-              !name.contains(where: { ".?!/:;\"()[]".contains($0) }) else { return nil }
+              !name.contains(where: { ".?!/:;\"()[]".contains($0) }),
+              // A name's longer words start with a capital: "One more thing: the date" is not a speaker.
+              name.split(separator: " ").allSatisfy({ $0.count <= 3 || $0.first?.isUppercase == true }) else { return nil }
         return (name, said)
     }
 }

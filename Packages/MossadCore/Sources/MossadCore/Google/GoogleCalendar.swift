@@ -7,9 +7,19 @@ public enum GoogleCalendarAPI {
         /// The primary calendar's name, which is the account's address.
         public var account: String?
         public var events: [CalendarEventInfo]
-        /// Every invite id of the answer, the declined ones too, so the Mac's copy of a declined event goes as well.
+        /// Every invite id of the answer.
         public var allUIDs: Set<String>
         public var nextPageToken: String?
+        /// False when the read stopped at its page limit with more to come: the list is short.
+        public var complete = true
+
+        public init(account: String?, events: [CalendarEventInfo], allUIDs: Set<String>, nextPageToken: String?, complete: Bool = true) {
+            self.account = account
+            self.events = events
+            self.allUIDs = allUIDs
+            self.nextPageToken = nextPageToken
+            self.complete = complete
+        }
     }
 
     /// Repeated events come as single instances in time order.
@@ -22,6 +32,8 @@ public enum GoogleCalendarAPI {
             URLQueryItem(name: "singleEvents", value: "true"),
             URLQueryItem(name: "orderBy", value: "startTime"),
             URLQueryItem(name: "maxResults", value: String(max)),
+            // Meetings only: no working location, out of office, focus time, or birthday.
+            URLQueryItem(name: "eventTypes", value: "default"),
         ] + (pageToken.map { [URLQueryItem(name: "pageToken", value: $0)] } ?? [])
         return c.url!
     }
@@ -156,11 +168,14 @@ public final class GoogleCalendarSource: Sendable {
         self.names = names
     }
 
+    /// Connected with Calendar on: a read is worth trying.
+    public var isOn: Bool { session.has(.calendar) }
+
     public func page(from: Date, to: Date) async -> GoogleCalendarAPI.Page? {
         guard session.has(.calendar) else { return nil }
         var all = GoogleCalendarAPI.Page(account: nil, events: [], allUIDs: [], nextPageToken: nil)
         var token: String?
-        for _ in 0..<Self.maxPages {
+        for page in 0..<Self.maxPages {
             do {
                 let p = try GoogleCalendarAPI.page(try await session.get(GoogleCalendarAPI.eventsURL(from: from, to: to, pageToken: token), scope: .calendar))
                 all.account = all.account ?? p.account
@@ -168,6 +183,10 @@ public final class GoogleCalendarSource: Sendable {
                 all.allUIDs.formUnion(p.allUIDs)
                 token = p.nextPageToken
                 if token == nil { break }
+                if page == Self.maxPages - 1 {
+                    all.complete = false
+                    Log.error("Google Calendar: the read stopped at \(Self.maxPages) pages")
+                }
             } catch {
                 Log.error("Google Calendar: the read failed (\(GoogleError.from(error).logText))")
                 return nil
@@ -188,22 +207,29 @@ public final class GoogleCalendarSource: Sendable {
     }
 }
 
-/// The calendar that the app and the pipeline read: Google's events for the Google calendar and the Mac's for
-/// every other account, each meeting once.
+/// The calendar that the app and the pipeline read: Google's events where Google has them and the Mac's for every
+/// other calendar, each meeting once.
 public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
     private let mac: CalendarSource
     private let google: @Sendable () -> GoogleCalendarSource?
     private let lock = NSLock()
     /// The last Google read, so the 2 s checks and the pipeline do not each ask Google.
     private var cache: (from: Date, to: Date, at: Date, page: GoogleCalendarAPI.Page)?
+    /// When the last read failed: the next ones use the Mac alone for a while instead of waiting for the network.
+    private var failedAt: Date?
     static let cacheSeconds: TimeInterval = 120
+    static let failedSeconds: TimeInterval = 60
+    /// A read waits at most this long for Google; a later answer goes to the cache for the next read. The Mac's
+    /// calendars answer at once, and the do-not-record gate waits only 3 s at launch.
+    let waitLimit: Duration
 
-    public init(mac: CalendarSource, google: @escaping @Sendable () -> GoogleCalendarSource?) {
+    public init(mac: CalendarSource, google: @escaping @Sendable () -> GoogleCalendarSource?, waitLimit: Duration = .seconds(2)) {
         self.mac = mac
         self.google = google
+        self.waitLimit = waitLimit
     }
 
-    public func forget() { lock.withLock { cache = nil } }
+    public func forget() { lock.withLock { cache = nil; failedAt = nil } }
 
     public func events(from: Date, to: Date) async -> [CalendarEventInfo] {
         let local = await mac.events(from: from, to: to)
@@ -211,37 +237,51 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
     }
 
     private func googlePage(from: Date, to: Date) async -> GoogleCalendarAPI.Page? {
-        guard let google = google() else { return nil }
+        // Not connected is not a failure: nothing to wait for and nothing to mark.
+        guard let google = google(), google.isOn else { return nil }
         let now = Date()
-        if let c = lock.withLock({ cache }), c.from <= from, c.to >= to, now.timeIntervalSince(c.at) < Self.cacheSeconds {
+        let (cached, failed) = lock.withLock { (cache, failedAt) }
+        if let c = cached, c.from <= from, c.to >= to, now.timeIntervalSince(c.at) < Self.cacheSeconds {
             return GoogleCalendarAPI.Page(account: c.page.account, events: c.page.events.filter { $0.end > from && $0.start < to },
-                                          allUIDs: c.page.allUIDs, nextPageToken: nil)
+                                          allUIDs: c.page.allUIDs, nextPageToken: nil, complete: c.page.complete)
         }
-        guard let page = await google.page(from: from, to: to) else { return nil }
-        lock.withLock { cache = (from, to, now, page) }
-        return page
+        if let failed, now.timeIntervalSince(failed) < Self.failedSeconds { return nil }
+        let read = Task { [weak self] () -> GoogleCalendarAPI.Page? in
+            let page = await google.page(from: from, to: to)
+            self?.lock.withLock {
+                if let page { self?.cache = (from, to, now, page); self?.failedAt = nil } else { self?.failedAt = now }
+            }
+            return page
+        }
+        let limit = waitLimit
+        return await withTaskGroup(of: GoogleCalendarAPI.Page??.self) { group in
+            group.addTask { await read.value }
+            group.addTask {
+                try? await Task.sleep(for: limit)
+                return .some(nil)
+            }
+            // The first to answer: Google's page, or nothing yet (the Mac alone this time).
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? nil
+        }
     }
 }
 
 /// How the two calendars join. Pure.
 public enum CalendarMerge {
-    /// With no Google read (`google` nil: not connected, or the read failed) the Mac's events stay as they are:
-    /// unknown is not "no events". With one, each Google event wins over the Mac's copy of the same invite (the same
-    /// iCalUID at the same start), the Mac's events of the Google account itself go, and a meeting the owner declined
-    /// is left out.
+    /// With no Google read (`google` nil: not connected, the read failed, or it was slow) the Mac's events stay as
+    /// they are: unknown is not "no events". With one, each Google event wins over the Mac's copy of the same invite
+    /// (the same iCalUID at the same start); every other Mac event stays, from any calendar. A declined meeting
+    /// stays in the list, so a call still finds its invite; the lists and the import leave it out.
     public static func merge(mac: [CalendarEventInfo], google: GoogleCalendarAPI.Page?) -> [CalendarEventInfo] {
         guard let google else { return mac }
-        let account = google.account?.lowercased()
         var starts: [String: [Date]] = [:]
         for e in google.events { if let uid = e.iCalUID { starts[uid, default: []].append(e.start) } }
         let kept = mac.filter { e in
-            if let account, e.calendarAccount?.lowercased() == account { return false }
             guard let uid = e.iCalUID else { return true }
-            // A declined event is in the answer's ids but not in its events: the Mac's copy goes too.
-            if google.allUIDs.contains(uid), starts[uid] == nil { return false }
             return !(starts[uid] ?? []).contains { abs($0.timeIntervalSince(e.start)) < 60 }
         }
-        let accepted = google.events.filter { !$0.declinedByOwner }
-        return (accepted + kept).sorted { ($0.start, $0.title) < ($1.start, $1.title) }
+        return (google.events + kept).sorted { ($0.start, $0.title) < ($1.start, $1.title) }
     }
 }

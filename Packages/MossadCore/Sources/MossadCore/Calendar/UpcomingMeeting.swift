@@ -12,6 +12,9 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
     public var link: URL?
     /// The calendar series it belongs to, when the calendar said (Google).
     public var seriesID: String?
+    /// The first call link in the event's text, when it is not `link`: a do-not-record choice that an older build
+    /// keyed by it still counts.
+    public var textLink: URL?
 
     public static let days = 7
     public static let limit = 12
@@ -26,14 +29,16 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
                     && r.start < e.end && (r.status == .recording ? now : r.end) > e.start
             }
         }
-        return events.filter { !$0.isAllDay && $0.end > now && $0.start < horizon && !isRecorded($0) }
+        // A meeting the owner declined is not upcoming; the matcher and the do-not-record gate still see it.
+        return events.filter { !$0.isAllDay && $0.end > now && $0.start < horizon && !isRecorded($0) && !$0.declinedByOwner }
             .sorted { $0.start < $1.start }
             .compactMap { e in
                 // Only calls: an event without a call link (lunch, a focus block) is not one.
-                let (platform, link) = callLink(in: e.text)
+                let (platform, link) = e.callLink
                 guard platform != nil else { return nil }
+                let text = e.textLink
                 return UpcomingMeeting(title: e.title, start: e.start, end: e.end, attendees: e.attendees, platform: platform,
-                                       link: e.meetingLink.flatMap { callLink(in: $0.absoluteString).0 == nil ? nil : $0 } ?? link, seriesID: e.seriesID)
+                                       link: link, seriesID: e.seriesID, textLink: text == link ? nil : text)
             }
             .prefix(limit).map { $0 }
     }

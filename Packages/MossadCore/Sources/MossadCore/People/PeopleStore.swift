@@ -262,6 +262,19 @@ public final class PeopleStore: @unchecked Sendable {
         return count
     }
 
+    /// Removes the directory's details of these sources from every person. Returns how many changed.
+    @discardableResult
+    public func clearDirectory(_ sources: Set<GoogleProfile.Source>) throws -> Int {
+        var count = 0
+        try change { people, date in
+            let next = DirectoryMerge.clear(sources, from: people, at: date)
+            count = zip(people, next).filter { $0 != $1 }.count
+            people = next
+            return count > 0 ? [PeopleLogEntry(at: date, kind: "directory", actor: "google", subject: PersonID(rawValue: "all"), after: "cleared")] : []
+        }
+        return count
+    }
+
     public func rename(_ id: PersonID, to new: String, actor: String = "owner") throws {
         try change { people, date in
             guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }) else { return [] }

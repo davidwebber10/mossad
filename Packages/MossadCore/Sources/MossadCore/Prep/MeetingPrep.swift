@@ -196,7 +196,8 @@ public struct MeetingPrep: Sendable, Equatable {
         let size = MeetingFacts.Size(voices: invited.count + 1)
         let since = now.addingTimeInterval(-Self.recentDays * 86_400)
         self.people = known.map { name in
-            let shared = past.filter { $0.speakerNames.values.contains(name) }
+            // "Last met" only where the owner was surely there: a meeting made from notes the owner missed is not one.
+            let shared = past.filter { $0.speakerNames.values.contains(name) && $0.ownerPresent == true }
             return Person(name: name, lastMet: shared.first.map(Earlier.init), recent: shared.filter { $0.start >= since }.count, meetings: shared.count,
                           fact: history.flatMap { Self.fact(about: name, in: $0, series: seriesIDs, size: size, met: shared.map(\.start), now: now) })
         }
@@ -373,7 +374,9 @@ public struct MeetingPrep: Sendable, Equatable {
         let key = PeopleDuplicates.normalized(meeting.title)
         let link = meeting.link.map { ($0.absoluteString.removingPercentEncoding ?? $0.absoluteString).lowercased() }
         return past.filter { r in
-            if let id = meeting.seriesID, let theirs = r.calendarSeriesID { return id == theirs }
+            // The same series id is the series. A different one is not proof of another: Google gives a new id when
+            // the organizer changes "this and following events", so the title and people rule decides.
+            if let id = meeting.seriesID, id == r.calendarSeriesID { return true }
             guard r.titleSource == .calendar || r.titleSource == .custom, PeopleDuplicates.normalized(r.title) == key else { return false }
             let listed = Set(Self.invited(r.attendees, owner: owner, directory: directory, ownerEmails: ownerEmails).map { PeopleDuplicates.normalized($0.name) })
             let voices = Set(r.speakerNames.values.filter { !$0.hasPrefix("Speaker ") && PeopleDuplicates.normalized($0) != PeopleDuplicates.normalized(owner) }

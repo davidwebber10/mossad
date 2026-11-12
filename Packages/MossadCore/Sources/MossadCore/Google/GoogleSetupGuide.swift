@@ -27,6 +27,11 @@ public enum GoogleSetupGuide {
     public struct Copy: Equatable, Sendable {
         public var label: String
         public var value: String
+
+        public init(label: String, value: String) {
+            self.label = label
+            self.value = value
+        }
     }
 
     public struct Step: Equatable, Sendable, Identifiable {
@@ -50,7 +55,7 @@ public enum GoogleSetupGuide {
                  detail: "Open each page and press Enable. Check that the project at the top is the one from step 1.",
                  links: apis.map { Link(title: $0.name, url: $0.library) }, copies: []),
             Step(number: 3, title: "Set up the sign-in screen",
-                 detail: "On Branding, press Get started. Type the app name and your email. On Audience: \(audience.detail)",
+                 detail: "On Branding, press Get started. Type the app name and your email, choose the audience, type your email as the contact, and tick \"I agree\" before Create. Audience: \(audience.detail)",
                  links: [Link(title: "Branding", url: url("auth/branding")), Link(title: "Audience", url: url("auth/audience"))],
                  copies: [Copy(label: "App name", value: "Mossad")]),
             Step(number: 4, title: "Add the permissions",
@@ -58,7 +63,7 @@ public enum GoogleSetupGuide {
                  links: [Link(title: "Data access", url: url("auth/scopes"))],
                  copies: GoogleScope.allCases.filter(scopes.contains).map { Copy(label: $0.title, value: $0.url) }),
             Step(number: 5, title: "Make the client",
-                 detail: "On Clients, press Create client. For Application type, choose Desktop app. Name it Mossad and press Create. Copy the client ID and the client secret into the fields below.",
+                 detail: "On Clients, press Create client. For Application type, choose Desktop app. Name it Mossad and press Create. Copy the client ID and the client secret into the fields below now: Google does not show the secret again.",
                  links: [Link(title: "Create client", url: url("auth/clients/create"))],
                  copies: [Copy(label: "Application type", value: "Desktop app"), Copy(label: "Name", value: "Mossad")]),
         ]

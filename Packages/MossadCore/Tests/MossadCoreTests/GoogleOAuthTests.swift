@@ -64,7 +64,7 @@ final class GoogleOAuthTests: XCTestCase {
 
     func testTheCallbackLine() {
         XCTAssertEqual(GoogleCallback.parse(requestLine: "GET /?state=xyz&code=4/0Ab-c HTTP/1.1"), .code("4/0Ab-c", state: "xyz"))
-        XCTAssertEqual(GoogleCallback.parse(requestLine: "GET /?error=access_denied&state=xyz HTTP/1.1"), .error("access_denied"))
+        XCTAssertEqual(GoogleCallback.parse(requestLine: "GET /?error=access_denied&state=xyz HTTP/1.1"), .error("access_denied", state: "xyz"))
         XCTAssertNil(GoogleCallback.parse(requestLine: "GET /favicon.ico HTTP/1.1"))
         XCTAssertNil(GoogleCallback.parse(requestLine: "POST /?code=1 HTTP/1.1"))
         XCTAssertNil(GoogleCallback.parse(requestLine: ""))
@@ -227,6 +227,7 @@ final class GoogleSessionTests: XCTestCase {
     func testTheCheckReadsOneEventAndNamesEachPartThatFails() async throws {
         let secrets = try connected(expiry: now.addingTimeInterval(600), scopes: [.calendar, .docs, .directory])
         let t = StubTransport { r in
+            if r.url?.host == "docs.googleapis.com" { return (404, Data()) }
             if r.url?.host == "www.googleapis.com" {
                 return (200, StubTransport.json(["summary": "Owner@Example.com", "items": [
                     ["id": "e1", "summary": "Weekly sync", "start": ["dateTime": "2026-11-10T10:00:00Z"], "end": ["dateTime": "2026-11-10T10:30:00Z"]],

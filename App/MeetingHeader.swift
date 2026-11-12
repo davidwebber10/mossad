@@ -65,6 +65,7 @@ struct MeetingHeader: View {
                 Text(when).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
             }
             .frame(minHeight: 20)
+            if let source = record.sourceLabel { SourceMark(text: source).frame(minHeight: 20) }
             if let kind = record.kind { TagChip(text: kind) }
             if record.titleSource == .generated { NamedByMossadTag().frame(minHeight: 20) }
             if record.status == .written { TagRow(record: record) }

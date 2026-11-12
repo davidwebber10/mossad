@@ -34,8 +34,10 @@ public enum GoogleCheck {
                     report.event = page.events.first?.title
                     if let account = page.account { await session.setAccount(account) }
                 case .docs:
-                    // A document's id comes only from an event, so the token's grant is the check.
-                    guard session.has(.docs) else { throw GoogleError.scopeMissing(.docs) }
+                    // A document that cannot exist: an API that is on says "not found" (or "bad request"); an API that is
+                    // off says so. Only then is the part known to work.
+                    let (status, body) = try await session.probe(GeminiDoc.url(documentID: "mossad-check-no-such-document"), scope: .docs)
+                    if status != 404, status != 400, status != 200 { throw GoogleError.from(status: status, body: body, scope: .docs) }
                 case .directory:
                     _ = try await session.get(GooglePeopleAPI.directoryURL(pageSize: 1), scope: .directory)
                 case .contacts:

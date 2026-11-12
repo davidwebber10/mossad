@@ -127,6 +127,7 @@ struct MeetingView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .accessibilityAddTraits(.isHeader)
+            if let source = record.sourceLabel { SourceMark(text: source) }
             if record.titleSource == .generated {
                 Label("Named by Mossad", systemImage: "sparkle")
                     .textRole(.secondary)

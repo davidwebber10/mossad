@@ -63,7 +63,9 @@ public enum DirectoryMerge {
             let before = out[i]
             let source: SourceKind = profile.source == .directory ? .googleDirectory : .googleContacts
             if let name = profile.name, PersonNames.nameKey(name) != PersonNames.nameKey(out[i].displayName) {
-                if canTakeName(out[i]) {
+                // Another live person with this name would make two of one name, and then neither resolves.
+                let taken = out.contains { $0.id != out[i].id && $0.isLive && PersonNames.nameKey($0.displayName) == PersonNames.nameKey(name) }
+                if canTakeName(out[i]), !taken {
                     setDisplay(&out[i], name, source: source, at: date)
                     log.append(PeopleLogEntry(at: date, kind: "rename", actor: "google", subject: out[i].id, before: before.displayName, after: name))
                 } else {
@@ -106,6 +108,18 @@ public enum DirectoryMerge {
         p.displayName = name
         p.name = NameParts(PersonNames.parse(name))
         p.updated = date
+    }
+
+    /// The people without what the directory or the contacts gave (`sources`): after a sign-out, or with that part
+    /// turned off. The names stay: a name is the person's now.
+    public static func clear(_ sources: Set<GoogleProfile.Source>, from people: [Person], at date: Date) -> [Person] {
+        people.map { p in
+            guard let d = p.directory, sources.contains(d.source == .googleDirectory ? .directory : .contacts) else { return p }
+            var p = p
+            p.directory = nil
+            p.updated = date
+            return p
+        }
     }
 
     /// "Name, Title" for the names that the org chart did not give, from the directory's job titles: the same lines

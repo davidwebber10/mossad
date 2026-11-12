@@ -58,7 +58,8 @@ final class GooglePeopleTests: XCTestCase {
                 : (200, StubTransport.json(["people": [["names": [["displayName": "Riley Chen"]], "emailAddresses": [["value": "riley@example.com"]]]]]))
         }
         let profiles = await GooglePeopleAPI.fetch(session: GoogleSession(secrets: secrets, transport: t))
-        XCTAssertEqual(profiles?.map(\.name), ["Sam Carter", "Jordan Lee", "Riley Chen"])
+        XCTAssertEqual(profiles[.directory]?.map(\.name), ["Sam Carter", "Jordan Lee", "Riley Chen"])
+        XCTAssertNil(profiles[.contacts])
         XCTAssertFalse(t.sent.contains { $0.url?.path.contains("connections") == true }, "contacts were not given")
     }
 
@@ -67,7 +68,7 @@ final class GooglePeopleTests: XCTestCase {
         try secrets.setClient(testClient)
         try secrets.setTokens(GoogleTokens(accessToken: "a", refreshToken: "r", expiry: Date().addingTimeInterval(3600), scopes: [.directory]))
         let profiles = await GooglePeopleAPI.fetch(session: GoogleSession(secrets: secrets, transport: StubTransport { _ in (403, Data()) }))
-        XCTAssertNil(profiles)
+        XCTAssertTrue(profiles.isEmpty, "a part that failed is not read: its old copy stays")
     }
 
     // MARK: The merge rule
@@ -197,7 +198,8 @@ final class GooglePeopleTests: XCTestCase {
     func testTheCacheStaysOnThisMac() throws {
         let paths = Paths(root: tempDirectory())
         try GoogleDirectoryCache(profiles: [sam], read: now).save(paths)
-        XCTAssertEqual(GoogleDirectoryCache.load(paths)?.profiles, [sam])
+        XCTAssertEqual(GoogleDirectoryCache.load(paths)?.profiles, [GoogleProfile(emails: sam.emails, name: sam.name, source: .directory)],
+                       "the copy keeps the addresses and the name only")
         XCTAssertEqual(GoogleDirectoryCache.url(paths).deletingLastPathComponent(), paths.people)
     }
 }

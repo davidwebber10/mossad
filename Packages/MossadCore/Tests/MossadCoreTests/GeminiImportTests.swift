@@ -83,7 +83,7 @@ final class GeminiImportTests: XCTestCase {
         let capped = GeminiImport.capped(plan, dollars: 0.03)
         XCTAssertEqual(capped.map(\.event.title), ["New", "Recorded"])
         XCTAssertEqual(GeminiImport.estimateLine(plan, cap: 0.03),
-                       "2 meetings without a recording, 1 recorded meeting with Gemini notes. Mossad's summaries cost about $0.04. The cap of $0.03 allows 1.")
+                       "2 meetings without a recording, 1 recorded meeting with Gemini notes. The price of this model is not known; at Claude's prices the summaries cost about $0.04. The cap of $0.03 allows 1.")
         XCTAssertEqual(GeminiImport.estimateLine([], cap: 1), "No meetings with Gemini notes to import.")
         XCTAssertFalse(GeminiImport.estimateLine(plan, cap: 0.03).contains("—"))
     }
@@ -266,7 +266,8 @@ final class GeminiImportTests: XCTestCase {
         try FileManager.default.createDirectory(at: paths.callDirectory(first), withIntermediateDirectories: true)
         let items = GeminiImport.plan(events: [event(), event("Missing doc", hoursAgo: 5, doc: "doc-gone", eventID: "e2")], records: [], now: now)
         let outcome = await runner.run(items, ownerName: "Alex Rivera", ownerNames: [], now: { [now] in now })
-        XCTAssertEqual(outcome, GeminiRunner.Outcome(made: 1, attached: 0, failed: 1))
+        XCTAssertEqual([outcome.made, outcome.attached, outcome.failed], [1, 0, 1])
+        XCTAssertEqual(outcome.madeIDs, [first + "-2"])
         let r = try CallRecord.load(from: paths.callDirectory(first + "-2"))
         XCTAssertEqual(r.status, .written)
         XCTAssertTrue(r.isNotesOnly)

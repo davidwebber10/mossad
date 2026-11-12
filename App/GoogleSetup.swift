@@ -11,13 +11,13 @@ struct GoogleStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.xl) {
+            StepGroup(label: "What Mossad reads", footer: "The steps below follow these choices.") { GooglePartRows() }
             StepGroup(label: "Your account") { GoogleAudienceRow() }
             StepGroup(label: "In Google Cloud", footer: "About 5 minutes, once. Each link opens the right page in your browser.") {
                 GoogleGuideRows()
             }
             StepGroup(label: "Your Google app", footer: "The client ID, the secret, and the sign-in stay in the macOS Keychain. Mossad only reads.") {
                 GoogleClientRows()
-                GooglePartRows()
             }
         }
     }
@@ -95,6 +95,9 @@ private struct GoogleGuideStepRow: View {
                     }
                 }
                 ForEach(step.copies, id: \.value) { copy in GoogleCopyRow(copy: copy) }
+                if step.copies.count > 2 {
+                    GoogleCopyRow(copy: GoogleSetupGuide.Copy(label: "All of them", value: step.copies.map(\.value).joined(separator: "\n")))
+                }
             }
         }
         .padding(.vertical, style.padding)
@@ -169,16 +172,16 @@ struct GoogleClientRows: View {
         HStack(spacing: Space.s) {
             Group {
                 if secure {
-                    SecureField(title, text: text, prompt: Text("Paste the \(title.lowercased())"))
+                    SecureField(title, text: text, prompt: Text("Paste the \(title.replacingOccurrences(of: "Client", with: "client"))"))
                 } else {
-                    TextField(title, text: text, prompt: Text("Paste the \(title.lowercased())"))
+                    TextField(title, text: text, prompt: Text("Paste the \(title.replacingOccurrences(of: "Client", with: "client"))"))
                 }
             }
             .textFieldStyle(SheetFieldStyle(monospaced: true))
             .accessibilityLabel(title)
             Button("Paste") { text.wrappedValue = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? text.wrappedValue }
                 .rowButton()
-                .accessibilityLabel("Paste the \(title.lowercased())")
+                .accessibilityLabel("Paste the \(title.replacingOccurrences(of: "Client", with: "client"))")
         }
     }
 }
@@ -194,7 +197,9 @@ struct GoogleConnectionRow: View {
             HStack(spacing: Space.m) {
                 SettingsRowText(title: "Google account", detail: status)
                 Spacer(minLength: Space.m)
-                if controller.googleConnected {
+                if connector.phase == .signingIn {
+                    Button("Cancel") { controller.cancelGoogleSignIn() }.rowButton()
+                } else if controller.googleConnected {
                     Button("Sign out") { controller.signOutOfGoogle() }.rowButton().disabled(connector.busy)
                 }
                 Button {
@@ -231,7 +236,7 @@ struct GoogleConnectionRow: View {
                     if let error = report.parts[scope] ?? nil {
                         GoogleErrorLine(error: error, part: scope.title)
                     } else if scope != .calendar || report.event == nil {
-                        PassLine(text: "\(scope.title) works")
+                        PassLine(text: "\(scope.title): read")
                     }
                 }
             }
@@ -268,7 +273,9 @@ struct GooglePartRows: View {
         ForEach(GoogleScope.allCases) { scope in
             SettingsSwitchRow(title: scope.title, detail: detail(scope),
                               isOn: Binding(get: { connector.scopes.contains(scope) }, set: { on in
+                                  let old = connector.scopes
                                   if on { connector.scopes.insert(scope) } else { connector.scopes.remove(scope) }
+                                  controller.googlePartsChanged(from: old)
                                   controller.objectWillChange.send()
                               }))
         }

@@ -212,16 +212,25 @@ final class MeetingPrepTests: XCTestCase {
 
     // MARK: The series
 
-    func testGooglesSeriesIDDecidesTheSeriesWhenBothSidesHaveOne() {
+    func testGooglesSeriesIDJoinsARenamedMeetingAndAnotherIDFallsToTheTitleRule() {
         var renamed = call("r1", daysAgo: 7, title: "Design review (moved)", speakers: [owner, sam], headline: "Renamed once.")
         renamed.calendarSeriesID = "series-1"
-        var other = call("o1", daysAgo: 3, title: "Weekly sync", speakers: [owner, sam, jo], headline: "Same title, other series.")
-        other.calendarSeriesID = "series-2"
         var meeting = upcoming("Weekly sync")
         meeting.seriesID = "series-1"
-        let p = prep(meeting, records: [other, renamed])
-        XCTAssertEqual(p.lastTime?.meeting.id, "r1")
-        XCTAssertEqual(p.lastTime?.headline, "Renamed once.")
+        XCTAssertEqual(prep(meeting, records: [renamed]).lastTime?.meeting.id, "r1", "the same id is the series, whatever the title")
+        // "This and following events" gives a new id: the title and the people still make the series.
+        var split = call("o1", daysAgo: 3, title: "Weekly sync", speakers: [owner, sam, jo], headline: "Before the split.")
+        split.calendarSeriesID = "series-0"
+        XCTAssertEqual(prep(meeting, records: [split, renamed]).lastTime?.meeting.id, "o1")
+    }
+
+    func testANotesOnlyMeetingTheOwnerMissedIsNotLastMet() {
+        var missed = call("n1", daysAgo: 1, title: "Other meeting", speakers: [sam], headline: "Without the owner.",
+                          lines: [(1, 0, "Hello.")])
+        missed.source = CallRecord.geminiNotesSource
+        let met = call("m1", daysAgo: 9, title: "Something else", speakers: [owner, sam], headline: "With the owner.")
+        let p = prep(records: [missed, met])
+        XCTAssertEqual(p.people.first { $0.name == sam }?.lastMet?.id, "m1")
     }
 
     func testTwoSeriesWithOneTitleAreTwoSeries() {

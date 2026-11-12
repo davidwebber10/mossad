@@ -32,6 +32,12 @@ final class GoogleConnector: ObservableObject {
     @Published var pastSearching = false
     @Published var pastImport: (done: Int, total: Int)?
     @Published var pastResult: String?
+    /// False when the calendar read for old notes stopped at its limit.
+    @Published var pastComplete = true
+    /// What the chosen notes model costs for an hour of meeting; nil when its price is not known.
+    @Published var pastPerHour: Double?
+    /// The sign-in that waits for the browser, for Cancel.
+    var signIn: Task<Void, Never>?
 
     init() {
         let saved = UserDefaults.standard.stringArray(forKey: "googleScopes")
@@ -48,7 +54,7 @@ final class GoogleConnector: ObservableObject {
     var busy: Bool { phase == .signingIn || phase == .checking }
 
     /// The line about the plan, with its cost and the cap, as the step shows it and the log keeps it.
-    var pastLine: String? { pastPlan.map { GeminiImport.estimateLine($0, cap: pastCap) } }
+    var pastLine: String? { pastPlan.map { GeminiImport.estimateLine($0, cap: pastCap, perHour: pastPerHour, complete: pastComplete) } }
 
     func changed() { version += 1 }
 }
@@ -72,7 +78,10 @@ extension AppController {
         guard !CommandLine.arguments.contains("--ui-preview") else { return }
         let id = typedID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let secret = typedSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // A new client cannot use the old client's sign-in: it signs in again.
+        var newClient = false
         if !id.isEmpty || !secret.isEmpty {
+            newClient = keychain.client?.id != id
             guard GoogleClient.looksLikeID(id), !secret.isEmpty else {
                 connector.phase = .failed(id.isEmpty || secret.isEmpty ? .noClient : .invalidClient)
                 return
@@ -89,8 +98,9 @@ extension AppController {
             return
         }
         let scopes = connector.scopes, session = google
-        Task {
+        connector.signIn = Task {
             do {
+                if newClient, session.isConnected { await session.signOut() }
                 if !session.isConnected || session.scopes != scopes {
                     // Fewer parts than before: the old grant ends first, so Google forgets the parts turned off.
                     if session.isConnected { await session.signOut() }
@@ -105,18 +115,56 @@ extension AppController {
                 let report = await GoogleCheck.run(session: session, scopes: scopes)
                 connector.phase = .done(report)
                 Log.info("Google: checked \(scopes.count) parts, \(report.passed ? "all work" : "some need you")")
+            } catch is CancellationError {
+                Log.info("Google: the sign-in was cancelled")
+                connector.phase = .idle
             } catch {
                 let g = GoogleError.from(error)
                 Log.error("Google: the sign-in failed (\(g.logText))")
                 connector.phase = .failed(g)
             }
+            connector.signIn = nil
             connector.changed()
             googleChanged()
         }
     }
 
+    /// Cancel while Google's page is open: the wait ends, and Check can open the page again.
+    func cancelGoogleSignIn() {
+        googleConnector.signIn?.cancel()
+    }
+
+    /// The parts on now: the session stops a part turned off at once, and its directory data goes.
+    func googlePartsChanged(from old: Set<GoogleScope>) {
+        let now = googleConnector.scopes
+        google.choose(now)
+        var gone: Set<GoogleProfile.Source> = []
+        if old.contains(.directory), !now.contains(.directory) { gone.insert(.directory) }
+        if old.contains(.contacts), !now.contains(.contacts) { gone.insert(.contacts) }
+        if !gone.isEmpty { forgetDirectory(gone) }
+    }
+
+    /// Removes what the directory or the contacts gave: the copy on this Mac and the details on each person.
+    func forgetDirectory(_ sources: Set<GoogleProfile.Source>) {
+        let paths = paths, library = library, names = googleNames
+        Task.detached(priority: .utility) {
+            if let cache = GoogleDirectoryCache.load(paths) {
+                let kept = GoogleDirectoryCache(profiles: cache.profiles.filter { !sources.contains($0.source) }, read: cache.read)
+                if kept.profiles.isEmpty { GoogleDirectoryCache.remove(paths) } else { try? kept.save(paths) }
+                names.set(kept.names)
+            }
+            if let store = library.identity?.people {
+                do { try store.clearDirectory(sources) } catch { Log.error("Google People: the details were not removed: \(error)") }
+            }
+            Log.info("Google People: removed what \(sources.map(\.rawValue).sorted().joined(separator: " and ")) gave")
+            await MainActor.run { UserDefaults.standard.removeObject(forKey: "googleDirectoryRead") }
+        }
+    }
+
     func signOutOfGoogle() {
         let session = google
+        googleConnector.signIn?.cancel()
+        forgetDirectory([.directory, .contacts])
         Task {
             await session.signOut()
             Log.info("Google: signed out")
@@ -155,15 +203,17 @@ extension AppController {
         guard force || Date().timeIntervalSince1970 - last > 86_400 else { return }
         let session = google, paths = paths, library = library, names = googleNames
         Task.detached(priority: .utility) {
-            guard let profiles = await GooglePeopleAPI.fetch(session: session) else { return }
-            let cache = GoogleDirectoryCache(profiles: profiles, read: Date())
+            let fresh = await GooglePeopleAPI.fetch(session: session)
+            guard !fresh.isEmpty else { return }
+            // A part that was not read keeps its old copy; nothing is made from a part of a list.
+            let cache = (GoogleDirectoryCache.load(paths) ?? GoogleDirectoryCache(profiles: [], read: Date())).replacing(fresh, read: Date())
             do { try cache.save(paths) } catch { Log.error("Google People: the directory copy was not saved: \(error)") }
             names.set(cache.names)
             var changed = 0
             if let store = library.identity?.people {
-                do { changed = try store.applyDirectory(profiles) } catch { Log.error("Google People: the people were not filled: \(error)") }
+                do { changed = try store.applyDirectory(fresh.values.flatMap { $0 }) } catch { Log.error("Google People: the people were not filled: \(error)") }
             }
-            Log.info("Google People: read \(profiles.count) entries; \(changed) people filled")
+            Log.info("Google People: read \(fresh.values.map(\.count).reduce(0, +)) entries; \(changed) people filled")
             await MainActor.run {
                 UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "googleDirectoryRead")
                 if changed > 0 { self.refreshPeopleReferences() }
@@ -182,18 +232,24 @@ extension AppController {
         googleRunning = true
         let runner = GeminiRunner(session: google, pipeline: pipeline, paths: paths)
         let owner = ownerName, ownerNames = library.identity?.people.ownerNames ?? []
+        let lastGood = (UserDefaults.standard.object(forKey: "geminiLastGood") as? Double).map(Date.init(timeIntervalSince1970:))
         Task {
             defer { googleRunning = false }
             let now = Date()
-            guard let events = await runner.events(from: now.addingTimeInterval(-GeminiImport.recentWindow), to: now) else { return }
             UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "geminiLastCheck")
-            let items = GeminiImport.plan(events: events, records: meetings, now: now)
-            guard !items.isEmpty, !isRecording else { return }
-            let outcome = await runner.run(items, ownerName: owner, ownerNames: ownerNames)
-            Log.info("Gemini notes: \(outcome.made) made, \(outcome.attached) added to recordings, \(outcome.failed) to try again")
+            // Back to the last good check, so a weekend with the Mac closed is not lost.
+            guard let read = await runner.events(from: GeminiImport.windowStart(lastGood: lastGood, now: now), to: now) else { return }
+            if read.complete { UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "geminiLastGood") }
+            let items = GeminiImport.plan(events: read.events, records: meetings, now: now, noRecord: noRecord, removed: RemovedNotes.load(paths).ids)
+            guard !items.isEmpty else { return }
+            let outcome = await runner.run(items, ownerName: owner, ownerNames: ownerNames, isLive: { await MainActor.run { self.isRecording } })
+            Log.info("Gemini notes: \(outcome.made) made, \(outcome.attached) added to recordings, \(outcome.failed) to try again\(outcome.stopped ? ", stopped for a call" : "")")
             refresh()
         }
     }
+
+    /// The chosen notes model's price for an hour of meeting: the summary and the tasks; nil when not known.
+    var notesPerHour: Double? { hourCost.parts.first { $0.kind == .notes }?.amount }
 
     /// Finds the past meetings with notes in the chosen days, and says what an import would cost.
     func findPastNotes() {
@@ -201,46 +257,63 @@ extension AppController {
         guard !isInert, google.has(.calendar), google.has(.docs), !connector.pastSearching, let pipeline else { return }
         connector.pastSearching = true
         connector.pastResult = nil
+        connector.pastPerHour = notesPerHour
         let runner = GeminiRunner(session: google, pipeline: pipeline, paths: paths), days = connector.pastDays
         Task {
             let now = Date()
-            let events = await runner.events(from: now.addingTimeInterval(-Double(days) * 86_400), to: now)
+            let read = await runner.events(from: now.addingTimeInterval(-Double(days) * 86_400), to: now)
             connector.pastSearching = false
-            guard let events else {
+            guard let read else {
                 connector.pastResult = "Mossad could not read your Google calendar. Press Check above."
                 return
             }
-            connector.pastPlan = GeminiImport.plan(events: events, records: meetings, now: now)
+            connector.pastComplete = read.complete
+            connector.pastPlan = GeminiImport.plan(events: read.events, records: meetings, now: now, noRecord: noRecord, removed: RemovedNotes.load(paths).ids)
             if let line = connector.pastLine { Log.info("Gemini notes, last \(days) days: \(line)") }
         }
     }
 
-    /// Imports the plan within the cap, the newest first, one meeting at a time. Not while a call records.
+    /// Imports the plan within the cap, the newest first, one meeting at a time. It stops at the cap by what the
+    /// imported meetings really cost, and waits while a call records. The background check does not run meanwhile.
     func importPastNotes() {
         let connector = googleConnector
-        guard let plan = connector.pastPlan, connector.pastImport == nil, !isRecording, let pipeline else { return }
-        let items = GeminiImport.capped(plan, dollars: connector.pastCap)
+        guard let plan = connector.pastPlan, connector.pastImport == nil, !googleRunning, !isRecording, let pipeline else { return }
+        let cap = connector.pastCap
+        let items = GeminiImport.capped(plan, dollars: cap, perHour: connector.pastPerHour)
         guard !items.isEmpty else { return }
-        Log.info("Gemini notes: importing \(items.count) of \(plan.count), about \(String(format: "$%.2f", GeminiImport.estimate(items)))")
+        Log.info("Gemini notes: importing \(items.count) of \(plan.count), about \(String(format: "$%.2f", GeminiImport.estimate(items, perHour: connector.pastPerHour)))")
+        googleRunning = true
         let runner = GeminiRunner(session: google, pipeline: pipeline, paths: paths)
-        let owner = ownerName, ownerNames = library.identity?.people.ownerNames ?? []
+        let owner = ownerName, ownerNames = library.identity?.people.ownerNames ?? [], usage = usage
+        // What the imported meetings cost so far, from the usage log.
+        let spent: @Sendable ([String]) -> Double = { ids in
+            let set = Set(ids)
+            return usage.all().filter { $0.callID.map(set.contains) == true }.map(Pricing.cost).reduce(0, +)
+        }
         connector.pastImport = (0, items.count)
         Task {
-            var total = GeminiRunner.Outcome()
+            defer { googleRunning = false }
+            var total = GeminiRunner.Outcome(), made: [String] = []
             for (i, item) in items.enumerated() {
                 // A call that starts waits for nothing: the rest goes on after it.
                 while isRecording { try? await Task.sleep(for: .seconds(30)) }
-                let o = await runner.run([item], ownerName: owner, ownerNames: ownerNames)
+                let ids = made
+                let soFar = await Task.detached { spent(ids) }.value
+                let o = await runner.run([item], ownerName: owner, ownerNames: ownerNames, isLive: { await MainActor.run { self.isRecording } },
+                                         spent: { _ in soFar }, cap: cap)
+                refresh()
+                made += o.madeIDs
                 total.made += o.made
                 total.attached += o.attached
                 total.failed += o.failed
                 connector.pastImport = (i + 1, items.count)
-                refresh()
+                if o.stopped, !isRecording { total.stopped = true; break }
             }
             connector.pastImport = nil
             connector.pastPlan = nil
             connector.pastResult = "Imported \(total.made) \(total.made == 1 ? "meeting" : "meetings") and added notes to \(total.attached) recorded."
                 + (total.failed > 0 ? " \(total.failed) could not be read now." : "")
+                + (total.stopped ? " The cap was reached." : "")
             Log.info("Gemini notes: \(connector.pastResult ?? "")")
         }
     }

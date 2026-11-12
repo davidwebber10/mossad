@@ -22,14 +22,31 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
     }
 
     var rules: [Rule] = []
+    /// Rules for one meeting after the meeting ended, kept `endedKeep` more: the Gemini notes of a meeting that the
+    /// owner did not want recorded are not imported either.
+    var ended: [Rule] = []
+    static let endedKeep: TimeInterval = 400 * 86_400
     /// The file was there and did not decode. The rules are unknown, so every call that matches an invite is
     /// blocked (the owner's "do not record" wins over a recording) until the owner sets a choice or resets the list.
     /// The app says so at each blocked call; see `NoRecordGate.currentBlock`.
     public private(set) var unreadable = false
 
-    private enum CodingKeys: String, CodingKey { case rules }
+    private enum CodingKeys: String, CodingKey { case rules, ended }
 
     public init() {}
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        rules = try c.decode([Rule].self, forKey: .rules)
+        ended = try c.decodeIfPresent([Rule].self, forKey: .ended) ?? []
+    }
+
+    /// The keys of a meeting: by its call link, and by the first link of its text that older builds used.
+    static func keys(title: String, link: URL?, textLink: URL?) -> [String] {
+        [key(title: title, link: link), key(title: title, link: textLink)].compactMap { $0 }.reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
+    }
+
+    static func keys(_ e: CalendarEventInfo) -> [String] { keys(title: e.title, link: e.callLink.url, textLink: e.textLink) }
 
     static func key(title: String, link: URL?) -> String? {
         guard let link, let host = link.host else { return nil }
@@ -38,17 +55,27 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
     }
 
     public func choice(for meeting: UpcomingMeeting) -> RecordingChoice {
-        guard let key = Self.key(title: meeting.title, link: meeting.link) else { return .record }
-        if rules.contains(where: { $0.key == key && $0.start == nil }) { return .skipSeries }
-        return rules.contains { $0.key == key && $0.covers(meeting.start) } ? .skipThisMeeting : .record
+        let keys = Self.keys(title: meeting.title, link: meeting.link, textLink: meeting.textLink)
+        guard !keys.isEmpty else { return .record }
+        if rules.contains(where: { keys.contains($0.key) && $0.start == nil }) { return .skipSeries }
+        return rules.contains { keys.contains($0.key) && $0.covers(meeting.start) } ? .skipThisMeeting : .record
+    }
+
+    /// Whether the Gemini notes of this event stay out: the owner chose not to record it or its series, now or
+    /// before it ended. A list that cannot be read keeps every event out, as it keeps every call off the record.
+    public func excludesNotes(of event: CalendarEventInfo) -> Bool {
+        if unreadable { return true }
+        let keys = Self.keys(event)
+        return (rules + ended).contains { keys.contains($0.key) && $0.covers(event.start) }
     }
 
     /// A choice made now starts a list the app can read, so the block for the damaged one ends at once. A choice
     /// for a meeting with no link to know it by cannot be kept: it changes nothing and ends no block.
     public mutating func set(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
         guard let key = Self.key(title: meeting.title, link: meeting.link) else { return }
+        let keys = Self.keys(title: meeting.title, link: meeting.link, textLink: meeting.textLink)
         unreadable = false
-        rules.removeAll { $0.key == key && $0.covers(meeting.start) }
+        rules.removeAll { keys.contains($0.key) && $0.covers(meeting.start) }
         switch choice {
         case .record: break
         case .skipThisMeeting: rules.append(Rule(key: key, start: meeting.start, end: meeting.end))
@@ -59,11 +86,14 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
     /// "Reset do-not-record list": an empty list that records every call again.
     public mutating func reset() {
         rules = []
+        ended = []
         unreadable = false
     }
 
     public mutating func removeExpired(now: Date) {
+        ended += rules.filter { $0.end.map { $0 < now } ?? false }
         rules.removeAll { $0.end.map { $0 < now } ?? false }
+        ended.removeAll { ($0.end ?? now) < now.addingTimeInterval(-Self.endedKeep) }
     }
 
     /// Whether a call that just started is a meeting the owner does not want recorded. It finds the invite the
@@ -77,7 +107,7 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
         guard let event = CalendarMatcher.bestEvent(for: platform, meetingID: meetingID, start: time,
                                                     end: time.addingTimeInterval(Self.earlyJoin), in: events),
               time >= event.start.addingTimeInterval(-Self.earlyJoin), time < event.end,
-              let key = Self.key(title: event.title, link: UpcomingMeeting.callLink(in: event.text).1) else { return nil }
+              let key = keys(event).first else { return nil }
         return (event, key)
     }
 
@@ -86,7 +116,8 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
     }
 
     func blocksByChoice(_ invite: (event: CalendarEventInfo, key: String)) -> Bool {
-        rules.contains { $0.key == invite.key && $0.covers(invite.event.start) }
+        let keys = Self.keys(invite.event)
+        return rules.contains { keys.contains($0.key) && $0.covers(invite.event.start) }
     }
 
     func blockingInvite(platform: Platform, meetingID: String?, at time: Date, events: [CalendarEventInfo]) -> (event: CalendarEventInfo, key: String)? {
@@ -232,7 +263,7 @@ public final class NoRecordGate: @unchecked Sendable {
             if forced { return record(at: time) }
             guard let s = session, s.bundleID == bundleID else { return decide(nil, platform, bundleID, meetingID, time) }
             func isOwn(_ e: CalendarEventInfo) -> Bool {
-                e.start == s.plannedStart && NoRecordBook.key(title: e.title, link: UpcomingMeeting.callLink(in: e.text).1) == s.key
+                e.start == s.plannedStart && NoRecordBook.keys(e).contains(s.key)
             }
             if let a = s.meetingID, let b = meetingID {
                 guard a == b else { return decide(nil, platform, bundleID, meetingID, time) }
