@@ -18,7 +18,7 @@ Mossad should feel like a best-in-class Apple app on Mac and iPhone: calm, nativ
 
 The coach forms conclusions about the owner's world and asks the owner to confirm them. Confirmed ones become facts that shape the purpose of each call and the feedback.
 
-- Each review may propose at most 2 questions, only when the answer would change the coaching. Examples: "Mitch reports to you." "The Monday call is a status update, not a decision meeting." "You held back a date in the budget call. Was that on purpose?"
+- Each review may propose at most 2 questions, only when the answer would change the coaching. Examples: "Jordan reports to you." "The Monday call is a status update, not a decision meeting." "You held back a date in the budget call. Was that on purpose?"
 - A question has: the statement, its kind (relationship, role, meeting purpose, preference, or about this call), the evidence (a quote with its time), and the call.
 - The owner answers Yes, No, or "Not quite" with a short note ("No: legal approves dates first").
   - Yes: the statement becomes a fact.

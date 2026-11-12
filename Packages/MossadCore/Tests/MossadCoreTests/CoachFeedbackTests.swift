@@ -97,11 +97,11 @@ final class CoachMemoryTests: XCTestCase {
         profile.updateFacts(add: [CoachFact(kind: .role, text: "Head of data and technology"),
                                   CoachFact(kind: .responsibility, text: "The Databricks contract"),
                                   CoachFact(kind: .goal, text: "Metric ownership agreed by December"),
-                                  CoachFact(kind: .relationship, text: "Jeff Hill is my manager")], remove: [])
+                                  CoachFact(kind: .relationship, text: "Casey Hill is my manager")], remove: [])
         var r = CallRecord(id: "x", platform: .meet, bundleID: "", start: Date(), end: Date(), status: .written)
         r.speakerNames = ["me:A": "Dana Lee"]
         let text = CoachPrompt.user(record: r, owner: "Dana Lee", profile: profile)
-        for expected in ["Role: Head of data and technology", "Responsible for:", "- The Databricks contract", "Goals:", "Jeff Hill is my manager"] {
+        for expected in ["Role: Head of data and technology", "Responsible for:", "- The Databricks contract", "Goals:", "Casey Hill is my manager"] {
             XCTAssertTrue(text.contains(expected), expected)
         }
         XCTAssertLessThan(text.range(of: "Head of data")!.lowerBound, text.range(of: "## The focus")!.lowerBound)

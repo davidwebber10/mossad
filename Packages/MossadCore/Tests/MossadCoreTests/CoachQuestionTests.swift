@@ -6,17 +6,17 @@ final class CoachQuestionTests: XCTestCase {
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
     private func question(_ statement: String, _ kind: CoachQuestion.Kind = .relationship, call: String? = "c1") -> CoachQuestion {
-        CoachQuestion(statement: statement, kind: kind, evidence: "“I'll check with Mitch” (12:40)", callID: call, at: 760, asked: t0)
+        CoachQuestion(statement: statement, kind: kind, evidence: "“I'll check with Jordan” (12:40)", callID: call, at: 760, asked: t0)
     }
 
     func testANewQuestionIsAskedOnceAndANoIsNeverAskedAgain() {
         var p = CoachProfile()
-        p.ask([question("Mitch reports to you."), question("The Monday call is a status update.", .meetingPurpose)])
+        p.ask([question("Jordan reports to you."), question("The Monday call is a status update.", .meetingPurpose)])
         XCTAssertEqual(p.openQuestions.count, 2)
-        p.ask([question("mitch reports to you")])
+        p.ask([question("jordan reports to you")])
         XCTAssertEqual(p.questions.count, 2, "the same statement, ignoring case and the final period")
         p.answer(p.questions[0].id, .rejected, note: nil, at: t0.addingTimeInterval(60))
-        p.ask([question("Mitch reports to you.")])
+        p.ask([question("Jordan reports to you.")])
         XCTAssertEqual(p.questions.count, 2)
         XCTAssertEqual(p.openQuestions.map(\.statement), ["The Monday call is a status update."])
     }
@@ -29,17 +29,17 @@ final class CoachQuestionTests: XCTestCase {
 
     func testAYesBecomesAFactAndANotQuiteKeepsTheOwnersWords() {
         var p = CoachProfile()
-        p.ask([question("Mitch reports to you."), question("Ben approves every date.", .preference)])
+        p.ask([question("Jordan reports to you."), question("Ben approves every date.", .preference)])
         p.answer(p.questions[0].id, .confirmed, note: nil, at: t0)
         p.answer(p.questions[1].id, .corrected, note: "Legal approves dates first.", at: t0)
-        XCTAssertEqual(p.facts(.relationship).map(\.text), ["Mitch reports to you."])
+        XCTAssertEqual(p.facts(.relationship).map(\.text), ["Jordan reports to you."])
         XCTAssertEqual(p.facts(.context).map(\.text), ["Legal approves dates first."])
         XCTAssertEqual(p.questions[1].note, "Legal approves dates first.")
     }
 
     func testAnAnswerOnEitherDeviceWinsByItsDate() {
         var mac = CoachProfile()
-        mac.ask([question("Mitch reports to you.")])
+        mac.ask([question("Jordan reports to you.")])
         var phone = mac
         phone.answer(phone.questions[0].id, .confirmed, note: nil, at: t0.addingTimeInterval(120))
         let merged = mac.merged(with: phone, takeCoaching: false)
@@ -49,30 +49,30 @@ final class CoachQuestionTests: XCTestCase {
 
     func testThePromptListsOpenAndDeniedQuestionsSoTheCoachDoesNotRepeatThem() {
         var p = CoachProfile()
-        p.ask([question("Mitch reports to you."), question("Jo leads Finance.")])
+        p.ask([question("Jordan reports to you."), question("Jo leads Finance.")])
         p.answer(p.questions[1].id, .rejected, note: nil, at: t0)
         let text = CoachPrompt.questionsText(p, now: Date())
-        XCTAssertTrue(text.contains("Waiting for an answer:\n- Mitch reports to you."), text)
+        XCTAssertTrue(text.contains("Waiting for an answer:\n- Jordan reports to you."), text)
         XCTAssertTrue(text.contains("Not true:\n- Jo leads Finance."), text)
     }
 
     func testTheFirstPassAsksAboutRecentCallsOnly() async throws {
         let model = FakeModel(output: ["questions": [
-            ["statement": "Mitch reports to you.", "kind": "relationship", "evidence": "“Mitch, own this.”", "call_id": "c1", "at_seconds": 30],
+            ["statement": "Jordan reports to you.", "kind": "relationship", "evidence": "“Jordan, own this.”", "call_id": "c1", "at_seconds": 30],
             ["statement": "A call it never read.", "kind": "role", "evidence": "x", "call_id": "nope", "at_seconds": NSNull()],
         ] + (1...12).map { ["statement": "Fact \($0).", "kind": "preference", "evidence": "e", "call_id": "c1", "at_seconds": NSNull()] as [String: Any] }])
         var recent = CallRecord(id: "c1", platform: .meet, bundleID: "", start: t0.addingTimeInterval(-86_400), end: t0, status: .written)
-        recent.speakerNames = ["me:A": "Dana", "them:A": "Mitch Haus"]
+        recent.speakerNames = ["me:A": "Dana", "them:A": "Jordan Hale"]
         recent.headline = "Budget plan"
         let old = CallRecord(id: "c0", platform: .meet, bundleID: "", start: t0.addingTimeInterval(-40 * 86_400),
                              end: t0.addingTimeInterval(-40 * 86_400 + 600), status: .written)
         let pass = CoachQuestionPass(llm: model, ownerName: "Dana")
         let questions = try await pass.questions(records: [old, recent], profile: CoachProfile(), now: t0)
-        XCTAssertEqual(questions.first?.statement, "Mitch reports to you.")
+        XCTAssertEqual(questions.first?.statement, "Jordan reports to you.")
         XCTAssertFalse(questions.contains { $0.callID == "nope" })
         XCTAssertEqual(questions.count, CoachQuestionPass.limit)
         XCTAssertTrue(model.user.contains("c1"))
-        XCTAssertTrue(model.user.contains("Mitch Haus"))
+        XCTAssertTrue(model.user.contains("Jordan Hale"))
         XCTAssertFalse(model.user.contains("c0"), "only the last 30 days")
     }
 
@@ -82,12 +82,12 @@ final class CoachQuestionTests: XCTestCase {
             "focus_result": NSNull(), "focus_proposal": NSNull(), "strengths": [], "improvements": [],
             "meeting_value": ["rating": "medium", "reason": "R", "action": "keep", "suggestion": ""],
             "profile": ["summary": "", "patterns": [], "people": []],
-            "questions": [["statement": "Mitch reports to you.", "kind": "relationship", "evidence": "“Mitch, can you own this?”", "at_seconds": 75]],
+            "questions": [["statement": "Jordan reports to you.", "kind": "relationship", "evidence": "“Jordan, can you own this?”", "at_seconds": 75]],
         ])
         let coach = LLMCoach(llm: model, ownerName: "Dana")
         let r = CallRecord(id: "c9", platform: .meet, bundleID: "", start: t0, end: t0.addingTimeInterval(1800), status: .written)
         let result = try await coach.review(record: r, profile: CoachProfile(), tone: nil)
-        XCTAssertEqual(result.questions.map(\.statement), ["Mitch reports to you."])
+        XCTAssertEqual(result.questions.map(\.statement), ["Jordan reports to you."])
         XCTAssertEqual(result.questions.first?.callID, "c9")
         XCTAssertEqual(result.questions.first?.at, 75)
         let schema = try XCTUnwrap(model.schema)

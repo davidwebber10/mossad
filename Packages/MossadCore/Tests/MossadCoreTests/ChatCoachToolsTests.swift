@@ -9,8 +9,8 @@ final class ChatCoachToolsTests: XCTestCase {
         paths = Paths(root: tempDirectory())
         try paths.ensureDirectories()
         var r = CallRecord(id: "c1", platform: .meet, bundleID: "", start: base, end: base.addingTimeInterval(1800), status: .written)
-        r.calendarTitle = "Mitch / David"
-        r.speakerNames = ["me:A": "Avery Lane", "them:A": "Mitch Haus"]
+        r.calendarTitle = "Jordan / David"
+        r.speakerNames = ["me:A": "Avery Lane", "them:A": "Jordan Hale"]
         r.utterances = [Utterance(track: .me, speakerLabel: "A", start: 0, end: 120, text: "Let us start with the budget."),
                         Utterance(track: .them, speakerLabel: "A", start: 130, end: 400, text: "Sure.")]
         try FileManager.default.createDirectory(at: paths.callDirectory("c1"), withIntermediateDirectories: true)
@@ -21,12 +21,12 @@ final class ChatCoachToolsTests: XCTestCase {
                                  focusProgress: nil,
                                  scorecard: Scorecard(score: 3, reason: "Clear open, loose close.", dimensions: [Scorecard.Dimension(name: "Clarity", score: 4)],
                                                       positives: ["Opened with the budget decision"], negatives: ["No owner for the next step"]))
-        review.feedback["Close the loop"] = CoachFeedback(agree: false, note: "Mitch owns it by default.")
+        review.feedback["Close the loop"] = CoachFeedback(agree: false, note: "Jordan owns it by default.")
         try review.save(in: paths.callDirectory("c1"))
         var profile = CoachProfile()
         profile.focus = "Close every call with owners and dates."
         profile.updateFacts(add: [CoachFact(kind: .role, text: "Head of data and technology")], remove: [])
-        profile.people["Mitch Haus"] = CoachPerson(note: "Direct report; wants the decision first.", calls: 3, lastSeen: base)
+        profile.people["Jordan Hale"] = CoachPerson(note: "Direct report; wants the decision first.", calls: 3, lastSeen: base)
         try profile.save(to: paths.coach)
     }
 
@@ -50,12 +50,12 @@ final class ChatCoachToolsTests: XCTestCase {
         let text = tools.run("read_coach_review", input: ["call_id": "c1"])
         XCTAssertTrue(text.contains("Close the loop"), text)
         XCTAssertTrue(text.contains("Who owns this, by when?"))
-        XCTAssertTrue(text.contains("Mitch owns it by default."))
+        XCTAssertTrue(text.contains("Jordan owns it by default."))
     }
 
     func testPeopleCombineStatsAndCoachNotes() {
-        let text = tools.run("people", input: ["query": "mitch"])
-        XCTAssertTrue(text.contains("Mitch Haus"), text)
+        let text = tools.run("people", input: ["query": "jordan"])
+        XCTAssertTrue(text.contains("Jordan Hale"), text)
         XCTAssertTrue(text.contains("wants the decision first"))
     }
 

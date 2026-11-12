@@ -103,7 +103,7 @@ final class LiveAPITests: XCTestCase {
         var r = syntheticCall()
         r.calendarTitle = "Tech Team Monthly Sync"
         r.kind = "Monthly update"
-        r.speakerNames = ["me:A": "Avery Lane", "them:A": "Jeff Hill", "them:B": "Ed Ng"]
+        r.speakerNames = ["me:A": "Avery Lane", "them:A": "Casey Hill", "them:B": "Ed Ng"]
         r.utterances = [
             Utterance(track: .them, speakerLabel: "A", start: 0, end: 300, text: "Infrastructure update: the firewall swap is done, the new laptops ship next week, and the Databricks migration slipped two weeks because the vendor contract is not signed."),
             Utterance(track: .them, speakerLabel: "B", start: 310, end: 600, text: "On data, the cost dashboard is live. Nobody owns the Databricks contract follow-up yet; someone from leadership needs to push the vendor."),
@@ -118,19 +118,19 @@ final class LiveAPITests: XCTestCase {
 
     func testClaudeCoachTakesFeedback() async throws {
         guard let key = APIKey.anthropic.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("key not set") }
-        let review = CoachReview(headline: "You let Mitch drive", overview: "Mitch talked 70% of the time.", strengths: [],
-                                 improvements: [CoachPoint(title: "Take back the agenda", observation: "Mitch set the order of topics.", quote: "Let me go first on the dashboards.",
+        let review = CoachReview(headline: "You let Jordan drive", overview: "Jordan talked 70% of the time.", strengths: [],
+                                 improvements: [CoachPoint(title: "Take back the agenda", observation: "Jordan set the order of topics.", quote: "Let me go first on the dashboards.",
                                                            at: 40, principle: "Framing", tryInstead: "Before we start, here is what I need from today.")],
                                  focusProgress: nil)
         var r = syntheticCall()
-        r.calendarTitle = "Mitch / David"
+        r.calendarTitle = "Jordan / David"
         let answer = try await CoachResponder(llm: AnthropicModel(apiKey: key), ownerName: "Avery Lane")
-            .respond(to: "That was on purpose. Mitch is my direct report and I want him to own these 1:1s.", review: review, record: r, profile: CoachProfile())
+            .respond(to: "That was on purpose. Jordan is my direct report and I want him to own these 1:1s.", review: review, record: r, profile: CoachProfile())
         print("LIVE feedback reply: \(answer.reply)")
         print("LIVE feedback guidance: add \(answer.add) remove \(answer.remove)")
         XCTAssertFalse(answer.add.isEmpty)
         let facts = try await CoachResponder(llm: AnthropicModel(apiKey: key), ownerName: "Avery Lane")
-            .respond(to: "For context: I run data and technology, I own our vendor contracts for data tools including Databricks, and Mitch reports to me.",
+            .respond(to: "For context: I run data and technology, I own our vendor contracts for data tools including Databricks, and Jordan reports to me.",
                      review: review, record: r, profile: CoachProfile())
         print("LIVE facts reply: \(facts.reply)")
         print("LIVE facts: \(facts.addFacts.map { "\($0.kind.rawValue): \($0.text)" })")

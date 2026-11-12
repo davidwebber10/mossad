@@ -10,7 +10,7 @@ final class AnalyticsTests: XCTestCase {
 
     private func date(_ m: Int, _ d: Int, _ h: Int = 12) -> Date { cal.date(from: DateComponents(year: 2026, month: m, day: d, hour: h))! }
 
-    private func call(_ id: String, _ start: Date, minutes: Double, platform: Platform = .meet, people: [String] = ["Mitch Haus"],
+    private func call(_ id: String, _ start: Date, minutes: Double, platform: Platform = .meet, people: [String] = ["Jordan Hale"],
                       kind: String? = nil, ownerSeconds: Double = 60) -> CallRecord {
         var r = CallRecord(id: id, platform: platform, bundleID: "", start: start, end: start.addingTimeInterval(minutes * 60), status: .written)
         r.kind = kind
@@ -93,8 +93,8 @@ final class AnalyticsTests: XCTestCase {
 
     func testReportTotalsBreakdownsAndCosts() {
         let calls = [
-            call("a", date(10, 19, 9), minutes: 30, platform: .meet, people: ["Mitch Haus", "Ed Ng"], kind: "1:1"),
-            call("b", date(10, 20, 14), minutes: 60, platform: .zoom, people: ["Mitch Haus"], kind: "Planning"),
+            call("a", date(10, 19, 9), minutes: 30, platform: .meet, people: ["Jordan Hale", "Ed Ng"], kind: "1:1"),
+            call("b", date(10, 20, 14), minutes: 60, platform: .zoom, people: ["Jordan Hale"], kind: "Planning"),
             call("old", date(9, 1), minutes: 45),
         ]
         let usage = [
@@ -110,7 +110,7 @@ final class AnalyticsTests: XCTestCase {
         XCTAssertEqual(r.averageSeconds, 45 * 60)
         XCTAssertEqual(r.longest?.id, "b")
         XCTAssertEqual(r.actionItems, 2)
-        XCTAssertEqual(r.people.first?.name, "Mitch Haus")
+        XCTAssertEqual(r.people.first?.name, "Jordan Hale")
         XCTAssertEqual(r.people.first?.calls, 2)
         XCTAssertEqual(r.people.count, 2)
         XCTAssertEqual(r.platforms.first { $0.name == "Zoom" }?.seconds, 3600)

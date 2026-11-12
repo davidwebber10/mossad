@@ -32,11 +32,11 @@ final class PersonBriefTests: XCTestCase {
     func testTheBriefComesFromTheirCallsAndKeepsOnlyRealSources() async throws {
         let model = FakeModel(output: output)
         var profile = CoachProfile()
-        profile.updateFacts(add: [CoachFact(kind: .relationship, text: "Mitch Haus reports to you.")], remove: [])
-        profile.people["Mitch Haus"] = CoachPerson(note: "Likes data.", calls: 2, lastSeen: t0)
-        let records = [call("c1", daysAgo: 3, with: ["Mitch Haus"]), call("c2", daysAgo: 1, with: ["Mitch Haus", "Jo Park"]),
+        profile.updateFacts(add: [CoachFact(kind: .relationship, text: "Jordan Hale reports to you.")], remove: [])
+        profile.people["Jordan Hale"] = CoachPerson(note: "Likes data.", calls: 2, lastSeen: t0)
+        let records = [call("c1", daysAgo: 3, with: ["Jordan Hale"]), call("c2", daysAgo: 1, with: ["Jordan Hale", "Jo Park"]),
                        call("c3", daysAgo: 2, with: ["Jo Park"])]
-        let brief = try await PersonBriefWriter(llm: model, ownerName: "Dana").brief(for: "Mitch Haus", records: records, profile: profile, now: t0)
+        let brief = try await PersonBriefWriter(llm: model, ownerName: "Dana").brief(for: "Jordan Hale", records: records, profile: profile, now: t0)
         XCTAssertEqual(brief.headline, "Lead with the number, then the reason.")
         XCTAssertEqual(brief.sections.map(\.title), ["Goals", "How to communicate with them"])
         XCTAssertEqual(brief.sections[0].points[0].callID, "c2")
@@ -46,8 +46,8 @@ final class PersonBriefTests: XCTestCase {
         XCTAssertEqual(brief.updated, t0)
         XCTAssertTrue(model.user.contains("c1") && model.user.contains("c2"))
         XCTAssertFalse(model.user.contains("c3"), "only calls with them")
-        XCTAssertTrue(model.user.contains("Mitch: I need the numbers by Friday."), "their own words")
-        XCTAssertTrue(model.user.contains("Mitch Haus reports to you."), "what the owner confirmed")
+        XCTAssertTrue(model.user.contains("Jordan: I need the numbers by Friday."), "their own words")
+        XCTAssertTrue(model.user.contains("Jordan Hale reports to you."), "what the owner confirmed")
         XCTAssertTrue(model.user.contains("Likes data."))
     }
 
@@ -57,8 +57,8 @@ final class PersonBriefTests: XCTestCase {
             "sections": (1...6).map { i in ["title": "S\(i)", "points": (1...4).map { ["text": "P\($0)", "call_id": ""] }] as [String: Any] },
         ]
         let model = FakeModel(output: long)
-        let records = [call("c1", daysAgo: 3, with: ["Mitch Haus"]), call("c2", daysAgo: 1, with: ["Mitch Haus"])]
-        let brief = try await PersonBriefWriter(llm: model, ownerName: "Dana").brief(for: "Mitch Haus", records: records, profile: CoachProfile(), now: t0)
+        let records = [call("c1", daysAgo: 3, with: ["Jordan Hale"]), call("c2", daysAgo: 1, with: ["Jordan Hale"])]
+        let brief = try await PersonBriefWriter(llm: model, ownerName: "Dana").brief(for: "Jordan Hale", records: records, profile: CoachProfile(), now: t0)
         XCTAssertEqual(brief.sections.count, PersonBriefWriter.maxSections)
         XCTAssertTrue(brief.sections.allSatisfy { $0.points.count <= PersonBriefWriter.maxPoints })
         XCTAssertEqual(brief.style, PersonBrief.currentStyle)
@@ -70,7 +70,7 @@ final class PersonBriefTests: XCTestCase {
         let model = FakeModel(output: output)
         var profile = CoachProfile()
         profile.summary = "Dana leads with questions."
-        let records = [call("c1", daysAgo: 3, with: ["Mitch Haus"]), call("c3", daysAgo: 2, with: ["Jo Park"])]
+        let records = [call("c1", daysAgo: 3, with: ["Jordan Hale"]), call("c3", daysAgo: 2, with: ["Jo Park"])]
         let brief = try await PersonBriefWriter(llm: model, ownerName: "Dana").brief(for: "Dana", records: records, profile: profile, now: t0)
         XCTAssertEqual(brief.calls, 2, "every call is a call with the owner")
         XCTAssertTrue(model.user.contains("c1") && model.user.contains("c3"))
@@ -88,40 +88,40 @@ final class PersonBriefTests: XCTestCase {
 
     func testAReadInAnOlderStyleIsWrittenAgainAtOnce() {
         var profile = CoachProfile()
-        let records = [call("c1", daysAgo: 3, with: ["Mitch Haus"]), call("c2", daysAgo: 1, with: ["Mitch Haus"])]
+        let records = [call("c1", daysAgo: 3, with: ["Jordan Hale"]), call("c2", daysAgo: 1, with: ["Jordan Hale"])]
         var old = PersonBrief(headline: "H", sections: [], calls: 2, updated: t0.addingTimeInterval(-600))
         old.style = PersonBrief.currentStyle - 1
         profile.people["Dana"] = CoachPerson(note: "", calls: 0, lastSeen: t0)
         profile.people["Dana"]!.brief = PersonBrief(headline: "H", sections: [], calls: 2, updated: t0)
-        profile.people["Mitch Haus"] = CoachPerson(note: "", calls: 2, lastSeen: t0)
-        profile.people["Mitch Haus"]!.brief = old
-        XCTAssertEqual(PersonBriefWriter.due(profile: profile, records: records, owner: "Dana", now: t0), ["Mitch Haus"])
+        profile.people["Jordan Hale"] = CoachPerson(note: "", calls: 2, lastSeen: t0)
+        profile.people["Jordan Hale"]!.brief = old
+        XCTAssertEqual(PersonBriefWriter.due(profile: profile, records: records, owner: "Dana", now: t0), ["Jordan Hale"])
     }
 
     func testAReviewKeepsThePersonsBrief() {
         var profile = CoachProfile()
-        profile.people["Mitch Haus"] = CoachPerson(note: "Old", calls: 1, lastSeen: t0)
-        profile.people["Mitch Haus"]!.brief = PersonBrief(headline: "H", sections: [], calls: 1, updated: t0)
+        profile.people["Jordan Hale"] = CoachPerson(note: "Old", calls: 1, lastSeen: t0)
+        profile.people["Jordan Hale"]!.brief = PersonBrief(headline: "H", sections: [], calls: 1, updated: t0)
         let review = CoachReview(headline: "", overview: "", strengths: [], improvements: [], focusProgress: nil)
-        profile.apply(CoachProfileUpdate(summary: "", focus: "", patterns: [], people: [CoachPersonUpdate(name: "Mitch Haus", note: "New")]),
+        profile.apply(CoachProfileUpdate(summary: "", focus: "", patterns: [], people: [CoachPersonUpdate(name: "Jordan Hale", note: "New")]),
                       review: review, callID: "c", title: "T", at: t0)
-        XCTAssertEqual(profile.people["Mitch Haus"]?.note, "New")
-        XCTAssertEqual(profile.people["Mitch Haus"]?.brief?.headline, "H")
+        XCTAssertEqual(profile.people["Jordan Hale"]?.note, "New")
+        XCTAssertEqual(profile.people["Jordan Hale"]?.brief?.headline, "H")
     }
 
     func testABriefIsDueAfterANewCallAtMostOnceADay() {
         var profile = CoachProfile()
-        let records = [call("c1", daysAgo: 3, with: ["Mitch Haus", "Jo Park"]), call("c2", daysAgo: 1, with: ["Mitch Haus"]),
+        let records = [call("c1", daysAgo: 3, with: ["Jordan Hale", "Jo Park"]), call("c2", daysAgo: 1, with: ["Jordan Hale"]),
                        call("c3", daysAgo: 0.1, with: ["Ed Ng"])]
         profile.people["Dana"] = CoachPerson(note: "", calls: 0, lastSeen: t0)
         profile.people["Dana"]!.brief = PersonBrief(headline: "H", sections: [], calls: 3, updated: t0.addingTimeInterval(2 * 86_400))
-        XCTAssertEqual(PersonBriefWriter.due(profile: profile, records: records, owner: "Dana", now: t0), ["Mitch Haus"],
+        XCTAssertEqual(PersonBriefWriter.due(profile: profile, records: records, owner: "Dana", now: t0), ["Jordan Hale"],
                        "two calls or more; Jo and Ed have one")
-        profile.people["Mitch Haus"] = CoachPerson(note: "", calls: 2, lastSeen: t0)
-        profile.people["Mitch Haus"]!.brief = PersonBrief(headline: "H", sections: [], calls: 2, updated: t0.addingTimeInterval(-3600))
+        profile.people["Jordan Hale"] = CoachPerson(note: "", calls: 2, lastSeen: t0)
+        profile.people["Jordan Hale"]!.brief = PersonBrief(headline: "H", sections: [], calls: 2, updated: t0.addingTimeInterval(-3600))
         XCTAssertEqual(PersonBriefWriter.due(profile: profile, records: records, owner: "Dana", now: t0), [], "no new call since")
-        let newer = records + [call("c4", daysAgo: 0.01, with: ["Mitch Haus"])]
+        let newer = records + [call("c4", daysAgo: 0.01, with: ["Jordan Hale"])]
         XCTAssertEqual(PersonBriefWriter.due(profile: profile, records: newer, owner: "Dana", now: t0), [], "updated less than a day ago")
-        XCTAssertEqual(PersonBriefWriter.due(profile: profile, records: newer, owner: "Dana", now: t0.addingTimeInterval(86_400)), ["Mitch Haus"])
+        XCTAssertEqual(PersonBriefWriter.due(profile: profile, records: newer, owner: "Dana", now: t0.addingTimeInterval(86_400)), ["Jordan Hale"])
     }
 }

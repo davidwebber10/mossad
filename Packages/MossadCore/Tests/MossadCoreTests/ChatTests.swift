@@ -29,7 +29,7 @@ final class ChatTests: XCTestCase {
         meeting("both", day: 5, title: "Launch sync", people: ["Jennifer Lee", "Austin Ray"],
                 lines: ["Where are we?", "Austin will send the deck by Friday.", "Jen owns the pricing page."],
                 items: [ActionItem(owner: "Austin Ray", task: "send the deck by Friday"), ActionItem(owner: "Jennifer Lee", task: "own the pricing page")]),
-        meeting("mitch", day: 9, title: "Data review", people: ["Mitch Haus"], lines: ["Supermetrics renews in December."], tags: ["Supermetrics"]),
+        meeting("jordan", day: 9, title: "Data review", people: ["Jordan Hale"], lines: ["Supermetrics renews in December."], tags: ["Supermetrics"]),
     ]
 
     private var tools: ChatTools { ChatTools(records: records, owner: "Avery Lane") }
@@ -39,14 +39,14 @@ final class ChatTests: XCTestCase {
     func testFindMeetingsByShortNamesNewestFirst() {
         let found = tools.findMeetings(people: ["Jen", "Austin"])
         XCTAssertEqual(found.map(\.id), ["both", "old"])
-        XCTAssertEqual(tools.findMeetings(people: ["Mitch"]).map(\.id), ["mitch"])
+        XCTAssertEqual(tools.findMeetings(people: ["Jordan"]).map(\.id), ["jordan"])
     }
 
     func testFindMeetingsByDatesTagAndWords() {
-        XCTAssertEqual(tools.findMeetings(from: base.addingTimeInterval(4 * 86_400)).map(\.id), ["mitch", "both"])
+        XCTAssertEqual(tools.findMeetings(from: base.addingTimeInterval(4 * 86_400)).map(\.id), ["jordan", "both"])
         XCTAssertEqual(tools.findMeetings(to: base.addingTimeInterval(2 * 86_400)).map(\.id), ["old"])
         XCTAssertEqual(tools.findMeetings(tag: "budget").map(\.id), ["old"])
-        XCTAssertEqual(tools.findMeetings(query: "supermetrics").map(\.id), ["mitch"])
+        XCTAssertEqual(tools.findMeetings(query: "supermetrics").map(\.id), ["jordan"])
     }
 
     func testSearchTranscriptsReturnsLinesWithTheirMeetingAndTime() {
@@ -73,7 +73,7 @@ final class ChatTests: XCTestCase {
     }
 
     func testRunDispatchesByToolNameAndReportsBadInput() {
-        XCTAssertTrue(tools.run("find_meetings", input: ["people": ["Mitch"]]).contains("call_id: mitch"))
+        XCTAssertTrue(tools.run("find_meetings", input: ["people": ["Jordan"]]).contains("call_id: jordan"))
         XCTAssertTrue(tools.run("read_meeting", input: ["call_id": "zzz"]).contains("No meeting"))
         XCTAssertTrue(tools.run("unknown", input: [:]).contains("Unknown tool"))
     }

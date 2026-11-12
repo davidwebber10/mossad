@@ -25,11 +25,11 @@ public struct CoachResponder: Sendable {
         they are right, say so plainly and say what you will do differently. When you still think your point holds, \
         say why in one or two sentences, without arguing. Keep the reply short and direct, and address them as "you".
         Then decide what to remember. add_guidance holds standing instructions for future reviews, each one short, \
-        specific, and written as a rule (for example "In 1:1s with Mitch, letting him lead is on purpose; do not flag \
+        specific, and written as a rule (for example "In 1:1s with Jordan, letting him lead is on purpose; do not flag \
         it."). Add one only when the reply tells you something that should change later reviews. remove_guidance \
         holds existing guidance, word for word, that this reply makes wrong. \
         add_facts holds facts about who they are that the reply states: their role, a responsibility, a goal, or a \
-        relationship (such as "Mitch Haus is my direct report"). Write each as a short statement in their words. \
+        relationship (such as "Jordan Hale is my direct report"). Write each as a short statement in their words. \
         remove_facts holds existing facts, word for word, that the reply makes wrong. When you add or remove \
         anything, say so briefly in the reply. Return empty lists when nothing changes.
         """

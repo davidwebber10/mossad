@@ -4,8 +4,8 @@
 
 Mossad is open source. The owner wants three things that need a server on the internet:
 
-1. Public share links for one meeting (summary, transcript, recording, and an optional AI chat), at an address like `notes.dispatchd.app/<code>`.
-2. An MCP server that ChatGPT and other web AI apps can connect to, with a login, at `mcp.dispatchd.app`.
+1. Public share links for one meeting (summary, transcript, recording, and an optional AI chat), at an address like `notes.example.com/<code>`.
+2. An MCP server that ChatGPT and other web AI apps can connect to, with a login, at `mcp.example.com`.
 3. A sync choice: iCloud (as today), the owner's own server, or off. Then the iPhone app works without iCloud, and the Mac can use the server as its sync store.
 
 Nobody runs a shared server for all users. Each user deploys their own copy of one Cloudflare Worker from `server/` in this repo ("bring your own server"). The app works with no server at all: iCloud stays the default, and share links and the remote MCP stay hidden until a server is set up.
@@ -20,8 +20,8 @@ Nobody runs a shared server for all users. Each user deploys their own copy of o
 
 The Worker answers on two host names that the owner picks, set as variables in `wrangler.jsonc`:
 
-- `SHARE_HOST` (`notes.dispatchd.app`): `/` is a short page about Mossad with a link to the repo; `/<token>` is a share page; `/api/...` is the owner API.
-- `MCP_HOST` (`mcp.dispatchd.app`): `/mcp` is the MCP endpoint behind OAuth 2.1; `/authorize` is the sign-in page.
+- `SHARE_HOST` (`notes.example.com`): `/` is a short page about Mossad with a link to the repo; `/<token>` is a share page; `/api/...` is the owner API.
+- `MCP_HOST` (`mcp.example.com`): `/mcp` is the MCP endpoint behind OAuth 2.1; `/authorize` is the sign-in page.
 
 Storage: D1 (records, the meeting index for the MCP, and shares), R2 (record assets, share copies, share audio), and KV (OAuth grants, rate counters).
 

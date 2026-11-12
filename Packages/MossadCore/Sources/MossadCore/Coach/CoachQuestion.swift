@@ -1,6 +1,6 @@
 import Foundation
 
-/// A conclusion the coach drew and asks the owner to confirm, such as "Mitch reports to you." The answer
+/// A conclusion the coach drew and asks the owner to confirm, such as "Jordan reports to you." The answer
 /// shapes how later calls are judged: a Yes becomes a fact, a correction becomes the owner's own words, and
 /// a No is remembered so the coach never asks again.
 public struct CoachQuestion: Codable, Equatable, Sendable, Identifiable, Hashable {
@@ -55,7 +55,7 @@ public struct CoachQuestion: Codable, Equatable, Sendable, Identifiable, Hashabl
         updated = asked
     }
 
-    /// "Mitch reports to you." and "mitch reports to you" are the same question.
+    /// "Jordan reports to you." and "jordan reports to you" are the same question.
     var key: String {
         statement.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     }
