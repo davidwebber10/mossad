@@ -28,6 +28,27 @@ public struct LiveTranscript: Codable, Equatable, Sendable {
 
     public private(set) var lines: [Line] = []
     public private(set) var session = 0
+    /// The recording's seconds when the file was written, so a reader counts "the last 5 minutes" in the same
+    /// seconds as the lines, with the pauses left out.
+    public struct Clock: Codable, Equatable, Sendable {
+        public var recorded: TimeInterval
+        public var at: Date
+        public var paused: Bool
+
+        public init(recorded: TimeInterval, at: Date, paused: Bool) {
+            self.recorded = recorded
+            self.at = at
+            self.paused = paused
+        }
+    }
+
+    public var clock: Clock?
+
+    /// Seconds of the recording at `date`, from the saved clock; nil from a file of an older build.
+    public func recordedNow(at date: Date) -> TimeInterval? {
+        clock.map { $0.paused ? $0.recorded : $0.recorded + max(0, date.timeIntervalSince($0.at)) }
+    }
+
     /// Names found from the voice library during the call, by speaker key.
     public var names: [String: String] = [:]
 
@@ -95,11 +116,11 @@ public struct LiveTranscript: Codable, Equatable, Sendable {
         }
     }
 
-    static func label(_ letter: String, session: Int) -> String {
+    public static func label(_ letter: String, session: Int) -> String {
         session == 0 ? "Speaker \(letter)" : "Speaker \(letter)\(session + 1)"
     }
 
-    /// Each named voice by the label it had before its name: "Speaker A2" is Sam Carter.
+    /// Each named voice by its label: "Speaker A2" is Sam Carter. The names are those of now; one can change or go.
     public var voiceNames: [String: String] {
         var out: [String: String] = [:]
         for (key, name) in names {

@@ -4,10 +4,14 @@ import Foundation
 public struct LiveSummary: Equatable, Sendable {
     public var through: TimeInterval
     public var text: String
+    /// Each name the summary used, with the labels of its voice then. A live name can change or go later; the
+    /// prompt compares these with the names of now and says which ones are old.
+    public var names: [String: Set<String>]
 
-    public init(through: TimeInterval, text: String) {
+    public init(through: TimeInterval, text: String, names: [String: Set<String>] = [:]) {
         self.through = through
         self.text = text
+        self.names = names
     }
 }
 
@@ -70,6 +74,14 @@ public enum LiveSummaryRules {
         return (tail[cut].time, Array(tail[..<cut]))
     }
 
+    /// The names a fold used, each with its voice's labels then, added to those of the older summary.
+    public static func names(in fold: [LiveEntry], voices: [String: String], old: [String: Set<String>]) -> [String: Set<String>] {
+        var out = old
+        let used = Set(fold.filter { !$0.mine }.map(\.who))
+        for (label, name) in voices where used.contains(name) { out[name, default: []].insert(label) }
+        return out
+    }
+
     /// The request that folds new lines into the summary so far. The summary may grow with the time it covers: 300
     /// words, and 100 more for each ten minutes, up to 1,200.
     public static func request(old: LiveSummary?, fold: [LiveEntry], owner: String, through: TimeInterval = 0) -> (system: String, user: String) {
@@ -96,8 +108,9 @@ public actor LiveSummaryCache {
 
     public init() {}
 
+    /// `voices` are the names by label at this moment, kept with what the summary folds.
     public func summary(for callID: String, entries: [LiveEntry], owner: String, llm: any LanguageModel,
-                        limits: LiveLimits = .standard) async -> LiveSummary? {
+                        limits: LiveLimits = .standard, voices: [String: String] = [:]) async -> LiveSummary? {
         if callID != self.callID {
             self.callID = callID
             current = nil
@@ -107,11 +120,12 @@ public actor LiveSummaryCache {
         guard self.callID == callID else { return nil }
         guard let step = LiveSummaryRules.due(entries, summary: current, limits: limits) else { return current }
         let request = LiveSummaryRules.request(old: current, fold: step.fold, owner: owner, through: step.through)
+        let names = LiveSummaryRules.names(in: step.fold, voices: voices, old: current?.names ?? [:])
         let task = Task { () -> LiveSummary? in
             do {
                 let out = try await llm.json(system: request.system, user: request.user, schema: Schema.object(["summary": Schema.string]),
                                              effort: .low, purpose: .question, as: Output.self)
-                return LiveSummary(through: step.through, text: out.summary.trimmingCharacters(in: .whitespacesAndNewlines))
+                return LiveSummary(through: step.through, text: out.summary.trimmingCharacters(in: .whitespacesAndNewlines), names: names)
             } catch {
                 Log.error("Live chat: the summary of the older part failed: \(error)")
                 return nil

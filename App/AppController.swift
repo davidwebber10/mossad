@@ -1087,6 +1087,7 @@ final class AppController: ObservableObject {
         stopLive()
         updater.callEnded()
         summarizeLiveChats()
+        forgetLiveCall()
     }
 
     /// Quit during a call: closes the tracks and saves the call as recorded, so the next launch processes it.
@@ -1276,6 +1277,12 @@ final class AppController: ObservableObject {
         let themURL = dir.appendingPathComponent(room ? Track.me.fileName : Track.them.fileName)
         // Saved for the current_call tool in Chat and in other AI apps.
         live.fileURL = dir.appendingPathComponent(LiveTranscript.fileName)
+        live.clock = { [weak self] in
+            guard let self else { return nil }
+            return LiveTranscript.Clock(recorded: self.liveRecorded, at: Date(), paused: self.isPaused)
+        }
+        // At once, so a reader after a resume does not count from the pause.
+        live.save()
         let streams: [(Track, AudioSink)] = room ? [(.me, recorder.meSink)] : [(.me, recorder.meSink), (.them, recorder.themSink)]
         for (track, sink) in streams {
             let source: Track = room ? .them : track
@@ -1332,6 +1339,24 @@ final class AppController: ObservableObject {
                 Task { @MainActor in self.refresh() }
             }
         }
+    }
+
+    /// After the call: the namer, the events around the call, and the chat runs are not needed any more. A chat
+    /// answer still on its way keeps its own session and saves its chat.
+    private func forgetLiveCall() {
+        liveNamer = nil
+        liveCalendar = nil
+        liveChatSessions = [:]
+    }
+
+    /// The invite the live names use now: the pipeline's match with the call's times so far. Nil when the events
+    /// around the call are not known yet, or in a room.
+    func liveInvite(callID: String) -> (title: String, people: [String])? {
+        guard let c = liveCalendar, c.callID == callID, c.platform != .inPerson else { return nil }
+        let end = max(Date(), c.start.addingTimeInterval(1800))
+        guard let match = CalendarMatcher.match(for: c.platform, meetingID: c.meetingID, start: c.start, end: end, in: c.events) else { return nil }
+        let people = CallInvite(event: match.event, sure: match.sure)?.guests.filter { !$0.declined && $0.person }.compactMap { $0.name ?? $0.email } ?? []
+        return (match.event.title, people)
     }
 
     /// Seconds of the recording so far: the clock of the live lines.
@@ -1872,6 +1897,7 @@ final class AppController: ObservableObject {
             failedStarts.removeAll()
             updater.callEnded()
             summarizeLiveChats()
+            forgetLiveCall()
             status = .idle
             isPaused = false
             isMuted = false
@@ -2134,9 +2160,13 @@ final class LiveTranscriptModel: ObservableObject {
     }
 
     /// Writes the file now, off the main actor.
+    /// The recording's seconds now, saved with the lines, so current_call counts in the same seconds.
+    var clock: (@MainActor () -> LiveTranscript.Clock?)?
+
     func save() {
         guard let url = fileURL else { return }
-        let snapshot = pending
+        var snapshot = pending
+        snapshot.clock = clock?()
         saves.async { try? snapshot.save(to: url) }
     }
 

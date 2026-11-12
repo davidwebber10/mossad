@@ -58,7 +58,9 @@ final class LiveChatSession: ObservableObject {
         Task {
             do {
                 let answer = try await controller.liveChatAnswer(q, history: history, record: record, onStep: stepSink.add, onText: textSink.add)
-                current.messages.append(ChatMessage(role: .assistant, text: answer, steps: steps))
+                var message = ChatMessage(role: .assistant, text: answer, steps: steps)
+                message.live = true
+                current.messages.append(message)
                 current.updated = Date()
                 save(current, controller)
                 controller.liveChatsToSummarize.insert(current.id)

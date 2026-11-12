@@ -27,7 +27,7 @@ struct ChatExchangeRow: View {
     var body: some View {
         switch message.role {
         case .user: ChatQuestionBubble(text: message.text).padding(.top, Space.s)
-        case .assistant: ChatAnswer(text: message.text, steps: message.steps, callID: callID)
+        case .assistant: ChatAnswer(text: message.text, steps: message.steps, callID: callID, live: message.live == true)
         }
     }
 }
@@ -57,12 +57,18 @@ struct ChatAnswer: View {
     let text: String
     var steps: [String] = []
     var callID: String?
+    /// Given during the call, from the live transcript.
+    var live = false
     @State private var showSteps = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ChatMarkdown(text: text, bodyFont: ChatThread.bodyFont, timeChips: true, callID: callID)
                 .foregroundStyle(Palette.ink)
+            if live {
+                Label("Asked during the call. Names were not final.", systemImage: "waveform")
+                    .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            }
             if !steps.isEmpty {
                 Button { withAnimation(.snappy(duration: 0.2)) { showSteps.toggle() } } label: {
                     Label("\(steps.count) \(steps.count == 1 ? "lookup" : "lookups")", systemImage: showSteps ? "chevron.down" : "chevron.right")

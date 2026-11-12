@@ -42,6 +42,11 @@ extension AppController {
         var facts = LiveCallFacts(callID: record.id, title: record.calendarTitle ?? record.title, platform: record.platform.displayName,
                                   start: record.start, invited: invited.isEmpty ? record.attendees.filter { $0 != ownerName } : invited,
                                   owner: ownerName)
+        // The invite the live names use, matched again with the call's times so far.
+        if let invite = liveInvite(callID: record.id) {
+            facts.title = invite.title
+            if !invite.people.isEmpty { facts.invited = invite.people }
+        }
         let recorded = liveRecorded
         facts.room = record.platform == .inPerson
         facts.transcriptOff = liveOffReason
@@ -67,7 +72,8 @@ extension AppController {
                 var limits = LiveLimits.standard
                 if let limited = llm as? any ContextLimitedModel { limits = .small(contextTokens: await limited.contextTokens()) }
                 let entries = snapshot.entries(owner: owner)
-                let summary = await cache.summary(for: facts.callID, entries: entries, owner: owner, llm: small, limits: limits)
+                let summary = await cache.summary(for: facts.callID, entries: entries, owner: owner, llm: small, limits: limits,
+                                                  voices: facts.voices)
                 return try await LiveChatAgent(llm: llm, ownerName: owner).answer(
                     question, history: history, facts: facts, entries: entries, summary: summary, records: records,
                     paths: paths, personaTraits: personas, limits: limits, onStep: onStep, onText: onText)

@@ -192,7 +192,8 @@ public enum ChatBlocks {
     }
 
     static func isName(_ s: String) -> Bool {
-        s.split(separator: " ").count <= 4 && !s.contains(where: \.isNumber)
+        if s.wholeMatch(of: /Speaker [A-Z]{1,2}\d*/) != nil { return true }
+        return s.split(separator: " ").count <= 4 && !s.contains(where: \.isNumber)
     }
 
     private static func startsWithTime(_ s: String) -> Bool {

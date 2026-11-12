@@ -45,7 +45,8 @@ public struct LiveCallFacts: Equatable, Sendable {
     public var paused = false
     /// Seconds of the recording so far; the line times count the same seconds. Nil: the clock since the start.
     public var recorded: TimeInterval?
-    /// Each named voice by the label it had before its name, for a summary written before the name came.
+    /// Each voice's name now, by its label. A name can come, change, or go during the call; the prompt compares
+    /// these with the names a summary used.
     public var voices: [String: String] = [:]
 
     public init(callID: String, title: String, platform: String, start: Date, invited: [String], owner: String) {
@@ -165,11 +166,31 @@ public enum LiveChips {
 /// the live transcript is off, has gaps, or is paused, so silence in the transcript is never read as silence in the
 /// call.
 public enum LiveChatPrompt {
+    /// A pause that ended leaves the clock ahead of the recording: one line, from a minute on.
+    public static func pauseNote(clock: TimeInterval, recorded: TimeInterval) -> String? {
+        let paused = clock - recorded
+        guard paused >= 60 else { return nil }
+        return "The recording was paused for about \(Int((paused / 60).rounded())) min in all; the times leave the pauses out, and nothing said in a pause was recorded."
+    }
+
+    /// One line for each name in the summary that its voice no longer has.
+    static func oldNames(_ summary: LiveSummary, now voices: [String: String]) -> [String] {
+        summary.names.sorted { $0.key < $1.key }.flatMap { name, labels in
+            labels.sorted().compactMap { label -> String? in
+                let current = voices[label]
+                guard current != name else { return nil }
+                let now = current.map { "the voice is \($0) now" } ?? "the voice has no name now"
+                return "The summary calls \(label) \u{201C}\(name)\u{201D}. That name is no longer right: \(now)."
+            }
+        }
+    }
+
     public static func system(facts: LiveCallFacts, entries: [LiveEntry], summary: LiveSummary?, openQuestions: [LiveEntry], now: Date,
                               limits: LiveLimits = .standard) -> String {
         let owner = facts.owner
-        let elapsed = max(0, now.timeIntervalSince(facts.start))
-        var call = "Title: \(facts.title)\nApp: \(facts.platform)\nStarted: \(facts.start.formatted(date: .omitted, time: .shortened)), \(Int(elapsed / 60)) min so far"
+        let clockTime = max(0, now.timeIntervalSince(facts.start))
+        let recorded = facts.now(now)
+        var call = "Title: \(facts.title)\nApp: \(facts.platform)\nStarted: \(facts.start.formatted(date: .omitted, time: .shortened)), \(Int(recorded / 60)) min recorded so far"
         if !facts.invited.isEmpty { call += "\nInvited: \(facts.invited.joined(separator: ", "))" }
         var parts = ["""
         You help \(owner) during a call that is happening now. \(owner) asks you about it while it goes on. Today is \
@@ -181,7 +202,11 @@ public enum LiveChatPrompt {
         missing or only a summary; then say that you do not have that part. A line marked "(still speaking)" is not \
         finished. The live transcript comes from speech recognition, so words and names can be wrong; prefer the \
         spelling of the invite. Lines use a name where Mossad knows the voice and "Speaker A", "Speaker B" otherwise. \
-        Keep those labels as they are. Never give a name to a "Speaker" label, not even as a guess. "\(owner)" is the \
+        A label with a number, such as "Speaker A2", is a voice after a pause or a new connection; it can be a person \
+        who had a name or another label earlier in the call. Keep those labels as they are. Never give a name to a \
+        "Speaker" label, not even as a guess. A name can change or go during the call as Mossad hears more of a voice: \
+        the transcript below has the names of now. An earlier answer in this chat, or the summary, can use a name that \
+        Mossad took back; trust the names below and do not repeat an old one. "\(owner)" is the \
         owner; "I" and "me" in a question mean \(owner). "What did I miss" means the last five minutes unless they \
         say otherwise.
 
@@ -205,6 +230,8 @@ public enum LiveChatPrompt {
             notes.append("The live transcript is missing from \(gaps.joined(separator: ", ")): words said then are not below.")
         }
         if facts.paused { notes.append("The recording is paused now: nothing said since the pause is below.") }
+        if let pause = pauseNote(clock: clockTime, recorded: recorded) { notes.append(pause) }
+        if let summary { notes += oldNames(summary, now: facts.voices) }
         let lines = LiveSummaryRules.verbatim(entries, summary: summary, limits: limits)
         if summary == nil, let firstKept = lines.first, firstKept != entries.first {
             notes.append("You have only the lines from \(LiveEntry.stamp(firstKept.time)) on; the earlier lines are not available to you.")

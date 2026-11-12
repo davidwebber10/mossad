@@ -51,7 +51,7 @@ final class LiveChatTests: XCTestCase {
         XCTAssertTrue(system.contains("[02:10] Speaker B: The budget is still open."))
         XCTAssertTrue(system.contains("Budget review"))
         XCTAssertTrue(system.contains("Invited: Sam Carter, lee@example.com"))
-        XCTAssertTrue(system.contains("3 min so far"))
+        XCTAssertTrue(system.contains("3 min recorded so far"))
         XCTAssertTrue(system.contains("mossad://call/20261112-100000?t="), "answers cite the live moment")
         XCTAssertTrue(system.contains("only what was said so far"), "never invents what was not said")
         XCTAssertFalse(system.contains("Earlier in the call"), "no summary for a short call")

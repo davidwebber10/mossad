@@ -29,7 +29,8 @@ public struct ChatAgent: Sendable {
         self.init(llm: AnthropicModel(apiKey: apiKey, model: model, session: session, usage: usage), ownerName: ownerName)
     }
 
-    static func system(owner: String, tools: ChatTools, now: Date, about callID: String? = nil) -> String {
+    /// `liveHistory`: some earlier answers of this chat came during the call, from the live transcript.
+    static func system(owner: String, tools: ChatTools, now: Date, about callID: String? = nil, liveHistory: Bool = false) -> String {
         var focus = ""
         if let callID, let text = tools.readMeeting(callID) {
             focus = """
@@ -40,6 +41,15 @@ public struct ChatAgent: Sendable {
             unless they say otherwise. Answer from it first; use the tools for other meetings only when asked or when \
             it helps.
             \(text)
+            """
+        }
+        if liveHistory {
+            focus += """
+
+
+            ## Answers from during the call
+            Some earlier answers in this chat were given during the call, from the live transcript: their names and \
+            "Speaker" letters were not final and may not match this meeting's note. The note's names and letters are right.
             """
         }
         return base(owner: owner, tools: tools, now: now) + focus
@@ -114,7 +124,9 @@ public struct ChatAgent: Sendable {
     public func answer(_ question: String, history: [ChatMessage], records: [CallRecord], paths: Paths? = nil, now: Date = Date(),
                        about callID: String? = nil, personaTraits: Bool = true, onStep: @escaping @Sendable (String) -> Void) async throws -> String {
         let tools = ChatTools(records: records, owner: ownerName, paths: paths, personaTraits: personaTraits)
-        return try await llm.runTools(system: Self.system(owner: ownerName, tools: tools, now: now, about: callID), history: history, question: question,
+        let live = history.contains { $0.live == true }
+        return try await llm.runTools(system: Self.system(owner: ownerName, tools: tools, now: now, about: callID, liveHistory: live),
+                                      history: history, question: question,
                                       tools: paths == nil ? ChatTools.definitions : ChatTools.allDefinitions, purpose: .question) { name, input in
             onStep(ChatTools.step(name, input: input) { id in tools.records.first { $0.id == id }?.title })
             return tools.run(name, input: input)

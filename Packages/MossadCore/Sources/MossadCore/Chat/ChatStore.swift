@@ -8,6 +8,8 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
     public var text: String
     /// The lookups behind an answer, such as "Reading Launch sync".
     public var steps: [String] = []
+    /// An answer given during the call, from the live transcript: its names and letters were not final.
+    public var live: Bool?
 
     public init(role: Role, text: String, steps: [String] = []) {
         self.role = role

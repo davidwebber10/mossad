@@ -204,7 +204,8 @@ private struct LiveLines: View {
         if let name = line.speakerKey.flatMap({ model.transcript.names[$0] }) {
             return name == owner ? ("You", 0, false) : (String(name.split(separator: " ").first ?? ""), hue, false)
         }
-        if let letter = line.speaker { return ("Voice \(letter)", hue, true) }
+        // The same label as the chat and current_call: "Speaker A2" in a later stream session.
+        if let letter = line.speaker { return (LiveTranscript.label(letter, session: line.session), hue, true) }
         return (room ? "Room" : "Call", hue, false)
     }
 }
