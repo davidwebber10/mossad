@@ -20,6 +20,8 @@ struct MossadEntry {
         if CommandLine.arguments.contains("--mcp") {
             // Rehearsal never serves the meetings.
             if Rehearsal.isOn { print("Mossad Rehearsal does not serve MCP."); exit(1) }
+            // For the usage statistics' "mcp" feature: only the date of the last start.
+            UserDefaults.standard.set(Date(), forKey: AppController.mcpLastUsedKey)
             let owner = UserDefaults.standard.string(forKey: "ownerName") ?? NSFullUserName()
             // The coach's reads of how people think: on for other AI apps, unless the owner turned it off.
             let d = UserDefaults.standard

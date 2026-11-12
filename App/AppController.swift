@@ -409,6 +409,12 @@ final class AppController: ObservableObject {
     /// The meeting whose "Transcribe again" sheet is open.
     @Published var transcribingAgainCallID: String?
     @AppStorage("coachEnabled") var coachEnabled = false
+    /// "Send anonymous usage statistics" (Settings › Storage & Sync): on by default (+UsageStats).
+    @AppStorage(UsageReportPlan.enabledKey) var usageStatsEnabled = true
+    /// The wait, the daily check, and the send; cancelled when the owner turns the statistics off.
+    var usageStatsTask: Task<Void, Never>?
+    /// The days the app ran and the failures by kind, for the statistics only.
+    let usageCounters = UsageCounterStore(directory: Paths.live.usage)
     /// Calls that start before this (seconds since 1970) are not coached, so turning the coach on does not review years of calls.
     @AppStorage("coachSince") var coachSince: Double = 0
     /// The coach's reads of how each person thinks (Settings > Coach). On with the coach.
@@ -596,6 +602,7 @@ final class AppController: ObservableObject {
             }
             detection.onUnconfirmed = { @Sendable [weak self] call in
                 Task { @MainActor in
+                    self?.countUsage(.detect)
                     guard let self, case .idle = self.status else { return }
                     self.notifier.postUnconfirmed(call)
                     // A missing permission is said one time a day, not on each use of the mic.
@@ -618,7 +625,12 @@ final class AppController: ObservableObject {
             }
             // A recording that loses one side of the call (no permission, a full disk, a dead source) says so once.
             let notifier = notifier
-            CaptureQueue.queue.async { recorder.onProblem = { problem, _ in notifier.postCaptureProblem(problem) } }
+            CaptureQueue.queue.async {
+                recorder.onProblem = { [weak self] problem, _ in
+                    notifier.postCaptureProblem(problem)
+                    Task { @MainActor in self?.countUsage(.detect) }
+                }
+            }
             detection.onCallProcesses = { @Sendable [weak self] ids in
                 self?.noRecordGate.seen(at: Date())
                 CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
@@ -732,6 +744,7 @@ final class AppController: ObservableObject {
                 }
             }
             startShareWatch()
+            startUsageStats()
         }
         DevHooks.run(self, inert: inert)
     }
@@ -938,7 +951,10 @@ final class AppController: ObservableObject {
                             },
                             // The text on kept frames is read on this Mac. The pipeline ties it to the gate for heavy
                             // work: while a call records it goes on slowly, one frame at a time, and holds no note back.
-                            screenStep: ScreenStep(reader: VisionScreenReader()))
+                            screenStep: ScreenStep(reader: VisionScreenReader()),
+                            onFailure: { [weak self] step in
+                                Task { @MainActor in self?.countUsage(step) }
+                            })
     }
 
     /// A meeting that is gone (deleted, or merged into another) leaves nothing behind outside this Mac: its
