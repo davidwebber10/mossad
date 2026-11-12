@@ -4,7 +4,7 @@
 
 Mossad is work intelligence for your Mac. It records your calls without a bot, then keeps meeting notes, transcripts that know who spoke, decisions, action items, the promises you made, and a page for each person you meet. Before a meeting, it shows who is coming, what happened last time, and what you still owe. It is free and open source under the MIT License.
 
-- Latest version: 2.20.0
+- Latest version: 2.21.0
 - Requires: macOS 26 or later on Apple silicon
 - Price: free. Cloud AI providers that you connect bill you directly; models on your Mac cost nothing.
 - Website: https://getmossad.com/
@@ -125,11 +125,13 @@ Find any meeting, prepare for the next one, and keep the moments that matter.
   - The last meeting's decisions and action items
   - Your open tasks for these people
   - Join from the same page
+  - Your next 45 days of meetings in the list, by day
 - **Recurring meetings.** Each series gets its own report and a list of points for next time, which Mossad checks off when you raise them.
   - A point counts as discussed only with a quote from the transcript
   - The coach suggests points from open action items, open decisions, and unanswered questions
   - Add a point from Chat or from another AI app
   - Points for a person show on that person's page
+  - Search and filter the series by people, cadence, next meeting, last met, length, and open items
 - **Filter by anything.** Narrow your meetings by person, length, date, topic, kind, size, platform, or the coach's rating.
   - Only meetings with action items, decisions, or screens
   - Each choice shows how many meetings match
@@ -138,6 +140,10 @@ Find any meeting, prepare for the next one, and keep the moments that matter.
   - Command-F opens the page's search
   - Recent searches before you type
   - Bookmark notes and job titles in the results
+- **Back and Forward.** Go from a recurring meeting to one of its calls, or from a meeting to a person, and come back to where you were in one click.
+  - Command-[ and Command-], or the side buttons of your mouse
+  - Hold the button to pick a recent page
+  - The page comes back with its tab, search, and filter
 - **Bookmark a moment.** Press Control-Option-B during a call to mark a moment, with a note if you want one.
   - Works while the call app is in front
   - All bookmarks of all meetings on one page
