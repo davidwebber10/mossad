@@ -24,11 +24,11 @@ struct CoachView: View {
     @EnvironmentObject var controller: AppController
 
     /// Development hooks, in a preview only: `MOSSAD_DECK_DRAG=<points>` holds the top card mid-drag,
-    /// `MOSSAD_DECK_WHY=line|open` answers no to the first card and shows the line about it.
+    /// `MOSSAD_DECK_WHY=line|open|never` answers no (or never again) to the first card and shows the line about it.
     static var deckPreview: FindingsDeck.Preview? {
         guard CommandLine.arguments.contains("--ui-preview") else { return nil }
         let env = ProcessInfo.processInfo.environment
-        let why: FindingsDeck.Preview.Why? = env["MOSSAD_DECK_WHY"] == "open" ? .open : env["MOSSAD_DECK_WHY"] == "line" ? .line : nil
+        let why: FindingsDeck.Preview.Why? = env["MOSSAD_DECK_WHY"] == "open" ? .open : env["MOSSAD_DECK_WHY"] == "line" ? .line : env["MOSSAD_DECK_WHY"] == "never" ? .never : nil
         let drag = env["MOSSAD_DECK_DRAG"].flatMap(Double.init) ?? 0
         return drag == 0 && why == nil ? nil : FindingsDeck.Preview(drag: drag, why: why)
     }
@@ -103,7 +103,7 @@ private struct FindingsPage: View {
                                  offersNever: { FindingRules.offersNever($0, profile: profile) }, focusOnAppear: true, preview: CoachView.deckPreview,
                                  answer: { controller.answerFinding($0, $1) }, undo: { controller.takeBackFinding($0) },
                                  explain: { controller.explainFinding($0, note: $1) })
-                    Text("Yes and no teach the coach what is useful to you. \u{201C}No, never again\u{201D} stops a subject for good; you can undo it in Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
+                    Text("Useful and Not useful teach the coach what helps you; True and Not true correct what it believes; Take it on starts a goal. \u{201C}Never again\u{201D} stops a subject for good, and on praise only the praise; you can undo it in Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
                         .textRole(.secondary).foregroundStyle(Palette.tertiary).lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }

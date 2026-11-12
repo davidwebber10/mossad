@@ -28,7 +28,7 @@ struct MeetingsListView: View {
                 Image(systemName: "rectangle.stack").foregroundStyle(Palette.accent).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(store.findings.count == 1 ? "1 finding to review" : "\(store.findings.count) findings to review").textRole(.headline).foregroundStyle(Palette.ink)
-                    Text("From the coach. Swipe right for yes, left for no.").textRole(.secondary).foregroundStyle(Palette.secondary)
+                    Text("From the coach. Swipe right if it is useful or true, or to take a goal; left if not.").textRole(.secondary).foregroundStyle(Palette.secondary)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.tertiaryMark).accessibilityHidden(true)

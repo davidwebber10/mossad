@@ -68,8 +68,11 @@ public struct CoachObservation: Codable, Equatable, Sendable, Hashable {
     /// The owner's own words only, found in the transcript by code.
     public var quote: String?
     public var at: TimeInterval?
+    /// Why it matters, in the model's words. Nil in the memory from before it.
+    public var why: String?
 
-    public init(callID: String, date: Date, pattern: String, result: Result, note: String, quote: String? = nil, at: TimeInterval? = nil) {
+    public init(callID: String, date: Date, pattern: String, result: Result, note: String, quote: String? = nil, at: TimeInterval? = nil,
+                why: String? = nil) {
         self.callID = callID
         self.date = date
         self.pattern = pattern
@@ -77,6 +80,7 @@ public struct CoachObservation: Codable, Equatable, Sendable, Hashable {
         self.note = note
         self.quote = quote
         self.at = at
+        self.why = why
     }
 }
 
@@ -91,9 +95,11 @@ public struct CoachPatternUpdate: Codable, Equatable, Sendable {
     public var result: CoachObservation.Result?
     public var quote: String?
     public var at: TimeInterval?
+    /// Why it matters: the effect of the habit, in the model's words.
+    public var why: String?
 
     public init(name: String, kind: CoachPattern.Kind, note: String, trend: CoachPattern.Trend = .steady, result: CoachObservation.Result? = nil,
-                quote: String? = nil, at: TimeInterval? = nil) {
+                quote: String? = nil, at: TimeInterval? = nil, why: String? = nil) {
         self.name = name
         self.kind = kind
         self.note = note
@@ -101,6 +107,7 @@ public struct CoachPatternUpdate: Codable, Equatable, Sendable {
         self.result = result
         self.quote = quote
         self.at = at
+        self.why = why
     }
 
     /// What the call showed: the habit itself unless the model said the opposite.
@@ -388,7 +395,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
                 patterns.append(CoachPattern(name: p.name, kind: p.kind, note: p.note, seen: shows ? 1 : 0, firstSeen: at, lastSeen: at, trend: .steady))
             }
             let name = patterns.first { $0.name.caseInsensitiveCompare(p.name) == .orderedSame }?.name ?? p.name
-            observations.append(CoachObservation(callID: callID, date: at, pattern: name, result: p.shown, note: p.note, quote: p.quote, at: p.at))
+            observations.append(CoachObservation(callID: callID, date: at, pattern: name, result: p.shown, note: p.note, quote: p.quote, at: p.at, why: p.why))
         }
         observations = Array(observations.sorted { $0.date < $1.date }.suffix(Self.observationLimit))
         if patterns.count > Self.patternLimit {
