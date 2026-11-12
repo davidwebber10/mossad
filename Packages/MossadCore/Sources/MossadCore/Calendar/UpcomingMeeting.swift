@@ -72,13 +72,14 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
         }
     }
 
-    /// "Today", "Tomorrow", the weekday within the next days, else the date ("Thu, Feb 4").
+    /// "Today", "Tomorrow", then the weekday with the date ("Tuesday, Nov 17"), so an upcoming day never reads like
+    /// a past day's header ("Tuesday").
     public static func dayTitle(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
         let ahead = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day ?? 0
         if ahead <= 0 { return "Today" }
         if ahead == 1 { return "Tomorrow" }
         let style = Date.FormatStyle(locale: calendar.locale ?? .current, calendar: calendar, timeZone: calendar.timeZone)
-        return ahead < 7 ? date.formatted(style.weekday(.wide)) : date.formatted(style.weekday(.abbreviated).month(.abbreviated).day())
+        return date.formatted(style.weekday(.wide).month(.abbreviated).day())
     }
 
     /// The first URL in the event's location, notes, or URL that points at a call app.

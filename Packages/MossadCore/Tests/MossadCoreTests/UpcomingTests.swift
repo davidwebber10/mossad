@@ -55,10 +55,11 @@ final class UpcomingTests: XCTestCase {
                       event("Thursday", in: 6 * 24 * hour, text: link), event("Next Friday", in: 7 * 24 * hour, text: link),
                       event("February", in: 20 * 24 * hour, text: link)]
         let days = UpcomingMeeting.byDay(UpcomingMeeting.from(events, now: now, limit: .max), now: now, calendar: cal)
-        XCTAssertEqual(days.map(\.title), ["Thu, Feb 4", "Fri, Jan 22", "Thursday", "Monday", "Tomorrow", "Today"])
+        XCTAssertEqual(days.map(\.title), ["Thursday, Feb 4", "Friday, Jan 22", "Thursday, Jan 21", "Monday, Jan 18", "Tomorrow", "Today"])
         // Time runs one way down the list: the latest on top, the soonest at the bottom, just above the meetings that happened.
         XCTAssertEqual(days.flatMap { $0.meetings.map(\.title) },
                        ["February", "Next Friday", "Thursday", "Monday", "Tomorrow", "Today late", "Today early"])
+        // After Tomorrow the date is in the header too, so an upcoming day never reads like a past one ("Monday").
         XCTAssertEqual(days.last?.date, cal.startOfDay(for: now))
         XCTAssertTrue(UpcomingMeeting.byDay([], now: now, calendar: cal).isEmpty)
     }

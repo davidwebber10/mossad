@@ -77,7 +77,7 @@ struct UpcomingHeader: View {
         return parts.compactMap { $0 }.joined(separator: " · ")
     }
 
-    /// "Today", "Tomorrow", a weekday within the next days, else the date.
+    /// "Today", "Tomorrow", else the weekday with the date.
     static func day(_ date: Date) -> String { UpcomingMeeting.dayTitle(date) }
 
     // MARK: The people
