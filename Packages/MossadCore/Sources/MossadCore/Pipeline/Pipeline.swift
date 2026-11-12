@@ -69,6 +69,8 @@ public actor Pipeline {
     private var transcribing: Set<String> = []
     /// Reads the text on the kept frames of shared screens; nil where that is not done (tests, the iPhone).
     private let screenStep: ScreenStep?
+    /// Each failed attempt at a step, by its kind only, for the anonymous usage statistics.
+    private let onFailure: @Sendable (UsageStats.Step) -> Void
 
     /// `onStep` receives the record after every save of `call.json`, so the UI can show the live step.
     public init(paths: Paths, transcriber: Transcribing, library: VoiceLibrary, embeddings: EmbeddingProvider,
@@ -79,8 +81,10 @@ public actor Pipeline {
                 onProgress: @escaping @Sendable (String, ProcessingProgress?) -> Void = { _, _ in },
                 titles: @escaping @Sendable ([String]) -> [String] = { _ in [] },
                 onDiscard: @escaping @Sendable (CallRecord) -> Void = { _ in },
-                heavy: HeavyWorkGate = .shared, screenStep: ScreenStep? = nil) {
+                heavy: HeavyWorkGate = .shared, screenStep: ScreenStep? = nil,
+                onFailure: @escaping @Sendable (UsageStats.Step) -> Void = { _ in }) {
         self.heavy = heavy
+        self.onFailure = onFailure
         // The text step asks the same gate whether a call records. It does not wait there: it rests between frames.
         self.screenStep = screenStep?.gated(by: heavy)
         self.titles = titles
@@ -207,6 +211,7 @@ public actor Pipeline {
             try? store(r, dir: dir)
         } catch {
             Log.error("Processing \(id) failed at \(r.status.rawValue): \(error)")
+            if let step = UsageStats.Step(failedAt: r.status) { onFailure(step) }
             r.failureReason = Self.failureReason(error)
             queue.markFailure(&r, now: now())
             if r.attempts >= Self.maxAttempts {
@@ -828,6 +833,7 @@ public actor Pipeline {
                 return false
             } catch {
                 Log.error("Summary for \(r.id) failed: \(error)")
+                onFailure(.summarize)
                 r.failureReason = Self.failureReason(error)
                 queue.markFailure(&r, now: now())
                 if r.attempts < Self.maxSummaryAttempts { return false }

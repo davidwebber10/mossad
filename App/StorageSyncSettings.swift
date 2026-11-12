@@ -14,6 +14,8 @@ struct StorageSyncSettings: View {
             PhoneSyncGroup(settingUp: $settingUp).id("Sync with your iPhone")
             BackupGroup(settingUp: $settingUp).id("Recording backup")
             ServerGroup(settingUp: $settingUp).id("Your server")
+            // Last on the page: the least visited page of Settings, and the one about what leaves this Mac.
+            UsageStatsGroup().id("Usage statistics")
         }
         .sheet(isPresented: $settingUp) { ServerSetupSheet() }
         .task { controller.refreshServerFacts() }
@@ -21,6 +23,12 @@ struct StorageSyncSettings: View {
         .overlay(alignment: .top) {
             if ProcessInfo.processInfo.environment["MOSSAD_SERVER_SETUP"] != nil {
                 ServerSetupSheet()
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: .black.opacity(0.35), radius: 40, y: 30)
+            }
+            // MOSSAD_USAGE_SHEET shows the "What is sent" sheet over the page.
+            if DevHooks.preview, ProcessInfo.processInfo.environment["MOSSAD_USAGE_SHEET"] != nil {
+                UsageStatsSheet()
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .shadow(color: .black.opacity(0.35), radius: 40, y: 30)
             }
