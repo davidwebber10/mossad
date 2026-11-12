@@ -13,7 +13,7 @@ import MossadCore
 @MainActor
 final class SeriesFilterModel: ObservableObject {
     @Published var filter = SeriesFilter() {
-        didSet { if filter != oldValue { count() } }
+        didSet { if filter != oldValue { controller?.series.asked = false; count() } }
     }
     @Published private(set) var facets = SeriesFacets()
     /// The filter that `facets` answers, so the list never shows one filter's series under another's chips.
@@ -22,7 +22,7 @@ final class SeriesFilterModel: ObservableObject {
         didSet { if oldValue, !isOpen { gate.closed(at: Date()) } }
     }
     @Published var query = "" {
-        didSet { if query != oldValue { search(debounce: !oldValue.isEmpty) } }
+        didSet { if query != oldValue { controller?.series.asked = false; search(debounce: !oldValue.isEmpty) } }
     }
     /// The series the search text matches; nil while it is empty, when every series matches.
     @Published private(set) var found: Set<String>?

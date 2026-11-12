@@ -253,10 +253,9 @@ struct MeetingsView: View {
     private func takeOpenRequest() {
         guard let id = controller.meetingToOpen else { return }
         controller.meetingToOpen = nil
+        // A recorded meeting or an invite: Prepare opens an invite's page in Calendar mode too.
         if let shown = MeetingOpenRoute.fullPane(calendarMode: mode == .calendar, request: id, shown: opened), shown != opened {
-            opened = shown
-            openedUpcoming = nil
-            openedFrom = "Meetings"
+            show(pane: shown)
         }
     }
 

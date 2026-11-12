@@ -70,8 +70,6 @@ Screenshots are coming.
 - **Transcription:** AssemblyAI, Deepgram, ElevenLabs, or OpenAI with your key, or Parakeet, Whisper, Apple Speech, or Qwen3-ASR on your Mac.
 - **Notes, chat, and coach:** Anthropic, OpenAI, OpenRouter, a local server such as Ollama or LM Studio, or Apple's on-device model.
 
-Coming soon: recurring meetings with points for next time, a search in every list, person pages with tabs and more than one email, and voice recognition that reads the invite.
-
 ## How it works
 
 ```

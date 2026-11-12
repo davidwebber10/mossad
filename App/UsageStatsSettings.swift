@@ -69,7 +69,10 @@ struct UsageStatsSheet: View {
         }
         .mossadSheet(width: 520)
         .task(id: resets) {
-            let stats = await controller.makeUsageStats()
+            guard let stats = await controller.makeUsageStats() else {
+                text = "Mossad is still reading your meetings and calendar. The report shows here when they are read."
+                return
+            }
             text = (try? stats.json(pretty: true)).map { String(decoding: $0, as: UTF8.self) } ?? ""
         }
     }

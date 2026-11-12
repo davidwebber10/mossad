@@ -35,6 +35,8 @@ extension AppController {
                (UserDefaults.standard.string(forKey: "detailTab") ?? "") == MeetingDetailView.Tab.transcript.rawValue { place.time = moment.at }
         case .recurring:
             place.item = part?.item ?? series.selected
+            place.search = Self.text(seriesFilter.query)
+            place.seriesFilter = seriesFilter.filter.isEmpty ? nil : seriesFilter.filter
         case .people:
             // The person asked for, before the page has read its list; by the id where the name is a saved person,
             // so a merge or a rename still finds them.
@@ -94,7 +96,13 @@ extension AppController {
                 lastMoment = nil
             }
         case .recurring:
-            if let id = place.item { series.selected = id }
+            if seriesFilter.query != (place.search ?? "") { seriesFilter.query = place.search ?? "" }
+            let filter = place.seriesFilter ?? SeriesFilter()
+            if seriesFilter.filter != filter { seriesFilter.filter = filter }
+            if let id = place.item {
+                series.selected = id
+                series.asked = true
+            }
         case .people:
             if let item = place.item {
                 personToOpen = navigationPeople.name(of: item) ?? item

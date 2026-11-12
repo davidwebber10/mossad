@@ -262,6 +262,8 @@ final class AppController: ObservableObject {
     let meetingFilter = MeetingFilterModel()
     /// The Recurring list's search and filter; it starts with the Recurring page.
     let seriesFilter = SeriesFilterModel()
+    /// True once the calendar was read at least once (also when it gave nothing).
+    var calendarRead = false
     private var filterTask: Task<Void, Never>?
     private var makingRecordings = false
 
@@ -1953,6 +1955,7 @@ final class AppController: ObservableObject {
             // Development hook for screenshots: MOSSAD_UPCOMING=<file> shows only the made-up invites of that file.
             if let sample = DevHooks.sampleInvites() { events = sample }
             calendarEvents = events
+            calendarRead = true
             // Development hook for screenshots: MOSSAD_UPCOMING_OPEN=<title> opens that invite's page.
             if DevHooks.preview, let title = ProcessInfo.processInfo.environment["MOSSAD_UPCOMING_OPEN"],
                let invite = calendarUpcoming.first(where: { $0.title == title }) {

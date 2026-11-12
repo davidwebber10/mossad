@@ -5,9 +5,9 @@ import Foundation
 /// one group with "or", except the people when the owner asks for all of them. A series that cannot say (no meeting
 /// recorded, so no length; no rating) matches none of that group's choices; "None known" and "Not rated" are choices
 /// of their own.
-public struct SeriesFilter: Equatable, Sendable {
+public struct SeriesFilter: Equatable, Codable, Sendable {
     /// How often it meets, in the groups the owner thinks in. A series whose dates say nothing has no cadence.
-    public enum Cadence: Int, CaseIterable, Sendable {
+    public enum Cadence: Int, CaseIterable, Codable, Sendable {
         case weekly, everyTwoWeeks, monthly, other
 
         public init?(_ cadence: SeriesCadence?) {
@@ -35,7 +35,7 @@ public struct SeriesFilter: Equatable, Sendable {
     }
 
     /// When the next meeting is, from the calendar. One at a time: "this week" is also in "next 2 weeks".
-    public enum Next: Int, CaseIterable, Sendable {
+    public enum Next: Int, CaseIterable, Codable, Sendable {
         case thisWeek, twoWeeks, noneKnown
 
         public func rule(now: Date, calendar: Calendar) -> DateRule {
@@ -51,7 +51,7 @@ public struct SeriesFilter: Equatable, Sendable {
     }
 
     /// When the owner last met in the series. One at a time, as the date of the Meetings filter.
-    public enum LastMet: Int, CaseIterable, Sendable {
+    public enum LastMet: Int, CaseIterable, Codable, Sendable {
         case last7, last30, last90, earlier
 
         public func rule(now: Date, calendar: Calendar) -> DateRule {

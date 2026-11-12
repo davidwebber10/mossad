@@ -285,6 +285,13 @@ final class UsageReportPlanTests: XCTestCase {
         let r = UsageReportPlan.request(body: Data(), endpoint: UsageReportPlan.endpoint(override: nil), appVersion: "2.20 Sam")
         XCTAssertEqual(r.value(forHTTPHeaderField: "User-Agent"), "Mossad/0")
     }
+
+    /// The receiver cannot tell "not read yet" from "none": a count goes only once what it is made of is read.
+    func testNoReportUntilTheMeetingsAndTheCalendarAreRead() {
+        XCTAssertFalse(UsageReportPlan.inputsRead(meetings: false, calendar: true))
+        XCTAssertFalse(UsageReportPlan.inputsRead(meetings: true, calendar: false))
+        XCTAssertTrue(UsageReportPlan.inputsRead(meetings: true, calendar: true))
+    }
 }
 
 final class UsageCounterStoreTests: XCTestCase {
