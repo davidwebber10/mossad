@@ -182,7 +182,18 @@ struct MeetingDetailView: View {
                                 top: Self.underTabs + 32, openCoach: { tabBinding.wrappedValue = .coach })
                 .equatable()
         case .chat:
-            MeetingChatView(record: record, top: Self.underTabs + 14) { at in Task { await play(from: at) } }
+            MeetingChatView(record: record, top: Self.underTabs + 14) { at in showChatMoment(at) }
+        }
+    }
+
+    /// A time in a chat answer: the Transcript tab with that line marked for a few seconds, playing from there.
+    private func showChatMoment(_ at: TimeInterval) {
+        tabBinding.wrappedValue = .transcript
+        highlight = at
+        Task {
+            await play(from: at)
+            try? await Task.sleep(for: .seconds(4))
+            if highlight == at { withAnimation { highlight = nil } }
         }
     }
 

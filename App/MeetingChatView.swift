@@ -16,37 +16,21 @@ struct MeetingChatView: View {
     @State private var steps: [String] = []
     @State private var error: FriendlyError? = AppController.errorPreview("meetingChat")
     @FocusState private var focused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var messages: [ChatMessage] { chat?.messages ?? [] }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LabelColumnStack(spacing: Space.m) {
+                VStack(alignment: .leading, spacing: Space.l) {
                     if messages.isEmpty && !running { welcome }
                     ForEach(messages) { m in
-                        ChatExchangeRow(message: m).id(m.id)
+                        ChatExchangeRow(message: m, callID: record.id).id(m.id)
                     }
-                    if running {
-                        LabelColumn(label: "Answer") {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(Array(steps.enumerated()), id: \.offset) { _, s in
-                                    Label(s, systemImage: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                                }
-                                Text("Thinking…").font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                                    .phaseAnimator(reduceMotion ? [1] : [0.45, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
-                            }
-                        }
-                        .id("running")
-                    }
-                    if let error {
-                        LabelColumn(label: "") { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
-                    }
-                    // Questions not asked yet, under the last answer, as the canvas shows them.
-                    if !messages.isEmpty, !running, !followUps.isEmpty {
-                        LabelColumn(label: "") { chips(followUps) }
-                    }
+                    if running { ChatAnswering(steps: steps, callID: record.id).id("running") }
+                    if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
+                    // Questions not asked yet, under the last answer.
+                    if !messages.isEmpty, !running, !followUps.isEmpty { chips(followUps) }
                 }
                 // Room for the floating composer, as the canvas leaves 80 pt under the last answer.
                 .detailColumn(top: top, bottom: 80)
@@ -68,14 +52,13 @@ struct MeetingChatView: View {
     }
 
     private var welcome: some View {
-        LabelColumn(label: "Ask") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Ask about this meeting").font(.system(size: 16, weight: .medium))
-                Text("Claude reads this meeting's summary and transcript, and can look at your other meetings when that helps. Times in the answer play the moment.")
-                    .font(.system(size: 13)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-                chips(examples).padding(.top, 4)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Ask about this meeting").font(.system(size: 16, weight: .medium))
+            Text("Claude reads this meeting's summary and transcript, and can look at your other meetings when that helps. Times in the answer play the moment.")
+                .font(.system(size: 13)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+            chips(examples).padding(.top, 4)
         }
+        .frame(maxWidth: ChatThread.answerMax, alignment: .leading)
     }
 
     /// Wraps instead of cutting the questions short in a narrow detail pane.
@@ -177,46 +160,5 @@ struct MeetingChatView: View {
     private func save(_ c: Chat) {
         do { try controller.chats.save(c) } catch { Log.error("Saving the chat failed: \(error)") }
         chat = c
-    }
-}
-
-/// "You asked" with the question as a lede, or "Answer" with the reply and its lookups.
-struct ChatExchangeRow: View {
-    let message: ChatMessage
-    @State private var showSteps = false
-
-    var body: some View {
-        switch message.role {
-        case .user:
-            LabelColumn(label: "You asked") {
-                Text(message.text).font(.system(size: 16, weight: .medium)).foregroundStyle(Palette.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-            }
-            .padding(.top, Space.s)
-        case .assistant:
-            LabelColumn(label: "Answer") {
-                VStack(alignment: .leading, spacing: 8) {
-                    ChatMarkdown(text: message.text, bodyFont: .system(size: 13), timeChips: true)
-                        .lineSpacing(2)
-                        .foregroundStyle(Palette.ink)
-                        .frame(maxWidth: 680, alignment: .leading)
-                    if !message.steps.isEmpty {
-                        Button { showSteps.toggle() } label: {
-                            Label("\(message.steps.count) \(message.steps.count == 1 ? "lookup" : "lookups")",
-                                  systemImage: showSteps ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-                        }
-                        .buttonStyle(.plain)
-                        if showSteps {
-                            ForEach(Array(message.steps.enumerated()), id: \.offset) { _, s in
-                                Text(s).font(.system(size: 11)).foregroundStyle(Palette.tertiary).padding(.leading, 16)
-                            }
-                        }
-                    }
-                }
-                .textSelection(.enabled)
-            }
-        }
     }
 }

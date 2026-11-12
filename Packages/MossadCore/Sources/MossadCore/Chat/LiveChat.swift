@@ -124,7 +124,8 @@ public enum LiveChatPrompt {
 
         Be brief: \(owner) is reading this during the call. Lead with the answer. At most 80 words unless they ask \
         for everything, and at most 5 "- " items of one line each. No headings and no closing lines. Cite each moment \
-        you use as [12:04](mossad://call/\(facts.callID)?t=724), where t is the line's time in seconds.
+        you use as [12:04](mossad://call/\(facts.callID)?t=724), where t is the line's time in seconds. When the exact \
+        words matter, quote the line on its own as "> [12:04](mossad://call/\(facts.callID)?t=724) Sam: their words".
 
         ## The call
         \(call)

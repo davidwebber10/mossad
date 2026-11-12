@@ -13,7 +13,6 @@ struct ChatView: View {
     @State private var steps: [String] = []
     @State private var error: FriendlyError?
     @FocusState private var focused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var current: Chat {
         chats.first { $0.id == selection } ?? draft
@@ -74,28 +73,15 @@ struct ChatView: View {
     private var exchange: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LabelColumnStack(spacing: Space.m) {
+                VStack(alignment: .leading, spacing: Space.l) {
                     if let id = current.callID, let r = controller.meetings.first(where: { $0.id == id }) {
-                        LabelColumn(label: "About", labelTopPadding: 6) { MeetingPill(record: r) }
+                        MeetingPill(record: r)
                     }
                     ForEach(current.messages) { m in
                         ChatExchangeRow(message: m).id(m.id)
                     }
-                    if running == current.id {
-                        LabelColumn(label: "Answer") {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(Array(steps.enumerated()), id: \.offset) { _, s in
-                                    Label(s, systemImage: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                                }
-                                Text(steps.isEmpty ? "Thinking…" : "Reading…").font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                                    .phaseAnimator(reduceMotion ? [1] : [0.45, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
-                            }
-                        }
-                        .id("running")
-                    }
-                    if let error {
-                        LabelColumn(label: "") { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
-                    }
+                    if running == current.id { ChatAnswering(steps: steps).id("running") }
+                    if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
                 }
                 .frame(maxWidth: Self.column, alignment: .leading)
                 // Room for the floating composer, as the canvas leaves 80 pt under the last answer.

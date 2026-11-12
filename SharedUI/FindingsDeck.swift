@@ -28,6 +28,8 @@ struct FindingsDeck: View {
     /// Plays the card's moment. `playing` is the id of the card whose moment plays now.
     var play: ((CoachFinding) -> Void)?
     var playing: String?
+    /// Stops the moment that a card started: when a card is answered, leaves the top, or the deck closes.
+    var stopPlaying: (() -> Void)?
     /// Whether a card offers "Never again". Not on a card of the active focus.
     var offersNever: (CoachFinding) -> Bool = { _ in true }
     /// Shows the calm empty state when there is no card. Inside a meeting the deck is then not there at all.
@@ -76,6 +78,7 @@ struct FindingsDeck: View {
     @State private var saved = false
     @State private var whyTimer: Task<Void, Never>?
     @State private var previewed = false
+    @State private var playback = DeckPlayback()
     @FocusState private var deckFocused: Bool
     @FocusState private var noteFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -102,7 +105,11 @@ struct FindingsDeck: View {
             .onAppear { if focusOnAppear { deckFocused = true } }
             // When the cards are there: a view that waits in a task would keep the cards of its start.
             .onChange(of: cards.isEmpty, initial: true) { _, empty in if !empty { startPreview() } }
-            .onDisappear { whyTimer?.cancel() }
+            .onDisappear {
+                whyTimer?.cancel()
+                if playback.closed() { stopPlaying?() }
+            }
+            .onChange(of: visible.first?.id) { _, top in if playback.topChanged(to: top) { stopPlaying?() } }
             // The page and the sheet do not scroll or close while a card moves to the side.
             .preference(key: DeckDragging.self, value: drag != .zero)
     }
@@ -208,7 +215,10 @@ struct FindingsDeck: View {
 
     private func card(_ finding: CoachFinding, faded: CGFloat = 1, quiet: CGFloat = 0) -> some View {
         FindingCard(finding: finding, source: source?(finding), openSource: openSource.map { open in { open(finding) } },
-                    play: play.map { play in { play(finding) } }, isPlaying: playing == finding.id,
+                    play: play.map { play in {
+                        if playing == finding.id { playback.paused() } else { playback.started(finding.id) }
+                        play(finding)
+                    } }, isPlaying: playing == finding.id,
                     never: offersNever(finding) ? { commit(finding, .never) } : nil, quiet: quiet)
             .opacity(faded)
             .frame(maxWidth: .infinity, minHeight: Self.cardMinHeight, alignment: .topLeading)
@@ -330,6 +340,7 @@ struct FindingsDeck: View {
         tick = Tick(count: tick.count + 1, yes: verdict == .yes)
         last = Answered(finding: finding, verdict: verdict)
         Haptic.answered()
+        if playback.answered(finding.id) { stopPlaying?() }
         answer(finding, verdict)
         if verdict == .no { askWhy(finding) }
         if verdict == .never { showBlocked(finding) }

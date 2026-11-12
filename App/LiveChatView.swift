@@ -19,22 +19,19 @@ struct LiveChatView: View {
     @State private var partial = ""
     @State private var error: FriendlyError?
     @FocusState private var focused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var messages: [ChatMessage] { chat?.messages ?? [] }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LabelColumnStack(spacing: Space.m) {
+                VStack(alignment: .leading, spacing: Space.l) {
                     if messages.isEmpty && !running { welcome }
                     ForEach(messages) { m in
-                        ChatExchangeRow(message: m).id(m.id)
+                        ChatExchangeRow(message: m, callID: record.id).id(m.id)
                     }
-                    if running { answering.id("running") }
-                    if let error {
-                        LabelColumn(label: "") { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
-                    }
+                    if running { ChatAnswering(steps: steps, partial: partial, callID: record.id, waiting: "Reading the call…").id("running") }
+                    if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
                 }
                 // Room for the quick questions and the floating composer.
                 .detailColumn(top: top, bottom: 128)
@@ -59,31 +56,12 @@ struct LiveChatView: View {
     }
 
     private var welcome: some View {
-        LabelColumn(label: "Ask") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Ask about this call").font(.system(size: 16, weight: .medium))
-                Text("Answers come from what was said so far, the invite, and your earlier meetings. Times in an answer show the moment in the live transcript.")
-                    .font(.system(size: 13)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Ask about this call").font(.system(size: 16, weight: .medium))
+            Text("Answers come from what was said so far, the invite, and your earlier meetings. Times in an answer show the moment in the live transcript.")
+                .font(.system(size: 13)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    /// The lookups, then the answer as it streams in.
-    private var answering: some View {
-        LabelColumn(label: "Answer") {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(steps.enumerated()), id: \.offset) { _, s in
-                    Label(s, systemImage: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                }
-                if partial.isEmpty {
-                    Text("Reading the call…").font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                        .phaseAnimator(reduceMotion ? [1] : [0.45, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
-                } else {
-                    ChatMarkdown(text: partial, bodyFont: .system(size: 13), timeChips: true)
-                        .lineSpacing(2).foregroundStyle(Palette.ink).frame(maxWidth: 680, alignment: .leading)
-                }
-            }
-        }
+        .frame(maxWidth: ChatThread.answerMax, alignment: .leading)
     }
 
     private var composerStack: some View {
