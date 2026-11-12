@@ -4,7 +4,7 @@ import Foundation
 /// What both devices write and read: chats, the owner's ratings and conversation on a review, and the
 /// coach's memory. Meetings themselves come only from the Mac.
 public struct SharedPayload: Sendable {
-    public enum Kind: String, Sendable { case chat, notes, profile, commitments, people, personas }
+    public enum Kind: String, Sendable { case chat, notes, profile, commitments, people, personas, nextTime }
 
     public let kind: Kind
     /// "chat:<uuid>", "notes:<call id>", or "profile": the record name and the key in the sync state.
@@ -20,7 +20,7 @@ public struct SharedPayload: Sendable {
     }
 
     /// Whether a sync-state key belongs to a shared record, not a meeting: "chat:…", "notes:…", "profile", "commitments".
-    static func isShared(_ key: String) -> Bool { key.contains(":") || key == "profile" || key == "commitments" || key == "people" || key == "personas" }
+    static func isShared(_ key: String) -> Bool { key.contains(":") || key == "profile" || key == "commitments" || key == "people" || key == "personas" || key == "next-time" }
 
     public static func chat(_ chat: Chat) -> SharedPayload {
         SharedPayload(kind: .chat, key: "chat:\(chat.id.uuidString)", data: (try? JSONEncoder.callRecord.encode(chat)) ?? Data())
@@ -35,6 +35,11 @@ public struct SharedPayload: Sendable {
 
     public static func commitments(_ book: CommitmentBook) -> SharedPayload {
         SharedPayload(kind: .commitments, key: "commitments", data: (try? JSONEncoder.callRecord.encode(book)) ?? Data())
+    }
+
+    /// The owner's points for next time: both ways, like the tasks.
+    public static func nextTime(_ book: NextTimeBook) -> SharedPayload {
+        SharedPayload(kind: .nextTime, key: "next-time", data: (try? JSONEncoder.callRecord.encode(book)) ?? Data())
     }
 
     /// The people, from the Mac to the phone: only the fields of `SyncedPeople`, with the company's domains.

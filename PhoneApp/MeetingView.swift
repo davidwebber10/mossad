@@ -181,6 +181,7 @@ private struct SummarySection: View {
             if record.summary != nil, record.hasOutcomes != false || !record.actionItems.isEmpty {
                 LabelColumn(label: "Action items") { actionItems }
             }
+            PhoneMeetingPoints(callID: record.id) { read($0) }
             if let summary = record.summary {
                 LabelColumn(label: "Overview") { SummaryBlocks(markdown: summary) }
             } else if record.utterances.isEmpty {

@@ -17,11 +17,12 @@ final class AppController: ObservableObject {
 
     enum Section: String, CaseIterable, Identifiable {
         case meetings = "Meetings", bookmarks = "Bookmarks", screens = "Screens", shares = "Shares", commitments = "Tasks",
+             recurring = "Recurring",
              chat = "Chat", people = "People", analytics = "Analytics", coach = "Coach",
              settings = "Settings", log = "Log"
         var id: String { rawValue }
         /// The pages under Meetings in the sidebar, in their order there.
-        static let underMeetings: [Section] = [.bookmarks, .screens, .shares, .commitments]
+        static let underMeetings: [Section] = [.bookmarks, .screens, .shares, .commitments, .recurring]
         /// The items of the sidebar's first level.
         static var topLevel: [Section] { allCases.filter { !underMeetings.contains($0) } }
         var isUnderMeetings: Bool { Self.underMeetings.contains(self) }
@@ -40,6 +41,7 @@ final class AppController: ObservableObject {
             case .shares: KeyboardShortcut("9")
             case .bookmarks: KeyboardShortcut("0")
             case .screens: KeyboardShortcut("s", modifiers: [.command, .option])
+            case .recurring: KeyboardShortcut("r", modifiers: [.command, .option])
             }
         }
         var icon: Icon {
@@ -53,6 +55,7 @@ final class AppController: ObservableObject {
             case .shares: .link
             case .bookmarks: .bookmark
             case .screens: .camera
+            case .recurring: .clock
             case .settings: .settings
             case .log: .log
             }
@@ -436,6 +439,8 @@ final class AppController: ObservableObject {
     /// Bumped when chats change on another device, so the Chat list reloads.
     @Published var chatsVersion = 0
     @Published var commitmentsVersion = 0
+    /// The recurring meetings and the owner's points for next time (`AppController+Series.swift`).
+    let series = SeriesModel()
     var findingCommitments = false
     private var iCloudTimer: Timer?
     /// The search palette (Command-K) and its index, kept up to date as meetings, tasks, and chats change.
@@ -1778,6 +1783,7 @@ final class AppController: ObservableObject {
         syncCloud()
         runCoach()
         runCommitments()
+        runNextTimeCheck()
         syncNow()
         processing -= 1
         refresh()
@@ -1823,6 +1829,7 @@ final class AppController: ObservableObject {
         }.value
         runCoach()
         runCommitments()
+        runNextTimeCheck()
         syncNow()
         refreshGoogleDirectory()
     }
@@ -1879,7 +1886,8 @@ final class AppController: ObservableObject {
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         Task {
             let now = Date()
-            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))
+            // The recurring meetings look further ahead than the lists, which still cut at `UpcomingMeeting.days`.
+            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.seriesDays) * 86_400))
             // Development hook: `--sample-upcoming` adds two events, since a preview build has no Calendar access.
             if CommandLine.arguments.contains("--sample-upcoming") {
                 events += [CalendarEventInfo(title: "Alex / Sam", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),

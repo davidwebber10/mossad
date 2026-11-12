@@ -161,7 +161,7 @@ public struct ChatTools: Sendable {
     // MARK: Claude
 
     /// The meeting tools, plus the coach, people, stats, memory, and chat tools.
-    public static var allDefinitions: [ToolSpec] { definitions + coachDefinitions }
+    public static var allDefinitions: [ToolSpec] { definitions + coachDefinitions + [nextTimeDefinition] }
 
     public static var definitions: [ToolSpec] { [
         ToolSpec(name: "find_meetings",
@@ -206,6 +206,8 @@ public struct ChatTools: Sendable {
             return currentCall(minutes: (input["minutes"] as? NSNumber)?.doubleValue)
         case "read_meeting":
             return (input["call_id"] as? String).flatMap(readMeeting) ?? "No meeting with that call_id."
+        case "add_next_time_point":
+            return addNextTimePoint(input)
         case "list_screens":
             return listScreens(input)
         case "get_screen":
@@ -248,6 +250,7 @@ public struct ChatTools: Sendable {
         case "stats": return "Adding up your numbers"
         case "commitments": return "Checking your tasks"
         case "remember": return "Remembering that"
+        case "add_next_time_point": return "Saving that for next time"
         case "past_chats", "read_chat": return "Reading earlier chats"
         default: return "Looking it up"
         }

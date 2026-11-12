@@ -119,8 +119,8 @@ private struct PhoneSyncGroup: View {
 
     private var footer: String? {
         switch controller.syncWith {
-        case .icloud: "Finished meetings, their summaries and transcripts, and the coach’s notes go to your private iCloud, where Mossad for iPhone reads them. Audio does not sync."
-        case .server: "Finished meetings, their summaries and transcripts, and the coach’s notes sync through your server. Audio does not sync."
+        case .icloud: "Finished meetings, their summaries and transcripts, and the coach’s notes go to your private iCloud, where Mossad for iPhone reads them. Audio does not sync. Your points for next time stay on this Mac: they sync only through your own server."
+        case .server: "Finished meetings, their summaries and transcripts, and the coach’s notes sync through your server, with your points for next time. Audio does not sync."
         case .off: nil
         }
     }

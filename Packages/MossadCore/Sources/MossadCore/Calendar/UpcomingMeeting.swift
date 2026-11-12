@@ -15,8 +15,13 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
     /// The first call link in the event's text, when it is not `link`: a do-not-record choice that an older build
     /// keyed by it still counts.
     public var textLink: URL?
+    /// True when the calendar says that the invite repeats (a Google series id, or an EventKit recurrence rule).
+    public var isRecurring = false
 
     public static let days = 7
+    /// How far the calendar is read for the recurring meetings, so a monthly series has its next date. The lists
+    /// still show `days`.
+    public static let seriesDays = 45
     public static let limit = 12
 
     /// `recorded` hides events that are being recorded or were recorded: the call is already happening or done.
@@ -38,7 +43,8 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
                 guard platform != nil else { return nil }
                 let text = e.textLink
                 return UpcomingMeeting(title: e.title, start: e.start, end: e.end, attendees: e.attendees, platform: platform,
-                                       link: link, seriesID: e.seriesID, textLink: text == link ? nil : text)
+                                       link: link, seriesID: e.seriesID, textLink: text == link ? nil : text,
+                                       isRecurring: e.isRecurring || e.seriesID != nil)
             }
             .prefix(limit).map { $0 }
     }

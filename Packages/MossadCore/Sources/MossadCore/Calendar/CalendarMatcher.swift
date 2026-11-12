@@ -90,6 +90,8 @@ public struct CalendarEventInfo: Sendable, Equatable {
     public var eventID: String?
     /// The id of the series a repeated event belongs to; nil for a single event or a source that does not say.
     public var seriesID: String?
+    /// True when the event repeats. EventKit says so with no series id of Google's kind.
+    public var isRecurring = false
     public var organizer: Invitee?
     /// The call link the invite names, when the source gives it apart from the text.
     public var meetingLink: URL?
@@ -147,10 +149,13 @@ public struct EventAttachment: Codable, Equatable, Sendable, Hashable {
 }
 
 extension CalendarEventInfo {
-    func from(eventKit uid: String?, account: String?) -> CalendarEventInfo {
+    func from(eventKit uid: String?, account: String?, recurring: Bool = false) -> CalendarEventInfo {
         var e = self
         e.iCalUID = uid?.nonBlank
         e.calendarAccount = account?.nonBlank
+        // Every occurrence of a repeated event has the series' iCalendar UID: that is the series id here.
+        e.isRecurring = recurring
+        if recurring, let uid = uid?.nonBlank { e.seriesID = "ek:\(uid)" }
         return e
     }
 }
@@ -326,7 +331,7 @@ public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
                     Invitee.make(name: $0.name, address: $0.url.absoluteString, isCurrentUser: $0.isCurrentUser,
                                  response: Self.response($0.participantStatus), kind: Self.kind($0.participantType))
                 })
-                .from(eventKit: e.calendarItemExternalIdentifier, account: e.calendar?.source?.title)
+                .from(eventKit: e.calendarItemExternalIdentifier, account: e.calendar?.source?.title, recurring: e.hasRecurrenceRules)
         }
     }
 }
