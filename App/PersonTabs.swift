@@ -20,6 +20,9 @@ struct PersonOverviewTab: View {
 
     var body: some View {
         LabelColumnStack(spacing: 18) {
+            if !profile.isOwner, let personID {
+                PersonNextTimeSection(personID: personID, name: profile.name, inColumn: true)
+            }
             if !profile.isOwner {
                 if read != nil || brief != nil, controller.personaCovered(personID) {
                     // A colleague must not read this on a shared screen.

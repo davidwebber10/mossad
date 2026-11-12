@@ -312,15 +312,26 @@ struct PersonNextTimeSection: View {
     @EnvironmentObject var controller: AppController
     let personID: String
     let name: String
+    /// The person page's layout: the title in the label column at the left.
+    var inColumn = false
 
     var body: some View {
+        let title = "Next time I see \(SeriesNames.first(name))"
+        if inColumn {
+            LabelColumn(label: title) { list }
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title).textRole(.label).foregroundStyle(Palette.secondary).accessibilityAddTraits(.isHeader)
+                list
+            }
+        }
+    }
+
+    private var list: some View {
         let refs = controller.series.people
         let points = controller.series.book.points(forPerson: personID, canonical: { refs.canonical($0) })
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Next time I see \(SeriesNames.first(name))").textRole(.label).foregroundStyle(Palette.secondary).accessibilityAddTraits(.isHeader)
-            NextTimeList(points: points, add: { text in controller.changeNextTime { $0.add(text, personID: personID, personName: name) } },
-                         placeholder: "Add a point for \(SeriesNames.first(name))")
-        }
+        return NextTimeList(points: points, add: { text in controller.changeNextTime { $0.add(text, personID: personID, personName: name) } },
+                            placeholder: "Add a point for \(SeriesNames.first(name))")
     }
 }
 

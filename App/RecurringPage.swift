@@ -14,6 +14,8 @@ struct RecurringPage: View {
     @AppStorage("recurringTab") private var savedTab = Tab.nextTime
     @State private var previewTab: Tab?
     @State private var data: (key: Int, report: SeriesReport, suggestions: [SeriesSuggestion])?
+    /// Which saved person each name of the series opens: the band's usual people and the People tab.
+    @State private var links = PersonLinks()
     @State private var wide = true
 
     private var tab: Tab { previewTab ?? savedTab }
@@ -27,6 +29,7 @@ struct RecurringPage: View {
         h.combine(controller.meetingsVersion)
         h.combine(controller.commitmentsVersion)
         h.combine(controller.coachVersion)
+        h.combine(controller.peopleStamp)
         h.combine(controller.series.book.answers)
         h.combine(controller.series.book.points(of: series).open.map(\.text))
         return h.finalize()
@@ -42,6 +45,7 @@ struct RecurringPage: View {
             }
         }
         .background(Palette.window)
+        .environment(\.personLinks, links)
         .environment(\.personOpener, controller.personOpener)
         .environment(\.analyticsWide, wide)
         .onGeometryChange(for: Bool.self) { $0.size.width >= 600 } action: { wide = $0 }
@@ -59,16 +63,24 @@ struct RecurringPage: View {
         let focus = controller.shownCoachProfile.activeFocus
         let goal = focus.map { (plan: $0.plan, oneOnOne: $0.goal?.measure == .oneOnOneTalkShare) }
         let profiles = controller.library.profiles
+        let people = controller.library.identity?.people.people
         let email = UserDefaults.standard.string(forKey: "ownerEmail") ?? ""
         let identity = OwnerIdentity.read(name: owner, paths: controller.paths)
         let made = await Task.detached(priority: .userInitiated) {
-            (SeriesReport(series: series, records: records, commitments: commitments, owner: identity, directory: PersonDirectory(profiles: profiles),
-                          ownerEmails: [email]),
-             SeriesSuggestion.make(for: series, records: records, commitments: commitments, owner: identity, points: book.points(of: series).open,
-                                   answers: book.answers, goal: goal))
+            // Every address of each saved person, as the meeting page reads them.
+            let directory = PersonDirectory(profiles: profiles, people: people)
+            let report = SeriesReport(series: series, records: records, commitments: commitments, owner: identity, directory: directory,
+                                      ownerEmails: [email])
+            // Only a sure match is a link: the whole name of one saved person among the names of this series.
+            let names = series.usualPeople + report.attendees.map(\.name)
+            return (report,
+                    SeriesSuggestion.make(for: series, records: records, commitments: commitments, owner: identity, points: book.points(of: series).open,
+                                          answers: book.answers, goal: goal),
+                    PersonLinks(stamp: "\(key)", directory: directory, meeting: names, names: names))
         }.value
         guard !Task.isCancelled else { return }
         data = (key, made.0, made.1)
+        links = made.2
     }
 
     @ViewBuilder
