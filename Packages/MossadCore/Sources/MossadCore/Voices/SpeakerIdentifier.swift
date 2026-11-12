@@ -33,8 +33,10 @@ public struct SpeakerIdentifier: Sendable {
         self.ownerName = ownerName
     }
 
-    /// `call` is the call's id and start, kept with each voice sample that the call teaches.
-    public func identify(utterances: [Utterance], meURL: URL, themURL: URL, call: (id: String, start: Date)? = nil) async throws -> SpeakerIdentification {
+    /// `call` is the call's id and start, kept with each voice sample that the call teaches. `invite` is the call's
+    /// invite, nil when it has none; `InviteVoiceRules` says what it changes.
+    public func identify(utterances: [Utterance], meURL: URL, themURL: URL, call: (id: String, start: Date)? = nil,
+                         invite: CallInvite? = nil) async throws -> SpeakerIdentification {
         var result = SpeakerIdentification()
         var keys: [String] = []
         for u in utterances where !keys.contains(u.speakerKey) { keys.append(u.speakerKey) }
@@ -76,14 +78,31 @@ public struct SpeakerIdentifier: Sendable {
             }
         }
 
-        for key in keys where result.names[key] == nil {
-            guard let e = result.embeddings[key], let match = library.bestMatch(e) else {
-                result.unknown.append(key)
-                continue
-            }
-            result.names[key] = match.name
-            if match.score >= Self.learnThreshold { try library.add(e, to: match.name, source: source(key, .autoMatch(match.score))) }
+        let voices = keys.filter { result.names[$0] == nil }.map { key in
+            InviteVoiceRules.Voice(key: key, scores: result.embeddings[key].map(library.ranked) ?? [], fingerprint: result.embeddings[key] != nil)
         }
+        let roster = invite.map { InviteRoster(invite: $0, profiles: library.profiles, people: library.identity?.people.people ?? []) }
+        let decision = InviteVoiceRules.decide(voices, roster: roster, owner: library.owner?.name,
+                                               matchThreshold: library.matchThreshold, learnThreshold: Self.learnThreshold)
+        for v in voices {
+            switch decision.verdicts[v.key] ?? .unknown {
+            case .named(let name, let score, let learn):
+                result.names[v.key] = name
+                if learn, let e = result.embeddings[v.key] { try library.add(e, to: name, source: source(v.key, .autoMatch(score))) }
+            case .inferred(let name):
+                result.names[v.key] = name
+                guard let e = result.embeddings[v.key] else { continue }
+                try library.add(e, to: name, source: source(v.key, .inviteInference))
+                // The address ties this voice to the invite's person, so the next invite finds the voice by it.
+                if let email = decision.inferred?.email, library.profiles.first(where: { $0.name == name })?.email == nil,
+                   library.name(forEmail: email) == nil {
+                    try library.setEmail(email, for: name)
+                }
+            case .withheld, .unknown:
+                result.unknown.append(v.key)
+            }
+        }
+        Log.info(call.map { "\(decision.logLine) (call \($0.id))" } ?? decision.logLine)
         return result
     }
 

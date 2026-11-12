@@ -41,7 +41,7 @@ public struct SpeakerSampleDetail: Codable, Equatable, Sendable {
 public struct VoiceSample: Codable, Equatable, Sendable, Identifiable {
     /// Why Mossad has the sample.
     public struct Origin: Codable, Equatable, Sendable {
-        /// "ownerNamed", "autoMatch", "ownerEnrollment", or "migrated".
+        /// "ownerNamed", "autoMatch", "inviteInference", "ownerEnrollment", or "migrated".
         public var kind: String
         /// The match score of an automatic match.
         public var score: Float?
@@ -57,6 +57,8 @@ public struct VoiceSample: Codable, Equatable, Sendable, Identifiable {
         public static let ownerEnrollment = Origin(kind: "ownerEnrollment")
         /// From the voice library of before, with no more known.
         public static let migrated = Origin(kind: "migrated")
+        /// The one invited person with no voice, named as the one voice left in the call.
+        public static let inviteInference = Origin(kind: "inviteInference")
         /// A sure automatic match taught the profile.
         public static func autoMatch(_ score: Float) -> Origin { Origin(kind: "autoMatch", score: score) }
     }

@@ -46,12 +46,16 @@ public final class VoiceLibrary: @unchecked Sendable {
 
     /// The closest profile by cosine similarity to its centroid, when above the threshold.
     public func bestMatch(_ embedding: [Float]) -> (name: String, score: Float)? {
-        let scored = profiles.compactMap { p -> (String, Float)? in
+        guard let best = ranked(embedding).first, best.score >= matchThreshold else { return nil }
+        return (best.name, best.score)
+    }
+
+    /// Every profile with a voice by cosine similarity to its centroid, best first.
+    public func ranked(_ embedding: [Float]) -> [VoiceScore] {
+        profiles.compactMap { p -> VoiceScore? in
             guard let centroid = Self.centroid(p.embeddings) else { return nil }
-            return (p.name, Self.cosine(embedding, centroid))
-        }
-        guard let best = scored.max(by: { $0.1 < $1.1 }), best.1 >= matchThreshold else { return nil }
-        return best
+            return VoiceScore(name: p.name, score: Self.cosine(embedding, centroid))
+        }.sorted { $0.score > $1.score }
     }
 
     /// `source` says which call and speaker the sample came from. With it, a sample learned again from the same

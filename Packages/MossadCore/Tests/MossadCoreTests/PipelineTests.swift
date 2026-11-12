@@ -1052,7 +1052,7 @@ final class PipelineTests: XCTestCase {
         try library.add([0, 1, 0, 0], to: "Alex Rivera")
         let id = try makeRecord()
         let calendar = FakeCalendar(events: [CalendarEventInfo(title: "Weekly Ops Sync", start: start, end: start.addingTimeInterval(1800),
-                                                               attendees: ["Alex Rivera", "Amy Lee"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)])
+                                                               attendees: ["Alex Rivera", "Amy Lee", "Sam Ortiz"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)])
         await pipeline(calendar: calendar).process(id)
         let r = try load(id)
         XCTAssertEqual(r.status, .written)
@@ -1070,6 +1070,20 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(r.markdownPath!.hasPrefix(paths.meetings.path))
         XCTAssertEqual(notified.map(\.id), [id])
         XCTAssertTrue(summarizer.lastTranscript.contains("Alex Rivera: It leaves Friday."))
+    }
+
+    func testTheOneVoiceLeftIsTheOneInvitedPersonWithNoVoice() async throws {
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        let id = try makeRecord()
+        let calendar = FakeCalendar(events: [CalendarEventInfo(title: "Weekly Ops Sync", start: start, end: start.addingTimeInterval(1800),
+                                                               attendees: ["Alex Rivera", "Amy Lee"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)])
+        await pipeline(calendar: calendar).process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
+        XCTAssertEqual(r.speakerNames["them:B"], "Amy Lee")
+        XCTAssertTrue(r.unknownSpeakers.isEmpty)
+        XCTAssertTrue(notified.isEmpty)
+        XCTAssertEqual(library.profiles.first { $0.name == "Amy Lee" }?.embeddings.count, 1)
     }
 
     func testNoNotificationWhenAllSpeakersKnown() async throws {

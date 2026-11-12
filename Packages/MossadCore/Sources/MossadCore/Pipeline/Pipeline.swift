@@ -749,13 +749,19 @@ public actor Pipeline {
             r.status = .identified
             return
         }
+        // Who was invited decides whose voice may be named on a call, so the invite is looked for here when the call
+        // had none yet. A room recording keeps the rules of before.
+        let onCall = r.platform != .inPerson && !r.isNotesOnly
+        if onCall, r.attendees.isEmpty, r.invitees == nil { await matchInvite(&r) }
+        let invite = onCall ? CallInvite(record: r) : nil
+        detail(r.id, "Identifying speakers")
         // Short pieces of each voice, at most a minute per speaker, through the one copy of the voice models that the
         // live transcript's namer also uses; so it runs behind a call.
         let plan = await clearance(r.id, .voiceIdentification)
         let identifier = identifier, utterances = r.utterances, call = (id: r.id, start: r.start)
         let me = dir.appendingPathComponent(Track.me.fileName), them = dir.appendingPathComponent(Track.them.fileName)
         let result = try await runHeavy(r.id, .voiceIdentification, plan) {
-            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call)
+            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite)
         }
         r.speakerNames = result.names
         r.unknownSpeakers = result.unknown
@@ -784,16 +790,18 @@ public actor Pipeline {
         Log.info("Dropped \(echo.count) mic voices that are people on the call audio")
     }
 
+    private func matchInvite(_ r: inout CallRecord) async {
+        detail(r.id, "Finding the calendar invite")
+        let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
+            r.setInvite(event)
+        }
+    }
+
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
         // A notes-only meeting was made from its invite.
-        if quietRuns[r.id] == nil, !r.isNotesOnly {
-            detail(r.id, "Finding the calendar invite")
-            let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
-            if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
-                r.setInvite(event)
-            }
-        }
+        if quietRuns[r.id] == nil, !r.isNotesOnly { await matchInvite(&r) }
         // After the calendar, so a presenter's name can be matched to the invited people.
         await readScreens(&r)
         if summarizer != nil, !r.utterances.isEmpty { detail(r.id, "Claude is writing the summary") }
