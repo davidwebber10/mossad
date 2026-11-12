@@ -303,7 +303,8 @@ extension PeopleSort {
         case .mostMet: "Most met with"
         case .talkTime: "Most talk time"
         case .newest: "Newest"
-        case .name: "Name"
+        case .firstName: "First name"
+        case .lastName: "Last name"
         }
     }
 }

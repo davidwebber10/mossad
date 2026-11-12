@@ -6,7 +6,7 @@ struct PersonRoute: Hashable { let name: String }
 /// Everyone you meet with, as the canvas lists them: you first, then the others by the last time you met, with
 /// their mark, how often, and when. It opens from Analytics, inside that tab's navigation.
 struct PeopleScreen: View {
-    enum Sort: String, CaseIterable { case recent = "Most recent", mostMet = "Most met", name = "A to Z" }
+    enum Sort: String, CaseIterable { case recent = "Most recent", mostMet = "Most met", firstName = "First name", lastName = "Last name" }
 
     @Environment(PhoneStore.self) private var store
     @State private var query = ""
@@ -82,7 +82,12 @@ struct PeopleScreen: View {
         case .mostMet:
             return named.sorted { $0.value.meetings.count == $1.value.meetings.count ? $0.key < $1.key : $0.value.meetings.count > $1.value.meetings.count }
                 .map(\.key)
-        case .name: return named.keys.sorted { $0.localizedCompare($1) == .orderedAscending }
+        case .firstName: return named.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        case .lastName:
+            return named.keys.sorted { a, b in
+                let c = PeopleSort.lastName(a).localizedStandardCompare(PeopleSort.lastName(b))
+                return c == .orderedSame ? a.localizedStandardCompare(b) == .orderedAscending : c == .orderedAscending
+            }
         }
     }
 }

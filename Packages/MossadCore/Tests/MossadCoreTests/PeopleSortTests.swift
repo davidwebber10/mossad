@@ -30,7 +30,7 @@ final class PeopleSortTests: XCTestCase {
     func names(_ sort: PeopleSort) -> [String] { sort.order(profiles, stats: table).map(\.name) }
 
     func testOwnerIsFirstInEverySort() {
-        for sort in [PeopleSort.recent, .mostMet, .talkTime, .newest, .name] {
+        for sort in [PeopleSort.recent, .mostMet, .talkTime, .newest, .firstName, .lastName] {
             XCTAssertEqual(names(sort).first, "Me Owner", "\(sort)")
         }
     }
@@ -52,8 +52,18 @@ final class PeopleSortTests: XCTestCase {
         XCTAssertEqual(names(.newest), ["Me Owner", "Sam Park", "Alex Rivera", "Dana Lee"])
     }
 
-    func testNameAToZ() {
-        XCTAssertEqual(names(.name), ["Me Owner", "Alex Rivera", "Dana Lee", "Sam Park"])
+    func testFirstNameAToZ() {
+        XCTAssertEqual(names(.firstName), ["Me Owner", "Alex Rivera", "Dana Lee", "Sam Park"])
+    }
+
+    func testLastNameAToZThenFirstName() {
+        // Lee, Park, Rivera; two with one last name go by the first name; a single name is its own last name.
+        let all = [profile("Sam Park"), profile("Dana Lee"), profile("Alex Rivera"), profile("Jo Park"), profile("Madonna")]
+        XCTAssertEqual(PeopleSort.lastName.order(all, stats: [:]).map(\.name), ["Dana Lee", "Madonna", "Jo Park", "Sam Park", "Alex Rivera"])
+    }
+
+    func testASavedNameSortIsTheFirstNameSort() {
+        XCTAssertEqual(PeopleSort(rawValue: "name"), .firstName)
     }
 
     func testTiesBreakByName() {
