@@ -119,6 +119,7 @@ enum SearchWeight {
     static let task = 3.0
     static let chatTitle = 3.0
     static let email = 3.0
+    static let jobTitle = 2.0
     static let taskDetail = 2.0
     static let transcript = 1.0
     static let chatMessage = 1.0
@@ -145,7 +146,9 @@ extension SearchIndex {
         guard !Task.isCancelled else { return .empty }
         var moments = deep ? momentGroups(words, allowed: allowed, limits: limits, now: now) : []
         guard !Task.isCancelled else { return .empty }
-        var outcomes = deep ? matchOutcomes(words, allowed: allowed, now: now) : []
+        let found = deep ? matchOutcomes(words, allowed: allowed, now: now) : []
+        var outcomes = found.filter { $0.kind != .bookmark }
+        var bookmarks = found.filter { $0.kind == .bookmark }
         let callIDs = allowed.map { Set($0.map { slots[Int($0)]!.id }) }
         var tasks = words.isEmpty ? [] : matchTasks(words, callIDs: callIDs, now: now)
         var chats = deep ? matchChats(words, callIDs: callIDs, now: now) : []
@@ -154,7 +157,8 @@ extension SearchIndex {
         let candidates: [SearchHit?] = [
             meetings.first.map(SearchHit.meeting), people.first.map(SearchHit.person),
             moments.first?.moments.max { $0.score < $1.score }.map(SearchHit.moment),
-            outcomes.first.map(SearchHit.outcome), tasks.first.map(SearchHit.task), chats.first.map(SearchHit.chat),
+            outcomes.first.map(SearchHit.outcome), bookmarks.first.map(SearchHit.outcome), tasks.first.map(SearchHit.task),
+            chats.first.map(SearchHit.chat),
         ]
         var top: SearchHit?
         for case let c? in candidates where c.score > (top?.score ?? -1) { top = c }
@@ -164,7 +168,7 @@ extension SearchIndex {
         case .moment(let m):
             moments[0].moments.removeAll { $0.id == m.id }
             if moments[0].moments.isEmpty { moments.removeFirst() }
-        case .outcome: outcomes.removeFirst()
+        case .outcome(let o): if o.kind == .bookmark { bookmarks.removeFirst() } else { outcomes.removeFirst() }
         case .task: tasks.removeFirst()
         case .chat: chats.removeFirst()
         case nil: break
@@ -174,6 +178,7 @@ extension SearchIndex {
         r.people = Array(people.prefix(limits.people))
         r.moments = moments
         r.decisionsAndActions = Array(outcomes.prefix(limits.decisionsAndActions))
+        r.bookmarks = Array(bookmarks.prefix(limits.bookmarks))
         r.tasks = Array(tasks.prefix(limits.tasks))
         r.chats = Array(chats.prefix(limits.chats))
         return r
@@ -264,7 +269,7 @@ extension SearchIndex {
 
     // MARK: Filters
 
-    private func allowedSlots(tag: String?, person: [QueryWord]) -> [Int32]? {
+    func allowedSlots(tag: String?, person: [QueryWord]) -> [Int32]? {
         guard tag != nil || !person.isEmpty else { return nil }
         var keys: Set<String> = []
         if let tag {
@@ -348,6 +353,7 @@ extension SearchIndex {
             for w in words {
                 let b = max((best(p.name, w, names: true, typos: true) ?? 0) * SearchWeight.person,
                             (p.email.flatMap { best($0, w) } ?? 0) * SearchWeight.email,
+                            (p.title.flatMap { best($0, w) } ?? 0) * SearchWeight.jobTitle,
                             // A name of before is a little less than the name of now.
                             (p.others.compactMap { best($0, w, names: true) }.max() ?? 0) * SearchWeight.email)
                 if b == 0 { all = false; break }
@@ -365,7 +371,7 @@ extension SearchIndex {
     }
 
     private func personHit(_ p: PersonEntry, name: SearchText, score: Double) -> PersonHit {
-        PersonHit(name: name, email: p.email?.text, isOwner: p.isOwner, meetings: p.meetings, lastMet: p.lastMet, score: score)
+        PersonHit(name: name, email: p.email?.text, title: p.title?.text, isOwner: p.isOwner, meetings: p.meetings, lastMet: p.lastMet, score: score)
     }
 
     // MARK: Moments
@@ -420,11 +426,11 @@ extension SearchIndex {
         }
     }
 
-    private func postingCount(_ w: QueryWord) -> Int {
+    func postingCount(_ w: QueryWord) -> Int {
         w.prefixIDs.reduce(0) { $0 + (Int($1) < postings.count ? postings[Int($1)].count : 0) }
     }
 
-    private func moment(_ e: MeetingEntry, turn: Int, score: Double, _ words: [QueryWord]) -> MomentHit {
+    func moment(_ e: MeetingEntry, turn: Int, score: Double, _ words: [QueryWord]) -> MomentHit {
         let u = e.utterances[turn]
         let spans = SearchTokenizer.tokens(u.text).filter { t in
             guard let id = vocab.id(t.term) else { return false }

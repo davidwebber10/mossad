@@ -18,6 +18,8 @@ public struct PersonHit: Sendable, Equatable, Identifiable {
     public var id: String { name.text }
     public var name: SearchText
     public var email: String?
+    /// The job title from the directory, when one is known.
+    public var title: String? = nil
     public var isOwner: Bool
     /// Meetings where this person spoke.
     public var meetings: Int
@@ -54,15 +56,15 @@ public struct MomentGroup: Sendable, Equatable, Identifiable {
     var score: Double = 0
 }
 
-/// A decision or an action item from a meeting's summary.
+/// A decision or an action item from a meeting's summary, or the note of a bookmark.
 public struct OutcomeHit: Sendable, Equatable, Identifiable {
-    public enum Kind: String, Sendable { case decision, actionItem }
+    public enum Kind: String, Sendable { case decision, actionItem, bookmark }
     public var id: String { "\(callID)#\(kind.rawValue)\(position)" }
     public var kind: Kind
     public var callID: String
     public var meetingTitle: String
     public var meetingStart: Date
-    /// The position in the meeting's decisions or action items.
+    /// The position in the meeting's decisions, action items, or bookmarks.
     public var position: Int
     /// Seconds into the meeting, when known.
     public var time: TimeInterval?
@@ -127,7 +129,7 @@ public enum SearchHit: Sendable, Equatable, Identifiable {
 }
 
 public enum SearchGroup: String, Sendable, CaseIterable, Identifiable {
-    case topHit, meetings, people, moments, decisionsAndActions, tasks, chats
+    case topHit, meetings, people, moments, decisionsAndActions, bookmarks, tasks, chats
 
     public var id: String { rawValue }
 
@@ -138,6 +140,7 @@ public enum SearchGroup: String, Sendable, CaseIterable, Identifiable {
         case .people: "People"
         case .moments: "Transcript"
         case .decisionsAndActions: "Decisions and action items"
+        case .bookmarks: "Bookmarks"
         case .tasks: "Tasks"
         case .chats: "Chats"
         }
@@ -159,6 +162,8 @@ public struct SearchResults: Sendable, Equatable {
     public var people: [PersonHit] = []
     public var moments: [MomentGroup] = []
     public var decisionsAndActions: [OutcomeHit] = []
+    /// Bookmarks whose note holds the words.
+    public var bookmarks: [OutcomeHit] = []
     public var tasks: [TaskHit] = []
     public var chats: [ChatHit] = []
 
@@ -174,6 +179,7 @@ public struct SearchResults: Sendable, Equatable {
             SearchSection(group: .people, hits: people.map(SearchHit.person)),
             SearchSection(group: .moments, hits: moments.flatMap { $0.moments.map(SearchHit.moment) }),
             SearchSection(group: .decisionsAndActions, hits: decisionsAndActions.map(SearchHit.outcome)),
+            SearchSection(group: .bookmarks, hits: bookmarks.map(SearchHit.outcome)),
             SearchSection(group: .tasks, hits: tasks.map(SearchHit.task)),
             SearchSection(group: .chats, hits: chats.map(SearchHit.chat)),
         ]
@@ -211,6 +217,7 @@ public struct SearchLimits: Sendable, Equatable {
     public var momentMeetings = 10
     public var momentsPerMeeting = 3
     public var decisionsAndActions = 20
+    public var bookmarks = 10
     public var tasks = 10
     public var chats = 10
 

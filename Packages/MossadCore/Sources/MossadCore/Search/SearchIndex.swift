@@ -86,6 +86,8 @@ struct MeetingEntry: Sendable {
     /// Named speakers, for the People counts.
     var speakers: Set<String>
     var outcomes: [OutcomeEntry]
+    /// The summary's overview and each topic, for the Meetings list search.
+    var summaryFields: [IndexedField] = []
     var utterances: [Utterance]
     var displayNames: [String: String]
     /// The meeting's first turn in the index's turn arrays; its turns follow in order.
@@ -97,6 +99,8 @@ struct PersonEntry: Sendable {
     /// The person's other names: a name of before a rename, and a form a calendar showed. The old name finds them.
     var others: [IndexedField] = []
     var email: IndexedField?
+    /// The job title from the directory, when one is known.
+    var title: IndexedField? = nil
     var isOwner: Bool
     var meetings: Int
     var lastMet: Date?
@@ -132,6 +136,8 @@ public struct SearchIndex: Sendable {
     var turnSlot: [Int32] = []
     /// Word id to the turns that hold it, oldest turn first, each turn once.
     var postings: [[Int32]] = []
+    /// Word id to the meeting slots with a turn that holds it, each slot once: the Meetings list asks per meeting.
+    var slotPostings: [[Int32]] = []
     var liveTurns = 0
     var deadTurns = 0
 
@@ -142,6 +148,8 @@ public struct SearchIndex: Sendable {
     var people: [PersonEntry] = []
     /// Each saved person's other names, by the name of now.
     private var otherNames: [String: [String]] = [:]
+    /// Each saved person's job title, by the name of now.
+    private var jobTitles: [String: String] = [:]
     var tasks: [TaskEntry] = []
     var chats: [ChatEntry] = []
 
@@ -185,15 +193,19 @@ public struct SearchIndex: Sendable {
         rebuildPeople()
     }
 
-    /// The other names of the saved people, from the people store: a person is found by a name of before a rename.
+    /// The other names and the job titles of the saved people, from the people store: a person is found by a name
+    /// of before a rename, and shows their job.
     public mutating func setOtherNames(_ people: [Person]) {
         var out: [String: [String]] = [:]
+        var titles: [String: String] = [:]
         for p in people where p.isLive {
             let others = p.forms.map(\.text).filter { PersonNames.nameKey($0) != PersonNames.nameKey(p.displayName) }
             if !others.isEmpty { out[p.displayName, default: []] += others }
+            if let title = p.directory?.jobTitle?.trimmingCharacters(in: .whitespaces), !title.isEmpty { titles[p.displayName] = title }
         }
-        guard out != otherNames else { return }
+        guard out != otherNames || titles != jobTitles else { return }
         otherNames = out
+        jobTitles = titles
         rebuildPeople()
         vocab.sort()
     }
@@ -261,6 +273,10 @@ public struct SearchIndex: Sendable {
         for p in speakers.sorted() + r.attendees where !people.contains(p) { people.append(p) }
         let decisions = r.decisions.enumerated().map { i, d in (OutcomeHit.Kind.decision, i, d.at, d.text) }
         let actions = r.actionItems.enumerated().map { i, a in (OutcomeHit.Kind.actionItem, i, TimeInterval?.none, a.text) }
+        let bookmarks = r.markers.filter(\.isBookmark).enumerated().compactMap { i, m -> (OutcomeHit.Kind, Int, TimeInterval?, String)? in
+            guard let note = m.note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else { return nil }
+            return (.bookmark, i, m.offset, note)
+        }
         var entry = MeetingEntry(
             id: r.id, start: r.start, end: r.end, platform: r.platform, kind: r.kind, tags: r.tags,
             title: field(r.title, names: true), otherTitles: [], kindField: nil, tagFields: [], tagKeys: r.tags.map(SearchTokenizer.key),
@@ -276,7 +292,8 @@ public struct SearchIndex: Sendable {
         entry.tagFields = r.tags.map { field($0) }
         entry.personFields = people.map { personField($0, names: true) }
         entry.emails = people.compactMap(SearchIndex.normalizedEmail)
-        entry.outcomes = (decisions + actions).map { OutcomeEntry(kind: $0.0, position: $0.1, time: $0.2, field: field($0.3)) }
+        entry.outcomes = (decisions + actions + bookmarks).map { OutcomeEntry(kind: $0.0, position: $0.1, time: $0.2, field: field($0.3)) }
+        entry.summaryFields = SearchIndex.summaryTexts(r).map { field($0) }
         for u in turns {
             for t in SearchTokenizer.tokens(u.text) { termStore.append(vocab.intern(t.term)) }
             appendTurn(slot: slot)
@@ -286,6 +303,13 @@ public struct SearchIndex: Sendable {
         slotOf[r.id] = slot
     }
 
+    /// The overview, then each topic as "Title: text", without the Markdown bold marks.
+    static func summaryTexts(_ r: CallRecord) -> [String] {
+        let plain = { (s: String) in s.replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespacesAndNewlines) }
+        let texts = [r.summary.map(plain) ?? ""] + r.topics.map { "\(plain($0.title)): \(plain($0.summary))" }
+        return texts.filter { !$0.isEmpty }
+    }
+
     /// Records the turn whose words were just added to `termStore`, and its postings.
     private mutating func appendTurn(slot: Int32) {
         let g = Int32(turnSlot.count)
@@ -293,9 +317,11 @@ public struct SearchIndex: Sendable {
         turnOffset.append(Int32(termStore.count))
         turnSlot.append(slot)
         if postings.count < vocab.count { postings.append(contentsOf: repeatElement([], count: vocab.count - postings.count)) }
+        if slotPostings.count < vocab.count { slotPostings.append(contentsOf: repeatElement([], count: vocab.count - slotPostings.count)) }
         for i in from..<termStore.count {
             let id = Int(termStore[i])
             if postings[id].last != g { postings[id].append(g) }
+            if slotPostings[id].last != slot { slotPostings[id].append(slot) }
         }
     }
 
@@ -315,6 +341,7 @@ public struct SearchIndex: Sendable {
         turnOffset = [0]
         turnSlot = []
         postings = []
+        slotPostings = []
         var kept: [MeetingEntry?] = []
         slotOf = [:]
         for case var entry? in slots {
@@ -347,7 +374,8 @@ public struct SearchIndex: Sendable {
         for p in profiles where !p.name.hasPrefix("Speaker ") && seen.insert(p.name).inserted {
             let c = counts[p.name]
             out.append(PersonEntry(name: field(p.name, names: true), others: (otherNames[p.name] ?? []).map { field($0, names: true) },
-                                   email: p.email.map { personField($0, names: false) }, isOwner: p.isOwner, meetings: c?.meetings ?? 0, lastMet: c?.last))
+                                   email: p.email.map { personField($0, names: false) }, title: jobTitles[p.name].map { field($0) },
+                                   isOwner: p.isOwner, meetings: c?.meetings ?? 0, lastMet: c?.last))
         }
         for (name, c) in counts.sorted(by: { $0.key < $1.key }) where seen.insert(name).inserted {
             out.append(PersonEntry(name: field(name, names: true), email: nil, isOwner: false, meetings: c.meetings, lastMet: c.last))
