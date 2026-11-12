@@ -187,7 +187,8 @@ struct SearchPalette: View {
                         status("Nothing matches “\(trimmed)”.")
                     }
                     ForEach(Array(list.sections.enumerated()), id: \.element.id) { i, section in
-                        PaletteHeader(title: section.title, first: i == 0)
+                        PaletteHeader(title: section.title, first: i == 0,
+                                      clear: section.id == "searches" ? { model.forgetRecent() } : nil)
                         ForEach(section.rows) { row in
                             rowView(row, top: section.group == .topHit)
                                 .id(row.id)
@@ -226,6 +227,7 @@ struct SearchPalette: View {
             switch row {
             case .hit(let hit): HitContent(hit: hit, top: top, selected: selected)
             case .more(_, let count): MoreContent(count: count)
+            case .recent(let query): RecentContent(query: query)
             }
         }
     }
@@ -278,6 +280,9 @@ struct SearchPalette: View {
         switch row {
         case .hit(let hit): controller.openResult(hit, transcript: transcript)
         case .more(let callID, _): model.expand(callID)
+        case .recent(let query):
+            model.query = query
+            fieldFocused = true
         }
     }
 
@@ -288,16 +293,45 @@ struct SearchPalette: View {
 private struct PaletteHeader: View {
     let title: String
     let first: Bool
+    /// "Clear", for the recent searches.
+    var clear: (() -> Void)?
 
     var body: some View {
-        Text(title)
-            .textRole(.label)
-            .foregroundStyle(Palette.tertiary)
-            .padding(.horizontal, 10)
-            .padding(.top, first ? 6 : 14)
-            .padding(.bottom, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityAddTraits(.isHeader)
+        HStack {
+            Text(title)
+                .textRole(.label)
+                .foregroundStyle(Palette.tertiary)
+                .accessibilityAddTraits(.isHeader)
+            Spacer()
+            if let clear {
+                Button("Clear", action: clear)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Palette.secondary)
+                    .accessibilityLabel("Clear recent searches")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, first ? 6 : 14)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A recent search: the clock mark and the words. Return or a click puts them in the field.
+private struct RecentContent: View {
+    let query: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            IconImage(.clock, size: 14).foregroundStyle(Palette.tertiaryMark)
+                .frame(width: PaletteMetrics.leading, height: 18)
+            Text(query).font(.system(size: 13)).foregroundStyle(Palette.ink).lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Recent search: \(query)")
+        .accessibilityHint("Searches again")
     }
 }
 
@@ -352,7 +386,8 @@ private struct HitContent: View {
         case .meeting(let m): PlatformDot(platform: m.platform, size: top ? 10 : 8)
         case .person(let p): PersonMark(name: p.name.text, size: top ? 34 : 24, isOwner: p.isOwner)
         case .moment: IconImage(.waveform, size: top ? 18 : 15).foregroundStyle(Palette.accent)
-        case .outcome(let o): IconImage(o.kind == .decision ? .check : .note, size: top ? 18 : 15).foregroundStyle(Palette.accent)
+        case .outcome(let o):
+            IconImage(o.kind == .decision ? .check : o.kind == .bookmark ? .bookmark : .note, size: top ? 18 : 15).foregroundStyle(Palette.accent)
         case .task(let t):
             Circle().strokeBorder(t.isDone ? Palette.ok : Palette.ring, lineWidth: 1.5)
                 .frame(width: top ? 18 : 15, height: top ? 18 : 15)
@@ -374,7 +409,7 @@ private struct HitContent: View {
             }
         case .person(let p):
             title(p.name)
-            detail([p.email ?? (p.isOwner ? "You" : nil), p.lastMet.map { "Last met \(dateText($0))" }].compactMap { $0 })
+            detail([p.title, p.email ?? (p.isOwner ? "You" : nil), p.lastMet.map { "Last met \(dateText($0))" }].compactMap { $0 })
         case .moment(let m):
             HStack(spacing: 0) {
                 Text(m.meetingTitle).fontWeight(.medium).foregroundStyle(Palette.ink).lineLimit(1).layoutPriority(-1)
@@ -384,7 +419,7 @@ private struct HitContent: View {
             snippet(m.snippet)
         case .outcome(let o):
             title(o.text, lines: 2)
-            detail([o.kind == .decision ? "Decision" : "Action item", o.meetingTitle, dateText(o.meetingStart)])
+            detail([o.kind.label, o.meetingTitle, dateText(o.meetingStart)])
         case .task(let t):
             title(t.text, lines: 2)
             detail([t.to.map { "To \($0)" }, t.callTitle, t.isDone ? "Done" : nil].compactMap { $0 })
@@ -491,6 +526,16 @@ private struct WindowReader: NSViewRepresentable {
             // Later, not during the view update that moved it.
             guard let window else { return }
             DispatchQueue.main.async { [found] in found(window) }
+        }
+    }
+}
+
+extension OutcomeHit.Kind {
+    var label: String {
+        switch self {
+        case .decision: "Decision"
+        case .actionItem: "Action item"
+        case .bookmark: "Bookmark"
         }
     }
 }

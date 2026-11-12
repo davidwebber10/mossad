@@ -6,7 +6,8 @@ import SwiftUI
 /// pictures decode off the main thread when they come into view (`FrameThumbnail`).
 struct AllScreensView: View {
     @EnvironmentObject var controller: AppController
-    @State private var query = ""
+    @State private var search = ListSearchState()
+    private var query: String { search.query }
     @State private var groups: [ScreenIndex.Group] = []
     @State private var total = 0
     @State private var loaded = false
@@ -15,9 +16,7 @@ struct AllScreensView: View {
 
     var body: some View {
         DetailColumn {
-            PageToolbar(title: "Screens", subtitle: subtitle) {
-                if total > 0 { ToolbarSearchField(prompt: "Search text on screens", query: $query) }
-            }
+            PageToolbar(title: "Screens", subtitle: subtitle, search: total > 0 ? $search : nil, searchPrompt: "Search text on screens") {}
         } content: {
             page
         }

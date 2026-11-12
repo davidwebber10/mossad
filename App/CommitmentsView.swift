@@ -11,14 +11,18 @@ struct CommitmentsView: View {
     @State private var editing: Commitment?
     @State private var adding: Commitment?
     @State private var mode = Mode.open
-    @State private var query = ""
+    @State private var search = ListSearchState()
+    private var query: String { search.trimmed }
     /// A task opened from search: marked with the selection fill and scrolled to.
     @State private var opened: UUID?
 
+    /// The task's words, then whom it is for, the meeting, and the words it came from.
     private var matching: [Commitment] {
-        book.visible.filter { c in
-            query.isEmpty || c.text.localizedCaseInsensitiveContains(query) || (c.to ?? "").localizedCaseInsensitiveContains(query)
-                || (c.callTitle ?? "").localizedCaseInsensitiveContains(query)
+        let words = ListSearch(query)
+        guard !words.isEmpty else { return book.visible }
+        return book.visible.filter { c in
+            let fields = [ListField("To", c.to ?? ""), ListField("Meeting", c.callTitle ?? ""), ListField("Said", c.quote ?? "")]
+            return words.match(title: c.text, fields: fields) != nil
         }
     }
 
@@ -97,17 +101,16 @@ struct CommitmentsView: View {
     private func takeOpenedTask() {
         guard let id = controller.taskToOpen, let c = book.visible.first(where: { $0.id == id }) else { return }
         controller.taskToOpen = nil
-        query = ""
+        search.close()
         mode = c.done == nil ? .open : .done
         opened = id
     }
 
     private var toolbar: some View {
-        PageToolbar(title: "Tasks", subtitle: subtitle) {
+        PageToolbar(title: "Tasks", subtitle: subtitle, search: $search, searchPrompt: "Search tasks, people, meetings") {
             ToolbarSegmented(selection: $mode, options: Mode.allCases.map { .init(value: $0, label: $0.rawValue) },
                            accessibilityLabel: "Show")
                 .help("Open or done tasks")
-            ToolbarSearchField(prompt: "Search tasks", query: $query)
             ToolbarCircleButton(icon: .plus, label: "Add", help: "Add a task", action: add)
         }
     }

@@ -8,10 +8,23 @@ struct SharesView: View {
     @StateObject private var model = SharesModel()
     @State private var selection: String?
     @State private var editing: CallRecord?
+    @State private var search = ListSearchState()
 
     private var hasServer: Bool { ShareSample.kind != nil || controller.serverConnection != nil }
     private var links: [MeetingLink] { model.sampleLinks ?? controller.shareBook.links }
     private var rows: [ShareRow] { ShareRows.make(links: links, remote: model.remote) }
+
+    /// The shares whose title, or the people of whose meeting, hold every word.
+    private func searched(_ rows: [ShareRow]) -> [ShareRow] {
+        let words = ListSearch(search.query)
+        guard !words.isEmpty else { return rows }
+        let records = Dictionary(controller.meetings.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return rows.filter { row in
+            let record = row.link.flatMap { records[$0.callID] }
+            let people = record.map { Set($0.speakerNames.values.filter { !$0.hasPrefix("Speaker ") }).sorted() + $0.attendees } ?? []
+            return words.match(title: row.title, fields: people.map { ListField("People", $0) }) != nil
+        }
+    }
     /// Development hook for screenshots: MOSSAD_SHARE_ROW=2 opens the third of the made-up shares.
     private static let previewRow = ShareSample.kind == nil ? nil : ProcessInfo.processInfo.environment["MOSSAD_SHARE_ROW"].flatMap { Int($0) }
 
@@ -39,8 +52,16 @@ struct SharesView: View {
                 // The chosen share, or the first one: a share that was stopped leaves the choice to the next.
                 let shown = rows.first { $0.id == selection } ?? Self.previewRow.flatMap { rows.indices.contains($0) ? rows[$0] : nil } ?? rows[0]
                 HStack(spacing: 0) {
-                    ListColumn("Shares", widthKey: "shares") {
-                        ShareList(rows: rows, selection: Binding(get: { shown.id }, set: { selection = $0 }))
+                    ListColumn("Shares", widthKey: "shares", search: $search, searchPrompt: "Search shares and their people") {
+                        let found = searched(rows)
+                        if found.isEmpty {
+                            Text("No share matches “\(search.trimmed)”.")
+                                .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                                .padding(.horizontal, 24).padding(.top, Space.s)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            ShareList(rows: found, selection: Binding(get: { shown.id }, set: { selection = $0 }))
+                        }
                     }
                     ShareDetailPane(row: shown, model: model, edit: { editing = $0 })
                         .id(shown.id)

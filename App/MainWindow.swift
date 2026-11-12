@@ -29,6 +29,11 @@ struct MainWindow: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .environment(\.windowWidth, width)
+        .environment(\.openGlobalSearch, { [weak c = controller] in c?.openSearch() })
+        .background {
+            // Command-F: the page's own search, or the search of everything on a page without one.
+            Button("Find") { controller.find() }.keyboardShortcut("f").opacity(0).accessibilityHidden(true)
+        }
         .ignoresSafeArea()
         .background { WindowBackdrop() }
         // The window's contentMinSize sets the limit. A minimum height here would apply below the toolbar, so it

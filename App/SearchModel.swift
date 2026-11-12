@@ -15,6 +15,11 @@ final class SearchModel: ObservableObject {
     /// Each meeting whose "N more" row was opened, with all its moments.
     @Published private(set) var expanded: [String: [MomentHit]] = [:]
     @Published private(set) var isReady = false
+    /// Bumped after each update of the index, so the Meetings list search runs again on the new one.
+    @Published private(set) var version = 0
+    /// The owner's searches that led to a result, newest first, for the empty field.
+    @Published private(set) var recent = RecentSearches(UserDefaults.standard.stringArray(forKey: SearchModel.recentKey) ?? [])
+    private static let recentKey = "searchRecent"
 
     private var index = SearchIndex()
     private var results = SearchResults.empty
@@ -39,6 +44,7 @@ final class SearchModel: ObservableObject {
             index = next
             indexed = records
             isReady = true
+            version += 1
             suggestions = next.suggestions()
             updating = nil
             if !query.isEmpty { search() }
@@ -54,19 +60,21 @@ final class SearchModel: ObservableObject {
         async -> (SearchIndex, [String: CallRecord]) {
         let tasks = ((try? CommitmentBook.load(from: s.paths.commitments)) ?? CommitmentBook()).items
         let chats = ChatStore(directory: s.paths.chats).all()
+        // The people file as it is until the store is attached at launch.
+        let people = s.library.identity?.people.people ?? PeopleStore.peek(in: s.paths.people) ?? []
         let records = Dictionary(s.records.map { ($0.id, $0) }, uniquingKeysWith: { _, b in b })
         // One by one costs more than a fresh build once many meetings change, as at launch.
         let changed = records.filter { old[$0.key] != $0.value }.count + old.keys.filter { records[$0] == nil }.count
         if fresh || changed > 20 {
             var index = SearchIndex(records: s.records, people: s.library.profiles, tasks: tasks, chats: chats)
-            index.setOtherNames(s.library.identity?.people.people ?? [])
+            index.setOtherNames(people)
             return (index, records)
         }
         var index = base
         for (id, r) in records where old[id] != r { index.update(r) }
         for id in old.keys where records[id] == nil { index.removeMeeting(id: id) }
         index.setPeople(s.library.profiles)
-        index.setOtherNames(s.library.identity?.people.people ?? [])
+        index.setOtherNames(people)
         index.setTasks(tasks)
         index.setChats(chats)
         return (index, records)
@@ -102,5 +110,25 @@ final class SearchModel: ObservableObject {
     }
 
     /// The suggestions as rows, for the empty query.
-    var suggestionList: SearchList { SearchList(suggestions: suggestions) }
+    var suggestionList: SearchList { SearchList(suggestions: suggestions, recent: recent.items) }
+
+    /// Keeps the typed query among the recent searches: a result was opened from it.
+    func remember(_ query: String) {
+        recent.add(query)
+        UserDefaults.standard.set(recent.items, forKey: Self.recentKey)
+    }
+
+    func forgetRecent() {
+        recent.clear()
+        UserDefaults.standard.removeObject(forKey: Self.recentKey)
+    }
+
+    /// The Meetings list search on the newest index, off the main actor; nil until the index is first built.
+    func listMatches(_ query: String) async -> [String: ListMatch]? {
+        guard isReady else { return nil }
+        return await Self.list(query, on: index)
+    }
+
+    @concurrent
+    nonisolated private static func list(_ text: String, on index: SearchIndex) async -> [String: ListMatch] { index.listMatches(text) }
 }

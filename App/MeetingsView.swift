@@ -21,6 +21,20 @@ struct MeetingsView: View {
     @State private var openedFrom = ""
     @State private var lastInvite = InviteHolder()
     @StateObject private var calendarState = CalendarState()
+    @State private var searchOpen = false
+    @State private var searchFocus = 0
+
+    /// The list search: its text is the controller's, so a tag click or another page can set it.
+    private var search: Binding<ListSearchState> {
+        Binding(get: { ListSearchState(query: controller.meetingQuery, isOpen: searchOpen, focusTick: searchFocus) },
+                set: { s in
+                    if controller.meetingQuery != s.query { controller.meetingQuery = s.query }
+                    searchOpen = s.isOpen
+                    searchFocus = s.focusTick
+                })
+    }
+
+    private static let searchPrompt = "Search titles, transcripts, people"
 
     /// The meetings that the search text and the filter leave. The call that records now stays under any filter:
     /// it has no length, people, or summary to filter by yet, and the owner must see that it records.
@@ -159,7 +173,7 @@ struct MeetingsView: View {
 
     private var splitBody: some View {
         HStack(spacing: 0) {
-            ListColumn("Meetings", widthKey: "meetings") {
+            ListColumn("Meetings", widthKey: "meetings", search: search, searchPrompt: Self.searchPrompt) {
                 MeetingFilterButton()
             } content: {
                 MeetingFilterChips()
@@ -183,15 +197,18 @@ struct MeetingsView: View {
         }
     }
 
-    /// List or calendar, the search, then export and more for the open meeting: three glass groups.
+    /// Calendar mode has no list column: its search and filter sit at the start of the toolbar row instead.
+    private var calendarShown: Bool { mode == .calendar && opened == nil && openedUpcoming == nil && !controller.meetings.isEmpty }
+
+    /// List or calendar, then share, export, and more for the open meeting, then the search of everything.
     private var toolbar: some View {
-        PageToolbar {
-            if mode == .calendar, opened == nil, openedUpcoming == nil, !controller.meetings.isEmpty { CalendarControls(state: calendarState) }
+        PageToolbar(search: calendarShown ? search : nil, searchPrompt: Self.searchPrompt) {
+            if calendarShown {
+                MeetingFilterButton(place: .title)
+                CalendarControls(state: calendarState).padding(.leading, Space.s)
+            }
         } trailing: {
             ModePicker(mode: Binding(get: { mode }, set: { previewMode = nil; savedMode = $0 }))
-            ToolbarSearchField(prompt: "Search titles and transcripts", query: $controller.meetingQuery)
-            // Calendar mode has no list column to carry the filter's button.
-            if mode == .calendar, opened == nil, openedUpcoming == nil, !controller.meetings.isEmpty { MeetingFilterButton(place: .toolbar) }
             if mode == .split || opened != nil {
                 let record = opened.flatMap { id in controller.meetings.first { $0.id == id } } ?? selected
                 ToolbarCapsule {

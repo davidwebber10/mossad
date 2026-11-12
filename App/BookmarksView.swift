@@ -5,7 +5,8 @@ import SwiftUI
 /// its note, and what was said at that moment. Play opens the meeting there.
 struct BookmarksView: View {
     @EnvironmentObject var controller: AppController
-    @State private var query = ""
+    @State private var search = ListSearchState()
+    private var query: String { search.query }
     @State private var groups: [BookmarkIndex.Group] = []
     /// All bookmarks, also the ones the search hides, for the subtitle and the empty states.
     @State private var total = 0
@@ -13,9 +14,7 @@ struct BookmarksView: View {
 
     var body: some View {
         DetailColumn {
-            PageToolbar(title: "Bookmarks", subtitle: subtitle) {
-                if total > 0 { ToolbarSearchField(prompt: "Search bookmarks", query: $query) }
-            }
+            PageToolbar(title: "Bookmarks", subtitle: subtitle, search: total > 0 ? $search : nil, searchPrompt: "Search notes and what was said") {}
         } content: {
             page
         }

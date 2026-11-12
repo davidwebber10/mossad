@@ -5,6 +5,8 @@ import SwiftUI
 extension EnvironmentValues {
     /// The main window's width, so a list column can leave the detail its minimum.
     @Entry var windowWidth: CGFloat = .infinity
+    /// Opens the search of everything (Command-K); the toolbar row's last button. Nil outside the main window.
+    @Entry var openGlobalSearch: (@MainActor () -> Void)?
 }
 
 /// The canvas's icons: 16 pt grid, 1.5 pt round strokes, as template images in the asset catalog.
@@ -187,18 +189,24 @@ final class TrafficLights {
 // MARK: Columns
 
 /// A list column: its own title row (15 pt semibold, 36 pt), then the list. The trailing edge drags to resize it;
-/// the width is kept per page.
+/// the width is kept per page. A list with a search has the magnifying glass at the end of the title row, and its
+/// field comes down under the row.
 struct ListColumn<Accessory: View, Content: View>: View {
     let title: String
     @AppStorage private var width: Double
+    private let search: Binding<ListSearchState>?
+    private let searchPrompt: String
     /// A small control at the trailing end of the title row, such as the Meetings filter.
     @ViewBuilder let accessory: Accessory
     @ViewBuilder let content: Content
     @State private var dragStart: Double?
 
-    init(_ title: String, widthKey: String, @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
+    init(_ title: String, widthKey: String, search: Binding<ListSearchState>? = nil, searchPrompt: String = "Search",
+         @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
         self.title = title
         _width = AppStorage(wrappedValue: Double(Chrome.listWidth), "listWidth.\(widthKey)")
+        self.search = search
+        self.searchPrompt = searchPrompt
         self.accessory = accessory()
         self.content = content()
     }
@@ -221,13 +229,20 @@ struct ListColumn<Accessory: View, Content: View>: View {
                     .foregroundStyle(Palette.ink)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
-                accessory
+                HStack(spacing: 2) {
+                    if let search { ListSearchToggle(state: search) }
+                    accessory
+                }
             }
             .padding(.leading, Chrome.listTitleLeading)
             .padding(.trailing, Space.m)
             .frame(maxWidth: .infinity, minHeight: Chrome.listTitleHeight, maxHeight: Chrome.listTitleHeight, alignment: .leading)
             .background { WindowDragArea() }
             .padding(.top, Chrome.listTop)
+            if let search, search.wrappedValue.isShown {
+                ListSearchField(prompt: searchPrompt, state: search)
+                    .padding(.leading, 10).padding(.trailing, Space.m).padding(.bottom, Space.xs)
+            }
             VStack(spacing: 0) { content }.frame(maxHeight: .infinity, alignment: .top)
         }
         .frame(width: clamped)
@@ -258,8 +273,9 @@ struct ListColumn<Accessory: View, Content: View>: View {
 }
 
 extension ListColumn where Accessory == EmptyView {
-    init(_ title: String, widthKey: String, @ViewBuilder content: () -> Content) {
-        self.init(title, widthKey: widthKey, accessory: { EmptyView() }, content: content)
+    init(_ title: String, widthKey: String, search: Binding<ListSearchState>? = nil, searchPrompt: String = "Search",
+         @ViewBuilder content: () -> Content) {
+        self.init(title, widthKey: widthKey, search: search, searchPrompt: searchPrompt, accessory: { EmptyView() }, content: content)
     }
 }
 
@@ -301,22 +317,43 @@ struct OverflowRight: Layout {
     }
 }
 
-/// The toolbar row: an optional title and subtitle on the left, the page's controls on the right, 8 pt apart.
+/// The toolbar row: an optional title and subtitle on the left, the page's controls on the right, 8 pt apart, and
+/// the search of everything last. A page whose list fills the detail (Tasks, Bookmarks) has its list search beside
+/// the title, and the field comes down under the row.
 struct PageToolbar<Leading: View, Trailing: View>: View {
     var title: String?
     var subtitle: String?
+    var search: Binding<ListSearchState>?
+    var searchPrompt = "Search"
     @ViewBuilder var leading: Leading
     @ViewBuilder var trailing: Trailing
+    @Environment(\.openGlobalSearch) private var openGlobalSearch
 
-    init(title: String? = nil, subtitle: String? = nil, @ViewBuilder leading: () -> Leading = { EmptyView() },
-         @ViewBuilder trailing: () -> Trailing) {
+    init(title: String? = nil, subtitle: String? = nil, search: Binding<ListSearchState>? = nil, searchPrompt: String = "Search",
+         @ViewBuilder leading: () -> Leading = { EmptyView() }, @ViewBuilder trailing: () -> Trailing) {
         self.title = title
         self.subtitle = subtitle
+        self.search = search
+        self.searchPrompt = searchPrompt
         self.leading = leading()
         self.trailing = trailing()
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            row
+            if let search, search.wrappedValue.isShown {
+                ListSearchField(prompt: searchPrompt, state: search)
+                    .frame(maxWidth: Chrome.searchWidth + 96)
+                    .padding(.leading, Chrome.toolbarInsets.leading - 10)
+                    .padding(.trailing, Chrome.toolbarInsets.trailing)
+                    .padding(.top, 2).padding(.bottom, Space.s)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var row: some View {
         HStack(spacing: 10) {
             if let title {
                 VStack(alignment: .leading, spacing: 1) {
@@ -330,11 +367,15 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
                 .accessibilityAddTraits(.isHeader)
                 .layoutPriority(-1)
             }
+            if let search { ListSearchToggle(state: search).padding(.leading, title == nil ? -6 : -4) }
             leading
             Spacer(minLength: 0)
-            // Sized before the title: each control keeps its size and only the search narrows when room is short.
-            ToolbarTrailing { trailing }
-                .layoutPriority(1)
+            // Sized before the title: each control keeps its size.
+            ToolbarTrailing {
+                trailing
+                if let openGlobalSearch { GlobalSearchButton(open: openGlobalSearch) }
+            }
+            .layoutPriority(1)
         }
         .frame(maxHeight: .infinity)
         .padding(Chrome.toolbarInsets)
@@ -518,38 +559,11 @@ struct ToolbarSegmented<Value: Hashable>: View {
     }
 }
 
-/// A page's search ("Search titles and transcripts") as a 240 x 30 glass capsule; ⌘F focuses it and Esc clears it.
-struct ToolbarSearchField: View {
-    let prompt: String
-    @Binding var query: String
-    @FocusState private var focused: Bool
+/// The search of everything: a glass circle at the end of every toolbar row. Command-K opens it from anywhere.
+struct GlobalSearchButton: View {
+    let open: @MainActor () -> Void
 
     var body: some View {
-        HStack(spacing: 7) {
-            IconImage(.search, size: 14).foregroundStyle(Palette.tertiaryMark)
-            TextField(prompt, text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(Palette.ink)
-                .focused($focused)
-                .onExitCommand { query = ""; focused = false }
-            if !query.isEmpty {
-                Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.tertiaryMark)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(minWidth: Chrome.searchMinWidth, idealWidth: Chrome.searchWidth, maxWidth: Chrome.searchWidth)
-        .frame(height: Chrome.controlHeight)
-        .contentShape(Capsule())
-        .onTapGesture { focused = true }
-        .chromeGlass(in: Capsule())
-        .background {
-            Button("Search") { focused = true }.keyboardShortcut("f").opacity(0).accessibilityHidden(true)
-        }
-        .layoutValue(key: Compressible.self, value: true)
+        ToolbarCircleButton(icon: .search, label: "Search everything", help: "Search meetings, transcripts, people, and tasks (⌘K)", action: open)
     }
 }

@@ -296,13 +296,13 @@ private struct OutcomeHitRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Space.m) {
-            Image(systemName: hit.kind == .decision ? "checkmark.seal" : "checklist")
+            Image(systemName: hit.kind == .decision ? "checkmark.seal" : hit.kind == .bookmark ? "bookmark" : "checklist")
                 .foregroundStyle(Palette.accent)
                 .frame(width: 20)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(hit.text.attributed).textRole(.body).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
-                Text("\(hit.kind == .decision ? "Decision" : "Action item") · \(hit.meetingTitle) · \(shortDay(hit.meetingStart))")
+                Text("\(hit.kind == .decision ? "Decision" : hit.kind == .bookmark ? "Bookmark" : "Action item") · \(hit.meetingTitle) · \(shortDay(hit.meetingStart))")
                     .textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(2)
             }
         }
