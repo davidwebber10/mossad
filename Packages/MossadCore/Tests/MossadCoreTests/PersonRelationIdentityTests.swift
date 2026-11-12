@@ -41,4 +41,16 @@ final class PersonRelationIdentityTests: XCTestCase {
         let records = [call("a", "Sam Carter", person: "id-1"), call("c", "Sam Carter", person: nil)]
         XCTAssertEqual(PersonRelation(name: "Sam Carter", personID: "id-1", owner: "Avery Webb", records: records, nameIsUnique: true).calls, 2)
     }
+
+    func testTheOwnersItemsComeFromTheirOneToOnesOnly() {
+        var one = call("a", "Sam Carter", person: "id-1")
+        one.actionItems = [ActionItem(owner: "Avery Webb", task: "Send the plan"), ActionItem(owner: "Sam Carter", task: "Read it", ownerID: "id-1")]
+        var group = call("b", "Sam Carter", person: "id-1")
+        group.speakerNames["them:B"] = "Jo Quinn"
+        group.utterances.append(Utterance(track: .them, speakerLabel: "B", start: 10, end: 12, text: "Yes."))
+        group.actionItems = [ActionItem(owner: "Avery Webb", task: "Book the room")]
+        let r = PersonRelation(name: "Sam Carter", personID: "id-1", owner: "Avery Webb", records: [one, group])
+        XCTAssertEqual(r.myItems.map(\.task), ["Send the plan"], "an item of the owner's in a group is not between the two")
+        XCTAssertEqual(r.theirItems.map(\.task), ["Read it"])
+    }
 }

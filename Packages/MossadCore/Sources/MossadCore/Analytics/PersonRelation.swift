@@ -55,6 +55,8 @@ public struct PersonRelation: Sendable {
     public let topics: [String]
     /// Action items this person owns from shared meetings.
     public let theirItems: [Item]
+    /// The owner's action items from the 1:1s with this person: in a group, an item is not between the two.
+    public let myItems: [Item]
     /// The owner's commitments to this person.
     public let myCommitments: [Commitment]
     public let value: [MeetingValue.Rating: Int]
@@ -80,12 +82,13 @@ public struct PersonRelation: Sendable {
         var myQ = 0, theirQ = 0, iCut = 0, theyCut = 0
         var mine: [Double] = [], theirs: [Double] = []
         var tags: [String: Int] = [:]
-        var items: [Item] = []
+        var items: [Item] = [], mine1on1: [Item] = []
         var value: [MeetingValue.Rating: Int] = [:]
         for r in shared {
             let x = Exchange(record: r)
             if x.names.subtracting([owner]).count == 1 {
                 hasOne = true
+                mine1on1 += r.actionItems.filter { $0.owner == owner }.map { Item(callID: r.id, title: r.title, date: r.start, task: $0.task) }
                 one.mine += x.speech(owner); one.theirs += x.speech(name)
             } else {
                 hasMany = true
@@ -114,6 +117,7 @@ public struct PersonRelation: Sendable {
         theirReply = median(of: theirs)
         topics = tags.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.prefix(5).map(\.key)
         theirItems = items.reversed()
+        myItems = mine1on1.reversed()
         myCommitments = commitments.filter { c in
             guard !c.deleted else { return false }
             if let personID {

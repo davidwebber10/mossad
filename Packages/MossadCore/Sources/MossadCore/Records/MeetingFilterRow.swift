@@ -166,7 +166,7 @@ public struct MeetingFilterRow: Sendable, Equatable {
         guard r.status != .recording else { return nil }
         id = r.id
         start = r.start
-        seconds = r.parts.last.map { $0.offset + max(0, $0.end.timeIntervalSince($0.start)) } ?? max(0, r.end.timeIntervalSince(r.start))
+        seconds = r.recordedSeconds
         platform = r.platform
         let seen = people.seen(in: r)
         self.people = seen.people
