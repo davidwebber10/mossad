@@ -43,7 +43,8 @@ final class GoogleConnector: ObservableObject {
         let saved = UserDefaults.standard.stringArray(forKey: "googleScopes")
         scopes = saved.map { Set($0.compactMap(GoogleScope.init(rawValue:))) } ?? Set(GoogleScope.allCases)
         audience = UserDefaults.standard.string(forKey: "googleAudience").flatMap(GoogleSetupGuide.Audience.init(rawValue:)) ?? .internal
-        // Development hook for screenshots: MOSSAD_GOOGLE_SAMPLE shows a passed check with made-up values.
+        // Development hook for screenshots: MOSSAD_GOOGLE_SAMPLE shows a passed check with made-up values, and
+        // MOSSAD_GOOGLE_SAMPLE=off shows no client and no sign-in.
         if Self.sample {
             phase = .done(GoogleCheck.Report(account: "owner@example.com", event: "Weekly design review",
                                              parts: [.calendar: GoogleError?.none, .docs: GoogleError?.none,
@@ -54,13 +55,16 @@ final class GoogleConnector: ObservableObject {
     var busy: Bool { phase == .signingIn || phase == .checking }
 
     /// The screenshot hook, in a Debug build only: a release build never shows a made-up account.
-    static var sample: Bool {
+    private static var sampleValue: String? {
         #if DEBUG
-        ProcessInfo.processInfo.environment["MOSSAD_GOOGLE_SAMPLE"] != nil
+        ProcessInfo.processInfo.environment["MOSSAD_GOOGLE_SAMPLE"]
         #else
-        false
+        nil
         #endif
     }
+
+    static var sample: Bool { sampleValue.map { $0 != "off" } ?? false }
+    static var sampleOff: Bool { sampleValue == "off" }
 
     /// The line about the plan, with its cost and the cap, as the step shows it and the log keeps it.
     var pastLine: String? { pastPlan.map { GeminiImport.estimateLine($0, cap: pastCap, perHour: pastPerHour, complete: pastComplete) } }
@@ -71,11 +75,20 @@ final class GoogleConnector: ObservableObject {
 extension AppController {
     var googleConnected: Bool {
         _ = googleConnector.version
+        if GoogleConnector.sampleOff { return false }
         return GoogleConnector.sample || google.isConnected
+    }
+
+    /// The client ID and the secret are both in the Keychain.
+    var googleClientSaved: Bool {
+        if GoogleConnector.sample { return true }
+        if GoogleConnector.sampleOff { return false }
+        return hasKey(.googleClientID) && hasKey(.googleClientSecret)
     }
 
     var googleAccount: String? {
         _ = googleConnector.version
+        if GoogleConnector.sampleOff { return nil }
         return GoogleConnector.sample ? "owner@example.com" : google.account
     }
 

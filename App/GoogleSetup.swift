@@ -3,35 +3,81 @@ import MossadCore
 import SwiftUI
 
 /// The Google step: the owner's own Google app, made in Google Cloud with the numbered steps, then pasted here and
-/// checked. Setup and Settings › Google show the same rows, each in its own groups. Optional: Mossad works without it.
+/// checked. Optional: Mossad works without it. Settings › Google holds only the settings; its "Set up…" opens the
+/// same steps in a sheet. `GoogleGuide` is the one view of the steps, in setup and in the sheet.
+
+enum GoogleWords {
+    static let keychain = "The client ID, the secret, and the sign-in stay in the macOS Keychain. Mossad only reads."
+}
 
 /// Setup's step.
 struct GoogleStep: View {
-    @EnvironmentObject var controller: AppController
-
     var body: some View {
         VStack(alignment: .leading, spacing: Space.xl) {
             StepGroup(label: "What Mossad reads", footer: "The steps below follow these choices.") { GooglePartRows() }
-            StepGroup(label: "Your account") { GoogleAudienceRow() }
-            StepGroup(label: "In Google Cloud", footer: "About 5 minutes, once. Each link opens the right page in your browser.") {
-                GoogleGuideRows()
-            }
-            StepGroup(label: "Your Google app", footer: "The client ID, the secret, and the sign-in stay in the macOS Keychain. Mossad only reads.") {
+            GoogleGuide()
+            StepGroup(label: "Your Google app", footer: GoogleWords.keychain) {
                 GoogleClientRows()
+                GoogleConnectionRow()
             }
         }
     }
 }
 
-/// Settings › Google.
+/// The instructions: who signs in, then the numbered steps in Google Cloud with their links and values to copy.
+struct GoogleGuide: View {
+    var body: some View {
+        StepGroup(label: "Your account") { GoogleAudienceRow() }
+        StepGroup(label: "In Google Cloud", footer: "About 5 minutes, once. Each link opens the right page in your browser.") {
+            GoogleGuideRows()
+        }
+    }
+}
+
+/// The steps over Settings › Google: the guide, then the client ID and secret as the last step. It closes with
+/// Done, its X, and Escape.
+struct GoogleSetupSheet: View {
+    @EnvironmentObject var controller: AppController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SheetHeader(icon: .link, title: "Set up your Google app",
+                        subtitle: "Make your own Google app in Google Cloud, then paste its client here.", close: { dismiss() })
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.xl) {
+                    GoogleGuide()
+                    StepGroup(label: "Your Google app", footer: GoogleWords.keychain) {
+                        GoogleClientRows()
+                        GoogleConnectionRow()
+                    }
+                }
+                .padding(EdgeInsets(top: 18, leading: 22, bottom: 18, trailing: 22))
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: 600)
+            .fixedSize(horizontal: false, vertical: true)
+            SheetFooter {
+                Button("Done") { dismiss() }.buttonStyle(.sheetPrimary)
+            }
+        }
+        .mossadSheet(width: 620)
+    }
+}
+
+/// Settings › Google: the connection, the client, the parts, and the Gemini notes. The steps are in the sheet.
 struct GoogleSettings: View {
     @EnvironmentObject var controller: AppController
+    @State private var showingGuide = false
 
     var body: some View {
         let connector = controller.googleConnector
         VStack(alignment: .leading, spacing: Space.xl) {
-            SettingsGroup(label: "Your Google app", footer: "The client ID, the secret, and the sign-in stay in the macOS Keychain. Mossad only reads, and works without Google.") {
+            SettingsGroup(label: "Your Google app", footer: GoogleWords.keychain + " Mossad works without Google.") {
+                GoogleConnectionRow()
+                if !controller.googleConnected { guideRow }
                 GoogleClientRows()
+                if controller.googleConnected { guideRow }
             }
             SettingsGroup(label: "What Mossad reads", footer: "A part you turn off is asked for no more at the next Check.") {
                 GooglePartRows()
@@ -41,9 +87,28 @@ struct GoogleSettings: View {
                     GooglePastNotesRows()
                 }
             }
-            if !controller.googleConnected || connector.phase != .idle {
-                SettingsGroup(label: "Your account") { GoogleAudienceRow() }
-                SettingsGroup(label: "In Google Cloud") { GoogleGuideRows() }
+        }
+        .sheet(isPresented: $showingGuide) { GoogleSetupSheet() }
+        // Development hook for screenshots: MOSSAD_GOOGLE_SETUP shows the sheet over the page.
+        .overlay(alignment: .top) {
+            if CommandLine.arguments.contains("--ui-preview"), ProcessInfo.processInfo.environment["MOSSAD_GOOGLE_SETUP"] != nil {
+                GoogleSetupSheet()
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: .black.opacity(0.35), radius: 40, y: 30)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var guideRow: some View {
+        if controller.googleConnected {
+            SettingsRow(title: "Setup steps", detail: "The steps in Google Cloud, with the links and the values to copy.") {
+                Button("How to set up") { showingGuide = true }
+                    .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .medium))
+            }
+        } else {
+            SettingsRow(title: "Make your Google app", detail: "About 5 minutes in Google Cloud, once. The steps open over this page.") {
+                Button("Set up…") { showingGuide = true }.rowButton(accent: !controller.googleClientSaved)
             }
         }
     }
@@ -139,10 +204,9 @@ struct GoogleClientRows: View {
     @Environment(\.rowStyle) private var style
 
     var body: some View {
-        let saved = controller.hasKey(.googleClientID) && controller.hasKey(.googleClientSecret)
-        if !saved || replacing {
+        if !controller.googleClientSaved || replacing {
             VStack(alignment: .leading, spacing: 8) {
-                SettingsRowText(title: "Client ID and secret", detail: "From the client of step 5. The ID ends with .apps.googleusercontent.com.")
+                SettingsRowText(title: "Client ID and secret", detail: "From the client of step 5 of the setup steps. The ID ends with .apps.googleusercontent.com.")
                 field("Client ID", text: $id, secure: false)
                 field("Client secret", text: $secret, secure: true)
                 HStack(spacing: Space.s) {
@@ -165,7 +229,6 @@ struct GoogleClientRows: View {
                 Button("Remove") { controller.forgetGoogleClient() }.rowButton()
             }
         }
-        GoogleConnectionRow()
     }
 
     private func field(_ title: String, text: Binding<String>, secure: Bool) -> some View {
@@ -208,7 +271,7 @@ struct GoogleConnectionRow: View {
                     if connector.busy { ProgressView().controlSize(.small).frame(width: 40) } else { Text(controller.googleConnected ? "Check" : "Sign in and Check") }
                 }
                 .rowButton(accent: !controller.googleConnected)
-                .disabled(connector.busy || !(controller.hasKey(.googleClientID) && controller.hasKey(.googleClientSecret)))
+                .disabled(connector.busy || !controller.googleClientSaved)
                 .help("Signs in with Google in your browser when needed, then reads one event.")
             }
             result
