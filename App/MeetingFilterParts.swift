@@ -12,6 +12,8 @@ struct FilterChip: View {
     let count: Int?
     let on: Bool
     var platform: Platform?
+    /// What the count counts, one and many.
+    var noun = FilterNoun.meetings
     let action: () -> Void
     @State private var hovering = false
 
@@ -43,9 +45,22 @@ struct FilterChip: View {
         .opacity(empty ? 0.42 : 1)
         .onHover { hovering = $0 }
         .accessibilityLabel(text)
-        .accessibilityValue(count.map { "\($0) \($0 == 1 ? "meeting" : "meetings")" } ?? "")
+        .accessibilityValue(count.map { noun.count($0) } ?? "")
         .accessibilityAddTraits(on ? .isSelected : [])
     }
+}
+
+/// What a filter's counts count: meetings in the Meetings filter, recurring meetings in the Recurring one.
+struct FilterNoun {
+    let one: String
+    let many: String
+
+    static let meetings = FilterNoun(one: "meeting", many: "meetings")
+    static let series = FilterNoun(one: "recurring meeting", many: "recurring meetings")
+
+    func count(_ n: Int) -> String { "\(n) \(n == 1 ? one : many)" }
+    /// "Meetings", "Recurring meetings".
+    var title: String { many.prefix(1).uppercased() + many.dropFirst() }
 }
 
 // MARK: People
@@ -53,12 +68,17 @@ struct FilterChip: View {
 /// Who was in the meeting: a field to search, then everyone with a mark, a name, and a count, the person in the
 /// most meetings first. The arrow keys move through the list from the field and Return chooses.
 struct FilterPeoplePicker: View {
-    @EnvironmentObject var filters: MeetingFilterModel
+    /// Everyone with their counts, the one in the most first.
+    let people: [MeetingFacets.Person]
+    let chosen: [MeetingFilter.Who]
+    @Binding var mode: MeetingFilter.PeopleMode
+    var noun = FilterNoun.meetings
+    let toggle: (MeetingFilter.Who) -> Void
     @State private var query = ""
     @State private var highlighted: String?
     @FocusState private var searching: Bool
 
-    private var shown: [MeetingFacets.Person] { filters.facets.people(matching: query) }
+    private var shown: [MeetingFacets.Person] { MeetingFacets.people(people, matching: query) }
 
     var body: some View {
         let people = shown
@@ -72,7 +92,7 @@ struct FilterPeoplePicker: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
-                if filters.filter.people.count > 1 { modePicker.transition(.opacity) }
+                if chosen.count > 1 { modePicker.transition(.opacity) }
             }
             .frame(height: 20)
             .padding(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 12))
@@ -81,7 +101,7 @@ struct FilterPeoplePicker: View {
                 ScrollView {
                     LazyVStack(spacing: 1) {
                         ForEach(people) { p in
-                            PersonRow(person: p, on: filters.filter.people.contains(p.who), highlighted: highlighted == p.id) { toggle(p.who) }
+                            PersonRow(person: p, on: chosen.contains(p.who), highlighted: highlighted == p.id, noun: noun) { choose(p.who) }
                                 .id(p.id)
                         }
                     }
@@ -107,8 +127,8 @@ struct FilterPeoplePicker: View {
         .accessibilityLabel("People")
     }
 
-    private func toggle(_ who: MeetingFilter.Who) {
-        withAnimation(.snappy(duration: 0.2)) { filters.filter.toggle(.person(who)) }
+    private func choose(_ who: MeetingFilter.Who) {
+        withAnimation(.snappy(duration: 0.2)) { toggle(who) }
     }
 
     private var field: some View {
@@ -127,7 +147,7 @@ struct FilterPeoplePicker: View {
                     return .handled
                 }
                 .onSubmit {
-                    if let who = filters.facets.choiceOnReturn(query: query, highlighted: highlighted, filter: filters.filter) { toggle(who) }
+                    if let who = MeetingFacets.choiceOnReturn(people, query: query, highlighted: highlighted, chosen: chosen) { choose(who) }
                 }
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.tertiaryMark) }
@@ -151,9 +171,9 @@ struct FilterPeoplePicker: View {
     /// "Any" finds the meetings with one of the chosen people; "All" the meetings with every one of them.
     private var modePicker: some View {
         HStack(spacing: 0) {
-            ForEach([(MeetingFilter.PeopleMode.any, "Any"), (.all, "All")], id: \.1) { mode, word in
-                let on = filters.filter.peopleMode == mode
-                Button { withAnimation(.snappy(duration: 0.2)) { filters.filter.peopleMode = mode } } label: {
+            ForEach([(MeetingFilter.PeopleMode.any, "Any"), (.all, "All")], id: \.1) { choice, word in
+                let on = mode == choice
+                Button { withAnimation(.snappy(duration: 0.2)) { mode = choice } } label: {
                     Text(word)
                         .font(.system(size: 11, weight: on ? .semibold : .regular))
                         .foregroundStyle(on ? Palette.ink : Palette.secondary)
@@ -164,7 +184,7 @@ struct FilterPeoplePicker: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(on ? .isSelected : [])
-                .help(mode == .any ? "Meetings with any of these people" : "Meetings with all of these people")
+                .help("\(noun.title) with \(choice == .any ? "any" : "all") of these people")
             }
         }
         .padding(2)
@@ -178,6 +198,7 @@ private struct PersonRow: View {
     let person: MeetingFacets.Person
     let on: Bool
     let highlighted: Bool
+    let noun: FilterNoun
     let action: () -> Void
     @State private var hovering = false
 
@@ -208,7 +229,7 @@ private struct PersonRow: View {
         .opacity(empty ? 0.42 : 1)
         .onHover { hovering = $0 }
         .accessibilityLabel(person.who.name)
-        .accessibilityValue("\(person.count) \(person.count == 1 ? "meeting" : "meetings")")
+        .accessibilityValue(noun.count(person.count))
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

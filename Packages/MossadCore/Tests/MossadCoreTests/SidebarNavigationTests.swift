@@ -51,3 +51,31 @@ final class SidebarNavigationTests: XCTestCase {
 private extension SidebarNavigation.Spot where ID == String {
     var label: String { child ?? item }
 }
+
+/// The pages under Meetings: Recurring first, then the pages of before in their order, each with its own key.
+final class MeetingsPageTests: XCTestCase {
+    typealias Nav = SidebarNavigation<String>
+
+    func testRecurringIsTheFirstPageUnderMeetings() {
+        XCTAssertEqual(MeetingsPage.allCases, [.recurring, .bookmarks, .screens, .shares, .tasks])
+    }
+
+    func testTheArrowsGoFromMeetingsToRecurringFirst() {
+        let items = [Nav.Item(id: "meetings", children: MeetingsPage.allCases.map(\.rawValue)), Nav.Item(id: "chat")]
+        XCTAssertEqual(Nav.rows(items, at: Nav.Spot(item: "meetings")).map { $0.child ?? $0.item },
+                       ["meetings", "recurring", "bookmarks", "screens", "shares", "tasks", "chat"])
+        XCTAssertEqual(Nav.step(items, from: Nav.Spot(item: "meetings"), by: 1), Nav.Spot(item: "meetings", child: "recurring"))
+        XCTAssertEqual(Nav.step(items, from: Nav.Spot(item: "meetings", child: "recurring"), by: 1), Nav.Spot(item: "meetings", child: "bookmarks"))
+        XCTAssertEqual(Nav.step(items, from: Nav.Spot(item: "meetings", child: "recurring"), by: -1), Nav.Spot(item: "meetings"))
+        XCTAssertEqual(Nav.step(items, from: Nav.Spot(item: "meetings", child: "tasks"), by: 1), Nav.Spot(item: "chat"))
+    }
+
+    func testEachPageKeepsItsKeyAndNoTwoShareOne() {
+        XCTAssertEqual(MeetingsPage.recurring.key, MeetingsPage.Key(character: "r", option: true))
+        XCTAssertEqual(MeetingsPage.screens.key, MeetingsPage.Key(character: "s", option: true))
+        XCTAssertEqual(MeetingsPage.bookmarks.key, MeetingsPage.Key(character: "0", option: false))
+        XCTAssertEqual(MeetingsPage.shares.key, MeetingsPage.Key(character: "9", option: false))
+        XCTAssertEqual(MeetingsPage.tasks.key, MeetingsPage.Key(character: "2", option: false))
+        XCTAssertEqual(Set(MeetingsPage.allCases.map(\.key)).count, MeetingsPage.allCases.count)
+    }
+}

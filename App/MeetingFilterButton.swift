@@ -56,8 +56,15 @@ struct MeetingFilterChips: View {
                     if i > 0, filters.filter.peopleMode == .all, case .person = choice {
                         Text("and").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary).frame(height: 22)
                     }
-                    ActiveChip(choice: choice, text: filters.label(choice, calendar: calendar)) {
+                    ActiveChip(text: filters.label(choice, calendar: calendar)) {
                         withAnimation(.snappy(duration: 0.2)) { filters.filter.remove(choice) }
+                    } mark: {
+                        switch choice {
+                        case .person(let who): FilterPersonDot(who: who)
+                        case .platform(let p): PlatformDot(platform: p, size: 7)
+                        case .tag: Text("#").foregroundStyle(Palette.tertiary)
+                        default: EmptyView()
+                        }
                     }
                 }
                 HStack(spacing: 8) {
@@ -83,10 +90,10 @@ struct MeetingFilterChips: View {
 }
 
 /// One choice: its mark (a person's hue, a platform's dot), its words, and a small cross. The whole chip removes it.
-private struct ActiveChip: View {
-    let choice: MeetingFilter.Active
+struct ActiveChip<Mark: View>: View {
     let text: String
     let remove: () -> Void
+    @ViewBuilder let mark: Mark
     @State private var hovering = false
 
     var body: some View {
@@ -110,16 +117,13 @@ private struct ActiveChip: View {
         .help("Remove this filter")
         .accessibilityLabel("\(text), remove filter")
     }
+}
 
-    @ViewBuilder
-    private var mark: some View {
-        switch choice {
-        case .person(let who): Circle().fill(PersonMark.color(for: who.name)).frame(width: 7, height: 7)
-        case .platform(let p): PlatformDot(platform: p, size: 7)
-        case .tag: Text("#").foregroundStyle(Palette.tertiary)
-        default: EmptyView()
-        }
-    }
+/// A person's hue on a chip.
+struct FilterPersonDot: View {
+    let who: MeetingFilter.Who
+
+    var body: some View { Circle().fill(PersonMark.color(for: who.name)).frame(width: 7, height: 7) }
 }
 
 extension MeetingFilterModel {

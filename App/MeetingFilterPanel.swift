@@ -25,7 +25,7 @@ struct MeetingFilterPanel: View {
             Hairline()
             HStack(alignment: .top, spacing: 0) {
                 // As tall as the groups beside it; the list scrolls inside.
-                FilterPeoplePicker()
+                FilterPeoplePicker(people: facets.people, chosen: filters.filter.people, mode: $filters.filter.peopleMode) { filters.filter.toggle(.person($0)) }
                     .frame(width: Self.peopleWidth)
                     .frame(idealHeight: 380, maxHeight: .infinity)
                 Hairline(axis: .vertical)
@@ -198,7 +198,7 @@ struct MeetingFilterPanel: View {
 }
 
 /// A group of choices under its small label.
-private struct FilterGroup<Content: View>: View {
+struct FilterGroup<Content: View>: View {
     let title: String
     var note: String?
     @ViewBuilder let content: Content

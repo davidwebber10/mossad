@@ -418,11 +418,12 @@
             "A point counts as discussed only with a quote from the transcript",
             "The coach suggests points from open action items, open decisions, and unanswered questions",
             "Add a point from Chat or from another AI app",
-            "Points for a person show on that person's page"
+            "Points for a person show on that person's page",
+            "Search and filter the series by people, cadence, next meeting, last met, length, and open items"
           ],
           "icon": "repeat",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesFilter.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesListSearch.swift"]
         },
         {
           "id": "filters",
