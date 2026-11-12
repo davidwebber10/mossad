@@ -1,4 +1,12 @@
 {
   "schemaVersion": 1,
-  "releases": []
+  "releases": [
+    {
+      "version": "2.21.0",
+      "date": "2026-11-12",
+      "notes": [
+        "Back and Forward in the main window. Recurring is first under Meetings, with search and a filter. 45 days of upcoming meetings, by day. Anonymous usage statistics, with a switch in Settings."
+      ]
+    }
+  ]
 }
