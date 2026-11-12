@@ -1,0 +1,65 @@
+# Mossad
+
+> Free, open source work intelligence for your Mac. Mossad turns Zoom, Meet, and Teams calls into notes and transcripts, and tracks people and promises.
+
+Mossad is work intelligence for your Mac. It records your calls without a bot, then keeps meeting notes, transcripts that know who spoke, decisions, action items, the promises you made, and a page for each person you meet. Before a meeting, it shows who is coming, what happened last time, and what you still owe. It is free and open source under the MIT License.
+
+- Latest version: 2.20.0
+- Requires: macOS 26 or later on Apple silicon
+- Price: free. Cloud AI providers that you connect bill you directly; models on your Mac cost nothing.
+- Website: https://getmossad.com/
+- Source: https://github.com/davidwebber10/mossad
+
+**Features**
+
+- **Capture.** Mossad records without a bot in the meeting and without a click from you. Finds your calls; Stops when the call ends; Two tracks, no bot; Muted means silent; Pause, stop, or skip; Your call comes first.
+- **Notes and transcripts.** Each call becomes one plain Markdown file that you own. One note per call; Summaries by topic; Real meeting titles; Live transcript; See who spoke when; Nothing gets lost.
+- **People and voices.** Name a voice once. Mossad knows it on every call after that. Name a voice once; Voices that read the invite; A page for each person; Person pages with tabs; Your org chart; How to present to them.
+- **Coach.** A coach that reads your calls and gives you one thing to work on, with the proof. One line per call; Findings you can answer; Goals with a number; A weekly review; It remembers; Was it worth it.
+- **Meetings.** Find any meeting, prepare for the next one, and keep the moments that matter. Before this meeting; Recurring meetings; Filter by anything; Search everything; A search in every list; Bookmark a moment; Shared screens; What you promised; A calendar of your meetings.
+- **Analytics.** Numbers about your meetings that say a change only when there is one. Each meeting in numbers; How you communicate; Where your time goes; What it costs you.
+- **Chat and MCP for other AI apps.** Ask your meetings a question, here or in the AI app you already use. Ask your meetings; MCP on your Mac; MCP for web AI apps; Notes your agents can read.
+- **iPhone.** Your meetings on your phone, and a recorder for the meetings in a room. Your meetings, in your pocket; Record in the room.
+- **Sharing with PIN.** Send one meeting to someone, on your own server, with the parts you choose. Share one meeting; A PIN on the link; See who opened it; Copy for their AI.
+- **Storage, your own server, backups.** Your meetings live in a folder on your Mac. Anything more is your choice. A folder you own; Your own server; Recording backup; iCloud sync.
+- **Connect Google, with Gemini notes.** Optional, read only, and through a Google app that you own. Your own Google app; Richer calendar details; Gemini notes come in; Names from your directory.
+- **Bring your own AI providers.** Choose who transcribes and who writes the notes. Or keep it all on your Mac. Choose your transcription; Choose your model; All on your Mac; Your keys, your bills.
+
+**Privacy**
+
+Mossad is local first. Your meetings stay in a folder on your Mac, and you decide where they go.
+
+- **Local first.** Notes, audio, voice fingerprints, and the coach's memory are files in ~/Mossad. There is no Mossad account, and no Mossad cloud holds your meetings.
+- **Your keys.** You bring your own provider keys. They live only in your Mac's Keychain, and each provider bills you directly.
+- **Your server.** Sync, share links, the remote MCP, and backups run on a server in your own Cloudflare account, or not at all.
+- **Your words stay yours.** Your meetings, recordings, names, and words stay on your Mac, except where you send them: to the providers, servers, and devices that you choose.
+- Voice fingerprints never leave your Mac. Shared-screen images never sync.
+
+**Don't like something? Change it.** Mossad is yours to reshape. Fork it, and your copy works the way you want, for good. Fork it on GitHub. Your own copy, under the MIT License. Open it with your AI coding tool. The repository has an AGENTS.md written for AI agents, so you can ask for a change in plain words. Build it. Set your Apple team in project.yml, then run scripts/build.sh. It installs your copy in Applications. Needs: A Mac with Apple silicon and macOS 26, Xcode 16 or later, XcodeGen, and an Apple Development certificate.
+
+**Install**
+
+1. Download the latest release from https://github.com/davidwebber10/mossad/releases/latest and move Mossad to Applications, or build it from the source with Xcode (see the README).
+2. Open it, and follow setup: pick a transcription provider and a notes model, or models that run on your Mac, and grant the permissions it asks for.
+3. Take your calls as usual. Notes appear in ~/Mossad/Meetings.
+
+**FAQ**
+
+- **What does it cost?** Mossad is free. If you use cloud AI providers, they bill you directly: cloud transcription is about $0.22 to $0.36 an hour of audio, and the notes model adds its own cost. Setup shows the cost per hour of your choices. With models on your Mac, it costs nothing to run.
+- **Does a bot join my meetings?** No. Nothing joins the call and nothing shows to the other people. That is also why telling them is your job.
+- **Do I have to tell people that I record?** Yes. Many places require the consent of one or of all people on a call, and voice fingerprints can be biometric data under some laws. Read Lawful use in the README, and ask a lawyer if you are not sure.
+- **Which call apps does it work with?** Zoom, Microsoft Teams, and Google Meet, in their apps or in Chrome, Arc, Safari, Edge, and Brave. In a browser that it cannot read, such as Firefox, it tells you once and offers to record. You can also record a meeting in a room by hand.
+- **Can my meetings stay on my Mac?** Yes. Choose transcription and a notes model that run on your Mac, and nothing about your meetings has to leave it. Quality and speed then depend on the model and your Mac.
+- **Is there an iPhone app?** Yes: your meetings, chat, people, and the coach, and a recorder for meetings in a room. It is not in the App Store. You build it from the source with Xcode.
+- **Can I change how it works?** Yes. Mossad is open source under the MIT License. Fork it, change the note, the prompts, the steps, the look, or the providers, and build your own copy with Xcode. The repository has an AGENTS.md, so your AI coding tool knows where everything is.
+- **What if it gets something wrong?** Rename a voice and every note updates. Edit a title, regenerate a summary, or transcribe a meeting again. Summaries, coaching, and person notes come from software and can be wrong, so check them before you act on them.
+
+## Links
+
+- [Download the latest release](https://github.com/davidwebber10/mossad/releases/latest): the Mac app
+- [Source code](https://github.com/davidwebber10/mossad): the Mac app, the iPhone app, and the optional server, in one repository
+- [README](https://github.com/davidwebber10/mossad#readme): setup, providers, and limits
+- [Where your data lives](https://github.com/davidwebber10/mossad#where-your-data-lives): the folders on your Mac
+- [Lawful use](https://github.com/davidwebber10/mossad#lawful-use): recording consent
+- [Privacy](https://getmossad.com/privacy): what stays on your Mac, and where your meetings can go when you choose
+- [Full text for AI tools](https://getmossad.com/llms-full.txt): every feature, install, privacy, and FAQ

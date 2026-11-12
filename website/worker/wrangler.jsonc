@@ -1,0 +1,37 @@
+// The site at getmossad.com: static files from ../site, and a small Worker for the counts and the owner's /stats.
+// website/README.md has the deploy steps. Create the database first: `npx wrangler d1 create mossad-telemetry`,
+// then put its id below and apply the tables: `npx wrangler d1 migrations apply mossad-telemetry --remote`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "getmossad-site",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "../site",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    // The Worker sees each request first: it redirects the other hosts, counts page views, and guards /stats.
+    "run_worker_first": true
+  },
+  // All four zones are in the account. A custom domain needs no DNS record of its own on that host name.
+  "routes": [
+    { "pattern": "getmossad.com", "custom_domain": true },
+    { "pattern": "www.getmossad.com", "custom_domain": true },
+    { "pattern": "getmossad.app", "custom_domain": true },
+    { "pattern": "www.getmossad.app", "custom_domain": true }
+  ],
+  "vars": {
+    "CANONICAL_HOST": "getmossad.com",
+    "REDIRECT_HOSTS": "www.getmossad.com,getmossad.app,www.getmossad.app"
+    // Cloudflare Access for /stats: ACCESS_TEAM_DOMAIN, ACCESS_AUD, and OWNER_EMAIL are secrets, set with
+    // `npx wrangler secret put <name>` (website/README.md), so the owner's email is never in this public file.
+    // Until all three are set, /stats answers 403.
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "mossad-telemetry", "database_id": "27ec8831-513e-47e1-b293-bd9580c7a22a", "migrations_dir": "migrations" }
+  ],
+  "observability": { "enabled": false }
+}

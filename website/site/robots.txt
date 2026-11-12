@@ -1,0 +1,117 @@
+# Every search engine and AI crawler is welcome. Only the owner dashboard and the API are off limits.
+User-agent: GPTBot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Claude-User
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Googlebot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Applebot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: CCBot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Meta-ExternalAgent
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Amazonbot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: MistralAI-User
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: YouBot
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: Bytespider
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+User-agent: *
+Allow: /
+Disallow: /stats
+Disallow: /api/
+
+Sitemap: https://getmossad.com/sitemap.xml

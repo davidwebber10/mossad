@@ -4,7 +4,7 @@ Meeting notes for your Mac, with no bot on the call. Mossad is a free, open sour
 
 There are no buttons to press. You take your meetings as usual, and a searchable record of each conversation builds up in a folder on your Mac. You choose who transcribes and who writes the notes, or keep it all on your Mac with local models. Later you can point an AI agent at that folder and say "read Tuesday's planning call and build the tool we talked about."
 
-The website is [getmossad.app](https://getmossad.app). Its words are in [`website/content/site.json`](website/content/site.json).
+The website is [getmossad.com](https://getmossad.com). Its words are in [`website/content/site.json`](website/content/site.json).
 
 > **Before you use it:** Mossad does not announce itself on the call, so telling people is your job. Let the people on your calls know that you record and transcribe them, and read [Recording consent](#recording-consent) and [Lawful use](#lawful-use) first.
 
@@ -188,7 +188,7 @@ Everything stays in your home folder.
 | `~/Mossad/Voices/voices.json` | Saved voice fingerprints and names |
 | `~/Mossad/Logs/mossad.log` | The app log, rotated at 5 MB |
 
-Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Nothing else leaves your Mac unless you turn on sync, backup, sharing, Google, or the weekly email.
+Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Your meetings, recordings, and names go nowhere else unless you turn on sync, backup, sharing, Google, or the weekly email.
 
 ## Project layout
 
