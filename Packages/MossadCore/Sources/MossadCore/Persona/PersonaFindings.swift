@@ -53,6 +53,13 @@ public enum PersonaFindings {
         }
     }
 
+    /// The calls that can have a trait card: written, in the deck's days, and with a deck of their own. A meeting made
+    /// from Gemini's notes has no review, so its card could never show; it must not take one of the week's places.
+    public static func calls(from records: [CallRecord], now: Date) -> [(callID: String, date: Date)] {
+        records.filter { $0.status == .written && !$0.isNotesOnly && now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }
+            .map { (callID: $0.id, date: $0.start) }
+    }
+
     /// The trait card of each call, by call id: newest calls first, one for each call, and no more than the week
     /// leaves. `calls` are the calls of the deck with their start. `quote` gives the person's words of a moment.
     public static func cards(_ sources: [Source], calls: [(callID: String, date: Date)], profile: CoachProfile, now: Date = Date(),

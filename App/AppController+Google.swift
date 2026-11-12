@@ -44,7 +44,7 @@ final class GoogleConnector: ObservableObject {
         scopes = saved.map { Set($0.compactMap(GoogleScope.init(rawValue:))) } ?? Set(GoogleScope.allCases)
         audience = UserDefaults.standard.string(forKey: "googleAudience").flatMap(GoogleSetupGuide.Audience.init(rawValue:)) ?? .internal
         // Development hook for screenshots: MOSSAD_GOOGLE_SAMPLE shows a passed check with made-up values.
-        if ProcessInfo.processInfo.environment["MOSSAD_GOOGLE_SAMPLE"] != nil {
+        if Self.sample {
             phase = .done(GoogleCheck.Report(account: "owner@example.com", event: "Weekly design review",
                                              parts: [.calendar: GoogleError?.none, .docs: GoogleError?.none,
                                                                      .directory: GoogleError?.some(.apiDisabled(.people)), .contacts: GoogleError?.none]))
@@ -52,6 +52,15 @@ final class GoogleConnector: ObservableObject {
     }
 
     var busy: Bool { phase == .signingIn || phase == .checking }
+
+    /// The screenshot hook, in a Debug build only: a release build never shows a made-up account.
+    static var sample: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["MOSSAD_GOOGLE_SAMPLE"] != nil
+        #else
+        false
+        #endif
+    }
 
     /// The line about the plan, with its cost and the cap, as the step shows it and the log keeps it.
     var pastLine: String? { pastPlan.map { GeminiImport.estimateLine($0, cap: pastCap, perHour: pastPerHour, complete: pastComplete) } }
@@ -62,12 +71,12 @@ final class GoogleConnector: ObservableObject {
 extension AppController {
     var googleConnected: Bool {
         _ = googleConnector.version
-        return ProcessInfo.processInfo.environment["MOSSAD_GOOGLE_SAMPLE"] != nil || google.isConnected
+        return GoogleConnector.sample || google.isConnected
     }
 
     var googleAccount: String? {
         _ = googleConnector.version
-        return ProcessInfo.processInfo.environment["MOSSAD_GOOGLE_SAMPLE"] != nil ? "owner@example.com" : google.account
+        return GoogleConnector.sample ? "owner@example.com" : google.account
     }
 
     /// Saves a typed client, signs in when the parts changed or no sign-in is saved, then reads one event and one of
@@ -248,7 +257,8 @@ extension AppController {
             UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "geminiLastCheck")
             // Back to the last good check, so a weekend with the Mac closed is not lost.
             guard let read = await runner.events(from: GeminiImport.windowStart(lastGood: lastGood, now: now), to: now) else { return }
-            let items = GeminiImport.plan(events: read.events, records: meetings, now: now, noRecord: noRecord, removed: RemovedNotes.load(paths).ids)
+            let gone = RemovedNotes.load(paths)
+            let items = GeminiImport.plan(events: read.events, records: meetings, now: now, noRecord: noRecord, removed: gone.ids, deleted: gone.meetings)
             // The window moves on only after a complete read and a run with nothing left to do.
             func good() { if read.complete { UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "geminiLastGood") } }
             guard !items.isEmpty else { return good() }
@@ -260,7 +270,7 @@ extension AppController {
     }
 
     /// The chosen notes model's price for an hour of meeting: the summary and the tasks; nil when not known.
-    var notesPerHour: Double? { hourCost.parts.first { $0.kind == .notes }?.amount }
+    var notesPerHour: Double? { GeminiImport.perHour(hourCost) }
 
     /// Finds the past meetings with notes in the chosen days, and says what an import would cost.
     func findPastNotes() {
@@ -279,7 +289,8 @@ extension AppController {
                 return
             }
             connector.pastComplete = read.complete
-            connector.pastPlan = GeminiImport.plan(events: read.events, records: meetings, now: now, noRecord: noRecord, removed: RemovedNotes.load(paths).ids)
+            let gone = RemovedNotes.load(paths)
+            connector.pastPlan = GeminiImport.plan(events: read.events, records: meetings, now: now, noRecord: noRecord, removed: gone.ids, deleted: gone.meetings)
             if let line = connector.pastLine { Log.info("Gemini notes, last \(days) days: \(line)") }
         }
     }

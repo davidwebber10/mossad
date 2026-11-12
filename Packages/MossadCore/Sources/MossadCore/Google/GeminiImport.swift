@@ -42,8 +42,9 @@ public enum GeminiImport {
 
     /// `noRecord` is the owner's do-not-record list: a meeting it covers gets no notes either. `removed` holds the
     /// event and document ids of notes-only meetings that the owner deleted: they never come back.
+    /// `deleted` holds the meetings the owner deleted or skipped, matched by time and title or meeting code.
     public static func plan(events: [CalendarEventInfo], records: [CallRecord], now: Date, noRecord: NoRecordBook = NoRecordBook(),
-                            removed: Set<String> = []) -> [Item] {
+                            removed: Set<String> = [], deleted: [RemovedNotes.Mark] = []) -> [Item] {
         let imported = Set(records.compactMap { $0.gemini?.docID })
         let notes = records.filter(\.isNotesOnly)
         var seen: Set<String> = []
@@ -52,6 +53,8 @@ public enum GeminiImport {
                   let a = GeminiNotes.attachment(in: e), let id = a.fileID, seen.insert(id).inserted else { return nil }
             if removed.contains(id) || e.eventID.map(removed.contains) == true { return nil }
             if noRecord.excludesNotes(of: e) { return nil }
+            // A meeting the owner deleted or skipped stays gone.
+            if deleted.contains(where: { $0.covers(e) }) { return nil }
             // A failed recording still has its audio: it is this meeting's recording.
             let recorded = records.filter { r in !r.isNotesOnly && isSameMeeting(r, e, now: now) }
             // The call still records or its record is being made: the next check decides.
@@ -97,6 +100,10 @@ public enum GeminiImport {
         return perHour * max(0.25, item.event.end.timeIntervalSince(item.event.start) / 3600)
     }
 
+    /// The price of an hour of meeting for the requests that follow an import: the summary and the task list (the
+    /// notes part of `HourCost`). Nil when the model's price is not known.
+    public static func perHour(_ cost: HourCost) -> Double? { cost.parts.first { $0.kind == .notes }?.amount }
+
     static func cents(_ d: Double) -> Int { Int((d * 100).rounded()) }
 
     /// The plan within the cap: the newest meetings first, as long as their estimates fit. Counted in cents.
@@ -123,9 +130,11 @@ public enum GeminiImport {
         let total = estimate(items, perHour: perHour)
         switch perHour {
         case 0?: parts.append("The summaries are free with this model.")
-        case nil: parts.append("The price of this model is not known; at Claude's prices the summaries cost about \(money(total)).")
-        default: parts.append("Mossad's summaries cost about \(money(total)).")
+        case nil: parts.append("The price of this model is not known; at Claude's prices the summaries and task lists cost about \(money(total)).")
+        default: parts.append("Mossad's summaries and task lists cost about \(money(total)).")
         }
+        // The reads of how people think follow later, within their own monthly budget.
+        if creates > 0 { parts.append("The reads of how people think keep to their own budget.") }
         if kept < creates { parts.append("The cap of \(money(cap)) allows \(kept).") }
         return parts.joined(separator: " ") + short
     }
@@ -287,30 +296,82 @@ public struct GeminiRunner: Sendable {
     }
 }
 
-/// The notes-only meetings that the owner deleted, by event id and document id: their notes are never imported or
-/// billed again. On this Mac only (`Google/removed-notes.json`).
+/// The meetings that the owner deleted or skipped: their Gemini notes are never imported or billed again. A
+/// notes-only meeting by its event id and document id; a recording, deleted or skipped, also by its time, title,
+/// and meeting code, so the plan finds its event by the rule of `GeminiImport.isSameMeeting`. On this Mac only
+/// (`Google/removed-notes.json`).
 public struct RemovedNotes: Codable, Equatable, Sendable {
-    public var ids: Set<String> = []
+    /// A meeting that is gone, as the plan matches it to an event.
+    public struct Mark: Codable, Equatable, Sendable {
+        public var start: Date
+        public var end: Date
+        public var title: String?
+        public var meetingID: String?
+        public var platform: Platform
 
-    public init(ids: Set<String> = []) { self.ids = ids }
+        public init(start: Date, end: Date, title: String?, meetingID: String?, platform: Platform) {
+            self.start = start
+            self.end = end
+            self.title = title
+            self.meetingID = meetingID
+            self.platform = platform
+        }
+
+        /// Whether this is the meeting of the event.
+        public func covers(_ e: CalendarEventInfo) -> Bool {
+            var r = CallRecord(id: "", platform: platform, bundleID: "", start: start, end: end, status: .written)
+            r.calendarTitle = title
+            r.meetingID = meetingID
+            return GeminiImport.isSameMeeting(r, e, now: end)
+        }
+    }
+
+    public var ids: Set<String> = []
+    public var meetings: [Mark] = []
+
+    public init(ids: Set<String> = [], meetings: [Mark] = []) {
+        self.ids = ids
+        self.meetings = meetings
+    }
+
+    enum CodingKeys: String, CodingKey { case ids, meetings }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ids = try c.decodeIfPresent(Set<String>.self, forKey: .ids) ?? []
+        meetings = try c.decodeIfPresent([Mark].self, forKey: .meetings) ?? []
+    }
 
     public static func url(_ paths: Paths) -> URL { paths.root.appendingPathComponent("Google").appendingPathComponent("removed-notes.json") }
 
     public static func load(_ paths: Paths) -> RemovedNotes {
-        (try? Data(contentsOf: url(paths))).flatMap { try? JSONDecoder().decode(RemovedNotes.self, from: $0) } ?? RemovedNotes()
+        (try? Data(contentsOf: url(paths))).flatMap { try? JSONDecoder.callRecord.decode(RemovedNotes.self, from: $0) } ?? RemovedNotes()
     }
 
-    /// Adds the ids of a deleted notes-only meeting.
-    public static func add(_ r: CallRecord, paths: Paths) {
-        guard r.isNotesOnly, let g = r.gemini else { return }
+    /// The mark of a meeting the owner deleted or skipped. A recording keeps no notes, so the owner's delete holds.
+    public static func mark(_ r: CallRecord, end: Date? = nil) -> (ids: Set<String>, mark: Mark?) {
+        var ids: Set<String> = []
+        if let g = r.gemini {
+            ids.insert(g.docID)
+            if let event = g.eventID { ids.insert(event) }
+        }
+        let mark = r.isNotesOnly ? nil : Mark(start: r.start, end: max(end ?? r.end, r.start.addingTimeInterval(60)), title: r.calendarTitle,
+                                              meetingID: r.meetingID, platform: r.platform)
+        return (ids, mark)
+    }
+
+    /// Adds the mark of a deleted or skipped meeting. `end` is for a call that was skipped while it ran.
+    public static func add(_ r: CallRecord, end: Date? = nil, paths: Paths) {
+        let (newIDs, mark) = Self.mark(r, end: end)
+        guard !newIDs.isEmpty || mark != nil else { return }
         var book = load(paths)
-        book.ids.insert(g.docID)
-        if let event = g.eventID { book.ids.insert(event) }
+        book.ids.formUnion(newIDs)
+        if let mark { book.meetings.append(mark) }
+        // Marks older than the longest look back of "Old notes" match nothing.
+        book.meetings.removeAll { $0.end < Date().addingTimeInterval(-400 * 86_400) }
         do {
             try FileManager.default.createDirectory(at: url(paths).deletingLastPathComponent(), withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            try encoder.encode(book).write(to: url(paths), options: .atomic)
+            try JSONEncoder.callRecord.encode(book).write(to: url(paths), options: .atomic)
         } catch {
             Log.error("Gemini notes: the list of deleted meetings was not saved: \(error)")
         }

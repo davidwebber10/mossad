@@ -867,13 +867,14 @@ final class PhoneStore {
         let now = Date(), paths = paths, profile = profile
         let recent = meetings.filter { now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }.map { ($0.id, $0.start) }
         let saved = CoachPeople(people: people)
+        let cardCalls = PersonaFindings.calls(from: meetings, now: now)
         let sources = personas.flatMap { p in p.traits.map { PersonaFindings.Source($0, person: p.person, name: saved.name(of: p.person) ?? "") } }
             .filter { !$0.personName.isEmpty }
         findingsAsk += 1
         let ask = findingsAsk
         Task {
             let (cards, traits) = await Task.detached(priority: .utility) {
-                let traits = PersonaFindings.cards(sources, calls: recent.map { (callID: $0.0, date: $0.1) }, profile: profile, now: now,
+                let traits = PersonaFindings.cards(sources, calls: cardCalls, profile: profile, now: now,
                                                    quote: { PersonaReads.words($0, person: $1, paths: paths, saved: saved) })
                 let cards = FindingRules.deck(reviews: recent.compactMap { id, start in
                     CoachReview.load(in: paths.callDirectory(id)).map { (callID: id, date: start, review: $0) }

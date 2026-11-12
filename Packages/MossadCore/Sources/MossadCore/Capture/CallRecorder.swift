@@ -607,6 +607,8 @@ public final class CallRecorder: @unchecked Sendable {
         guard let r = record else { return }
         _ = stopAll()
         try? FileManager.default.removeItem(at: paths.callDirectory(r.id))
+        // A skipped call is not in Mossad: its Gemini notes are not imported either.
+        RemovedNotes.add(r, end: Date(), paths: paths)
         Log.info("Skipped call \(r.id)")
     }
 
