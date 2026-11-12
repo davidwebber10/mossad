@@ -35,6 +35,22 @@ Mossad is local first. Your meetings stay in a folder on your Mac, and you decid
 - **Your words stay yours.** Your meetings, recordings, names, and words stay on your Mac, except where you send them: to the providers, servers, and devices that you choose.
 - Voice fingerprints never leave your Mac. Shared-screen images never sync.
 
+## Change it
+
+Don't like something? Change it. Mossad is yours to reshape. Fork it, and your copy works the way you want, for good.
+
+- The note: your own sections, order, and front matter
+- The prompts: summaries, coaching, and tasks written the way you think
+- The steps: turn off what you do not need, or add a step of your own
+- The look: your colors, your layout, your menu bar
+- The providers: add the transcription or AI service you already pay for
+
+1. Fork it on GitHub. Your own copy, under the MIT License.
+2. Open it with your AI coding tool. The repository has an AGENTS.md written for AI agents, so you can ask for a change in plain words.
+3. Build it. Set your Apple team in project.yml, then run scripts/build.sh. It installs your copy in Applications.
+
+Needs: A Mac with Apple silicon and macOS 26, Xcode 16 or later, XcodeGen, and an Apple Development certificate. Fork: https://github.com/davidwebber10/mossad/fork
+
 ## Install
 
 1. Download the latest release from https://github.com/davidwebber10/mossad/releases/latest and move Mossad to Applications, or build it from the source with Xcode (see the README).
@@ -66,6 +82,10 @@ Yes. Choose transcription and a notes model that run on your Mac, and your audio
 ### Is there an iPhone app?
 
 Yes: your meetings, chat, people, and the coach, and a recorder for meetings in a room. It is not in the App Store. You build it from the source with Xcode.
+
+### Can I change how it works?
+
+Yes. Mossad is open source under the MIT License. Fork it, change the note, the prompts, the steps, the look, or the providers, and build your own copy with Xcode. The repository has an AGENTS.md, so your AI coding tool knows where everything is.
 
 ### What if it gets something wrong?
 

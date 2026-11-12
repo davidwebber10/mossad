@@ -326,6 +326,45 @@
 </div>
 </section>
 
+<section id="yours" aria-labelledby="yours-title">
+<div class="wrap sec">
+<div class="sec-head">
+<div class="stack">
+<p class="eyebrow">OPEN SOURCE</p>
+<h2 id="yours-title" class="h2">Don't like something? <span class="accent">Change it.</span></h2>
+</div>
+<p class="side">Mossad is yours to reshape. Fork it, and your copy works the way you want, for good.</p>
+</div>
+<div class="mine-body">
+<ul class="ruled mine-list">
+<li><span class="label accent">THE NOTE</span><span>Your own sections, order, and front matter in every note.</span></li>
+<li><span class="label accent">THE PROMPTS</span><span>Summaries, coaching, and tasks written the way you think.</span></li>
+<li><span class="label accent">THE STEPS</span><span>Turn off what you do not need, or add a step of your own.</span></li>
+<li><span class="label accent">THE LOOK</span><span>Your colors, your layout, your menu bar.</span></li>
+<li><span class="label accent">THE PROVIDERS</span><span>Add the transcription or AI service you already pay for.</span></li>
+</ul>
+<div class="start">
+<p class="label">HOW TO START</p>
+<ol class="start-steps">
+<li><b>Fork it on GitHub.</b> <span>Your own copy, under the MIT License.</span></li>
+<li><b>Open it with your AI coding tool.</b> <span>The repository has an AGENTS.md written for AI agents, so you can ask for a change in plain words.</span></li>
+<li><b>Build it.</b> <span>Set your Apple team in project.yml, then run <code>scripts/build.sh</code>. It installs your copy in Applications.</span></li>
+</ol>
+<div class="mock term" aria-label="Sample session">
+<span><span class="faint">$</span> git clone https://github.com/you/mossad</span>
+<span class="it muted">&gt; Put the decisions above the summary in every note.</span>
+<span><span class="faint">$</span> scripts/build.sh</span>
+</div>
+<p class="needs">You need a Mac with Apple silicon and macOS 26, Xcode 16 or later, XcodeGen, and an Apple Development certificate.</p>
+<div class="actions">
+<a class="btn btn-primary btn-lg" href="{{REPO}}/fork">Fork on GitHub</a>
+<a class="btn btn-ghost" href="{{REPO}}">View the source</a>
+</div>
+</div>
+</div>
+</div>
+</section>
+
 <section id="faq" aria-labelledby="faq-title">
 <div class="wrap sec faq">
 <div class="faq-head">
@@ -339,6 +378,7 @@
 <details><summary><h3>Which call apps does it work with?</h3></summary><p>Zoom, Microsoft Teams, and Google Meet, in their apps or in Chrome, Arc, Safari, Edge, and Brave. In a browser that it cannot read, such as Firefox, it tells you once and offers to record. You can also record a meeting in a room by hand.</p></details>
 <details><summary><h3>Can it run with no cloud at all?</h3></summary><p>Yes. Choose transcription and a notes model that run on your Mac, and your audio and text stay on it. Quality and speed then depend on the model and your Mac.</p></details>
 <details><summary><h3>Is there an iPhone app?</h3></summary><p>Yes: your meetings, chat, people, and the coach, and a recorder for meetings in a room. It is not in the App Store. You build it from the source with Xcode.</p></details>
+<details><summary><h3>Can I change how it works?</h3></summary><p>Yes. Mossad is open source under the MIT License. Fork it, change the note, the prompts, the steps, the look, or the providers, and build your own copy with Xcode. The repository has an AGENTS.md, so your AI coding tool knows where everything is.</p></details>
 <details><summary><h3>What if it gets something wrong?</h3></summary><p>Rename a voice and every note updates. Edit a title, regenerate a summary, or transcribe a meeting again. Summaries, coaching, and person notes come from software and can be wrong, so check them before you act on them.</p></details>
 </div>
 </div>

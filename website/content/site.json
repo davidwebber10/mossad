@@ -902,6 +902,33 @@
       "href": "https://github.com/davidwebber10/mossad"
     }
   },
+  "makeItYours": {
+    "title": "Don't like something? Change it.",
+    "intro": "Mossad is yours to reshape. Fork it, and your copy works the way you want, for good.",
+    "changes": [
+      "The note: your own sections, order, and front matter",
+      "The prompts: summaries, coaching, and tasks written the way you think",
+      "The steps: turn off what you do not need, or add a step of your own",
+      "The look: your colors, your layout, your menu bar",
+      "The providers: add the transcription or AI service you already pay for"
+    ],
+    "steps": [
+      "Fork it on GitHub. Your own copy, under the MIT License.",
+      "Open it with your AI coding tool. The repository has an AGENTS.md written for AI agents, so you can ask for a change in plain words.",
+      "Build it. Set your Apple team in project.yml, then run scripts/build.sh. It installs your copy in Applications."
+    ],
+    "needs": "A Mac with Apple silicon and macOS 26, Xcode 16 or later, XcodeGen, and an Apple Development certificate.",
+    "action": {
+      "label": "Fork on GitHub",
+      "href": "https://github.com/davidwebber10/mossad/fork"
+    },
+    "sources": [
+      "AGENTS.md",
+      "scripts/build.sh",
+      "project.yml",
+      "LICENSE"
+    ]
+  },
   "requirements": {
     "title": "Requirements",
     "items": [
@@ -957,6 +984,10 @@
     {
       "question": "What if Mossad gets a name or a summary wrong?",
       "answer": "Rename a voice and every note updates. Edit a title, regenerate a summary, or transcribe a meeting again. Summaries, coaching, and person notes come from software and can be wrong, so check them before you act on them."
+    },
+    {
+      "question": "Can I change how it works?",
+      "answer": "Yes. Mossad is open source under the MIT License. Fork it, change the note, the prompts, the steps, the look, or the providers, and build your own copy with Xcode. The repository has an AGENTS.md, so your AI coding tool knows where everything is."
     }
   ],
   "footer": {
