@@ -31,6 +31,7 @@ struct MainWindow: View {
         }
         .environment(\.windowWidth, width)
         .environment(\.openGlobalSearch, { [weak c = controller] in c?.openSearch() })
+        .environment(\.navigation, controller.navigation)
         .background {
             // Command-F: the page's own search, or the search of everything on a page without one.
             Button("Find") { controller.find() }.keyboardShortcut("f").opacity(0).accessibilityHidden(true)

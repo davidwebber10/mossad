@@ -139,6 +139,8 @@ struct MeetingList: View {
     }
 
     private func select(_ id: String) {
+        // A click on another meeting is a step of Back; the arrow keys are not.
+        if selection != id { controller.navigation.jumpNext() }
         selection = id
         focused = true
     }

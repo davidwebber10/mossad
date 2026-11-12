@@ -145,6 +145,7 @@ extension AppController {
     }
 
     func openSeries(_ id: String) {
+        navigation.jumpNext()
         series.selected = id
         open(.recurring)
     }

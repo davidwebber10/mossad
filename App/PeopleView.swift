@@ -75,6 +75,10 @@ struct PeopleView: View {
         }
         .onReceive(controller.$meetings) { _ in Task { await reload() } }
         .onChange(of: controller.personRequests) { _, _ in Task { await reload() } }
+        .navigationPart(.people, .init(page: mode.rawValue, item: selection, search: search.query)) { p in
+            search.show(p.search)
+            if let m = p.page.flatMap(Mode.init(rawValue:)), m != mode { mode = m }
+        }
         .onAppear {
             org.reload()
             let env = ProcessInfo.processInfo.environment
@@ -191,7 +195,9 @@ struct PeopleView: View {
     }
 
     private func select(_ name: String) {
-        if profiles.contains(where: { $0.name == name }) { selection = name }
+        guard profiles.contains(where: { $0.name == name }) else { return }
+        if selection != name { controller.navigation.jumpNext() }
+        selection = name
     }
 
     private func merge(_ p: VoiceProfile, into target: VoiceProfile) {
@@ -408,6 +414,7 @@ private struct PeopleList: View {
 
     private func row(_ p: VoiceProfile) -> some View {
         PersonRow(profile: p, stats: stats[p.name], selected: selection == p.name, match: matches[p.name]) {
+            if selection != p.name { controller.navigation.jumpNext() }
             selection = p.name
             focused = true
         }

@@ -31,6 +31,7 @@ extension AppController {
     func sidebarOpen(_ item: Section) -> Bool { sidebarSpot.item == .section(item) }
 
     func go(to spot: SidebarNav.Spot) {
+        navigation.jumpNext()
         switch spot.child ?? spot.item {
         case .section(let s): section = s
         case .coach(let page):
@@ -41,6 +42,7 @@ extension AppController {
 
     /// A click on an item, a letter typed, or the Go menu: Coach opens on its first page, as each way to it does.
     func go(to section: Section) {
+        navigation.jumpNext()
         if section.isUnderMeetings { self.section = section } else { go(to: SidebarNav.open(Self.sidebarItems, item: .section(section))) }
     }
 }

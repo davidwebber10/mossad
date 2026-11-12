@@ -72,6 +72,7 @@ struct RecurringView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .leading) { Hairline(axis: .vertical) }
                 }
+                .navigationPart(.recurring, .init(item: shown?.id)) { _ in }
             }
         }
         .task(id: controller.meetingsVersion) { controller.refreshSeries() }
@@ -103,6 +104,7 @@ private struct SeriesList: View {
     /// Why each series is in a searched list; empty with no search.
     let places: [String: SeriesListSearch.Match]
     @Binding var selection: String?
+    @Environment(\.navigation) private var navigation
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -111,6 +113,7 @@ private struct SeriesList: View {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(series) { s in
                         SeriesRow(series: s, open: book.points(of: s).open.count, selected: selection == s.id, place: places[s.id]) {
+                            if selection != s.id { navigation?.jumpNext() }
                             selection = s.id
                             focused = true
                         }

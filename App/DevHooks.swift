@@ -52,6 +52,11 @@ enum DevHooks {
         if preview, let query = env["MOSSAD_SEARCH"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { c.openSearch(query) }
         }
+        // `MOSSAD_NAV_OPEN=<call id>` opens that meeting 3 s after launch, as a link on the page would, so Back
+        // shows enabled after the path to it.
+        if preview, let id = env["MOSSAD_NAV_OPEN"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { c.openMeeting(id) }
+        }
         // `MOSSAD_PERSON` opens that person's page.
         if looks, let person = env["MOSSAD_PERSON"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { c.openPerson(person) }

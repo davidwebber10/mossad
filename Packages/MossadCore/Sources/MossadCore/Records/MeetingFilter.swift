@@ -6,10 +6,10 @@ import Foundation
 ///
 /// A choice is about something Mossad knows of a meeting. A meeting that cannot say (no transcript, so no number
 /// of people; no summary, so no action items) matches none of that group's choices.
-public struct MeetingFilter: Equatable, Sendable {
+public struct MeetingFilter: Equatable, Codable, Sendable {
     /// A person in the filter: by the durable id where the meeting's name is surely a saved person, otherwise by
     /// the name as the meeting shows it. Two with one id are the same person under any name.
-    public struct Who: Hashable, Sendable {
+    public struct Who: Hashable, Codable, Sendable {
         /// The `PersonID` of the saved person, when there is one.
         public var id: String?
         public var name: String
@@ -26,10 +26,10 @@ public struct MeetingFilter: Equatable, Sendable {
         public func hash(into hasher: inout Hasher) { hasher.combine(key) }
     }
 
-    public enum PeopleMode: Sendable { case any, all }
+    public enum PeopleMode: Codable, Sendable { case any, all }
 
     /// The length ranges. Each takes its lower edge: a meeting of 30 minutes is in "30–60".
-    public enum Length: Int, CaseIterable, Sendable {
+    public enum Length: Int, CaseIterable, Codable, Sendable {
         case under15, to30, to60, over60
 
         public func contains(seconds: TimeInterval) -> Bool {
@@ -44,7 +44,7 @@ public struct MeetingFilter: Equatable, Sendable {
 
     /// Whole minutes of the recorded length, both ends in; no `max` is "or more". For a joined meeting the length is
     /// that of its audio, which can be less than the list's end minus start.
-    public struct MinuteRange: Hashable, Sendable {
+    public struct MinuteRange: Hashable, Codable, Sendable {
         /// The slider's track: 0 to 2 hours in steps of 5 minutes; its end means "or more".
         public static let top = 120
         public static let step = 5
@@ -88,7 +88,7 @@ public struct MeetingFilter: Equatable, Sendable {
         }
     }
 
-    public enum Period: Hashable, Sendable {
+    public enum Period: Hashable, Codable, Sendable {
         case today, thisWeek, last7, last30, last90
         /// Whole days, both in, in either order.
         case custom(from: Date, to: Date)
@@ -119,7 +119,7 @@ public struct MeetingFilter: Equatable, Sendable {
 
     /// How many people were in the meeting: the owner, the voices that count (`MeetingFacts.mainVoices`), and the
     /// invited people on a sure match. "Unknown" when the meeting cannot say, which is never "Just me" or "1:1".
-    public enum Size: Int, CaseIterable, Sendable {
+    public enum Size: Int, CaseIterable, Codable, Sendable {
         case alone, oneOnOne, small, large, unknown
 
         init(people: Int) {
@@ -128,7 +128,7 @@ public struct MeetingFilter: Equatable, Sendable {
     }
 
     /// The coach's rating. A meeting with no rating is its own choice and never a low one.
-    public enum Value: Hashable, CaseIterable, Sendable {
+    public enum Value: Hashable, CaseIterable, Codable, Sendable {
         case high, medium, low, notRated
 
         public init(_ rating: MeetingValue.Rating?) {
@@ -141,7 +141,7 @@ public struct MeetingFilter: Equatable, Sendable {
         }
     }
 
-    public enum Flag: Hashable, CaseIterable, Sendable { case actionItems, decisions, screens }
+    public enum Flag: Hashable, CaseIterable, Codable, Sendable { case actionItems, decisions, screens }
 
     public var people: [Who] = []
     public var peopleMode = PeopleMode.any
