@@ -61,14 +61,15 @@ public struct UsageCounters: Codable, Equatable, Sendable {
 public final class UsageCounterStore: Sendable {
     public static let fileName = "usage-stats.json"
     private let file: URL
-    private let lock = Mutex(())
+    /// True after `delete()`: a count already on its way when the owner turned the statistics off writes nothing.
+    private let closed = Mutex(false)
 
     public init(directory: URL) {
         file = directory.appendingPathComponent(Self.fileName)
     }
 
     public func read() -> UsageCounters {
-        lock.withLock { _ in load() }
+        closed.withLock { _ in load() }
     }
 
     public func markActive(at date: Date = Date()) {
@@ -79,13 +80,22 @@ public final class UsageCounterStore: Sendable {
         change { $0.record(step, at: date) }
     }
 
-    /// Turning the statistics off forgets what was counted.
+    /// Turning the statistics off forgets what was counted, and nothing is counted until `reopen()`.
     public func delete() {
-        lock.withLock { _ in try? FileManager.default.removeItem(at: file) }
+        closed.withLock { closed in
+            closed = true
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+
+    /// Turning the statistics on again.
+    public func reopen() {
+        closed.withLock { $0 = false }
     }
 
     private func change(_ body: (inout UsageCounters) -> Void) {
-        lock.withLock { _ in
+        closed.withLock { closed in
+            guard !closed else { return }
             var c = load()
             let before = c
             body(&c)

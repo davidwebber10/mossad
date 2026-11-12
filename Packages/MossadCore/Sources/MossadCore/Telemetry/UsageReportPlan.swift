@@ -1,7 +1,8 @@
 import Foundation
 
-/// When and how the statistics go out: at most once a day, after a random wait at launch, to one fixed address,
-/// with no header beyond the body's type and the app's version. A failed send waits for the next day.
+/// When and how the statistics go out: at most once a day, after a random wait at launch, to one fixed address.
+/// The request sets the body's type and the app's version; the session's own Accept and Accept-Language get fixed
+/// values, so the owner's language list does not go. A failed send waits for the next day.
 public enum UsageReportPlan {
     public static let defaultEndpoint = URL(string: "https://getmossad.com/api/telemetry")!
     /// The settings switch, on by default.
@@ -73,17 +74,22 @@ public enum UsageReportPlan {
         return id
     }
 
-    /// Sends one report. The log says only that it went, or the HTTP status; never the body.
-    @discardableResult
-    public static func send(_ stats: UsageStats, endpoint: URL, appVersion: String) async -> Bool {
-        guard let body = try? stats.json() else { return false }
+    public static func sessionConfiguration() -> URLSessionConfiguration {
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil
         config.urlCache = nil
+        config.httpAdditionalHeaders = ["Accept-Language": "en", "Accept": "*/*"]
         config.timeoutIntervalForRequest = timeout
         config.timeoutIntervalForResource = timeout
         config.waitsForConnectivity = false
-        let session = URLSession(configuration: config)
+        return config
+    }
+
+    /// Sends one report. The log says only that it went, or the HTTP status; never the body.
+    @discardableResult
+    public static func send(_ stats: UsageStats, endpoint: URL, appVersion: String) async -> Bool {
+        guard stats.isSendable, let body = try? stats.json() else { return false }
+        let session = URLSession(configuration: sessionConfiguration())
         defer { session.finishTasksAndInvalidate() }
         do {
             let (_, response) = try await session.data(for: request(body: body, endpoint: endpoint, appVersion: appVersion))

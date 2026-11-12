@@ -35,6 +35,7 @@ extension AppController {
     func setUsageStats(_ on: Bool) {
         usageStatsEnabled = on
         if on {
+            usageCounters.reopen()
             startUsageStats()
         } else {
             usageStatsTask?.cancel()
@@ -57,7 +58,7 @@ extension AppController {
         let last = defaults.object(forKey: UsageReportPlan.lastAttemptKey) as? Date
         guard usageStatsGate.allows, !isRecording, UsageReportPlan.isDue(lastAttempt: last, now: Date()) else { return }
         let stats = await makeUsageStats()
-        guard !Task.isCancelled, usageStatsGate.allows, !isRecording else { return }
+        guard !Task.isCancelled, usageStatsGate.allows, !isRecording, stats.isSendable else { return }
         // Before the send: a failure waits for the next day, with no retry in between.
         defaults.set(Date(), forKey: UsageReportPlan.lastAttemptKey)
         let endpoint = UsageReportPlan.endpoint(override: defaults.string(forKey: UsageReportPlan.endpointKey))

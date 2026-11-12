@@ -135,7 +135,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
             v: version,
             installID: i.installID.uuidString.lowercased(),
             appVersion: versionText(i.appVersion),
-            build: Int(i.build).map { min(max($0, 0), 10_000_000) } ?? 0,
+            build: Int(i.build).map { min(max($0, 0), 1_000_000) } ?? 0,
             os: "\(min(max(i.os.majorVersion, 0), 999)).\(min(max(i.os.minorVersion, 0), 999))",
             chip: chipFamily(i.cpuBrand),
             locale: localeTag(language: i.language, region: i.region),
@@ -160,15 +160,20 @@ public struct UsageStats: Codable, Equatable, Sendable {
         }
     }
 
-    /// "M3" from "Apple M3 Pro": the family only. Any other chip is "other".
+    /// "M3" from "Apple M3 Pro": the family only. Any other chip is "Other", the receiver's word.
     public static func chipFamily(_ brand: String?) -> String {
-        guard let brand, let match = brand.firstMatch(of: /\bM([0-9]+)\b/), let n = Int(match.1), (1...5).contains(n) else { return "other" }
+        guard let brand, let match = brand.firstMatch(of: /\bM([0-9]+)\b/), let n = Int(match.1), (1...5).contains(n) else { return "Other" }
         return "M\(n)"
     }
 
-    /// "2.20.0", or "0" when the text is anything but a version.
+    /// "2.20.0", or "0" when the text is not a version the receiver takes (two or three parts of up to three digits).
     static func versionText(_ text: String) -> String {
-        text.wholeMatch(of: /[0-9]{1,4}(\.[0-9]{1,4}){0,3}/) != nil ? text : "0"
+        text.wholeMatch(of: /[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?/) != nil ? text : "0"
+    }
+
+    /// False when the receiver would refuse the report (no real version or build), so it is not sent at all.
+    public var isSendable: Bool {
+        appVersion != "0" && build >= 1 && os.wholeMatch(of: /(2[6-9]|[3-9][0-9])(\.[0-9]{1,2}){0,2}/) != nil
     }
 
     /// "en-US", "fr", or "und" when the language is not a plain language code.

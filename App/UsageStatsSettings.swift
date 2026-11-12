@@ -41,7 +41,7 @@ struct UsageStatsSheet: View {
             SheetHeader(icon: .analytics, title: "What is sent", subtitle: "The next report, exactly as Mossad would send it.", close: { dismiss() })
             VStack(alignment: .leading, spacing: 12) {
                 Text(controller.usageStatsEnabled
-                     ? "At most once a day, Mossad sends this to getmossad.com. Never while a call records."
+                     ? "At most once a day, Mossad sends this to getmossad.com. A report never starts while a call records. The server also keeps the day and the country of the request, and not your IP address."
                      : "The setting is off, so Mossad sends nothing. This is what a report would hold.")
                     .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 ScrollView {

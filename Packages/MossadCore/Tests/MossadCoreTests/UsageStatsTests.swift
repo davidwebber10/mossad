@@ -94,9 +94,45 @@ final class UsageStatsTests: XCTestCase {
         XCTAssertEqual(UsageStats.chipFamily("Apple M2 Max"), "M2")
         XCTAssertEqual(UsageStats.chipFamily("Apple M4 Pro"), "M4")
         XCTAssertEqual(UsageStats.chipFamily("Apple M5"), "M5")
-        XCTAssertEqual(UsageStats.chipFamily("Apple M9 Ultra"), "other")
-        XCTAssertEqual(UsageStats.chipFamily("Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz"), "other")
-        XCTAssertEqual(UsageStats.chipFamily(nil), "other")
+        XCTAssertEqual(UsageStats.chipFamily("Apple M9 Ultra"), "Other")
+        XCTAssertEqual(UsageStats.chipFamily("Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz"), "Other")
+        XCTAssertEqual(UsageStats.chipFamily(nil), "Other")
+    }
+
+    /// The receiver's rules (`website/worker/src/telemetry.ts`), copied here so the two sides cannot move apart unseen.
+    private enum Worker {
+        static let appVersion = try! NSRegularExpression(pattern: "^\\d{1,3}\\.\\d{1,3}(\\.\\d{1,3})?$")
+        static let os = try! NSRegularExpression(pattern: "^(2[6-9]|[3-9]\\d)(\\.\\d{1,2}){0,2}$")
+        static let chip = try! NSRegularExpression(pattern: "^(M\\d{1,2}( Pro| Max| Ultra)?|Other)$")
+        static let locale = try! NSRegularExpression(pattern: "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|\\d{3}))?$")
+        static func fits(_ r: NSRegularExpression, _ s: String) -> Bool { r.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil }
+    }
+
+    func testEveryChipWordFitsTheReceiversRule() {
+        for brand in ["Apple M1", "Apple M2 Max", "Apple M3 Pro", "Apple M4", "Apple M5 Ultra", "Apple M6", "Intel(R) Core(TM) i7", "", nil] {
+            let chip = UsageStats.chipFamily(brand)
+            XCTAssertTrue(Worker.fits(Worker.chip, chip), "\(chip) from \(brand ?? "nil")")
+        }
+    }
+
+    func testANormalReportFitsTheReceiversRules() {
+        let s = UsageStats.make(input(), now: now, calendar: calendar)
+        XCTAssertTrue(s.isSendable)
+        XCTAssertTrue(Worker.fits(Worker.appVersion, s.appVersion))
+        XCTAssertTrue(Worker.fits(Worker.os, s.os))
+        XCTAssertTrue(Worker.fits(Worker.chip, s.chip))
+        XCTAssertTrue(Worker.fits(Worker.locale, s.locale))
+        XCTAssertGreaterThanOrEqual(s.build, 1)
+    }
+
+    /// A version or a build that the receiver would refuse is not sent at all, so no report fails each day.
+    func testAReportTheReceiverWouldRefuseIsNotSendable() {
+        for (version, build) in [("abc", "607"), ("2.20.0.1", "607"), ("2.20.0", "x"), ("2.20.0", "0"), ("1234.0", "607")] {
+            var i = input()
+            i.appVersion = version
+            i.build = build
+            XCTAssertFalse(UsageStats.make(i, now: now, calendar: calendar).isSendable, "\(version) \(build)")
+        }
     }
 
     func testProvidersSayNoneWhenNothingIsSet() {
@@ -154,9 +190,9 @@ final class UsageStatsTests: XCTestCase {
 
         let allowed: [NSRegularExpression] = [
             "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-            "^[0-9]{1,4}(\\.[0-9]{1,4}){0,3}$",
+            "^[0-9]{1,3}(\\.[0-9]{1,3}){0,2}$",
             "^[a-z]{2,3}(-[A-Z]{2})?$|^und$",
-            "^(M[1-5]|other)$",
+            "^(M[1-5]|Other)$",
             "^(assemblyai|deepgram|elevenlabs|openai|local|none|anthropic|openrouter|localServer|apple)$",
             "^(0|1-5|6-20|21-100|100\\+)$",
         ].map { try! NSRegularExpression(pattern: $0) }
@@ -236,6 +272,15 @@ final class UsageReportPlanTests: XCTestCase {
         XCTAssertEqual(r.cachePolicy, .reloadIgnoringLocalCacheData)
     }
 
+    /// URLSession adds its own Accept and Accept-Language headers; fixed values keep the owner's language list out.
+    func testTheSessionSendsFixedLanguageAndAcceptHeaders() {
+        let config = UsageReportPlan.sessionConfiguration()
+        XCTAssertEqual(config.httpAdditionalHeaders as? [String: String], ["Accept-Language": "en", "Accept": "*/*"])
+        XCTAssertNil(config.httpCookieStorage)
+        XCTAssertNil(config.urlCache)
+        XCTAssertEqual(config.timeoutIntervalForRequest, 10)
+    }
+
     func testTheUserAgentNeverCarriesMoreThanAVersion() {
         let r = UsageReportPlan.request(body: Data(), endpoint: UsageReportPlan.endpoint(override: nil), appVersion: "2.20 Sam")
         XCTAssertEqual(r.value(forHTTPHeaderField: "User-Agent"), "Mossad/0")
@@ -257,5 +302,19 @@ final class UsageCounterStoreTests: XCTestCase {
         store.delete()
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent(UsageCounterStore.fileName).path))
         XCTAssertEqual(store.read(), UsageCounters())
+    }
+
+    /// A count that was on its way when the owner turned the statistics off does not make the file again.
+    func testAfterDeleteNothingIsCountedUntilReopened() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("usage-counters-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = UsageCounterStore(directory: dir)
+        store.delete()
+        store.record(.write)
+        store.markActive()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent(UsageCounterStore.fileName).path))
+        store.reopen()
+        store.record(.write)
+        XCTAssertEqual(store.read().errors.values.first?["write"], 1)
     }
 }
