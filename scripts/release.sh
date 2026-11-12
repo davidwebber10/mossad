@@ -2,6 +2,8 @@
 # Publish a new version as a GitHub release; installed copies of Mossad find it and offer to update.
 #   scripts/release.sh 2.1.0 ["Release notes"]
 #   DRY_RUN=1 scripts/release.sh 2.1.0     builds, signs, and writes the feed, but publishes nothing
+#   WEBSITE_CHANGELOG=1 scripts/release.sh 2.1.0 ["notes"]   also adds the release to website/content/changelog.json
+#                                           and commits it on main after the release is published
 # The update is signed with the Sparkle key in the login Keychain (made once with generate_keys).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -17,6 +19,14 @@ git fetch --tags --quiet
 git rev-parse "v$VERSION" >/dev/null 2>&1 && { echo "v$VERSION already exists." >&2; exit 1; }
 PREVIOUS=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
 NOTES=${2:-$(git log --pretty='- %s' "$PREVIOUS"..HEAD)}
+CHANGELOG=website/content/changelog.json
+# With the flag, the entry is tried on a copy first, so a bad entry stops the release before anything is built.
+if [ -n "${WEBSITE_CHANGELOG:-}" ]; then
+  mkdir -p build
+  cp "$CHANGELOG" build/changelog-check.json
+  scripts/website-changelog.py "$VERSION" "$NOTES" --file build/changelog-check.json >/dev/null \
+    || { echo "The website changelog entry failed; nothing was released." >&2; exit 1; }
+fi
 # The build number only goes up, which is what the updater compares: Sparkle ignores a release whose number is
 # not larger than the one installed copies have.
 BUILD=$(git rev-list --count HEAD)
@@ -63,8 +73,20 @@ cat > "$OUT/appcast.xml" <<XML
 </rss>
 XML
 
-if [ -n "${DRY_RUN:-}" ]; then echo "Dry run: $OUT/$ZIP and $OUT/appcast.xml are ready; nothing published."; exit 0; fi
+if [ -n "${DRY_RUN:-}" ]; then
+  if [ -n "${WEBSITE_CHANGELOG:-}" ]; then
+    cp "$CHANGELOG" "$OUT/changelog.json"
+    scripts/website-changelog.py "$VERSION" "$NOTES" --file "$OUT/changelog.json"
+  fi
+  echo "Dry run: $OUT/$ZIP and $OUT/appcast.xml are ready; nothing published."; exit 0
+fi
 git tag "v$VERSION"
 git push --quiet origin "v$VERSION"
 gh release create "v$VERSION" "$OUT/$ZIP" "$OUT/appcast.xml" -R "$REPO" --title "Mossad $VERSION" --notes "$NOTES"
 echo "Published Mossad $VERSION (build $BUILD)"
+if [ -n "${WEBSITE_CHANGELOG:-}" ]; then
+  scripts/website-changelog.py "$VERSION" "$NOTES"
+  git add "$CHANGELOG"
+  git commit --quiet -m "Website changelog: $VERSION"
+  echo "Committed the changelog entry on main. Push main to put it on the website."
+fi

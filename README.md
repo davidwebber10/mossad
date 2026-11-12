@@ -1,13 +1,16 @@
 # Mossad
 
-Automatic meeting notes for your Mac. Mossad is a menu bar app that records your Zoom, Google Meet, and Microsoft Teams calls, transcribes them after the call ends, works out who said what, and saves a Markdown note for every meeting.
+Meeting notes for your Mac, with no bot on the call. Mossad is a free, open source menu bar app. It notices your Zoom, Google Meet, and Microsoft Teams calls, records them on your Mac, and writes a Markdown note for each one: a summary, decisions, action items, and a transcript that knows who spoke.
 
-There are no buttons to press and no bot joins your call. You take your meetings as usual, and a searchable record of each conversation builds up in a folder on your Mac. Later you can point an AI agent at that folder and say "read Tuesday's planning call and build the tool we talked about."
+There are no buttons to press. You take your meetings as usual, and a searchable record of each conversation builds up in a folder on your Mac. You choose who transcribes and who writes the notes, or keep it all on your Mac with local models. Later you can point an AI agent at that folder and say "read Tuesday's planning call and build the tool we talked about."
 
-> **Before you use it:** Mossad does not announce itself on the call, so telling people is your job. Let the people on your calls know that you record and transcribe them, and read [Recording consent](#recording-consent) first.
+The website is [getmossad.app](https://getmossad.app). Its words are in [`website/content/site.json`](website/content/site.json).
+
+> **Before you use it:** Mossad does not announce itself on the call, so telling people is your job. Let the people on your calls know that you record and transcribe them, and read [Recording consent](#recording-consent) and [Lawful use](#lawful-use) first.
 
 ## Contents
 
+- [Screenshots](#screenshots)
 - [What it does](#what-it-does)
 - [How it works](#how-it-works)
 - [What a meeting note looks like](#what-a-meeting-note-looks-like)
@@ -21,16 +24,53 @@ There are no buttons to press and no bot joins your call. You take your meetings
 - [Status and known limits](#status-and-known-limits)
 - [License](#license)
 
+## Screenshots
+
+<!-- Screenshots go here: the meeting page with the lanes player, the Meetings list with the filter, a person's page, the Coach Findings deck, Analytics, and the iPhone app. -->
+
+Screenshots are coming.
+
 ## What it does
 
-- **Finds your calls on its own.** It notices when Zoom, Teams, or a Meet or Teams tab in your browser is using the microphone for a real meeting, and starts recording.
+**Capture**
+
+- **Finds your calls on its own.** It notices when Zoom, Teams, or a Meet or Teams tab in Chrome, Arc, Safari, Edge, or Brave is in a real meeting, and starts recording. No bot joins the call.
 - **Knows when the call is over.** It watches for the meeting window or tab to close instead of guessing from a few seconds of silence.
-- **Keeps you and them apart.** Your microphone and the call's audio are recorded as two separate tracks. When the other side comes out of your laptop speakers and your mic picks it up, Mossad finds those words in both tracks and drops them from yours, so they are not labeled as you.
-- **Transcribes after the call.** Nothing is transcribed live. When the call ends, the audio goes to AssemblyAI in one batch.
-- **Learns voices (optional).** Each speaker gets a voice fingerprint. Name a new voice once and Mossad recognizes that person on later calls. You can turn this off in Settings.
-- **Summarizes.** Claude writes a short summary and a list of action items for each call.
-- **Uses your calendar.** The meeting title and attendee list come from the matching event in the macOS Calendar app.
-- **Asks for one thing at most.** If a call had voices it has never heard, you get a single notification to name them. That is the only time it asks for anything.
+- **Keeps you and them apart.** Your microphone and the call's audio are two tracks. Echo of the other side that your mic picks up is removed from your track. When you mute in the call app, your track is silent for that time.
+- **Stays out of the way.** Pause, stop, or skip a call from the menu bar, mark a meeting as do not record, or record a meeting in a room by hand. Shared screens are captured only if you turn it on.
+
+**Notes and transcripts**
+
+- **One Markdown note per call**, with a summary by topic, decisions with their times, action items, and the transcript.
+- **Real titles** from the calendar invite, or from what was said. An optional live transcript shows the call as it happens.
+- **A player with one lane per speaker**, bookmarks (Control-Option-B during a call), and a tab for shared screens.
+
+**People and voices**
+
+- **Learns voices.** Name a voice once and Mossad recognizes that person on later calls. If a call had voices it has never heard, you get one notification to name them. You can turn this off.
+- **A page for each person** with your meetings, talk time, and their action items, an org chart from a CSV file, and a card on how to present to them after a few calls.
+
+**Meetings, coach, and analytics**
+
+- **Before each meeting**, a page with who is coming, what happened last time, and what you still owe them.
+- **Filter and search** every meeting by person, date, topic, kind, size, or platform, and search everything with Command-K. The Tasks page keeps what you promised in your calls.
+- **A coach** that gives at most one line of advice per call, always with a moment or a number to back it, plus a Findings deck, goals with a number, and a weekly review.
+- **Analytics** for each meeting and for how you communicate over time, plus what each meeting cost.
+
+**Chat, sharing, and sync**
+
+- **Chat** with your meetings, or give Claude, ChatGPT, and other AI apps read access through MCP (`Mossad --mcp`, or your own server).
+- **Share one meeting** with a link and an optional PIN, through your own server, and see who opened it.
+- **An iPhone app** for your meetings, the coach, and recording meetings in a room. It syncs through iCloud or your own server.
+- **Backups** of recordings to Cloudflare R2, Amazon S3, or your own server.
+- **Connect Google** (optional, read only) for richer calendar details, your directory, and Gemini notes.
+
+**Your providers**
+
+- **Transcription:** AssemblyAI, Deepgram, ElevenLabs, or OpenAI with your key, or Parakeet, Whisper, Apple Speech, or Qwen3-ASR on your Mac.
+- **Notes, chat, and coach:** Anthropic, OpenAI, OpenRouter, a local server such as Ollama or LM Studio, or Apple's on-device model.
+
+Coming soon: recurring meetings with points for next time, a search in every list, person pages with tabs and more than one email, and voice recognition that reads the invite.
 
 ## How it works
 
@@ -42,12 +82,12 @@ There are no buttons to press and no bot joins your call. You take your meetings
  Markdown note  ◄──  Summary  ◄──  Speaker ID  ◄──  Transcription
 ```
 
-1. **Detection.** Every two seconds Mossad checks which apps are using the microphone (Core Audio), reads Zoom and Teams window titles (Accessibility), and reads browser tab addresses (AppleScript). A call starts when a meeting app is on the mic and a meeting window or tab is open.
-2. **Recording.** The "me" track comes from the raw microphone. The "them" track comes from a Core Audio process tap on the call app, so only the call's audio is captured, not your music or notifications. Both are saved as 16 kHz mono files.
+1. **Detection.** Every two seconds Mossad checks which apps are using the microphone (Core Audio), reads Zoom and Teams windows (Accessibility), and reads browser tab addresses (AppleScript). A call starts when a meeting app is on the mic and a meeting window or tab is open.
+2. **Recording.** The "me" track comes from the raw microphone. The "them" track comes from a Core Audio process tap on the call app, so only the call's audio is captured, not your music or notifications.
 3. **End of call.** The call ends when the meeting window or tab closes. If that signal is missing, a fallback ends it after three minutes with no mic activity. Calls shorter than one minute are thrown away.
-4. **Processing.** Each track is uploaded to AssemblyAI with speaker labels. The two transcripts are merged by time, and any echo of the other side that leaked into your mic is removed.
-5. **Speaker ID.** FluidAudio turns each speaker's audio into a voice embedding, which is compared against your saved voices.
-6. **Summary and note.** Claude writes the summary and action items, and the note is saved to `~/Mossad/Meetings`.
+4. **Transcription.** Each track goes to the transcription provider you chose, or to a model on your Mac. The two transcripts are merged by time, and any echo of the other side that leaked into your mic is removed.
+5. **Speaker ID.** FluidAudio turns each speaker's audio into a voice embedding on your Mac, which is compared against your saved voices.
+6. **Summary and note.** The model you chose writes the summary, decisions, and action items, and the note is saved to `~/Mossad/Meetings`.
 
 Each step saves its result before the next one starts. If your Mac sleeps, the network drops, or the app quits halfway, processing picks up where it left off and retries with backoff.
 
@@ -89,8 +129,8 @@ Notes are named like `2026-10-20 1430 - Weekly Ops Sync.md`, so they sort by dat
 - macOS 26 or later on Apple silicon
 - Xcode 16 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - An Apple Development signing certificate
-- An [AssemblyAI](https://www.assemblyai.com) API key for transcription
-- An [Anthropic](https://console.anthropic.com) API key for summaries (optional; without it, notes have a transcript but no summary)
+- For transcription, a key for [AssemblyAI](https://www.assemblyai.com), Deepgram, ElevenLabs, or OpenAI, or no key with a local model
+- For notes, a key for [Anthropic](https://console.anthropic.com), OpenAI, or OpenRouter, or no key with a local server or Apple's on-device model (without any, notes have a transcript but no summary)
 
 ## Setup
 
@@ -148,7 +188,7 @@ Everything stays in your home folder.
 | `~/Mossad/Voices/voices.json` | Saved voice fingerprints and names |
 | `~/Mossad/Logs/mossad.log` | The app log, rotated at 5 MB |
 
-Audio is sent to AssemblyAI for transcription, and the transcript is sent to Anthropic for the summary. Nothing else leaves your Mac.
+Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Nothing else leaves your Mac unless you turn on sync, backup, sharing, Google, or the weekly email.
 
 ## Project layout
 
