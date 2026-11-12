@@ -103,7 +103,7 @@ private struct FindingsPage: View {
                                  offersNever: { FindingRules.offersNever($0, profile: profile) }, focusOnAppear: true, preview: CoachView.deckPreview,
                                  answer: { controller.answerFinding($0, $1) }, undo: { controller.takeBackFinding($0) },
                                  explain: { controller.explainFinding($0, note: $1) })
-                    Text("Yes and no teach the coach what is useful to you. \u{201C}No, never again\u{201D} stops a subject for good; you can undo it in Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
+                    Text("Useful and Not useful teach the coach what helps you; True and Not true correct what it believes. \u{201C}Never again\u{201D} stops a subject for good; you can undo it in Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
                         .textRole(.secondary).foregroundStyle(Palette.tertiary).lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }

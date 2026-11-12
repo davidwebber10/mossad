@@ -4,8 +4,9 @@ import SwiftUI
 import AppKit
 #endif
 
-/// The coach's findings as a stack of cards. A swipe to the right is yes; a swipe to the left is a plain no to
-/// this one card. The card follows the pointer or the finger, tilts, and takes a tint that grows with the
+/// The coach's findings as a stack of cards. Each card asks one question (`Kind.question`) and names its two
+/// answers in words: Useful and Not useful, True and Not true, Take it on and Not now. A swipe to the right is the
+/// first; a swipe to the left is the second, for this one card. The card follows the pointer or the finger, tilts, and takes a tint that grows with the
 /// distance; past the threshold a light tap says the answer will count. At the release the answer is saved, and
 /// the card leaves with the speed of the hand while the next one rises from behind. The arrow keys and two small
 /// buttons do the same. "No, never again" is its own quiet button on the card. After a no, one quiet line under
@@ -200,8 +201,8 @@ struct FindingsDeck: View {
             }
             #endif
             .accessibilityElement(children: .contain)
-            .accessibilityAction(named: "Yes") { commit(top, .yes) }
-            .accessibilityAction(named: "No") { commit(top, .no) }
+            .accessibilityAction(named: Text(top.kind.yes)) { commit(top, .yes) }
+            .accessibilityAction(named: Text(top.kind.no)) { commit(top, .no) }
     }
 
     private func card(_ finding: CoachFinding, faded: CGFloat = 1, quiet: CGFloat = 0) -> some View {
@@ -225,9 +226,9 @@ struct FindingsDeck: View {
             // Where the arrow keys go.
             .overlay { if top, deckFocused { shape.strokeBorder(Palette.accent.opacity(0.35), lineWidth: 1.5).allowsHitTesting(false) } }
             #endif
-            // Each mark on the side of the card that stays on the screen: "Yes" on the left in a swipe to the
-            // right, "No" on the right in a swipe to the left. "No, never again" steps back while it shows.
-            .overlay(alignment: x >= 0 ? .bottomLeading : .bottomTrailing) { if top { stamp(x) } }
+            // Each mark on the side of the card that stays on the screen: "Useful" on the left in a swipe to the
+            // right, "Not useful" on the right in a swipe to the left. "Never again" steps back while it shows.
+            .overlay(alignment: x >= 0 ? .bottomLeading : .bottomTrailing) { if top { stamp(x, finding.kind) } }
             .shadow(color: .black.opacity(top ? 0.13 : 0.06), radius: top ? 18 : 8, y: top ? 9 : 4)
     }
 
@@ -268,10 +269,10 @@ struct FindingsDeck: View {
         return (x >= 0 ? Palette.ok : Palette.secondary).opacity(Double(amount) * (x >= 0 ? 0.16 : 0.13))
     }
 
-    private func stamp(_ x: CGFloat) -> some View {
+    private func stamp(_ x: CGFloat, _ kind: CoachFinding.Kind) -> some View {
         let amount = min(1, abs(x) / Self.threshold)
         let yes = x >= 0
-        return Label(yes ? "Yes" : "No", systemImage: yes ? "checkmark" : "xmark")
+        return Label(yes ? kind.yes : kind.no, systemImage: yes ? "checkmark" : "xmark")
             .labelStyle(.titleAndIcon)
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(yes ? Palette.okText : Palette.secondary)
@@ -356,21 +357,31 @@ struct FindingsDeck: View {
         undo(last.finding.id)
     }
 
-    // MARK: Yes, No, Undo
+    // MARK: The question, its two answers, Undo
 
     private func controls(_ top: CoachFinding) -> some View {
-        HStack(spacing: Space.s) {
-            Button { commit(top, .no) } label: { Label("No", systemImage: "arrow.left") }
+        let buttons = HStack(spacing: Space.s) {
+            Button { commit(top, .no) } label: { Label(top.kind.no, systemImage: "arrow.left") }
                 .buttonStyle(DeckButtonStyle(tint: Palette.secondary))
-                .help("No to this card (Left Arrow)")
-            Button { commit(top, .yes) } label: { Label("Yes", systemImage: "arrow.right").labelStyle(TrailingIconStyle()) }
+                .help("\(top.kind.no) (Left Arrow)")
+            Button { commit(top, .yes) } label: { Label(top.kind.yes, systemImage: "arrow.right").labelStyle(TrailingIconStyle()) }
                 .buttonStyle(DeckButtonStyle(tint: Palette.okText))
-                .help("Yes (Right Arrow)")
-            #if os(macOS)
+                .help("\(top.kind.yes) (Right Arrow)")
+        }
+        let question = Text(top.kind.question).textRole(.secondary).foregroundStyle(Palette.secondary)
+        #if os(macOS)
+        return HStack(spacing: Space.m) {
+            question.lineLimit(1).layoutPriority(1)
+            buttons
             Spacer(minLength: Space.s)
             if last != nil, why == nil, blocked == nil { undoButton.textRole(.secondary) }
-            #endif
         }
+        #else
+        return VStack(alignment: .leading, spacing: Space.s) {
+            question
+            buttons
+        }
+        #endif
     }
 
     private var undoButton: some View {
@@ -407,7 +418,7 @@ struct FindingsDeck: View {
                                 #endif
                                 .padding(.horizontal, 10).padding(.vertical, 6)
                                 .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control + 2, style: .continuous))
-                                .accessibilityLabel("Why you did not agree with \(FindingRules.shortTitle(card.text))")
+                                .accessibilityLabel(card.kind.whyNot(FindingRules.shortTitle(card.text)))
                             Button("Save") { save(card) }
                                 .buttonStyle(QuietLinkStyle(color: Palette.accent))
                                 .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -422,7 +433,7 @@ struct FindingsDeck: View {
                             withAnimation(spring) { writing = true }
                             noteFocused = true
                         } label: {
-                            Text("Why didn\u{2019}t you agree with \u{201C}\(FindingRules.shortTitle(card.text, words: Self.whyWords))\u{201D}?")
+                            Text(card.kind.whyNot(FindingRules.shortTitle(card.text, words: Self.whyWords)))
                                 .lineLimit(1).truncationMode(.tail)
                         }
                         .buttonStyle(QuietLinkStyle())
@@ -453,6 +464,7 @@ struct FindingsDeck: View {
         case .learning: "Not true, never asked again: \u{201C}\(FindingRules.shortTitle(card.text, words: Self.whyWords))\u{201D}"
         case .trait: "Not true of \(card.personName ?? "them"), never shown: \u{201C}\(FindingRules.shortTitle(card.text, words: Self.whyWords))\u{201D}"
         case .goalOffer: "This goal is not offered again."
+        case .didWell: "No more praise for: \(CoachSkill.subject(of: card.skill))"
         default: "Never again: \(CoachSkill.subject(of: card.skill))"
         }
     }
@@ -517,8 +529,8 @@ struct DeckDragging: PreferenceKey {
 
 // MARK: - The card
 
-/// One finding: what it is, the words, the proof (a moment that plays, a number with its usual value), and the
-/// quiet "No, never again".
+/// One finding: what it is, the words, why it matters and what that stands on, the proof (a moment that plays,
+/// a number with its usual value), and the quiet "Never again".
 struct FindingCard: View {
     let finding: CoachFinding
     var source: String?
@@ -549,6 +561,16 @@ struct FindingCard: View {
                 if let detail = finding.detail {
                     Text(detail).textRole(.body).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 }
+                if let why = finding.why {
+                    (Text("Why it matters: ").foregroundStyle(Palette.secondary) + Text(why).foregroundStyle(Palette.ink))
+                        .textRole(.body).lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+                if let basis = finding.basis {
+                    Label(basis, systemImage: basis.hasPrefix("Your goal") ? "scope" : "tag")
+                        .textRole(.secondary).foregroundStyle(Palette.secondary)
+                }
                 if let name = finding.personName {
                     Label("About \(name)", systemImage: "person.crop.circle")
                         .textRole(.secondary).foregroundStyle(Palette.secondary)
@@ -566,7 +588,7 @@ struct FindingCard: View {
             Spacer(minLength: 0)
             HStack {
                 if let never {
-                    Button("No, never again", action: never)
+                    Button(finding.kind.never, action: never)
                         .buttonStyle(QuietLinkStyle(color: Palette.tertiary))
                         .textRole(.secondary)
                         #if os(iOS)
@@ -576,6 +598,7 @@ struct FindingCard: View {
                         .help(finding.kind == .learning ? "Marks this not true, and the coach never asks it again. You can undo it in Coach \u{203A} Knowledge."
                               : finding.kind == .trait ? "Marks this not true of this person: the trait never shows. You can undo it in Coach \u{203A} Knowledge."
                               : finding.kind == .goalOffer ? "The coach never offers this goal again. You can undo it in Coach \u{203A} Knowledge."
+                              : finding.kind == .didWell ? "The coach never praises this again; its advice can still come. You can undo it in Coach \u{203A} Knowledge."
                               : "The coach never brings this up again. You can undo it in Coach \u{203A} Knowledge.")
                 }
                 Spacer()
@@ -687,7 +710,7 @@ struct FindingsEmpty: View {
 
 // MARK: - Parts
 
-/// The small Yes and No under the deck.
+/// The two small answers under the deck.
 private struct DeckButtonStyle: ButtonStyle {
     let tint: Color
     @Environment(\.isEnabled) private var enabled

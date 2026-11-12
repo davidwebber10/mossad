@@ -1,8 +1,8 @@
 import MossadCore
 import SwiftUI
 
-/// The coach's findings of all calls as one deck, the newest call first. A swipe to the right is yes, a swipe to
-/// the left is a plain no to that one card. The play button opens the meeting at the moment: the audio stays on
+/// The coach's findings of all calls as one deck, the newest call first. A swipe to the right is the card's first
+/// answer (Useful, True, Take it on), a swipe to the left its second, for that one card. The play button opens the meeting at the moment: the audio stays on
 /// the Mac.
 struct FindingsScreen: View {
     @Environment(PhoneStore.self) private var store
@@ -33,7 +33,7 @@ struct FindingsScreen: View {
                              answer: { store.answerFinding($0, $1) }, undo: { store.takeBackFinding($0) },
                              explain: { store.explainFinding($0, note: $1) })
                     .frame(maxWidth: .infinity)
-                Text("Yes and no teach the coach what is useful to you. \u{201C}No, never again\u{201D} stops a subject for good; you can undo it in Coach \u{203A} Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
+                Text("Useful and Not useful teach the coach what helps you; True and Not true correct what it believes. \u{201C}Never again\u{201D} stops a subject for good; you can undo it in Coach \u{203A} Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
                     .textRole(.secondary).foregroundStyle(Palette.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
