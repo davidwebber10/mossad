@@ -256,7 +256,7 @@ private struct PhoneKnowledgeScreen: View {
                     ForEach(rules) { g in Text(g.text) }
                         .onDelete { offsets in for i in offsets { store.removeGuidance(rules[i].text) } }
                 } header: { Text("Rules from your answers") } footer: {
-                    Text("From the line \u{201C}Why didn\u{2019}t you agree\u{201D} after a no. Each is for its subject only.")
+                    Text("From the line \u{201C}Why was \u{2026} not useful?\u{201D} or \u{201C}Why is \u{2026} not true?\u{201D} after a no. Each is for its subject only.")
                 }
             }
             let blocked = p.neverAgain
@@ -264,13 +264,18 @@ private struct PhoneKnowledgeScreen: View {
                 Section {
                     ForEach(blocked) { a in
                         HStack {
-                            Text(a.kind.isBehavior || a.kind == .goalOffer ? CoachSkill.subject(of: a.skill) : a.text)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(a.kind.isBehavior || a.kind == .goalOffer ? CoachSkill.subject(of: a.skill) : a.text)
+                                if a.kind == .didWell {
+                                    Text("No more praise for this. Advice on it still comes.").font(.footnote).foregroundStyle(.secondary)
+                                }
+                            }
                             Spacer()
                             Button("Undo") { store.allowFindingAgain(a.id) }.buttonStyle(.borderless)
                         }
                     }
                 } header: { Text("Never again") } footer: {
-                    Text("From \u{201C}No, never again\u{201D} on a card. Undo lets the coach bring it up again.")
+                    Text("From \u{201C}Never again\u{201D} on a card. Undo lets the coach bring it up again.")
                 }
             }
             ForEach(CoachFact.Kind.allCases, id: \.self) { kind in

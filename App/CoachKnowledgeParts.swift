@@ -63,7 +63,7 @@ struct FocusProse: View {
     }
 }
 
-/// "Is this right?": the coach's first open question as a sentence, the moment it came from, and Yes, Not
+/// "Is this true?": the coach's first open question as a sentence, the moment it came from, and True, Not
 /// quite, No.
 struct QuestionProse: View {
     @EnvironmentObject var controller: AppController
@@ -76,7 +76,7 @@ struct QuestionProse: View {
         if let q = questions.first {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text("Is this right?").textRole(.label).foregroundStyle(Palette.accent)
+                    Text("Is this true?").textRole(.label).foregroundStyle(Palette.accent)
                     Spacer()
                     if questions.count > 1 {
                         Text("1 of \(questions.count)").font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(Palette.tertiary)
@@ -114,7 +114,7 @@ struct QuestionProse: View {
                             .disabled(note.trimmingCharacters(in: .whitespaces).isEmpty)
                         Button("Cancel") { correcting = false }.buttonStyle(.settings)
                     } else {
-                        Button("Yes") { send(q, .confirmed) }.buttonStyle(.settingsAccent)
+                        Button("True") { send(q, .confirmed) }.buttonStyle(.settingsAccent)
                         Button("Not quite…") { correcting = true; noteFocused = true }.buttonStyle(.settings)
                         // Not a plain no: the coach never asks this again.
                         Button("Not true") { send(q, .rejected) }.buttonStyle(.settings)
@@ -139,7 +139,7 @@ struct QuestionProse: View {
     }
 }
 
-/// What the owner blocked with "No, never again" on a card of the findings deck. Each has Undo.
+/// What the owner blocked with "Never again" on a card of the findings deck. Each has Undo.
 struct NeverAgain: View {
     @EnvironmentObject var controller: AppController
     let profile: CoachProfile
@@ -149,6 +149,7 @@ struct NeverAgain: View {
         case .learning: "The coach does not ask this again."
         case .trait: "This trait never shows for this person."
         case .goalOffer: "The coach does not offer this goal again."
+        case .didWell: "No more praise for this. Advice on it still comes."
         default: "The coach says nothing more about this subject."
         }
     }
@@ -156,7 +157,7 @@ struct NeverAgain: View {
     var body: some View {
         let blocked = profile.neverAgain
         if !blocked.isEmpty {
-            SettingsGroup(label: "Never again", footer: "From \u{201C}No, never again\u{201D} on a card in Findings. Undo lets the coach bring it up again.") {
+            SettingsGroup(label: "Never again", footer: "From \u{201C}Never again\u{201D} on a card in Findings. Undo lets the coach bring it up again.") {
                 ForEach(blocked) { a in
                     HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                         VStack(alignment: .leading, spacing: 2) {

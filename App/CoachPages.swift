@@ -311,7 +311,7 @@ private struct WhyRules: View {
         let rules = profile.whyRules
         if !rules.isEmpty {
             SettingsGroup(label: "Rules from your answers",
-                          footer: "From the line \u{201C}Why didn\u{2019}t you agree\u{201D} after a no. The coach keeps the newest \(CoachProfile.reasonLimit) and uses each for its subject only.") {
+                          footer: "From the line \u{201C}Why was \u{2026} not useful?\u{201D} or \u{201C}Why is \u{2026} not true?\u{201D} after a no. The coach keeps the newest \(CoachProfile.reasonLimit) and uses each for its subject only.") {
                 ForEach(rules) { g in
                     HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                         Text(g.text).font(.system(size: 12.5)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)

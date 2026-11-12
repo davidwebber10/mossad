@@ -9,15 +9,16 @@ import AppKit
 /// first; a swipe to the left is the second, for this one card. The card follows the pointer or the finger, tilts, and takes a tint that grows with the
 /// distance; past the threshold a light tap says the answer will count. At the release the answer is saved, and
 /// the card leaves with the speed of the hand while the next one rises from behind. The arrow keys and two small
-/// buttons do the same. "No, never again" is its own quiet button on the card. After a no, one quiet line under
+/// buttons do the same. "Never again" is its own quiet button on the card. After a no, one quiet line under
 /// the deck asks why; it never stands in the way.
 struct FindingsDeck: View {
     /// A fixed state for a picture of the deck, in a preview only.
     struct Preview: Equatable {
         var drag: CGFloat = 0
-        /// The line about the last no: `line` shows it, `open` shows its field.
+        /// The line about the last no: `line` shows it, `open` shows its field, `never` answers "Never again"
+        /// and shows what it blocked.
         var why: Why?
-        enum Why { case line, open }
+        enum Why { case line, open, never }
     }
 
     let cards: [CoachFinding]
@@ -27,7 +28,7 @@ struct FindingsDeck: View {
     /// Plays the card's moment. `playing` is the id of the card whose moment plays now.
     var play: ((CoachFinding) -> Void)?
     var playing: String?
-    /// Whether a card offers "No, never again". Not on a card of the active focus.
+    /// Whether a card offers "Never again". Not on a card of the active focus.
     var offersNever: (CoachFinding) -> Bool = { _ in true }
     /// Shows the calm empty state when there is no card. Inside a meeting the deck is then not there at all.
     var showsEmpty = true
@@ -68,7 +69,7 @@ struct FindingsDeck: View {
     @State private var armed = 0
     @State private var tick = Tick()
     @State private var why: CoachFinding?
-    /// The card that just got "No, never again": one line says what it blocked.
+    /// The card that just got "Never again": one line says what it blocked.
     @State private var blocked: CoachFinding?
     @State private var writing = false
     @State private var note = ""
@@ -156,7 +157,7 @@ struct FindingsDeck: View {
         // As the owner does it: a no to the first card, then the line about it, then its field.
         Task {
             try? await Task.sleep(for: .milliseconds(700))
-            commit(first, .no)
+            commit(first, state == .never ? .never : .no)
             guard state == .open else { return }
             try? await Task.sleep(for: .milliseconds(900))
             whyTimer?.cancel()
@@ -392,7 +393,7 @@ struct FindingsDeck: View {
 
     // MARK: Why not
 
-    /// One quiet line about the card that just got a no, or about what "No, never again" blocked. It opens a
+    /// One quiet line about the card that just got a no, or about what "Never again" blocked. It opens a
     /// field in place, waits a short time, and goes with the next answer. The room for it is always there, so the
     /// deck does not move. Undo sits at its right.
     private var whyLine: some View {
@@ -538,7 +539,7 @@ struct FindingCard: View {
     var play: (() -> Void)?
     var isPlaying = false
     var never: (() -> Void)?
-    /// 0 to 1 while the card is dragged: "No, never again" steps back for the mark of the answer.
+    /// 0 to 1 while the card is dragged: "Never again" steps back for the mark of the answer.
     var quiet: CGFloat = 0
 
     var body: some View {
@@ -568,7 +569,7 @@ struct FindingCard: View {
                         .padding(.top, 2)
                 }
                 if let basis = finding.basis {
-                    Label(basis, systemImage: basis.hasPrefix("Your goal") ? "scope" : "tag")
+                    Label(basis, systemImage: finding.basisIsGoal ? "scope" : "tag")
                         .textRole(.secondary).foregroundStyle(Palette.secondary)
                 }
                 if let name = finding.personName {
