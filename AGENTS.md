@@ -48,6 +48,7 @@ The product goal is zero interaction. Any change that adds a click, a prompt, or
 | `.../Summary/Summarizer.swift` | Claude Messages API over raw HTTP with a JSON schema response. |
 | `.../Output/MarkdownWriter.swift` | The note format. The golden test in `MarkdownWriterTests` is the contract. |
 | `server/` | The owner's optional Cloudflare Worker: sync (`api.ts`), share links (`share.ts` routes, `pages.ts` the pages, `access.ts` the PIN and the cookies, `views.ts` the view counts, `markdown.ts` the text for AI apps), the MCP (`mcp.ts`), and the recording backup (`recordings.ts`). A share page does not name Mossad and asks no other site for anything. D1 changes are numbered files in `server/migrations/`, additive only: the Worker that runs before a migration must keep working after it. `npm test` and `npx tsc --noEmit` in `server/`; `server/README.md` has the calls. Never deploy it from an agent session. |
+| `website/content/`, `scripts/website-changelog.py` | The content of the website, getmossad.app (static; its design is made apart). `site.json` is every word the site shows: the hero, how it works, the feature groups (each feature with its title, one sentence, details, an SF Symbol, `comingSoon`, and the source files that prove it; a `comingSoon` feature names its `branch`), privacy, requirements, FAQ, and the footer. `changelog.json` lists the releases, newest first; `WEBSITE_CHANGELOG=1 scripts/release.sh` adds each release to it with `scripts/website-changelog.py`. Every claim must be true in the code or marked `comingSoon`. |
 | `docs/superpowers/specs/` | Design documents. The newest spec is the source of truth for behavior. |
 | `docs/superpowers/plans/` | Implementation plans. |
 
@@ -72,6 +73,7 @@ scripts/build.sh --no-launch                  # full app build and install to /A
 - **Do not lose audio.** Never delete a call's audio unless the call is shorter than the minimum length or the user skipped it.
 - **Secrets.** API keys live only in the Keychain (service `com.dwebber.mossad`). Never log them, write them to files, or put them in code or command arguments.
 - **No AI attribution** in commits, PRs, or code comments.
+- **The website follows the app.** When a user-facing feature ships, update `website/content/site.json` in the same branch: add or change the feature (with its sources), and set `comingSoon` to false and remove `branch` when it was there.
 - Match the existing style: small focused files, few comments, comments explain why rather than what.
 
 ## Reading meeting notes
