@@ -83,7 +83,7 @@ final class GeminiImportTests: XCTestCase {
         let capped = GeminiImport.capped(plan, dollars: 0.03)
         XCTAssertEqual(capped.map(\.event.title), ["New", "Recorded"])
         XCTAssertEqual(GeminiImport.estimateLine(plan, cap: 0.03),
-                       "2 meetings without a recording, 1 recorded meeting with Gemini notes. The price of this model is not known; at Claude's prices the summaries cost about $0.04. The cap of $0.03 allows 1.")
+                       "2 meetings without a recording, 1 recorded meeting with Gemini notes. The price of this model is not known; at Claude's prices the summaries and task lists cost about $0.04. The reads of how people think keep to their own budget. The cap of $0.03 allows 1.")
         XCTAssertEqual(GeminiImport.estimateLine([], cap: 1), "No meetings with Gemini notes to import.")
         XCTAssertFalse(GeminiImport.estimateLine(plan, cap: 0.03).contains("—"))
     }

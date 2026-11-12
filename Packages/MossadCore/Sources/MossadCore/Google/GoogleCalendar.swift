@@ -217,8 +217,10 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
     private var cache: (from: Date, to: Date, at: Date, page: GoogleCalendarAPI.Page)?
     /// When the last read failed: the next ones use the Mac alone for a while instead of waiting for the network.
     private var failedAt: Date?
-    /// The read that runs now, shared by every caller that comes meanwhile.
-    private var inFlight: Task<GoogleCalendarAPI.Page?, Never>?
+    /// The reads that run now, each with its window, shared by the callers whose window it covers.
+    private var inFlight: [(id: UUID, from: Date, to: Date, task: Task<GoogleCalendarAPI.Page?, Never>)] = []
+    /// Raised by `forget`: a read that started before does not write the cache.
+    private var generation = 0
     static let cacheSeconds: TimeInterval = 120
     static let failedSeconds: TimeInterval = 60
     /// A read waits at most this long for Google; a later answer goes to the cache for the next read. The Mac's
@@ -231,7 +233,7 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
         self.waitLimit = waitLimit
     }
 
-    public func forget() { lock.withLock { cache = nil; failedAt = nil; inFlight = nil } }
+    public func forget() { lock.withLock { cache = nil; failedAt = nil; inFlight = []; generation += 1 } }
 
     public func events(from: Date, to: Date) async -> [CalendarEventInfo] {
         let local = await mac.events(from: from, to: to)
@@ -248,18 +250,23 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
                                           allUIDs: c.page.allUIDs, nextPageToken: nil, complete: c.page.complete)
         }
         if let failed, now.timeIntervalSince(failed) < Self.failedSeconds { return nil }
-        // One read in flight for all callers; a new one only when none runs.
+        // A read in flight joins a caller whose window it covers; another window gets its own read. The page is cut
+        // to each caller's window.
         let read: Task<GoogleCalendarAPI.Page?, Never> = lock.withLock {
-            if let running = inFlight { return running }
+            if let running = inFlight.first(where: { $0.from <= from && $0.to >= to }) { return running.task }
+            let started = generation
+            let id = UUID()
             let task = Task { [weak self] () -> GoogleCalendarAPI.Page? in
                 let page = await google.page(from: from, to: to)
                 self?.lock.withLock {
+                    self?.inFlight.removeAll { $0.id == id }
+                    // A read that `forget` overtook (a new sign-in, other calendars) leaves the cache alone.
+                    guard self?.generation == started else { return }
                     if let page { self?.cache = (from, to, now, page); self?.failedAt = nil } else { self?.failedAt = now }
-                    self?.inFlight = nil
                 }
                 return page
             }
-            inFlight = task
+            inFlight.append((id, from, to, task))
             return task
         }
         // The first of the read and the timer answers; the read goes on in the background and fills the cache.
@@ -267,7 +274,13 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
         let once = Once<GoogleCalendarAPI.Page?>()
         return await withCheckedContinuation { c in
             once.set(c)
-            Task { once.resume(await read.value) }
+            Task {
+                let page = await read.value
+                once.resume(page.map { p in
+                    GoogleCalendarAPI.Page(account: p.account, events: p.events.filter { $0.end > from && $0.start < to },
+                                           allUIDs: p.allUIDs, nextPageToken: nil, complete: p.complete)
+                })
+            }
             Task {
                 try? await Task.sleep(for: limit)
                 once.resume(nil)

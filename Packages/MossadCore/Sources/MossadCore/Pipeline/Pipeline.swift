@@ -569,7 +569,8 @@ public actor Pipeline {
     /// has outside this Mac (its archived recording) from the record's own values, not from a list in memory.
     public func remove(callID: String) -> CallRecord? { remove(callID: callID, keepNotes: false) }
 
-    /// `keepNotes` false marks a deleted notes-only meeting, so its notes are never imported or billed again.
+    /// `keepNotes` false marks a deleted meeting (a recording or a notes-only meeting), so its notes are never imported
+    /// or billed again.
     func remove(callID: String, keepNotes: Bool) -> CallRecord? {
         let dir = paths.callDirectory(callID)
         guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed else { return nil }
