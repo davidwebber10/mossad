@@ -16,7 +16,7 @@ struct SeriesMoment: View {
         } label: {
             HStack(spacing: 5) {
                 IconImage(at == nil ? .chevronRight : .play, size: 8)
-                Text(label ?? at.map(clock) ?? "Open").monospacedDigit()
+                Text(label ?? at.map(clock) ?? "Open meeting").monospacedDigit()
             }
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(Palette.accent)
@@ -191,7 +191,9 @@ struct DiscussedRow: View {
                 Text(point.text).foregroundStyle(Palette.secondary).strikethrough(color: Palette.tertiaryMark)
                 HStack(spacing: 8) {
                     if let d = point.done {
-                        Text(d.byOwner ? "Marked done \(shortDay(d.date))" : "Discussed \(shortDay(d.date))")
+                        // The day of the meeting, not of the check.
+                        let day = d.callID.flatMap { id in controller.meetings.first { $0.id == id }?.start } ?? d.date
+                        Text(d.byOwner ? "Marked done \(shortDay(day))" : "Discussed \(shortDay(day))")
                             .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
                         if let call = d.callID { SeriesMoment(callID: call, at: d.at) }
                     }
@@ -232,6 +234,7 @@ struct SuggestionList: View {
                 }
                 .padding(.horizontal, 8).padding(.bottom, 4)
             }
+            OffKinds(answers: controller.series.book.answers)
             if suggestions.isEmpty {
                 Text("No suggestions now. The coach suggests a point only from something Mossad knows: an open action item, a task of yours that is due, a decision left open, a question with no answer, or your coach goal.")
                     .font(.system(size: 12.5)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
@@ -282,6 +285,25 @@ struct SuggestionList: View {
     }
 }
 
+/// The kinds of suggestion that are off, blocked with "Never" or lowered by dismissals, with the way to turn them on.
+private struct OffKinds: View {
+    @EnvironmentObject var controller: AppController
+    let answers: [SuggestionAnswer]
+
+    var body: some View {
+        let training = SuggestionTraining(answers: answers)
+        ForEach(training.off, id: \.self) { kind in
+            HStack(spacing: 8) {
+                Text("Off: \(kind.title)\(training.isBlocked(kind) ? "" : ", after your dismissals")")
+                    .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Button("Turn on") { controller.changeNextTime { $0.allowAgain(kind) } }
+                    .buttonStyle(.plain).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
+            }
+            .padding(.horizontal, 8)
+        }
+    }
+}
+
 // MARK: For other pages
 
 /// "Next time I see Sam": the owner's points for one person. A small section any page can show (the person page
@@ -292,13 +314,13 @@ struct PersonNextTimeSection: View {
     let name: String
 
     var body: some View {
-        let points = controller.series.book.points(forPerson: personID)
+        let refs = controller.series.people
+        let points = controller.series.book.points(forPerson: personID, canonical: { refs.canonical($0) })
         VStack(alignment: .leading, spacing: 6) {
             Text("Next time I see \(SeriesNames.first(name))").textRole(.label).foregroundStyle(Palette.secondary).accessibilityAddTraits(.isHeader)
             NextTimeList(points: points, add: { text in controller.changeNextTime { $0.add(text, personID: personID, personName: name) } },
                          placeholder: "Add a point for \(SeriesNames.first(name))")
         }
-        .task { controller.series.reload(controller.paths) }
     }
 }
 
@@ -309,12 +331,21 @@ struct PrepYourPoints: View {
 
     var body: some View {
         let series = SeriesCatalog.series(of: meeting, in: controller.series.all)
-        let points = controller.nextTimePoints(for: meeting)
-        if series != nil || !points.isEmpty {
+        let own = series.map { controller.series.book.points(of: $0).open } ?? []
+        let refs = controller.series.people
+        // Each invited person with points of their own, as a list of its own: a drag never mixes two lists.
+        let people = (controller.series.invitedIDs[meeting.id] ?? []).compactMap { id -> (id: String, name: String)? in
+            guard !controller.series.book.points(forPerson: id, canonical: { refs.canonical($0) }).isEmpty else { return nil }
+            return (id, refs.name(of: id) ?? id)
+        }
+        if series != nil || !people.isEmpty {
             MeetingAnalyticsGroup("Your points") {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 12) {
                     if let series {
-                        NextTimeList(points: points, add: { text in controller.changeNextTime { $0.add(text, series: series) } })
+                        NextTimeList(points: own, add: { text in controller.changeNextTime { $0.add(text, series: series) } })
+                    }
+                    ForEach(people, id: \.id) { p in PersonNextTimeSection(personID: p.id, name: p.name) }
+                    if let series {
                         Button { controller.openSeries(series.id) } label: {
                             HStack(spacing: 3) {
                                 Text("All of \(series.title)")
@@ -323,8 +354,6 @@ struct PrepYourPoints: View {
                             .font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
                         }
                         .buttonStyle(.plain)
-                    } else {
-                        NextTimeList(points: points, add: { _ in }, canAdd: false)
                     }
                 }
             }

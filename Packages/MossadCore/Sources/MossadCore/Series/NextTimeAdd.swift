@@ -23,7 +23,8 @@ public enum NextTimeAdd {
         let words = Set(q.split(separator: " "))
         let byTitle = all.filter { s in
             let title = PeopleDuplicates.normalized(s.title)
-            return title.contains(q) || words.isSubset(of: Set(title.split { !$0.isLetter && !$0.isNumber }))
+            // Whole words only: "TB" is not in "Football".
+            return words.isSubset(of: Set(title.split { !$0.isLetter && !$0.isNumber }))
         }
         if !byTitle.isEmpty { return byTitle }
         return all.filter { s in s.usualPeople.contains { ChatTools.name(query, matches: $0) } }

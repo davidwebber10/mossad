@@ -324,7 +324,12 @@ public struct CallRecord: Codable, Equatable, Sendable {
         calendarTitle = event.title
         attendees = event.attendees
         invitees = event.participants.isEmpty ? nil : event.participants
-        calendarSeriesID = event.seriesID ?? (same ? calendarSeriesID : nil)
+        // The Mac's own series id ("ek:") never replaces Google's for the same meeting: one series would get two ids.
+        if let id = event.seriesID, id.hasPrefix("ek:"), let kept = calendarSeriesID, !kept.hasPrefix("ek:") {
+            calendarSeriesID = kept
+        } else {
+            calendarSeriesID = event.seriesID ?? (same ? calendarSeriesID : nil)
+        }
         organizer = event.organizer ?? (same ? organizer : nil)
         plannedStart = event.isAllDay ? nil : event.start
         plannedEnd = event.isAllDay ? nil : event.end

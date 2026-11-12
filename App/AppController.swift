@@ -1868,7 +1868,8 @@ final class AppController: ObservableObject {
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         Task {
             let now = Date()
-            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))
+            // The recurring meetings look further ahead than the lists, which still cut at `UpcomingMeeting.days`.
+            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.seriesDays) * 86_400))
             // Development hook: `--sample-upcoming` adds two events, since a preview build has no Calendar access.
             if CommandLine.arguments.contains("--sample-upcoming") {
                 events += [CalendarEventInfo(title: "Alex / Sam", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),

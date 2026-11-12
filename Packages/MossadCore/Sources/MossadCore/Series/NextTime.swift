@@ -73,6 +73,12 @@ public struct SuggestionAnswer: Codable, Equatable, Sendable, Hashable, Identifi
     public var kind: String
     public var verdict: Verdict
     public var date: Date
+    /// When the owner took it back. The answer stays as a mark, so a sync with an older copy cannot bring it back.
+    public var withdrawn: Date?
+
+    /// The time of its last change, which wins when devices merge.
+    public var changed: Date { max(date, withdrawn ?? .distantPast) }
+    public var counts: Bool { withdrawn == nil }
 
     public init(key: String, kind: String, verdict: Verdict, date: Date) {
         self.key = key
@@ -85,6 +91,9 @@ public struct SuggestionAnswer: Codable, Equatable, Sendable, Hashable, Identifi
 /// Every point and every answer to a suggestion. Lives in `~/Mossad/NextTime`, syncs both ways like the tasks.
 public struct NextTimeBook: Codable, Equatable, Sendable {
     public static let fileName = "next-time.json"
+    /// A file from a later build has a higher version: it is read, and never saved over.
+    public static let currentVersion = 1
+    public var version = NextTimeBook.currentVersion
 
     public var points: [NextTimePoint] = []
     public var answers: [SuggestionAnswer] = []
@@ -93,10 +102,11 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case points, answers, checked }
+    enum CodingKeys: String, CodingKey { case version, points, answers, checked }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
         points = try c.decodeIfPresent([NextTimePoint].self, forKey: .points) ?? []
         answers = try c.decodeIfPresent([SuggestionAnswer].self, forKey: .answers) ?? []
         checked = Set(try c.decodeIfPresent([String].self, forKey: .checked) ?? [])
@@ -104,6 +114,7 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(version, forKey: .version)
         try c.encode(points, forKey: .points)
         try c.encode(answers, forKey: .answers)
         try c.encode(checked.sorted(), forKey: .checked)
@@ -120,23 +131,26 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
                 mine.filter { $0.done != nil }.sorted { ($0.done?.date ?? .distantPast) > ($1.done?.date ?? .distantPast) })
     }
 
-    /// The open points for one person, in their order.
-    public func points(forPerson id: String) -> [NextTimePoint] {
-        visible.filter { $0.isOpen && $0.personID == id }.sorted { ($0.rank, $0.created) < ($1.rank, $1.created) }
+    /// The open points for one person, in their order. `canonical` gives the id a person has now, so a point
+    /// saved for a person who was merged into another still shows.
+    public func points(forPerson id: String, canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
+        let wanted = canonical(id)
+        return visible.filter { p in p.isOpen && p.personID.map(canonical) == wanted }.sorted { ($0.rank, $0.created) < ($1.rank, $1.created) }
     }
 
     /// The open points for an upcoming meeting: its series' first, then the ones for each invited person.
     /// `people` are the saved ids of the invited people.
-    public func points(for series: MeetingSeries?, people: [String]) -> [NextTimePoint] {
+    public func points(for series: MeetingSeries?, people: [String], canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
         let own = series.map { points(of: $0).open } ?? []
-        let ids = Set(own.map(\.id))
-        let theirs = people.flatMap { points(forPerson: $0) }.filter { !ids.contains($0.id) }
+        var seen = Set(own.map(\.id))
+        var theirs: [NextTimePoint] = []
+        for id in people { for p in points(forPerson: id, canonical: canonical) where seen.insert(p.id).inserted { theirs.append(p) } }
         return own + theirs
     }
 
-    /// The points that a meeting marked discussed.
+    /// The points that a meeting discussed: found by the check, or marked by the owner on that meeting.
     public func discussed(in callID: String) -> [NextTimePoint] {
-        visible.filter { $0.done?.callID == callID && $0.done?.byOwner == false }
+        visible.filter { $0.done?.callID == callID }
     }
 
     // MARK: Changes
@@ -162,6 +176,19 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
 
     public mutating func delete(_ id: UUID, at date: Date = Date()) { update(id, at: date) { $0.deleted = true } }
 
+    /// Gives each point of a series the keys its series has now, so it keeps finding it after the old keys go.
+    /// Returns whether anything changed. Not the owner's change: the time of the last change stays.
+    @discardableResult
+    public mutating func refreshKeys(_ all: [MeetingSeries]) -> Bool {
+        var changed = false
+        for i in points.indices where points[i].seriesID != nil && !points[i].deleted {
+            guard let s = all.first(where: { points[i].belongs(to: $0) }) else { continue }
+            let keys = Array(Set((points[i].seriesKeys ?? []) + s.savedKeys)).sorted()
+            if keys != points[i].seriesKeys { points[i].seriesKeys = keys; changed = true }
+        }
+        return changed
+    }
+
     /// Puts the open points of one list in this order.
     public mutating func reorder(_ ids: [UUID], at date: Date = Date()) {
         for (n, id) in ids.enumerated() { update(id, at: date) { $0.rank = Double(n + 1) } }
@@ -185,15 +212,15 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         answers.append(SuggestionAnswer(key: suggestion.key, kind: suggestion.kind.rawValue, verdict: verdict, date: date))
     }
 
-    /// Undo of an answer: the suggestion can come again, and a point kept from it goes.
+    /// Undo of an answer: the suggestion can come again, and a point kept from it goes. The answer stays, marked.
     public mutating func takeBack(_ key: String, at date: Date = Date()) {
-        answers.removeAll { $0.key == key }
+        for i in answers.indices where answers[i].key == key && answers[i].counts { answers[i].withdrawn = date }
         for p in points where p.suggestion == key && !p.deleted { delete(p.id, at: date) }
     }
 
-    /// Lets a kind that the owner blocked with "never" come again.
-    public mutating func allowAgain(_ kind: SeriesSuggestion.Kind) {
-        answers.removeAll { $0.kind == kind.rawValue && $0.verdict == .never }
+    /// Turns a kind on again: its "never" and its dismissals no longer count.
+    public mutating func allowAgain(_ kind: SeriesSuggestion.Kind, at date: Date = Date()) {
+        for i in answers.indices where answers[i].kind == kind.rawValue && answers[i].verdict != .keep && answers[i].counts { answers[i].withdrawn = date }
     }
 
     /// Both devices' changes: the newer copy of each point, every answer, and every checked call.
@@ -212,8 +239,9 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         out.points = order.compactMap { byID[$0] }
         // One answer for each suggestion: the newer.
         var answers: [String: SuggestionAnswer] = [:]
-        for a in self.answers + other.answers where answers[a.key].map({ a.date > $0.date }) ?? true { answers[a.key] = a }
+        for a in self.answers + other.answers where answers[a.key].map({ a.changed > $0.changed }) ?? true { answers[a.key] = a }
         out.answers = answers.values.sorted { ($0.date, $0.key) < ($1.date, $1.key) }
+        out.version = max(version, other.version)
         out.checked = checked.union(other.checked)
         return out
     }
@@ -241,8 +269,27 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
     @discardableResult
     public static func change(in dir: URL, _ change: (inout NextTimeBook) -> Void) throws -> NextTimeBook {
         var book = try load(from: dir)
+        guard book.version <= currentVersion else { throw NewerFile() }
         change(&book)
         try book.save(to: dir)
         return book
+    }
+}
+
+/// A file from a later build: this build reads it and never saves over it.
+public struct NewerFile: Error, CustomStringConvertible {
+    public var description: String { "The points for next time come from a newer Mossad. Update this copy to change them." }
+}
+
+/// The saved people of an invite, for the points of each person.
+public enum NextTimeInvite {
+    /// The ids of the invited people, without the owner: an address, a whole name, or an id, on a sure match only.
+    public static func personIDs(_ attendees: [String], people refs: PersonReferences) -> [String] {
+        var out: [String] = []
+        for a in attendees {
+            guard let id = refs.id(for: a).map(refs.canonical), refs.person(id)?.isOwner != true, !out.contains(id) else { continue }
+            out.append(id)
+        }
+        return out
     }
 }

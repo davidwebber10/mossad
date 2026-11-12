@@ -23,25 +23,88 @@ final class SeriesModel: ObservableObject {
 
     func series(_ id: String?) -> MeetingSeries? { id.flatMap { id in all.first { $0.id == id || $0.keys.contains(id) } } }
 
-    /// Makes the catalog again when the meetings, the invites, or the people changed.
-    func refresh(records: [CallRecord], upcoming: [UpcomingMeeting], owner: String, profiles: [VoiceProfile], ownerEmail: String, version: Int) {
+    /// The saved people of each invite by its id, and of each series' usual people, made with the catalog: the
+    /// pages and the menu read these and never the people file.
+    private(set) var invitedIDs: [String: [String]] = [:]
+    private(set) var usualIDs: [String: [(id: String, name: String)]] = [:]
+    /// The people store, for the id a merged person has now.
+    private(set) var people = PersonReferences(people: [])
+
+    /// Everything the catalog is made from, taken on the main actor.
+    struct Inputs: Sendable {
+        let events: [CalendarEventInfo]
+        let records: [CallRecord]
+        let owner: String
+        let profiles: [VoiceProfile]
+        let ownerEmail: String
+        let peopleDir: URL
+    }
+
+    private struct Made: Sendable {
+        let all: [MeetingSeries]
+        let invited: [String: [String]]
+        let usual: [String: [UsualPerson]]
+        let people: PersonReferences
+    }
+
+    struct UsualPerson: Sendable {
+        let id: String
+        let name: String
+    }
+
+    /// Makes the catalog again when the meetings, the invites, or the people changed. The invites come from the
+    /// whole read of the calendar (`UpcomingMeeting.seriesDays`), not the lists' 7 days. All of it is off the main
+    /// thread: the invites against the records, the catalog, and the people file.
+    func refresh(_ inputs: Inputs, version: Int) {
         var h = Hasher()
         h.combine(version)
-        h.combine(owner)
-        for u in upcoming { h.combine(u.id); h.combine(u.seriesID); h.combine(u.attendees) }
-        for p in profiles { h.combine(p.name); h.combine(p.email) }
+        h.combine(inputs.owner)
+        h.combine(inputs.ownerEmail)
+        for e in inputs.events { h.combine(e.title); h.combine(e.start); h.combine(e.seriesID); h.combine(e.attendees) }
+        for p in inputs.profiles { h.combine(p.name); h.combine(p.email) }
+        let file = inputs.peopleDir.appendingPathComponent(PeopleStore.fileName)
+        h.combine((try? FileManager.default.attributesOfItem(atPath: file.path))?[.modificationDate] as? Date)
+        h.combine(Calendar.current.startOfDay(for: Date()))
         let key = h.finalize()
         guard key != builtFor else { return }
         builtFor = key
         building?.cancel()
         building = Task {
-            let made = await Task.detached(priority: .userInitiated) {
-                SeriesCatalog.build(records: records, upcoming: upcoming, owner: owner, directory: PersonDirectory(profiles: profiles), ownerEmails: [ownerEmail])
+            let made = await Task.detached(priority: .userInitiated) { () -> Made in
+                let upcoming = UpcomingMeeting.from(inputs.events, days: UpcomingMeeting.seriesDays, limit: .max, recorded: inputs.records)
+                let all = SeriesCatalog.build(records: inputs.records, upcoming: upcoming, owner: inputs.owner, directory: PersonDirectory(profiles: inputs.profiles),
+                                              ownerEmails: [inputs.ownerEmail], aliases: SeriesCatalog.aliases(inputs.events))
+                let refs = PersonReferences(people: PeopleStore.peek(in: inputs.peopleDir) ?? [])
+                var invited: [String: [String]] = [:]
+                for u in upcoming { invited[u.id] = NextTimeInvite.personIDs(u.attendees, people: refs) }
+                var usual: [String: [UsualPerson]] = [:]
+                for s in all {
+                    var seen: Set<String> = []
+                    usual[s.id] = s.usualPeople.compactMap { name in
+                        guard let id = refs.id(for: name).map(refs.canonical), refs.person(id)?.isOwner != true, seen.insert(id).inserted else { return nil }
+                        return UsualPerson(id: id, name: refs.name(of: id) ?? name)
+                    }
+                }
+                return Made(all: all, invited: invited, usual: usual, people: refs)
             }.value
             guard !Task.isCancelled else { return }
-            all = made
+            invitedIDs = made.invited
+            usualIDs = made.usual.mapValues { $0.map { (id: $0.id, name: $0.name) } }
+            people = made.people
+            all = made.all
             loaded = true
+            // The points take the keys their series has now (one save, only on a change).
+            if let owner, book.points.contains(where: { $0.seriesID != nil && $0.isOpen }) {
+                var copy = book
+                if copy.refreshKeys(made.all) { owner.changeNextTime { $0.refreshKeys(made.all) } }
+            }
         }
+    }
+
+    /// The owner's open points for an upcoming meeting: its series' and its invited people's.
+    func points(for meeting: UpcomingMeeting) -> [NextTimePoint] {
+        let refs = people
+        return book.points(for: SeriesCatalog.series(of: meeting, in: all), people: invitedIDs[meeting.id] ?? [], canonical: { refs.canonical($0) })
     }
 
     /// Reads the book again when its file changed.
@@ -70,11 +133,6 @@ final class SeriesModel: ObservableObject {
         }
     }
 
-    /// Sample points for a preview, from `MOSSAD_NEXT_TIME=<file>` (a made-up `next-time.json`).
-    func usePreview(_ book: NextTimeBook) {
-        self.book = book
-        bookDate = .distantFuture
-    }
 }
 
 extension AppController {
@@ -82,8 +140,8 @@ extension AppController {
     func refreshSeries() {
         series.owner = self
         series.reload(paths)
-        series.refresh(records: meetings, upcoming: calendarUpcoming, owner: ownerName, profiles: library.profiles,
-                       ownerEmail: UserDefaults.standard.string(forKey: "ownerEmail") ?? "", version: meetingsVersion)
+        series.refresh(.init(events: calendarEvents, records: meetings, owner: ownerName, profiles: library.profiles,
+                             ownerEmail: UserDefaults.standard.string(forKey: "ownerEmail") ?? "", peopleDir: paths.people), version: meetingsVersion)
     }
 
     func openSeries(_ id: String) {
@@ -98,18 +156,8 @@ extension AppController {
         syncNow()
     }
 
-    /// The saved ids of the invited people of an upcoming meeting, on a sure match.
-    func invitedPersonIDs(_ meeting: UpcomingMeeting) -> [String] {
-        let refs = PersonReferences(people: PeopleStore.peek(in: paths.people) ?? [])
-        let invited = MeetingPrep.invited(meeting.attendees, owner: ownerName, directory: PersonDirectory(profiles: library.profiles),
-                                          ownerEmails: [UserDefaults.standard.string(forKey: "ownerEmail") ?? ""])
-        return invited.compactMap { $0.person.flatMap { refs.id(for: $0) } }
-    }
-
-    /// The owner's open points for an upcoming meeting: its series' and its people's.
-    func nextTimePoints(for meeting: UpcomingMeeting) -> [NextTimePoint] {
-        series.book.points(for: SeriesCatalog.series(of: meeting, in: series.all), people: invitedPersonIDs(meeting))
-    }
+    /// The owner's open points for an upcoming meeting: its series' and its people's. Reads no file.
+    func nextTimePoints(for meeting: UpcomingMeeting) -> [NextTimePoint] { series.points(for: meeting) }
 
     /// Adds a point from words, for the search command: "TB" or "Sam Carter". Returns what happened, in words.
     @discardableResult
@@ -132,9 +180,14 @@ extension AppController {
         guard series.book.points.contains(where: \.isOpen) else { return }
         series.checking = true
         let runner = NextTimeRunner(paths: paths, checker: NextTimeChecker(llm: llm))
-        let records = meetings, all = series.all
+        // The runner reads the records from disk and makes its own catalog from them, so the meeting written a
+        // moment ago is in its series.
+        let events = calendarEvents, records = meetings, owner = ownerName, profiles = library.profiles
+        let email = UserDefaults.standard.string(forKey: "ownerEmail") ?? ""
         Task {
-            let changed = await runner.run(records: records, series: all) { await MainActor.run { self.isRecording } }
+            let upcoming = await Task.detached { UpcomingMeeting.from(events, days: UpcomingMeeting.seriesDays, limit: .max, recorded: records) }.value
+            let changed = await runner.run(upcoming: upcoming, owner: owner, directory: PersonDirectory(profiles: profiles), ownerEmails: [email],
+                                           aliases: SeriesCatalog.aliases(events)) { await MainActor.run { self.isRecording } }
             if changed > 0 {
                 series.reload(paths)
                 syncNow()

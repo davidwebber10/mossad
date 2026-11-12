@@ -36,26 +36,37 @@ public struct NextTimeChecker: Sendable {
                                      schema: Self.schema, effort: .low, purpose: .summary, as: Output.self)
         var found: [Found] = []
         for item in out.points where item.discussed {
-            guard let p = handles[item.point], let quote = item.quote?.nonBlank, let line = Self.line(quoting: quote, in: r.utterances),
+            guard let p = handles[item.point], let quote = item.quote?.nonBlank, let match = Self.line(quoting: quote, in: r.utterances),
                   !found.contains(where: { $0.point == p.id }) else { continue }
-            found.append(Found(point: p.id, at: line.start, quote: quote))
+            // The words as the transcript has them, never the model's.
+            found.append(Found(point: p.id, at: match.line.start, quote: match.quote))
         }
         return found
     }
 
-    /// A quote counts with this many words or more.
-    static let quoteWords = 4
+    /// A quote counts with this many words or more, as the prompt asks.
+    static let quoteWords = 6
 
-    /// The line that holds the quote's first words, or nil: a paraphrase is not proof.
-    static func line(quoting quote: String, in lines: [Utterance]) -> Utterance? {
-        func norm(_ s: String) -> String {
-            s.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == " " }.map(String.init).joined()
-                .split(separator: " ").joined(separator: " ")
+    /// The line that holds every word of the quote, in order and on word limits, with those words as the line
+    /// has them. Nil otherwise: a paraphrase or a quote with a made-up end is not proof.
+    static func line(quoting quote: String, in lines: [Utterance]) -> (line: Utterance, quote: String)? {
+        func norm(_ word: Substring) -> String { word.lowercased().filter { $0.isLetter || $0.isNumber } }
+        let wanted = quote.split(whereSeparator: \.isWhitespace).map(norm).filter { !$0.isEmpty }
+        guard wanted.count >= quoteWords else { return nil }
+        for line in Transcript.interleaved(lines) {
+            let raw = line.text.split(whereSeparator: \.isWhitespace)
+            let pairs = raw.enumerated().map { ($0.offset, norm($0.element)) }.filter { !$0.1.isEmpty }
+            guard pairs.count >= wanted.count else { continue }
+            for start in 0...(pairs.count - wanted.count) where (0..<wanted.count).allSatisfy({ pairs[start + $0].1 == wanted[$0] }) {
+                let first = pairs[start].0, last = pairs[start + wanted.count - 1].0
+                var words = raw[first...last].map(String.init)
+                // Leading and trailing marks belong to the sentence around the quote.
+                words[0] = String(words[0].drop { !$0.isLetter && !$0.isNumber })
+                words[words.count - 1] = String(words[words.count - 1].reversed().drop { !$0.isLetter && !$0.isNumber }.reversed())
+                return (line, words.joined(separator: " "))
+            }
         }
-        let words = norm(quote).split(separator: " ")
-        guard words.count >= quoteWords else { return nil }
-        let q = words.prefix(8).joined(separator: " ")
-        return Transcript.interleaved(lines).first { norm($0.text).contains(q) }
+        return nil
     }
 
     private struct Output: Decodable {
@@ -96,10 +107,15 @@ public enum NextTimeRules {
         book.checked.insert(r.id)
     }
 
-    /// The written meetings still to check, oldest first: after the first point was made, and not yet checked.
-    public static func pending(_ records: [CallRecord], book: NextTimeBook) -> [CallRecord] {
-        guard let first = book.visible.map(\.created).min() else { return [] }
-        return records.filter { $0.status == .written && $0.start > first && !book.checked.contains($0.id) }.sorted { $0.start < $1.start }
+    /// A meeting older than this is not checked: a point is about the next meetings, not the old ones.
+    static let pendingDays = 60.0
+
+    /// The written meetings still to check, oldest first: after the first open point was made, in the last
+    /// `pendingDays`, and not yet checked.
+    public static func pending(_ records: [CallRecord], book: NextTimeBook, now: Date = Date()) -> [CallRecord] {
+        guard let first = book.visible.filter(\.isOpen).map(\.created).min() else { return [] }
+        let since = max(first, now.addingTimeInterval(-pendingDays * 86_400))
+        return records.filter { $0.status == .written && $0.start > since && !book.checked.contains($0.id) }.sorted { $0.start < $1.start }
     }
 }
 
@@ -116,44 +132,49 @@ public actor NextTimeRunner {
         self.now = now
     }
 
-    /// Returns how many meetings changed a point. `series` are the recurring meetings of now.
+    /// Returns how many meetings were checked. The runner reads the records from disk and makes the catalog from
+    /// them, so a meeting written a moment ago is in its series. `upcoming` are the calendar's invites.
     @discardableResult
-    public func run(records: [CallRecord], series: [MeetingSeries], recording: @escaping @Sendable () async -> Bool) async -> Int {
+    public func run(upcoming: [UpcomingMeeting], owner: String, directory: PersonDirectory, ownerEmails: [String] = [], aliases: [String: String] = [:],
+                    recording: @escaping @Sendable () async -> Bool) async -> Int {
         guard !StoredFile.awaitsMerge(paths.nextTime.appendingPathComponent(NextTimeBook.fileName)),
               let start = try? NextTimeBook.load(from: paths.nextTime) else { return 0 }
+        let records = ProcessingQueue(paths: paths).allRecords()
+        let pending = NextTimeRules.pending(records, book: start, now: now())
+        guard !pending.isEmpty else { return 0 }
+        let series = SeriesCatalog.build(records: records, upcoming: upcoming, owner: owner, directory: directory, ownerEmails: ownerEmails, aliases: aliases)
         let people = PersonReferences(people: PeopleStore.peek(in: paths.people) ?? [])
         var ledger = RetryLedger.load(from: paths.nextTime)
-        var changed = 0
-        for r in NextTimeRules.pending(records, book: start) {
-            if await recording() { return changed }
+        var checked = 0
+        for r in pending {
+            if await recording() { return checked }
+            guard let book = try? NextTimeBook.load(from: paths.nextTime) else { return checked }
+            let points = NextTimeRules.points(for: r, in: book, series: SeriesCatalog.series(ofCall: r.id, in: series), people: people)
+            // Nothing to check, or no words: no request, and the meeting is not marked as checked.
+            guard !points.isEmpty, !r.utterances.isEmpty else { continue }
             switch ledger.state(r.id, now: now()) {
             case .gaveUp: continue
-            case .waiting: return changed
+            case .waiting: return checked
             case .ready: break
             }
-            guard let book = try? NextTimeBook.load(from: paths.nextTime) else { return changed }
-            let points = NextTimeRules.points(for: r, in: book, series: SeriesCatalog.series(ofCall: r.id, in: series), people: people)
             do {
-                // No request for a meeting with nothing to check, or with no words.
-                let found = points.isEmpty || r.utterances.isEmpty ? []
-                    : try await UsageContext.$callID.withValue(r.id) { try await checker.check(points, in: r) }
+                let found = try await UsageContext.$callID.withValue(r.id) { try await checker.check(points, in: r) }
                 // Read again: the owner may have changed a point while the request ran.
-                let checkedNow = r.utterances.isEmpty ? [] : points
-                try NextTimeBook.change(in: paths.nextTime) { NextTimeRules.apply(found, checked: checkedNow, call: r, to: &$0, at: now()) }
-                if !checkedNow.isEmpty { changed += 1 }
+                try NextTimeBook.change(in: paths.nextTime) { NextTimeRules.apply(found, checked: points, call: r, to: &$0, at: now()) }
+                checked += 1
                 if ledger.entries[r.id] != nil { ledger.clear(r.id); ledger.save(to: paths.nextTime) }
-                if !found.isEmpty { Log.info("Next time: \(found.count) of \(points.count) points discussed in \(r.id)") }
+                Log.info("Next time: \(found.count) of \(points.count) points discussed in \(r.id)")
             } catch {
-                guard !RetryLedger.isUnbilled(error), !(error is UnreadableFile) else {
+                guard !RetryLedger.isUnbilled(error), !(error is UnreadableFile), !(error is NewerFile) else {
                     Log.error("Checking the points in \(r.id) waits: \(error)")
-                    return changed
+                    return checked
                 }
                 ledger.fail(r.id, reason: Pipeline.failureReason(error), now: now())
                 ledger.save(to: paths.nextTime)
                 Log.error("Checking the points in \(r.id) failed: \(error)")
-                return changed
+                return checked
             }
         }
-        return changed
+        return checked
     }
 }

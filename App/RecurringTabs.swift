@@ -137,14 +137,14 @@ struct SeriesStatsTab: View {
             MeetingAnalyticsGroup("Length") {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(lengthLine(report)).fixedSize(horizontal: false, vertical: true)
-                    Bars(values: rows.map(\.minutes), marks: rows.map(\.plannedMinutes), format: { "\(Int($0.rounded())) min" }, dates: rows.map(\.start))
+                    Bars(values: rows.map { Optional($0.minutes) }, marks: rows.map(\.plannedMinutes), format: { "\(Int($0.rounded())) min" }, dates: rows.map(\.start))
                 }
             }
             MeetingAnalyticsGroup("Talk balance") {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(report.ownerShare.map { "You usually talk \(Int(($0 * 100).rounded()))% of the time" + (report.talksMost.map { $0 == "You" ? ", the most of anyone." : "; \($0) talks most." } ?? ".") }
                          ?? "Too few meetings with your voice to say.")
-                    Bars(values: rows.map { ($0.ownerShare ?? 0) * 100 }, marks: [], top: 100, format: { "\(Int($0.rounded()))%" }, dates: rows.map(\.start))
+                    Bars(values: rows.map { $0.ownerShare.map { $0 * 100 } }, marks: [], top: 100, format: { "\(Int($0.rounded()))%" }, dates: rows.map(\.start))
                 }
             }
             MeetingAnalyticsGroup("Outcomes") {
@@ -182,7 +182,8 @@ struct SeriesStatsTab: View {
 
 /// A row of small bars, oldest left, with an optional mark (the plan) on each.
 private struct Bars: View {
-    let values: [Double]
+    /// Nil draws no bar: a meeting with no such number.
+    let values: [Double?]
     let marks: [Double?]
     /// The value of a full bar; the largest value without it.
     var top: Double?
@@ -190,22 +191,24 @@ private struct Bars: View {
     let dates: [Date]
 
     var body: some View {
-        let top = self.top ?? max(1, (values + marks.compactMap { $0 }).max() ?? 1)
+        let top = self.top ?? max(1, (values.compactMap { $0 } + marks.compactMap { $0 }).max() ?? 1)
         HStack(alignment: .bottom, spacing: 4) {
             ForEach(values.indices, id: \.self) { i in
                 ZStack(alignment: .bottom) {
                     RoundedRectangle(cornerRadius: 2).fill(Palette.fill).frame(height: 70)
-                    RoundedRectangle(cornerRadius: 2).fill(Palette.accentFill.opacity(0.75)).frame(height: max(2, 70 * values[i] / top))
+                    if let v = values[i] {
+                        RoundedRectangle(cornerRadius: 2).fill(Palette.accentFill.opacity(0.75)).frame(height: max(2, 70 * v / top))
+                    }
                     if i < marks.count, let m = marks[i] {
                         Rectangle().fill(Palette.ink.opacity(0.55)).frame(height: 1.5).offset(y: -70 * m / top)
                     }
                 }
                 .frame(width: 18)
-                .help("\(dates[i].formatted(.dateTime.month(.abbreviated).day())): \(format(values[i]))" + (i < marks.count ? marks[i].map { " (\(format($0)) planned)" } ?? "" : ""))
+                .help("\(dates[i].formatted(.dateTime.month(.abbreviated).day())): \(values[i].map(format) ?? "not known")" + (i < marks.count ? marks[i].map { " (\(format($0)) planned)" } ?? "" : ""))
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(values.map(format).joined(separator: ", "))
+        .accessibilityLabel(values.map { $0.map(format) ?? "not known" }.joined(separator: ", "))
     }
 }
 
@@ -222,7 +225,7 @@ struct SeriesOpenTab: View {
             let groups: [(String, SeriesReport.OpenItem.Kind, String)] = [
                 ("Your tasks", .yourTask, "Your open tasks from meetings of this series."),
                 ("Action items", .actionItem, "The other people's action items of the last meeting. Mossad does not know whether they are done."),
-                ("Open decisions", .pendingDecision, "Decisions whose words say they are still open."),
+                ("Decisions that may be open", .pendingDecision, "Decisions of the last 3 meetings whose words say they may still be open. Mossad reads the words only."),
             ]
             if report.openItems.isEmpty {
                 Text("Nothing open: no task of yours, no action item of the last meeting, and no decision left open.").foregroundStyle(Palette.tertiary)

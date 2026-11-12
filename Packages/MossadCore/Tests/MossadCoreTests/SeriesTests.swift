@@ -251,7 +251,7 @@ final class SeriesTests: XCTestCase {
         let last = call("b", daysAgo: 7, items: [ActionItem(owner: "Sam Carter", task: "Send the vendor list"), ActionItem(owner: "Dana Lee", task: "Book it")],
                         decisions: [Decision(text: "Revisit the pricing next meeting", at: 90)],
                         lines: [(0, 10, "Before we go, what is the plan for the old billing service?"), (0, 20, "Okay, let us move on then."),
-                                (1, 30, "Fine."), (0, 40, "Can you hear me?")])
+                                (1, 60, "Fine."), (0, 70, "Can you hear me?")])
         var due = Commitment(text: "Share the roadmap", to: "Sam", callID: "a", callTitle: "Platform TB", madeAt: now, at: 30, due: now.addingTimeInterval(86_400))
         due.created = now
         var later = due
@@ -285,7 +285,7 @@ final class SeriesTests: XCTestCase {
         XCTAssertEqual(suggestions(records, answers: old).count, 1)
         XCTAssertTrue(suggestions(records, answers: [SuggestionAnswer(key: "x", kind: "openItem", verdict: .never, date: .distantPast)]).isEmpty)
         // An answered suggestion does not come again.
-        XCTAssertTrue(suggestions(records, answers: [SuggestionAnswer(key: "openItem:b:0", kind: "openItem", verdict: .keep, date: now)]).isEmpty)
+        XCTAssertTrue(suggestions(records, answers: [SuggestionAnswer(key: "openItem:b:\(PersonNames.key("Send the vendor list"))", kind: "openItem", verdict: .keep, date: now)]).isEmpty)
     }
 
     func testAPointTheOwnerWroteIsNotSuggestedAgain() {
@@ -304,7 +304,8 @@ final class SeriesTests: XCTestCase {
         XCTAssertEqual(book.points(of: s).open.map(\.suggestion), [suggestion.key])
         book.takeBack(suggestion.key, at: now)
         XCTAssertTrue(book.points(of: s).open.isEmpty)
-        XCTAssertTrue(book.answers.isEmpty)
+        // The answer stays as a mark, so a sync cannot bring it back.
+        XCTAssertTrue(book.answers.allSatisfy { !$0.counts })
     }
 
     // MARK: The check

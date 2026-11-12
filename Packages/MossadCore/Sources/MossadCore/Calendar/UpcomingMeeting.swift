@@ -19,6 +19,9 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
     public var isRecurring = false
 
     public static let days = 7
+    /// How far the calendar is read for the recurring meetings, so a monthly series has its next date. The lists
+    /// still show `days`.
+    public static let seriesDays = 45
     public static let limit = 12
 
     /// `recorded` hides events that are being recorded or were recorded: the call is already happening or done.

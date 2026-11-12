@@ -28,7 +28,8 @@ struct RecurringView: View {
                         SeriesList(series: all, book: model.book, selection: Binding(get: { shown.id }, set: { model.selected = $0 }))
                     }
                     RecurringPage(series: shown)
-                        .id(shown.id)
+                        // A key that stays while the series lives, so a point in edit is not lost when the id moves.
+                        .id(shown.meetings.last.map { "call:\($0.id)" } ?? shown.id)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .overlay(alignment: .leading) { Hairline(axis: .vertical) }
                 }

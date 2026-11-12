@@ -74,7 +74,11 @@ public struct SeriesReport: Sendable, Equatable {
     static let minimumTalk = 3
     static let recentMeetings = 3
 
-    public init(series: MeetingSeries, records: [CallRecord], commitments: [Commitment]?, owner: OwnerIdentity, directory: PersonDirectory) {
+    /// The open decisions come from this many of the last meetings: an old decision with such words is not open for good.
+    static let decisionMeetings = 3
+
+    public init(series: MeetingSeries, records: [CallRecord], commitments: [Commitment]?, owner: OwnerIdentity, directory: PersonDirectory,
+                ownerEmails: [String] = [], calendar: Calendar = .current) {
         let byID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let recs = series.meetings.compactMap { byID[$0.id] }
         var shares: [String: [Double]] = [:]
@@ -102,7 +106,7 @@ public struct SeriesReport: Sendable, Equatable {
                 }
             }
             let voices = r.speakerNames.values.filter { !owner.isOwner($0) && !$0.hasPrefix("Speaker ") }
-            let invited = MeetingPrep.invited(r.attendees, owner: owner.name, directory: directory).map(\.name)
+            let invited = MeetingPrep.invited(r.attendees, owner: owner.name, directory: directory, ownerEmails: ownerEmails).map(\.name)
             for name in Set((voices + invited).map(PeopleDuplicates.normalized)) {
                 seen[name, default: []].append(n)
                 if display[name] == nil { display[name] = (voices + invited).first { PeopleDuplicates.normalized($0) == name } }
@@ -125,10 +129,7 @@ public struct SeriesReport: Sendable, Equatable {
         startedLate = plannedRows.filter { ($0.lateMinutes ?? 0) * 60 >= MeetingAnalytics.Schedule.lateStart }.count
         usualOverrun = plannedRows.count >= Self.minimumPlanned ? Self.median(plannedRows.compactMap(\.overMinutes)) : nil
         usualPeople = Self.median(rows.compactMap(\.people).map(Double.init)).map { Int($0.rounded()) }
-        if let interval = series.cadence?.interval, interval >= 1, rows.count >= 2, let first = rows.last?.start, let last = rows.first?.start {
-            let expected = Int((last.timeIntervalSince(first) / 86_400 / interval).rounded()) + 1
-            gaps = max(0, expected - rows.count)
-        }
+        gaps = Self.gaps(rows.map(\.start), cadence: series.cadence, calendar: calendar)
         let talked = shares.filter { $0.value.count >= Self.minimumTalk }.mapValues { $0.reduce(0, +) / Double($0.count) }
         if let top = talked.max(by: { ($0.value, $1.key) < ($1.value, $0.key) }) {
             talksMost = top.key == "\u{0}owner" ? "You" : display[top.key]
@@ -162,7 +163,7 @@ public struct SeriesReport: Sendable, Equatable {
                 open.append(OpenItem(id: "item:\(last.id):\(i)", kind: .actionItem, text: item.task, owner: who, callID: last.id, at: nil, date: last.start))
             }
         }
-        for r in recs {
+        for r in recs.prefix(Self.decisionMeetings) {
             for (i, d) in r.decisions.enumerated() where SeriesSuggestion.isPending(d.text) {
                 open.append(OpenItem(id: "decision:\(r.id):\(i)", kind: .pendingDecision, text: d.text, owner: nil, callID: r.id, at: d.at, date: r.start))
             }
@@ -185,6 +186,26 @@ public struct SeriesReport: Sendable, Equatable {
         if items > 0 { line += (line.isEmpty ? "" : "; ") + "\(items) open \(items == 1 ? "item" : "items")" }
         if line.isEmpty { return nil }
         return line.first!.uppercased() + line.dropFirst()
+    }
+
+    /// The times with no meeting between the first and the last, by the cadence: weekdays for a meeting of each
+    /// weekday, days for a daily one, weeks, two weeks, months. Nil for an uneven cadence ("about every 10 days").
+    static func gaps(_ starts: [Date], cadence: SeriesCadence?, calendar: Calendar) -> Int? {
+        guard let cadence, starts.count >= 2, let first = starts.min(), let last = starts.max() else { return nil }
+        let days = Set(starts.map { calendar.startOfDay(for: $0) }).count
+        let a = calendar.startOfDay(for: first), b = calendar.startOfDay(for: last)
+        let span = calendar.dateComponents([.day], from: a, to: b).day ?? 0
+        let expected: Int
+        switch cadence.rhythm {
+        case .weekdays:
+            expected = (0...span).filter { !calendar.isDateInWeekend(calendar.date(byAdding: .day, value: $0, to: a)!) }.count
+        case .daily: expected = span + 1
+        case .weekly: expected = Int((Double(span) / 7).rounded()) + 1
+        case .everyOtherWeek: expected = Int((Double(span) / 14).rounded()) + 1
+        case .monthly: expected = (calendar.dateComponents([.month], from: a, to: b).month ?? 0) + 1
+        case .everyDays: return nil
+        }
+        return max(0, expected - days)
     }
 
     /// The seconds each voice spoke.

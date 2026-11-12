@@ -42,6 +42,6 @@ struct PhoneMeetingPoints: View {
                 }
             }
         }
-        .task(id: store.meetings.count) { book = NextTimeBook.peek(in: store.paths.nextTime) ?? NextTimeBook() }
+        .task(id: store.meetingsVersion) { book = NextTimeBook.peek(in: store.paths.nextTime) ?? NextTimeBook() }
     }
 }

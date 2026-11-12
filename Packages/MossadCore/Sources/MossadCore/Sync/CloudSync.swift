@@ -173,16 +173,17 @@ public actor CloudSync {
         }
         // A file that was set aside is empty here until a pull merged the store's copy: sending it now would
         // replace the good copy on the other device.
-        let waiting = Self.syncedFiles(paths).map(StoredFile.awaitsMerge)
-        if !waiting[0], FileManager.default.fileExists(atPath: paths.coach.appendingPathComponent(CoachProfile.fileName).path),
+        let files = Self.syncedFiles(paths)
+        func waiting(_ name: String) -> Bool { files.first { $0.lastPathComponent == name }.map(StoredFile.awaitsMerge) ?? false }
+        if !waiting(CoachProfile.fileName), FileManager.default.fileExists(atPath: paths.coach.appendingPathComponent(CoachProfile.fileName).path),
            let profile = try? CoachProfile.load(from: paths.coach) {
             payloads.append(.profile(profile))
         }
-        if !waiting[1], FileManager.default.fileExists(atPath: paths.commitments.appendingPathComponent(CommitmentBook.fileName).path),
+        if !waiting(CommitmentBook.fileName), FileManager.default.fileExists(atPath: paths.commitments.appendingPathComponent(CommitmentBook.fileName).path),
            let book = try? CommitmentBook.load(from: paths.commitments) {
             payloads.append(.commitments(book))
         }
-        if !waiting[2], store.wantsMeetingView, FileManager.default.fileExists(atPath: paths.nextTime.appendingPathComponent(NextTimeBook.fileName).path),
+        if !waiting(NextTimeBook.fileName), store.wantsMeetingView, FileManager.default.fileExists(atPath: paths.nextTime.appendingPathComponent(NextTimeBook.fileName).path),
            let book = try? NextTimeBook.load(from: paths.nextTime) {
             payloads.append(.nextTime(book))
         }

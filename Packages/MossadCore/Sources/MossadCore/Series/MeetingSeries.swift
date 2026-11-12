@@ -141,7 +141,9 @@ public enum SeriesCatalog {
 
     /// `records` may hold every meeting: only the written ones count. `upcoming` are the calendar's invites.
     public static func build(records: [CallRecord], upcoming: [UpcomingMeeting], owner: String, directory: PersonDirectory,
-                             ownerEmails: [String] = [], calendar: Calendar = .current) -> [MeetingSeries] {
+                             ownerEmails: [String] = [], aliases: [String: String] = [:], calendar: Calendar = .current) -> [MeetingSeries] {
+        // One series, two ids: the Mac's calendar and Google name one series in two ways (`aliases`).
+        func canon(_ id: String?) -> String? { id.map { aliases[$0] ?? $0 } }
         let past = records.filter { $0.status == .written }.sorted { ($0.start, $0.id) < ($1.start, $1.id) }
         let ownerKey = PeopleDuplicates.normalized(owner)
         let members = past.map { r -> Member in
@@ -161,13 +163,21 @@ public enum SeriesCatalog {
 
         var bySeriesID: [String: Int] = [:]
         for (i, m) in members.enumerated() {
-            guard let id = m.record.calendarSeriesID else { continue }
+            guard let id = canon(m.record.calendarSeriesID) else { continue }
             if let j = bySeriesID[id] { union(i, j) } else { bySeriesID[id] = i }
         }
         let byTitle = Dictionary(grouping: members.indices.filter { members[$0].titleKey != nil }, by: { members[$0].titleKey! })
         for group in byTitle.values where group.count > 1 {
-            for (n, i) in group.enumerated() {
-                for j in group[(n + 1)...] where find(i) != find(j) && same(members[i], members[j]) { union(i, j) }
+            // Meetings with people first. A meeting with no known people is never a bridge between two series: it joins
+            // the one series of its title, and nothing when there are two.
+            let known = group.filter { !members[$0].people.isEmpty }, unknown = group.filter { members[$0].people.isEmpty }
+            for (n, i) in known.enumerated() {
+                for j in known[(n + 1)...] where find(i) != find(j) && same(members[i], members[j]) { union(i, j) }
+            }
+            for i in unknown {
+                let roots = Set(known.filter { same(members[i], members[$0]) }.map(find))
+                if roots.count == 1, let root = roots.first { union(i, root) }
+                if known.isEmpty { for j in unknown where j != i && same(members[i], members[j]) { union(i, j) } }
             }
         }
 
@@ -178,7 +188,7 @@ public enum SeriesCatalog {
         var invites: [Int: [UpcomingMeeting]] = [:]
         var calendarOnly: [String: [UpcomingMeeting]] = [:]
         for u in upcoming.sorted(by: { $0.start < $1.start }) {
-            if let id = u.seriesID, let i = bySeriesID[id] {
+            if let id = canon(u.seriesID), let i = bySeriesID[id] {
                 invites[find(i), default: []].append(u)
                 continue
             }
@@ -188,7 +198,7 @@ public enum SeriesCatalog {
                let i = members.firstIndex(where: { $0.record.id == newest.id }) {
                 invites[find(i), default: []].append(u)
             } else if u.repeats {
-                calendarOnly[u.seriesID ?? "title:" + PeopleDuplicates.normalized(u.title), default: []].append(u)
+                calendarOnly[canon(u.seriesID) ?? "title:" + PeopleDuplicates.normalized(u.title), default: []].append(u)
             }
         }
 
@@ -198,10 +208,11 @@ public enum SeriesCatalog {
             let upcoming = invites[root] ?? []
             let repeats = upcoming.contains(where: \.repeats)
             guard records.count >= 2 || repeats else { continue }
-            out.append(make(records: records, upcoming: upcoming, repeats: repeats, members: indices.map { members[$0] }, directory: directory, calendar: calendar))
+            out.append(make(records: records, upcoming: upcoming, repeats: repeats, members: indices.map { members[$0] }, directory: directory, aliases: aliases,
+                            calendar: calendar))
         }
         for (_, upcoming) in calendarOnly {
-            out.append(make(records: [], upcoming: upcoming, repeats: true, members: [], directory: directory, calendar: calendar))
+            out.append(make(records: [], upcoming: upcoming, repeats: true, members: [], directory: directory, aliases: aliases, calendar: calendar))
         }
         // The next meeting first, then the most recent.
         return out.sorted { a, b in
@@ -224,9 +235,11 @@ public enum SeriesCatalog {
     }
 
     static func make(records: [CallRecord], upcoming: [UpcomingMeeting], repeats: Bool, members: [Member], directory: PersonDirectory,
-                     calendar: Calendar) -> MeetingSeries {
+                     aliases: [String: String] = [:], calendar: Calendar) -> MeetingSeries {
         let oldestFirst = records.sorted { ($0.start, $0.id) < ($1.start, $1.id) }
-        let calendarIDs = oldestFirst.compactMap(\.calendarSeriesID) + upcoming.compactMap(\.seriesID)
+        let raw = oldestFirst.compactMap(\.calendarSeriesID) + upcoming.compactMap(\.seriesID)
+        // The id from the canonical calendar id; the keys hold both names of it.
+        let calendarIDs = raw.map { aliases[$0] ?? $0 } + raw
         let id = calendarIDs.first.map { "cal:\($0)" } ?? oldestFirst.first.map { "call:\($0.id)" }
             ?? "title:\(PeopleDuplicates.normalized(upcoming.first?.title ?? ""))"
         var keys = Set(calendarIDs.map { "cal:\($0)" } + oldestFirst.map { "call:\($0.id)" })
@@ -257,6 +270,17 @@ public enum SeriesCatalog {
         }
         let needed = max(1, Int((Double(recent.count) / 2).rounded(.up)))
         return counts.filter { $0.value >= needed }.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.compactMap { shown[$0.key] }
+    }
+
+    /// The Mac's calendar id of a repeated Google event ("ek:<iCalendar UID>") and Google's id for it, from the
+    /// events that Google gave: both name one series.
+    public static func aliases(_ events: [CalendarEventInfo]) -> [String: String] {
+        var out: [String: String] = [:]
+        for e in events where e.source == .google {
+            guard let id = e.seriesID, let uid = e.iCalUID?.nonBlank else { continue }
+            out["ek:\(uid)"] = id
+        }
+        return out
     }
 
     /// The series of an invite, when it has one.

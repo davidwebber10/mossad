@@ -20,7 +20,7 @@ public struct SeriesSuggestion: Sendable, Equatable, Identifiable, Hashable {
             switch self {
             case .openItem: "Open action items"
             case .promise: "Your due tasks"
-            case .pendingDecision: "Open decisions"
+            case .pendingDecision: "Decisions that may be open"
             case .unanswered: "Questions with no answer"
             case .goal: "Your coach goal"
             }
@@ -53,6 +53,7 @@ public struct SuggestionTraining: Equatable, Sendable {
     public let answered: Set<String>
 
     public init(answers: [SuggestionAnswer], asOf date: Date = Date()) {
+        let answers = answers.filter(\.counts)
         answered = Set(answers.map(\.key))
         for a in answers {
             switch a.verdict {
@@ -69,6 +70,8 @@ public struct SuggestionTraining: Equatable, Sendable {
     public func isLowered(_ kind: SeriesSuggestion.Kind) -> Bool { weight(kind) <= CoachTraining.lowered }
     public func isBlocked(_ kind: SeriesSuggestion.Kind) -> Bool { blocked.contains(kind.rawValue) }
     public func shows(_ kind: SeriesSuggestion.Kind) -> Bool { !isBlocked(kind) && !isLowered(kind) }
+    /// The kinds that show no suggestion now, blocked or lowered, for the page to offer to turn on again.
+    public var off: [SeriesSuggestion.Kind] { SeriesSuggestion.Kind.allCases.filter { !shows($0) } }
 }
 
 extension SeriesSuggestion {
@@ -95,9 +98,9 @@ extension SeriesSuggestion {
             let ownerKeys = owner.speakerKeys(in: last)
             let ownerNames = Set(ownerKeys.compactMap { last.speakerNames[$0] })
             let words = last.utterances.map { MeetingPrep.keywords($0.text) }
-            for (i, item) in last.actionItems.enumerated() {
+            for item in last.actionItems {
                 guard let who = item.owner?.nonBlank, !owner.isOwner(who), !ownerNames.contains(who) else { continue }
-                out.append(SeriesSuggestion(key: "openItem:\(last.id):\(i)", kind: .openItem, text: "Ask \(first(who)) about: \(item.task)",
+                out.append(SeriesSuggestion(key: "openItem:\(last.id):\(PersonNames.key(item.task))", kind: .openItem, text: "Ask \(first(who)) about: \(item.task)",
                                             source: Source(callID: last.id, at: MeetingPrep.moment(of: item.task, in: last.utterances, words: words), label: "From \(day(last.start, calendar))")))
             }
             for q in unanswered(in: last, owner: owner).prefix(questionsPerMeeting) {
@@ -108,9 +111,9 @@ extension SeriesSuggestion {
 
         // Decisions that say they are still open, in the last three meetings.
         for r in meetings.prefix(3) {
-            for (i, d) in r.decisions.enumerated() where isPending(d.text) {
-                out.append(SeriesSuggestion(key: "pendingDecision:\(r.id):\(i)", kind: .pendingDecision, text: "Close the decision: \(d.text)",
-                                            source: Source(callID: r.id, at: d.at, label: "Left open on \(day(r.start, calendar))")))
+            for d in r.decisions where isPending(d.text) {
+                out.append(SeriesSuggestion(key: "pendingDecision:\(r.id):\(PersonNames.key(d.text))", kind: .pendingDecision, text: "Check whether this is decided: \(d.text)",
+                                            source: Source(callID: r.id, at: d.at, label: "May still be open, \(day(r.start, calendar))")))
             }
         }
 
@@ -160,14 +163,31 @@ extension SeriesSuggestion {
         return f.string(from: date)
     }
 
-    private static let pendingWords = ["pending", "tbd", "to be decided", "not yet decided", "undecided", "revisit", "deferred", "on hold",
-                                       "next meeting", "next time", "parked", "open question"]
+    /// Phrases that say a decision is still open, matched on whole words.
+    private static let pendingPhrases = ["pending", "tbd", "tbc", "to be decided", "to be confirmed", "not yet decided", "undecided",
+                                         "no decision yet", "still open", "open question", "tabled"]
+    /// "Next meeting" and "next time" say it is open only with a word of deciding.
+    private static let laterPhrases = ["next meeting", "next time"]
+    private static let decideWords: Set<String> = ["decide", "discuss", "revisit", "confirm", "agree"]
 
-    /// A decision whose words say it is still open.
-    static func isPending(_ text: String) -> Bool {
-        let t = text.lowercased()
-        return pendingWords.contains { t.contains($0) }
+    /// The words of a text, lower case, split on anything that is not a letter or a digit.
+    static func words(_ text: String) -> [String] {
+        text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
     }
+
+    /// A decision whose words say it may still be open. A guess from the words, so the pages say "may".
+    static func isPending(_ text: String) -> Bool {
+        let w = words(text)
+        let line = " " + w.joined(separator: " ") + " "
+        func has(_ phrase: String) -> Bool { line.contains(" \(phrase) ") }
+        if pendingPhrases.contains(where: has) { return true }
+        // "Revisit" as the plain verb only: "revisited" is done.
+        if w.contains("revisit") { return true }
+        return laterPhrases.contains(where: has) && !decideWords.isDisjoint(with: w)
+    }
+
+    /// A reply within this long after a question answers it.
+    static let answerWait: TimeInterval = 20
 
     /// The owner's questions in a meeting that nobody answered: a line of the owner's that ends in a question of
     /// at least `questionWords` words, after which the owner spoke again, or nobody did.
@@ -176,13 +196,14 @@ extension SeriesSuggestion {
         guard !keys.isEmpty else { return [] }
         let lines = Transcript.interleaved(r.utterances)
         var out: [(TimeInterval, String)] = []
-        for (i, u) in lines.enumerated() where keys.contains(u.speakerKey) {
+        for u in lines where keys.contains(u.speakerKey) {
             let text = u.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard text.hasSuffix("?") else { continue }
             let sentence = lastSentence(text)
             guard sentence.split(separator: " ").count >= questionWords else { continue }
-            let next = lines[(i + 1)...].first { $0.start >= u.start }
-            if next == nil || keys.contains(next!.speakerKey) { out.append((u.start, sentence)) }
+            // Answered when another person starts to talk soon after it, also after a line more of the owner's.
+            let reply = lines.first { !keys.contains($0.speakerKey) && $0.start >= u.start }
+            if reply.map({ $0.start - u.end > answerWait }) ?? true { out.append((u.start, sentence)) }
         }
         return out
     }

@@ -59,9 +59,11 @@ struct RecurringPage: View {
         let focus = controller.shownCoachProfile.activeFocus
         let goal = focus.map { (plan: $0.plan, oneOnOne: $0.goal?.measure == .oneOnOneTalkShare) }
         let profiles = controller.library.profiles
+        let email = UserDefaults.standard.string(forKey: "ownerEmail") ?? ""
         let identity = OwnerIdentity.read(name: owner, paths: controller.paths)
         let made = await Task.detached(priority: .userInitiated) {
-            (SeriesReport(series: series, records: records, commitments: commitments, owner: identity, directory: PersonDirectory(profiles: profiles)),
+            (SeriesReport(series: series, records: records, commitments: commitments, owner: identity, directory: PersonDirectory(profiles: profiles),
+                          ownerEmails: [email]),
              SeriesSuggestion.make(for: series, records: records, commitments: commitments, owner: identity, points: book.points(of: series).open,
                                    answers: book.answers, goal: goal))
         }.value
@@ -193,7 +195,7 @@ private struct RecurringHeader: View {
                 Spacer(minLength: 0)
             }
         } else {
-            Text(series.meetings.isEmpty ? "No date in your calendar." : "No meeting of this series in your calendar in the next \(UpcomingMeeting.days) days.")
+            Text(series.meetings.isEmpty ? "No date in your calendar." : "No meeting of this series with a call link in your calendar in the next \(UpcomingMeeting.seriesDays) days.")
                 .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
         }
     }
@@ -207,6 +209,8 @@ struct NextTimeTab: View {
     @EnvironmentObject var controller: AppController
     let series: MeetingSeries
     let suggestions: [SeriesSuggestion]
+    /// The people the owner chose to add a first point for.
+    @State private var adding: Set<String> = []
 
     var body: some View {
         let lists = controller.series.book.points(of: series)
@@ -225,11 +229,22 @@ struct NextTimeTab: View {
         MeetingAnalyticsGroup("Suggested") {
             SuggestionList(series: series, suggestions: suggestions)
         }
-        let people = personPoints
-        if !people.isEmpty {
+        let usual = controller.series.usualIDs[series.id] ?? []
+        let shown = usual.filter { p in !controller.series.book.points(forPerson: p.id, canonical: canonical).isEmpty || adding.contains(p.id) }
+        let rest = usual.filter { p in !shown.contains { $0.id == p.id } }
+        if !usual.isEmpty {
             MeetingAnalyticsGroup("For one person") {
                 VStack(alignment: .leading, spacing: 14) {
-                    ForEach(people, id: \.id) { p in PersonNextTimeSection(personID: p.id, name: p.name) }
+                    ForEach(shown, id: \.id) { p in PersonNextTimeSection(personID: p.id, name: p.name) }
+                    if !rest.isEmpty {
+                        Menu {
+                            ForEach(rest, id: \.id) { p in Button(p.name) { adding.insert(p.id) } }
+                        } label: {
+                            Text("Add a point for one person").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
+                        }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                        .help("A point for the next time you see this person, in this series or any other meeting")
+                    }
                 }
             }
         }
@@ -242,12 +257,8 @@ struct NextTimeTab: View {
         }
     }
 
-    /// The usual people who have points of their own.
-    private var personPoints: [(id: String, name: String)] {
-        let refs = PersonReferences(people: PeopleStore.peek(in: controller.paths.people) ?? [])
-        return series.usualPeople.compactMap { name in
-            guard let id = refs.id(for: name), !controller.series.book.points(forPerson: id).isEmpty else { return nil }
-            return (id, name)
-        }
+    private var canonical: (String) -> String {
+        let refs = controller.series.people
+        return { refs.canonical($0) }
     }
 }
