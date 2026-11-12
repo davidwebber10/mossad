@@ -17,7 +17,7 @@ struct QuestionsPanel: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 6) {
                     Image(systemName: "questionmark.bubble").foregroundStyle(.tint)
-                    Text("Is this right?").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("Is this true?").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                     Spacer()
                     if questions.count > 1 {
                         Text("1 of \(questions.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
@@ -54,7 +54,7 @@ struct QuestionsPanel: View {
                     }
                 } else {
                     HStack(spacing: 8) {
-                        Button("Yes") { send(q, .confirmed) }.buttonStyle(.borderedProminent)
+                        Button("True") { send(q, .confirmed) }.buttonStyle(.borderedProminent)
                         Button("Not quite…") {
                             withAnimation(.snappy) { correcting = true }
                             noteFocused = true

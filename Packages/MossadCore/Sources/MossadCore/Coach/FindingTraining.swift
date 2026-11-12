@@ -3,10 +3,13 @@ import Foundation
 /// What the owner's answers to the cards taught the coach, read from the log of answers each time. Nothing here
 /// is stored: an answer that is taken back is gone from it at once.
 ///
-/// - A yes or a no on a finding moves the weight of its skill by one, for `weightDays`, within `limit`.
-/// - A skill at `lowered` or less waits longer before its advice can come again, and stands behind the other
-///   news of a call. No number of no's blocks a skill.
-/// - "No, never again" on a finding blocks its skill for good. On a goal offer it blocks that goal only.
+/// - Useful or Not useful on a finding moves the weight of its skill by one, for `weightDays`, within `limit`.
+///   On a "did well" card it moves the weight of the praise for that skill, not of its advice: "Not useful" on
+///   praise says the praise did not help, not that the advice is unwelcome.
+/// - A skill at `lowered` or less waits longer before its advice (or its praise) can come again, and stands
+///   behind the other news of a call. No number of no's blocks a skill.
+/// - "Never again" on a finding blocks its skill for good, praise and advice. On a "did well" card it blocks the
+///   praise only. On a goal offer it blocks that goal only.
 public struct CoachTraining: Equatable, Sendable {
     /// An answer counts for this long.
     public static let weightDays = 90.0
@@ -18,34 +21,54 @@ public struct CoachTraining: Equatable, Sendable {
     public static let extraDays = 15.0
 
     public private(set) var weights: [String: Int] = [:]
+    /// The weights of the praise for each skill, from the answers to "did well" cards.
+    public private(set) var praiseWeights: [String: Int] = [:]
     public private(set) var blocked: Set<String> = []
+    /// Skills the owner wants no more praise for.
+    public private(set) var blockedPraise: Set<String> = []
     public private(set) var blockedGoals: Set<String> = []
 
     public init(answers: [FindingAnswer] = [], asOf date: Date = Date()) {
         for a in answers {
             let key = AdviceRules.key(a.skill)
             guard !key.isEmpty, let verdict = a.verdict else { continue }
+            let praise = a.kind == .didWell
             switch (verdict, a.kind) {
             case (.never, .goalOffer): blockedGoals.insert(key)
-            case (.never, let kind) where kind.isBehavior: blocked.insert(key)
-            case (.yes, let kind) where kind.isBehavior && Self.counts(a, date): weights[key, default: 0] += 1
-            case (.no, let kind) where kind.isBehavior && Self.counts(a, date): weights[key, default: 0] -= 1
+            case (.never, let kind) where kind.isBehavior: if praise { blockedPraise.insert(key) } else { blocked.insert(key) }
+            case (.yes, let kind) where kind.isBehavior && Self.counts(a, date):
+                if praise { praiseWeights[key, default: 0] += 1 } else { weights[key, default: 0] += 1 }
+            case (.no, let kind) where kind.isBehavior && Self.counts(a, date):
+                if praise { praiseWeights[key, default: 0] -= 1 } else { weights[key, default: 0] -= 1 }
             default: break
             }
         }
         weights = weights.mapValues { min(Self.limit, max(-Self.limit, $0)) }.filter { $0.value != 0 }
+        praiseWeights = praiseWeights.mapValues { min(Self.limit, max(-Self.limit, $0)) }.filter { $0.value != 0 }
     }
 
     private static func counts(_ a: FindingAnswer, _ date: Date) -> Bool { date.timeIntervalSince(a.date) <= weightDays * 86_400 }
 
-    public func weight(_ skill: String) -> Int { weights[AdviceRules.key(skill)] ?? 0 }
-    public func isLowered(_ skill: String) -> Bool { weight(skill) <= Self.lowered }
-    public func isRaised(_ skill: String) -> Bool { weight(skill) >= Self.raised }
-    public func isBlocked(_ skill: String) -> Bool { blocked.contains(AdviceRules.key(skill)) }
+    /// `praise`: the weight of the praise for the skill, not of its advice.
+    public func weight(_ skill: String, praise: Bool = false) -> Int { (praise ? praiseWeights : weights)[AdviceRules.key(skill)] ?? 0 }
+    public func isLowered(_ skill: String, praise: Bool = false) -> Bool { weight(skill, praise: praise) <= Self.lowered }
+    public func isRaised(_ skill: String, praise: Bool = false) -> Bool { weight(skill, praise: praise) >= Self.raised }
+    /// A skill blocked for good is blocked for praise too; praise blocked for good leaves the advice.
+    public func isBlocked(_ skill: String, praise: Bool = false) -> Bool {
+        let key = AdviceRules.key(skill)
+        return blocked.contains(key) || (praise && blockedPraise.contains(key))
+    }
     public func isGoalBlocked(_ skill: String) -> Bool { blockedGoals.contains(AdviceRules.key(skill)) }
 
-    /// The days before the same advice can come again: longer for a skill that the owner said no to a few times.
-    public func repeatDays(_ skill: String) -> Double { AdviceRules.repeatDays + Self.extraDays * Double(max(0, -weight(skill))) }
+    /// A card's own weight and block: praise for a "did well" card, the skill's advice for the others.
+    public func isLowered(_ card: CoachFinding) -> Bool { isLowered(card.skill, praise: card.kind == .didWell) }
+    public func isBlocked(_ card: CoachFinding) -> Bool { isBlocked(card.skill, praise: card.kind == .didWell) }
+
+    /// The days before the same advice (or praise) can come again: longer for a skill that the owner said no to
+    /// a few times.
+    public func repeatDays(_ skill: String, praise: Bool = false) -> Double {
+        AdviceRules.repeatDays + Self.extraDays * Double(max(0, -weight(skill, praise: praise)))
+    }
 }
 
 extension CoachProfile {

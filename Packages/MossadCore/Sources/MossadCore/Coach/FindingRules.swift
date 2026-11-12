@@ -10,6 +10,7 @@ import Foundation
 /// 3. Not for long. A card with no answer goes `expiryDays` after its call. A review from before the cards
 ///    gives cards only for `seedDays`, so the first launch does not start with weeks of cards.
 /// 4. What the owner blocked is not made, and what the owner said no to a few times comes last.
+/// 5. Meaning. A card about the owner's behavior says why it matters (`FindingMeaning`), or it is not made.
 public enum FindingRules {
     public static let perCall = 2
     public static let expiryDays = 14.0
@@ -32,7 +33,7 @@ public enum FindingRules {
 
     private static func words(_ text: String) -> Int { text.split(whereSeparator: \.isWhitespace).count }
 
-    /// The first words of a card's text, to name the card in one line: "Why didn't you agree with ...?".
+    /// The first words of a card's text, to name the card in one line: "Why was ... not useful?".
     public static func shortTitle(_ text: String, words limit: Int = 6) -> String {
         let all = text.split(whereSeparator: \.isWhitespace)
         let cut = all.prefix(limit).joined(separator: " ")
@@ -44,15 +45,17 @@ public enum FindingRules {
     /// are there when the review is made; a review from before the cards gives only what its file holds.
     /// `measuredFocus`: the focus is a goal that the app measures, so a miss on it is a number over the target, a
     /// thing to do better, and not a thing the owner did not do.
+    /// `goals`: the owner's foci, so a card about the goal's skill is made with that tie (`FindingMeaning`). The
+    /// card keeps only the model's why; the deck fills the rest each time it is shown.
     static func cards(review: CoachReview, callID: String, date: Date, measured: CoachMeasured?, observations: [CoachObservation] = [],
-                      training: CoachTraining = CoachTraining(), measuredFocus: Bool = false) -> [CoachFinding] {
+                      training: CoachTraining = CoachTraining(), measuredFocus: Bool = false, goals: [CoachFocus] = []) -> [CoachFinding] {
         var out: [CoachFinding] = []
         func add(_ kind: CoachFinding.Kind?, text: String, skill: String, quote: String? = nil, at: TimeInterval? = nil, number: String? = nil,
-                 usual: String? = nil, say: String? = nil) {
-            guard let kind, let text = text.nonBlank, !skill.isEmpty, !training.isBlocked(skill) else { return }
+                 usual: String? = nil, say: String? = nil, why: String? = nil) {
+            guard let kind, let text = text.nonBlank, !skill.isEmpty, !training.isBlocked(skill, praise: kind == .didWell) else { return }
             let card = CoachFinding(id: "\(callID)|\(kind.rawValue)|\(skill)", callID: callID, date: date, kind: kind, text: text, skill: skill,
-                               quote: quote?.nonBlank, at: at, number: number?.nonBlank, usual: usual?.nonBlank, say: say?.nonBlank)
-            guard card.hasProof, !out.contains(where: { $0.id == card.id }) else { return }
+                               quote: quote?.nonBlank, at: at, number: number?.nonBlank, usual: usual?.nonBlank, say: say?.nonBlank, why: why?.nonBlank)
+            guard card.hasProof, FindingMeaning.settle(card, goals: goals) != nil, !out.contains(where: { $0.id == card.id }) else { return }
             out.append(card)
         }
         func number(_ id: String) -> CoachFinding.Kind? {
@@ -71,14 +74,14 @@ public enum FindingRules {
                 let parts = (line.number ?? "").components(separatedBy: "; ")
                 add(.didWell, text: line.text, skill: line.skill, number: parts.first, usual: parts.count > 1 ? parts[1] : nil)
             case .tryNext:
-                add(.couldBeBetter, text: line.text, skill: line.skill, quote: line.quote, at: line.at, number: line.number, say: line.say)
+                add(.couldBeBetter, text: line.text, skill: line.skill, quote: line.quote, at: line.at, number: line.number, say: line.say, why: line.why)
             case .again:
-                add(.missed, text: line.text, skill: line.skill, quote: line.quote, at: line.at, number: line.number)
+                add(.missed, text: line.text, skill: line.skill, quote: line.quote, at: line.at, number: line.number, why: line.why)
             case .number:
                 let id = line.skill.hasPrefix("number:") ? String(line.skill.dropFirst(7)) : line.skill
                 add(number(id), text: line.text, skill: line.skill, at: line.at, usual: line.number)
             case .didWell:
-                add(.didWell, text: line.text, skill: line.skill, quote: line.quote, at: line.at, number: line.number)
+                add(.didWell, text: line.text, skill: line.skill, quote: line.quote, at: line.at, number: line.number, why: line.why)
             }
         }
 
@@ -96,7 +99,7 @@ public enum FindingRules {
         for o in observations {
             guard let at = o.at, o.quote != nil, words(o.note) <= CoachLineRules.textWords, !CoachLineRules.judgesTrend(o.note),
                   !out.contains(where: { $0.at.map { abs($0 - at) < 1 } == true }) else { continue }
-            add(o.result == .did ? .didWell : .missed, text: o.note, skill: "pattern:" + AdviceRules.key(o.pattern), quote: o.quote, at: at)
+            add(o.result == .did ? .didWell : .missed, text: o.note, skill: "pattern:" + AdviceRules.key(o.pattern), quote: o.quote, at: at, why: o.why)
         }
         return out
     }
@@ -109,19 +112,22 @@ public enum FindingRules {
     public static func deck(callID: String, date: Date, review: CoachReview, profile: CoachProfile, now: Date = Date(), trait: CoachFinding? = nil) -> [CoachFinding] {
         guard now.timeIntervalSince(date) <= (review.findings == nil ? seedDays : expiryDays) * 86_400 else { return [] }
         let training = profile.training(asOf: now)
-        var base = (review.findings ?? cards(review: review, callID: callID, date: date, measured: nil,
-                                             observations: profile.observations.filter { $0.callID == callID }))
-            .filter { $0.kind.isKnown && $0.hasProof && !training.isBlocked($0.skill) }
+        let made = (review.findings ?? cards(review: review, callID: callID, date: date, measured: nil,
+                                             observations: profile.observations.filter { $0.callID == callID }, goals: profile.foci))
+            .filter { $0.kind.isKnown && $0.hasProof && !training.isBlocked($0) }
+        // Each card with why it matters; one that only says what happened is no card, also from an older review.
+        var base = made.compactMap { FindingMeaning.settle($0, goals: profile.foci) }
 
         var head: [CoachFinding] = []
         // The focus that the coach proposed from this call: a goal with its number and what was usual, or a focus
         // with the moment of this call that shows its skill.
-        if let focus = profile.proposedFocus, abs(focus.proposed.timeIntervalSince(date)) < 1, !training.isGoalBlocked(focus.skillID) {
+        // A goal with no reason is no card: the owner would get an offer with no why.
+        if let focus = profile.proposedFocus, abs(focus.proposed.timeIntervalSince(date)) < 1, !training.isGoalBlocked(focus.skillID), focus.why.nonBlank != nil {
             let id = "\(callID)|\(CoachFinding.Kind.goalOffer.rawValue)|\(focus.id.uuidString)"
             if let goal = focus.goal {
                 head.append(CoachFinding(id: id, callID: callID, date: date, kind: .goalOffer, text: focus.plan, skill: focus.skillID, detail: focus.why.nonBlank,
                                          number: goal.typicalText, usual: goal.usualText, focusID: focus.id))
-            } else if let proof = base.first(where: { $0.at != nil && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) }) {
+            } else if let proof = made.first(where: { $0.at != nil && AdviceRules.key($0.skill) == AdviceRules.key(focus.skillID) }) {
                 head.append(CoachFinding(id: id, callID: callID, date: date, kind: .goalOffer, text: focus.plan, skill: focus.skillID, detail: focus.why.nonBlank,
                                          quote: proof.quote, at: proof.at, focusID: focus.id))
             }
@@ -135,7 +141,7 @@ public enum FindingRules {
                                 quote: quote, at: at, questionID: q.id, person: q.person, personName: q.personName))
         }
         if let trait, trait.callID == callID, trait.kind == .trait, trait.hasProof { head.append(trait) }
-        let all = head + base.filter { !training.isLowered($0.skill) } + base.filter { training.isLowered($0.skill) }
+        let all = head + base.filter { !training.isLowered($0) } + base.filter { training.isLowered($0) }
         // Each answer of this call uses up one of its cards: an answer that takes a conclusion or an offer out of
         // the list must not let a third card move up.
         let answered = profile.answers.filter { $0.callID == callID && $0.verdict != nil }.count
@@ -145,7 +151,7 @@ public enum FindingRules {
         }.prefix(max(0, perCall - answered)))
     }
 
-    /// "No, never again" is not offered on a card of the active focus: the owner would block the skill they
+    /// "Never again" is not offered on a card of the active focus: the owner would block the skill they
     /// chose to work on, and the coach would get two orders. Ending the focus is the way.
     public static func offersNever(_ card: CoachFinding, profile: CoachProfile) -> Bool {
         guard let focus = profile.activeFocus else { return true }

@@ -18,6 +18,14 @@ public enum CoachLineRules {
     static let minimumQuoteWords = 3
     /// The most words of a note's own text. The prompt asks for 16.
     static let textWords = 24
+    /// The most words of a note's why. The prompt asks for 14.
+    static let whyWords = 20
+
+    /// The model's why when it can stand on a card: not blank, short, and no trend. Else none; the note stays.
+    static func checkedWhy(_ why: String?) -> String? {
+        guard let why = why?.nonBlank, count(why) <= whyWords, !judgesTrend(why) else { return nil }
+        return why
+    }
     /// The most words the owner reads for a call.
     public static let lineWords = 35
 
@@ -43,7 +51,7 @@ public enum CoachLineRules {
         let training = profile.training(asOf: r.start)
 
         /// The note with the owner's moment that holds its quote; nil when it has no proof or breaks a rule.
-        func checked(_ note: CoachNote?, _ name: String) -> CoachNote? {
+        func checked(_ note: CoachNote?, _ name: String, praise: Bool = false) -> CoachNote? {
             guard var note else { return nil }
             guard let moment = ownerMoment(quote: note.quote ?? "", in: r, owner: owner) else {
                 dropped.append("\(name): its quote is not in the owner's lines")
@@ -54,7 +62,7 @@ public enum CoachLineRules {
             let id = note.skill ?? ""
             // The count of calls for earlier advice has no text of its own; advice and praise need a skill with a name.
             guard CoachSkill.isNamed(id) else { dropped.append("\(name): no skill name"); return nil }
-            guard !training.isBlocked(id) else { dropped.append("\(name): the owner said never again"); return nil }
+            guard !training.isBlocked(id, praise: praise) else { dropped.append("\(name): the owner said never again"); return nil }
             if let skill = CoachSkill(id: id), !skill.isCoached, !(skill == .pace && focus?.metric == .pace) {
                 dropped.append("\(name): \(skill.rawValue) is not coached")
                 return nil
@@ -64,15 +72,22 @@ public enum CoachLineRules {
             note.skill = id
             note.measure = CoachSkill(id: id)?.measure
             note.number = note.measure == .commitmentDay ? measured.commitments?.text : nil
+            note.why = checkedWhy(note.why)
             return note
         }
         func earlier(_ kind: CoachLine.Kind, _ note: CoachNote) -> CoachAdvice? {
-            AdviceRules.earlier(kind: kind, skill: note.skill ?? "", in: log, callID: r.id, date: r.start, days: training.repeatDays(note.skill ?? ""))
+            AdviceRules.earlier(kind: kind, skill: note.skill ?? "", in: log, callID: r.id, date: r.start,
+                                days: training.repeatDays(note.skill ?? "", praise: kind == .didWell))
         }
         // A focus the owner said "never again" to is not offered again.
         if let p = out.proposal, training.isGoalBlocked(p.skillID) || training.isBlocked(p.skillID) {
             out.proposal = nil
             dropped.append("focus_proposal: the owner said never again")
+        }
+        // A goal with no reason is no offer: the card and the goal page would show an empty line.
+        if let p = out.proposal, p.why.nonBlank == nil {
+            out.proposal = nil
+            dropped.append("focus_proposal: no reason")
         }
         // Room in 1:1s is offered by code, with its numbers. A skill whose goal the owner declined or ended in the
         // last 30 days, or learned, is not offered again in other words.
@@ -98,7 +113,7 @@ public enum CoachLineRules {
             }
         }
 
-        review.didWell = checked(review.didWell, "did_well")
+        review.didWell = checked(review.didWell, "did_well", praise: true)
         review.tryNext = checked(review.tryNext, "try_next")
         review.seenAgain = checked(review.seenAgain, "seen_again")
 
@@ -165,16 +180,31 @@ public enum CoachLineRules {
         // Last: a count is no news when the call has any.
         if let again { candidates.append(again) }
 
-        candidates.removeAll { $0.kind != .focus && training.isBlocked($0.skill) }
-        // A skill that got a few no's is still said, after the other news of the call.
-        func lowered(_ c: CoachLine) -> Bool { c.kind != .focus && c.kind != .progress && training.isLowered(c.skill) }
+        // Praise: what the owner did well, a measured change for the better, or a number on the good side of its
+        // usual. Its card is a "did well" card, so the answers to praise decide it, on the card and here.
+        func praise(_ c: CoachLine) -> Bool {
+            switch c.kind {
+            case .didWell, .progress: return true
+            case .number:
+                let id = c.skill.hasPrefix("number:") ? String(c.skill.dropFirst(7)) : c.skill
+                guard let s = measured.standouts.first(where: { $0.id == id }) else { return false }
+                return FindingRules.kind(ofNumber: id, above: s.above, oneOnOne: measured.oneOnOne) == .didWell
+            default: return false
+            }
+        }
+        candidates.removeAll { $0.kind != .focus && training.isBlocked($0.skill, praise: praise($0)) }
+        // A skill that got a few no's is still said, after the other news of the call. Praise that got a few
+        // no's stands back the same way; its advice does not.
+        func lowered(_ c: CoachLine) -> Bool {
+            c.kind != .focus && (c.kind != .progress || praise(c)) && training.isLowered(c.skill, praise: praise(c))
+        }
         candidates = candidates.filter { !lowered($0) } + candidates.filter(lowered)
 
         let line = candidates.first { c in
             guard c.hasProof else { return false }
             // The notes and the count passed the log above; a number and a trend are checked here.
             guard c.kind == .number || c.kind == .progress else { return true }
-            return AdviceRules.earlier(kind: c.kind, skill: c.skill, in: log, callID: r.id, date: r.start, days: training.repeatDays(c.skill)) == nil
+            return AdviceRules.earlier(kind: c.kind, skill: c.skill, in: log, callID: r.id, date: r.start, days: training.repeatDays(c.skill, praise: praise(c))) == nil
         }.map(fit)
         review.line = line
         review.version = CoachReview.currentVersion
@@ -214,12 +244,15 @@ public enum CoachLineRules {
             let moment = ownerMoment(quote: p.quote ?? "", in: r, owner: owner)
             p.quote = moment?.quote
             p.at = moment?.at
+            p.why = checkedWhy(p.why)
             return p
         }
         // The cards of this call, from what stayed: the line, the notes, the numbers, and the patterns.
-        let shown = out.update.patterns.map { CoachObservation(callID: r.id, date: r.start, pattern: $0.name, result: $0.shown, note: $0.note, quote: $0.quote, at: $0.at) }
+        let shown = out.update.patterns.map {
+            CoachObservation(callID: r.id, date: r.start, pattern: $0.name, result: $0.shown, note: $0.note, quote: $0.quote, at: $0.at, why: $0.why)
+        }
         review.findings = FindingRules.cards(review: review, callID: r.id, date: r.start, measured: measured, observations: shown, training: training,
-                                             measuredFocus: focus?.goal != nil)
+                                             measuredFocus: focus?.goal != nil, goals: profile.foci)
         out.review = review
         out.advice = said
         out.dropped = dropped

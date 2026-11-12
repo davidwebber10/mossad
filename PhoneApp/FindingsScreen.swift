@@ -1,8 +1,8 @@
 import MossadCore
 import SwiftUI
 
-/// The coach's findings of all calls as one deck, the newest call first. A swipe to the right is yes, a swipe to
-/// the left is a plain no to that one card. The play button opens the meeting at the moment: the audio stays on
+/// The coach's findings of all calls as one deck, the newest call first. A swipe to the right is the card's first
+/// answer (Useful, True, Take it on), a swipe to the left its second, for that one card. The play button opens the meeting at the moment: the audio stays on
 /// the Mac.
 struct FindingsScreen: View {
     @Environment(PhoneStore.self) private var store
@@ -14,9 +14,9 @@ struct FindingsScreen: View {
     @AppStorage("findingsSeen") private var seen = ""
 
     /// Development hooks for screenshots: `MOSSAD_DECK_DRAG=<points>` holds the top card mid-drag,
-    /// `MOSSAD_DECK_WHY=line|open` answers no to the first card and shows the line about it.
+    /// `MOSSAD_DECK_WHY=line|open|never` answers no (or never again) to the first card and shows the line about it.
     static var deckPreview: FindingsDeck.Preview? {
-        let why: FindingsDeck.Preview.Why? = PhoneStore.hook("MOSSAD_DECK_WHY") == "open" ? .open : PhoneStore.hook("MOSSAD_DECK_WHY") == "line" ? .line : nil
+        let why: FindingsDeck.Preview.Why? = PhoneStore.hook("MOSSAD_DECK_WHY") == "open" ? .open : PhoneStore.hook("MOSSAD_DECK_WHY") == "line" ? .line : PhoneStore.hook("MOSSAD_DECK_WHY") == "never" ? .never : nil
         let drag = PhoneStore.hook("MOSSAD_DECK_DRAG").flatMap(Double.init) ?? 0
         return drag == 0 && why == nil ? nil : FindingsDeck.Preview(drag: drag, why: why)
     }
@@ -33,7 +33,7 @@ struct FindingsScreen: View {
                              answer: { store.answerFinding($0, $1) }, undo: { store.takeBackFinding($0) },
                              explain: { store.explainFinding($0, note: $1) })
                     .frame(maxWidth: .infinity)
-                Text("Yes and no teach the coach what is useful to you. \u{201C}No, never again\u{201D} stops a subject for good; you can undo it in Coach \u{203A} Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
+                Text("Useful and Not useful teach the coach what helps you; True and Not true correct what it believes; Take it on starts a goal. \u{201C}Never again\u{201D} stops a subject for good, and on praise only the praise; you can undo it in Coach \u{203A} Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
                     .textRole(.secondary).foregroundStyle(Palette.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
