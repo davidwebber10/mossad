@@ -128,6 +128,7 @@ struct MeetingView: View {
                 .textSelection(.enabled)
                 .accessibilityAddTraits(.isHeader)
             if let source = record.sourceLabel { SourceMark(text: source) }
+            if let url = record.gemini?.url { Link(destination: url) { SourceMark(text: "Notes by Gemini ↗") } }
             if record.titleSource == .generated {
                 Label("Named by Mossad", systemImage: "sparkle")
                     .textRole(.secondary)

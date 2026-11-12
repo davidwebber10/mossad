@@ -56,7 +56,11 @@ public enum GeminiImport {
             let recorded = records.filter { r in !r.isNotesOnly && isSameMeeting(r, e, now: now) }
             // The call still records or its record is being made: the next check decides.
             if recorded.contains(where: { $0.status == .recording }) { return nil }
-            let madeFromNotes = notes.first { r in r.gemini?.docID == id || (e.eventID != nil && r.gemini?.eventID == e.eventID) }
+            // The notes-only meeting of this very event: its event id, or its time. A document on two events (a series)
+            // is not proof that it is this one.
+            let madeFromNotes = notes.first { r in
+                (e.eventID != nil && r.gemini?.eventID == e.eventID) || (r.gemini?.eventID == nil && r.gemini?.docID == id && overlap(r, e, now: now) > 0)
+            }
             if let r = recorded.max(by: { overlap($0, e, now: now) < overlap($1, e, now: now) }) {
                 guard r.gemini == nil else { return nil }
                 if let madeFromNotes { return Item(event: e, attachment: a, action: .move(notesID: madeFromNotes.id, callID: r.id)) }
@@ -148,7 +152,8 @@ public enum GeminiImport {
     /// The reference kept on the record.
     public static func reference(_ item: Item, doc: GeminiDoc, now: Date) -> GeminiNotesRef {
         GeminiNotesRef(docID: item.docID, title: doc.title.nonBlank ?? item.attachment.title, url: item.attachment.url, eventID: item.event.eventID,
-                       imported: now, notes: doc.notesText.map { String($0.prefix(20_000)) })
+                       // Gemini's own text only for a meeting made from it; a recording keeps the link.
+                       imported: now, notes: item.action == .create ? doc.notesText.map { String($0.prefix(20_000)) } : nil)
     }
 
     /// A meeting made from the notes: the invite, the transcript with names, and the step after the voices, so the

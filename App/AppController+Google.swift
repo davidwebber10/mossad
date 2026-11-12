@@ -100,10 +100,16 @@ extension AppController {
         let scopes = connector.scopes, session = google
         connector.signIn = Task {
             do {
-                if newClient, session.isConnected { await session.signOut() }
+                if newClient, session.isConnected {
+                    await session.signOut()
+                    forgetDirectory([.directory, .contacts])
+                }
                 if !session.isConnected || session.scopes != scopes {
                     // Fewer parts than before: the old grant ends first, so Google forgets the parts turned off.
-                    if session.isConnected { await session.signOut() }
+                    if session.isConnected {
+                        await session.signOut()
+                        forgetDirectory([.directory, .contacts])
+                    }
                     connector.phase = .signingIn
                     _ = try await GoogleSignIn.run(client: client, scopes: scopes, session: session, loginHint: session.account) { url in
                         await MainActor.run { _ = NSWorkspace.shared.open(url) }
@@ -202,9 +208,12 @@ extension AppController {
         let last = UserDefaults.standard.double(forKey: "googleDirectoryRead")
         guard force || Date().timeIntervalSince1970 - last > 86_400 else { return }
         let session = google, paths = paths, library = library, names = googleNames
+        let signIn = googleConnector.version
         Task.detached(priority: .utility) {
             let fresh = await GooglePeopleAPI.fetch(session: session)
             guard !fresh.isEmpty else { return }
+            // A sign-out or a new sign-in during the read: its answer belongs to a grant that is gone.
+            guard await MainActor.run(body: { self.googleConnector.version == signIn && session.isConnected }) else { return }
             // A part that was not read keeps its old copy; nothing is made from a part of a list.
             let cache = (GoogleDirectoryCache.load(paths) ?? GoogleDirectoryCache(profiles: [], read: Date())).replacing(fresh, read: Date())
             do { try cache.save(paths) } catch { Log.error("Google People: the directory copy was not saved: \(error)") }
@@ -239,10 +248,12 @@ extension AppController {
             UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "geminiLastCheck")
             // Back to the last good check, so a weekend with the Mac closed is not lost.
             guard let read = await runner.events(from: GeminiImport.windowStart(lastGood: lastGood, now: now), to: now) else { return }
-            if read.complete { UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "geminiLastGood") }
             let items = GeminiImport.plan(events: read.events, records: meetings, now: now, noRecord: noRecord, removed: RemovedNotes.load(paths).ids)
-            guard !items.isEmpty else { return }
+            // The window moves on only after a complete read and a run with nothing left to do.
+            func good() { if read.complete { UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "geminiLastGood") } }
+            guard !items.isEmpty else { return good() }
             let outcome = await runner.run(items, ownerName: owner, ownerNames: ownerNames, isLive: { await MainActor.run { self.isRecording } })
+            if !outcome.stopped, outcome.failed == 0 { good() }
             Log.info("Gemini notes: \(outcome.made) made, \(outcome.attached) added to recordings, \(outcome.failed) to try again\(outcome.stopped ? ", stopped for a call" : "")")
             refresh()
         }
@@ -295,12 +306,16 @@ extension AppController {
             defer { googleRunning = false }
             var total = GeminiRunner.Outcome(), made: [String] = []
             for (i, item) in items.enumerated() {
-                // A call that starts waits for nothing: the rest goes on after it.
-                while isRecording { try? await Task.sleep(for: .seconds(30)) }
-                let ids = made
-                let soFar = await Task.detached { spent(ids) }.value
-                let o = await runner.run([item], ownerName: owner, ownerNames: ownerNames, isLive: { await MainActor.run { self.isRecording } },
+                var o = GeminiRunner.Outcome(stopped: true)
+                // A call that starts waits for nothing: the item goes on after it, and is not left out.
+                while o.stopped {
+                    while isRecording { try? await Task.sleep(for: .seconds(30)) }
+                    let ids = made
+                    let soFar = await Task.detached { spent(ids) }.value
+                    o = await runner.run([item], ownerName: owner, ownerNames: ownerNames, isLive: { await MainActor.run { self.isRecording } },
                                          spent: { _ in soFar }, cap: cap)
+                    if o.stopped, !isRecording { break }
+                }
                 refresh()
                 made += o.madeIDs
                 total.made += o.made

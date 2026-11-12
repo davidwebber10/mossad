@@ -319,12 +319,13 @@ public struct CallRecord: Codable, Equatable, Sendable {
 
     /// Takes the invite's title, people, and planned times. An all-day event plans no time of day.
     public mutating func setInvite(_ event: CalendarEventInfo) {
+        // A later match of the same event from a source that does not say (the Mac's copy) keeps what Google said.
+        let same = calendarTitle == event.title && plannedStart == (event.isAllDay ? nil : event.start)
         calendarTitle = event.title
         attendees = event.attendees
         invitees = event.participants.isEmpty ? nil : event.participants
-        // A later match from a source that does not say (the Mac's copy) keeps what Google said.
-        calendarSeriesID = event.seriesID ?? calendarSeriesID
-        organizer = event.organizer ?? organizer
+        calendarSeriesID = event.seriesID ?? (same ? calendarSeriesID : nil)
+        organizer = event.organizer ?? (same ? organizer : nil)
         plannedStart = event.isAllDay ? nil : event.start
         plannedEnd = event.isAllDay ? nil : event.end
     }

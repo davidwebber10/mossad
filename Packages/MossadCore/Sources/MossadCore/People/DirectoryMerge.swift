@@ -58,7 +58,7 @@ public enum DirectoryMerge {
             let addresses = out[i].emails.filter { $0.state != .rejected && !$0.shared }.map(\.address)
             let found = addresses.compactMap { a in index[a].map { (a, $0) } }
             // Every address of this person leads to one profile, and nobody else has that address.
-            guard let (address, profile) = found.first, found.allSatisfy({ $0.1 == profile }),
+            guard let (_, profile) = found.first, found.allSatisfy({ $0.1 == profile }),
                   found.allSatisfy({ holders[$0.0] == [out[i].id] }) else { continue }
             let before = out[i]
             let source: SourceKind = profile.source == .directory ? .googleDirectory : .googleContacts
@@ -77,8 +77,8 @@ public enum DirectoryMerge {
             if hasFacts, !details.sameFacts(as: out[i].directory) {
                 out[i].directory = details
                 out[i].updated = date
-                log.append(PeopleLogEntry(at: date, kind: "directory", actor: "google", subject: out[i].id, before: address,
-                                          after: [profile.jobTitle, profile.department].compactMap { $0 }.joined(separator: ", ")))
+                // The log says that it was filled, never with what: the details stay on the person, and go with a sign-out.
+                log.append(PeopleLogEntry(at: date, kind: "directory", actor: "google", subject: out[i].id, after: "filled"))
             }
             if out[i] != before { changed.append(out[i].id) }
         }

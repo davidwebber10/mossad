@@ -250,8 +250,10 @@ public enum GeminiTranscript {
         let said = String(text[colon.upperBound...]).trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, !said.isEmpty, name.count <= 60, words(name) <= 6, name.first?.isLetter == true,
               !name.contains(where: { ".?!/:;\"()[]".contains($0) }),
-              // A name's longer words start with a capital: "One more thing: the date" is not a speaker.
-              name.split(separator: " ").allSatisfy({ $0.count <= 3 || $0.first?.isUppercase == true }) else { return nil }
+              // A phrase is not a name: "One more thing: the date". A word that starts in lower case after a capital marks
+              // one. A name with no capitals at all (a script without them, or all lower case) is still a name.
+              !(name.first?.isUppercase == true && name.split(separator: " ").contains { $0.count > 3 && $0.first?.isLowercase == true })
+        else { return nil }
         return (name, said)
     }
 }

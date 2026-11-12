@@ -66,27 +66,37 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
     public func excludesNotes(of event: CalendarEventInfo) -> Bool {
         if unreadable { return true }
         let keys = Self.keys(event)
-        return (rules + ended).contains { keys.contains($0.key) && $0.covers(event.start) }
+        if rules.contains(where: { keys.contains($0.key) && $0.covers(event.start) }) { return true }
+        // An ended series rule covers the meetings that started before the owner changed it.
+        return ended.contains { r in
+            keys.contains(r.key) && (r.start == nil ? r.end.map { event.start < $0 } ?? true : r.covers(event.start))
+        }
     }
 
     /// A choice made now starts a list the app can read, so the block for the damaged one ends at once. A choice
     /// for a meeting with no link to know it by cannot be kept: it changes nothing and ends no block.
-    public mutating func set(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
-        guard let key = Self.key(title: meeting.title, link: meeting.link) else { return }
+    /// A rule is saved under each key of the meeting (its call link and the first link of its text), so the Mac's
+    /// copy of a Google event, which has only the text, is blocked too. `at` is when the owner chose: a series rule
+    /// that goes keeps the series' meetings before it out of the notes import.
+    public mutating func set(_ choice: RecordingChoice, for meeting: UpcomingMeeting, at time: Date = Date()) {
         let keys = Self.keys(title: meeting.title, link: meeting.link, textLink: meeting.textLink)
+        guard !keys.isEmpty else { return }
         unreadable = false
+        let gone = rules.filter { keys.contains($0.key) && $0.covers(meeting.start) }
+        ended += gone.filter { $0.start == nil }.map { Rule(key: $0.key, start: nil, end: time) }
         rules.removeAll { keys.contains($0.key) && $0.covers(meeting.start) }
         switch choice {
         case .record: break
-        case .skipThisMeeting: rules.append(Rule(key: key, start: meeting.start, end: meeting.end))
-        case .skipSeries: rules.append(Rule(key: key))
+        case .skipThisMeeting: rules += keys.map { Rule(key: $0, start: meeting.start, end: meeting.end) }
+        case .skipSeries: rules += keys.map { Rule(key: $0) }
         }
     }
 
-    /// "Reset do-not-record list": an empty list that records every call again.
-    public mutating func reset() {
+    /// "Reset do-not-record list": an empty list that records every call again. What the owner chose for the
+    /// meetings that already happened stays: their notes are not imported.
+    public mutating func reset(at time: Date = Date()) {
+        ended += rules.map { $0.start == nil ? Rule(key: $0.key, start: nil, end: time) : $0 }
         rules = []
-        ended = []
         unreadable = false
     }
 

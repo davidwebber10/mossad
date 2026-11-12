@@ -217,6 +217,8 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
     private var cache: (from: Date, to: Date, at: Date, page: GoogleCalendarAPI.Page)?
     /// When the last read failed: the next ones use the Mac alone for a while instead of waiting for the network.
     private var failedAt: Date?
+    /// The read that runs now, shared by every caller that comes meanwhile.
+    private var inFlight: Task<GoogleCalendarAPI.Page?, Never>?
     static let cacheSeconds: TimeInterval = 120
     static let failedSeconds: TimeInterval = 60
     /// A read waits at most this long for Google; a later answer goes to the cache for the next read. The Mac's
@@ -229,7 +231,7 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
         self.waitLimit = waitLimit
     }
 
-    public func forget() { lock.withLock { cache = nil; failedAt = nil } }
+    public func forget() { lock.withLock { cache = nil; failedAt = nil; inFlight = nil } }
 
     public func events(from: Date, to: Date) async -> [CalendarEventInfo] {
         let local = await mac.events(from: from, to: to)
@@ -246,25 +248,60 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
                                           allUIDs: c.page.allUIDs, nextPageToken: nil, complete: c.page.complete)
         }
         if let failed, now.timeIntervalSince(failed) < Self.failedSeconds { return nil }
-        let read = Task { [weak self] () -> GoogleCalendarAPI.Page? in
-            let page = await google.page(from: from, to: to)
-            self?.lock.withLock {
-                if let page { self?.cache = (from, to, now, page); self?.failedAt = nil } else { self?.failedAt = now }
+        // One read in flight for all callers; a new one only when none runs.
+        let read: Task<GoogleCalendarAPI.Page?, Never> = lock.withLock {
+            if let running = inFlight { return running }
+            let task = Task { [weak self] () -> GoogleCalendarAPI.Page? in
+                let page = await google.page(from: from, to: to)
+                self?.lock.withLock {
+                    if let page { self?.cache = (from, to, now, page); self?.failedAt = nil } else { self?.failedAt = now }
+                    self?.inFlight = nil
+                }
+                return page
             }
-            return page
+            inFlight = task
+            return task
         }
+        // The first of the read and the timer answers; the read goes on in the background and fills the cache.
         let limit = waitLimit
-        return await withTaskGroup(of: GoogleCalendarAPI.Page??.self) { group in
-            group.addTask { await read.value }
-            group.addTask {
+        let once = Once<GoogleCalendarAPI.Page?>()
+        return await withCheckedContinuation { c in
+            once.set(c)
+            Task { once.resume(await read.value) }
+            Task {
                 try? await Task.sleep(for: limit)
-                return .some(nil)
+                once.resume(nil)
             }
-            // The first to answer: Google's page, or nothing yet (the Mac alone this time).
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first ?? nil
         }
+    }
+}
+
+/// A continuation that the first of several tasks resumes, one time only.
+final class Once<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Never>?
+    private var early: T??
+
+    func set(_ c: CheckedContinuation<T, Never>) {
+        let value: T?? = lock.withLock {
+            if let early { return early }
+            continuation = c
+            return nil
+        }
+        if let value { c.resume(returning: value!) }
+    }
+
+    func resume(_ value: T) {
+        let c: CheckedContinuation<T, Never>? = lock.withLock {
+            if let c = continuation {
+                continuation = nil
+                early = .some(value)
+                return c
+            }
+            if early == nil { early = .some(value) }
+            return nil
+        }
+        c?.resume(returning: value)
     }
 }
 

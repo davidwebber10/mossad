@@ -90,13 +90,14 @@ final class LoopbackReceiver: @unchecked Sendable {
             guard let self else { return connection.cancel() }
             let text = String(decoding: data ?? Data(), as: UTF8.self)
             let line = text.components(separatedBy: "\r\n").first ?? ""
-            let callback = GoogleCallback.parse(requestLine: line)
+            let parsed = GoogleCallback.parse(requestLine: line)
+            // An answer with another state is not this sign-in's: the page says nothing about it.
+            let callback = parsed.flatMap { c in self.expected.map { c.state == $0 } ?? true ? c : nil }
             let body = Self.page(callback)
             let response = "HTTP/1.1 \(callback == nil ? "404 Not Found" : "200 OK")\r\nContent-Type: text/html; charset=utf-8\r\n"
                 + "Content-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
             connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
             guard let callback else { return }
-            if let expected = self.expected, callback.state != expected { return }
             guard let waiting = self.waiting else {
                 if self.early == nil { self.early = callback }
                 return

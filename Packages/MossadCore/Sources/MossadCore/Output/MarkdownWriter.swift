@@ -110,7 +110,7 @@ public enum MarkdownWriter {
             }
         }
         // Gemini's own notes only when there is no transcript to summarize: otherwise Mossad's summary is the summary.
-        if r.utterances.isEmpty, let notes = r.gemini?.notes { lines += ["## Notes by Gemini", "", notes, ""] }
+        if r.isNotesOnly, r.utterances.isEmpty, let notes = r.gemini?.notes { lines += ["## Notes by Gemini", "", notes, ""] }
         lines += ["## Transcript", "", transcript(r), ""]
         return lines.joined(separator: "\n")
     }

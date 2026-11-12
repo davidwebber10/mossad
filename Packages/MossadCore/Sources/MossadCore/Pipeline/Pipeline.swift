@@ -551,9 +551,12 @@ public actor Pipeline {
     /// notes-only meeting goes without a mark, since its notes live on.
     @discardableResult
     public func moveNotes(from notesID: String, to callID: String) -> Bool {
-        guard let notes = try? CallRecord.load(from: paths.callDirectory(notesID)), notes.isNotesOnly, let ref = notes.gemini,
-              !inFlight.contains(notesID), attachNotes(callID: callID, ref) else { return false }
-        _ = remove(callID: notesID, keepNotes: true)
+        // Only a notes-only meeting that can be removed: else the recording would get the notes and both would stay.
+        guard let notes = try? CallRecord.load(from: paths.callDirectory(notesID)), notes.isNotesOnly, var ref = notes.gemini,
+              notes.status == .written || notes.status == .failed, !inFlight.contains(notesID) else { return false }
+        ref.notes = nil
+        guard attachNotes(callID: callID, ref) else { return false }
+        if let removed = remove(callID: notesID, keepNotes: true) { onDiscard(removed) }
         Log.info("Gemini notes: \(notesID) joined its recording \(callID)")
         return true
     }

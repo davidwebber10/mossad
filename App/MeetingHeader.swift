@@ -66,6 +66,12 @@ struct MeetingHeader: View {
             }
             .frame(minHeight: 20)
             if let source = record.sourceLabel { SourceMark(text: source).frame(minHeight: 20) }
+            // The notes in Google Docs, for a notes-only meeting and for a recording that has them.
+            if let url = record.gemini?.url {
+                Link(destination: url) { SourceMark(text: "Notes by Gemini ↗") }
+                    .frame(minHeight: 20)
+                    .help("Opens Gemini's notes in Google Docs")
+            }
             if let kind = record.kind { TagChip(text: kind) }
             if record.titleSource == .generated { NamedByMossadTag().frame(minHeight: 20) }
             if record.status == .written { TagRow(record: record) }
