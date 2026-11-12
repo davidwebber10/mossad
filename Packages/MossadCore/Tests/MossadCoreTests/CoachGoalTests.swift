@@ -481,7 +481,7 @@ final class CoachGoalTests: XCTestCase {
             let id = "n\(i)"
             let start = focus.proposed.addingTimeInterval(Double(i + 1) * 3600)
             r.findings = ["did_well", "could_be_better"].map {
-                CoachFinding(id: "\(id)|\($0)|s\(i)", callID: id, date: start, kind: CoachFinding.Kind(rawValue: $0), text: "T", skill: "s\(i)\($0)", at: 10)
+                CoachFinding(id: "\(id)|\($0)|s\(i)", callID: id, date: start, kind: CoachFinding.Kind(rawValue: $0), text: "T", skill: "questions", at: 10)
             }
             reviews.append((id, start, r))
         }

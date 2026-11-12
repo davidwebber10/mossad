@@ -70,6 +70,10 @@ enum JSONRepair {
 /// out: a missing nullable field becomes null, a missing list becomes empty, and a value outside an open list
 /// becomes "other".
 enum SchemaCheck {
+    /// Text fields that came after the first replies, where "" means none: a model that leaves one out has none,
+    /// and the reply is not asked for again.
+    static let blankWhenMissing: Set<String> = ["why"]
+
     static func fill(_ value: inout Any, schema: [String: Any], path: String = "") -> [String] {
         if let choices = schema["anyOf"] as? [[String: Any]] {
             let nullable = choices.contains { $0["type"] as? String == "null" }
@@ -106,6 +110,7 @@ enum SchemaCheck {
                 let subPath = path.isEmpty ? key : "\(path).\(key)"
                 guard var field = object[key] else {
                     if allowsNull(sub) { object[key] = NSNull() } else if sub["type"] as? String == "array" { object[key] = [Any]() }
+                    else if blankWhenMissing.contains(key), sub["type"] as? String == "string" { object[key] = "" }
                     else if required.contains(key) { problems.append("\(subPath) is missing") }
                     continue
                 }

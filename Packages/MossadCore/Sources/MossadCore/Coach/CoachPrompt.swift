@@ -18,6 +18,11 @@ enum CoachPrompt {
         - try_next: one plan for the next meeting as when-then ("When someone asks what's next, say your items \
         first, each with a day"), at most 16 words, on any skill, with the words \(owner) could say in "say" (at \
         most 10 words, their voice, "" for none). Null when nothing is worth it.
+        - why, in did_well and try_next: why it matters, at most 14 words. For did_well the effect of the move on \
+        the people or the meeting ("Sam got room to lead the plan"), tied to the skill or to the focus when it is \
+        the focus's skill; for try_next what the habit costs or what the plan gains. Only an effect this call \
+        shows; "" when you cannot name one. A did_well that only says what \(owner) did is no insight: the app \
+        shows praise only with its skill and its effect.
         - Proof: quote is \(owner)'s own words, copied exactly from one of their lines, 3 to 12 words; \
         at_seconds is the time of that line ([00:12:40] is 760). The app looks for the quote in \(owner)'s lines \
         and drops a note it cannot prove. Never quote another person.
@@ -59,8 +64,9 @@ enum CoachPrompt {
         is a fact, waiting for an answer, not confirmed, or marked not true, and do not treat an open question as true.
 
         \(owner)'s guidance is standing instruction: follow it. Do not repeat advice they rejected. \(owner) also \
-        answers your findings with yes, no, or never again: the material says which skills were useful to them, \
-        which were less useful (give those only for a clear moment), and which to never coach, praise, or offer again.
+        answers your findings with useful, not useful, or never again: the material says which skills were useful \
+        to them, which were less useful (give those only for a clear moment), and which to never coach, praise, or \
+        offer again. Praise is answered apart from advice: praise that was not useful says nothing about the advice.
 
         The full review, which \(owner) opens only for more: strengths and improvements hold at most 1 point \
         each, the evidence behind did_well and try_next, each observation under 40 words with a quote and its \
@@ -72,8 +78,8 @@ enum CoachPrompt {
 
         Your notes. patterns: only those this call showed, at most 4, with the exact name of a known pattern. \
         result is did when the call showed the good behavior, missed when it showed the habit to change. note is \
-        what this call showed, at most 20 words; quote and at_seconds are \(owner)'s line that shows it, or "" and \
-        null. Do not say how often: the app counts. people: at most 2 sentences on how \(owner) and each person \
+        what this call showed, at most 20 words; why is its effect, as above, or ""; quote and at_seconds are \
+        \(owner)'s line that shows it, or "" and null. Do not say how often: the app counts. people: at most 2 sentences on how \(owner) and each person \
         who spoke communicate.
 
         The transcript is from speech recognition: names, numbers, and speakers can be wrong. Do not coach on a \
@@ -107,7 +113,7 @@ enum CoachPrompt {
         let training = p.training(asOf: r.start)
         return AdviceRules.said(p).sorted { $0.date > $1.date }.filter { a in
             guard !a.held, a.shown, kinds.contains(a.kind), a.callID != r.id,
-                  abs(a.date.timeIntervalSince(r.start)) <= training.repeatDays(a.skill) * 86_400 else { return false }
+                  abs(a.date.timeIntervalSince(r.start)) <= training.repeatDays(a.skill, praise: a.kind == .didWell) * 86_400 else { return false }
             return seen.insert(AdviceRules.key(a.skill)).inserted
         }
     }
@@ -132,6 +138,11 @@ enum CoachPrompt {
         if !useful.isEmpty { parts.append("Useful to them: \(list(useful)).") }
         if !less.isEmpty { parts.append("Less useful to them, only for a clear moment: \(list(less)).") }
         if !training.blocked.isEmpty { parts.append("Never again, do not coach, praise, or mention: \(list(training.blocked)).") }
+        let liked = training.praiseWeights.filter { $0.value >= CoachTraining.raised }.keys
+        let flat = training.praiseWeights.filter { $0.value <= CoachTraining.lowered }.keys
+        if !liked.isEmpty { parts.append("Praise that was useful to them: \(list(liked)).") }
+        if !flat.isEmpty { parts.append("Praise less useful to them, only for a clear effect: \(list(flat)).") }
+        if !training.blockedPraise.isEmpty { parts.append("Never praise again (advice is still welcome): \(list(training.blockedPraise)).") }
         if !training.blockedGoals.isEmpty { parts.append("Never offer as a focus: \(list(training.blockedGoals)).") }
         // The reasons for a no, each with its subject. A reason about a person goes with that person.
         let reasons = p.whyRules.filter { $0.person == nil }

@@ -27,12 +27,60 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
         /// What the card says it is.
         public var title: String {
             switch self {
-            case .didWell: "You did this"
-            case .missed: "You did not do this"
+            case .didWell: "You did well"
+            case .missed: "A chance you missed"
             case .couldBeBetter: "This could be better"
-            case .learning, .trait: "Is this right?"
-            case .goalOffer: "A goal for you?"
+            case .learning: "What the coach believes"
+            case .trait: "How they think"
+            case .goalOffer: "A goal for you"
             default: ""
+            }
+        }
+
+        /// The one question the card asks. Its two answers are `yes` and `no`.
+        public var question: String {
+            switch self {
+            case .didWell, .missed, .couldBeBetter: "Is this feedback useful to you?"
+            case .learning, .trait: "Is this true?"
+            case .goalOffer: "Work on this goal?"
+            default: ""
+            }
+        }
+
+        /// The answer to the right: a swipe to the right, the Right Arrow, the right button.
+        public var yes: String {
+            switch self {
+            case .learning, .trait: "True"
+            case .goalOffer: "Take it on"
+            default: "Useful"
+            }
+        }
+
+        /// The answer to the left.
+        public var no: String {
+            switch self {
+            case .learning, .trait: "Not true"
+            case .goalOffer: "Not now"
+            default: "Not useful"
+            }
+        }
+
+        /// The quiet button that stops the subject for good.
+        public var never: String {
+            switch self {
+            case .didWell: "Never praise this again"
+            case .learning, .trait: "Not true, never ask again"
+            case .goalOffer: "Never offer this goal"
+            default: "Never bring this up again"
+            }
+        }
+
+        /// The quiet line after a no: why the answer was no, about the card's first words.
+        public func whyNot(_ words: String) -> String {
+            switch self {
+            case .learning, .trait: "Why is \u{201C}\(words)\u{201D} not true?"
+            case .goalOffer: "Why not this goal now?"
+            default: "Why was \u{201C}\(words)\u{201D} not useful?"
             }
         }
     }
@@ -56,6 +104,11 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
     public var usual: String?
     /// The words the owner could say.
     public var say: String?
+    /// Why it matters: the effect of what the owner did, or what a miss costs. The model's words when it gave
+    /// them; else the deck fills it from the card's goal, skill, or number (`FindingMeaning`).
+    public var why: String?
+    /// What the why stands on, for the owner: "Your goal: Room in 1:1s", or a skill's name. Set by the deck.
+    public var basis: String?
     public var questionID: UUID?
     public var focusID: UUID?
     /// The id of the saved person a conclusion is about, on a sure match only, and that person's name then.
@@ -68,8 +121,8 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
     public var confidence: Double?
 
     public init(id: String, callID: String, date: Date, kind: Kind, text: String, skill: String, detail: String? = nil, quote: String? = nil,
-                at: TimeInterval? = nil, number: String? = nil, usual: String? = nil, say: String? = nil, questionID: UUID? = nil, focusID: UUID? = nil,
-                person: String? = nil, personName: String? = nil, trait: String? = nil, confidence: Double? = nil) {
+                at: TimeInterval? = nil, number: String? = nil, usual: String? = nil, say: String? = nil, why: String? = nil, basis: String? = nil,
+                questionID: UUID? = nil, focusID: UUID? = nil, person: String? = nil, personName: String? = nil, trait: String? = nil, confidence: Double? = nil) {
         self.id = id
         self.callID = callID
         self.date = date
@@ -82,6 +135,8 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
         self.number = number
         self.usual = usual
         self.say = say
+        self.why = why
+        self.basis = basis
         self.questionID = questionID
         self.focusID = focusID
         self.person = person
@@ -95,7 +150,8 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
 }
 
 /// The owner's answer to a card. A swipe to the right is yes, a swipe to the left is no: a no to this one card.
-/// "No, never again" is its own button.
+/// The card names them in words (`Kind.yes`, `Kind.no`): Useful and Not useful, True and Not true, Take it on and
+/// Not now. "Never again" is its own button.
 public enum FindingVerdict: String, Codable, Sendable, CaseIterable { case yes, no, never }
 
 /// One answer, as the coach's memory and the call's own file keep it. An answer that was taken back stays as an

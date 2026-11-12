@@ -36,9 +36,11 @@ public struct CoachLine: Codable, Equatable, Sendable, Hashable {
     public var measure: CoachMeasure?
     /// For the focus: how the call went on it.
     public var outcome: FocusOutcome?
+    /// Why it matters, in the model's words. Not counted in `words`: the line shows it only as a card.
+    public var why: String?
 
     public init(kind: Kind, text: String, skill: String, quote: String? = nil, at: TimeInterval? = nil, say: String? = nil,
-                number: String? = nil, measure: CoachMeasure? = nil, outcome: FocusOutcome? = nil) {
+                number: String? = nil, measure: CoachMeasure? = nil, outcome: FocusOutcome? = nil, why: String? = nil) {
         self.kind = kind
         self.text = text
         self.skill = skill
@@ -48,11 +50,12 @@ public struct CoachLine: Codable, Equatable, Sendable, Hashable {
         self.number = number
         self.measure = measure
         self.outcome = outcome
+        self.why = why
     }
 
     init(kind: Kind, note: CoachNote) {
         self.init(kind: kind, text: note.text, skill: note.skill ?? note.text, quote: note.quote, at: note.at, say: note.say,
-                  number: note.number, measure: note.measure)
+                  number: note.number, measure: note.measure, why: note.why)
     }
 
     public var hasProof: Bool { at != nil || number != nil }

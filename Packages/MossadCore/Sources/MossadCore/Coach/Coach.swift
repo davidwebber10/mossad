@@ -69,9 +69,9 @@ public struct LLMCoach: Coaching {
         return Schema.object([
             "quiet": ["type": "boolean"],
             "headline": Schema.string,
-            "did_well": nullable(Schema.object(["text": Schema.string, "quote": Schema.string, "at_seconds": number, "skill": skill,
+            "did_well": nullable(Schema.object(["text": Schema.string, "why": Schema.string, "quote": Schema.string, "at_seconds": number, "skill": skill,
                                                 "skill_label": Schema.string])),
-            "try_next": nullable(Schema.object(["text": Schema.string, "quote": Schema.string, "at_seconds": number, "say": Schema.string,
+            "try_next": nullable(Schema.object(["text": Schema.string, "why": Schema.string, "quote": Schema.string, "at_seconds": number, "say": Schema.string,
                                                 "skill": skill, "skill_label": Schema.string])),
             "seen_again": nullable(Schema.object(["skill": skill, "skill_label": Schema.string, "quote": Schema.string, "at_seconds": number])),
             "focus_result": nullable(Schema.object(["outcome": Schema.oneOf(FocusOutcome.allCases.map(\.rawValue)),
@@ -94,7 +94,7 @@ public struct LLMCoach: Coaching {
             "profile": Schema.object([
                 "patterns": Schema.array(Schema.object([
                     "name": Schema.string, "kind": Schema.oneOf(["strength", "growth"]),
-                    "result": Schema.oneOf(CoachObservation.Result.allCases.map(\.rawValue)), "note": Schema.string,
+                    "result": Schema.oneOf(CoachObservation.Result.allCases.map(\.rawValue)), "note": Schema.string, "why": Schema.string,
                     "quote": Schema.string, "at_seconds": Schema.nullableNumber,
                 ])),
                 "people": Schema.array(Schema.object(["name": Schema.string, "note": Schema.string])),
@@ -144,7 +144,7 @@ public struct LLMCoach: Coaching {
             return CoachFocus(plan: p.plan, why: p.why, metric: p.metric, proposed: record.start, skill: CoachSkill.isNamed(id) ? id : "other:" + AdviceRules.key(p.plan))
         }
         let patterns = out.profile.patterns.prefix(Self.patternsPerCall).map {
-            CoachPatternUpdate(name: $0.name, kind: $0.kind, note: $0.note, result: $0.result, quote: $0.quote?.nonBlank, at: $0.at_seconds)
+            CoachPatternUpdate(name: $0.name, kind: $0.kind, note: $0.note, result: $0.result, quote: $0.quote?.nonBlank, at: $0.at_seconds, why: $0.why?.nonBlank)
         }
         let update = CoachProfileUpdate(summary: "", focus: "", patterns: Array(patterns), people: out.profile.people)
         let questions = (out.questions ?? []).prefix(2).map { asked -> CoachQuestion in
@@ -157,11 +157,12 @@ public struct LLMCoach: Coaching {
 
     private struct Note: Decodable {
         let text: String
-        let quote, say, skill, skill_label: String?
+        let quote, say, skill, skill_label, why: String?
         let at_seconds: Double?
         var note: CoachNote {
             let id = CoachSkill.id(key: skill, label: skill_label)
-            return CoachNote(text: text, quote: quote?.nonBlank, at: at_seconds, say: say?.nonBlank, skill: id, measure: CoachSkill(id: id)?.measure)
+            return CoachNote(text: text, quote: quote?.nonBlank, at: at_seconds, say: say?.nonBlank, skill: id, measure: CoachSkill(id: id)?.measure,
+                             why: why?.nonBlank)
         }
     }
 
@@ -187,7 +188,7 @@ public struct LLMCoach: Coaching {
         let name, note: String
         let kind: CoachPattern.Kind
         let result: CoachObservation.Result?
-        let quote: String?
+        let quote, why: String?
         let at_seconds: Double?
     }
 

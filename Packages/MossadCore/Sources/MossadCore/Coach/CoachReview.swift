@@ -104,9 +104,11 @@ public struct CoachNote: Codable, Equatable, Sendable, Hashable {
     public var measure: CoachMeasure?
     /// The measured number that stands next to the note, when its measure has one.
     public var number: String?
+    /// Why it matters: the effect of the move, or what the miss costs. Nil in reviews from before it.
+    public var why: String?
 
     public init(text: String, quote: String? = nil, at: TimeInterval? = nil, say: String? = nil, skill: String? = nil,
-                measure: CoachMeasure? = nil, number: String? = nil) {
+                measure: CoachMeasure? = nil, number: String? = nil, why: String? = nil) {
         self.text = text
         self.quote = quote
         self.at = at
@@ -114,9 +116,10 @@ public struct CoachNote: Codable, Equatable, Sendable, Hashable {
         self.skill = skill
         self.measure = measure
         self.number = number
+        self.why = why
     }
 
-    enum CodingKeys: String, CodingKey { case text, quote, at, say, skill, measure, number }
+    enum CodingKeys: String, CodingKey { case text, quote, at, say, skill, measure, number, why }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -128,6 +131,7 @@ public struct CoachNote: Codable, Equatable, Sendable, Hashable {
         // A measure from a later build is no measure here, not a review that cannot be read.
         measure = (try? c.decodeIfPresent(CoachMeasure.self, forKey: .measure)) ?? nil
         number = try c.decodeIfPresent(String.self, forKey: .number)
+        why = try c.decodeIfPresent(String.self, forKey: .why)
     }
 }
 

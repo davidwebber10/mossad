@@ -29,7 +29,9 @@ final class FindingTests: XCTestCase {
         CoachNote(text: "When you take an item, say the day.", quote: "Let me look at it and get back to you.", at: 760, say: "I will send it by Friday.", skill: dates)
     }
 
-    private var praise: CoachNote { CoachNote(text: "You named the risk.", quote: "My read is that the vendor price holds", at: 900, skill: risk) }
+    /// Praise needs a skill key, a goal, or a number to be a card (`FindingMeaning`).
+    private let answerFirst = CoachSkill.answerFirst.rawValue
+    private var praise: CoachNote { CoachNote(text: "You gave your read first.", quote: "My read is that the vendor price holds", at: 900, skill: answerFirst) }
 
     private func review(tryNext: CoachNote? = nil, didWell: CoachNote? = nil) -> CoachReview {
         var r = CoachReview(headline: "H", overview: "", strengths: [], improvements: [], focusProgress: nil)
@@ -113,14 +115,16 @@ final class FindingTests: XCTestCase {
 
     func testAPatternThatTheCallShowedIsACardWithTheOwnersWords() {
         let missed = CoachPatternUpdate(name: "Long history first", kind: .growth, note: "You gave the history before the ask.", result: .missed,
-                                        quote: "I went on for a long time about the history", at: 1)
+                                        quote: "I went on for a long time about the history", at: 1, why: "Sam waited for the ask.")
+        // Praise of a pattern has no skill key, goal, or number: it only says what happened, and is no card.
         let did = CoachPatternUpdate(name: "Reflects back", kind: .strength, note: "You said back what you heard.", result: .did,
-                                     quote: "So what I am hearing is that the date moved.", at: 1)
+                                     quote: "So what I am hearing is that the date moved.", at: 1, why: "Sam heard he was understood.")
         let unproven = CoachPatternUpdate(name: "Vague", kind: .growth, note: "N", result: .missed, quote: "Nobody said this at all here.", at: 3)
         let trend = CoachPatternUpdate(name: "Trend", kind: .growth, note: "You did it again, a third time.", result: .missed, quote: "I will send the forecast to finance.", at: 3)
         let cards = settle(review(tryNext: advice), patterns: [missed, did, unproven, trend]).review.findings ?? []
-        XCTAssertEqual(cards.map(\.kind), [.couldBeBetter, .missed, .didWell])
+        XCTAssertEqual(cards.map(\.kind), [.couldBeBetter, .missed])
         XCTAssertEqual(cards[1].text, "You gave the history before the ask.")
+        XCTAssertEqual(cards[1].why, "Sam waited for the ask.")
         XCTAssertEqual(cards[1].at, 1500, "the time is where code found the words")
         XCTAssertEqual(cards[1].skill, "pattern:long history first")
     }
@@ -129,7 +133,8 @@ final class FindingTests: XCTestCase {
         let patterns = (0..<6).map { i in
             CoachPatternUpdate(name: "P\(i)", kind: .growth, note: "Note \(i).", result: .missed,
                                quote: ["I will send the forecast to finance.", "So what I am hearing is that the date moved.", "I went on for a long time about the history there.",
-                                       "My read is that the vendor price holds until March.", "Let me look at it and get back to you.", "I will send the forecast"][i], at: 1)
+                                       "My read is that the vendor price holds until March.", "Let me look at it and get back to you.", "I will send the forecast"][i], at: 1,
+                               why: "W\(i).")
         }
         let made = settle(review(tryNext: advice), patterns: patterns).review
         var profile = CoachProfile()
@@ -361,7 +366,7 @@ final class FindingTests: XCTestCase {
             XCTAssertEqual(deck(made, p, now: 2), cards, "\(card.kind.rawValue)")
             XCTAssertEqual(p.facts, card.kind == .didWell ? [] : before.facts)
             XCTAssertEqual(p.activeFocus, nil)
-            XCTAssertEqual(p.training(asOf: base).weight(risk), 0)
+            XCTAssertEqual(p.training(asOf: base).weight(answerFirst, praise: true), 0)
             XCTAssertNil(p.answer(to: card.id), "the answer is taken back")
         }
         profile.answer(cards[1], .no, at: base.addingTimeInterval(day))
@@ -410,7 +415,7 @@ final class FindingTests: XCTestCase {
         profile.answer(card(.missed, skill: CoachSkill.interruptions.rawValue), .never, at: base)
         profile.answer(CoachFinding(id: "g", callID: "c", date: base, kind: .goalOffer, text: "P", skill: CoachSkill.longTurns.rawValue, at: 1, focusID: UUID()), .never, at: base)
         let text = CoachPrompt.trainingText(profile, record: call("d", day: 1))
-        XCTAssertTrue(text.contains("Useful to them: other, skill_label \"name the risk\""), text)
+        XCTAssertTrue(text.contains("Praise that was useful to them: other, skill_label \"name the risk\""), text)
         XCTAssertTrue(text.contains("Less useful to them"), text)
         XCTAssertTrue(text.contains("commitment-dates"), text)
         XCTAssertTrue(text.contains("Never again"), text)
@@ -446,7 +451,7 @@ final class FindingTests: XCTestCase {
         let q = try JSONDecoder.coach.decode(CoachProfile.self, from: Data(later.utf8))
         XCTAssertEqual(q.answers.map(\.id), ["a", "b"])
         XCTAssertNil(q.answers[1].verdict)
-        XCTAssertEqual(q.training(asOf: base).weight("s"), 1)
+        XCTAssertEqual(q.training(asOf: base).weight("s", praise: true), 1, "a yes on praise counts for the praise")
         // A card of a kind from a later build is not shown, and the review reads.
         let cards = #"{"headline":"H","overview":"","strengths":[],"improvements":[],"version":3,"findings":[{"id":"x","callID":"c","date":"2026-10-01T10:00:00Z","kind":"some_new_kind","text":"T","skill":"s","at":4}]}"#
         let r = try JSONDecoder.coach.decode(CoachReview.self, from: Data(cards.utf8))
@@ -514,7 +519,8 @@ final class FindingTests: XCTestCase {
         profile.forget(callID: "a")
         XCTAssertEqual(profile.answers.map(\.verdict), [.no, .never], "an answer is the owner's signal about the coaching")
         XCTAssertEqual(profile.training(asOf: base).weight(dates), -1)
-        XCTAssertTrue(profile.training(asOf: base).isBlocked(risk))
+        XCTAssertTrue(profile.training(asOf: base).isBlocked(risk, praise: true))
+        XCTAssertFalse(profile.training(asOf: base).isBlocked(risk), "never again on praise leaves the advice")
         // The other device has the same answers: a merge brings nothing back and takes nothing away.
         XCTAssertEqual(profile.merged(with: other).answers, profile.answers)
     }
@@ -756,7 +762,8 @@ final class FindingTests: XCTestCase {
     func testAnAnswerThatEndsAConclusionOrAGoalOfferMakesNoRoomForAThirdCard() {
         let patterns = (0..<3).map { i in
             CoachPatternUpdate(name: "P\(i)", kind: .growth, note: "Note \(i).", result: .missed,
-                               quote: ["I will send the forecast to finance.", "So what I am hearing is that the date moved.", "I went on for a long time about the history there."][i], at: 1)
+                               quote: ["I will send the forecast to finance.", "So what I am hearing is that the date moved.", "I went on for a long time about the history there."][i], at: 1,
+                               why: "W\(i).")
         }
         let made = settle(review(tryNext: advice), patterns: patterns).review
         var profile = CoachProfile()
