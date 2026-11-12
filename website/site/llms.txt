@@ -4,7 +4,7 @@
 
 Mossad is work intelligence for your Mac. It records your calls without a bot, then keeps meeting notes, transcripts that know who spoke, decisions, action items, the promises you made, and a page for each person you meet. Before a meeting, it shows who is coming, what happened last time, and what you still owe. It is free and open source under the MIT License.
 
-- Latest version: 2.21.0
+- Latest version: 2.22.0
 - Requires: macOS 26 or later on Apple silicon
 - Price: free. Cloud AI providers that you connect bill you directly; models on your Mac cost nothing.
 - Website: https://getmossad.com/
@@ -18,7 +18,7 @@ Mossad is work intelligence for your Mac. It records your calls without a bot, t
 - **Coach.** A coach that reads your calls and gives you one thing to work on, with the proof. One line per call; Findings you can answer; Goals with a number; A weekly review; It remembers; Was it worth it.
 - **Meetings.** Find any meeting, prepare for the next one, and keep the moments that matter. Before this meeting; Recurring meetings; Filter by anything; Search everything; A search in every list; Back and Forward; Bookmark a moment; Shared screens; What you promised; A calendar of your meetings.
 - **Analytics.** Numbers about your meetings that say a change only when there is one. Each meeting in numbers; How you communicate; Where your time goes; What it costs you.
-- **Chat and MCP for other AI apps.** Ask your meetings a question, here or in the AI app you already use. Ask your meetings; MCP on your Mac; MCP for web AI apps; Notes your agents can read.
+- **Chat and MCP for other AI apps.** Ask your meetings a question, here or in the AI app you already use. Ask your meetings; Ask the call you are on; MCP on your Mac; MCP for web AI apps; Notes your agents can read.
 - **iPhone.** Your meetings on your phone, and a recorder for the meetings in a room. Your meetings, in your pocket; Record in the room.
 - **Sharing with PIN.** Send one meeting to someone, on your own server, with the parts you choose. Share one meeting; A PIN on the link; See who opened it; Copy for their AI.
 - **Storage, your own server, backups.** Your meetings live in a folder on your Mac. Anything more is your choice. A folder you own; Your own server; Recording backup; iCloud sync.
