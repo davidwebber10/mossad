@@ -117,27 +117,53 @@ public final class VoiceLibrary: @unchecked Sendable {
         }
     }
 
-    /// A blank email clears it. A name with no profile gets one without voice samples, so the email is kept
-    /// even when voice fingerprints are off.
-    public func setEmail(_ email: String?, for name: String) throws {
+    /// The first address of a person, as the edit sheet sets it. A blank one clears the first address; the others
+    /// stay. An address the person has already becomes the first, and none goes. An address another person has
+    /// stays theirs: the answer says whose, and nothing changes. A name with no profile gets one without voice
+    /// samples, so the address is kept even when voice fingerprints are off.
+    @discardableResult
+    public func setEmail(_ email: String?, for name: String) throws -> EmailAddResult {
         let trimmed = email?.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = trimmed?.isEmpty == false ? trimmed : nil
-        try lock.withLock {
+        if let value, CompanyDomains.split(value) == nil { return .notAnAddress }
+        return try lock.withLock {
             let i: Int
             if let known = storage.firstIndex(where: { $0.name == name }) {
                 i = known
-                // The first address changes; the others stay, without a copy of the new one.
-                let rest = storage[i].emails.dropFirst().filter { a in value.map { a.lowercased() != $0.lowercased() } ?? true }
-                storage[i].setEmails((value.map { [$0] } ?? []) + rest)
+                let mine = storage[i].emails
+                if let value {
+                    if let at = mine.firstIndex(where: { $0.lowercased() == value.lowercased() }) {
+                        guard at > 0 else { return .alreadyTheirs }
+                        storage[i].setEmails([mine[at]] + mine.enumerated().filter { $0.offset != at }.map(\.element))
+                        try save()
+                        attached?.emailChanged(storage[i])
+                        return .alreadyTheirs
+                    }
+                    if let other = holder(of: value, except: name, profile: storage[i]) { return .belongsTo(other) }
+                    storage[i].setEmails([value] + mine.dropFirst())
+                } else {
+                    guard !mine.isEmpty else { return .alreadyTheirs }
+                    storage[i].setEmails(Array(mine.dropFirst()))
+                }
             } else if let value {
+                if let other = holder(of: value, except: name, profile: nil) { return .belongsTo(other) }
                 i = storage.count
                 storage.append(VoiceProfile(name: name, isOwner: false, embeddings: [], email: value))
             } else {
-                return
+                return .alreadyTheirs
             }
             try save()
             attached?.emailChanged(storage[i])
+            return .added
         }
+    }
+
+    /// Who else has an address: another profile, else another saved person. Call it inside the lock.
+    private func holder(of address: String, except name: String, profile: VoiceProfile?) -> String? {
+        let a = EmailIdentity.normalized(address)
+        if let other = storage.first(where: { $0.name != name && $0.emails.contains { $0.lowercased() == a } }) { return other.name }
+        if let other = attached?.holder(of: a, for: profile), other != name { return other }
+        return nil
     }
 
     /// The profile name stored with this email, any of a profile's addresses, ignoring case.
@@ -154,8 +180,7 @@ public final class VoiceLibrary: @unchecked Sendable {
         return try lock.withLock {
             let i = storage.firstIndex { $0.name == name }
             if let i, storage[i].emails.contains(where: { $0.lowercased() == address }) { return .alreadyTheirs }
-            if let other = storage.first(where: { $0.name != name && $0.emails.contains { $0.lowercased() == address } }) { return .belongsTo(other.name) }
-            if let other = attached?.holder(of: address, for: i.map { storage[$0] }), other != name { return .belongsTo(other) }
+            if let other = holder(of: address, except: name, profile: i.map { storage[$0] }) { return .belongsTo(other) }
             let j: Int
             if let i {
                 j = i

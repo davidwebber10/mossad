@@ -964,7 +964,12 @@ public actor Pipeline {
         }
         for (key, email) in emails {
             guard let name = chosen[key] ?? current.speakerNames[key] else { continue }
-            do { try library.setEmail(email, for: name) } catch { Log.error("Saving email for \(name) failed: \(error)") }
+            // One more address of the person; one that another person has stays with them.
+            do {
+                if case .belongsTo(let other) = try library.addEmail(email, for: name) {
+                    Log.info("An address picked for a voice is another person's; it stays with \(other)")
+                }
+            } catch { Log.error("Saving email for \(name) failed: \(error)") }
         }
         // Save the names before the summary request, so a second save made meanwhile starts from them. The new
         // summary takes a while; until it lands, the old one shows the names in place of the letters.

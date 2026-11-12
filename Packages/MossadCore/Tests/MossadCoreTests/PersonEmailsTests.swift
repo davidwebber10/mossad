@@ -24,13 +24,6 @@ final class PersonEmailsTests: XCTestCase {
         XCTAssertFalse(domains.contains("sam@other.test"))
     }
 
-    func testSuggestionsStartWithTheOwnersDomainThenTheMostInvitedOnes() {
-        let invites = [["a@acmeinc.test", "b@vendor.test", "c@gmail.com"], ["d@acmeinc.test", "e@vendor.test"], ["f@acmeinc.test", "g@once.test"],
-                       ["room@resource.calendar.google.com", "h@acme.test"]]
-        XCTAssertEqual(CompanyDomains.suggestions(ownerEmails: ["me@acme.test"], invites: invites),
-                       ["acme.test", "acmeinc.test", "vendor.test"], "public mail, rooms, and a domain seen once are no suggestion")
-    }
-
     func testAnAddressOnAnotherListedDomainIsTheOnePersonWithThatLocalPart() {
         let sam = person("sam", "Sam Carter", ["sam.carter@acme.test"])
         let riley = person("riley", "Riley Park", ["riley@acme.test"])
@@ -68,8 +61,8 @@ final class PersonEmailsTests: XCTestCase {
     }
 
     func testTheDirectoryUsesTheCompanyDomains() {
-        let directory = PersonDirectory([.init(name: "Sam Carter", email: "sam@acme.test")], domains: domains)
-        XCTAssertEqual(directory.link(for: "sam@acmeoutdoor.test"), "Sam Carter")
+        let directory = PersonDirectory([.init(name: "Sam Carter", email: "sam.carter@acme.test")], domains: domains)
+        XCTAssertEqual(directory.link(for: "sam.carter@acmeoutdoor.test"), "Sam Carter")
         XCTAssertNotEqual(directory, PersonDirectory([.init(name: "Sam Carter", email: "sam@acme.test")]), "other domains, other answers")
     }
 

@@ -170,9 +170,11 @@ final class GooglePeopleTests: XCTestCase {
         let again = PeopleStore(directory: dir)
         XCTAssertEqual(again.person(id)?.directory?.jobTitle, "Staff Engineer")
         XCTAssertEqual(again.person(id)?.displayName, "Sam Carter")
-        // The phone gets the allowed fields only: no job, no photo.
+        // The owner's devices get the job and the team, by the owner's choice; never the photo.
         let synced = try JSONSerialization.jsonObject(with: try JSONEncoder.callRecord.encode(SyncedPeople.Entry(again.person(id)!))) as? [String: Any]
-        XCTAssertNil(synced?["directory"])
+        let directory = synced?["directory"] as? [String: Any]
+        XCTAssertEqual(directory?["jobTitle"] as? String, "Staff Engineer")
+        XCTAssertNil(directory?["photoURL"])
     }
 
     func testAnInviteeGivenOnlyAsAnAddressGetsItsName() {

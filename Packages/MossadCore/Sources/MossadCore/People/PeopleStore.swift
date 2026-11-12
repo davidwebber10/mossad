@@ -307,6 +307,20 @@ public final class PeopleStore: @unchecked Sendable {
         }
     }
 
+    /// "Not their address": the address is the person's no more, and no rule gives it to them again. Google's
+    /// directory does not bring it back.
+    public func rejectEmail(_ address: String, for id: PersonID) throws {
+        let a = EmailIdentity.normalized(address)
+        try change { people, date in
+            guard let i = people.firstIndex(where: { $0.id == id && $0.isLive }) else { return [] }
+            guard !people[i].emails.contains(where: { $0.address == a && $0.state == .rejected }) else { return [] }
+            people[i].emails.removeAll { $0.address == a }
+            people[i].emails.append(EmailIdentity(address: a, state: .rejected, source: .owner, at: date))
+            people[i].updated = date
+            return [PeopleLogEntry(at: date, kind: "email", actor: "owner", subject: id, after: "rejected")]
+        }
+    }
+
     /// The live person, other than `except`, who has this address (not rejected, not a team address).
     public func holder(of address: String, except: PersonID? = nil) -> Person? {
         let a = EmailIdentity.normalized(address)

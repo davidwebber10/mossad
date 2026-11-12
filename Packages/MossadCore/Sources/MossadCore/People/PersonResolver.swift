@@ -162,6 +162,19 @@ public struct PersonResolver: Sendable {
 
     public func person(_ id: PersonID) -> Person? { index[id].map { entries[$0].person } }
 
+    /// "sam.carter", "carter", "scarter", "samcarter": the family name of the person is in the name before the @.
+    private static func holdsFamilyName(_ local: String, _ entry: Entry) -> Bool {
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).filter { $0.isLetter } }
+        let parts = local.split(whereSeparator: { !$0.isLetter }).map { fold(String($0)) }
+        let joined = fold(local)
+        return entry.names.contains { name in
+            guard let family = name.family.map(fold), family.count >= 2 else { return false }
+            if parts.contains(family) { return true }
+            let given = name.given.map(fold) ?? ""
+            return joined == given + family || (given.first.map { joined == String($0) + family } ?? false)
+        }
+    }
+
     /// The best relation of a written name to any form of a person. A conflict with one form blocks the others.
     private func fit(_ written: ParsedName, _ entry: Entry) -> NameFit {
         let all = entry.names.map { PersonNames.fit(written, $0) }
@@ -191,17 +204,32 @@ public struct PersonResolver: Sendable {
             // Rules 1 and 1b: the email beats the name.
             if let r = Self.one(having(.verified), rule: .verifiedEmail, confidence: .certain) { return r }
             if let r = Self.one(having(.seen), rule: .seenEmail, confidence: .strong) { return r }
-            // Rule 1c: nobody has the address itself, and one person has its name on another company domain.
-            if holders.isEmpty, domains.contains(email), let local = CompanyDomains.split(email)?.local {
-                let hits = (byLocal[local] ?? []).filter { !blocked.contains($0) }
-                if hits.count == 1 { return .resolved(entries[hits[0]].person.id, rule: .companyEmail, confidence: .strong) }
-            }
         }
         if let identity = o.identity {
             for (i, e) in entries.enumerated() where e.person.identities.contains(where: { $0.isSame(identity) && $0.state == .rejected }) { blocked.insert(i) }
             // Rule 2.
             let holders = entries.enumerated().filter { i, e in !blocked.contains(i) && e.person.identities.contains { $0.isSame(identity) } }.map(\.element)
             if let r = Self.one(holders, rule: .externalID, confidence: .certain) { return r }
+        }
+        // Rule 1c: nobody has the address itself, and one saved person has its name before the @ on another company
+        // domain. One saved person is not one person: the names must agree, a name on the invite that does not fit
+        // blocks it, and with no name only the family name before the @ links. A role address never does.
+        if let email, !email.isEmpty, (byEmail[email] ?? []).isEmpty, domains.contains(email),
+           let local = CompanyDomains.split(email)?.local, !CompanyDomains.isRole(local) {
+            let hits = (byLocal[local] ?? []).filter { !blocked.contains($0) }
+            if hits.count == 1 {
+                let entry = entries[hits[0]]
+                let named = PersonNames.parse(written)
+                if named.isName {
+                    let f = fit(named, entry)
+                    if f != .conflict, f != .none { return .resolved(entry.person.id, rule: .companyEmail, confidence: .strong) }
+                    blocked.insert(hits[0])
+                } else if Self.holdsFamilyName(local, entry) {
+                    return .resolved(entry.person.id, rule: .companyEmail, confidence: .strong)
+                } else {
+                    return .suggestion(entry.person.id, rule: .companyEmail, evidence: [email])
+                }
+            }
         }
 
         let name = PersonNames.parse(written)

@@ -44,7 +44,7 @@ public enum PeopleDuplicates {
     }
 
     static func reason(_ a: VoiceProfile, _ b: VoiceProfile) -> Reason? {
-        if let ea = a.email?.lowercased(), ea == b.email?.lowercased() { return .sameEmail }
+        if !Set(a.emails.map { $0.lowercased() }).isDisjoint(with: b.emails.map { $0.lowercased() }) { return .sameEmail }
         let na = normalized(a.name), nb = normalized(b.name)
         if na == nb { return .sameName }
         // One name written two ways: last name first, a middle name, or a short first name.
@@ -90,6 +90,6 @@ extension VoiceLibrary {
     /// The saved person a new name stands for, when a voice is named: the same email (any case), or the whole
     /// name in any case, spacing, or order. Nil for someone new, and for a guess (`PersonDirectory.existing`).
     public func existingName(name: String, email: String?) -> String? {
-        PersonDirectory.existing(name: name, email: email, among: profiles.map { PersonDirectory.Person(name: $0.name, email: $0.email) })
+        PersonDirectory.existing(name: name, email: email, among: profiles.map { PersonDirectory.Person(name: $0.name, emails: $0.emails) })
     }
 }

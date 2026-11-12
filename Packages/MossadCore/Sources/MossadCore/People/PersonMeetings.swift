@@ -22,7 +22,7 @@ public struct PersonMeetings: Sendable, Equatable {
     }
 
     /// How often the meetings come, from the last 90 days.
-    public enum Cadence: Sendable, Equatable { case daily, weekly, everyOtherWeek, monthly }
+    public enum Cadence: Sendable, Equatable { case daily, severalAWeek, weekly, everyOtherWeek, monthly }
 
     /// The numbers of the page's top band. Only a meeting they spoke in, with the owner there, proves that the two
     /// met: an invite and a notes-only meeting the owner may have missed count in `meetings` and nowhere else.
@@ -96,6 +96,7 @@ public struct PersonMeetings: Sendable, Equatable {
         guard now.timeIntervalSince(last) / 86_400 <= max(2 * mean, 2) else { return nil }
         switch mean {
         case ..<2: return .daily
+        case ..<5: return .severalAWeek
         case ..<10: return .weekly
         case ..<20: return .everyOtherWeek
         case ..<45: return .monthly

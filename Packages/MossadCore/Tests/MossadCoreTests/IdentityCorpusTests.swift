@@ -158,4 +158,22 @@ final class IdentityCorpusTests: XCTestCase {
         XCTAssertEqual(found.map(\.reason), [.sameName, .sameName])
         XCTAssertEqual(Set(found.map(\.id)), ["Carter, Sam|Sam Carter", "Michael Reed|Mike Reed"])
     }
+
+    /// The company's domains (made up): an address on another listed domain is a person only when the names agree.
+    func testTheCompanyDomainRows() {
+        let saved = PersonDirectory([.init(name: "Sam Carter", emails: ["sam@acme.test", "sam.carter@acme.test"]), .init(name: "Dana Lee", email: "info@acme.test")],
+                                    domains: CompanyDomains.parse("acme.test, acmeinc.test"))
+        let rows: [(written: String, invite: Invitee?, link: String?, why: String)] = [
+            ("Sam Reed <sam@acmeinc.test>", nil, nil, "a conflicting name on the invite"),
+            ("sam@acmeinc.test", Invitee(name: "Sam Reed", email: "sam@acmeinc.test"), nil, "the invite pairs the address with another name"),
+            ("sam@acmeinc.test", nil, nil, "a first name alone before the @ can be a second Sam"),
+            ("sam.carter@acmeinc.test", nil, "Sam Carter", "the family name before the @"),
+            ("Sam Carter <sam@acmeinc.test>", nil, "Sam Carter", "the names agree"),
+            ("info@acmeinc.test", nil, nil, "a role address is nobody"),
+            ("sam@other.test", nil, nil, "a domain that is not listed"),
+        ]
+        for row in rows {
+            XCTAssertEqual(saved.with(invitees: row.invite.map { [$0] }).link(for: row.written), row.link, "\(row.written): \(row.why)")
+        }
+    }
 }
