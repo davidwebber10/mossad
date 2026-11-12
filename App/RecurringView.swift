@@ -38,9 +38,11 @@ struct RecurringView: View {
                 // Development hook for screenshots: MOSSAD_RECURRING_SERIES names the series to open.
                 let preview = DevHooks.preview ? ProcessInfo.processInfo.environment["MOSSAD_RECURRING_SERIES"] : nil
                 let visible = filters.visible(all)
-                // The page shows a series of the list: the selected one while it is in the list, else the first one.
+                // The page shows a series of the list: the selected one while it is in the list (or while Back or a link
+                // asks for it and the list is still answering), else the first one.
                 let selected = model.series(model.selected) ?? preview.flatMap { t in all.first { $0.title == t } }
-                let shown = selected.flatMap { s in visible.contains { $0.id == s.id } ? s : nil } ?? visible.first
+                let shownID = SeriesShown.pick(selected: selected?.id, asked: model.asked, visible: visible.map(\.id), all: all.map(\.id))
+                let shown = shownID.flatMap { id in all.first { $0.id == id } }
                 HStack(spacing: 0) {
                     ListColumn("Recurring", widthKey: "recurring", search: search, searchPrompt: Self.searchPrompt) {
                         SeriesFilterButton(filters: filters)
@@ -205,6 +207,10 @@ private struct SeriesRow: View {
     private func placeLine(_ place: SeriesListSearch.Match) -> some View {
         if let id = place.meetingID {
             Button {
+                // The series of this line becomes the place to come back to, then the meeting opens as one step.
+                controller.series.selected = series.id
+                controller.navigation.report(.recurring, .init(item: series.id))
+                controller.navigation.recordNow()
                 if let time = place.match.time { controller.showMoment(id, at: time) } else { controller.openMeeting(id) }
             } label: {
                 ListMatchLine(match: place.match).multilineTextAlignment(.leading).contentShape(Rectangle())
@@ -216,11 +222,20 @@ private struct SeriesRow: View {
         }
     }
 
+    /// The row's short day: "Today", "Tomorrow", the weekday inside a week, else "Tue, Nov 17". The headers keep
+    /// the long form; the row has one line.
+    private static func shortDay(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) || calendar.isDateInTomorrow(date) { return UpcomingHeader.day(date) }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: calendar.startOfDay(for: date)).day ?? 0
+        return days < 7 ? date.formatted(.dateTime.weekday(.wide)) : date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
+
     /// "Every Tuesday 10:00 · Next Tue · 12 meetings".
     private var subtitle: String {
         var parts: [String] = []
         if let c = series.cadence { parts.append(c.text(time: clockTime)) } else if series.recurringInCalendar { parts.append("Repeats") }
-        if let next = series.next { parts.append("Next: \(UpcomingHeader.day(next.start))") }
+        if let next = series.next { parts.append("Next: \(Self.shortDay(next.start))") }
         let n = series.meetings.count
         parts.append(n == 0 ? "None recorded yet" : "\(n) \(n == 1 ? "meeting" : "meetings")")
         return parts.joined(separator: " · ")

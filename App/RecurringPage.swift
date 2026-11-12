@@ -198,10 +198,7 @@ private struct RecurringHeader: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Button("Prepare") {
-                    controller.selectedMeetingID = next.id
-                    controller.open(.meetings)
-                }
+                Button("Prepare") { controller.openMeeting(next.id) }
                 .buttonStyle(.plain).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
                 .help("Open the page of this meeting")
                 Spacer(minLength: 0)

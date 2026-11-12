@@ -34,6 +34,10 @@ public enum UsageReportPlan {
         public var allows: Bool { enabled && !inert && !rehearsal && !rootOverride && (!debugBuild || debugFlag) }
     }
 
+    /// Whether the counts can be made: the meetings and the calendar are read. Before that a count of recurring
+    /// meetings would say 0 for "not read yet", which the receiver cannot tell from none, so the report waits.
+    public static func inputsRead(meetings: Bool, calendar: Bool) -> Bool { meetings && calendar }
+
     public static func isDue(lastAttempt: Date?, now: Date) -> Bool {
         guard let lastAttempt else { return true }
         let since = now.timeIntervalSince(lastAttempt)

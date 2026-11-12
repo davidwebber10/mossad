@@ -11,17 +11,20 @@ public struct NavigationPlace: Codable, Equatable, Sendable {
     public var tab: String?
     public var search: String?
     public var filter: MeetingFilter?
+    /// The Recurring list's filter.
+    public var seriesFilter: SeriesFilter?
     /// Seconds into the meeting, when it was opened at a moment.
     public var time: TimeInterval?
 
     public init(section: String, page: String? = nil, item: String? = nil, tab: String? = nil, search: String? = nil,
-                filter: MeetingFilter? = nil, time: TimeInterval? = nil) {
+                filter: MeetingFilter? = nil, seriesFilter: SeriesFilter? = nil, time: TimeInterval? = nil) {
         self.section = section
         self.page = page
         self.item = item
         self.tab = tab
         self.search = search
         self.filter = filter
+        self.seriesFilter = seriesFilter
         self.time = time
     }
 

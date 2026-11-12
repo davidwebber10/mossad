@@ -31,7 +31,7 @@ struct MenuContent: View {
             if next != nil || !recent.isEmpty { PanelDivider() }
             if let next {
                 PanelHeader(text: "Next")
-                PanelRow(action: { go { controller.selectedMeetingID = next.id; controller.open(.meetings) } }) {
+                PanelRow(action: { go { controller.openMeeting(next.id) } }) {
                     Group {
                         if let p = next.platform {
                             PlatformDot(platform: p, hollow: true)
@@ -49,7 +49,7 @@ struct MenuContent: View {
                     }
                 }
                 NextPointsRows(points: controller.nextTimePoints(for: next)) {
-                    go { controller.selectedMeetingID = next.id; controller.open(.meetings) }
+                    go { controller.openMeeting(next.id) }
                 }
                 .task(id: controller.meetingsVersion) { controller.refreshSeries() }
             }

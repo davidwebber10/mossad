@@ -58,6 +58,8 @@ final class NavigationModel: ObservableObject {
             controller.$meetingQuery.sink(receiveValue: poke),
             controller.$windowVisible.sink(receiveValue: poke),
             controller.meetingFilter.$filter.sink(receiveValue: poke),
+            controller.seriesFilter.$query.sink(receiveValue: poke),
+            controller.seriesFilter.$filter.sink(receiveValue: poke),
             controller.series.$selected.sink(receiveValue: poke),
             NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)
                 .sink { [weak self] _ in MainActor.assumeIsolated { self?.savedChoicesChanged() } },
@@ -92,6 +94,12 @@ final class NavigationModel: ObservableObject {
             guard !Task.isCancelled else { return }
             self?.record()
         }
+    }
+
+    /// Takes the place now, before a move that follows at once, so the current step is what the window showed.
+    func recordNow() {
+        noting?.cancel()
+        record()
     }
 
     private func record() {

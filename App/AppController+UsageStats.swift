@@ -57,7 +57,8 @@ extension AppController {
         let defaults = UserDefaults.standard
         let last = defaults.object(forKey: UsageReportPlan.lastAttemptKey) as? Date
         guard usageStatsGate.allows, !isRecording, UsageReportPlan.isDue(lastAttempt: last, now: Date()) else { return }
-        let stats = await makeUsageStats()
+        // Not marked as tried: the next hour tries again once the meetings and the calendar are read.
+        guard let stats = await makeUsageStats() else { return }
         guard !Task.isCancelled, usageStatsGate.allows, !isRecording, stats.isSendable else { return }
         // Before the send: a failure waits for the next day, with no retry in between.
         defaults.set(Date(), forKey: UsageReportPlan.lastAttemptKey)
@@ -70,8 +71,10 @@ extension AppController {
         await withTaskCancellationHandler { _ = await send.value } onCancel: { send.cancel() }
     }
 
-    /// The report as it would go now. The "What is sent" sheet shows this.
-    func makeUsageStats() async -> UsageStats {
+    /// The report as it would go now. The "What is sent" sheet shows this. Nil until the meetings and the calendar
+    /// are read: a count of recurring meetings made before would be a wrong 0.
+    func makeUsageStats() async -> UsageStats? {
+        guard UsageReportPlan.inputsRead(meetings: meetingsLoaded, calendar: calendarRead) else { return nil }
         let records = meetings
         let transcription = transcriptionProvider
         let summary = aiProvider
@@ -83,7 +86,9 @@ extension AppController {
             shares: shareBook.links.contains { !$0.isExpired() && $0.stopping != true })
         let people = library.identity?.people.people.filter { $0.isLive && !$0.isOwner }.count
             ?? library.profiles.filter { !$0.isOwner }.count
-        let recurring = series.all.count
+        // From the inputs, as the Recurring page makes its catalog, so no page has to have opened first.
+        let seriesInputs = SeriesModel.Inputs(events: calendarEvents, records: records, owner: ownerName, profiles: library.profiles,
+                                              ownerEmail: UserDefaults.standard.string(forKey: "ownerEmail") ?? "", peopleDir: paths.people)
         let counters = usageCounters
         let commitments = paths.commitments
         let id = UsageReportPlan.installID()
@@ -91,6 +96,7 @@ extension AppController {
         let summaryReady = hasLanguageModel
         return await Task.detached(priority: .utility) {
             let open = ((try? CommitmentBook.load(from: commitments)) ?? CommitmentBook()).visible.filter { $0.done == nil }.count
+            let recurring = SeriesModel.catalog(seriesInputs).all.count
             let input = UsageStats.Input(
                 installID: id, appVersion: version, build: build, os: ProcessInfo.processInfo.operatingSystemVersion,
                 cpuBrand: Self.cpuBrand(), language: Locale.current.language.languageCode?.identifier,
