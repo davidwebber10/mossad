@@ -14,11 +14,53 @@ final class UpcomingTests: XCTestCase {
         let link = "https://meet.google.com/abc-defg-hij"
         let events = [
             event("Later", in: 120, text: link), event("Running", in: -10, text: link), event("Done", in: -60, text: link),
-            event("Holiday", in: 0, length: 1440, text: link, allDay: true), event("Far", in: 60 * 24 * 9, text: link), event("Soon", in: 15, text: link),
+            event("Holiday", in: 0, length: 1440, text: link, allDay: true), event("Far", in: 60 * 24 * 50, text: link), event("Soon", in: 15, text: link),
             event("Lunch", in: 30, text: "Cafe"),
         ]
         // Lunch has no call link, so it is not a call.
         XCTAssertEqual(UpcomingMeeting.from(events, now: now).map(\.title), ["Running", "Soon", "Later"])
+    }
+
+    func testTheListsShowTheWholeReadOfTheCalendar() {
+        let link = "https://meet.google.com/abc-defg-hij"
+        // One window for the lists, the calendar, the prep pages, and the series: 45 days, read once.
+        XCTAssertEqual(UpcomingMeeting.days, 45)
+        let events = [event("Next week", in: 60 * 24 * 8, text: link), event("Next month", in: 60 * 24 * 30, text: link),
+                      event("Last day", in: 60 * 24 * 44.9, text: link), event("Too far", in: 60 * 24 * 46, text: link)]
+        XCTAssertEqual(UpcomingMeeting.from(events, now: now, limit: .max).map(\.title), ["Next week", "Next month", "Last day"])
+        // The menu bar keeps its own short count.
+        let many = (1...20).map { event("Call \($0)", in: Double($0) * 60, text: link) }
+        XCTAssertEqual(UpcomingMeeting.from(many, now: now).count, UpcomingMeeting.limit)
+    }
+
+    func testAPastRecordingHidesOnlyItsOwnInvite() {
+        let link = "https://meet.google.com/abc-defg-hij"
+        var done = CallRecord(id: "done", platform: .meet, bundleID: "", start: now.addingTimeInterval(-1200), end: now.addingTimeInterval(-60), status: .written)
+        done.calendarTitle = "Weekly sync"
+        var old = CallRecord(id: "old", platform: .meet, bundleID: "", start: now.addingTimeInterval(-8 * 86_400), end: now.addingTimeInterval(-8 * 86_400 + 1800), status: .written)
+        old.calendarTitle = "Weekly sync"
+        let events = [event("Weekly sync", in: -20, length: 30, text: link), event("Weekly sync", in: 60 * 24 * 7, text: link)]
+        XCTAssertEqual(UpcomingMeeting.from(events, now: now, recorded: [done, old]).map(\.start), [events[1].start])
+    }
+
+    func testTheUpcomingListGroupsByDayLatestOnTop() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        cal.locale = Locale(identifier: "en_US")
+        // `now` is Friday, January 15, 2027, 08:00 UTC.
+        let link = "https://meet.google.com/abc-defg-hij"
+        let hour = 60.0
+        let events = [event("Today early", in: 1 * hour, text: link), event("Today late", in: 6 * hour, text: link),
+                      event("Tomorrow", in: 26 * hour, text: link), event("Monday", in: 3 * 24 * hour, text: link),
+                      event("Thursday", in: 6 * 24 * hour, text: link), event("Next Friday", in: 7 * 24 * hour, text: link),
+                      event("February", in: 20 * 24 * hour, text: link)]
+        let days = UpcomingMeeting.byDay(UpcomingMeeting.from(events, now: now, limit: .max), now: now, calendar: cal)
+        XCTAssertEqual(days.map(\.title), ["Thu, Feb 4", "Fri, Jan 22", "Thursday", "Monday", "Tomorrow", "Today"])
+        // Time runs one way down the list: the latest on top, the soonest at the bottom, just above the meetings that happened.
+        XCTAssertEqual(days.flatMap { $0.meetings.map(\.title) },
+                       ["February", "Next Friday", "Thursday", "Monday", "Tomorrow", "Today late", "Today early"])
+        XCTAssertEqual(days.last?.date, cal.startOfDay(for: now))
+        XCTAssertTrue(UpcomingMeeting.byDay([], now: now, calendar: cal).isEmpty)
     }
 
     func testTheDefaultCalendarsAreTheOwnersOwn() {

@@ -99,7 +99,7 @@ struct CalendarsStep: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 4)
                 } else {
-                    Text("No meetings in the next week on these calendars.")
+                    Text("No meetings in the next \(UpcomingMeeting.days) days on these calendars.")
                         .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

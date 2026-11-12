@@ -78,13 +78,7 @@ struct UpcomingHeader: View {
     }
 
     /// "Today", "Tomorrow", a weekday within the next days, else the date.
-    static func day(_ date: Date) -> String {
-        let cal = Calendar.current
-        if cal.isDateInToday(date) { return "Today" }
-        if cal.isDateInTomorrow(date) { return "Tomorrow" }
-        let days = cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: date)).day ?? 0
-        return (2..<7).contains(days) ? date.formatted(.dateTime.weekday(.wide)) : date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-    }
+    static func day(_ date: Date) -> String { UpcomingMeeting.dayTitle(date) }
 
     // MARK: The people
 

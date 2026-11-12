@@ -159,7 +159,7 @@ struct MeetingsView: View {
     /// open items and the promises are needed. The live call is one click away in the list.
     private var openInvite: UpcomingMeeting? {
         guard let id = controller.selectedMeetingID else { return nil }
-        if let m = controller.upcoming.first(where: { $0.id == id }) {
+        if let m = controller.calendarUpcoming.first(where: { $0.id == id }) {
             lastInvite.meeting = m
             return m
         }
