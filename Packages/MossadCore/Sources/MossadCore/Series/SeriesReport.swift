@@ -149,10 +149,14 @@ public struct SeriesReport: Sendable, Equatable {
         }
         .sorted { ($0.came, $1.name) > ($1.came, $0.name) }
 
-        // What is open: the owner's tasks from the series (their state is known), the other action items of the
-        // last meeting (no state of their own), and the decisions left open.
+        openItems = Self.openItems(of: recs, commitments: commitments, owner: owner)
+    }
+
+    /// What is open: the owner's tasks from the series (their state is known), the other action items of the last
+    /// meeting (no state of their own), and the decisions left open. `recs` are the series' records, newest first.
+    static func openItems(of recs: [CallRecord], commitments: [Commitment]?, owner: OwnerIdentity) -> [OpenItem] {
         var open: [OpenItem] = []
-        let ids = Set(rows.map(\.id))
+        let ids = Set(recs.map(\.id))
         for c in (commitments ?? []) where !c.deleted && c.done == nil && c.callID.map(ids.contains) == true {
             open.append(OpenItem(id: "task:\(c.id)", kind: .yourTask, text: c.text, owner: nil, callID: c.callID, at: c.at, date: c.madeAt, commitment: c))
         }
@@ -168,7 +172,7 @@ public struct SeriesReport: Sendable, Equatable {
                 open.append(OpenItem(id: "decision:\(r.id):\(i)", kind: .pendingDecision, text: d.text, owner: nil, callID: r.id, at: d.at, date: r.start))
             }
         }
-        openItems = open.sorted { $0.date > $1.date }
+        return open.sorted { $0.date > $1.date }
     }
 
     /// "Usually 5 people, runs 8 min over, Sam talks most; 3 open items". Each part only when it is known.

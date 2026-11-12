@@ -16,32 +16,42 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", bookmarks = "Bookmarks", screens = "Screens", shares = "Shares", commitments = "Tasks",
-             recurring = "Recurring",
+        case meetings = "Meetings", recurring = "Recurring", bookmarks = "Bookmarks", screens = "Screens", shares = "Shares",
+             commitments = "Tasks",
              chat = "Chat", people = "People", analytics = "Analytics", coach = "Coach",
              settings = "Settings", log = "Log"
         var id: String { rawValue }
-        /// The pages under Meetings in the sidebar, in their order there.
-        static let underMeetings: [Section] = [.bookmarks, .screens, .shares, .commitments, .recurring]
+        /// The pages under Meetings in the sidebar, in their order there (`MeetingsPage`): Recurring first.
+        static let underMeetings: [Section] = MeetingsPage.allCases.map(Section.init)
+
+        init(_ page: MeetingsPage) {
+            switch page {
+            case .recurring: self = .recurring
+            case .bookmarks: self = .bookmarks
+            case .screens: self = .screens
+            case .shares: self = .shares
+            case .tasks: self = .commitments
+            }
+        }
+
+        var meetingsPage: MeetingsPage? { MeetingsPage.allCases.first { Section($0) == self } }
         /// The items of the sidebar's first level.
         static var topLevel: [Section] { allCases.filter { !underMeetings.contains($0) } }
         var isUnderMeetings: Bool { Self.underMeetings.contains(self) }
         /// The key in the Go menu. Each page keeps the number it had before it moved under Meetings; Coach and Shares
-        /// took the next free numbers, Bookmarks takes 0, and Screens has Option-Command-S, as no number is left.
+        /// took the next free numbers. The pages under Meetings have theirs in `MeetingsPage.key`.
         var shortcut: KeyboardShortcut {
+            if let key = meetingsPage?.key {
+                return KeyboardShortcut(KeyEquivalent(key.character), modifiers: key.option ? [.command, .option] : .command)
+            }
             switch self {
-            case .meetings: KeyboardShortcut("1")
-            case .commitments: KeyboardShortcut("2")
-            case .chat: KeyboardShortcut("3")
-            case .people: KeyboardShortcut("4")
-            case .analytics: KeyboardShortcut("5")
-            case .settings: KeyboardShortcut("6")
-            case .log: KeyboardShortcut("7")
-            case .coach: KeyboardShortcut("8")
-            case .shares: KeyboardShortcut("9")
-            case .bookmarks: KeyboardShortcut("0")
-            case .screens: KeyboardShortcut("s", modifiers: [.command, .option])
-            case .recurring: KeyboardShortcut("r", modifiers: [.command, .option])
+            case .chat: return KeyboardShortcut("3")
+            case .people: return KeyboardShortcut("4")
+            case .analytics: return KeyboardShortcut("5")
+            case .settings: return KeyboardShortcut("6")
+            case .log: return KeyboardShortcut("7")
+            case .coach: return KeyboardShortcut("8")
+            default: return KeyboardShortcut("1")
             }
         }
         var icon: Icon {
@@ -241,6 +251,8 @@ final class AppController: ObservableObject {
     @Published private(set) var meetingListMatches: [String: ListMatch] = [:]
     /// The Meetings filter: the owner's choices and what the meetings offer.
     let meetingFilter = MeetingFilterModel()
+    /// The Recurring list's search and filter; it starts with the Recurring page.
+    let seriesFilter = SeriesFilterModel()
     private var filterTask: Task<Void, Never>?
     private var makingRecordings = false
 
