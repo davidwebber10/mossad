@@ -59,6 +59,14 @@ public enum AIProvider: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// The model for a question during a call, which must answer in seconds: Sonnet when the choice is Opus on
+    /// Anthropic, else the choice.
+    public func liveChatModel(_ chosen: String) -> String {
+        guard self == .anthropic else { return chosen }
+        let id = chosen.isEmpty ? defaultModel : chosen
+        return id.contains("opus") ? "claude-sonnet-5-5" : id
+    }
+
     /// `serverURL` is the local server's address; the other providers ignore it.
     public func model(_ name: String, apiKey: String?, usage: UsageLog?, serverURL: URL = LocalServer.ollama,
                       cache: LatestModelCache = .shared, session: URLSession = .shared) -> any LanguageModel {

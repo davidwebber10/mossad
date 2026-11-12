@@ -589,6 +589,22 @@
           "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/ChatAgent.swift", "Packages/MossadCore/Sources/MossadCore/Chat/ChatTools.swift", "Packages/MossadCore/Sources/MossadCore/Chat/ChatTools+Live.swift"]
         },
         {
+          "id": "live-chat",
+          "title": "Ask the call you are on",
+          "body": "Fell behind for a minute? Ask what you missed, what was decided so far, or what someone just asked you, and get a short answer while the call goes on.",
+          "details": [
+            "One-click questions: what did I miss, a summary so far, action items so far",
+            "Finds the questions put to you that you have not answered yet",
+            "Each answer links to the moment in the live transcript",
+            "Knows your past meetings too, so \"what did Sam promise last time?\" works",
+            "Option-Command-K, or Ask about this call in the menu bar",
+            "The conversation stays with the meeting after the call"
+          ],
+          "icon": "bubble.left.and.text.bubble.right",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/LiveChat.swift", "Packages/MossadCore/Sources/MossadCore/Chat/LiveSummary.swift", "App/LiveChatView.swift", "App/AppController+LiveChat.swift"]
+        },
+        {
           "id": "mcp-local",
           "title": "MCP on your Mac",
           "body": "Run Mossad --mcp and Claude Desktop, Claude Code, or any MCP client can search and read your meetings.",

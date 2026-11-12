@@ -95,24 +95,39 @@ private struct RoomWaveform: View {
 struct LiveTranscriptPanel: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
+    var top: CGFloat = Space.xl
+    /// A moment from a live chat answer: the line there is scrolled to and marked for a few seconds.
+    var jump: LiveJump?
+    @State private var marked: String?
     private var room: Bool { record.platform == .inPerson }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Space.m) {
-                LabelColumn(label: room ? "Room transcript" : "Live transcript") {
-                    Text(note).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.m) {
+                    LabelColumn(label: room ? "Room transcript" : "Live transcript") {
+                        Text(note).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if controller.liveTranscriptEnabled {
+                        LiveLines(model: controller.live, room: room, paused: controller.isPaused, owner: controller.ownerName, marked: marked)
+                    }
                 }
-                if controller.liveTranscriptEnabled {
-                    LiveLines(model: controller.live, room: room, paused: controller.isPaused, owner: controller.ownerName)
-                }
+                .detailColumn(top: top)
             }
-            .detailColumn(top: Space.xl)
+            // Starts at the newest line and stays there as lines arrive.
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            .task(id: jump) {
+                guard let jump, let line = LiveJump.line(at: jump.at, in: controller.live.visibleLines) else { return }
+                // After the first layout, which starts at the newest line.
+                try? await Task.sleep(for: .milliseconds(120))
+                withAnimation { proxy.scrollTo(line, anchor: .center) }
+                marked = line
+                try? await Task.sleep(for: .seconds(4))
+                withAnimation { marked = nil }
+            }
         }
-        // Starts at the newest line and stays there as lines arrive.
-        .defaultScrollAnchor(.bottom, for: .initialOffset)
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
     }
 
     private var note: String {
@@ -124,11 +139,23 @@ struct LiveTranscriptPanel: View {
     }
 }
 
+/// A moment to show in the live transcript; a new one each time, so the same time can be shown twice.
+struct LiveJump: Equatable {
+    let at: TimeInterval
+    let id = UUID()
+
+    /// The line that was being said at that time: the last one that began by then, else the first.
+    static func line(at time: TimeInterval, in lines: [LiveTranscript.Line]) -> String? {
+        (lines.last { $0.time <= time + 0.5 } ?? lines.first)?.id
+    }
+}
+
 private struct LiveLines: View {
     @ObservedObject var model: LiveTranscriptModel
     let room: Bool
     let paused: Bool
     let owner: String
+    var marked: String?
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: Space.m) {
@@ -151,6 +178,11 @@ private struct LiveLines: View {
                             .foregroundStyle(line.isFinal ? Palette.ink : Palette.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(longClock(line.time)).font(.system(size: 11)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                    }
+                }
+                .background {
+                    if line.id == marked {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.accent.opacity(0.12)).padding(-6)
                     }
                 }
                 .id(line.id)

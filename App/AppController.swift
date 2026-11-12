@@ -292,6 +292,12 @@ final class AppController: ObservableObject {
     }
     /// Set to open the Chat tab on a new chat.
     @Published var newChatRequest = 0
+    /// The call whose live page should open on its Chat tab with the field focused; the page takes it.
+    @Published var liveChatFocus: String?
+    /// The summary of the older part of the call that records, for the live chat. In memory only.
+    let liveSummaries = LiveSummaryCache()
+    /// Live chats that get their short summary for later chats once the call ends, not on each answer.
+    var liveChatsToSummarize: Set<UUID> = []
     lazy var chats = ChatStore(directory: paths.chats)
     /// A meeting to open and play from a time; the meeting view takes it when it appears.
     @Published var seekRequest: SeekRequest? {
@@ -1042,6 +1048,7 @@ final class AppController: ObservableObject {
         isPaused = false
         stopLive()
         updater.callEnded()
+        summarizeLiveChats()
     }
 
     /// Ends the recording now and processes it. The detector still sees this call, so it does not start a
@@ -1063,6 +1070,7 @@ final class AppController: ObservableObject {
         isPaused = false
         stopLive()
         updater.callEnded()
+        summarizeLiveChats()
     }
 
     /// Quit during a call: closes the tracks and saves the call as recorded, so the next launch processes it.
@@ -1822,6 +1830,7 @@ final class AppController: ObservableObject {
         case .ended:
             failedStarts.removeAll()
             updater.callEnded()
+            summarizeLiveChats()
             status = .idle
             isPaused = false
             isMuted = false

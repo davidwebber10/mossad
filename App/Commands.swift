@@ -46,6 +46,9 @@ struct MossadCommands: Commands {
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .disabled(selected?.status != .written)
             Divider()
+            Button("Ask About This Call…") { controller.askAboutCall() }
+                .keyboardShortcut("k", modifiers: [.command, .option])
+                .disabled(!controller.isRecording)
             Button("Bookmark This Moment") { controller.bookmarkCurrentCall() }
                 .keyboardShortcut("b", modifiers: [.command, .option])
                 .disabled(!controller.isRecording)

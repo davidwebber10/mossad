@@ -264,6 +264,7 @@ private struct StatusRow<Dot: View, Action: View>: View {
 /// talk-share strip, then pause, bookmark, and skip.
 private struct RecordingStatus: View {
     @EnvironmentObject var controller: AppController
+    @Environment(\.dismiss) private var dismiss
     let platform: Platform
     let since: Date
 
@@ -294,6 +295,13 @@ private struct RecordingStatus: View {
             }
             CallControls(compact: true, showsStop: false)
                 .padding(.horizontal, 12).padding(.bottom, 8)
+            PanelRow(action: { controller.askAboutCall(); dismiss() }) {
+                Image(systemName: "bubble.left").font(.system(size: 13)).foregroundStyle(Palette.accent).frame(width: 16)
+                Text("Ask about this call…")
+                Spacer()
+                Text("⌥⌘K").font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+            }
+            .help("Ask what was said so far, what you missed, or what someone just asked you")
         }
     }
 }

@@ -77,11 +77,20 @@ public struct LiveTranscript: Codable, Equatable, Sendable {
 
     /// "[01:05] Speaker A: text" lines, from `since` seconds into the call. The owner's lines use their name.
     public func text(owner: String, since: TimeInterval?) -> String {
-        visibleLines.filter { $0.time >= (since ?? 0) }.map { line in
-            let t = Int(line.time)
-            let who = line.source == .me ? owner : line.speakerKey.flatMap { names[$0] } ?? line.speaker.map { "Speaker \($0)" } ?? "Others"
-            return String(format: "[%02d:%02d] ", t / 60, t % 60) + "\(who): \(line.text)" + (line.isFinal ? "" : " (still speaking)")
-        }.joined(separator: "\n")
+        entries(owner: owner).filter { $0.time >= (since ?? 0) }.map(\.line).joined(separator: "\n")
+    }
+
+    /// The visible lines with who said each: the owner by name, a voice by the name the library gave it, else
+    /// "Speaker A", else "Others".
+    public func entries(owner: String) -> [LiveEntry] { entries(owner: owner, lines: visibleLines) }
+
+    /// The same for lines whose echo filter already ran, as the live page keeps them.
+    public func entries(owner: String, lines: [Line]) -> [LiveEntry] {
+        lines.map { line in
+            let named = line.speakerKey.flatMap { names[$0] }
+            let who = line.source == .me ? owner : named ?? line.speaker.map { "Speaker \($0)" } ?? "Others"
+            return LiveEntry(time: line.time, who: who, text: line.text, isFinal: line.isFinal, mine: line.source == .me || named == owner)
+        }
     }
 
     public func save(to url: URL) throws {
