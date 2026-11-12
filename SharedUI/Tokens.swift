@@ -158,6 +158,13 @@ enum Chrome {
 }
 
 /// The meeting detail, from the canvas: the header band, the lanes player, the tab capsule, and the tab bodies.
+extension Palette {
+    /// The band at the top of a meeting or a person: a trace of ink over the window, so the title and the player read as one block.
+    static let band = Color(light: 0x1C1A17, lightAlpha: 0.035, dark: 0xFFFFFF, darkAlpha: 0.035)
+    /// The band over the window as one opaque color, for the fade at the foot of scrolling lanes.
+    static let bandOpaque = Color(light: 0xEEECE9, dark: 0x262523)
+}
+
 enum Detail {
     /// The reading column and its gutter.
     static let columnMax: CGFloat = 980

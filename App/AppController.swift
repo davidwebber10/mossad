@@ -465,6 +465,8 @@ final class AppController: ObservableObject {
     }
 
     init() {
+        // Before any resolver is made: the company's domains join a person's addresses on each.
+        CompanyDomains.current = .parse(UserDefaults.standard.string(forKey: CompanyDomainsSheet.key) ?? "")
         try? paths.ensureDirectories()
         Log.directory = paths.logs
         // A preview only looks: its lines would fill the owner's log with starts that recorded nothing.
@@ -1644,7 +1646,7 @@ final class AppController: ObservableObject {
 
     /// Meetings that used a saved person's email as the name get the person's name instead.
     func relinkEmails() {
-        let pairs = library.profiles.compactMap { p in p.email.map { ($0, p.name) } }
+        let pairs = library.profiles.flatMap { p in p.emails.map { ($0, p.name) } }
         guard !pairs.isEmpty, !isSecondCopy else { return }
         Task {
             for (email, name) in pairs where email != name { await pipeline.renamePerson(email, to: name) }

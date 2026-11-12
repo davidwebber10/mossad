@@ -86,7 +86,7 @@ final class MeetingPrepStore {
         func prep(facts: [MeetingFacts]?) -> MeetingPrep {
             // Nil when the file is there and cannot be read: the page then says so, not "no tasks".
             MeetingPrep(meeting: meeting, owner: owner, records: records, facts: facts, commitments: CommitmentBook.peek(in: commitments)?.items,
-                        people: PersonDirectory(profiles: profiles), ownerEmails: ownerEmails, keep: keep,
+                        people: PersonDirectory(profiles: profiles, people: PeopleStore.peek(in: people)), ownerEmails: ownerEmails, keep: keep,
                         memory: coach, saved: CoachPeople(people: PeopleStore.peek(in: people) ?? []), reads: reads)
         }
     }

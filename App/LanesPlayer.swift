@@ -1,13 +1,6 @@
 import MossadCore
 import SwiftUI
 
-extension Palette {
-    /// The meeting header's band: a trace of ink over the window, so the title and the player read as one block.
-    static let band = Color(light: 0x1C1A17, lightAlpha: 0.035, dark: 0xFFFFFF, darkAlpha: 0.035)
-    /// The band over the window as one opaque color, for the fade at the foot of scrolling lanes.
-    static let bandOpaque = Color(light: 0xEEECE9, dark: 0x262523)
-}
-
 /// The player: one lane per speaker across the whole meeting, a playhead through every lane, decisions and
 /// bookmarks on the ruler, and the transport row. Lanes draw in a Canvas each, so a meeting with a hundred voices
 /// and a thousand turns stays fast.

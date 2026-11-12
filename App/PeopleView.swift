@@ -48,7 +48,7 @@ struct PeopleView: View {
         var list = (PeopleSort(rawValue: sort) ?? .recent).order(profiles, stats: stats)
         if needsSample { list = list.filter { $0.isOwner || $0.embeddings.isEmpty } }
         guard !q.isEmpty else { return list }
-        return list.filter { $0.name.localizedCaseInsensitiveContains(q) || ($0.email?.localizedCaseInsensitiveContains(q) ?? false) }
+        return list.filter { $0.name.localizedCaseInsensitiveContains(q) || $0.emails.contains { $0.localizedCaseInsensitiveContains(q) } }
     }
 
     var body: some View {
@@ -141,24 +141,22 @@ struct PeopleView: View {
                            rename: startEditing, delete: { deleting = $0 })
             }
             DetailColumn { toolbar } content: {
-                VStack(spacing: 0) {
-                    Group {
+                Group {
                         if let p = selected {
                             PersonProfileView(profile: p, stats: stats[p.name] ?? PersonStats(),
                                               org: org.match(p.name), chart: org.chart,
                                               others: profiles.filter { $0.name != p.name },
                                               rename: { startEditing(p) }, merge: { merge(p, into: $0) },
-                                              delete: { deleting = p }, select: select)
+                                              delete: { deleting = p }, select: select,
+                                              deleteAllVoices: { confirmDeleteAll = true }, changed: { Task { await reload() } })
                                 .id(p.name)
                         } else {
                             EmptyState(symbol: "person.crop.circle", title: "Select a person",
-                                       message: "Their profile shows the coach's read, how much they talk, and who they meet with.")
+                                       message: "Their page shows how to present to them, your meetings together, your tasks, and their voice.")
                                 .frame(maxHeight: .infinity)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    footer
-                }
             }
         }
     }
@@ -182,25 +180,6 @@ struct PeopleView: View {
                 }
             }
         }
-    }
-
-    private var footer: some View {
-        HStack(spacing: Space.s) {
-            IconImage(.lock, size: 12)
-            Text("Voice fingerprints are biometric data. They stay on this Mac in the Voices folder and are never uploaded.")
-                // Two lines in a narrow window rather than cutting the promise that the voices stay here.
-                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: Space.m)
-            Button("Delete all saved voices…") { confirmDeleteAll = true }
-                .buttonStyle(.plain)
-                .fontWeight(.medium)
-                .foregroundStyle(Palette.recording)
-                .fixedSize()
-        }
-        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
-        .padding(.horizontal, 36).padding(.vertical, 6)
-        .frame(minHeight: 40)
-        .overlay(alignment: .top) { Hairline() }
     }
 
     private func select(_ name: String) {

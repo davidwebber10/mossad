@@ -9,6 +9,8 @@ struct GeneralSettings: View {
     @EnvironmentObject var permissions: PermissionsMonitor
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @AppStorage("ownerEmail") private var ownerEmail = ""
+    @AppStorage(CompanyDomainsSheet.key) private var companyDomains = ""
+    @State private var editingDomains = false
 
     /// Setup's order: the two that recording needs, then the ones that make the notes better.
     private var permissionItems: [PermissionsMonitor.Item] {
@@ -47,6 +49,10 @@ struct GeneralSettings: View {
                         .textFieldStyle(SettingsFieldStyle(width: Self.fieldWidth))
                         .onSubmit { controller.rebuildPipeline() }
                 }
+                SettingsRow(title: "Company domains", detail: CompanyDomains.parse(companyDomains).isEmpty ? "None" : CompanyDomains.parse(companyDomains).text,
+                            titleNote: "optional") {
+                    Button("Edit…") { editingDomains = true }.buttonStyle(.settings)
+                }
             }
             LabelColumn(label: "Permissions", note: permissions.allGood ? nil : "\(permissions.problemCount) need\(permissions.problemCount == 1 ? "s" : "") attention",
                         labelTopPadding: 10) {
@@ -67,6 +73,11 @@ struct GeneralSettings: View {
                 }
             }
             OrgChartSettings()
+                .sheet(isPresented: $editingDomains) { CompanyDomainsSheet() }
+                .onAppear {
+                    // Development hook for screenshots: MOSSAD_DOMAINS_SHEET opens the company domains.
+                    if CommandLine.arguments.contains("--ui-preview"), ProcessInfo.processInfo.environment["MOSSAD_DOMAINS_SHEET"] != nil { editingDomains = true }
+                }
             SettingsGroup(label: "Updates", footer: "New versions come from the Mossad releases on GitHub. Each one is signed, and an update never installs during a call.") {
                 UpdateRows(updater: controller.updater)
             }
