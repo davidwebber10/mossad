@@ -22,7 +22,8 @@ enum CoachPrompt {
         the people or the meeting ("Sam got room to lead the plan"), tied to the skill or to the focus when it is \
         the focus's skill; for try_next what the habit costs or what the plan gains. Only an effect this call \
         shows; "" when you cannot name one. A did_well that only says what \(owner) did is no insight: the app \
-        shows praise only with its skill and its effect.
+        shows praise only with its skill and its effect, and \
+        praise with the key other never shows, so use a key from the list when one fits.
         - Proof: quote is \(owner)'s own words, copied exactly from one of their lines, 3 to 12 words; \
         at_seconds is the time of that line ([00:12:40] is 760). The app looks for the quote in \(owner)'s lines \
         and drops a note it cannot prove. Never quote another person.

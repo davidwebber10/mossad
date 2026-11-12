@@ -155,7 +155,7 @@ public struct LLMCoach: Coaching {
         return CoachResult(review: review, update: update, proposal: proposal, questions: Array(questions))
     }
 
-    private struct Note: Decodable {
+    struct Note: Decodable {
         let text: String
         let quote, say, skill, skill_label, why: String?
         let at_seconds: Double?
@@ -166,25 +166,25 @@ public struct LLMCoach: Coaching {
         }
     }
 
-    private struct Again: Decodable {
+    struct Again: Decodable {
         let skill, skill_label, quote: String?
         let at_seconds: Double?
     }
 
-    private struct Result: Decodable {
+    struct Result: Decodable {
         let outcome: FocusOutcome
         let evidence: String
         let quote: String?
         let at_seconds: Double?
     }
 
-    private struct Proposal: Decodable {
+    struct Proposal: Decodable {
         let plan, why: String
         let metric: FocusMetric?
         let skill, skill_label: String?
     }
 
-    private struct PatternOut: Decodable {
+    struct PatternOut: Decodable {
         let name, note: String
         let kind: CoachPattern.Kind
         let result: CoachObservation.Result?
@@ -192,12 +192,12 @@ public struct LLMCoach: Coaching {
         let at_seconds: Double?
     }
 
-    private struct ProfileOut: Decodable {
+    struct ProfileOut: Decodable {
         let patterns: [PatternOut]
         let people: [CoachPersonUpdate]
     }
 
-    private struct Output: Decodable {
+    struct Output: Decodable {
         let quiet: Bool
         let headline: String
         let did_well, try_next: Note?
@@ -211,14 +211,14 @@ public struct LLMCoach: Coaching {
         let questions: [Question]?
     }
 
-    private struct Question: Decodable {
+    struct Question: Decodable {
         let statement, evidence: String
         let kind: CoachQuestion.Kind
         let at_seconds: Double?
         let person: String?
     }
 
-    private struct Point: Decodable {
+    struct Point: Decodable {
         let title, observation, quote, principle: String
         let at_seconds: Double?
         let try_instead: String?

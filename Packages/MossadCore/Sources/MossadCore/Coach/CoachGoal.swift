@@ -116,7 +116,7 @@ public enum GoalOffers {
 
     /// "Room in 1:1s", the owner's first goal: offered at the review of a 1:1, with what was usual in the 1:1s
     /// up to it and a target of the least difference that counts for a talk share. Nil while a goal is active,
-    /// while another offer waits (`offerDays`), while the goal rests (`rests`), after "No, never again", and
+    /// while another offer waits (`offerDays`), while the goal rests (`rests`), after "Never again", and
     /// without `Usual.firmSamples` 1:1s with people the owner met in a 1:1 two times or more: the goal is
     /// measured against the 1:1s with the same person, so single 1:1s could never show progress.
     public static func roomInOneOnOnes(this: MeetingFacts, history: [MeetingFacts], profile: CoachProfile, at date: Date,

@@ -74,7 +74,7 @@ final class FindingMeaningTests: XCTestCase {
         var own = goal
         own.skill = "other:hand over ownership"
         let planned = FindingMeaning.settle(card(.didWell, skill: "other:hand over ownership"), goals: [own])
-        XCTAssertEqual(planned?.why, "It is what your goal asks: In a 1:1, ask before you tell, and let them lead.")
+        XCTAssertEqual(planned?.why, "This is what your goal asks for.")
         XCTAssertEqual(planned?.basis, "Your goal: Hand over ownership")
         // A goal that is only proposed is not the owner's goal.
         var proposed = goal
@@ -290,5 +290,115 @@ final class FindingMeaningTests: XCTestCase {
         }
         XCTAssertNotNil(fields("did_well")?["why"])
         XCTAssertNotNil(fields("try_next")?["why"])
+    }
+
+    // MARK: Praise of a number or a trend on the meeting page
+
+    private func settle(_ review: CoachReview, profile: CoachProfile, measured: CoachMeasured) -> CoachResult {
+        CoachLineRules.settle(CoachResult(review: review, update: CoachProfileUpdate(summary: "", focus: "", patterns: [], people: [])),
+                              record: call(), owner: owner, profile: profile, measured: measured)
+    }
+
+    private var less: CoachMeasured.Standout {
+        CoachMeasured.Standout(id: "talkShare", text: "talked 38% of the time; usually 55 to 62% in your 1:1s with Riley", at: nil, above: false)
+    }
+
+    func testNeverPraiseAgainOnANumberStopsItsLineToo() {
+        let measured = CoachMeasured(standouts: [less], oneOnOne: true)
+        let made = settle(review(), profile: CoachProfile(), measured: measured).review
+        XCTAssertEqual(made.line?.kind, .number)
+        let praise = try! XCTUnwrap(made.findings?.first)
+        XCTAssertEqual(praise.kind, .didWell)
+        var profile = CoachProfile()
+        profile.answer(praise, .never, at: base)
+        let later = settle(review(), profile: profile, measured: measured).review
+        XCTAssertNil(later.line, "the meeting page does not show the praise either")
+        XCTAssertEqual(later.findings, [])
+        // A number that is not praise is advice: "never praise" leaves it.
+        let more = CoachMeasured.Standout(id: "talkShare", text: "talked 81% of the time; usually 55 to 62% in your 1:1s with Riley", at: nil, above: true)
+        XCTAssertEqual(settle(review(), profile: profile, measured: CoachMeasured(standouts: [more], oneOnOne: true)).review.line?.kind, .number)
+    }
+
+    func testNotUsefulOnANumbersPraiseLowersItsLineBehindOtherNews() {
+        let praise = CoachNote(text: "You asked what he needs.", quote: "What do you need from me to run it?", at: 30, skill: CoachSkill.questions.rawValue)
+        let measured = CoachMeasured(standouts: [less], oneOnOne: true)
+        XCTAssertEqual(settle(review(didWell: praise), profile: CoachProfile(), measured: measured).review.line?.kind, .number)
+        var profile = CoachProfile()
+        for id in ["a", "b"] {
+            profile.answer(CoachFinding(id: "\(id)|did_well|number:talkShare", callID: id, date: base, kind: .didWell, text: "T", skill: "number:talkShare",
+                                        usual: "U"), .no, at: base)
+        }
+        XCTAssertEqual(settle(review(didWell: praise), profile: profile, measured: measured).review.line?.kind, .didWell)
+    }
+
+    func testNeverPraiseAgainOnATrendStopsItsLine() {
+        let trend = CoachTrend(id: "oneOnOneShare", text: "You leave more room in your 1:1s with Riley.", proof: "48% in your last 5; 62 to 70% in the 10 before")
+        let measured = CoachMeasured(trend: trend)
+        let made = settle(review(), profile: CoachProfile(), measured: measured).review
+        XCTAssertEqual(made.line?.kind, .progress)
+        let card = try! XCTUnwrap(made.findings?.first)
+        var profile = CoachProfile()
+        profile.answer(card, .never, at: base)
+        XCTAssertNil(settle(review(), profile: profile, measured: measured).review.line)
+    }
+
+    // MARK: A reply with no why
+
+    func testAReplyWithNoWhyIsFilledOnlyWhereTheSchemaHasTheNewField() {
+        var reply: Any = [
+            "did_well": ["text": "T", "quote": "Q", "at_seconds": 3, "skill": "questions", "skill_label": ""],
+            "try_next": ["text": "T", "quote": "Q", "at_seconds": 3, "say": "", "skill": "questions", "skill_label": ""],
+            "profile": ["patterns": [["name": "N", "kind": "growth", "result": "missed", "note": "N", "quote": "", "at_seconds": NSNull()]], "people": []],
+            "focus_proposal": ["plan": "P", "metric": NSNull(), "skill": "questions", "skill_label": ""],
+        ]
+        let problems = SchemaCheck.fill(&reply, schema: LLMCoach.schema)
+        XCTAssertFalse(problems.contains { $0.contains("did_well.why") || $0.contains("try_next.why") || $0.contains("patterns[0].why") }, "\(problems)")
+        XCTAssertTrue(problems.contains { $0.hasPrefix("focus_proposal") }, "a goal's reason is not new: a reply without it is asked again. \(problems)")
+        let object = reply as? [String: Any]
+        XCTAssertEqual((object?["did_well"] as? [String: Any])?["why"] as? String, "")
+        XCTAssertEqual(((object?["profile"] as? [String: Any])?["patterns"] as? [[String: Any]])?.first?["why"] as? String, "")
+        // With its reason the same proposal passes: the reason was the problem.
+        var given: Any = ["focus_proposal": ["plan": "P", "why": "W", "metric": NSNull(), "skill": "questions", "skill_label": ""]]
+        XCTAssertFalse(SchemaCheck.fill(&given, schema: LLMCoach.schema).contains { $0.hasPrefix("focus_proposal") })
+    }
+
+    func testALocalModelThatLeavesOutTheWhyStillGivesAReview() async throws {
+        let output: [String: Any] = [
+            "quiet": false, "headline": "H",
+            "did_well": ["text": "You asked what he needs.", "quote": "What do you need from me to run it?", "at_seconds": 30, "skill": "questions", "skill_label": ""],
+            "try_next": NSNull(), "seen_again": NSNull(), "focus_result": NSNull(), "focus_proposal": NSNull(),
+            "strengths": [], "improvements": [],
+            "meeting_value": ["rating": "medium", "reason": "R", "action": "keep", "suggestion": ""],
+            "profile": ["patterns": [["name": "N", "kind": "strength", "result": "did", "note": "N", "quote": "", "at_seconds": NSNull()]], "people": []],
+            "questions": [],
+        ]
+        // As a local server and the Apple model read a reply that came with the schema in the instructions.
+        let text = String(decoding: try JSONSerialization.data(withJSONObject: output), as: UTF8.self)
+        let read = JSONRepair.read(text, schema: LLMCoach.schema, as: LLMCoach.Output.self)
+        XCTAssertEqual(read.problems, [])
+        XCTAssertNotNil(read.output)
+    }
+
+    func testAGoalProposalWithNoReasonIsNotOffered() {
+        let blank = CoachFocus(plan: "Ask before you tell.", why: " ", metric: nil, proposed: base, skill: CoachSkill.questions.rawValue)
+        let out = CoachLineRules.settle(CoachResult(review: review(), update: CoachProfileUpdate(summary: "", focus: "", patterns: [], people: []), proposal: blank),
+                                        record: call(), owner: owner, profile: CoachProfile(), measured: CoachMeasured())
+        XCTAssertNil(out.proposal)
+        XCTAssertTrue(out.dropped.contains { $0.contains("no reason") })
+        // An older proposal with no reason in the memory gives no card.
+        var profile = CoachProfile()
+        profile.propose(blank, at: base)
+        var r = review()
+        r.findings = [card(.couldBeBetter, skill: CoachSkill.questions.rawValue, say: "What do you need?")]
+        XCTAssertFalse(FindingRules.deck(callID: "c", date: base, review: r, profile: profile, now: base.addingTimeInterval(day)).contains { $0.kind == .goalOffer })
+    }
+
+    func testAMissOnAGoalOfItsOwnWordsReadsAsOneSentence() {
+        var own = roomGoal
+        own.skill = "other:hand over ownership"
+        let miss = FindingMeaning.settle(card(.missed, skill: "other:hand over ownership"), goals: [own])
+        XCTAssertEqual(miss?.why, "Your goal asks for this, and the chance passed.")
+        XCTAssertEqual(miss?.basisIsGoal, true)
+        XCTAssertEqual(FindingMeaning.settle(card(.didWell, skill: CoachSkill.questions.rawValue), goals: [])?.basisIsGoal, false)
     }
 }

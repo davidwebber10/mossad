@@ -33,7 +33,7 @@ public enum FindingRules {
 
     private static func words(_ text: String) -> Int { text.split(whereSeparator: \.isWhitespace).count }
 
-    /// The first words of a card's text, to name the card in one line: "Why didn't you agree with ...?".
+    /// The first words of a card's text, to name the card in one line: "Why was ... not useful?".
     public static func shortTitle(_ text: String, words limit: Int = 6) -> String {
         let all = text.split(whereSeparator: \.isWhitespace)
         let cut = all.prefix(limit).joined(separator: " ")
@@ -113,7 +113,7 @@ public enum FindingRules {
         guard now.timeIntervalSince(date) <= (review.findings == nil ? seedDays : expiryDays) * 86_400 else { return [] }
         let training = profile.training(asOf: now)
         let made = (review.findings ?? cards(review: review, callID: callID, date: date, measured: nil,
-                                             observations: profile.observations.filter { $0.callID == callID }))
+                                             observations: profile.observations.filter { $0.callID == callID }, goals: profile.foci))
             .filter { $0.kind.isKnown && $0.hasProof && !training.isBlocked($0) }
         // Each card with why it matters; one that only says what happened is no card, also from an older review.
         var base = made.compactMap { FindingMeaning.settle($0, goals: profile.foci) }
@@ -121,7 +121,8 @@ public enum FindingRules {
         var head: [CoachFinding] = []
         // The focus that the coach proposed from this call: a goal with its number and what was usual, or a focus
         // with the moment of this call that shows its skill.
-        if let focus = profile.proposedFocus, abs(focus.proposed.timeIntervalSince(date)) < 1, !training.isGoalBlocked(focus.skillID) {
+        // A goal with no reason is no card: the owner would get an offer with no why.
+        if let focus = profile.proposedFocus, abs(focus.proposed.timeIntervalSince(date)) < 1, !training.isGoalBlocked(focus.skillID), focus.why.nonBlank != nil {
             let id = "\(callID)|\(CoachFinding.Kind.goalOffer.rawValue)|\(focus.id.uuidString)"
             if let goal = focus.goal {
                 head.append(CoachFinding(id: id, callID: callID, date: date, kind: .goalOffer, text: focus.plan, skill: focus.skillID, detail: focus.why.nonBlank,
@@ -150,7 +151,7 @@ public enum FindingRules {
         }.prefix(max(0, perCall - answered)))
     }
 
-    /// "No, never again" is not offered on a card of the active focus: the owner would block the skill they
+    /// "Never again" is not offered on a card of the active focus: the owner would block the skill they
     /// chose to work on, and the coach would get two orders. Ending the focus is the way.
     public static func offersNever(_ card: CoachFinding, profile: CoachProfile) -> Bool {
         guard let focus = profile.activeFocus else { return true }

@@ -145,6 +145,9 @@ public struct CoachFinding: Codable, Equatable, Sendable, Hashable, Identifiable
         self.confidence = confidence
     }
 
+    /// The basis is the owner's goal, not a skill: the card marks it with the goal's symbol.
+    public var basisIsGoal: Bool { basis?.hasPrefix(FindingMeaning.goalPrefix) == true }
+
     /// A moment to play, or a number with its usual value. A card without one is never made.
     public var hasProof: Bool { at != nil || usual != nil }
 }

@@ -84,6 +84,11 @@ public enum CoachLineRules {
             out.proposal = nil
             dropped.append("focus_proposal: the owner said never again")
         }
+        // A goal with no reason is no offer: the card and the goal page would show an empty line.
+        if let p = out.proposal, p.why.nonBlank == nil {
+            out.proposal = nil
+            dropped.append("focus_proposal: no reason")
+        }
         // Room in 1:1s is offered by code, with its numbers. A skill whose goal the owner declined or ended in the
         // last 30 days, or learned, is not offered again in other words.
         if let p = out.proposal, AdviceRules.key(p.skillID) == AdviceRules.key(GoalOffers.skill) || GoalOffers.rests(p.skillID, profile: profile, at: r.start) {
@@ -175,17 +180,31 @@ public enum CoachLineRules {
         // Last: a count is no news when the call has any.
         if let again { candidates.append(again) }
 
-        candidates.removeAll { $0.kind != .focus && training.isBlocked($0.skill, praise: $0.kind == .didWell) }
+        // Praise: what the owner did well, a measured change for the better, or a number on the good side of its
+        // usual. Its card is a "did well" card, so the answers to praise decide it, on the card and here.
+        func praise(_ c: CoachLine) -> Bool {
+            switch c.kind {
+            case .didWell, .progress: return true
+            case .number:
+                let id = c.skill.hasPrefix("number:") ? String(c.skill.dropFirst(7)) : c.skill
+                guard let s = measured.standouts.first(where: { $0.id == id }) else { return false }
+                return FindingRules.kind(ofNumber: id, above: s.above, oneOnOne: measured.oneOnOne) == .didWell
+            default: return false
+            }
+        }
+        candidates.removeAll { $0.kind != .focus && training.isBlocked($0.skill, praise: praise($0)) }
         // A skill that got a few no's is still said, after the other news of the call. Praise that got a few
         // no's stands back the same way; its advice does not.
-        func lowered(_ c: CoachLine) -> Bool { c.kind != .focus && c.kind != .progress && training.isLowered(c.skill, praise: c.kind == .didWell) }
+        func lowered(_ c: CoachLine) -> Bool {
+            c.kind != .focus && (c.kind != .progress || praise(c)) && training.isLowered(c.skill, praise: praise(c))
+        }
         candidates = candidates.filter { !lowered($0) } + candidates.filter(lowered)
 
         let line = candidates.first { c in
             guard c.hasProof else { return false }
             // The notes and the count passed the log above; a number and a trend are checked here.
             guard c.kind == .number || c.kind == .progress else { return true }
-            return AdviceRules.earlier(kind: c.kind, skill: c.skill, in: log, callID: r.id, date: r.start, days: training.repeatDays(c.skill)) == nil
+            return AdviceRules.earlier(kind: c.kind, skill: c.skill, in: log, callID: r.id, date: r.start, days: training.repeatDays(c.skill, praise: praise(c))) == nil
         }.map(fit)
         review.line = line
         review.version = CoachReview.currentVersion

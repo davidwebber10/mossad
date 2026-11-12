@@ -11,6 +11,8 @@ import Foundation
 ///
 /// Conclusions, traits, and goal offers are not about behavior: they pass as they are.
 public enum FindingMeaning {
+    static let goalPrefix = "Your goal: "
+
     /// What a card's why stands on.
     public enum Link: Equatable, Sendable {
         case goal(CoachFocus)
@@ -52,9 +54,9 @@ public enum FindingMeaning {
 
     static func why(of link: Link, good: Bool) -> String? {
         switch link {
-        // A goal of its own words: the plan the owner chose is the effect they want, and the better way.
+        // A goal of its own words: the goal itself is why it matters. Its name is on the basis line.
         case .goal(let focus): CoachSkill(id: focus.skillID).flatMap { good ? $0.effect : $0.cost }
-            ?? focus.plan.nonBlank.map { good ? "It is what your goal asks: \($0)" : "Your plan: \($0)" }
+            ?? (good ? "This is what your goal asks for." : "Your goal asks for this, and the chance passed.")
         case .number(let metric): numberEffect(metric, good: good)
         case .skill(let skill): good ? skill.effect : skill.cost
         }
@@ -62,7 +64,7 @@ public enum FindingMeaning {
 
     static func basis(_ link: Link) -> String? {
         switch link {
-        case .goal(let focus): "Your goal: \(CoachSkill.title(of: focus.skillID))"
+        case .goal(let focus): goalPrefix + CoachSkill.title(of: focus.skillID)
         case .number: nil
         case .skill(let skill): skill.title
         }
