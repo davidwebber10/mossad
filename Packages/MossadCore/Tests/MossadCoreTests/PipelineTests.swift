@@ -1083,7 +1083,39 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(r.speakerNames["them:B"], "Amy Lee")
         XCTAssertTrue(r.unknownSpeakers.isEmpty)
         XCTAssertTrue(notified.isEmpty)
-        XCTAssertEqual(library.profiles.first { $0.name == "Amy Lee" }?.embeddings.count, 1)
+        XCTAssertEqual(r.fromInvite, ["them:B"])
+        // Seven seconds of speech name the voice but teach nothing.
+        XCTAssertNil(library.profiles.first { $0.name == "Amy Lee" })
+        await pipeline(calendar: calendar).applyNames(callID: id, names: ["them:B": "Amy Lee"])
+        XCTAssertNil(try load(id).fromInvite)
+    }
+
+    func testTheInviteIsMatchedAgainWithTheCallsRealTimes() async throws {
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        let id = try makeRecord()
+        // The invite found when the call started, by a guessed end: another meeting.
+        var stale = try load(id)
+        stale.attendees = ["Pat Quill"]
+        try stale.save(to: paths.callDirectory(id))
+        let calendar = FakeCalendar(events: [CalendarEventInfo(title: "Weekly Ops Sync", start: start, end: start.addingTimeInterval(1800),
+                                                               attendees: ["Alex Rivera", "Amy Lee"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)])
+        await pipeline(calendar: calendar).process(id)
+        XCTAssertEqual(try load(id).speakerNames["them:B"], "Amy Lee")
+    }
+
+    func testARoomRecordingWithAnInviteKeepsTheRulesOfBefore() async throws {
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        let id = try makeRecord()
+        var room = try load(id)
+        room.platform = .inPerson
+        try room.save(to: paths.callDirectory(id))
+        let calendar = FakeCalendar(events: [CalendarEventInfo(title: "Weekly Ops Sync", start: start, end: start.addingTimeInterval(1800),
+                                                               attendees: ["Alex Rivera", "Amy Lee"], text: "Room 4", isAllDay: false)])
+        await pipeline(calendar: calendar).process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.calendarTitle, "Weekly Ops Sync")
+        XCTAssertNil(r.speakerNames["them:B"])
+        XCTAssertNil(r.fromInvite)
     }
 
     func testNoNotificationWhenAllSpeakersKnown() async throws {

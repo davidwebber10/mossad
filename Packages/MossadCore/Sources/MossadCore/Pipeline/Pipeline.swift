@@ -292,6 +292,7 @@ public actor Pipeline {
         r.unknownSpeakers = []
         r.speakerEmbeddings = [:]
         r.speakerSamples = nil
+        r.fromInvite = nil
         r.status = .recorded
         r.failedStep = nil
         r.failureReason = nil
@@ -735,8 +736,8 @@ public actor Pipeline {
     }
 
     private func identify(_ r: inout CallRecord, dir: URL) async throws {
-        detail(r.id, "Identifying speakers")
         guard voiceFingerprints else {
+            detail(r.id, "Identifying speakers")
             // No fingerprints: the speaker who talks most on the mic is the owner; everyone else stays a letter.
             let talk = Dictionary(r.utterances.map { ($0.speakerKey, $0.end - $0.start) }, uniquingKeysWith: +)
             let owner = talk.filter { $0.key.hasPrefix("me:") }.max { $0.value < $1.value }?.key
@@ -746,14 +747,16 @@ public actor Pipeline {
             r.unknownSpeakers = keys
             r.speakerEmbeddings = [:]
             r.speakerSamples = nil
+            r.fromInvite = nil
             r.status = .identified
             return
         }
-        // Who was invited decides whose voice may be named on a call, so the invite is looked for here when the call
-        // had none yet. A room recording keeps the rules of before.
+        // Who was invited decides whose voice may be named on a call. The invite found when the call started was
+        // matched to a guessed end, and can have changed since: it is matched again with the call's real times. A
+        // room recording keeps the rules of before.
         let onCall = r.platform != .inPerson && !r.isNotesOnly
-        if onCall, r.attendees.isEmpty, r.invitees == nil { await matchInvite(&r) }
-        let invite = onCall ? CallInvite(record: r) : nil
+        let sure = onCall ? await matchInvite(&r) : false
+        let invite = onCall ? CallInvite(record: r, sure: sure) : nil
         detail(r.id, "Identifying speakers")
         // Short pieces of each voice, at most a minute per speaker, through the one copy of the voice models that the
         // live transcript's namer also uses; so it runs behind a call.
@@ -767,6 +770,7 @@ public actor Pipeline {
         r.unknownSpeakers = result.unknown
         r.speakerEmbeddings = result.embeddings
         r.speakerSamples = result.details.isEmpty ? nil : result.details
+        r.fromInvite = result.fromInvite.isEmpty ? nil : result.fromInvite.sorted()
         dropNamedEcho(&r)
         r.status = .identified
     }
@@ -787,15 +791,18 @@ public actor Pipeline {
             r.speakerSamples?[key] = nil
         }
         r.unknownSpeakers.removeAll { echo.contains($0) }
+        r.fromInvite = r.fromInvite.map { $0.filter { !echo.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
         Log.info("Dropped \(echo.count) mic voices that are people on the call audio")
     }
 
-    private func matchInvite(_ r: inout CallRecord) async {
+    /// True when the event found is surely the call's.
+    @discardableResult
+    private func matchInvite(_ r: inout CallRecord) async -> Bool {
         detail(r.id, "Finding the calendar invite")
         let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
-        if let event = CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) {
-            r.setInvite(event)
-        }
+        guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return false }
+        r.setInvite(match.event)
+        return match.sure
     }
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
@@ -981,6 +988,8 @@ public actor Pipeline {
                 r.speakerNames[key] = name
                 r.unknownSpeakers.removeAll { $0 == key }
             }
+            // The owner's word: the name no longer comes from the invite.
+            r.fromInvite = r.fromInvite.map { $0.filter { chosen[$0] == nil } }.flatMap { $0.isEmpty ? nil : $0 }
             r.replaceSpeakerLabels(renamed)
             return true
         }) else { return }

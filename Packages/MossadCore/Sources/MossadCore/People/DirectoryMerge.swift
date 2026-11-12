@@ -91,6 +91,9 @@ public enum DirectoryMerge {
         let shown = p.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !p.isOwner else { return false }
         if shown.isEmpty { return true }
+        // A name that Mossad read from the address, and that nobody typed since.
+        if p.forms.contains(where: { $0.kind == .display && $0.source == .address }),
+           !p.forms.contains(where: { $0.kind == .display && ($0.source == .owner || $0.source == .voiceNaming) }) { return true }
         guard shown.contains("@"), !shown.contains(" ") else { return false }
         return !p.forms.contains { $0.kind == .display && ($0.source == .owner || $0.source == .voiceNaming || $0.confirmed && $0.source != .calendar) }
     }

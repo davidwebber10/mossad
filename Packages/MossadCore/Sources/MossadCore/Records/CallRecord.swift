@@ -234,6 +234,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// How much clear speech each fingerprint was made from and how good it is, per speaker key. Nil in records
     /// from before it; a voice named later is learned with these numbers.
     public var speakerSamples: [String: SpeakerSampleDetail]?
+    /// Speaker keys whose name came from the invite and not yet from the owner or a second call, for the quiet mark
+    /// "Named from the invite". Nil when there are none.
+    public var fromInvite: [String]?
     /// Markdown; older records hold plain sentences.
     public var summary: String?
     public var topics: [SummaryTopic] = []
@@ -395,6 +398,7 @@ extension CallRecord {
         unknownSpeakers = try c.decodeIfPresent([String].self, forKey: .unknownSpeakers) ?? []
         speakerEmbeddings = try c.decodeIfPresent([String: [Float]].self, forKey: .speakerEmbeddings) ?? [:]
         speakerSamples = try c.decodeIfPresent([String: SpeakerSampleDetail].self, forKey: .speakerSamples)
+        fromInvite = try c.decodeIfPresent([String].self, forKey: .fromInvite)
         summary = try c.decodeIfPresent(String.self, forKey: .summary)
         actionItems = try c.decodeIfPresent([ActionItem].self, forKey: .actionItems) ?? []
         decisions = Decision.joined(try c.decodeIfPresent([Decision].self, forKey: .decisions) ?? [],

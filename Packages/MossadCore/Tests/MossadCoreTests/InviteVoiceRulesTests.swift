@@ -13,13 +13,14 @@ final class InviteVoiceRulesTests: XCTestCase {
         [profile(owner, owner: true), profile("Mira Stone", email: "mira@example.com"), profile("Dale Fenwick")]
     }
 
-    func voice(_ key: String, _ scores: [(String, Float)]) -> InviteVoiceRules.Voice {
-        InviteVoiceRules.Voice(key: key, scores: scores.map { VoiceScore(name: $0.0, score: $0.1) }, fingerprint: true)
+    func voice(_ key: String, _ scores: [(String, Float)], seconds: Double = 60) -> InviteVoiceRules.Voice {
+        InviteVoiceRules.Voice(key: key, scores: scores.map { VoiceScore(name: $0.0, score: $0.1) }, fingerprint: true, seconds: seconds)
     }
 
-    func decide(_ voices: [InviteVoiceRules.Voice], _ invite: CallInvite?, profiles: [VoiceProfile]? = nil, people: [Person] = []) -> InviteVoiceRules.Decision {
+    func decide(_ voices: [InviteVoiceRules.Voice], _ invite: CallInvite?, profiles: [VoiceProfile]? = nil, people: [Person] = [],
+                provisional: [String: String] = [:], call: String = "call-2") -> InviteVoiceRules.Decision {
         let roster = invite.map { InviteRoster(invite: $0, profiles: profiles ?? self.profiles, people: people) }
-        return InviteVoiceRules.decide(voices, roster: roster, owner: owner)
+        return InviteVoiceRules.decide(voices, roster: roster, owner: owner, provisional: provisional, callID: call)
     }
 
     // The owner's case: the brother of an invited person is a weak match and was not invited; the invited person
@@ -31,8 +32,10 @@ final class InviteVoiceRulesTests: XCTestCase {
                         voice("them:B", [("Dale Fenwick", 0.74), ("Mira Stone", 0.2)])], invite)
         XCTAssertEqual(d.verdicts["me:A"], .named(owner, score: 0.95, learn: true))
         XCTAssertEqual(d.verdicts["them:A"], .named("Mira Stone", score: 0.9, learn: true))
-        XCTAssertEqual(d.verdicts["them:B"], .inferred("Jo Fenwick"))
-        XCTAssertEqual(d.inferred?.email, "jo.fenwick@example.com")
+        XCTAssertEqual(d.verdicts["them:B"], .inferred("Jo Fenwick", learn: true))
+        XCTAssertEqual(d.inferred?.guest.email, "jo.fenwick@example.com")
+        XCTAssertEqual(d.inferred?.source, .address)
+        XCTAssertEqual(d.fromInvite, ["them:B"])
     }
 
     func testUninvitedWeakMatchIsWithheldAndSuggestedWhenNothingCanBeInferred() {
@@ -72,6 +75,87 @@ final class InviteVoiceRulesTests: XCTestCase {
         let invite = CallInvite(guests: [Guest(email: "jo.fenwick@example.com")])
         let d = decide([InviteVoiceRules.Voice(key: "them:A", scores: [], fingerprint: false)], invite)
         XCTAssertEqual(d.verdicts["them:A"], .unknown)
+    }
+
+    func testTheLeftVoiceNearAnInvitedVoiceThatHasANameIsNotInferred() {
+        // One person can be two speaker keys: a part of Mira's voice that scores low is not the invitee with no voice.
+        let invite = CallInvite(guests: [Guest(name: "Mira Stone"), Guest(email: "jo.fenwick@example.com")])
+        let d = decide([voice("them:A", [("Mira Stone", 0.9)]), voice("them:B", [("Mira Stone", 0.6)])], invite)
+        XCTAssertEqual(d.verdicts["them:B"], .unknown)
+        XCTAssertNil(d.inferred)
+    }
+
+    func testAShortVoiceIsNamedFromTheInviteButNotLearned() {
+        let invite = CallInvite(guests: [Guest(email: "jo.fenwick@example.com")])
+        let d = decide([voice("them:A", [("Dale Fenwick", 0.3)], seconds: 8)], invite)
+        XCTAssertEqual(d.verdicts["them:A"], .inferred("Jo Fenwick", learn: false))
+    }
+
+    func testAnInviteThatIsNotSurelyTheCallsNamesNobodyByRuleFour() {
+        let invite = CallInvite(guests: [Guest(email: "jo.fenwick@example.com")], sure: false)
+        let d = decide([voice("them:A", [("Dale Fenwick", 0.3)])], invite)
+        XCTAssertEqual(d.verdicts["them:A"], .unknown)
+    }
+
+    func testARoomOrAGroupIsNotAnInvitedPerson() {
+        let invite = CallInvite(guests: [Guest(name: "Board Room 4", person: false), Guest(email: "team@example.com", person: false),
+                                         Guest(email: "jo.fenwick@example.com")])
+        let roster = InviteRoster(invite: invite, profiles: profiles, people: [])
+        XCTAssertEqual(roster.guests, 1)
+        XCTAssertEqual(roster.voiceless.map(\.label), ["Jo Fenwick"])
+    }
+
+    func testAGuestWhoMayBeTheOwnerStopsRuleFour() {
+        for guest in [Guest(email: "avery@personal.example"), Guest(name: "Avery")] {
+            let invite = CallInvite(guests: [guest, Guest(name: "Mira Stone")])
+            let roster = InviteRoster(invite: invite, profiles: profiles, people: [])
+            XCTAssertTrue(roster.ownerDoubt)
+            XCTAssertTrue(roster.voiceless.isEmpty)
+            let d = InviteVoiceRules.decide([voice("them:A", [("Dale Fenwick", 0.3)])], roster: roster, owner: owner)
+            XCTAssertEqual(d.verdicts["them:A"], .unknown)
+        }
+    }
+
+    func testAGuestWhoMayBeASavedVoiceIsThatVoiceAndNoNewPerson() {
+        let invite = CallInvite(guests: [Guest(name: "Mira")])
+        let near = decide([voice("them:A", [("Mira Stone", 0.72)])], invite)
+        XCTAssertEqual(near.verdicts["them:A"], .named("Mira Stone", score: 0.72, learn: false))
+        XCTAssertNil(near.inferred)
+        let far = decide([voice("them:A", [("Dale Fenwick", 0.4)])], invite)
+        XCTAssertEqual(far.verdicts["them:A"], .unknown)
+    }
+
+    // A voice learned from one invite.
+
+    func testAProvisionalVoiceNamesNobodyWhoIsNotInvited() {
+        let p = ["Jo Fenwick": "call-1"]
+        let profiles = self.profiles + [profile("Jo Fenwick", email: "jo.fenwick@example.com")]
+        let other = decide([voice("them:A", [("Jo Fenwick", 0.97), ("Mira Stone", 0.1)])], CallInvite(guests: [Guest(name: "Mira Stone")]),
+                           profiles: profiles, provisional: p)
+        XCTAssertEqual(other.verdicts["them:A"], .withheld(suggestion: VoiceScore(name: "Jo Fenwick", score: 0.97)))
+        let none = decide([voice("them:A", [("Jo Fenwick", 0.97)])], nil, provisional: p)
+        XCTAssertEqual(none.verdicts["them:A"], .withheld(suggestion: VoiceScore(name: "Jo Fenwick", score: 0.97)))
+    }
+
+    func testAProvisionalVoiceOnAnotherCallThatInvitesThem() {
+        let p = ["Jo Fenwick": "call-1"]
+        let profiles = self.profiles + [profile("Jo Fenwick", email: "jo.fenwick@example.com")]
+        let invite = CallInvite(guests: [Guest(email: "jo.fenwick@example.com")])
+        let sure = decide([voice("them:A", [("Jo Fenwick", 0.85)])], invite, profiles: profiles, provisional: p)
+        XCTAssertEqual(sure.verdicts["them:A"], .named("Jo Fenwick", score: 0.85, learn: true))
+        XCTAssertTrue(sure.fromInvite.isEmpty)
+        let weak = decide([voice("them:A", [("Jo Fenwick", 0.7)])], invite, profiles: profiles, provisional: p)
+        XCTAssertEqual(weak.verdicts["them:A"], .named("Jo Fenwick", score: 0.7, learn: false))
+        XCTAssertEqual(weak.fromInvite, ["them:A"])
+    }
+
+    func testAProvisionalVoiceOnItsOwnCallStaysFromTheInvite() {
+        // "Transcribe again": the voice is learned again as the invite's, not as a sure match.
+        let profiles = self.profiles + [profile("Jo Fenwick", email: "jo.fenwick@example.com")]
+        let d = decide([voice("them:A", [("Jo Fenwick", 1)])], CallInvite(guests: [Guest(email: "jo.fenwick@example.com")]),
+                       profiles: profiles, provisional: ["Jo Fenwick": "call-1"], call: "call-1")
+        XCTAssertEqual(d.verdicts["them:A"], .inferred("Jo Fenwick", learn: true))
+        XCTAssertEqual(d.fromInvite, ["them:A"])
     }
 
     func testTheLeftVoiceNearAnInvitedVoiceThatDidNotSpeakIsNotInferred() {
@@ -121,7 +205,7 @@ final class InviteVoiceRulesTests: XCTestCase {
     func testAFirstNameAloneIsNotASureMatch() {
         let roster = InviteRoster(invite: CallInvite(guests: [Guest(name: "Mira")]), profiles: profiles, people: [])
         XCTAssertFalse(roster.invited.contains("Mira Stone"))
-        XCTAssertEqual(roster.voiceless.map(\.label), ["Mira"])
+        XCTAssertEqual(roster.voiceless.map(\.fits), [["Mira Stone"]])
     }
 
     func testTheOwnerIsNeverAVoicelessInvitee() {
@@ -150,7 +234,10 @@ final class InviteVoiceRulesTests: XCTestCase {
         XCTAssertEqual(label(Guest(name: "Quill, Pat")), "Pat Quill")
         XCTAssertEqual(label(Guest(name: "Robin Ash")), "Robin Ash")
         XCTAssertEqual(label(Guest(email: "robin.ash@example.com")), "Robin Ash")
-        XCTAssertEqual(label(Guest(email: "rash@example.com")), "rash@example.com")
+        XCTAssertEqual(label(Guest(name: "Fenwick, Jo")), "Jo Fenwick")
+        XCTAssertEqual(label(Guest(name: "FENWICK Jo")), "Jo Fenwick")
+        // A speaker's name shows in the note: an address is never one.
+        XCTAssertNil(label(Guest(email: "rash@example.com")))
     }
 
     func testALabelThatIsAnotherSavedVoiceIsNoLabel() {
@@ -164,11 +251,14 @@ final class InviteVoiceRulesTests: XCTestCase {
 
     func testTheInviteOfARecord() {
         var r = CallRecord(id: "c", platform: .zoom, bundleID: "", start: .distantPast, end: .distantPast, status: .transcribed)
-        XCTAssertNil(CallInvite(record: r))
+        XCTAssertNil(CallInvite(record: r, sure: true))
         r.attendees = ["Mira Stone", "jo@example.com"]
-        XCTAssertEqual(CallInvite(record: r)?.guests, [Guest(name: "Mira Stone"), Guest(email: "jo@example.com")])
-        r.invitees = [Invitee(name: owner, email: "avery@example.com", isSelf: true), Invitee(name: nil, email: "jo@example.com", personID: "p-jo", response: "declined")]
-        XCTAssertEqual(CallInvite(record: r)?.guests, [Guest(email: "jo@example.com", personID: "p-jo", declined: true)])
+        XCTAssertEqual(CallInvite(record: r, sure: true)?.guests, [Guest(name: "Mira Stone"), Guest(email: "jo@example.com")])
+        r.invitees = [Invitee(name: owner, email: "avery@example.com", isSelf: true), Invitee(name: nil, email: "jo@example.com", personID: "p-jo", response: "declined"),
+                     Invitee(name: "Board Room 4", email: nil, kind: "room")]
+        XCTAssertEqual(CallInvite(record: r, sure: false)?.guests, [Guest(email: "jo@example.com", personID: "p-jo", declined: true),
+                                                                   Guest(name: "Board Room 4", person: false)])
+        XCTAssertEqual(CallInvite(record: r, sure: false)?.sure, false)
     }
 
     func testTheLogLineHasCountsAndScoresAndNoNames() {
@@ -177,5 +267,36 @@ final class InviteVoiceRulesTests: XCTestCase {
         XCTAssertFalse(d.logLine.contains("Fenwick"))
         XCTAssertFalse(d.logLine.contains("Mira"))
         XCTAssertTrue(d.logLine.contains("0.74"), d.logLine)
+    }
+
+    func testADirectoryNameReplacesANameReadFromAnAddress() {
+        let read = Person(displayName: "Robin Ash", origin: .address, at: .distantPast)
+        XCTAssertTrue(DirectoryMerge.canTakeName(read))
+        var typed = read
+        typed.rename(to: "Robin Ashford", source: .owner, at: .distantPast)
+        XCTAssertFalse(DirectoryMerge.canTakeName(typed))
+    }
+
+    func testTheMacCalendarsAnswersAndKinds() {
+        XCTAssertEqual(EventKitCalendarSource.response(.declined), "declined")
+        XCTAssertEqual(EventKitCalendarSource.response(.pending), "needsAction")
+        XCTAssertNil(EventKitCalendarSource.response(.unknown))
+        XCTAssertEqual(EventKitCalendarSource.kind(.room), "room")
+        XCTAssertEqual(EventKitCalendarSource.kind(.group), "group")
+        XCTAssertNil(EventKitCalendarSource.kind(.person))
+        XCTAssertTrue(Invitee.make(name: "Board Room", address: nil, isCurrentUser: false, kind: "room")?.isPerson == false)
+    }
+
+    func testTheCallsEventIsSureByItsLinkOrWhenNoOtherCouldBeIt() {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        func event(_ title: String, _ text: String) -> CalendarEventInfo {
+            CalendarEventInfo(title: title, start: t0, end: t0.addingTimeInterval(1800), attendees: [], text: text, isAllDay: false)
+        }
+        let a = event("A", "https://zoom.us/j/111"), b = event("B", "https://zoom.us/j/222")
+        let end = t0.addingTimeInterval(1500)
+        XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: nil, start: t0, end: end, in: [a])?.sure, true)
+        XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: nil, start: t0, end: end, in: [a, b])?.sure, false)
+        XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: "222", start: t0, end: end, in: [a, b])?.event.title, "B")
+        XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: "222", start: t0, end: end, in: [a, b])?.sure, true)
     }
 }

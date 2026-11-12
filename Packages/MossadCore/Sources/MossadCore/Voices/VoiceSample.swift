@@ -324,7 +324,7 @@ public final class VoiceIdentity: @unchecked Sendable {
     /// that was learned just now. `profiles` is the whole library: two profiles can be one person (the owner's
     /// profile under an old name, and a voice named with the new one), and a change of one keeps the other's.
     func sync(_ profile: VoiceProfile, new: (vector: [Float], source: VoiceSampleSource)? = nil, among profiles: [VoiceProfile]) {
-        attempt("a voice of \(profile.name)") {
+        attempt("a voice") {
             let id = try people.ensure(voiceName: profile.name, isOwner: profile.isOwner, origin: .voiceNaming)
             let date = now()
             var vectors: [[Float]] = []
@@ -353,10 +353,10 @@ public final class VoiceIdentity: @unchecked Sendable {
         }
     }
 
-    func emailChanged(_ profile: VoiceProfile) {
-        attempt("the email of \(profile.name)") {
+    func emailChanged(_ profile: VoiceProfile, actor: String = "owner") {
+        attempt("an email") {
             let id = try people.ensure(voiceName: profile.name, isOwner: profile.isOwner, origin: .voiceNaming)
-            try people.setEmail(profile.email, for: id)
+            try people.setEmail(profile.email, for: id, actor: actor)
         }
     }
 

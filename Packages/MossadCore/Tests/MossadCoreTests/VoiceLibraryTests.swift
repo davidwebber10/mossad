@@ -86,4 +86,56 @@ final class VoiceLibraryTests: XCTestCase {
         XCTAssertEqual(reloaded.profiles.map(\.name), ["Avery Lane"])
         XCTAssertEqual(reloaded.owner?.name, "Avery Lane")
     }
+
+    // A voice learned from one invite.
+
+    func invited(_ call: String, _ key: String = "them:B") -> VoiceSampleSource {
+        VoiceSampleSource(callID: call, speakerKey: key, origin: .inviteInference)
+    }
+
+    func testAVoiceFromTheInviteIsProvisionalUntilAnotherCallConfirmsIt() throws {
+        let library = VoiceLibrary(directory: tempDirectory())
+        try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: invited("call-1"))
+        XCTAssertEqual(library.provisional, ["Jo Fenwick": "call-1"])
+        try library.add([0, 0.99, 0.1, 0], to: "Jo Fenwick", source: VoiceSampleSource(callID: "call-1", speakerKey: "them:B", origin: .autoMatch(0.99)))
+        XCTAssertEqual(library.provisional, ["Jo Fenwick": "call-1"])
+        try library.add([0, 0.98, 0.2, 0], to: "Jo Fenwick", source: VoiceSampleSource(callID: "call-2", speakerKey: "them:A", origin: .autoMatch(0.98)))
+        XCTAssertEqual(library.provisional, [:])
+    }
+
+    func testTheOwnersNameForTheSameVoiceMakesItFirm() throws {
+        let library = VoiceLibrary(directory: tempDirectory())
+        try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: invited("call-1"))
+        try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: VoiceSampleSource(callID: "call-1", speakerKey: "them:B", origin: .ownerNamed))
+        XCTAssertEqual(library.provisional, [:])
+        XCTAssertEqual(library.profiles.first?.embeddings, [[0, 1, 0, 0]])
+    }
+
+    func testTheOwnersNameForAnotherVoiceRemovesTheInvitesSample() throws {
+        let library = VoiceLibrary(directory: tempDirectory())
+        try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: invited("call-1"))
+        try library.add([0, 0, 1, 0], to: "Jo Fenwick", source: VoiceSampleSource(callID: "call-3", speakerKey: "them:A", origin: .ownerNamed))
+        XCTAssertEqual(library.provisional, [:])
+        XCTAssertEqual(library.profiles.first?.embeddings, [[0, 0, 1, 0]])
+    }
+
+    func testTranscribeAgainKeepsTheInvitesOrigin() throws {
+        let dir = tempDirectory()
+        let library = VoiceLibrary(directory: dir)
+        let people = PeopleStore(directory: dir.appendingPathComponent("People"))
+        let samples = VoiceSampleStore(directory: dir)
+        library.identity = VoiceIdentity(people: people, samples: samples)
+        try library.add([0, 1, 0, 0], to: "Jo Fenwick", source: invited("call-1"))
+        try library.add([0, 0.99, 0.1, 0], to: "Jo Fenwick", source: invited("call-1"))
+        let id = try XCTUnwrap(people.id(forVoiceName: "Jo Fenwick"))
+        XCTAssertEqual(samples.samples(of: id).map(\.origin), [.inviteInference])
+        XCTAssertEqual(library.profiles.first?.embeddings, [[0, 0.99, 0.1, 0]])
+        XCTAssertEqual(library.provisional, ["Jo Fenwick": "call-1"])
+    }
+
+    func testAProfileFromAnOlderBuildIsFirm() throws {
+        let dir = tempDirectory()
+        try Data(#"[{"name":"Mira Stone","isOwner":false,"embeddings":[[0,1,0,0]]}]"#.utf8).write(to: dir.appendingPathComponent("voices.json"))
+        XCTAssertEqual(VoiceLibrary(directory: dir).provisional, [:])
+    }
 }
