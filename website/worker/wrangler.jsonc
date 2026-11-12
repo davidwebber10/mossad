@@ -31,7 +31,7 @@
     // Until all three are set, /stats answers 403.
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "mossad-telemetry", "database_id": "<from wrangler d1 create mossad-telemetry; not a secret>", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "mossad-telemetry", "database_id": "27ec8831-513e-47e1-b293-bd9580c7a22a", "migrations_dir": "migrations" }
   ],
   "observability": { "enabled": false }
 }
