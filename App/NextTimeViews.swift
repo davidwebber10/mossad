@@ -345,7 +345,7 @@ struct MeetingPointsGroup: View {
         let book = controller.series.book
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
-        Group {
+        VStack(spacing: 0) {
             if !discussed.isEmpty || !carried.isEmpty {
                 LabelColumn(label: "Your points") {
                     VStack(alignment: .leading, spacing: 2) {

@@ -20,7 +20,9 @@ struct RecurringView: View {
                     }
                 }
             } else {
-                let shown = model.series(model.selected) ?? all[0]
+                // Development hook for screenshots: MOSSAD_RECURRING_SERIES names the series to open.
+                let preview = DevHooks.preview ? ProcessInfo.processInfo.environment["MOSSAD_RECURRING_SERIES"] : nil
+                let shown = model.series(model.selected) ?? preview.flatMap { t in all.first { $0.title == t } } ?? all[0]
                 HStack(spacing: 0) {
                     ListColumn("Recurring", widthKey: "recurring") {
                         SeriesList(series: all, book: model.book, selection: Binding(get: { shown.id }, set: { model.selected = $0 }))
@@ -128,10 +130,16 @@ private struct SeriesRow: View {
     /// "Every Tuesday 10:00 · Next Tue · 12 meetings".
     private var subtitle: String {
         var parts: [String] = []
-        if let c = series.cadence { parts.append(c.text) } else if series.recurringInCalendar { parts.append("Repeats") }
+        if let c = series.cadence { parts.append(c.text(time: clockTime)) } else if series.recurringInCalendar { parts.append("Repeats") }
         if let next = series.next { parts.append("Next: \(UpcomingHeader.day(next.start))") }
         let n = series.meetings.count
         parts.append(n == 0 ? "None recorded yet" : "\(n) \(n == 1 ? "meeting" : "meetings")")
         return parts.joined(separator: " · ")
     }
+}
+
+/// "10:00 AM" or "10:00", as the owner's clock shows the time.
+func clockTime(_ hour: Int, _ minute: Int) -> String {
+    let date = Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: Date()) ?? Date()
+    return date.formatted(date: .omitted, time: .shortened)
 }

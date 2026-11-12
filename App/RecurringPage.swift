@@ -99,7 +99,7 @@ private struct RecurringHeader: View {
                 FlowLayout(spacing: Space.s) {
                     HStack(spacing: Space.s) {
                         if let p = series.next?.platform { PlatformDot(platform: p, hollow: true) }
-                        Text(series.cadence?.text ?? (series.recurringInCalendar ? "Repeats in your calendar" : "Recurring"))
+                        Text(series.cadence?.text(time: clockTime) ?? (series.recurringInCalendar ? "Repeats in your calendar" : "Recurring"))
                             .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
                     }
                     .frame(minHeight: 20)
@@ -216,7 +216,7 @@ struct NextTimeTab: View {
                     Text("Mossad could not read your points, so it does not change them now.").foregroundStyle(Palette.recording)
                 }
                 if lists.open.isEmpty {
-                    Text("What do you want to raise \(series.next.map { "on \(UpcomingHeader.day($0.start))" } ?? "next time")? Your points show on the meeting's page and in the menu before it starts.")
+                    Text("What do you want to raise \(series.next.map { "on \(UpcomingHeader.day($0.start).replacingOccurrences(of: "Today", with: "today").replacingOccurrences(of: "Tomorrow", with: "tomorrow"))" } ?? "next time")? Your points show on the meeting's page and in the menu before it starts.")
                         .font(.system(size: 12.5)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
                 }
                 NextTimeList(points: lists.open, add: { text in controller.changeNextTime { $0.add(text, series: series) } })

@@ -12,7 +12,7 @@ struct PhoneMeetingPoints: View {
     var body: some View {
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
-        Group {
+        VStack(spacing: 0) {
             if !discussed.isEmpty || !carried.isEmpty {
                 LabelColumn(label: "Your points") {
                     VStack(alignment: .leading, spacing: Space.s) {

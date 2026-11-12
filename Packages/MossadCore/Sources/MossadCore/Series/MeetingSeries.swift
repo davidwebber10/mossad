@@ -75,7 +75,10 @@ public struct SeriesCadence: Sendable, Equatable, Hashable {
     public var interval: Double
 
     /// "Every Tuesday 10:00", "Every other Monday", "Every weekday 9:30", "Monthly", "About every 10 days".
-    public var text: String {
+    public var text: String { text() }
+
+    /// `time` writes the hour and the minute as the owner's clock does ("10:00 AM"); 24 hours without it.
+    public func text(time: ((Int, Int) -> String)? = nil) -> String {
         let days = Self.weekdays
         let words: String = switch rhythm {
         case .weekdays: "Every weekday"
@@ -86,7 +89,7 @@ public struct SeriesCadence: Sendable, Equatable, Hashable {
         case .everyDays(let n): "About every \(n) days"
         }
         guard let hour, let minute else { return words }
-        return words + String(format: " %d:%02d", hour, minute)
+        return words + " " + (time?(hour, minute) ?? String(format: "%d:%02d", hour, minute))
     }
 
     static let weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]

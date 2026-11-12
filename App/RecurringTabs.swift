@@ -144,7 +144,7 @@ struct SeriesStatsTab: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(report.ownerShare.map { "You usually talk \(Int(($0 * 100).rounded()))% of the time" + (report.talksMost.map { $0 == "You" ? ", the most of anyone." : "; \($0) talks most." } ?? ".") }
                          ?? "Too few meetings with your voice to say.")
-                    Bars(values: rows.map { ($0.ownerShare ?? 0) * 100 }, marks: [], format: { "\(Int($0.rounded()))%" }, dates: rows.map(\.start))
+                    Bars(values: rows.map { ($0.ownerShare ?? 0) * 100 }, marks: [], top: 100, format: { "\(Int($0.rounded()))%" }, dates: rows.map(\.start))
                 }
             }
             MeetingAnalyticsGroup("Outcomes") {
@@ -159,8 +159,8 @@ struct SeriesStatsTab: View {
             }
             if let gaps = report.gaps, let cadence = series.cadence {
                 MeetingAnalyticsGroup("Skipped") {
-                    Text(gaps == 0 ? "Mossad recorded every meeting (\(cadence.text.lowercased())) since the first."
-                         : "\(gaps) \(gaps == 1 ? "time" : "times") with no meeting recorded (\(cadence.text.lowercased())). Mossad cannot tell a cancelled meeting from one it did not record.")
+                    Text(gaps == 0 ? "Mossad recorded every meeting (\(firstLower(cadence.text(time: clockTime)))) since the first."
+                         : "\(gaps) \(gaps == 1 ? "time" : "times") with no meeting recorded (\(firstLower(cadence.text(time: clockTime)))). Mossad cannot tell a cancelled meeting from one it did not record.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -184,11 +184,13 @@ struct SeriesStatsTab: View {
 private struct Bars: View {
     let values: [Double]
     let marks: [Double?]
+    /// The value of a full bar; the largest value without it.
+    var top: Double?
     let format: (Double) -> String
     let dates: [Date]
 
     var body: some View {
-        let top = max(1, (values + marks.compactMap { $0 }).max() ?? 1)
+        let top = self.top ?? max(1, (values + marks.compactMap { $0 }).max() ?? 1)
         HStack(alignment: .bottom, spacing: 4) {
             ForEach(values.indices, id: \.self) { i in
                 ZStack(alignment: .bottom) {
@@ -262,3 +264,6 @@ struct SeriesOpenTab: View {
         .padding(.vertical, 6).padding(.horizontal, 8)
     }
 }
+
+/// "every Tuesday": a phrase inside a sentence.
+private func firstLower(_ text: String) -> String { (text.first.map { String($0).lowercased() } ?? "") + text.dropFirst() }
