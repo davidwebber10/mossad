@@ -3,7 +3,7 @@ import Foundation
 extension ChatTools {
     static var currentCallDefinition: ToolSpec {
         ToolSpec(name: "current_call",
-                 description: "Reads the call that is recording right now: its title, invited people, how long it has run, and the live transcript so far with times. The owner's lines use their name; the other people are Speaker A, Speaker B, and so on (Others when not yet known), so use the invite and the context to tell who is who. Use it for \"what was just said\", \"they just asked me to\", or anything about the meeting happening now. The live transcript can misspell words; the full note comes after the call.",
+                 description: "Reads the call that is recording right now: its title, invited people, how long it has run, and the live transcript so far with times. The owner's lines use their name; the other people are Speaker A, Speaker B, and so on (Others when not yet known), or a name from the voice library, which can change or go as the call goes on; so use the invite and the context to tell who is who. Use it for \"what was just said\", \"they just asked me to\", or anything about the meeting happening now. The live transcript can misspell words; the full note comes after the call.",
                  schema: ["type": "object", "properties": [
                     "minutes": ["type": "number", "description": "Only the last this many minutes. Leave out for the whole call."],
                  ] as [String: Any]])

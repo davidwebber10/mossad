@@ -99,6 +99,43 @@ final class LiveSpeakerNamerTests: XCTestCase {
         XCTAssertEqual(live.text(owner: "Dana", since: nil).components(separatedBy: "\n").first, "[00:12] Speaker A: words")
     }
 
+    /// Short halves that disagree are decided again: a later, longer fingerprint of one voice gives the name.
+    func testALaterLongFingerprintClearsAnEarlyShortMixedResult() async throws {
+        let them = dir.appendingPathComponent("them.caf")
+        try writeSegments(them, total: 70, [(0, 10, 400), (12, 22, 800), (24, 60, 400)])
+        let library = VoiceLibrary(directory: dir)
+        try library.add([0, 1, 0, 0], to: "Sam Lee")
+        let namer = LiveSpeakerNamer(library: library, provider: ToneEmbeddingProvider())
+        var live = LiveTranscript()
+        live.apply(turn(0, "A", from: 0, to: 10), source: .them, at: 10)
+        live.apply(turn(1, "A", from: 12, to: 22), source: .them, at: 22)
+        live.names = await namer.names(for: live, themURL: them)
+        XCTAssertEqual(live.names, [:])
+        live.apply(turn(2, "A", from: 24, to: 60), source: .them, at: 60)
+        live.names = await namer.names(for: live, themURL: them)
+        XCTAssertEqual(live.names, ["0A": "Sam Lee"])
+    }
+
+    /// The live namer only reads the voice library.
+    func testNamingChangesNoFileOfTheLibrary() async throws {
+        let them = dir.appendingPathComponent("them.caf")
+        try writeSegments(them, total: 30, [(0, 12, 400)])
+        let library = VoiceLibrary(directory: dir)
+        library.identity = VoiceIdentity(people: PeopleStore(directory: dir), samples: VoiceSampleStore(directory: dir))
+        try library.add([0, 1, 0, 0], to: "Sam Lee")
+        func files() throws -> [String: Data] {
+            Dictionary(uniqueKeysWithValues: try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasSuffix(".json") }
+                .map { ($0, try Data(contentsOf: dir.appendingPathComponent($0))) })
+        }
+        let before = try files()
+        XCTAssertFalse(before.isEmpty)
+        var live = LiveTranscript()
+        live.apply(turn(0, "A", from: 0, to: 12), source: .them, at: 12)
+        let names = await LiveSpeakerNamer(library: library, provider: ToneEmbeddingProvider()).names(for: live, themURL: them)
+        XCTAssertEqual(names, ["0A": "Sam Lee"])
+        XCTAssertEqual(try files(), before)
+    }
+
     /// A voice the library knows but the call did not invite needs a strong match; one that is only provisional
     /// is named only on a call that invites them.
     func testTheCallsInviteDecidesAsInThePipeline() async throws {

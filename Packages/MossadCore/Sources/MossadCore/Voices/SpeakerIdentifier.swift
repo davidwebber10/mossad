@@ -174,10 +174,6 @@ public struct SpeakerIdentifier: Sendable {
     }
 
     /// Averages fingerprints over the speaker's longest clear segments (each ≥ 2 s, up to 60 s in total).
-    func embedding(for utterances: [Utterance], in url: URL) async throws -> [Float]? {
-        try await fingerprint(for: utterances, in: url)?.vector
-    }
-
     func fingerprint(for utterances: [Utterance], in url: URL) async throws -> Fingerprint? {
         Self.fingerprint(of: try await pieceVectors(for: utterances, in: url))
     }
