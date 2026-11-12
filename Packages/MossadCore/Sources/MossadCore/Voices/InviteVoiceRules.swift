@@ -33,15 +33,34 @@ public struct CallInvite: Sendable, Equatable {
 
     /// Nil when the call has no invite: an ad-hoc call keeps the rules of before.
     public init?(record: CallRecord, sure: Bool) {
-        if let invitees = record.invitees, !invitees.isEmpty {
+        self.init(invitees: record.invitees, attendees: record.attendees, sure: sure)
+    }
+
+    /// The same people as `setInvite` gives a record of this event.
+    public init?(event: CalendarEventInfo, sure: Bool) {
+        self.init(invitees: event.participants.isEmpty ? nil : event.participants, attendees: event.attendees, sure: sure)
+    }
+
+    private init?(invitees: [Invitee]?, attendees: [String], sure: Bool) {
+        if let invitees, !invitees.isEmpty {
             guests = invitees.filter { $0.isSelf != true }
                 .map { Guest(name: $0.name, email: $0.email, personID: $0.personID, declined: $0.declined, person: $0.isPerson) }
-        } else if !record.attendees.isEmpty {
-            guests = record.attendees.map { $0.contains("@") ? Guest(email: $0) : Guest(name: $0) }
+        } else if !attendees.isEmpty {
+            guests = attendees.map { $0.contains("@") ? Guest(email: $0) : Guest(name: $0) }
         } else {
             return nil
         }
         self.sure = sure
+    }
+
+    /// The invite of a call that still records, by the pipeline's match with the call's times so far. In its first
+    /// half hour the call is taken to last that long, as when its title was found: a meeting that ends as the call
+    /// starts is not its invite. A room has none, as in the pipeline.
+    public static func live(platform: Platform, meetingID: String?, start: Date, now: Date, events: [CalendarEventInfo]) -> CallInvite? {
+        guard platform != .inPerson else { return nil }
+        let end = max(now, start.addingTimeInterval(1800))
+        return CalendarMatcher.match(for: platform, meetingID: meetingID, start: start, end: end, in: events)
+            .flatMap { CallInvite(event: $0.event, sure: $0.sure) }
     }
 }
 
