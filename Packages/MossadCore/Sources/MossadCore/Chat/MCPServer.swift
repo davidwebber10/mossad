@@ -1,10 +1,11 @@
 import Foundation
 
-/// A read-only Model Context Protocol server over stdio, so Claude Code, Claude Desktop, and other agents can
+/// A Model Context Protocol server over stdio, so Claude Code, Claude Desktop, and other agents can
 /// search and read the meetings with the same tools as the Chat tab. One JSON-RPC message per line.
 public struct MCPServer: Sendable {
     static let fallbackVersion = "2025-06-18"
-    /// Everything Chat can read; not `remember`, so other apps cannot change what the coach knows.
+    /// Everything Chat can read; not `remember`, so other apps cannot change what the coach knows. The one write is
+    /// `add_next_time_point`, the owner's own list, which they asked another app to add to.
     static var tools: [ToolSpec] { ChatTools.allDefinitions.filter { $0.name != "remember" } }
 
     let paths: Paths

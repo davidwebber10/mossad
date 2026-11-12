@@ -14,6 +14,9 @@ public actor CloudSync {
     /// The people, from the Mac to the phone. An older phone does not know the type and leaves it.
     static let peopleType = "People"
     static let personasType = "Personas"
+    /// The owner's points for next time, both ways. Only through the owner's server: an iCloud store needs the type
+    /// in its production schema first.
+    static let nextTimeType = "NextTime"
     static let recordingType = "Recording"
     /// Assets make big requests, so stay well under CloudKit's 400 changes a request.
     static let batch = 50
@@ -179,6 +182,10 @@ public actor CloudSync {
            let book = try? CommitmentBook.load(from: paths.commitments) {
             payloads.append(.commitments(book))
         }
+        if !waiting[2], store.wantsMeetingView, FileManager.default.fileExists(atPath: paths.nextTime.appendingPathComponent(NextTimeBook.fileName).path),
+           let book = try? NextTimeBook.load(from: paths.nextTime) {
+            payloads.append(.nextTime(book))
+        }
         // Only a people file that reads: a damaged or newer one is not sent, and the phone keeps the copy it has.
         // Only to the owner's server: an iCloud store needs the record type in its production schema first.
         if sendPeople, store.wantsMeetingView, let people = PeopleStore.peek(in: paths.people), !people.isEmpty,
@@ -205,6 +212,7 @@ public actor CloudSync {
                 case .commitments: Self.commitmentsType
                 case .people: Self.peopleType
                 case .personas: Self.personasType
+                case .nextTime: Self.nextTimeType
                 }
                 let name = Self.recordName(p.key)
                 return StoredRecord(name: name, type: type, files: ["data": try file(p.data, "\(name).json", in: dir)])
@@ -357,7 +365,8 @@ public actor CloudSync {
 
     /// The files that both devices write, and that must take the other device's copy first after a recovery.
     static func syncedFiles(_ paths: Paths) -> [URL] {
-        [paths.coach.appendingPathComponent(CoachProfile.fileName), paths.commitments.appendingPathComponent(CommitmentBook.fileName)]
+        [paths.coach.appendingPathComponent(CoachProfile.fileName), paths.commitments.appendingPathComponent(CommitmentBook.fileName),
+         paths.nextTime.appendingPathComponent(NextTimeBook.fileName)]
     }
 
     /// No store is connected, so there is no other copy to wait for: a recovered file is what there is.
@@ -511,6 +520,12 @@ public actor CloudSync {
             let merged = local.merged(with: remote)
             guard merged != local else { return false }
             try merged.save(to: paths.commitments)
+        case Self.nextTimeType:
+            let remote = try await decoded(NextTimeBook.self)
+            let local = try NextTimeBook.load(from: paths.nextTime)
+            let merged = local.merged(with: remote)
+            guard merged != local else { return false }
+            try merged.save(to: paths.nextTime)
         case Self.peopleType where includeMeetings:
             // The phone keeps the Mac's people as its people file. The Mac is the one writer; it leaves its own copy.
             guard let raw = try await data("data") else { throw MissingAsset(name: record.name) }

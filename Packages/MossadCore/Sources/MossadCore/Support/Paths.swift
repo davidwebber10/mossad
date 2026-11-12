@@ -28,6 +28,8 @@ public struct Paths: Sendable {
     /// One JSON file per chat in the Chat tab.
     public var chats: URL { root.appendingPathComponent("Chats") }
     public var commitments: URL { root.appendingPathComponent("Commitments") }
+    /// The owner's points for the next meeting of a series or the next time they see a person.
+    public var nextTime: URL { root.appendingPathComponent("NextTime") }
     /// What the iCloud sync last uploaded or fetched.
     public var sync: URL { root.appendingPathComponent("Sync") }
     /// The owner's share links, so they can be updated or stopped.
