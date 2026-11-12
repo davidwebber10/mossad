@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<style>
+@font-face{font-family:'Bricolage Grotesque';font-weight:400 800;src:url('../site/fonts/bricolage-grotesque-latin.woff2') format('woff2')}
+@font-face{font-family:Inter;font-weight:400 600;src:url('../site/fonts/inter-latin.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-weight:500;src:url('../site/fonts/ibm-plex-mono-500-latin.woff2') format('woff2')}
+.d{font-family:'Bricolage Grotesque','Helvetica Neue',Arial,sans-serif}
+.m{font-family:'IBM Plex Mono',Menlo,monospace}
+.i{font-family:Inter,'Helvetica Neue',Arial,sans-serif}
+</style>
+<rect width="1200" height="630" fill="#141210"/>
+<g transform="translate(72 64)">
+<rect width="44" height="44" rx="12.6" fill="#F2A05A"/>
+<path d="M12.6 26.7v-9.4M18.9 31.4V12.6M25.1 28.3V15.7M31.4 23.6v-3.1" stroke="#141210" stroke-width="3.8" stroke-linecap="round"/>
+<text x="60" y="33" class="d" font-size="36" font-weight="700" letter-spacing="-0.7" fill="#F4EFE7">Mossad</text>
+</g>
+<text x="1128" y="94" text-anchor="end" class="m" font-size="17" font-weight="500" letter-spacing="1.7" fill="#9A9287">GETMOSSAD.COM</text>
+<text x="72" y="196" class="m" font-size="19" font-weight="500" letter-spacing="1.9" fill="#F2A05A">WORK INTELLIGENCE FOR YOUR MAC</text>
+<text class="d" font-size="104" font-weight="600" letter-spacing="-4.6" fill="#F4EFE7"><tspan x="66" y="300">Intelligence on</tspan><tspan x="66" y="394" fill="#F2A05A">your own work.</tspan></text>
+<text x="72" y="462" class="i" font-size="27" fill="#D9D2C7">Meeting notes, transcripts, people, and promises.</text>
+<text x="72" y="500" class="i" font-size="23" fill="#B8B0A4">Free and open source. No bot on your calls.</text>
+<g transform="translate(40 540) scale(0.966 1)"><path d="M4 25.5V30.5M12 18.7V37.3M20 18.5V37.5M28 20.6V35.4M36 8.8V47.2M44 6.9V49.1M52 19.6V36.4M60 21.3V34.7M68 22.1V33.9M76 22.7V33.3M84 23.1V32.9M92 17.9V38.1M100 10.7V45.3M108 17.6V38.4M116 22.8V33.2M124 20.5V35.5M132 22.8V33.2M140 25.5V30.5M148 25.1V30.9M156 24.8V31.2M164 24.6V31.4M172 24.5V31.5M180 22.7V33.3M188 19.2V36.8M196 22.2V33.8M204 25.0V31.0M212 23.6V32.4M220 17.4V38.6M228 19.4V36.6M236 20.1V35.9M244 8.8V47.2M252 10.0V46.0M260 21.4V34.6M268 22.2V33.8M276 25.2V30.8M284 20.1V35.9M292 22.1V33.9M300 14.0V42.0M308 6.9V49.1M316 17.1V38.9M324 21.9V34.1M332 19.3V36.7M340 23.5V32.5M348 24.8V31.2M356 23.5V32.5M364 20.2V35.8M372 22.1V33.9M380 24.9V31.1M388 25.5V30.5M396 24.0V32.0M404 24.6V31.4M412 25.5V30.5M420 22.9V33.1M428 18.4V37.6M436 21.1V34.9M444 20.2V35.8M452 11.2V44.8M460 14.5V41.5M468 23.0V33.0M476 23.8V32.2M484 21.3V34.7M492 18.6V37.4M500 21.3V34.7M508 10.8V45.2M516 5.7V50.3M524 18.0V38.0M532 21.4V34.6M540 20.0V36.0M548 25.1V30.9M556 23.8V32.2M564 20.9V35.1M572 14.6V41.4M580 18.7V37.3M588 23.7V32.3M596 22.4V33.6M604 23.7V32.3M612 25.4V30.6M620 25.4V30.6M628 24.0V32.0M636 21.5V34.5M644 23.1V32.9M652 21.3V34.7M660 15.5V40.5M668 19.1V36.9M676 24.3V31.7M684 25.2V30.8M692 19.1V36.9M700 19.4V36.6M708 21.5V34.5M716 12.8V43.2M724 12.1V43.9M732 21.5V34.5M740 23.0V33.0M748 23.8V32.2M756 23.7V32.3M764 24.2V31.8M772 21.8V34.2M780 19.0V37.0M788 22.4V33.6M796 24.6V31.4M804 24.0V32.0M812 24.8V31.2M820 25.5V30.5M828 25.4V30.6M836 25.3V30.7M844 25.5V30.5" fill="none" stroke="#4A433B" stroke-width="2" stroke-linecap="round"></path><path d="M852 20.0V36.0M860 24.0V32.0M868 24.0V32.0M876 24.0V32.0M884 24.0V32.0M892 24.0V32.0M900 20.0V36.0M908 24.0V32.0M916 24.0V32.0M924 24.0V32.0M932 24.0V32.0M940 24.0V32.0M948 20.0V36.0M956 24.0V32.0M964 24.0V32.0M972 24.0V32.0M980 24.0V32.0M988 24.0V32.0M996 20.0V36.0M1004 24.0V32.0M1012 24.0V32.0M1020 24.0V32.0M1028 24.0V32.0M1036 24.0V32.0M1044 20.0V36.0M1052 24.0V32.0M1060 24.0V32.0M1068 24.0V32.0M1076 24.0V32.0M1084 24.0V32.0M1092 20.0V36.0M1100 24.0V32.0M1108 24.0V32.0M1116 24.0V32.0M1124 24.0V32.0M1132 24.0V32.0M1140 20.0V36.0M1148 24.0V32.0M1156 24.0V32.0" fill="none" stroke="#F2A05A" stroke-width="2" stroke-linecap="round"></path></g>
+</svg>

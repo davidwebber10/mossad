@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "about": {
-    "purpose": "The content of getmossad.app. The site renders this file; the design is separate.",
+    "purpose": "The content of getmossad.com. The site renders this file; the design is separate.",
     "comingSoon": "A feature with comingSoon true is on a branch and not yet in a release. Hide it, or show it with a 'Coming soon' mark. When it ships, set comingSoon to false and remove 'branch'.",
     "sources": "Paths are relative to the repository root. They are the code that proves each claim. A comingSoon feature names its branch; its sources are on that branch.",
     "style": "Plain, specific, no hype words, no emoji, no em dashes."
   },
   "site": {
     "name": "Mossad",
-    "domain": "getmossad.app",
-    "title": "Mossad: meeting notes on your Mac, with no bot on the call",
-    "description": "A free, open source menu bar app for macOS. It records your Zoom, Google Meet, and Microsoft Teams calls on your Mac and writes a Markdown note for each one.",
+    "domain": "getmossad.com",
+    "title": "Mossad: meeting notes and work intelligence for your Mac",
+    "description": "Free, open source work intelligence for your Mac. Mossad turns your Zoom, Meet, and Teams calls into notes and transcripts, and keeps track of people and promises.",
     "repository": "https://github.com/davidwebber10/mossad",
     "releases": "https://github.com/davidwebber10/mossad/releases",
     "license": "MIT"
@@ -854,11 +854,11 @@
   ],
   "privacy": {
     "title": "Private by design",
-    "intro": "Mossad is local first. Your meetings stay in a folder on your Mac, and you decide what leaves it.",
+    "intro": "Mossad is local first. Your meetings stay in a folder on your Mac, and you decide where they go.",
     "points": [
       {
         "title": "Local first",
-        "body": "Notes, audio, voice fingerprints, and the coach's memory are files in ~/Mossad. There is no Mossad account and no Mossad cloud."
+        "body": "Notes, audio, voice fingerprints, and the coach's memory are files in ~/Mossad. There is no Mossad account, and no Mossad cloud holds your meetings."
       },
       {
         "title": "Your keys",
@@ -869,12 +869,12 @@
         "body": "Sync, share links, the remote MCP, and backups run on a server in your own Cloudflare account, or not at all."
       },
       {
-        "title": "No tracking",
-        "body": "The app sends no analytics or usage data to anyone."
+        "title": "Your words stay yours",
+        "body": "Your meetings, recordings, names, and words stay on your Mac, except where you send them: to the providers, servers, and devices that you choose."
       }
     ],
     "leavesTheMac": {
-      "title": "What leaves your Mac",
+      "title": "Where your meetings can go",
       "items": [
         "Audio, to the transcription provider you chose. Nothing, if you transcribe on your Mac.",
         "Live audio while you record, to AssemblyAI, if the live transcript is on.",
@@ -920,7 +920,7 @@
     },
     {
       "question": "Where do my recordings and notes go?",
-      "answer": "Into ~/Mossad on your Mac. Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Nothing else leaves your Mac unless you turn on sync, backup, sharing, Google, or the weekly email."
+      "answer": "Into ~/Mossad on your Mac. Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Your meetings, recordings, and names go nowhere else unless you turn on sync, backup, sharing, Google, or the weekly email."
     },
     {
       "question": "Do I have to tell people that I record?",

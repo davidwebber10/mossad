@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mossad: meeting notes and work intelligence for your Mac</title>
+<meta name="description" content="Free, open source work intelligence for your Mac. Mossad turns your Zoom, Meet, and Teams calls into notes and transcripts, and keeps track of people and promises.">
+<link rel="canonical" href="https://getmossad.com/">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="theme-color" content="#141210">
+<meta name="color-scheme" content="dark">
+<link rel="preload" href="/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mossad">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="Mossad: intelligence on your own work">
+<meta property="og:description" content="Free, open source work intelligence for your Mac. Mossad turns your Zoom, Meet, and Teams calls into notes and transcripts, and keeps track of people and promises.">
+<meta property="og:url" content="https://getmossad.com/">
+<meta property="og:image" content="https://getmossad.com/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Mossad. Intelligence on your own work. Meeting notes, transcripts, people, and promises on your Mac. Free and open source.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Mossad: intelligence on your own work">
+<meta name="twitter:description" content="Free, open source work intelligence for your Mac. Mossad turns your Zoom, Meet, and Teams calls into notes and transcripts, and keeps track of people and promises.">
+<meta name="twitter:image" content="https://getmossad.com/og.png">
+<meta name="twitter:image:alt" content="Mossad. Intelligence on your own work. Meeting notes, transcripts, people, and promises on your Mac. Free and open source.">
+<style>@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-weight:400 800;font-display:swap;src:url(/fonts/bricolage-grotesque-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:Inter;font-style:normal;font-weight:400 600;font-display:swap;src:url(/fonts/inter-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/ibm-plex-mono-400-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/ibm-plex-mono-500-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}:root{color-scheme:dark;--bg:#141210;--surface:#1B1815;--mock:#141210;--line:#2E2A25;--line2:#3A342D;--line3:#332E28;--line4:#4A433B;--box:#6B635A;--text:#F4EFE7;--text2:#D9D2C7;--muted:#B8B0A4;--faint:#9A9287;--accent:#F2A05A;--accent-hover:#F7B676;--accent-ink:#141210;--warm-line:#5C3D21;--warm-bg:#241A10;--warm-text:#EAD9C2;--sand:#E3CDA2;--sky:#9DBBD0;--sage:#A8C09A;--bubble:#2B2621;--band:#26211C;--d:'Bricolage Grotesque','Helvetica Neue',Arial,sans-serif;--m:'IBM Plex Mono',ui-monospace,Menlo,monospace;--g:clamp(16px,4vw,40px)}*,*::before,*::after{box-sizing:border-box}html{-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--bg)}@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}body{margin:0;min-height:100vh;display:flex;flex-direction:column;overflow-x:clip;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}img,svg{max-width:100%}p,h1,h2,h3,ul,figure{margin:0}a{color:inherit;transition:color .15s ease,background-color .15s ease,border-color .15s ease,box-shadow .15s ease}a.accent-link{color:var(--accent);text-underline-offset:3px}a.accent-link:hover{color:var(--accent-hover);text-decoration-thickness:2px}:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}.skip{position:absolute;left:var(--g);top:-80px;z-index:10;padding:10px 16px;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-weight:600;text-decoration:none}.skip:focus{top:12px}.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.wrap{max-width:1240px;margin:0 auto;padding-inline:var(--g);width:100%}.eyebrow{font-family:var(--m);font-size:12px;font-weight:500;letter-spacing:.1em;color:var(--accent)}.label{font-family:var(--m);font-size:11.5px;letter-spacing:.08em;color:var(--faint)}.label.accent{color:var(--accent)}.h2{font-family:var(--d);font-weight:600;line-height:1.02;letter-spacing:-.035em;text-wrap:balance}.h3{font-family:var(--d);font-weight:600;font-size:clamp(26px,2.5vw,34px);line-height:1.08;letter-spacing:-.025em}.mono{font-family:var(--m)}.muted{color:var(--muted)}.faint{color:var(--faint)}.accent{color:var(--accent)}.it{font-style:italic}.hl{color:var(--text)}.btn{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font-weight:600;white-space:nowrap}.btn-primary{background:var(--accent);color:var(--accent-ink)}.btn-primary:hover{background:var(--accent-hover)}.btn-primary:active{transform:translateY(1px)}.btn-sm{min-height:44px;padding:0 18px;border-radius:12px}.btn-lg{min-height:54px;padding:0 24px;border-radius:14px;font-size:16px}.btn-ghost{min-height:54px;padding:0 22px;border-radius:14px;border:1px solid var(--line4);color:var(--text);font-weight:500;font-size:16px}.btn-ghost:hover{border-color:var(--faint);background:rgba(244,239,231,.04)}.site-header{padding-block:18px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between}.brand{color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:10px;min-height:44px;font-family:var(--d);font-weight:700;font-size:23px;letter-spacing:-.02em}.brand:hover{color:var(--accent-hover)}.nav{display:flex;align-items:center;gap:22px;font-size:15px}.nav-link{color:var(--text2);text-decoration:none;display:inline-flex;align-items:center;min-height:44px}.nav-link:hover{color:var(--text);text-decoration:underline;text-underline-offset:4px}.hero{padding-top:clamp(36px,4.6vw,64px);padding-bottom:clamp(48px,5.4vw,76px);display:flex;flex-direction:column;gap:clamp(32px,4vw,56px)}.hero-head{display:flex;flex-direction:column;gap:22px}.hero h1{font-family:var(--d);font-weight:600;font-size:clamp(46px,8.6vw,124px);line-height:.94;letter-spacing:-.045em}.hero h1 span{display:block;color:var(--accent)}.hero-body{display:flex;flex-wrap:wrap;gap:40px 64px;align-items:flex-start}.hero-copy{flex:5 1 340px;min-width:0;display:flex;flex-direction:column;gap:28px}.lede{font-size:clamp(17px,1.5vw,21px);line-height:1.5;color:var(--text2)}.actions{display:flex;flex-wrap:wrap;gap:12px}.hero-note{display:flex;flex-direction:column;gap:6px}.hero-note p:first-child{font-size:15px;color:var(--muted)}.hero-note p.mono{font-size:12.5px;color:var(--faint)}.brief{flex:7 1 520px;min-width:0;display:flex;flex-direction:column;gap:14px}.brief-frame{background:var(--surface);border:1px solid var(--line2);border-radius:22px;overflow:hidden;box-shadow:0 48px 90px -48px rgba(0,0,0,.9)}.brief-bar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:14px clamp(16px,2vw,24px);border-bottom:1px solid var(--line);font-family:var(--m);font-size:12px;letter-spacing:.08em}.brief-body{padding:clamp(16px,2vw,24px);display:flex;flex-direction:column;gap:20px}.brief-title{display:flex;flex-direction:column;gap:4px}.brief-title p:first-child{font-family:var(--d);font-weight:600;font-size:28px;line-height:1.1;letter-spacing:-.02em}.brief-title p:last-child{font-size:14px;color:var(--muted)}.brief-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:12px}.brief figcaption{font-size:13px;color:var(--faint)}.mock{background:var(--mock);border:1px solid var(--line);border-radius:16px}.pad{padding:16px;display:flex;flex-direction:column;gap:12px}.pad.tight{gap:10px}.who{display:flex;align-items:center;gap:10px}.avatar{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--c,var(--accent));color:var(--accent-ink);font-size:11.5px;font-weight:600;display:flex;align-items:center;justify-content:center}.avatar.lg{width:40px;height:40px;font-size:14px}.who-text{min-width:0;display:flex;flex-direction:column;line-height:1.3}.who-text b{font-size:14.5px;font-weight:600}.who-text span{font-size:13px;color:var(--muted)}.line{font-size:14.5px;line-height:1.45}.line b{font-weight:400;color:var(--faint)}.owe{font-size:14.5px;font-weight:600}.quote{font-size:13.5px;line-height:1.45;font-style:italic;color:var(--muted)}.check{display:flex;gap:10px;font-size:14.5px;line-height:1.4}.box{flex:0 0 auto;width:16px;height:16px;margin-top:2px;border-radius:5px;border:1.5px solid var(--box)}.chk{flex:0 0 auto;margin-top:2px}.wave{display:block;width:100%;height:56px}.what{padding-top:clamp(56px,6vw,84px);padding-bottom:clamp(48px,5vw,72px);display:flex;flex-direction:column;gap:26px}.what h2{font-size:clamp(38px,5vw,72px)}.what p{max-width:960px;font-family:var(--d);font-weight:500;font-size:clamp(20px,2.2vw,30px);line-height:1.3;letter-spacing:-.015em;color:var(--muted)}.sec{padding-block:clamp(56px,6vw,84px);display:flex;flex-direction:column;gap:clamp(28px,3.2vw,44px)}.sec-head{display:flex;flex-wrap:wrap;gap:16px 48px;align-items:flex-end;justify-content:space-between}.stack{display:flex;flex-direction:column;gap:14px}.side{font-size:18px;color:var(--muted)}.band{background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.know{padding-top:clamp(48px,5vw,72px);padding-bottom:clamp(56px,6vw,84px)}.know h2{font-size:clamp(40px,5.6vw,80px)}.know .side{max-width:430px}.cards{display:flex;flex-wrap:wrap;gap:20px}.card{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:clamp(20px,2.6vw,34px);min-width:0;display:flex;flex-direction:column;gap:22px}.card.w7{flex:7 1 520px}.card.w5{flex:5 1 360px}.card.wide{flex:1 1 100%;flex-direction:row;flex-wrap:wrap;gap:24px 48px;align-items:center}.card-copy{display:flex;flex-direction:column;gap:10px}.card-copy p:not(.eyebrow){font-size:16px;color:var(--muted)}.grow{flex:1 1 auto}.file{padding:10px 16px;border-bottom:1px solid var(--line);font-family:var(--m);font-size:12px;color:var(--faint);overflow-wrap:anywhere}.md{padding:14px 16px 16px;font-family:var(--m);font-size:13px;line-height:1.75;color:var(--text2);display:flex;flex-direction:column;overflow-wrap:anywhere}.md .h{color:var(--accent)}.md .gap{margin-top:8px}.rows{display:flex;flex-direction:column}.row{display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);align-items:flex-start}.row:last-child{border-bottom:0}.row-text{min-width:0;display:flex;flex-direction:column;gap:3px}.row-title{font-size:15px;line-height:1.35}.row-title.b{font-weight:600}.row-title.done{color:var(--faint)}.row-quote{font-size:14px;font-style:italic;color:var(--muted)}.row-meta{font-family:var(--m);font-size:12px;color:var(--faint)}.row-sub{font-size:13.5px;color:var(--muted)}.row-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 12px;padding:12px 16px;border-bottom:1px solid var(--line)}.row-head b{font-size:15px;font-weight:600}.suggest{padding:14px 16px;display:flex;flex-direction:column;gap:8px}.suggest-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px}.suggest-row>span:first-child{font-size:14.5px;color:var(--text2)}.pills{display:flex;gap:6px;font-size:12.5px}.pill{border:1px solid var(--line4);border-radius:8px;padding:3px 10px}.pill.dim{border-color:var(--line3);color:var(--muted)}.person-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:14px 16px}.person-head .who{gap:12px}.person-head .who-text b{font-size:16px}.tabs{display:flex;flex-wrap:wrap;gap:4px 18px;padding:0 16px;border-bottom:1px solid var(--line);font-size:13.5px;color:var(--faint)}.tabs span{padding:8px 0}.tabs .on{color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}.present{padding:16px;display:flex;flex-direction:column;gap:14px}.present-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:14px 24px}.tip{display:flex;flex-direction:column;gap:4px}.tip b{font-size:15px;font-weight:600;line-height:1.35}.tip span{font-size:13.5px;color:var(--muted)}.honest{font-size:13px;color:var(--faint)}.next{padding:14px 16px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px;margin-top:auto}.coach-copy{flex:4 1 300px;min-width:0}.coach-mocks{flex:7 1 480px;min-width:0;display:flex;flex-wrap:wrap;gap:14px}.coach-mocks .mock{min-width:0;padding:18px;display:flex;flex-direction:column}.advice{flex:1 1 250px;gap:12px}.advice .say{font-size:17px;line-height:1.4;font-weight:500}.advice .when{font-size:13.5px;color:var(--accent)}.advice .pills{margin-top:auto}.goal{flex:1 1 280px;gap:10px}.goal .what-line{font-size:14.5px;color:var(--text2)}.goal svg{display:block;width:100%;height:auto}.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-family:var(--m);font-size:12px;color:var(--faint)}.also{font-size:15px;color:var(--muted);max-width:860px}.ai-row{display:flex;flex-wrap:wrap;gap:36px 64px;align-items:center}.ai-copy{flex:6 1 400px;min-width:0;display:flex;flex-direction:column;gap:20px}.ai-copy h2{font-size:clamp(34px,4.4vw,60px)}.ai-copy p:last-child{max-width:540px;font-size:18px;color:var(--muted)}.chat{flex:5 1 380px;min-width:0;background:var(--mock);border:1px solid var(--line3);border-radius:20px;overflow:hidden}.chat>.label{padding:12px 18px;border-bottom:1px solid var(--line)}.chat-body{padding:18px;display:flex;flex-direction:column;gap:12px;font-size:15px;line-height:1.5}.bubble{align-self:flex-end;max-width:88%;background:var(--bubble);border-radius:14px 14px 4px 14px;padding:9px 14px}.bubble.later{margin-top:6px}.tool{font-family:var(--m);font-size:12px;color:var(--faint)}.answer{max-width:94%}.cites{display:flex;flex-wrap:wrap;gap:6px;font-size:13px}.cite{border:1px solid var(--warm-line);background:var(--warm-bg);color:var(--accent);border-radius:8px;padding:3px 10px}.ruled{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:20px 32px}.ruled li{border-top:1px solid var(--line2);padding-top:14px;display:flex;flex-direction:column;gap:6px}.ruled li>span:last-child{font-size:15px;color:var(--text2)}.day h2{font-size:clamp(38px,5vw,72px);max-width:760px}.day .head-copy{flex:1 1 480px;min-width:0}.day .side{flex:0 1 400px}.timeline{background:var(--surface);border:1px solid var(--line);border-radius:24px;overflow-x:auto}.timeline-in{min-width:900px;padding:22px clamp(16px,2.4vw,28px) 14px;display:flex;flex-direction:column}.axis{display:flex;align-items:flex-end;padding-bottom:8px}.lane-name{flex:0 0 170px;font-size:14.5px;font-weight:600}.axis .lane-name{font-weight:400}.hours{flex:1 1 auto;position:relative;height:18px;font-family:var(--m);font-size:11.5px;color:var(--faint)}.hours span,.ev{position:absolute;left:var(--l)}.lane{display:flex;align-items:center;border-top:1px solid var(--line)}.track{flex:1 1 auto;position:relative;height:58px;background-image:linear-gradient(90deg,#2A2621 1px,transparent 1px);background-size:11.765% 100%;background-position:6.667% 0}.ev{width:var(--w);top:13px;display:flex;flex-direction:column;gap:6px}.ev i{height:12px;border-radius:4px;background:var(--c)}.ev i.dash{background:none;border:1.5px dashed var(--sky)}.ev span{font-size:12.5px;white-space:nowrap;color:var(--text2)}.ev span em{font-style:normal;color:var(--faint)}.ev.mark{top:14px;width:auto}.ev.mark i{width:10px;height:10px;border-radius:0;background:var(--text);transform:rotate(45deg)}.keys{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:28px 40px}.keys li{display:flex;flex-direction:column;gap:6px}.keys b{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:600}.keys li>span{font-size:15px;color:var(--muted)}.sw{flex:0 0 auto;width:18px;height:8px;border-radius:3px;background:var(--c)}.sw.dash{background:none;border:1.5px dashed var(--sky)}.sw.outline{background:none;border:1.5px solid var(--box)}.sw.diamond{width:9px;height:9px;margin:0 5px 0 4px;border-radius:0;background:var(--text);transform:rotate(45deg)}.privacy h2{font-size:clamp(38px,5vw,72px)}.privacy .side{flex:0 1 420px}.priv-body{display:flex;flex-wrap:wrap;gap:28px 56px;align-items:flex-start}.promises{flex:5 1 340px;min-width:0;list-style:none;padding:0;display:flex;flex-direction:column;font-size:17px;line-height:1.45}.promises li{padding:16px 0;border-top:1px solid var(--line2)}.promises li:last-child{border-bottom:1px solid var(--line2)}.flow{flex:7 1 480px;min-width:0;background:var(--mock);border:1px solid var(--line3);border-radius:20px;padding:clamp(18px,2.2vw,28px);display:flex;flex-direction:column;gap:20px}.flow-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:24px 32px}.flow-grid>div{display:flex;flex-direction:column;gap:12px}.flow-grid ul{list-style:none;padding:0;display:flex;flex-direction:column;gap:10px;font-size:15px;line-height:1.45;color:var(--text2)}.flow>p{padding-top:16px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}.callout{border:1px solid var(--warm-line);background:var(--warm-bg);border-radius:16px;padding:18px clamp(16px,2vw,24px);font-size:15.5px;color:var(--warm-text)}.callout strong{color:var(--text)}.faq{display:flex;flex-direction:row;flex-wrap:wrap;gap:24px 64px;align-items:flex-start}.faq-head{flex:4 1 280px;min-width:0;display:flex;flex-direction:column;gap:14px}.faq-head h2{font-size:clamp(36px,4.4vw,60px)}.faq-head p{font-size:16px;color:var(--muted)}.faq-list{flex:8 1 520px;min-width:0;display:flex;flex-direction:column}.faq-list details{border-top:1px solid var(--line3)}.faq-list details:last-child{border-bottom:1px solid var(--line3)}.faq-list summary{cursor:pointer;padding:18px 0;font-size:17px;font-weight:600;transition:color .15s ease}.faq-list summary:hover{color:var(--accent-hover)}.faq-list summary h3{display:inline;font:inherit}.faq-list details p{margin:0 0 20px;max-width:700px;color:var(--muted)}.cta{flex:1 0 auto;border-top:1px solid var(--line);display:flex;flex-direction:column;justify-content:center}.cta .wrap{padding-block:clamp(64px,7vw,100px);display:flex;flex-direction:column;gap:32px}.cta h2{font-size:clamp(40px,6.2vw,88px);max-width:1040px}.cta-row{display:flex;flex-wrap:wrap;align-items:center;gap:16px 28px}.cta-row p{font-family:var(--m);font-size:12.5px;line-height:1.7;color:var(--faint)}.site-footer{border-top:1px solid var(--line)}.site-footer .wrap{padding-top:28px;padding-bottom:44px;display:flex;flex-direction:column;gap:12px;font-size:13px;color:var(--faint)}.foot-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 28px}.site-footer .brand{gap:8px;font-size:18px}.foot-nav{display:flex;flex-wrap:wrap;gap:0 24px;font-size:14px}.foot-nav a{color:var(--text2);display:inline-flex;align-items:center;min-height:44px;text-underline-offset:3px}.foot-nav a:hover{color:var(--text)}.site-footer p{max-width:980px}.doc{padding-top:clamp(36px,4.6vw,64px);padding-bottom:clamp(56px,6vw,84px);display:flex;flex-direction:column;gap:clamp(28px,3.2vw,44px)}.doc h1{font-family:var(--d);font-weight:600;font-size:clamp(42px,6vw,84px);line-height:.98;letter-spacing:-.04em;text-wrap:balance}.doc h1 span{color:var(--accent)}.doc .lede{max-width:760px}.doc-body{display:flex;flex-direction:column;gap:20px;max-width:900px}.doc-section{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:clamp(20px,2.6vw,34px);display:flex;flex-direction:column;gap:14px}.doc-section h2{font-family:var(--d);font-weight:600;font-size:clamp(26px,2.5vw,34px);line-height:1.08;letter-spacing:-.025em}.doc-section h3{font-size:17px;font-weight:600;margin-top:6px}.doc-section p,.doc-section li{color:var(--muted)}.doc-section ul{padding-left:20px;display:flex;flex-direction:column;gap:6px}.doc-section code{font-family:var(--m);font-size:.88em;color:var(--text2);background:var(--mock);border:1px solid var(--line);border-radius:6px;padding:1px 6px;overflow-wrap:anywhere}.fields{width:100%;border-collapse:collapse;font-size:14.5px}.fields th,.fields td{text-align:left;vertical-align:top;padding:10px 12px 10px 0;border-top:1px solid var(--line)}.fields th{font-weight:500;color:var(--text2);white-space:nowrap}.fields td{color:var(--muted)}.fields thead th{font-family:var(--m);font-size:11.5px;letter-spacing:.08em;color:var(--faint);border-top:0}.table-wrap{overflow-x:auto}.updated{font-family:var(--m);font-size:12.5px;color:var(--faint)}.notfound .actions{margin-top:4px}@media (max-width:560px){.fields th{white-space:normal}}@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}@media (forced-colors:active){.btn-primary,.btn-ghost{border:1px solid ButtonText}}main{flex:1 0 auto;display:flex;flex-direction:column}#ai .sec{gap:clamp(32px,3.4vw,48px)}</style>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://getmossad.com/#organization","name":"Mossad","url":"https://getmossad.com/","logo":{"@type":"ImageObject","url":"https://getmossad.com/icon-512.png","width":512,"height":512},"sameAs":["https://github.com/davidwebber10/mossad"]},{"@type":"WebSite","@id":"https://getmossad.com/#website","name":"Mossad","url":"https://getmossad.com/","description":"Free, open source work intelligence for your Mac. Mossad turns your Zoom, Meet, and Teams calls into notes and transcripts, and keeps track of people and promises.","inLanguage":"en","publisher":{"@id":"https://getmossad.com/#organization"}},{"@type":["SoftwareApplication","SoftwareSourceCode"],"@id":"https://getmossad.com/#app","name":"Mossad","description":"Free, open source work intelligence for your Mac. Mossad turns your Zoom, Meet, and Teams calls into notes and transcripts, and keeps track of people and promises.","url":"https://getmossad.com/","image":"https://getmossad.com/og.png","applicationCategory":"BusinessApplication","applicationSubCategory":"Meeting notes","operatingSystem":"macOS 26","processorRequirements":"Apple silicon","softwareVersion":"2.20.0","downloadUrl":"https://github.com/davidwebber10/mossad/releases/latest","installUrl":"https://github.com/davidwebber10/mossad/releases/latest","releaseNotes":"https://github.com/davidwebber10/mossad/releases/tag/v2.20.0","license":"https://opensource.org/licenses/MIT","isAccessibleForFree":true,"codeRepository":"https://github.com/davidwebber10/mossad","programmingLanguage":"Swift","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Finds your calls","Stops when the call ends","Two tracks, no bot","Muted means silent","Pause, stop, or skip","Your call comes first","One note per call","Summaries by topic","Real meeting titles","Live transcript","See who spoke when","Nothing gets lost","Name a voice once","Voices that read the invite","A page for each person","Person pages with tabs","Your org chart","How to present to them","One line per call","Findings you can answer","Goals with a number","A weekly review","It remembers","Was it worth it","Before this meeting","Recurring meetings","Filter by anything","Search everything","A search in every list","Bookmark a moment","Shared screens","What you promised","A calendar of your meetings","Each meeting in numbers","How you communicate","Where your time goes","What it costs you","Ask your meetings","MCP on your Mac","MCP for web AI apps","Notes your agents can read","Your meetings, in your pocket","Record in the room","Share one meeting","A PIN on the link","See who opened it","Copy for their AI","A folder you own","Your own server","Recording backup","iCloud sync","Your own Google app","Richer calendar details","Gemini notes come in","Names from your directory","Choose your transcription","Choose your model","All on your Mac","Your keys, your bills"],"author":{"@id":"https://getmossad.com/#organization"},"publisher":{"@id":"https://getmossad.com/#organization"}},{"@type":"FAQPage","@id":"https://getmossad.com/#faq","mainEntity":[{"@type":"Question","name":"What does it cost?","acceptedAnswer":{"@type":"Answer","text":"Mossad is free. If you use cloud AI providers, they bill you directly: cloud transcription is about $0.22 to $0.36 an hour of audio, and the notes model adds its own cost. Setup shows the cost per hour of your choices. With models on your Mac, it costs nothing to run."}},{"@type":"Question","name":"Does a bot join my meetings?","acceptedAnswer":{"@type":"Answer","text":"No. Nothing joins the call and nothing shows to the other people. That is also why telling them is your job."}},{"@type":"Question","name":"Do I have to tell people that I record?","acceptedAnswer":{"@type":"Answer","text":"Yes. Many places require the consent of one or of all people on a call, and voice fingerprints can be biometric data under some laws. Read Lawful use in the README, and ask a lawyer if you are not sure."}},{"@type":"Question","name":"Which call apps does it work with?","acceptedAnswer":{"@type":"Answer","text":"Zoom, Microsoft Teams, and Google Meet, in their apps or in Chrome, Arc, Safari, Edge, and Brave. In a browser that it cannot read, such as Firefox, it tells you once and offers to record. You can also record a meeting in a room by hand."}},{"@type":"Question","name":"Can it run with no cloud at all?","acceptedAnswer":{"@type":"Answer","text":"Yes. Choose transcription and a notes model that run on your Mac, and your audio and text stay on it. Quality and speed then depend on the model and your Mac."}},{"@type":"Question","name":"Is there an iPhone app?","acceptedAnswer":{"@type":"Answer","text":"Yes: your meetings, chat, people, and the coach, and a recorder for meetings in a room. It is not in the App Store. You build it from the source with Xcode."}},{"@type":"Question","name":"What if it gets something wrong?","acceptedAnswer":{"@type":"Answer","text":"Rename a voice and every note updates. Edit a title, regenerate a summary, or transcribe a meeting again. Summaries, coaching, and person notes come from software and can be wrong, so check them before you act on them."}}]}]}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap site-header">
+<a class="brand" href="#top" aria-label="Mossad home"><svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#F2A05A"></rect><path d="M8 17v-6M12 20V8M16 18v-8M20 15v-2" stroke="#141210" stroke-width="2.4" stroke-linecap="round"></path></svg>Mossad</a>
+<nav class="nav" aria-label="Main">
+<a class="nav-link" href="https://github.com/davidwebber10/mossad">GitHub</a>
+<a class="btn btn-primary btn-sm" href="https://github.com/davidwebber10/mossad/releases/latest" data-download="header">Download</a>
+</nav>
+</header>
+<main id="main">
+
+<section class="wrap hero" aria-labelledby="hero-title">
+<div class="hero-head">
+<p class="eyebrow">WORK INTELLIGENCE FOR YOUR MAC</p>
+<h1 id="hero-title">Intelligence on <span>your own work.</span></h1>
+</div>
+<div class="hero-body">
+<div class="hero-copy">
+<p class="lede">Most of what matters at work is said out loud, then lost. Mossad captures every meeting and keeps what counts: what was decided, who owes what, what you promised, and how each person thinks. Then it briefs you before the next one.</p>
+<div class="actions">
+<a class="btn btn-primary btn-lg" href="https://github.com/davidwebber10/mossad/releases/latest" data-download="hero"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="#141210" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5v9M5 8l4 4 4-4M3 15.5h12"></path></svg>Download for Mac</a>
+<a class="btn btn-ghost" href="https://github.com/davidwebber10/mossad">View the source</a>
+</div>
+<div class="hero-note">
+<p>Free and open source. No account. No bot on your calls.</p>
+<p class="mono">macOS 26 or later · Apple silicon</p>
+</div>
+</div>
+<figure class="brief">
+<div class="brief-frame">
+<div class="brief-bar"><span class="faint">BEFORE THIS MEETING</span><span class="accent">STARTS IN 5 MIN</span></div>
+<div class="brief-body">
+<div class="brief-title">
+<p>Product sync</p>
+<p>Every Tuesday 9:00 · Google Meet · 3 people invited</p>
+</div>
+<div class="brief-grid">
+<div class="mock pad">
+<p class="label">WHO IS COMING</p>
+<div class="who"><span class="avatar" aria-hidden="true">SC</span><div class="who-text"><b>Sam Carter</b><span>Last met 6 days ago</span></div></div>
+<div class="who"><span class="avatar" style="--c:var(--sand)" aria-hidden="true">JA</span><div class="who-text"><b>Jo Alvarez</b><span>Last met 2 weeks ago</span></div></div>
+<div class="who"><span class="avatar" style="--c:var(--sky)" aria-hidden="true">PN</span><div class="who-text"><b>Priya Nair</b><span>No meetings yet</span></div></div>
+</div>
+<div class="mock pad">
+<p class="label">LAST TIME · NOV 3</p>
+<p class="line"><b>Decided.</b> The pricing test moves to next sprint.</p>
+<p class="line"><b>Still open.</b> Sam owes the test plan.</p>
+</div>
+<div class="mock pad tight">
+<p class="label">YOU STILL OWE</p>
+<p class="owe">The Q3 numbers, to Jo</p>
+<p class="quote">“I'll get you the Q3 numbers by Thursday.”</p>
+</div>
+<div class="mock pad tight">
+<p class="label">YOUR POINTS FOR TODAY</p>
+<div class="check"><span class="box" aria-hidden="true"></span><span>Is the launch still on for the 3rd?</span></div>
+<div class="check"><span class="box" aria-hidden="true"></span><span>Budget for the research panel</span></div>
+</div>
+</div>
+</div>
+</div>
+<figcaption>The brief that is ready before each meeting. Drawn here with sample data.</figcaption>
+</figure>
+</div>
+</section>
+
+<div class="wrap" aria-hidden="true">
+<svg class="wave" viewBox="0 0 1160 56" preserveAspectRatio="xMinYMid slice"><path d="M4 25.5V30.5M12 18.7V37.3M20 18.5V37.5M28 20.6V35.4M36 8.8V47.2M44 6.9V49.1M52 19.6V36.4M60 21.3V34.7M68 22.1V33.9M76 22.7V33.3M84 23.1V32.9M92 17.9V38.1M100 10.7V45.3M108 17.6V38.4M116 22.8V33.2M124 20.5V35.5M132 22.8V33.2M140 25.5V30.5M148 25.1V30.9M156 24.8V31.2M164 24.6V31.4M172 24.5V31.5M180 22.7V33.3M188 19.2V36.8M196 22.2V33.8M204 25.0V31.0M212 23.6V32.4M220 17.4V38.6M228 19.4V36.6M236 20.1V35.9M244 8.8V47.2M252 10.0V46.0M260 21.4V34.6M268 22.2V33.8M276 25.2V30.8M284 20.1V35.9M292 22.1V33.9M300 14.0V42.0M308 6.9V49.1M316 17.1V38.9M324 21.9V34.1M332 19.3V36.7M340 23.5V32.5M348 24.8V31.2M356 23.5V32.5M364 20.2V35.8M372 22.1V33.9M380 24.9V31.1M388 25.5V30.5M396 24.0V32.0M404 24.6V31.4M412 25.5V30.5M420 22.9V33.1M428 18.4V37.6M436 21.1V34.9M444 20.2V35.8M452 11.2V44.8M460 14.5V41.5M468 23.0V33.0M476 23.8V32.2M484 21.3V34.7M492 18.6V37.4M500 21.3V34.7M508 10.8V45.2M516 5.7V50.3M524 18.0V38.0M532 21.4V34.6M540 20.0V36.0M548 25.1V30.9M556 23.8V32.2M564 20.9V35.1M572 14.6V41.4M580 18.7V37.3M588 23.7V32.3M596 22.4V33.6M604 23.7V32.3M612 25.4V30.6M620 25.4V30.6M628 24.0V32.0M636 21.5V34.5M644 23.1V32.9M652 21.3V34.7M660 15.5V40.5M668 19.1V36.9M676 24.3V31.7M684 25.2V30.8M692 19.1V36.9M700 19.4V36.6M708 21.5V34.5M716 12.8V43.2M724 12.1V43.9M732 21.5V34.5M740 23.0V33.0M748 23.8V32.2M756 23.7V32.3M764 24.2V31.8M772 21.8V34.2M780 19.0V37.0M788 22.4V33.6M796 24.6V31.4M804 24.0V32.0M812 24.8V31.2M820 25.5V30.5M828 25.4V30.6M836 25.3V30.7M844 25.5V30.5" fill="none" stroke="#4A433B" stroke-width="2" stroke-linecap="round"></path><path d="M852 20.0V36.0M860 24.0V32.0M868 24.0V32.0M876 24.0V32.0M884 24.0V32.0M892 24.0V32.0M900 20.0V36.0M908 24.0V32.0M916 24.0V32.0M924 24.0V32.0M932 24.0V32.0M940 24.0V32.0M948 20.0V36.0M956 24.0V32.0M964 24.0V32.0M972 24.0V32.0M980 24.0V32.0M988 24.0V32.0M996 20.0V36.0M1004 24.0V32.0M1012 24.0V32.0M1020 24.0V32.0M1028 24.0V32.0M1036 24.0V32.0M1044 20.0V36.0M1052 24.0V32.0M1060 24.0V32.0M1068 24.0V32.0M1076 24.0V32.0M1084 24.0V32.0M1092 20.0V36.0M1100 24.0V32.0M1108 24.0V32.0M1116 24.0V32.0M1124 24.0V32.0M1132 24.0V32.0M1140 20.0V36.0M1148 24.0V32.0M1156 24.0V32.0" fill="none" stroke="#F2A05A" stroke-width="2" stroke-linecap="round"></path></svg>
+</div>
+
+<section class="wrap what" aria-labelledby="what-title">
+<h2 id="what-title" class="h2">Not another transcription app.</h2>
+<p>Mossad is a memory for your work. It knows <span class="hl">the people in your meetings</span>, <span class="hl">what was decided</span>, <span class="hl">who owes what</span>, and <span class="hl">which promises are yours</span>. And it brings each one back at the moment you need it.</p>
+</section>
+
+<section id="know" class="wrap sec know" aria-labelledby="know-title">
+<div class="sec-head">
+<div class="stack">
+<p class="eyebrow">WHAT YOU GET</p>
+<h2 id="know-title" class="h2">Now you know.</h2>
+</div>
+<p class="side">Intelligence is having the answer at the moment you need it. Mossad has these ready.</p>
+</div>
+
+<div class="cards">
+
+<article class="card w7">
+<div class="card-copy">
+<p class="eyebrow">THE NOTE</p>
+<h3 class="h3">What did we decide?</h3>
+<p style="max-width:560px">Every meeting becomes one note: a short summary, the decisions, and each next step with its owner. It is a plain file on your Mac, with a name on every line.</p>
+</div>
+<div class="mock grow" style="overflow:hidden">
+<p class="file">2026-11-10 0900 - Product sync.md</p>
+<div class="md">
+<span class="h">## Action items</span>
+<span>- [ ] Sam Carter: send the test plan by Friday</span>
+<span>- [ ] Jo Alvarez: confirm the research budget</span>
+<span class="h gap">## Decisions</span>
+<span>- The pricing test moves to next sprint <span class="faint">(00:12:40)</span></span>
+<span class="h gap">## Transcript</span>
+<span><span class="faint">[00:12:31]</span> Sam Carter: If we wait one sprint, we get clean data.</span>
+<span><span class="faint">[00:12:40]</span> Jo Alvarez: Then we wait. I can move the budget.</span>
+</div>
+</div>
+</article>
+
+<article class="card w5">
+<div class="card-copy">
+<p class="eyebrow">TASKS</p>
+<h3 class="h3">What did I promise?</h3>
+<p>Mossad finds the things you said you would do, in your own words, and keeps them where you will see them.</p>
+</div>
+<div class="mock rows grow">
+<div class="row"><span class="box" aria-hidden="true"></span><div class="row-text"><span class="row-title b">Send the Q3 numbers to Jo</span><span class="row-quote">“I'll get you the Q3 numbers by Thursday.”</span><span class="row-meta">Product sync · due Thursday</span></div></div>
+<div class="row"><span class="box" aria-hidden="true"></span><div class="row-text"><span class="row-title b">Introduce Priya to the research team</span><span class="row-quote">“Let me connect you two this week.”</span><span class="row-meta">Design review · Monday</span></div></div>
+<div class="row"><svg class="chk" width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Done"><rect width="16" height="16" rx="5" fill="#F2A05A"></rect><path d="M4.5 8.2l2.3 2.3 4.7-5" fill="none" stroke="#141210" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg><div class="row-text"><span class="row-title done">Share the launch checklist</span><span class="row-meta">Done</span></div></div>
+</div>
+</article>
+
+<article class="card w5">
+<div class="card-copy">
+<p class="eyebrow">RECURRING MEETINGS</p>
+<h3 class="h3">What do I raise next time?</h3>
+<p>Save a point for a recurring meeting or for a person. When you raise it, Mossad checks it off with the moment you said it. If you do not, it carries to the next one.</p>
+</div>
+<div class="mock rows grow">
+<div class="row-head"><b>Product sync</b><span class="row-meta">Every Tuesday 9:00</span></div>
+<div class="row"><svg class="chk" width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Done"><rect width="16" height="16" rx="5" fill="#F2A05A"></rect><path d="M4.5 8.2l2.3 2.3 4.7-5" fill="none" stroke="#141210" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg><div class="row-text"><span class="row-title">Is the launch still on for the 3rd?</span><span class="row-sub"><span class="accent">Discussed at 14:02.</span> <span class="it">“So are we still on for the 3rd?”</span></span></div></div>
+<div class="row"><span class="box" aria-hidden="true"></span><div class="row-text"><span class="row-title">Budget for the research panel</span><span class="row-sub">Carried from last week</span></div></div>
+<div class="suggest">
+<p class="label">SUGGESTED</p>
+<div class="suggest-row"><span>Sam's test plan is still open</span><span class="pills" aria-hidden="true"><span class="pill">Keep</span><span class="pill dim">Dismiss</span></span></div>
+</div>
+</div>
+</article>
+
+<article class="card w7">
+<div class="card-copy">
+<p class="eyebrow">PEOPLE</p>
+<h3 class="h3">How do I pitch this to Sam?</h3>
+<p style="max-width:580px">Every person gets a page: your meetings together, what they owe you, and what you saved to raise with them. After a few calls, it also says how they like to hear a new idea, tied to what they said.</p>
+</div>
+<div class="mock grow" style="display:flex;flex-direction:column">
+<div class="person-head">
+<div class="who"><span class="avatar lg" aria-hidden="true">SC</span><div class="who-text"><b>Sam Carter</b><span>Head of Product</span></div></div>
+<span class="row-meta">Last met 6 days ago · 2 open items</span>
+</div>
+<div class="tabs" aria-hidden="true"><span class="on">Overview</span><span>Meetings</span><span>Tasks</span><span>Analytics</span><span>Knowledge</span><span>Voice</span></div>
+<div class="present">
+<p class="label">HOW TO PRESENT TO SAM</p>
+<div class="present-grid">
+<div class="tip"><b>Open with your answer, then the numbers.</b><span><span class="it">“Give me the headline first.”</span> Roadmap review</span></div>
+<div class="tip"><b>Bring one recommendation, not a menu.</b><span><span class="it">“Which one would you pick?”</span> 1:1, last month</span></div>
+</div>
+<p class="honest">Shown after a few calls. You can turn it off for any person.</p>
+</div>
+<div class="next">
+<p class="label">NEXT TIME I SEE SAM</p>
+<div class="check"><span class="box" aria-hidden="true"></span><span>Ask about the hiring plan for the research team</span></div>
+</div>
+</div>
+</article>
+
+<article class="card wide">
+<div class="card-copy coach-copy">
+<p class="eyebrow">COACH</p>
+<h3 class="h3">Am I getting better at this?</h3>
+<p>After each call, at most one piece of advice, always with the moment or the number behind it. Take on a goal and watch it move, meeting by meeting. The charts call a change only when there is one.</p>
+</div>
+<div class="coach-mocks">
+<div class="mock advice">
+<p class="label">AFTER YOUR 1:1 WITH SAM</p>
+<p class="say">You asked a question, then answered it yourself. Next time, leave the pause.</p>
+<p class="when">Hear it at 21:14</p>
+<div class="pills" aria-hidden="true"><span class="pill">Useful</span><span class="pill dim">Not useful</span></div>
+</div>
+<div class="mock goal">
+<p class="label">GOAL · MORE ROOM IN YOUR 1:1S</p>
+<p class="what-line">Your talk share, one point for each 1:1</p>
+<svg viewBox="0 0 320 104" width="320" height="104" role="img" aria-label="Sample chart. Your talk share in 1:1s sits in its usual band before the goal, and lower in each 1:1 since the goal began."><rect x="0" y="18" width="320" height="30" rx="4" fill="#26211C"></rect><path d="M152 4v96" stroke="#6B635A" stroke-width="1" stroke-dasharray="3 4" fill="none"></path><path d="M10 34H140" stroke="#9A9287" stroke-width="1.5" fill="none"></path><path d="M166 50L236 62L312 76" stroke="#F2A05A" stroke-width="2" stroke-linecap="round" fill="none"></path><g fill="#9A9287"><circle cx="14" cy="30" r="4"></circle><circle cx="38" cy="40" r="4"></circle><circle cx="62" cy="26" r="4"></circle><circle cx="86" cy="42" r="4"></circle><circle cx="110" cy="32" r="4"></circle><circle cx="134" cy="37" r="4"></circle></g><g fill="#F2A05A"><circle cx="170" cy="46" r="4.5"></circle><circle cx="194" cy="58" r="4.5"></circle><circle cx="218" cy="53" r="4.5"></circle><circle cx="242" cy="68" r="4.5"></circle><circle cx="266" cy="63" r="4.5"></circle><circle cx="290" cy="78" r="4.5"></circle><circle cx="310" cy="73" r="4.5"></circle></g></svg>
+<div class="legend"><span>grey: before the goal</span><span class="accent">orange: since the goal</span><span>band: your usual</span></div>
+</div>
+</div>
+</article>
+
+</div>
+
+<p class="also">Also in the app: one search for every meeting, person, and decision, a live transcript, a calendar, analytics, and a link with a PIN to share one meeting. <a class="accent-link" href="https://github.com/davidwebber10/mossad#what-it-does">The full list is in the README.</a></p>
+</section>
+
+<section id="ai" class="band" aria-labelledby="ai-title">
+<div class="wrap sec">
+<div class="ai-row">
+<div class="ai-copy">
+<p class="eyebrow">CONTEXT FOR YOUR AI</p>
+<h2 id="ai-title" class="h2">Your AI was not in the meeting. <span class="accent">Mossad was.</span></h2>
+<p>Ask in Mossad's own Chat, or connect the AI tools you already use. They search and read your meetings, and they answer with the exact moment.</p>
+</div>
+<figure class="chat">
+<figcaption class="label">ASK YOUR MEETINGS · SAMPLE</figcaption>
+<div class="chat-body">
+<p class="bubble">What did Sam agree to on pricing?</p>
+<p class="tool">search_transcripts · read_meeting</p>
+<p class="answer">Sam agreed to hold the pricing test until next sprint, and to send the test plan by Friday.</p>
+<div class="cites"><span class="cite">Product sync · 12:40</span><span class="cite">Product sync · 31:05</span></div>
+<p class="bubble later">Add the test plan to my points for Tuesday.</p>
+<p class="tool">add_next_time_point</p>
+<p>Done. It is on your list for Product sync.</p>
+</div>
+</figure>
+</div>
+<ul class="ruled">
+<li><span class="label accent">IN MOSSAD</span><span>Chat answers with links that open the meeting at that moment.</span></li>
+<li><span class="label accent">ON YOUR MAC</span><span>Claude Desktop, Claude Code, and any MCP app can search and read your meetings.</span></li>
+<li><span class="label accent">ON THE WEB</span><span>With your own server, Claude and ChatGPT connect after you sign in. Read only.</span></li>
+<li><span class="label accent">AS FILES</span><span>Every note is plain Markdown that your agents can open.</span></li>
+</ul>
+</div>
+</section>
+
+<section id="day" class="day" aria-labelledby="day-title">
+<div class="wrap sec">
+<div class="sec-head">
+<div class="stack head-copy">
+<p class="eyebrow">HOW IT GETS THERE</p>
+<h2 id="day-title" class="h2">From a day you were already having.</h2>
+</div>
+<p class="side">You start nothing and you change nothing. Wherever work gets said out loud, Mossad is there, and the record fills itself.</p>
+</div>
+
+<div class="timeline" role="group" tabindex="0" aria-label="A sample Tuesday, shown as five lanes: your calls, the room, the meeting you missed, shared screens, and your bookmarks">
+<div class="timeline-in">
+<div class="axis">
+<span class="lane-name label accent">ONE TUESDAY</span>
+<div class="hours" aria-hidden="true"><span style="--l:5.88%">9:00</span><span style="--l:17.65%">10:00</span><span style="--l:29.41%">11:00</span><span style="--l:41.18%">12:00</span><span style="--l:52.94%">13:00</span><span style="--l:64.71%">14:00</span><span style="--l:76.47%">15:00</span><span style="--l:88.24%">16:00</span></div>
+</div>
+<div class="lane">
+<span class="lane-name">Your calls</span>
+<div class="track">
+<div class="ev" style="--l:5.88%;--w:9.8%"><i style="--c:var(--accent)"></i><span>Product sync <em>Meet</em></span></div>
+<div class="ev" style="--l:29.41%;--w:11.76%"><i style="--c:var(--accent)"></i><span>Vendor review <em>Zoom</em></span></div>
+<div class="ev" style="--l:76.47%;--w:11.76%"><i style="--c:var(--accent)"></i><span>1:1 with Sam <em>Teams</em></span></div>
+</div>
+</div>
+<div class="lane">
+<span class="lane-name">The room</span>
+<div class="track">
+<div class="ev" style="--l:52.94%;--w:11.76%"><i style="--c:var(--sand)"></i><span>Design review <em>iPhone on the table</em></span></div>
+</div>
+</div>
+<div class="lane">
+<span class="lane-name">The one you missed</span>
+<div class="track">
+<div class="ev" style="--l:17.65%;--w:9.8%"><i class="dash"></i><span>Budget review <em>notes by Gemini</em></span></div>
+</div>
+</div>
+<div class="lane">
+<span class="lane-name">Shared screens</span>
+<div class="track">
+<div class="ev" style="--l:7.84%;--w:4.9%"><i style="--c:var(--sage)"></i><span>Roadmap slides</span></div>
+<div class="ev" style="--l:31.37%;--w:5.88%"><i style="--c:var(--sage)"></i><span>Price sheet</span></div>
+</div>
+</div>
+<div class="lane">
+<span class="lane-name">Your bookmarks</span>
+<div class="track">
+<div class="ev mark" style="--l:11.96%"><i></i><span>9:31</span></div>
+<div class="ev mark" style="--l:61.18%"><i></i><span>13:42</span></div>
+</div>
+</div>
+</div>
+</div>
+
+<ul class="keys">
+<li><b><span class="sw" style="--c:var(--accent)" aria-hidden="true"></span>Your calls</b><span>Zoom, Google Meet, and Microsoft Teams. No bot joins, and the meeting looks the way it does today.</span></li>
+<li><b><span class="sw" style="--c:var(--sand)" aria-hidden="true"></span>The room</b><span>Put your iPhone on the table, or start a recording on your Mac. The note is on your Mac after.</span></li>
+<li><b><span class="sw dash" aria-hidden="true"></span>The one you missed</b><span>Connect Google, and Gemini's notes for the meetings you could not join arrive on their own.</span></li>
+<li><b><span class="sw" style="--c:var(--sage)" aria-hidden="true"></span>The shared screen</b><span>Turn it on, and the slides people showed stay with the meeting, where search can find them.</span></li>
+<li><b><span class="sw diamond" aria-hidden="true"></span>The moment you mark</b><span>One shortcut flags a moment while you talk. Later, you go straight back to it.</span></li>
+<li><b><span class="sw outline" aria-hidden="true"></span>Nothing to press</b><span>It starts when the call starts and stops when it ends. Pause, skip, or mark a meeting as do not record at any time.</span></li>
+</ul>
+</div>
+</section>
+
+<section id="privacy" class="band privacy" aria-labelledby="privacy-title">
+<div class="wrap sec">
+<div class="sec-head">
+<div class="stack">
+<p class="eyebrow">PRIVATE BY DESIGN</p>
+<h2 id="privacy-title" class="h2">It answers to you alone.</h2>
+</div>
+<p class="side">Mossad is local first. Your meetings are files in a folder on your Mac, and you decide where they go.</p>
+</div>
+<div class="priv-body">
+<ul class="promises">
+<li>No Mossad account, and no Mossad cloud for your meetings.</li>
+<li>Your own AI keys, kept in your Keychain. Each provider bills you directly.</li>
+<li>Or models that run on your Mac, so audio and text never leave it.</li>
+<li>Your meetings, recordings, names, and words stay on your Mac, except where you send them. <a class="accent-link" href="/privacy">Read the privacy page.</a></li>
+<li>Open source under the MIT License. <a class="accent-link" href="https://github.com/davidwebber10/mossad">Read every line.</a></li>
+</ul>
+<div class="flow">
+<div class="flow-grid">
+<div>
+<p class="label">STAYS ON YOUR MAC</p>
+<ul>
+<li>Your notes, audio, and people, in a folder you own</li>
+<li>Voice fingerprints. They never leave.</li>
+<li>Your keys, in the Keychain</li>
+</ul>
+</div>
+<div>
+<p class="label accent">LEAVES ONLY IF YOU CHOOSE</p>
+<ul>
+<li>Audio, to the transcription provider you pick</li>
+<li>Transcript text, to the AI provider you pick</li>
+<li>Meetings, to your iPhone, through iCloud or your own server</li>
+<li>A shared meeting or a backup, to your own server or storage</li>
+</ul>
+</div>
+</div>
+<p>With models on your Mac, the first two never happen. <a class="accent-link" href="https://github.com/davidwebber10/mossad#where-your-data-lives">Where your data lives</a></p>
+</div>
+</div>
+<p class="callout"><strong>You are the one recording.</strong> Mossad does not announce itself on a call. Tell the people you meet, and get consent where the law requires it. <a class="accent-link" href="https://github.com/davidwebber10/mossad#lawful-use">Read Lawful use</a></p>
+</div>
+</section>
+
+<section id="faq" aria-labelledby="faq-title">
+<div class="wrap sec faq">
+<div class="faq-head">
+<h2 id="faq-title" class="h2">Fair questions.</h2>
+<p>Setup, providers, and limits are in the <a class="accent-link" href="https://github.com/davidwebber10/mossad#readme">README</a>.</p>
+</div>
+<div class="faq-list">
+<details open><summary><h3>What does it cost?</h3></summary><p>Mossad is free. If you use cloud AI providers, they bill you directly: cloud transcription is about $0.22 to $0.36 an hour of audio, and the notes model adds its own cost. Setup shows the cost per hour of your choices. With models on your Mac, it costs nothing to run.</p></details>
+<details><summary><h3>Does a bot join my meetings?</h3></summary><p>No. Nothing joins the call and nothing shows to the other people. That is also why telling them is your job.</p></details>
+<details><summary><h3>Do I have to tell people that I record?</h3></summary><p>Yes. Many places require the consent of one or of all people on a call, and voice fingerprints can be biometric data under some laws. Read Lawful use in the README, and ask a lawyer if you are not sure.</p></details>
+<details><summary><h3>Which call apps does it work with?</h3></summary><p>Zoom, Microsoft Teams, and Google Meet, in their apps or in Chrome, Arc, Safari, Edge, and Brave. In a browser that it cannot read, such as Firefox, it tells you once and offers to record. You can also record a meeting in a room by hand.</p></details>
+<details><summary><h3>Can it run with no cloud at all?</h3></summary><p>Yes. Choose transcription and a notes model that run on your Mac, and your audio and text stay on it. Quality and speed then depend on the model and your Mac.</p></details>
+<details><summary><h3>Is there an iPhone app?</h3></summary><p>Yes: your meetings, chat, people, and the coach, and a recorder for meetings in a room. It is not in the App Store. You build it from the source with Xcode.</p></details>
+<details><summary><h3>What if it gets something wrong?</h3></summary><p>Rename a voice and every note updates. Edit a title, regenerate a summary, or transcribe a meeting again. Summaries, coaching, and person notes come from software and can be wrong, so check them before you act on them.</p></details>
+</div>
+</div>
+</section>
+
+<section class="cta" aria-labelledby="cta-title">
+<div class="wrap">
+<h2 id="cta-title" class="h2">Your next meeting is the first one <span class="accent">it remembers.</span></h2>
+<div class="cta-row">
+<a class="btn btn-primary btn-lg" href="https://github.com/davidwebber10/mossad/releases/latest" data-download="cta"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="#141210" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5v9M5 8l4 4 4-4M3 15.5h12"></path></svg>Download for Mac</a>
+<p>Free · MIT License · macOS 26 or later · Apple silicon · your own AI keys or on-device models</p>
+</div>
+</div>
+</section>
+
+</main>
+<footer class="site-footer">
+<div class="wrap">
+<div class="foot-row">
+<a class="brand" href="#top" aria-label="Mossad home"><svg width="22" height="22" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#F2A05A"></rect><path d="M8 17v-6M12 20V8M16 18v-8M20 15v-2" stroke="#141210" stroke-width="2.4" stroke-linecap="round"></path></svg>Mossad</a>
+<nav class="foot-nav" aria-label="Footer">
+<a href="https://github.com/davidwebber10/mossad">GitHub</a>
+<a href="https://github.com/davidwebber10/mossad/releases">Releases</a>
+<a href="/privacy">Privacy</a>
+<a href="https://github.com/davidwebber10/mossad#license">MIT License</a>
+<a href="https://github.com/davidwebber10/mossad#disclaimer">Disclaimer</a>
+<a href="https://github.com/davidwebber10/mossad#lawful-use">Lawful use</a>
+<a href="https://github.com/davidwebber10/mossad#trademarks">Trademarks</a>
+</nav>
+</div>
+<p>Mossad is free and open source software under the MIT License. It is provided as is, without warranty of any kind, and the authors are not liable for its use. Use it only in a lawful way: tell the people you record, and get consent to record where the law requires it. Zoom, Google Meet, Gemini, Microsoft Teams, Claude, and ChatGPT are names of their owners. Mossad is not affiliated with Zoom, Google, Microsoft, or any other company named here.</p>
+</div>
+</footer>
+<script src="/beacon.js" defer></script>
+</body>
+</html>

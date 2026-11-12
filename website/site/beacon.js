@@ -1,0 +1,1 @@
+document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[data-download]');if(!a||!navigator.sendBeacon)return;try{navigator.sendBeacon('/api/click',a.getAttribute('data-download'))}catch(_){}});
