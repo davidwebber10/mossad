@@ -563,6 +563,29 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(failed.customTitle, "Dana and Sam sync")
     }
 
+    /// The usage statistics count each failed step by its kind, and nothing else of the call.
+    func testAFailedStepIsReportedByItsKind() async throws {
+        let failures = LogLines()
+        let later = start.addingTimeInterval(3600)
+        func make() -> Pipeline {
+            Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                     calendar: FakeCalendar(), summarizer: summarizer, notify: { _ in }, now: { later }, ownerName: "Avery Lane",
+                     onFailure: { failures.add($0.rawValue) })
+        }
+        let id = try makeRecord()
+        transcriber.error = Boom()
+        await make().process(id)
+        XCTAssertEqual(failures.all, ["transcribe"])
+
+        transcriber.error = nil
+        summarizer.fail = true
+        var r = try load(id)
+        r.nextAttempt = nil
+        try r.save(to: paths.callDirectory(id))
+        await make().process(id)
+        XCTAssertEqual(failures.all, ["transcribe", "summarize"])
+    }
+
     func testTheSummaryGetsTheBookmarkNotes() async throws {
         let id = try makeRecord()
         var r = try load(id)

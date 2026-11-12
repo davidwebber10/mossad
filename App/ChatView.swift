@@ -39,6 +39,9 @@ struct ChatView: View {
         .onChange(of: controller.chatsVersion) { _, _ in reload() }
         .onChange(of: controller.chatToOpen) { _, _ in reload() }
         .onChange(of: selection) { _, _ in error = nil }
+        .navigationPart(.chat, .init(item: selection?.uuidString)) { p in
+            if let id = p.item.flatMap(UUID.init(uuidString:)) { selection = id } else if selection != nil { newChat() }
+        }
     }
 
     // MARK: Conversation
@@ -243,6 +246,7 @@ private struct ChatList: View {
     let chats: [Chat]
     @Binding var selection: UUID?
     let delete: (Chat) -> Void
+    @Environment(\.navigation) private var navigation
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -251,6 +255,7 @@ private struct ChatList: View {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(chats) { chat in
                         ChatListRow(chat: chat, selected: selection == chat.id) {
+                            if selection != chat.id { navigation?.jumpNext() }
                             selection = chat.id
                             // The arrow keys then move on from here, as they did in the old list.
                             focused = true

@@ -31,6 +31,7 @@ struct AllScreensView: View {
             groups = shown
             loaded = true
         }
+        .navigationPart(.screens, .init(search: search.query)) { search.show($0.search) }
     }
 
     private var subtitle: String? {

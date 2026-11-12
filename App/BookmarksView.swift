@@ -30,6 +30,7 @@ struct BookmarksView: View {
             groups = shown
             loaded = true
         }
+        .navigationPart(.bookmarks, .init(search: search.query)) { search.show($0.search) }
     }
 
     private var subtitle: String? {

@@ -36,7 +36,8 @@ final class MeetingFilterModel: ObservableObject {
     private var observers: [AnyCancellable] = []
     private let kept = MeetingFilterRows()
     private let ratings = MeetingRatings()
-    private var rows: [MeetingFilterRow] = []
+    /// Every meeting's row; the Recurring filter reads its series from these.
+    @Published private(set) var rows: [MeetingFilterRow] = []
     /// The meetings the search text matches; nil with no text.
     private var within: Set<String>?
     private var reading: Task<Void, Never>?

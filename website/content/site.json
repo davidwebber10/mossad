@@ -404,7 +404,8 @@
             "When you last met each person, and how often",
             "The last meeting's decisions and action items",
             "Your open tasks for these people",
-            "Join from the same page"
+            "Join from the same page",
+            "Your next 45 days of meetings in the list, by day"
           ],
           "icon": "calendar.badge.clock",
           "comingSoon": false,
@@ -418,11 +419,12 @@
             "A point counts as discussed only with a quote from the transcript",
             "The coach suggests points from open action items, open decisions, and unanswered questions",
             "Add a point from Chat or from another AI app",
-            "Points for a person show on that person's page"
+            "Points for a person show on that person's page",
+            "Search and filter the series by people, cadence, next meeting, last met, length, and open items"
           ],
           "icon": "repeat",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesFilter.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesListSearch.swift"]
         },
         {
           "id": "filters",
@@ -457,6 +459,19 @@
           "icon": "text.magnifyingglass",
           "comingSoon": false,
           "sources": ["Packages/MossadCore/Sources/MossadCore/Search/ListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Search/MeetingListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Search/RecentSearches.swift", "App/ListSearch.swift"]
+        },
+        {
+          "id": "back-forward",
+          "title": "Back and Forward",
+          "body": "Go from a recurring meeting to one of its calls, or from a meeting to a person, and come back to where you were in one click.",
+          "details": [
+            "Command-[ and Command-], or the side buttons of your mouse",
+            "Hold the button to pick a recent page",
+            "The page comes back with its tab, search, and filter"
+          ],
+          "icon": "chevron.backward",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Support/NavigationHistory.swift", "App/NavigationModel.swift", "App/AppController+Navigation.swift"]
         },
         {
           "id": "bookmarks",

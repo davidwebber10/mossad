@@ -20,6 +20,9 @@ final class SeriesModel: ObservableObject {
     var checking = false
     /// The series open on the Recurring page.
     @Published var selected: String?
+    /// True when Back, Forward, or a link asked for `selected`: it shows before the list has answered its search,
+    /// until the owner changes the list (`SeriesShown`).
+    var asked = false
 
     func series(_ id: String?) -> MeetingSeries? { id.flatMap { id in all.first { $0.id == id || $0.keys.contains(id) } } }
 
@@ -52,8 +55,17 @@ final class SeriesModel: ObservableObject {
         let name: String
     }
 
+    /// The invites and the series, made from the inputs alone: the page's catalog, and the usage report's count,
+    /// which must not wait for a page to have made the catalog.
+    nonisolated static func catalog(_ inputs: Inputs) -> (upcoming: [UpcomingMeeting], all: [MeetingSeries]) {
+        let upcoming = UpcomingMeeting.from(inputs.events, limit: .max, recorded: inputs.records)
+        let all = SeriesCatalog.build(records: inputs.records, upcoming: upcoming, owner: inputs.owner, directory: PersonDirectory(profiles: inputs.profiles),
+                                      ownerEmails: [inputs.ownerEmail], aliases: SeriesCatalog.aliases(inputs.events))
+        return (upcoming, all)
+    }
+
     /// Makes the catalog again when the meetings, the invites, or the people changed. The invites come from the
-    /// whole read of the calendar (`UpcomingMeeting.seriesDays`), not the lists' 7 days. All of it is off the main
+    /// whole read of the calendar (`UpcomingMeeting.days`), as in the lists. All of it is off the main
     /// thread: the invites against the records, the catalog, and the people file.
     func refresh(_ inputs: Inputs, version: Int) {
         var h = Hasher()
@@ -71,9 +83,7 @@ final class SeriesModel: ObservableObject {
         building?.cancel()
         building = Task {
             let made = await Task.detached(priority: .userInitiated) { () -> Made in
-                let upcoming = UpcomingMeeting.from(inputs.events, days: UpcomingMeeting.seriesDays, limit: .max, recorded: inputs.records)
-                let all = SeriesCatalog.build(records: inputs.records, upcoming: upcoming, owner: inputs.owner, directory: PersonDirectory(profiles: inputs.profiles),
-                                              ownerEmails: [inputs.ownerEmail], aliases: SeriesCatalog.aliases(inputs.events))
+                let (upcoming, all) = Self.catalog(inputs)
                 let refs = PersonReferences(people: PeopleStore.peek(in: inputs.peopleDir) ?? [])
                 var invited: [String: [String]] = [:]
                 for u in upcoming { invited[u.id] = NextTimeInvite.personIDs(u.attendees, people: refs) }
@@ -145,7 +155,14 @@ extension AppController {
     }
 
     func openSeries(_ id: String) {
-        series.selected = id
+        navigation.jumpNext()
+        // A link asks to see its series: a Recurring search or filter that hides it is cleared.
+        if SeriesShown.linkClearsList(to: id, visible: seriesFilter.visible(series.all).map(\.id)) {
+            seriesFilter.query = ""
+            seriesFilter.filter = SeriesFilter()
+        }
+        series.selected = series.series(id)?.id ?? id
+        series.asked = true
         open(.recurring)
     }
 
@@ -185,7 +202,7 @@ extension AppController {
         let events = calendarEvents, records = meetings, owner = ownerName, profiles = library.profiles
         let email = UserDefaults.standard.string(forKey: "ownerEmail") ?? ""
         Task {
-            let upcoming = await Task.detached { UpcomingMeeting.from(events, days: UpcomingMeeting.seriesDays, limit: .max, recorded: records) }.value
+            let upcoming = await Task.detached { UpcomingMeeting.from(events, limit: .max, recorded: records) }.value
             let changed = await runner.run(upcoming: upcoming, owner: owner, directory: PersonDirectory(profiles: profiles), ownerEmails: [email],
                                            aliases: SeriesCatalog.aliases(events)) { await MainActor.run { self.isRecording } }
             if changed > 0 {

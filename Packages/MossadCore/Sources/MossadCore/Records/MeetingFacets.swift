@@ -2,8 +2,8 @@ import Foundation
 
 /// How many meetings each choice of one group has.
 public struct MeetingTally<Key: Hashable & Sendable>: Sendable, Equatable {
-    fileprivate var counts: [Key: Int] = [:]
-    fileprivate var overall: [Key: Int] = [:]
+    var counts: [Key: Int] = [:]
+    var overall: [Key: Int] = [:]
 
     /// The meetings with this choice that the other groups' choices leave: what the list shows with it chosen
     /// (alone in its group, or added to the group's other choices).
@@ -167,7 +167,9 @@ extension MeetingFacets {
     public func isSame(as other: MeetingFacets) -> Bool { self == other && people.map(\.who.name) == other.people.map(\.who.name) }
 
     /// The people list under the search text of the flyout.
-    public func people(matching query: String) -> [Person] {
+    public func people(matching query: String) -> [Person] { Self.people(people, matching: query) }
+
+    public static func people(_ people: [Person], matching query: String) -> [Person] {
         let q = query.trimmingCharacters(in: .whitespaces)
         return q.isEmpty ? people : people.filter { $0.who.name.localizedCaseInsensitiveContains(q) }
     }
@@ -175,15 +177,20 @@ extension MeetingFacets {
     /// Whom Return in the people search turns on or off: the row in the light, else the first that the text
     /// finds. Never a row that the pointer cannot choose either: one with no meeting that is not on.
     public func choiceOnReturn(query: String, highlighted: String?, filter: MeetingFilter) -> MeetingFilter.Who? {
-        let shown = people(matching: query)
+        Self.choiceOnReturn(people, query: query, highlighted: highlighted, chosen: filter.people)
+    }
+
+    /// The same for any list of people with counts, such as the Recurring filter's.
+    public static func choiceOnReturn(_ people: [Person], query: String, highlighted: String?, chosen: [MeetingFilter.Who]) -> MeetingFilter.Who? {
+        let shown = Self.people(people, matching: query)
         let q = query.trimmingCharacters(in: .whitespaces)
         guard let p = shown.first(where: { $0.id == highlighted }) ?? (q.isEmpty ? nil : shown.first) else { return nil }
-        return p.count > 0 || filter.people.contains(p.who) ? p.who : nil
+        return p.count > 0 || chosen.contains(p.who) ? p.who : nil
     }
 }
 
 extension MeetingTally {
-    fileprivate mutating func add(_ key: Key, counted: Bool) {
+    mutating func add(_ key: Key, counted: Bool) {
         overall[key, default: 0] += 1
         if counted { counts[key, default: 0] += 1 }
     }

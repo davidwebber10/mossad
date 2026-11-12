@@ -82,6 +82,10 @@ struct SharesView: View {
             }
         }
         .onChange(of: controller.shareBook) { _, _ in Task { await model.load(controller) } }
+        .navigationPart(.shares, .init(item: selection, search: search.query)) { p in
+            search.show(p.search)
+            selection = p.item
+        }
         .sheet(item: $editing, onDismiss: { Task { await model.load(controller) } }) { record in
             ShareSheet(record: record, startInSettings: true)
         }
@@ -99,6 +103,7 @@ private struct ShareList: View {
     let rows: [ShareRow]
     let matches: [String: ListMatch]
     @Binding var selection: String?
+    @Environment(\.navigation) private var navigation
     @FocusState private var focused: Bool
 
     private var current: String? { selection }
@@ -114,6 +119,7 @@ private struct ShareList: View {
                                 .accessibilityAddTraits(.isHeader)
                         }
                         ShareListRow(row: row, selected: current == row.id, match: matches[row.id]) {
+                            if current != row.id { navigation?.jumpNext() }
                             selection = row.id
                             focused = true
                         }

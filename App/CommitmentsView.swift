@@ -49,6 +49,11 @@ struct CommitmentsView: View {
         }
         .onChange(of: search.query) { _, _ in refilter() }
         .onChange(of: controller.taskToOpen) { _, _ in takeOpenedTask() }
+        .navigationPart(.commitments, .init(page: mode.rawValue, item: opened?.uuidString, search: search.query)) { p in
+            search.show(p.search)
+            mode = p.page.flatMap(Mode.init(rawValue:)) ?? .open
+            opened = p.item.flatMap(UUID.init(uuidString:))
+        }
         .onAppear {
             // Development hook for screenshots: MOSSAD_COMMITMENTS=done opens the Done view.
             if CommandLine.arguments.contains("--ui-preview"), ProcessInfo.processInfo.environment["MOSSAD_COMMITMENTS"] == "done" {

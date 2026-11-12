@@ -198,16 +198,13 @@ private struct RecurringHeader: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Button("Prepare") {
-                    controller.selectedMeetingID = next.id
-                    controller.open(.meetings)
-                }
+                Button("Prepare") { controller.openMeeting(next.id) }
                 .buttonStyle(.plain).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
                 .help("Open the page of this meeting")
                 Spacer(minLength: 0)
             }
         } else {
-            Text(series.meetings.isEmpty ? "No date in your calendar." : "No meeting of this series with a call link in your calendar in the next \(UpcomingMeeting.seriesDays) days.")
+            Text(series.meetings.isEmpty ? "No date in your calendar." : "No meeting of this series with a call link in your calendar in the next \(UpcomingMeeting.days) days.")
                 .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
         }
     }

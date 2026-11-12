@@ -16,32 +16,42 @@ final class AppController: ObservableObject {
     }
 
     enum Section: String, CaseIterable, Identifiable {
-        case meetings = "Meetings", bookmarks = "Bookmarks", screens = "Screens", shares = "Shares", commitments = "Tasks",
-             recurring = "Recurring",
+        case meetings = "Meetings", recurring = "Recurring", bookmarks = "Bookmarks", screens = "Screens", shares = "Shares",
+             commitments = "Tasks",
              chat = "Chat", people = "People", analytics = "Analytics", coach = "Coach",
              settings = "Settings", log = "Log"
         var id: String { rawValue }
-        /// The pages under Meetings in the sidebar, in their order there.
-        static let underMeetings: [Section] = [.bookmarks, .screens, .shares, .commitments, .recurring]
+        /// The pages under Meetings in the sidebar, in their order there (`MeetingsPage`): Recurring first.
+        static let underMeetings: [Section] = MeetingsPage.allCases.map(Section.init)
+
+        init(_ page: MeetingsPage) {
+            switch page {
+            case .recurring: self = .recurring
+            case .bookmarks: self = .bookmarks
+            case .screens: self = .screens
+            case .shares: self = .shares
+            case .tasks: self = .commitments
+            }
+        }
+
+        var meetingsPage: MeetingsPage? { MeetingsPage.allCases.first { Section($0) == self } }
         /// The items of the sidebar's first level.
         static var topLevel: [Section] { allCases.filter { !underMeetings.contains($0) } }
         var isUnderMeetings: Bool { Self.underMeetings.contains(self) }
         /// The key in the Go menu. Each page keeps the number it had before it moved under Meetings; Coach and Shares
-        /// took the next free numbers, Bookmarks takes 0, and Screens has Option-Command-S, as no number is left.
+        /// took the next free numbers. The pages under Meetings have theirs in `MeetingsPage.key`.
         var shortcut: KeyboardShortcut {
+            if let key = meetingsPage?.key {
+                return KeyboardShortcut(KeyEquivalent(key.character), modifiers: key.option ? [.command, .option] : .command)
+            }
             switch self {
-            case .meetings: KeyboardShortcut("1")
-            case .commitments: KeyboardShortcut("2")
-            case .chat: KeyboardShortcut("3")
-            case .people: KeyboardShortcut("4")
-            case .analytics: KeyboardShortcut("5")
-            case .settings: KeyboardShortcut("6")
-            case .log: KeyboardShortcut("7")
-            case .coach: KeyboardShortcut("8")
-            case .shares: KeyboardShortcut("9")
-            case .bookmarks: KeyboardShortcut("0")
-            case .screens: KeyboardShortcut("s", modifiers: [.command, .option])
-            case .recurring: KeyboardShortcut("r", modifiers: [.command, .option])
+            case .chat: return KeyboardShortcut("3")
+            case .people: return KeyboardShortcut("4")
+            case .analytics: return KeyboardShortcut("5")
+            case .settings: return KeyboardShortcut("6")
+            case .log: return KeyboardShortcut("7")
+            case .coach: return KeyboardShortcut("8")
+            default: return KeyboardShortcut("1")
             }
         }
         var icon: Icon {
@@ -179,7 +189,9 @@ final class AppController: ObservableObject {
     @Published var coachPage: CoachPage = .findings
     /// The main window is in full screen, where the traffic lights leave the sidebar.
     @Published private(set) var fullScreen = false
-    @Published var selectedMeetingID: String?
+    @Published var selectedMeetingID: String? {
+        didSet { if lastMoment?.callID != selectedMeetingID { lastMoment = nil } }
+    }
     @Published var namingCallID: String?
     var personToOpen: String?
     /// The one controller, for the app delegate's Dock handling.
@@ -204,16 +216,23 @@ final class AppController: ObservableObject {
     /// Calls still to come, without the ones being recorded or already recorded.
     /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
     /// is computed once for each of those and for each minute.
+    /// The next few, for the menu bar.
     var upcoming: [UpcomingMeeting] { Array(calendarUpcoming.prefix(UpcomingMeeting.limit)) }
-    /// Every call invite in the fetched days, for the calendar; the list shows only the next few.
-    var calendarUpcoming: [UpcomingMeeting] {
-        let minute = Int(Date().timeIntervalSince1970 / 60)
-        if let memo = upcomingMemo, memo.minute == minute { return memo.list }
-        let list = UpcomingMeeting.from(calendarEvents, limit: .max, recorded: meetings)
-        upcomingMemo = (minute, list)
-        return list
+    /// Every call invite in the fetched days (`UpcomingMeeting.days`), for the Meetings list, the calendar, and the
+    /// prep pages.
+    var calendarUpcoming: [UpcomingMeeting] { upcomingMemoNow.list }
+    /// The same invites in the Meetings list's day groups, made once with the list rather than at each draw.
+    var upcomingDays: [UpcomingMeeting.Day] { upcomingMemoNow.days }
+    private var upcomingMemoNow: (minute: Int, list: [UpcomingMeeting], days: [UpcomingMeeting.Day]) {
+        let now = Date()
+        let minute = Int(now.timeIntervalSince1970 / 60)
+        if let memo = upcomingMemo, memo.minute == minute { return memo }
+        let list = UpcomingMeeting.from(calendarEvents, now: now, limit: .max, recorded: meetings)
+        let memo = (minute, list, UpcomingMeeting.byDay(list, now: now))
+        upcomingMemo = memo
+        return memo
     }
-    private var upcomingMemo: (minute: Int, list: [UpcomingMeeting])?
+    private var upcomingMemo: (minute: Int, list: [UpcomingMeeting], days: [UpcomingMeeting.Day])?
     /// The Mac's calendars, for the choice in Settings.
     @Published private(set) var calendars: [CalendarInfo] = []
     /// The calendars Mossad reads; saved once chosen, and defaulted to the owner's own on first use.
@@ -241,6 +260,10 @@ final class AppController: ObservableObject {
     @Published private(set) var meetingListMatches: [String: ListMatch] = [:]
     /// The Meetings filter: the owner's choices and what the meetings offer.
     let meetingFilter = MeetingFilterModel()
+    /// The Recurring list's search and filter; it starts with the Recurring page.
+    let seriesFilter = SeriesFilterModel()
+    /// True once the calendar was read at least once (also when it gave nothing).
+    var calendarRead = false
     private var filterTask: Task<Void, Never>?
     private var makingRecordings = false
 
@@ -273,7 +296,18 @@ final class AppController: ObservableObject {
     @Published var newChatRequest = 0
     lazy var chats = ChatStore(directory: paths.chats)
     /// A meeting to open and play from a time; the meeting view takes it when it appears.
-    @Published var seekRequest: SeekRequest?
+    @Published var seekRequest: SeekRequest? {
+        didSet {
+            guard let s = seekRequest else { return }
+            if s.mark, s.screen == nil { lastMoment = (s.callID, s.at) }
+            // The tab the meeting will open on, now, so the step has it before the page turns to it.
+            UserDefaults.standard.set((s.screen == nil ? MeetingDetailView.Tab.transcript : .screens).rawValue, forKey: "detailTab")
+        }
+    }
+    /// The moment the open meeting was last opened at, for Back and Forward.
+    var lastMoment: (callID: String, at: TimeInterval)?
+    /// Back and Forward in the main window (`AppController+Navigation.swift`).
+    let navigation = NavigationModel()
     /// A meeting asked to open that the Meetings page has not taken yet; Calendar mode opens it full-pane.
     @Published var meetingToOpen: String?
 
@@ -345,6 +379,7 @@ final class AppController: ObservableObject {
     /// Used only on `CaptureQueue.queue`, except its meters, sinks, and track durations, which any thread can read.
     private nonisolated let recorder: CallRecorder
     private var window: NSWindow?
+    var mainWindow: NSWindow? { window }
     private var trafficLights: TrafficLights?
     /// The menu bar panel shown in a window, for a preview's screenshots.
     var panelPreviewWindow: NSWindow?
@@ -409,6 +444,12 @@ final class AppController: ObservableObject {
     /// The meeting whose "Transcribe again" sheet is open.
     @Published var transcribingAgainCallID: String?
     @AppStorage("coachEnabled") var coachEnabled = false
+    /// "Send anonymous usage statistics" (Settings › Storage & Sync): on by default (+UsageStats).
+    @AppStorage(UsageReportPlan.enabledKey) var usageStatsEnabled = true
+    /// The wait, the daily check, and the send; cancelled when the owner turns the statistics off.
+    var usageStatsTask: Task<Void, Never>?
+    /// The days the app ran and the failures by kind, for the statistics only.
+    let usageCounters = UsageCounterStore(directory: Paths.live.usage)
     /// Calls that start before this (seconds since 1970) are not coached, so turning the coach on does not review years of calls.
     @AppStorage("coachSince") var coachSince: Double = 0
     /// The coach's reads of how each person thinks (Settings > Coach). On with the coach.
@@ -518,6 +559,7 @@ final class AppController: ObservableObject {
         // The Google step's state is drawn by views that watch the controller.
         searchObservers.append(googleConnector.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
         meetingFilter.attach(self)
+        navigation.attach(self)
 
         // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
         // processing, so the screens can be checked while the installed copy records a call.
@@ -596,6 +638,7 @@ final class AppController: ObservableObject {
             }
             detection.onUnconfirmed = { @Sendable [weak self] call in
                 Task { @MainActor in
+                    self?.countUsage(.detect)
                     guard let self, case .idle = self.status else { return }
                     self.notifier.postUnconfirmed(call)
                     // A missing permission is said one time a day, not on each use of the mic.
@@ -618,7 +661,12 @@ final class AppController: ObservableObject {
             }
             // A recording that loses one side of the call (no permission, a full disk, a dead source) says so once.
             let notifier = notifier
-            CaptureQueue.queue.async { recorder.onProblem = { problem, _ in notifier.postCaptureProblem(problem) } }
+            CaptureQueue.queue.async {
+                recorder.onProblem = { [weak self] problem, _ in
+                    notifier.postCaptureProblem(problem)
+                    Task { @MainActor in self?.countUsage(.detect) }
+                }
+            }
             detection.onCallProcesses = { @Sendable [weak self] ids in
                 self?.noRecordGate.seen(at: Date())
                 CaptureQueue.queue.async { recorder.updateThemProcesses(ids) }
@@ -732,6 +780,7 @@ final class AppController: ObservableObject {
                 }
             }
             startShareWatch()
+            startUsageStats()
         }
         DevHooks.run(self, inert: inert)
     }
@@ -938,7 +987,10 @@ final class AppController: ObservableObject {
                             },
                             // The text on kept frames is read on this Mac. The pipeline ties it to the gate for heavy
                             // work: while a call records it goes on slowly, one frame at a time, and holds no note back.
-                            screenStep: ScreenStep(reader: VisionScreenReader()))
+                            screenStep: ScreenStep(reader: VisionScreenReader()),
+                            onFailure: { [weak self] step in
+                                Task { @MainActor in self?.countUsage(step) }
+                            })
     }
 
     /// A meeting that is gone (deleted, or merged into another) leaves nothing behind outside this Mac: its
@@ -1364,11 +1416,13 @@ final class AppController: ObservableObject {
     }
 
     func open(_ section: Section) {
+        navigation.jumpNext()
         go(to: section)
         showWindow()
     }
 
     func open(coach page: CoachPage) {
+        navigation.jumpNext()
         coachPage = page
         section = .coach
         showWindow()
@@ -1381,12 +1435,15 @@ final class AppController: ObservableObject {
         let refs = PersonReferences(people: library.identity?.people.people ?? [])
         personToOpen = refs.id(for: name).flatMap(refs.name(of:)) ?? name
         personRequests += 1
+        navigation.jumpNext()
         open(.people)
     }
 
     /// Every way to open a meeting comes here, so Calendar mode opens it too (see `MeetingsView`).
     func openMeeting(_ callID: String) {
         if !MeetingOpenRoute.keepsSeek(for: seekRequest?.callID, opening: callID) { seekRequest = nil }
+        if seekRequest == nil { lastMoment = nil }
+        navigation.jumpNext()
         section = .meetings
         selectedMeetingID = callID
         meetingToOpen = callID
@@ -1886,8 +1943,8 @@ final class AppController: ObservableObject {
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         Task {
             let now = Date()
-            // The recurring meetings look further ahead than the lists, which still cut at `UpcomingMeeting.days`.
-            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.seriesDays) * 86_400))
+            // One read for the lists, the calendar, the prep pages, and the recurring meetings.
+            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))
             // Development hook: `--sample-upcoming` adds two events, since a preview build has no Calendar access.
             if CommandLine.arguments.contains("--sample-upcoming") {
                 events += [CalendarEventInfo(title: "Alex / Sam", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),
@@ -1898,9 +1955,10 @@ final class AppController: ObservableObject {
             // Development hook for screenshots: MOSSAD_UPCOMING=<file> shows only the made-up invites of that file.
             if let sample = DevHooks.sampleInvites() { events = sample }
             calendarEvents = events
+            calendarRead = true
             // Development hook for screenshots: MOSSAD_UPCOMING_OPEN=<title> opens that invite's page.
             if DevHooks.preview, let title = ProcessInfo.processInfo.environment["MOSSAD_UPCOMING_OPEN"],
-               let invite = upcoming.first(where: { $0.title == title }) {
+               let invite = calendarUpcoming.first(where: { $0.title == title }) {
                 selectedMeetingID = invite.id
             }
         }

@@ -21,11 +21,14 @@ struct MeetingList: View {
     /// The arrow keys, Home, End, and typing scroll on their own; their selection change must not scroll again.
     @State private var scrolledHere: String?
 
-    /// Invites show only without a search or a filter: both narrow what was recorded. The soonest few, latest on top,
-    /// so time runs one way down the whole list and the next meeting sits just above the ones that happened.
-    private var upcoming: [UpcomingMeeting] {
-        controller.meetingQuery.isEmpty && !filters.isActive ? Array(controller.upcoming.prefix(UpcomingRow.shown).reversed()) : []
+    /// Invites show only without a search or a filter: both narrow what was recorded. Every invite of the calendar's
+    /// read, by day, latest on top, so time runs one way down the whole list and the next meeting sits just above
+    /// the ones that happened.
+    private var upcomingDays: [UpcomingMeeting.Day] {
+        controller.meetingQuery.isEmpty && !filters.isActive ? controller.upcomingDays : []
     }
+
+    private var upcoming: [UpcomingMeeting] { upcomingDays.flatMap(\.meetings) }
 
     /// Every row's id in the order shown, for the arrow keys.
     private var order: [String] {
@@ -46,14 +49,17 @@ struct MeetingList: View {
                                 .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
                         }
                     }
-                    if !upcoming.isEmpty {
-                        GroupHeader(title: "Upcoming", first: live.isEmpty)
-                        ForEach(upcoming) { m in
-                            UpcomingRow(meeting: m).listRow(selected: selection == m.id) { select(m.id) }
+                    ForEach(Array(upcomingDays.enumerated()), id: \.element.date) { i, day in
+                        GroupHeader(title: day.title, first: i == 0 && live.isEmpty)
+                        ForEach(day.meetings) { m in
+                            UpcomingRow(meeting: m, dated: false).listRow(selected: selection == m.id) { select(m.id) }
                         }
                     }
                     ForEach(Array(days.enumerated()), id: \.element.date) { i, day in
-                        GroupHeader(title: day.title, first: i == 0 && live.isEmpty && upcoming.isEmpty)
+                        // Today's invites and today's meetings share one "Today".
+                        if i > 0 || upcomingDays.last?.date != day.date {
+                            GroupHeader(title: day.title, first: i == 0 && live.isEmpty && upcomingDays.isEmpty)
+                        }
                         ForEach(day.records, id: \.id) { r in
                             let match = searching ? controller.meetingListMatches[r.id] : nil
                             MeetingRow(record: r, selected: selection == r.id, match: match)
@@ -139,6 +145,8 @@ struct MeetingList: View {
     }
 
     private func select(_ id: String) {
+        // A click on another meeting is a step of Back; the arrow keys are not.
+        if selection != id { controller.navigation.jumpNext() }
         selection = id
         focused = true
     }

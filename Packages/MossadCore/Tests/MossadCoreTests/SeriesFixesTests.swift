@@ -149,9 +149,8 @@ final class SeriesFixesTests: XCTestCase {
     }
 
     // C1
-    func testRecurringMeetingsLookFurtherAheadThanTheLists() {
-        XCTAssertGreaterThanOrEqual(UpcomingMeeting.seriesDays, 45)
-        XCTAssertEqual(UpcomingMeeting.days, 7)
+    func testRecurringMeetingsLookFarEnoughAheadForAMonthlySeries() {
+        XCTAssertGreaterThanOrEqual(UpcomingMeeting.days, 45)
     }
 
     // L4
