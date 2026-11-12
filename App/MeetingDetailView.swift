@@ -24,6 +24,13 @@ struct MeetingDetailView: View {
     /// The frame open in the Screens tab; nil shows its grid.
     @State private var openScreen: String?
 
+    /// While the call records: its live transcript or its chat, apart from the saved tab of written meetings.
+    @State private var liveTab = Tab.transcript
+    /// A moment of a live answer to show in the live transcript.
+    @State private var liveJump: LiveJump?
+    @State private var focusLiveChat = false
+    private static let liveTabs: [Tab] = [.transcript, .chat]
+
     /// The Screens tab exists only for a meeting that has screens.
     private var tab: Tab {
         let t = previewTab ?? savedTab
@@ -86,6 +93,12 @@ struct MeetingDetailView: View {
                 try? await Task.sleep(for: .milliseconds(600))
                 if !player.isAvailable, let url = controller.cloudArchive?.playbackURL(for: record) { await player.loadRemote(url) }
             }
+            .task(id: controller.liveChatFocus) {
+                guard controller.liveChatFocus == record.id else { return }
+                controller.liveChatFocus = nil
+                liveTab = .chat
+                focusLiveChat = true
+            }
             .onAppear(perform: applyPreviewHooks)
     }
 
@@ -103,11 +116,23 @@ struct MeetingDetailView: View {
                           retentionDays: controller.deleteRecordings ? controller.recordingDays : nil,
                           maxLanes: maxLanes)
                 .overlay(alignment: .bottom) {
-                    if record.status != .recording, !processingFirstTime { DetailTabs(tab: tabBinding, tabs: tabs, accessibilityLabel: "Meeting tabs").offset(y: Self.underTabs) }
+                    if record.status == .recording {
+                        DetailTabs(tab: $liveTab, tabs: Self.liveTabs, accessibilityLabel: "Live call tabs").offset(y: Self.underTabs)
+                    } else if !processingFirstTime {
+                        DetailTabs(tab: tabBinding, tabs: tabs, accessibilityLabel: "Meeting tabs").offset(y: Self.underTabs)
+                    }
                 }
                 .zIndex(1)
             if record.status == .recording {
-                LiveTranscriptPanel(record: record)
+                if liveTab == .chat {
+                    LiveChatView(record: record, session: controller.liveChatSession(record.id), top: Self.underTabs + 14,
+                                 focusRequest: $focusLiveChat) { at in
+                        liveJump = LiveJump(at: at)
+                        liveTab = .transcript
+                    }
+                } else {
+                    LiveTranscriptPanel(record: record, top: Self.underTabs + 28, jump: $liveJump)
+                }
             } else if processingFirstTime, let step = ProcessingStep(status: record.status) {
                 // Until the first note is written the tabs have nothing to show, so the progress takes their place.
                 ScrollView {
@@ -158,7 +183,19 @@ struct MeetingDetailView: View {
                                 top: Self.underTabs + 32, openCoach: { tabBinding.wrappedValue = .coach })
                 .equatable()
         case .chat:
-            MeetingChatView(record: record, top: Self.underTabs + 14) { at in Task { await play(from: at) } }
+            MeetingChatView(record: record, top: Self.underTabs + 14) { at in showChatMoment(at) }
+        }
+    }
+
+    /// A time in a chat answer: the Transcript tab with that line marked for a few seconds, playing from there.
+    private func showChatMoment(_ at: TimeInterval) {
+        tabBinding.wrappedValue = .transcript
+        highlight = at
+        Task {
+            // A second before, as a card's moment plays, so the first word is heard.
+            await play(from: max(0, at - 1))
+            try? await Task.sleep(for: .seconds(4))
+            if highlight == at { withAnimation { highlight = nil } }
         }
     }
 
@@ -166,7 +203,10 @@ struct MeetingDetailView: View {
         guard CommandLine.arguments.contains("--ui-preview") else { return }
         let env = ProcessInfo.processInfo.environment
         // Development hook for screenshots: MOSSAD_TAB=summary|transcript|screens|coach|analytics|chat picks the tab.
-        if let t = env["MOSSAD_TAB"].flatMap({ Tab(rawValue: $0.capitalized) }) { previewTab = t }
+        if let t = env["MOSSAD_TAB"].flatMap({ Tab(rawValue: $0.capitalized) }) {
+            previewTab = t
+            if Self.liveTabs.contains(t) { liveTab = t }
+        }
         // Development hook for screenshots: MOSSAD_SEEK=<seconds> puts the playhead there, without playing.
         if let at = env["MOSSAD_SEEK"].flatMap(TimeInterval.init) {
             Task {

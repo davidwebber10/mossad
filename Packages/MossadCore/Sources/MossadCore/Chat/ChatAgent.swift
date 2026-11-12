@@ -91,7 +91,8 @@ public struct ChatAgent: Sendable {
         words to say, not a list of principles. When the answer is "none" or "not found", say so in one sentence. \
         Name who committed to what and any deadline; say plainly when none was set. Give absolute dates (Oct 21), not only \
         relative ones. Link every meeting you mention as [Title, Oct 21](mossad://call/<call_id>) and each moment \
-        you quote as [12:40](mossad://call/<call_id>?t=760), where t is the line's time in seconds. Transcripts come \
+        you quote as [12:40](mossad://call/<call_id>?t=760), where t is the line's time in seconds. When the exact words \
+        matter, quote the line on its own as "> [12:40](mossad://call/<call_id>?t=760) Sam: their words". Transcripts come \
         from speech recognition, so names and numbers can be misspelled; prefer the spelling in the people list.\(memory)
         """
     }
