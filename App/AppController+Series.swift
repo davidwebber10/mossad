@@ -53,7 +53,7 @@ final class SeriesModel: ObservableObject {
     }
 
     /// Makes the catalog again when the meetings, the invites, or the people changed. The invites come from the
-    /// whole read of the calendar (`UpcomingMeeting.seriesDays`), not the lists' 7 days. All of it is off the main
+    /// whole read of the calendar (`UpcomingMeeting.days`), as in the lists. All of it is off the main
     /// thread: the invites against the records, the catalog, and the people file.
     func refresh(_ inputs: Inputs, version: Int) {
         var h = Hasher()
@@ -71,7 +71,7 @@ final class SeriesModel: ObservableObject {
         building?.cancel()
         building = Task {
             let made = await Task.detached(priority: .userInitiated) { () -> Made in
-                let upcoming = UpcomingMeeting.from(inputs.events, days: UpcomingMeeting.seriesDays, limit: .max, recorded: inputs.records)
+                let upcoming = UpcomingMeeting.from(inputs.events, limit: .max, recorded: inputs.records)
                 let all = SeriesCatalog.build(records: inputs.records, upcoming: upcoming, owner: inputs.owner, directory: PersonDirectory(profiles: inputs.profiles),
                                               ownerEmails: [inputs.ownerEmail], aliases: SeriesCatalog.aliases(inputs.events))
                 let refs = PersonReferences(people: PeopleStore.peek(in: inputs.peopleDir) ?? [])
@@ -186,7 +186,7 @@ extension AppController {
         let events = calendarEvents, records = meetings, owner = ownerName, profiles = library.profiles
         let email = UserDefaults.standard.string(forKey: "ownerEmail") ?? ""
         Task {
-            let upcoming = await Task.detached { UpcomingMeeting.from(events, days: UpcomingMeeting.seriesDays, limit: .max, recorded: records) }.value
+            let upcoming = await Task.detached { UpcomingMeeting.from(events, limit: .max, recorded: records) }.value
             let changed = await runner.run(upcoming: upcoming, owner: owner, directory: PersonDirectory(profiles: profiles), ownerEmails: [email],
                                            aliases: SeriesCatalog.aliases(events)) { await MainActor.run { self.isRecording } }
             if changed > 0 {

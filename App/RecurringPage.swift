@@ -207,7 +207,7 @@ private struct RecurringHeader: View {
                 Spacer(minLength: 0)
             }
         } else {
-            Text(series.meetings.isEmpty ? "No date in your calendar." : "No meeting of this series with a call link in your calendar in the next \(UpcomingMeeting.seriesDays) days.")
+            Text(series.meetings.isEmpty ? "No date in your calendar." : "No meeting of this series with a call link in your calendar in the next \(UpcomingMeeting.days) days.")
                 .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
         }
     }

@@ -2,12 +2,12 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// "in 25 min", "now", "Tue 9:00 AM".
-func upcomingWhen(_ m: UpcomingMeeting, now: Date = Date()) -> String {
+/// "in 25 min", "now", "Tue 9:00 AM"; without the day under a day's header (`dated` false).
+func upcomingWhen(_ m: UpcomingMeeting, now: Date = Date(), dated: Bool = true) -> String {
     if m.start <= now { return "Now" }
     let minutes = Int(m.start.timeIntervalSince(now) / 60)
     if minutes < 60 { return "in \(max(1, minutes)) min" }
-    return Calendar.current.isDateInToday(m.start)
+    return !dated || Calendar.current.isDateInToday(m.start)
         ? m.start.formatted(date: .omitted, time: .shortened)
         : m.start.formatted(.dateTime.weekday(.abbreviated).hour().minute())
 }
@@ -15,9 +15,10 @@ func upcomingWhen(_ m: UpcomingMeeting, now: Date = Date()) -> String {
 /// One upcoming calendar event in the meeting list: a hollow dot because it has not happened, the title in
 /// secondary, "2:00 PM · Zoom · Will record", and its planned length.
 struct UpcomingRow: View {
-    static let shown = 5
     @EnvironmentObject var controller: AppController
     let meeting: UpcomingMeeting
+    /// False under a day's header, which already says the day.
+    var dated = true
     var body: some View {
         // Every 15 s, so Join comes within the last minute before the start.
         TimelineView(.periodic(from: .now, by: 15)) { context in
@@ -36,7 +37,7 @@ struct UpcomingRow: View {
                     Text(meeting.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.secondary).lineLimit(1)
                     HStack(spacing: 0) {
                         // The time stays whole in a narrow list; the platform and the length give way.
-                        Text(upcomingWhen(meeting, now: context.date)).foregroundStyle(soon ? Palette.accent : Palette.secondary)
+                        Text(upcomingWhen(meeting, now: context.date, dated: dated)).foregroundStyle(soon ? Palette.accent : Palette.secondary)
                             .fixedSize().layoutPriority(1)
                         Text(detail).foregroundStyle(Palette.secondary)
                     }

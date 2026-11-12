@@ -216,16 +216,23 @@ final class AppController: ObservableObject {
     /// Calls still to come, without the ones being recorded or already recorded.
     /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
     /// is computed once for each of those and for each minute.
+    /// The next few, for the menu bar.
     var upcoming: [UpcomingMeeting] { Array(calendarUpcoming.prefix(UpcomingMeeting.limit)) }
-    /// Every call invite in the fetched days, for the calendar; the list shows only the next few.
-    var calendarUpcoming: [UpcomingMeeting] {
-        let minute = Int(Date().timeIntervalSince1970 / 60)
-        if let memo = upcomingMemo, memo.minute == minute { return memo.list }
-        let list = UpcomingMeeting.from(calendarEvents, limit: .max, recorded: meetings)
-        upcomingMemo = (minute, list)
-        return list
+    /// Every call invite in the fetched days (`UpcomingMeeting.days`), for the Meetings list, the calendar, and the
+    /// prep pages.
+    var calendarUpcoming: [UpcomingMeeting] { upcomingMemoNow.list }
+    /// The same invites in the Meetings list's day groups, made once with the list rather than at each draw.
+    var upcomingDays: [UpcomingMeeting.Day] { upcomingMemoNow.days }
+    private var upcomingMemoNow: (minute: Int, list: [UpcomingMeeting], days: [UpcomingMeeting.Day]) {
+        let now = Date()
+        let minute = Int(now.timeIntervalSince1970 / 60)
+        if let memo = upcomingMemo, memo.minute == minute { return memo }
+        let list = UpcomingMeeting.from(calendarEvents, now: now, limit: .max, recorded: meetings)
+        let memo = (minute, list, UpcomingMeeting.byDay(list, now: now))
+        upcomingMemo = memo
+        return memo
     }
-    private var upcomingMemo: (minute: Int, list: [UpcomingMeeting])?
+    private var upcomingMemo: (minute: Int, list: [UpcomingMeeting], days: [UpcomingMeeting.Day])?
     /// The Mac's calendars, for the choice in Settings.
     @Published private(set) var calendars: [CalendarInfo] = []
     /// The calendars Mossad reads; saved once chosen, and defaulted to the owner's own on first use.
@@ -1934,8 +1941,8 @@ final class AppController: ObservableObject {
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         Task {
             let now = Date()
-            // The recurring meetings look further ahead than the lists, which still cut at `UpcomingMeeting.days`.
-            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.seriesDays) * 86_400))
+            // One read for the lists, the calendar, the prep pages, and the recurring meetings.
+            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))
             // Development hook: `--sample-upcoming` adds two events, since a preview build has no Calendar access.
             if CommandLine.arguments.contains("--sample-upcoming") {
                 events += [CalendarEventInfo(title: "Alex / Sam", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),
@@ -1948,7 +1955,7 @@ final class AppController: ObservableObject {
             calendarEvents = events
             // Development hook for screenshots: MOSSAD_UPCOMING_OPEN=<title> opens that invite's page.
             if DevHooks.preview, let title = ProcessInfo.processInfo.environment["MOSSAD_UPCOMING_OPEN"],
-               let invite = upcoming.first(where: { $0.title == title }) {
+               let invite = calendarUpcoming.first(where: { $0.title == title }) {
                 selectedMeetingID = invite.id
             }
         }

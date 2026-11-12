@@ -18,24 +18,29 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
     /// True when the calendar says that the invite repeats (a Google series id, or an EventKit recurrence rule).
     public var isRecurring = false
 
-    public static let days = 7
-    /// How far the calendar is read for the recurring meetings, so a monthly series has its next date. The lists
-    /// still show `days`.
-    public static let seriesDays = 45
+    /// How far ahead the calendar is read, and what every list of upcoming meetings shows: the Meetings list, the
+    /// calendar, the prep pages, and the recurring meetings, so a monthly series has its next date.
+    public static let days = 45
+    /// The menu bar's short count.
     public static let limit = 12
 
     /// `recorded` hides events that are being recorded or were recorded: the call is already happening or done.
     public static func from(_ events: [CalendarEventInfo], now: Date = Date(), days: Int = days, limit: Int = limit,
                             recorded: [CallRecord] = []) -> [UpcomingMeeting] {
         let horizon = now.addingTimeInterval(Double(days) * 86_400)
+        // A meeting the owner declined is not upcoming; the matcher and the do-not-record gate still see it.
+        let open = events.filter { !$0.isAllDay && $0.end > now && $0.start < horizon && !$0.declinedByOwner }
+        // Only a recording that ends after the first open invite starts can hide one: weeks of invites are checked
+        // against the few latest records, not against every meeting ever recorded.
+        let earliest = open.map(\.start).min() ?? now
+        let recent = recorded.filter { $0.calendarTitle != nil && ($0.status == .recording ? now : $0.end) > earliest }
         func isRecorded(_ e: CalendarEventInfo) -> Bool {
-            recorded.contains { r in
-                r.calendarTitle?.caseInsensitiveCompare(e.title) == .orderedSame
-                    && r.start < e.end && (r.status == .recording ? now : r.end) > e.start
+            recent.contains { r in
+                r.start < e.end && (r.status == .recording ? now : r.end) > e.start
+                    && r.calendarTitle?.caseInsensitiveCompare(e.title) == .orderedSame
             }
         }
-        // A meeting the owner declined is not upcoming; the matcher and the do-not-record gate still see it.
-        return events.filter { !$0.isAllDay && $0.end > now && $0.start < horizon && !isRecorded($0) && !$0.declinedByOwner }
+        return open.filter { !isRecorded($0) }
             .sorted { $0.start < $1.start }
             .compactMap { e in
                 // Only calls: an event without a call link (lunch, a focus block) is not one.
@@ -47,6 +52,34 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
                                        isRecurring: e.isRecurring || e.seriesID != nil)
             }
             .prefix(limit).map { $0 }
+    }
+
+    /// One day of the Upcoming list.
+    public struct Day: Equatable, Sendable {
+        /// The start of the day.
+        public var date: Date
+        public var title: String
+        public var meetings: [UpcomingMeeting]
+    }
+
+    /// The Upcoming list's days: the latest day on top and the latest meeting first in each, so time runs one way
+    /// down the whole list and the next meeting sits just above the ones that happened.
+    public static func byDay(_ meetings: [UpcomingMeeting], now: Date = Date(), calendar: Calendar = .current) -> [Day] {
+        let buckets = Dictionary(grouping: meetings) { calendar.startOfDay(for: max($0.start, now)) }
+        return buckets.keys.sorted(by: >).map { day in
+            Day(date: day, title: dayTitle(day, now: now, calendar: calendar),
+                meetings: buckets[day, default: []].sorted { $0.start > $1.start })
+        }
+    }
+
+    /// "Today", "Tomorrow", then the weekday with the date ("Tuesday, Nov 17"), so an upcoming day never reads like
+    /// a past day's header ("Tuesday").
+    public static func dayTitle(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let ahead = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day ?? 0
+        if ahead <= 0 { return "Today" }
+        if ahead == 1 { return "Tomorrow" }
+        let style = Date.FormatStyle(locale: calendar.locale ?? .current, calendar: calendar, timeZone: calendar.timeZone)
+        return date.formatted(style.weekday(.wide).month(.abbreviated).day())
     }
 
     /// The first URL in the event's location, notes, or URL that points at a call app.
