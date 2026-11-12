@@ -25,6 +25,22 @@ public protocol LanguageModel: Sendable {
     /// Answers `question` after the earlier turns, calling `execute` for each tool call until the model answers.
     func runTools(system: String, history: [ChatMessage], question: String, tools: [ToolSpec], purpose: UsageEvent.Purpose,
                   execute: @escaping @Sendable (_ name: String, _ input: [String: Any]) -> String) async throws -> String
+
+    /// The same as `runTools`, and `onText` gets the answer so far as it comes. A provider that cannot stream gives
+    /// the whole answer once at the end.
+    func streamTools(system: String, history: [ChatMessage], question: String, tools: [ToolSpec], purpose: UsageEvent.Purpose,
+                     execute: @escaping @Sendable (_ name: String, _ input: [String: Any]) -> String,
+                     onText: @escaping @Sendable (String) -> Void) async throws -> String
+}
+
+extension LanguageModel {
+    public func streamTools(system: String, history: [ChatMessage], question: String, tools: [ToolSpec], purpose: UsageEvent.Purpose,
+                            execute: @escaping @Sendable (_ name: String, _ input: [String: Any]) -> String,
+                            onText: @escaping @Sendable (String) -> Void) async throws -> String {
+        let answer = try await runTools(system: system, history: history, question: question, tools: tools, purpose: purpose, execute: execute)
+        onText(answer)
+        return answer
+    }
 }
 
 public enum ChatError: Error, CustomStringConvertible {

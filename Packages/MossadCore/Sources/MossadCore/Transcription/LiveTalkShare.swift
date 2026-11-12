@@ -34,7 +34,8 @@ extension LiveTranscript {
         case .named(let name):
             let first = visibleLines.first { $0.source == .them && $0.speakerKey.flatMap { names[$0] } == name } ?? line
             return Self.letterHue(first.speaker)
-        case .speaker, nil: return Self.letterHue(line.speaker)
+        // A later session's letter is another voice: its own hue, away from the first session's letters.
+        case .speaker, nil: return Self.letterHue(line.speaker) + 6 * line.session
         }
     }
 

@@ -134,6 +134,13 @@ public struct SpeakerIdentifier: Sendable {
         }
     }
 
+    /// The fingerprint of one piece of a speaker's speech, with where it is in the track.
+    struct PieceVector: Sendable {
+        var start: TimeInterval
+        var seconds: TimeInterval
+        var vector: [Float]
+    }
+
     /// A fingerprint with what it was made from.
     struct Fingerprint {
         var vector: [Float]
@@ -167,22 +174,26 @@ public struct SpeakerIdentifier: Sendable {
     }
 
     /// Averages fingerprints over the speaker's longest clear segments (each ≥ 2 s, up to 60 s in total).
-    func embedding(for utterances: [Utterance], in url: URL) async throws -> [Float]? {
-        try await fingerprint(for: utterances, in: url)?.vector
+    func fingerprint(for utterances: [Utterance], in url: URL) async throws -> Fingerprint? {
+        Self.fingerprint(of: try await pieceVectors(for: utterances, in: url))
     }
 
-    func fingerprint(for utterances: [Utterance], in url: URL) async throws -> Fingerprint? {
-        var vectors: [[Float]] = []
-        var seconds: TimeInterval = 0
+    /// One fingerprint for each piece that had enough audio, in the order of `pieces`.
+    func pieceVectors(for utterances: [Utterance], in url: URL) async throws -> [PieceVector] {
+        var out: [PieceVector] = []
         for piece in Self.pieces(utterances) {
             let samples = try AudioSamples.read(url, from: piece.start, to: piece.end)
             if samples.count >= Int(Self.minimumSegment * TrackWriter.sampleRate) {
-                vectors.append(try await provider.embedding(for: samples))
-                seconds += piece.end - piece.start
+                out.append(PieceVector(start: piece.start, seconds: piece.end - piece.start, vector: try await provider.embedding(for: samples)))
             }
         }
+        return out
+    }
+
+    static func fingerprint(of pieces: [PieceVector]) -> Fingerprint? {
+        let vectors = pieces.map(\.vector)
         guard let centroid = VoiceLibrary.centroid(vectors) else { return nil }
         let coherence = vectors.count > 1 ? Double(vectors.reduce(Float(0)) { $0 + VoiceLibrary.cosine($1, centroid) }) / Double(vectors.count) : nil
-        return Fingerprint(vector: centroid, seconds: seconds, coherence: coherence)
+        return Fingerprint(vector: centroid, seconds: pieces.reduce(0) { $0 + $1.seconds }, coherence: coherence)
     }
 }

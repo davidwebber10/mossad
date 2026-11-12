@@ -8,6 +8,8 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
     public var text: String
     /// The lookups behind an answer, such as "Reading Launch sync".
     public var steps: [String] = []
+    /// An answer given during the call, from the live transcript: its names and letters were not final.
+    public var live: Bool?
 
     public init(role: Role, text: String, steps: [String] = []) {
         self.role = role
@@ -93,6 +95,15 @@ public struct ChatStore: Sendable {
     public func delete(_ id: UUID, record: Bool = true) {
         try? FileManager.default.removeItem(at: url(id))
         if record { setDeleted(deleted().union([id])) }
+    }
+
+    /// Deletes every chat about one call, as a deleted chat, so the sync removes it elsewhere too. For a call that
+    /// was skipped or discarded: its chat quotes words whose audio is gone.
+    @discardableResult
+    public func deleteChats(forCall callID: String) -> [UUID] {
+        let ids = all().filter { $0.callID == callID }.map(\.id)
+        for id in ids { delete(id) }
+        return ids
     }
 
     static let deletedFileName = "deleted.json"

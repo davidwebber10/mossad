@@ -99,7 +99,7 @@ private struct FindingsPage: View {
                 // One column, as wide as a card: the deck and the note share its left edge.
                 VStack(alignment: .leading, spacing: Space.l) {
                     FindingsDeck(cards: controller.findings, source: source, openSource: { controller.openMeeting($0.callID) },
-                                 play: { moments.toggle($0, paths: controller.paths) }, playing: moments.playing,
+                                 play: { moments.toggle($0, paths: controller.paths) }, playing: moments.playing, stopPlaying: { moments.stop() },
                                  offersNever: { FindingRules.offersNever($0, profile: profile) }, focusOnAppear: true, preview: CoachView.deckPreview,
                                  answer: { controller.answerFinding($0, $1) }, undo: { controller.takeBackFinding($0) },
                                  explain: { controller.explainFinding($0, note: $1) })

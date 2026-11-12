@@ -95,24 +95,45 @@ private struct RoomWaveform: View {
 struct LiveTranscriptPanel: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
+    var top: CGFloat = Space.xl
+    /// A moment from a live chat answer: the line there is scrolled to and marked for a few seconds.
+    @Binding var jump: LiveJump?
+    @State private var marked: String?
     private var room: Bool { record.platform == .inPerson }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Space.m) {
-                LabelColumn(label: room ? "Room transcript" : "Live transcript") {
-                    Text(note).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.m) {
+                    LabelColumn(label: room ? "Room transcript" : "Live transcript") {
+                        Text(note).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if controller.liveTranscriptEnabled {
+                        LiveLines(model: controller.live, room: room, paused: controller.isPaused, owner: controller.ownerName, marked: marked)
+                    }
                 }
-                if controller.liveTranscriptEnabled {
-                    LiveLines(model: controller.live, room: room, paused: controller.isPaused, owner: controller.ownerName)
-                }
+                .detailColumn(top: top)
             }
-            .detailColumn(top: Space.xl)
+            // Starts at the newest line and stays there as lines arrive.
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            .task(id: jump) {
+                let lines = controller.live.visibleLines
+                guard let jump, let i = ChatMoment.index(at: jump.at, in: lines.map(\.time)) else { return }
+                // After the first layout, which starts at the newest line.
+                try? await Task.sleep(for: .milliseconds(120))
+                withAnimation { proxy.scrollTo(lines[i].id, anchor: .center) }
+                marked = lines[i].id
+                // Used once: a later return to this tab starts at the newest line again.
+                self.jump = nil
+            }
+            .task(id: marked) {
+                guard marked != nil else { return }
+                try? await Task.sleep(for: .seconds(4))
+                withAnimation { marked = nil }
+            }
         }
-        // Starts at the newest line and stays there as lines arrive.
-        .defaultScrollAnchor(.bottom, for: .initialOffset)
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
     }
 
     private var note: String {
@@ -124,11 +145,18 @@ struct LiveTranscriptPanel: View {
     }
 }
 
+/// A moment to show in the live transcript; a new one each time, so the same time can be shown twice.
+struct LiveJump: Equatable {
+    let at: TimeInterval
+    let id = UUID()
+}
+
 private struct LiveLines: View {
     @ObservedObject var model: LiveTranscriptModel
     let room: Bool
     let paused: Bool
     let owner: String
+    var marked: String?
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: Space.m) {
@@ -153,6 +181,11 @@ private struct LiveLines: View {
                         Text(longClock(line.time)).font(.system(size: 11)).monospacedDigit().foregroundStyle(Palette.tertiary)
                     }
                 }
+                .background {
+                    if line.id == marked {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.accent.opacity(0.12)).padding(-6)
+                    }
+                }
                 .id(line.id)
                 .accessibilityElement(children: .combine)
             }
@@ -171,7 +204,8 @@ private struct LiveLines: View {
         if let name = line.speakerKey.flatMap({ model.transcript.names[$0] }) {
             return name == owner ? ("You", 0, false) : (String(name.split(separator: " ").first ?? ""), hue, false)
         }
-        if let letter = line.speaker { return ("Voice \(letter)", hue, true) }
+        // The same label as the chat and current_call: "Speaker A2" in a later stream session.
+        if let letter = line.speaker { return (LiveTranscript.label(letter, session: line.session), hue, true) }
         return (room ? "Room" : "Call", hue, false)
     }
 }
