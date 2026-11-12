@@ -1,0 +1,972 @@
+{
+  "schemaVersion": 1,
+  "about": {
+    "purpose": "The content of getmossad.app. The site renders this file; the design is separate.",
+    "comingSoon": "A feature with comingSoon true is on a branch and not yet in a release. Hide it, or show it with a 'Coming soon' mark. When it ships, set comingSoon to false and remove 'branch'.",
+    "sources": "Paths are relative to the repository root. They are the code that proves each claim. A comingSoon feature names its branch; its sources are on that branch.",
+    "style": "Plain, specific, no hype words, no emoji, no em dashes."
+  },
+  "site": {
+    "name": "Mossad",
+    "domain": "getmossad.app",
+    "title": "Mossad: meeting notes on your Mac, with no bot on the call",
+    "description": "A free, open source menu bar app for macOS. It records your Zoom, Google Meet, and Microsoft Teams calls on your Mac and writes a Markdown note for each one.",
+    "repository": "https://github.com/davidwebber10/mossad",
+    "releases": "https://github.com/davidwebber10/mossad/releases",
+    "license": "MIT"
+  },
+  "launchChecks": [
+    "scripts/release.sh publishes Mossad-<version>.zip and appcast.xml, not a DMG. A stable link to a DMG needs a DMG with a fixed name in each release (for example Mossad.dmg at releases/latest/download/Mossad.dmg). Until then, the download button points to the latest release page.",
+    "project.yml signs with 'Apple Development', and release.sh does not notarize. A copy downloaded on another Mac needs a Developer ID signature and notarization to open without a Gatekeeper warning.",
+    "The iPhone app is not in the App Store. The copy below says to build it with Xcode."
+  ],
+  "hero": {
+    "headlines": [
+      "Meeting notes that write themselves, on your Mac.",
+      "Take your calls. Mossad keeps the notes.",
+      "Every call, written down. No bot on the call."
+    ],
+    "subhead": "Mossad is a free, open source menu bar app for macOS. It notices your Zoom, Google Meet, and Microsoft Teams calls, records them on your Mac, and writes a Markdown note for each one: a summary, decisions, action items, and a transcript that knows who spoke.",
+    "primaryAction": {
+      "label": "Download for Mac",
+      "href": "https://github.com/davidwebber10/mossad/releases/latest",
+      "hrefWhenDmgShips": "https://github.com/davidwebber10/mossad/releases/latest/download/Mossad.dmg",
+      "caption": "Free. macOS 26 on Apple silicon."
+    },
+    "secondaryAction": {
+      "label": "View on GitHub",
+      "href": "https://github.com/davidwebber10/mossad"
+    },
+    "image": "The meeting page: the lanes player with one lane per speaker, over the Summary tab."
+  },
+  "howItWorks": {
+    "title": "How it works",
+    "intro": "You take your calls as usual. There is nothing to start and nothing to stop.",
+    "steps": [
+      {
+        "title": "It notices the call",
+        "body": "Every two seconds, Mossad checks which app uses the microphone and whether a meeting window or tab is open. When both are true, it starts to record.",
+        "icon": "waveform",
+        "sources": ["Packages/MossadCore/Sources/MossadCore/Detection/DetectionService.swift", "Packages/MossadCore/Sources/MossadCore/Detection/CallDetector.swift"]
+      },
+      {
+        "title": "It records two tracks on your Mac",
+        "body": "Your microphone is one track. The call app's audio is the other, taken from that app alone, so your music and notifications stay out. The call ends when its window or tab closes.",
+        "icon": "mic",
+        "sources": ["Packages/MossadCore/Sources/MossadCore/Capture/ProcessTap.swift", "Packages/MossadCore/Sources/MossadCore/Capture/MicCapture.swift", "Packages/MossadCore/Sources/MossadCore/Capture/CallRecorder.swift"]
+      },
+      {
+        "title": "It transcribes and knows the voices",
+        "body": "After the call, the provider you chose transcribes each track. Mossad joins them, removes the echo of the other side from your track, and matches each voice to the people you have named.",
+        "icon": "person.wave.2",
+        "sources": ["Packages/MossadCore/Sources/MossadCore/Transcription/TranscriptMerger.swift", "Packages/MossadCore/Sources/MossadCore/Voices/SpeakerIdentifier.swift"]
+      },
+      {
+        "title": "It writes a Markdown note",
+        "body": "A model you chose writes the summary, decisions, and action items. Mossad saves one note per call in ~/Mossad/Meetings, ready for you and for your AI tools.",
+        "icon": "doc.text",
+        "sources": ["Packages/MossadCore/Sources/MossadCore/Summary/Summarizer.swift", "Packages/MossadCore/Sources/MossadCore/Output/MarkdownWriter.swift"]
+      }
+    ]
+  },
+  "featureGroups": [
+    {
+      "id": "capture",
+      "title": "Capture",
+      "intro": "Mossad records without a bot in the meeting and without a click from you.",
+      "image": "The menu bar panel during a call: Recording, the platform, the time, Pause and Stop.",
+      "features": [
+        {
+          "id": "detects-calls",
+          "title": "Finds your calls",
+          "body": "Mossad starts to record when Zoom, Microsoft Teams, or a Meet or Teams tab in your browser is in a real meeting.",
+          "details": [
+            "Zoom and Microsoft Teams apps",
+            "Google Meet and Teams in Chrome, Arc, Safari, Edge, and Brave",
+            "When an app seems to be in a call that Mossad cannot confirm, one notification offers Record"
+          ],
+          "icon": "phone.and.waveform",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Detection/MeetingMatcher.swift", "Packages/MossadCore/Sources/MossadCore/Detection/CallDetector.swift", "Packages/MossadCore/Sources/MossadCore/Detection/UnconfirmedCallWatch.swift"]
+        },
+        {
+          "id": "ends-with-call",
+          "title": "Stops when the call ends",
+          "body": "The recording ends when the meeting window or tab closes, not after a guess from a few quiet seconds.",
+          "details": [
+            "If that signal is missing, three minutes without microphone use end the call",
+            "Calls shorter than one minute are not kept"
+          ],
+          "icon": "stop.circle",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Detection/CallDetector.swift", "Packages/MossadCore/Sources/MossadCore/Records/ProcessingQueue.swift"]
+        },
+        {
+          "id": "two-tracks",
+          "title": "Two tracks, no bot",
+          "body": "Your voice and the other side are recorded apart, so the transcript never confuses you with them.",
+          "details": [
+            "The call track comes from a Core Audio tap on the call app only",
+            "Echo of the other side that your microphone picks up is removed from your track",
+            "Nobody joins your meeting and nothing appears in the call"
+          ],
+          "icon": "waveform.path",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Capture/ProcessTap.swift", "Packages/MossadCore/Sources/MossadCore/Capture/MicCapture.swift", "Packages/MossadCore/Sources/MossadCore/Transcription/TranscriptMerger.swift"]
+        },
+        {
+          "id": "mute",
+          "title": "Muted means silent",
+          "body": "When you mute in the call app, Mossad writes silence over your track for that time.",
+          "details": [],
+          "icon": "mic.slash",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Detection/MuteState.swift", "Packages/MossadCore/Sources/MossadCore/Records/MutedAudio.swift", "App/MutedBanner.swift"]
+        },
+        {
+          "id": "controls",
+          "title": "Pause, stop, or skip",
+          "body": "Pause a recording, stop it early, or skip a call and delete it from the menu bar.",
+          "details": [
+            "Mark a meeting or a whole series in the calendar as do not record",
+            "Record a meeting in a room by hand"
+          ],
+          "icon": "pause.circle",
+          "comingSoon": false,
+          "sources": ["App/CallControls.swift", "App/MenuContent.swift", "Packages/MossadCore/Sources/MossadCore/Calendar/NoRecordBook.swift"]
+        },
+        {
+          "id": "calls-first",
+          "title": "Your call comes first",
+          "body": "Heavy work waits until the call ends, so the call keeps the processor and the network.",
+          "details": [
+            "An update that you accept during a call installs after the call",
+            "Process now runs a waiting meeting at once"
+          ],
+          "icon": "hourglass",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Support/HeavyWork.swift", "App/Updater.swift"]
+        }
+      ]
+    },
+    {
+      "id": "notes",
+      "title": "Notes and transcripts",
+      "intro": "Each call becomes one plain Markdown file that you own.",
+      "image": "A meeting page with the Summary tab: topics, decisions with their times, action items.",
+      "features": [
+        {
+          "id": "markdown-note",
+          "title": "One note per call",
+          "body": "Every call is a Markdown file with front matter, a summary, action items, decisions, and the transcript.",
+          "details": [
+            "Named by date and title, so it sorts in Finder",
+            "Front matter with date, platform, attendees, speakers, kind, and tags",
+            "Readable by any editor and any AI agent"
+          ],
+          "icon": "doc.text",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Output/MarkdownWriter.swift"]
+        },
+        {
+          "id": "summary",
+          "title": "Summaries by topic",
+          "body": "A short overview, one section per topic, decisions with the moment they were made, and action items with owners.",
+          "details": [
+            "Long meetings are summarized in parts",
+            "Regenerate a summary at any time"
+          ],
+          "icon": "text.quote",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Summary/Summarizer.swift", "Packages/MossadCore/Sources/MossadCore/Summary/ActionItem.swift", "Packages/MossadCore/Sources/MossadCore/Summary/SummaryInParts.swift"]
+        },
+        {
+          "id": "titles",
+          "title": "Real meeting titles",
+          "body": "A meeting takes its title from the calendar invite, or Mossad names it from what was said.",
+          "details": [
+            "A first title shows about five minutes into the call",
+            "A title you type is never replaced"
+          ],
+          "icon": "textformat",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Summary/LiveTitler.swift", "Packages/MossadCore/Sources/MossadCore/Calendar/CalendarMatcher.swift", "App/MeetingTitle.swift"]
+        },
+        {
+          "id": "live-transcript",
+          "title": "Live transcript",
+          "body": "Read the call as it happens, with the voices that Mossad knows already named.",
+          "details": [
+            "Optional; it uses AssemblyAI streaming",
+            "Off on a network in Low Data Mode"
+          ],
+          "icon": "captions.bubble",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Transcription/LiveTranscriber.swift", "Packages/MossadCore/Sources/MossadCore/Voices/LiveSpeakerNamer.swift", "App/LiveViews.swift"]
+        },
+        {
+          "id": "lanes-player",
+          "title": "See who spoke when",
+          "body": "The player shows one lane per speaker across the whole meeting; click a lane to hear that moment.",
+          "details": [
+            "Decisions and bookmarks are marks on the timeline",
+            "Each speaker keeps one color in the lanes and the transcript"
+          ],
+          "icon": "slider.horizontal.below.rectangle",
+          "comingSoon": false,
+          "sources": ["App/LanesPlayer.swift", "Packages/MossadCore/Sources/MossadCore/Output/SpeakerLanes.swift"]
+        },
+        {
+          "id": "resumable",
+          "title": "Nothing gets lost",
+          "body": "Each step saves its result, so a sleep, a lost network, or a quit picks up where it stopped.",
+          "details": [
+            "Failed steps try again with backoff",
+            "Transcribe a meeting again, with one undo"
+          ],
+          "icon": "arrow.triangle.2.circlepath",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Pipeline/Pipeline.swift", "App/TranscribeAgainSheet.swift"]
+        }
+      ]
+    },
+    {
+      "id": "people",
+      "title": "People and voices",
+      "intro": "Name a voice once. Mossad knows it on every call after that.",
+      "image": "A person's profile: meetings, talk time, who they meet with, and their action items.",
+      "features": [
+        {
+          "id": "voices",
+          "title": "Name a voice once",
+          "body": "Each speaker gets a voice fingerprint on your Mac; name a new one and Mossad recognizes that person from then on.",
+          "details": [
+            "One notification after a call with new voices, and nothing more",
+            "Play a short clip, then type a name or pick an invited person",
+            "Turn voice recognition off, or delete all saved voices, in Settings"
+          ],
+          "icon": "person.wave.2",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Voices/VoiceLibrary.swift", "Packages/MossadCore/Sources/MossadCore/Voices/SpeakerIdentifier.swift", "Packages/MossadCore/Sources/MossadCore/Voices/EmbeddingProvider.swift", "App/VoiceNamingView.swift"]
+        },
+        {
+          "id": "invite-aware-voices",
+          "title": "Voices that read the invite",
+          "body": "Mossad uses the call's invite to name voices: a person who was not invited needs a much closer match.",
+          "details": [
+            "When one invited person has no saved voice and one voice is left, Mossad names it and learns it",
+            "Calls with no invite keep the usual rules"
+          ],
+          "icon": "envelope.badge.person.crop",
+          "comingSoon": true,
+          "branch": "fix/invite-aware-voices",
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Voices/InviteVoiceRules.swift", "Packages/MossadCore/Sources/MossadCore/Voices/SpeakerIdentifier.swift"]
+        },
+        {
+          "id": "profiles",
+          "title": "A page for each person",
+          "body": "See every meeting with a person, your talk time together, who they meet with, and their open action items.",
+          "details": [
+            "Rename, merge, or delete a person",
+            "A review of likely duplicates",
+            "Sort by recent, most met, talk time, or name"
+          ],
+          "icon": "person.text.rectangle",
+          "comingSoon": false,
+          "sources": ["App/PersonProfileView.swift", "Packages/MossadCore/Sources/MossadCore/Voices/PersonStatistics.swift", "Packages/MossadCore/Sources/MossadCore/Voices/PeopleDuplicates.swift", "Packages/MossadCore/Sources/MossadCore/Voices/PeopleSort.swift"]
+        },
+        {
+          "id": "person-tabs",
+          "title": "Person pages with tabs",
+          "body": "A person's page splits into tabs, and every address they use finds them.",
+          "details": [
+            "More than one email for each person",
+            "Your company's domains and directory aliases count as theirs"
+          ],
+          "icon": "rectangle.split.3x1",
+          "comingSoon": true,
+          "branch": "feature/person-tabs",
+          "sources": ["Packages/MossadCore/Sources/MossadCore/People/PersonMeetings.swift", "Packages/MossadCore/Sources/MossadCore/People/CompanyDomains.swift", "Packages/MossadCore/Sources/MossadCore/People/Person.swift"]
+        },
+        {
+          "id": "org-chart",
+          "title": "Your org chart",
+          "body": "Import an org chart from a CSV file, and People shows each person's title, manager, and team.",
+          "details": [
+            "Titles give the summaries and the coach context"
+          ],
+          "icon": "person.3.sequence",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/People/OrgChart.swift", "App/OrgImportSheet.swift", "App/OrgChartView.swift"]
+        },
+        {
+          "id": "personas",
+          "title": "How to present to them",
+          "body": "After a few calls, a card says how a person likes to hear things, with each point tied to what they said.",
+          "details": [
+            "Shown only after three calls, or two with strong signs",
+            "The model sees handles such as P1, never names",
+            "Turn it off for any person"
+          ],
+          "icon": "person.crop.rectangle",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Persona/PersonaExtractor.swift", "Packages/MossadCore/Sources/MossadCore/Persona/PersonaCard.swift", "Packages/MossadCore/Sources/MossadCore/Persona/PersonaTraits.swift", "SharedUI/PersonaCardView.swift"]
+        }
+      ]
+    },
+    {
+      "id": "coach",
+      "title": "Coach",
+      "intro": "A coach that reads your calls and gives you one thing to work on, with the proof.",
+      "image": "The Findings deck on Coach: one card with a moment from a call and its Useful and Not useful answers.",
+      "features": [
+        {
+          "id": "one-line",
+          "title": "One line per call",
+          "body": "After each call, the coach gives at most one piece of advice, and only with a moment or a number to back it.",
+          "details": [
+            "Pace, filler words, turns, questions, and cut-ins from the transcript",
+            "Pitch, loudness, and trailing off from your own track",
+            "The same skill gets no new advice for 30 days"
+          ],
+          "icon": "text.bubble",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Coach/CoachLineRules.swift", "Packages/MossadCore/Sources/MossadCore/Coach/DeliveryStats.swift", "Packages/MossadCore/Sources/MossadCore/Coach/VoiceTone.swift", "Packages/MossadCore/Sources/MossadCore/Coach/AdviceLog.swift"]
+        },
+        {
+          "id": "findings",
+          "title": "Findings you can answer",
+          "body": "Swipe through short cards about your calls; each yes or no teaches the coach what helps you.",
+          "details": [
+            "Each card says why it matters",
+            "Never again blocks a subject until you undo it",
+            "On the Mac and the iPhone"
+          ],
+          "icon": "rectangle.stack",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Coach/Finding.swift", "Packages/MossadCore/Sources/MossadCore/Coach/FindingRules.swift", "Packages/MossadCore/Sources/MossadCore/Coach/FindingTraining.swift", "SharedUI/FindingsDeck.swift"]
+        },
+        {
+          "id": "goals",
+          "title": "Goals with a number",
+          "body": "Take on a goal such as more room in your 1:1s, and see it measured meeting by meeting.",
+          "details": [
+            "Progress comes from your talk share, not from the model's opinion"
+          ],
+          "icon": "target",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Coach/CoachGoal.swift", "SharedUI/GoalProgressPanel.swift"]
+        },
+        {
+          "id": "weekly-review",
+          "title": "A weekly review",
+          "body": "Each Monday, a review of last week's meetings, in the app and, if you like, in your inbox.",
+          "details": [
+            "Mail goes only to your own address",
+            "Send through Resend, Postmark, SendGrid, Mailgun, Brevo, or Amazon SES"
+          ],
+          "icon": "envelope",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Coach/WeeklyEmail.swift", "Packages/MossadCore/Sources/MossadCore/Mail/Mailers.swift"]
+        },
+        {
+          "id": "memory",
+          "title": "It remembers",
+          "body": "The coach keeps what it learns across calls, and you can read and change all of it in Knowledge.",
+          "details": [],
+          "icon": "books.vertical",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Coach/CoachProfile.swift", "App/CoachKnowledgeParts.swift"]
+        },
+        {
+          "id": "meeting-value",
+          "title": "Was it worth it",
+          "body": "The coach rates what each meeting was worth, and you can filter your meetings by that rating.",
+          "details": [],
+          "icon": "star.leadinghalf.filled",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Coach/CoachReview.swift", "Packages/MossadCore/Sources/MossadCore/Records/MeetingFilter.swift"]
+        }
+      ]
+    },
+    {
+      "id": "meetings",
+      "title": "Meetings",
+      "intro": "Find any meeting, prepare for the next one, and keep the moments that matter.",
+      "image": "The Meetings list in Calendar mode, with the filter panel open.",
+      "features": [
+        {
+          "id": "prep",
+          "title": "Before this meeting",
+          "body": "Open an upcoming meeting to see who is coming, what happened last time, and what you still owe them.",
+          "details": [
+            "When you last met each person, and how often",
+            "The last meeting's decisions and action items",
+            "Your open tasks for these people",
+            "Join from the same page"
+          ],
+          "icon": "calendar.badge.clock",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Prep/MeetingPrep.swift", "App/UpcomingDetailView.swift", "App/PrepSections.swift"]
+        },
+        {
+          "id": "recurring",
+          "title": "Recurring meetings",
+          "body": "Each series gets its own report and a list of points for next time, which Mossad checks off when you raise them.",
+          "details": [
+            "A point counts as discussed only with a quote from the transcript",
+            "The coach suggests points from open action items, open decisions, and unanswered questions",
+            "Add a point from Chat or from another AI app"
+          ],
+          "icon": "repeat",
+          "comingSoon": true,
+          "branch": "feature/series",
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift"]
+        },
+        {
+          "id": "filters",
+          "title": "Filter by anything",
+          "body": "Narrow your meetings by person, length, date, topic, kind, size, platform, or the coach's rating.",
+          "details": [
+            "Only meetings with action items, decisions, or screens",
+            "Each choice shows how many meetings match"
+          ],
+          "icon": "line.3.horizontal.decrease.circle",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Records/MeetingFilter.swift", "Packages/MossadCore/Sources/MossadCore/Records/MeetingFacets.swift", "App/MeetingFilterPanel.swift"]
+        },
+        {
+          "id": "search",
+          "title": "Search everything",
+          "body": "Press Command-K to search meetings, people, transcripts, decisions, action items, tasks, and chats at once.",
+          "details": [],
+          "icon": "magnifyingglass",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Search/SearchIndex.swift", "App/SearchPalette.swift", "App/Commands.swift"]
+        },
+        {
+          "id": "list-search",
+          "title": "A search in every list",
+          "body": "Each list gets its own search under its title, and each meeting shows where your words matched.",
+          "details": [
+            "A search button in every toolbar",
+            "Recent searches before you type",
+            "Bookmark notes and job titles in the results"
+          ],
+          "icon": "text.magnifyingglass",
+          "comingSoon": true,
+          "branch": "feature/search",
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Search/ListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Search/MeetingListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Search/RecentSearches.swift", "App/ListSearch.swift"]
+        },
+        {
+          "id": "bookmarks",
+          "title": "Bookmark a moment",
+          "body": "Press Control-Option-B during a call to mark a moment, with a note if you want one.",
+          "details": [
+            "Works while the call app is in front",
+            "All bookmarks of all meetings on one page"
+          ],
+          "icon": "bookmark",
+          "comingSoon": false,
+          "sources": ["App/GlobalHotKey.swift", "App/BookmarksView.swift", "Packages/MossadCore/Sources/MossadCore/Records/MeetingMoments.swift"]
+        },
+        {
+          "id": "screens",
+          "title": "Shared screens",
+          "body": "If you turn it on, Mossad keeps the slides and screens shared in a call and reads their text into the transcript.",
+          "details": [
+            "Off by default",
+            "Only the meeting window, and only the frames that change",
+            "Screen images never sync"
+          ],
+          "icon": "rectangle.on.rectangle",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Capture/ScreenRecorder.swift", "Packages/MossadCore/Sources/MossadCore/Frames/FrameSelector.swift", "Packages/MossadCore/Sources/MossadCore/Frames/ScreenTextReader.swift", "App/ScreensTab.swift", "App/AllScreensView.swift"]
+        },
+        {
+          "id": "tasks",
+          "title": "What you promised",
+          "body": "Mossad finds the things you said you would do, quotes your own words, and keeps them on the Tasks page.",
+          "details": [],
+          "icon": "checklist",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Commitments/Commitment.swift", "App/CommitmentsView.swift"]
+        },
+        {
+          "id": "calendar-view",
+          "title": "A calendar of your meetings",
+          "body": "See past and upcoming meetings by day, week, or month.",
+          "details": [],
+          "icon": "calendar",
+          "comingSoon": false,
+          "sources": ["App/CalendarPane.swift", "Packages/MossadCore/Sources/MossadCore/Records/CalendarLayout.swift"]
+        }
+      ]
+    },
+    {
+      "id": "analytics",
+      "title": "Analytics",
+      "intro": "Numbers about your meetings that say a change only when there is one.",
+      "image": "The 'How you communicate' chart: talk share per meeting with the weekly line and the usual band.",
+      "features": [
+        {
+          "id": "meeting-analytics",
+          "title": "Each meeting in numbers",
+          "body": "Talk time, turns, cut-ins, questions, and silence for one meeting, each next to its usual value.",
+          "details": [
+            "Compared with the same series, the same kind, or the same person",
+            "A number the call cannot give stays empty, never zero"
+          ],
+          "icon": "chart.bar",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Analytics/MeetingAnalytics.swift", "Packages/MossadCore/Sources/MossadCore/Analytics/MeetingBaselines.swift", "App/MeetingAnalyticsTab.swift"]
+        },
+        {
+          "id": "trends",
+          "title": "How you communicate",
+          "body": "Charts of your talk share, questions, cut-ins, and pace over time, with 1:1s and groups kept apart.",
+          "details": [
+            "A change is called only when a statistical test supports it",
+            "Click a point to open that meeting"
+          ],
+          "icon": "chart.line.uptrend.xyaxis",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Analytics/CommunicationTrends.swift", "Packages/MossadCore/Sources/MossadCore/Analytics/CommunicationTrends+Change.swift", "SharedUI/TrendChart.swift"]
+        },
+        {
+          "id": "time",
+          "title": "Where your time goes",
+          "body": "Your hours in meetings over time, the people you spend them with, and when in the week they fall.",
+          "details": [
+            "Scheduled against unplanned calls",
+            "A weekday and hour map of your meetings"
+          ],
+          "icon": "clock",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Analytics/AnalyticsReport.swift", "App/AnalyticsTime.swift", "App/AnalyticsPeople.swift"]
+        },
+        {
+          "id": "costs",
+          "title": "What it costs you",
+          "body": "Every billed request is logged, so you see what transcription, summaries, and the coach cost for each meeting.",
+          "details": [],
+          "icon": "dollarsign.circle",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Usage/UsageLog.swift", "Packages/MossadCore/Sources/MossadCore/Usage/Pricing.swift", "App/AnalyticsCosts.swift"]
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "title": "Chat and MCP for other AI apps",
+      "intro": "Ask your meetings a question, here or in the AI app you already use.",
+      "image": "The Chat page: an answer with links that open the meeting at the moment it cites.",
+      "features": [
+        {
+          "id": "chat",
+          "title": "Ask your meetings",
+          "body": "Chat looks up your meetings, transcripts, action items, and screens, then answers with links to the exact moments.",
+          "details": [
+            "Ask about one meeting from its own Chat tab",
+            "Ask about the call you are on while it runs"
+          ],
+          "icon": "bubble.left.and.text.bubble.right",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/ChatAgent.swift", "Packages/MossadCore/Sources/MossadCore/Chat/ChatTools.swift", "Packages/MossadCore/Sources/MossadCore/Chat/ChatTools+Live.swift"]
+        },
+        {
+          "id": "mcp-local",
+          "title": "MCP on your Mac",
+          "body": "Run Mossad --mcp and Claude Desktop, Claude Code, or any MCP client can search and read your meetings.",
+          "details": [
+            "The same tools as Chat: find meetings, search transcripts, read a meeting, action items, screens, and the coach"
+          ],
+          "icon": "puzzlepiece.extension",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/MCPServer.swift"]
+        },
+        {
+          "id": "mcp-remote",
+          "title": "MCP for web AI apps",
+          "body": "With your own server, ChatGPT, Claude, and other web AI apps can read your meetings after you sign in.",
+          "details": [
+            "Read only: an AI app cannot change anything"
+          ],
+          "icon": "network",
+          "comingSoon": false,
+          "sources": ["server/src/mcp.ts", "server/src/tools.ts"]
+        },
+        {
+          "id": "agents",
+          "title": "Notes your agents can read",
+          "body": "Point an AI agent at ~/Mossad/Meetings and ask it to act on Tuesday's planning call.",
+          "details": [],
+          "icon": "folder",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Output/MarkdownWriter.swift"]
+        }
+      ]
+    },
+    {
+      "id": "iphone",
+      "title": "iPhone",
+      "intro": "Your meetings on your phone, and a recorder for the meetings in a room.",
+      "image": "The iPhone Meetings list next to the room recorder.",
+      "features": [
+        {
+          "id": "phone-meetings",
+          "title": "Your meetings, in your pocket",
+          "body": "Read summaries and transcripts, search, chat, and see people and analytics on your iPhone.",
+          "details": [
+            "The coach's Findings deck and your tasks",
+            "Syncs through iCloud or your own server"
+          ],
+          "icon": "iphone",
+          "comingSoon": false,
+          "sources": ["PhoneApp/MeetingsListView.swift", "PhoneApp/MeetingView.swift", "PhoneApp/SearchScreen.swift", "PhoneApp/ChatScreen.swift", "Packages/MossadCore/Sources/MossadCore/Sync/CloudSync.swift"]
+        },
+        {
+          "id": "room-recorder",
+          "title": "Record in the room",
+          "body": "Record an in-person meeting on your iPhone, and your Mac writes the note.",
+          "details": [
+            "The recording survives a stopped app",
+            "The phone deletes a recording only after the Mac has made its meeting"
+          ],
+          "icon": "record.circle",
+          "comingSoon": false,
+          "sources": ["PhoneApp/RoomRecorder.swift", "Packages/MossadCore/Sources/MossadCore/Room/RoomRecording.swift", "Packages/MossadCore/Sources/MossadCore/Room/Outbox.swift", "Packages/MossadCore/Sources/MossadCore/Sync/PhoneRecording.swift"]
+        }
+      ]
+    },
+    {
+      "id": "sharing",
+      "title": "Sharing with PIN",
+      "intro": "Send one meeting to someone, on your own server, with the parts you choose.",
+      "image": "The share sheet: summary, transcript, and recording choices, a PIN, and the link.",
+      "features": [
+        {
+          "id": "share-link",
+          "title": "Share one meeting",
+          "body": "Make a link to the summary, the transcript, the recording, or any of them.",
+          "details": [
+            "The page does not name Mossad and loads nothing from other sites",
+            "Set an expiry, or stop a link at any time"
+          ],
+          "icon": "link",
+          "comingSoon": false,
+          "sources": ["App/ShareSheet.swift", "Packages/MossadCore/Sources/MossadCore/Sync/MeetingLink.swift", "server/src/share.ts", "server/src/pages.ts"]
+        },
+        {
+          "id": "share-pin",
+          "title": "A PIN on the link",
+          "body": "Add a four-digit PIN, and the page shows nothing until the right PIN is entered.",
+          "details": [
+            "The PIN is never in the link",
+            "Wrong guesses slow down and then lock the share"
+          ],
+          "icon": "lock",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Sync/MeetingLink.swift", "server/src/access.ts"]
+        },
+        {
+          "id": "share-views",
+          "title": "See who opened it",
+          "body": "Views and visitors per day, with country and kind of device, and your own visits left out.",
+          "details": [
+            "No addresses are kept"
+          ],
+          "icon": "eye",
+          "comingSoon": false,
+          "sources": ["server/src/views.ts", "App/SharesView.swift", "App/SharesDetail.swift"]
+        },
+        {
+          "id": "copy-for-ai",
+          "title": "Copy for their AI",
+          "body": "A button on the shared page copies the meeting as Markdown for the reader's own AI app.",
+          "details": [],
+          "icon": "doc.on.doc",
+          "comingSoon": false,
+          "sources": ["server/src/markdown.ts"]
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "title": "Storage, your own server, backups",
+      "intro": "Your meetings live in a folder on your Mac. Anything more is your choice.",
+      "image": "Settings, Storage and Sync: what stays on this Mac, sync, recording backup, and your server.",
+      "features": [
+        {
+          "id": "local-folder",
+          "title": "A folder you own",
+          "body": "Notes, audio, voices, and settings live in ~/Mossad on your Mac.",
+          "details": [
+            "Notes and transcripts are always kept",
+            "You choose how long raw tracks and recordings stay"
+          ],
+          "icon": "folder",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Support/Paths.swift", "Packages/MossadCore/Sources/MossadCore/Support/Retention.swift", "App/StorageSyncSettings.swift"]
+        },
+        {
+          "id": "own-server",
+          "title": "Your own server",
+          "body": "Run the included Cloudflare Worker in your account for sync, share links, the remote MCP, and recording backup.",
+          "details": [
+            "Cloudflare's free plan covers one person",
+            "Only your secret opens it",
+            "Mossad tells you when the server needs an update"
+          ],
+          "icon": "server.rack",
+          "comingSoon": false,
+          "sources": ["server/src/index.ts", "server/src/api.ts", "server/README.md", "App/ServerSettings.swift"]
+        },
+        {
+          "id": "backup",
+          "title": "Recording backup",
+          "body": "Back up each recording to Cloudflare R2, Amazon S3, or your own server, and keep a local copy only as long as you want.",
+          "details": [
+            "Every upload is checked by size and SHA-256",
+            "Move all backups to another place in one step"
+          ],
+          "icon": "externaldrive.badge.icloud",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Cloud/CloudArchive.swift", "Packages/MossadCore/Sources/MossadCore/Cloud/BucketArchive.swift", "Packages/MossadCore/Sources/MossadCore/Cloud/ServerArchive.swift", "Packages/MossadCore/Sources/MossadCore/Cloud/ArchiveMove.swift"]
+        },
+        {
+          "id": "icloud",
+          "title": "iCloud sync",
+          "body": "Meetings go from your Mac to your iPhone through iCloud, with no server to run.",
+          "details": [
+            "Chats, the coach's memory, and tasks sync both ways"
+          ],
+          "icon": "icloud",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Sync/CloudSync.swift", "Packages/MossadCore/Sources/MossadCore/Sync/CloudKitStore.swift"]
+        }
+      ]
+    },
+    {
+      "id": "google",
+      "title": "Connect Google, with Gemini notes",
+      "intro": "Optional, read only, and through a Google app that you own.",
+      "image": "Settings, Google: the connection and the four parts you can turn on.",
+      "features": [
+        {
+          "id": "google-connect",
+          "title": "Your own Google app",
+          "body": "Connect Google through a client in your own Google Cloud project, with step-by-step setup in the app.",
+          "details": [
+            "Four read-only parts: Calendar events, Gemini notes, the directory, and contacts",
+            "Tokens stay in your Keychain"
+          ],
+          "icon": "key",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GoogleOAuth.swift", "Packages/MossadCore/Sources/MossadCore/Google/GoogleScope.swift", "Packages/MossadCore/Sources/MossadCore/Google/GoogleSetupGuide.swift", "App/GoogleSetup.swift"]
+        },
+        {
+          "id": "google-calendar",
+          "title": "Richer calendar details",
+          "body": "Google Calendar adds who accepted, the organizer, the series, and the meeting link to each meeting.",
+          "details": [],
+          "icon": "calendar.badge.checkmark",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GoogleCalendar.swift"]
+        },
+        {
+          "id": "gemini-notes",
+          "title": "Gemini notes come in",
+          "body": "Meetings that Gemini took notes for arrive in Mossad, as meetings of their own or next to your recording.",
+          "details": [
+            "Every 15 minutes, never during a call",
+            "Meetings you marked do not record stay out"
+          ],
+          "icon": "doc.richtext",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GeminiImport.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiNotes.swift"]
+        },
+        {
+          "id": "directory",
+          "title": "Names from your directory",
+          "body": "Your company directory and contacts fill in names and titles for the people you meet.",
+          "details": [
+            "A name you typed is never replaced"
+          ],
+          "icon": "person.crop.rectangle.stack",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GooglePeople.swift", "Packages/MossadCore/Sources/MossadCore/People/DirectoryMerge.swift"]
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "title": "Bring your own AI providers",
+      "intro": "Choose who transcribes and who writes the notes. Or keep it all on your Mac.",
+      "image": "Settings, AI: the Transcription and Notes rows with the cost per hour.",
+      "features": [
+        {
+          "id": "transcription-providers",
+          "title": "Choose your transcription",
+          "body": "Use AssemblyAI, Deepgram, ElevenLabs, or OpenAI with your own key, or a model that runs on your Mac.",
+          "details": [
+            "Cloud transcription costs about $0.22 to $0.36 an hour of audio",
+            "On your Mac: Parakeet, Whisper Large v3 Turbo, Apple Speech, or Qwen3-ASR, free"
+          ],
+          "icon": "waveform.badge.mic",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/AI/Providers.swift", "Packages/MossadCore/Sources/MossadCore/Transcription/TranscriptionProviders.swift", "Packages/MossadCore/Sources/MossadCore/Transcription/LocalModels.swift"]
+        },
+        {
+          "id": "notes-providers",
+          "title": "Choose your model",
+          "body": "Summaries, chat, and the coach run on Anthropic, OpenAI, OpenRouter, a local server, or Apple's on-device model.",
+          "details": [
+            "Local server: Ollama, LM Studio, or any OpenAI-compatible server",
+            "Apple on-device needs Apple Intelligence"
+          ],
+          "icon": "cpu",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/AI/Providers.swift", "Packages/MossadCore/Sources/MossadCore/AI/LocalServerModel.swift", "Packages/MossadCore/Sources/MossadCore/AI/AppleModel.swift", "App/LocalAISetup.swift"]
+        },
+        {
+          "id": "all-local",
+          "title": "All on your Mac",
+          "body": "Pick local transcription and a local or on-device model, and your audio and text never leave your Mac.",
+          "details": [
+            "Voice recognition always runs on your Mac"
+          ],
+          "icon": "laptopcomputer",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Transcription/LocalTranscriber.swift", "Packages/MossadCore/Sources/MossadCore/AI/LocalServerModel.swift", "Packages/MossadCore/Sources/MossadCore/Voices/EmbeddingProvider.swift"]
+        },
+        {
+          "id": "keys",
+          "title": "Your keys, your bills",
+          "body": "Keys live in your Mac's Keychain, and each provider bills you directly, with the cost per hour shown before you choose.",
+          "details": [],
+          "icon": "key",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Support/Keychain.swift", "Packages/MossadCore/Sources/MossadCore/Usage/HourCost.swift", "App/ProviderRows.swift"]
+        }
+      ]
+    }
+  ],
+  "privacy": {
+    "title": "Private by design",
+    "intro": "Mossad is local first. Your meetings stay in a folder on your Mac, and you decide what leaves it.",
+    "points": [
+      {
+        "title": "Local first",
+        "body": "Notes, audio, voice fingerprints, and the coach's memory are files in ~/Mossad. There is no Mossad account and no Mossad cloud."
+      },
+      {
+        "title": "Your keys",
+        "body": "You bring your own provider keys. They live only in your Mac's Keychain, and each provider bills you directly."
+      },
+      {
+        "title": "Your server",
+        "body": "Sync, share links, the remote MCP, and backups run on a server in your own Cloudflare account, or not at all."
+      },
+      {
+        "title": "No tracking",
+        "body": "The app sends no analytics or usage data to anyone."
+      }
+    ],
+    "leavesTheMac": {
+      "title": "What leaves your Mac",
+      "items": [
+        "Audio, to the transcription provider you chose. Nothing, if you transcribe on your Mac.",
+        "Live audio while you record, to AssemblyAI, if the live transcript is on.",
+        "Transcript text, to the AI provider you chose for notes, chat, and the coach. Nothing, with a local or on-device model.",
+        "Meetings, to your iPhone through iCloud or through your own server, if you turn on sync.",
+        "Recordings, to Cloudflare R2, Amazon S3, or your own server, if you turn on backup.",
+        "One meeting, to your own server, when you share it.",
+        "Read-only requests to Google, if you connect Google.",
+        "The weekly review, to your own email address through your mail provider, if you turn it on.",
+        "A check for updates to GitHub."
+      ],
+      "neverLeaves": "Voice fingerprints never leave your Mac. Shared-screen images never sync."
+    }
+  },
+  "openSource": {
+    "title": "Free and open source",
+    "body": "Mossad is free and released under the MIT License. Read every line, build it yourself, change it, or send a fix.",
+    "points": [
+      "The Mac app, the iPhone app, and the server are in one repository",
+      "More than 2,000 unit tests run without a network",
+      "Design documents for each part are in docs/"
+    ],
+    "action": {
+      "label": "View on GitHub",
+      "href": "https://github.com/davidwebber10/mossad"
+    }
+  },
+  "requirements": {
+    "title": "Requirements",
+    "items": [
+      { "label": "Mac", "value": "macOS 26 or later on Apple silicon" },
+      { "label": "iPhone (optional)", "value": "iOS 26 or later; built from the source with Xcode" },
+      { "label": "Transcription", "value": "An AssemblyAI, Deepgram, ElevenLabs, or OpenAI key, or no key with a model on your Mac" },
+      { "label": "Notes", "value": "An Anthropic, OpenAI, or OpenRouter key, or no key with a local server or Apple's on-device model" },
+      { "label": "Permissions", "value": "Microphone, System Audio Recording, Calendars, Accessibility, Notifications, and Automation for your browser. Screen Recording only for shared screens." },
+      { "label": "Server (optional)", "value": "A Cloudflare account with a domain, for share links, server sync, the remote MCP, and server backup" }
+    ]
+  },
+  "faq": [
+    {
+      "question": "What does Mossad cost?",
+      "answer": "Mossad is free. The cloud providers that you connect bill you directly: cloud transcription is about $0.22 to $0.36 an hour of audio, and the notes model adds its own cost. Setup shows the cost per hour of your choices, and the Analytics page shows what each meeting cost. With local models, it costs nothing."
+    },
+    {
+      "question": "Where do my recordings and notes go?",
+      "answer": "Into ~/Mossad on your Mac. Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Nothing else leaves your Mac unless you turn on sync, backup, sharing, Google, or the weekly email."
+    },
+    {
+      "question": "Do I have to tell people that I record?",
+      "answer": "Yes. Mossad does not announce itself on the call, so telling people is your job. Many places require the consent of one or of all people on a call, and voice fingerprints can be biometric data under some laws. Read the Lawful use section of the README, and ask a lawyer if you are not sure."
+    },
+    {
+      "question": "Which call apps does it work with?",
+      "answer": "Zoom, Microsoft Teams, and Google Meet. It reads meeting tabs in Chrome, Arc, Safari, Edge, and Brave. In a browser whose tabs it cannot read, such as Firefox, it tells you once and offers to record. You can also record a meeting in a room by hand."
+    },
+    {
+      "question": "Does a bot join my meeting?",
+      "answer": "No. Mossad records on your Mac from your microphone and the call app's audio. Nothing joins the call and nothing shows to the other people."
+    },
+    {
+      "question": "Can it run without the cloud?",
+      "answer": "Yes. Choose a transcription model that runs on your Mac (Parakeet, Whisper, Apple Speech, or Qwen3-ASR) and a local server such as Ollama or LM Studio, or Apple's on-device model, for the notes. Then audio and text stay on your Mac. Local models are free; quality and speed depend on the model and your Mac."
+    },
+    {
+      "question": "Is there an iPhone app?",
+      "answer": "Yes. It shows your meetings, chat, people, analytics, and the coach, and it records meetings in a room for your Mac to write up. It syncs through iCloud or your own server. It is not in the App Store; build it from the source with Xcode."
+    },
+    {
+      "question": "How do updates work?",
+      "answer": "Mossad checks the latest GitHub release and offers each new version. It installs an update only when its signature matches the key built into the app, and an update that you accept during a call waits until the call ends. Settings lets you turn automatic checks and installs on or off."
+    },
+    {
+      "question": "Do I need my own server?",
+      "answer": "No. Mossad works on your Mac alone, and iCloud syncs your iPhone. The server is for share links, the remote MCP for web AI apps, sync without iCloud, and recording backup. It runs on Cloudflare's free plan for one person."
+    },
+    {
+      "question": "Can other AI apps read my meetings?",
+      "answer": "Yes, if you want. Run Mossad --mcp to give Claude Desktop, Claude Code, or any MCP client read access on your Mac. With your own server, ChatGPT and Claude on the web can connect after you sign in. The notes are also plain Markdown files that any agent can read."
+    },
+    {
+      "question": "What if Mossad gets a name or a summary wrong?",
+      "answer": "Rename a voice and every note updates. Edit a title, regenerate a summary, or transcribe a meeting again. Summaries, coaching, and person notes come from software and can be wrong, so check them before you act on them."
+    }
+  ],
+  "footer": {
+    "text": "Mossad is free and open source under the MIT License. It is provided as is, without warranty of any kind, and it gives no legal or professional advice. Use it only in a lawful way: tell the people you record, get consent where the law requires it, and follow the privacy laws and the rules of your organization. Zoom, Google Meet, Gemini, Microsoft Teams, and other names belong to their owners; Mossad is not affiliated with them.",
+    "links": [
+      { "label": "License", "href": "https://github.com/davidwebber10/mossad#license" },
+      { "label": "Disclaimer", "href": "https://github.com/davidwebber10/mossad#disclaimer" },
+      { "label": "Lawful use", "href": "https://github.com/davidwebber10/mossad#lawful-use" },
+      { "label": "Trademarks", "href": "https://github.com/davidwebber10/mossad#trademarks" },
+      { "label": "GitHub", "href": "https://github.com/davidwebber10/mossad" }
+    ]
+  }
+}
