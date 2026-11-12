@@ -82,6 +82,10 @@ struct SharesView: View {
             }
         }
         .onChange(of: controller.shareBook) { _, _ in Task { await model.load(controller) } }
+        .navigationPart(.shares, .init(item: selection, search: search.query)) { p in
+            search.show(p.search)
+            selection = p.item
+        }
         .sheet(item: $editing, onDismiss: { Task { await model.load(controller) } }) { record in
             ShareSheet(record: record, startInSettings: true)
         }

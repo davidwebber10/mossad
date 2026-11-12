@@ -150,6 +150,7 @@ struct MeetingsView: View {
         .onChange(of: controller.meetingToOpen) { _, _ in takeOpenRequest() }
         // The flyout belongs to this page's button; it must not come back by itself with the page.
         .onDisappear { filters.isOpen = false }
+        .navigationPart(.meetings, .init(page: mode == .calendar ? "calendar" : nil, item: opened), restore: restore)
     }
 
     // MARK: List
@@ -222,6 +223,16 @@ struct MeetingsView: View {
         }
     }
 
+    /// Back or Forward: the mode, and in Calendar mode the meeting open full-pane. The controller sets the rest.
+    private func restore(_ p: NavigationPlace) {
+        let wanted: Mode = p.page == "calendar" ? .calendar : .split
+        let open = { opened = wanted == .calendar ? p.item : nil; openedUpcoming = nil }
+        guard wanted != mode else { return open() }
+        if previewMode != nil { previewMode = wanted } else { savedMode = wanted }
+        // A change of mode closes the full pane (`onChange(of: mode)`); the meeting opens after it.
+        DispatchQueue.main.async(execute: open)
+    }
+
     // MARK: Calendar
 
     /// Opens the meeting that another page asked for, in either mode.
@@ -259,7 +270,6 @@ struct MeetingsView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
-                .keyboardShortcut("[", modifiers: .command)
                 .keyboardShortcut(.escape, modifiers: [])
                 Button("Meetings") { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
                 Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)

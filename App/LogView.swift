@@ -56,6 +56,7 @@ struct LogView: View {
             }
         }
         .onChange(of: controller.windowVisible) { _, visible in if visible { Task { await load() } } }
+        .navigationPart(.log, .init(search: search.query)) { search.show($0.search) }
     }
 
     private var logLines: some View {

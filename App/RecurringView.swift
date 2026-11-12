@@ -33,6 +33,7 @@ struct RecurringView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .overlay(alignment: .leading) { Hairline(axis: .vertical) }
                 }
+                .navigationPart(.recurring, .init(item: shown.id)) { _ in }
             }
         }
         .task(id: controller.meetingsVersion) { controller.refreshSeries() }

@@ -39,6 +39,9 @@ struct ChatView: View {
         .onChange(of: controller.chatsVersion) { _, _ in reload() }
         .onChange(of: controller.chatToOpen) { _, _ in reload() }
         .onChange(of: selection) { _, _ in error = nil }
+        .navigationPart(.chat, .init(item: selection?.uuidString)) { p in
+            if let id = p.item.flatMap(UUID.init(uuidString:)) { selection = id } else if selection != nil { newChat() }
+        }
     }
 
     // MARK: Conversation

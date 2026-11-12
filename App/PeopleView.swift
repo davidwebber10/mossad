@@ -75,6 +75,7 @@ struct PeopleView: View {
         }
         .onReceive(controller.$meetings) { _ in Task { await reload() } }
         .onChange(of: controller.personRequests) { _, _ in Task { await reload() } }
+        .navigationPart(.people, .init(item: selection, search: search.query)) { search.show($0.search) }
         .onAppear {
             org.reload()
             let env = ProcessInfo.processInfo.environment

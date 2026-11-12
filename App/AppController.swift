@@ -273,7 +273,13 @@ final class AppController: ObservableObject {
     @Published var newChatRequest = 0
     lazy var chats = ChatStore(directory: paths.chats)
     /// A meeting to open and play from a time; the meeting view takes it when it appears.
-    @Published var seekRequest: SeekRequest?
+    @Published var seekRequest: SeekRequest? {
+        didSet { if let s = seekRequest, s.mark, s.screen == nil { lastMoment = (s.callID, s.at) } }
+    }
+    /// The moment the open meeting was last opened at, for Back and Forward.
+    var lastMoment: (callID: String, at: TimeInterval)?
+    /// Back and Forward in the main window (`AppController+Navigation.swift`).
+    let navigation = NavigationModel()
     /// A meeting asked to open that the Meetings page has not taken yet; Calendar mode opens it full-pane.
     @Published var meetingToOpen: String?
 
@@ -345,6 +351,7 @@ final class AppController: ObservableObject {
     /// Used only on `CaptureQueue.queue`, except its meters, sinks, and track durations, which any thread can read.
     private nonisolated let recorder: CallRecorder
     private var window: NSWindow?
+    var mainWindow: NSWindow? { window }
     private var trafficLights: TrafficLights?
     /// The menu bar panel shown in a window, for a preview's screenshots.
     var panelPreviewWindow: NSWindow?
@@ -518,6 +525,7 @@ final class AppController: ObservableObject {
         // The Google step's state is drawn by views that watch the controller.
         searchObservers.append(googleConnector.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
         meetingFilter.attach(self)
+        navigation.attach(self)
 
         // Development hook: `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or
         // processing, so the screens can be checked while the installed copy records a call.
@@ -1364,11 +1372,13 @@ final class AppController: ObservableObject {
     }
 
     func open(_ section: Section) {
+        navigation.jumpNext()
         go(to: section)
         showWindow()
     }
 
     func open(coach page: CoachPage) {
+        navigation.jumpNext()
         coachPage = page
         section = .coach
         showWindow()
@@ -1381,12 +1391,15 @@ final class AppController: ObservableObject {
         let refs = PersonReferences(people: library.identity?.people.people ?? [])
         personToOpen = refs.id(for: name).flatMap(refs.name(of:)) ?? name
         personRequests += 1
+        navigation.jumpNext()
         open(.people)
     }
 
     /// Every way to open a meeting comes here, so Calendar mode opens it too (see `MeetingsView`).
     func openMeeting(_ callID: String) {
         if !MeetingOpenRoute.keepsSeek(for: seekRequest?.callID, opening: callID) { seekRequest = nil }
+        if seekRequest == nil { lastMoment = nil }
+        navigation.jumpNext()
         section = .meetings
         selectedMeetingID = callID
         meetingToOpen = callID

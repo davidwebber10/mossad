@@ -200,6 +200,7 @@ struct ListColumn<Accessory: View, Content: View>: View {
     @ViewBuilder let accessory: Accessory
     @ViewBuilder let content: Content
     @State private var dragStart: Double?
+    @State private var leads = false
 
     init(_ title: String, widthKey: String, search: Binding<ListSearchState>? = nil, searchPrompt: String = "Search",
          @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
@@ -224,6 +225,7 @@ struct ListColumn<Accessory: View, Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: Space.s) {
+                if leads { HistorySlot() }
                 Text(title)
                     .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
                     .foregroundStyle(Palette.ink)
@@ -247,6 +249,7 @@ struct ListColumn<Accessory: View, Content: View>: View {
         }
         .frame(width: clamped)
         .frame(maxHeight: .infinity)
+        .leadsWindow($leads)
         .overlay(alignment: .trailing) { resizeHandle }
         .zIndex(1)
     }
@@ -328,6 +331,7 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
     @ViewBuilder var leading: Leading
     @ViewBuilder var trailing: Trailing
     @Environment(\.openGlobalSearch) private var openGlobalSearch
+    @State private var leads = false
 
     init(title: String? = nil, subtitle: String? = nil, search: Binding<ListSearchState>? = nil, searchPrompt: String = "Search",
          @ViewBuilder leading: () -> Leading = { EmptyView() }, @ViewBuilder trailing: () -> Trailing) {
@@ -355,6 +359,7 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
 
     private var row: some View {
         HStack(spacing: 10) {
+            if leads { HistorySlot() }
             if let title {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.system(size: 15, weight: .semibold)).tracking(-0.15).foregroundStyle(Palette.ink)
@@ -381,6 +386,7 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
         .padding(Chrome.toolbarInsets)
         .frame(height: Chrome.toolbarHeight)
         .frame(maxWidth: .infinity)
+        .leadsWindow($leads)
         .background { WindowDragArea() }
     }
 }

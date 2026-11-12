@@ -459,6 +459,19 @@
           "sources": ["Packages/MossadCore/Sources/MossadCore/Search/ListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Search/MeetingListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Search/RecentSearches.swift", "App/ListSearch.swift"]
         },
         {
+          "id": "back-forward",
+          "title": "Back and Forward",
+          "body": "Go from a recurring meeting to one of its calls, or from a meeting to a person, and come back to where you were in one click.",
+          "details": [
+            "Command-[ and Command-], or the side buttons of your mouse",
+            "Hold the button to pick a recent page",
+            "The page comes back with its tab, search, and filter"
+          ],
+          "icon": "chevron.backward",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Support/NavigationHistory.swift", "App/NavigationModel.swift", "App/AppController+Navigation.swift"]
+        },
+        {
           "id": "bookmarks",
           "title": "Bookmark a moment",
           "body": "Press Control-Option-B during a call to mark a moment, with a note if you want one.",

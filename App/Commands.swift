@@ -14,6 +14,8 @@ struct MossadCommands: Commands {
             Button("Ask…") { controller.startChat() }.keyboardShortcut("k", modifiers: [.command, .shift])
         }
         CommandMenu("Go") {
+            NavigationCommands(model: controller.navigation)
+            Divider()
             Button("Search Everything…") { controller.toggleSearch() }.keyboardShortcut("k")
             Divider()
             // In the order of the sidebar, a group for each item with pages under it. Coach opens on Findings.
@@ -56,5 +58,15 @@ struct MossadCommands: Commands {
 
     private var selected: CallRecord? {
         controller.selectedMeetingID.flatMap { id in controller.meetings.first { $0.id == id } }
+    }
+}
+
+/// Back and Forward at the top of the Go menu, with the keys of every Mac browser and Finder.
+private struct NavigationCommands: View {
+    @ObservedObject var model: NavigationModel
+
+    var body: some View {
+        Button("Back") { model.back() }.keyboardShortcut("[").disabled(!model.canGoBack)
+        Button("Forward") { model.forward() }.keyboardShortcut("]").disabled(!model.canGoForward)
     }
 }
