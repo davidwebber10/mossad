@@ -188,7 +188,7 @@ Everything stays in your home folder.
 | `~/Mossad/Voices/voices.json` | Saved voice fingerprints and names |
 | `~/Mossad/Logs/mossad.log` | The app log, rotated at 5 MB |
 
-Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Your meetings, recordings, names, and words leave your Mac only by these choices and when you turn on sync, backup, sharing, Google, or the weekly email. Anonymous counts (the app version, the Mac model, how many meetings, which features are on) go once a day unless you turn them off in Settings > Storage & Sync.
+Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Your meetings, recordings, names, and words leave your Mac only by these choices and when you turn on sync, backup, sharing, Google, or the weekly email.
 
 ## Project layout
 

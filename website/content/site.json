@@ -870,7 +870,7 @@
       },
       {
         "title": "No tracking",
-        "body": "Your meetings, recordings, names, and words stay on your Mac unless you choose otherwise. The only other data is anonymous counts, once a day, and one switch turns them off."
+        "body": "The app sends no analytics or usage data to anyone."
       }
     ],
     "leavesTheMac": {
@@ -884,8 +884,7 @@
         "One meeting, to your own server, when you share it.",
         "Read-only requests to Google, if you connect Google.",
         "The weekly review, to your own email address through your mail provider, if you turn it on.",
-        "A check for updates to GitHub.",
-        "Anonymous counts, once a day, to getmossad.com: the app version, the Mac model, how many meetings, and which features are on. Never names, words, or files. Turn it off in Settings > Storage & Sync."
+        "A check for updates to GitHub."
       ],
       "neverLeaves": "Voice fingerprints never leave your Mac. Shared-screen images never sync."
     }
