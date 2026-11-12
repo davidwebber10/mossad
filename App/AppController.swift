@@ -231,28 +231,39 @@ final class AppController: ObservableObject {
             filterMeetings(debounce: !(meetingQuery.hasPrefix("#") || oldValue.isEmpty))
         }
     }
-    /// The meetings that match `meetingQuery`; nil while it is empty, when every meeting matches. A text search
-    /// reads every transcript, so it runs off the main thread, a moment after the last key press.
+    /// The meetings that match `meetingQuery`; nil while it is empty, when every meeting matches. The search reads
+    /// the palette's index off the main thread, a moment after the last key press.
     @Published private(set) var meetingMatches: Set<String>?
+    /// Why each matching meeting matched: the place to show under its row in the list.
+    @Published private(set) var meetingListMatches: [String: ListMatch] = [:]
     /// The Meetings filter: the owner's choices and what the meetings offer.
     let meetingFilter = MeetingFilterModel()
     private var filterTask: Task<Void, Never>?
     private var makingRecordings = false
 
-    private func filterMeetings(debounce: Bool) {
+    func filterMeetings(debounce: Bool) {
         filterTask?.cancel()
         let query = meetingQuery
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+        // `#`, `@`, or punctuation alone is no search yet: every meeting stays.
+        guard SearchIndex.isSearch(query) else {
             if meetingMatches != nil { meetingMatches = nil }
+            if !meetingListMatches.isEmpty { meetingListMatches = [:] }
             return
         }
         let records = meetings
         filterTask = Task { [weak self] in
-            if debounce { try? await Task.sleep(for: .milliseconds(180)) }
-            guard !Task.isCancelled else { return }
-            let ids = await Task.detached(priority: .userInitiated) { MeetingSearch.matchingIDs(records, query) }.value
-            guard !Task.isCancelled, let self, self.meetingMatches != ids else { return }
-            self.meetingMatches = ids
+            if debounce { try? await Task.sleep(for: .milliseconds(120)) }
+            guard !Task.isCancelled, let self else { return }
+            // Until the index is first built, the plain search, without the places.
+            let found = await self.search.listMatches(query)
+            var ids = found.map { Set($0.keys) }
+            if ids == nil {
+                ids = await Task.detached(priority: .userInitiated) { MeetingSearch.matchingIDs(records, query) }.value
+            }
+            guard !Task.isCancelled, query == self.meetingQuery else { return }
+            if self.meetingMatches != ids { self.meetingMatches = ids }
+            let places = found ?? [:]
+            if self.meetingListMatches != places { self.meetingListMatches = places }
         }
     }
     /// Set to open the Chat tab on a new chat.
@@ -430,6 +441,12 @@ final class AppController: ObservableObject {
     /// The search palette (Command-K) and its index, kept up to date as meetings, tasks, and chats change.
     let search = SearchModel()
     var searchObservers: [AnyCancellable] = []
+    /// The list searches on screen (`ListSearchToggle`), so Command-F knows whether the page has one.
+    var listSearches = 0
+    /// Bumped by Command-F on a page with a list search: its field comes down and takes the focus.
+    @Published var findRequest = 0
+    /// Bumped by Return or Down Arrow in a list's search field, and when it closes: the list takes the focus.
+    @Published var listFocusRequest = 0
     /// Bumped by `openPerson`, so a People page already open selects the person too.
     @Published var personRequests = 0
     /// A task or a chat to select when its page shows; the page clears it.
@@ -1465,7 +1482,8 @@ final class AppController: ObservableObject {
 
     /// Shows every meeting with this tag.
     func showTag(_ tag: String) {
-        meetingQuery = "#\(tag)"
+        // Quoted when it has more words, so they are read as one tag and not as words to search for.
+        meetingQuery = TagToken.query(tag)
         open(.meetings)
     }
 

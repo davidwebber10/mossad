@@ -13,7 +13,7 @@ struct PeopleView: View {
     @State private var stats: [String: PersonStats] = [:]
     @State private var loaded = false
     @State private var selection: String?
-    @State private var query = ""
+    @State private var search = ListSearchState()
     @State private var editing: VoiceProfile?
     @State private var newName = ""
     @State private var newEmail = ""
@@ -43,12 +43,15 @@ struct PeopleView: View {
 
     private var selected: VoiceProfile? { profiles.first { $0.name == selection } }
 
-    private var results: [VoiceProfile] {
-        let q = query.trimmingCharacters(in: .whitespaces)
+    private var matches: [String: ListMatch]? {
+        PeopleSearch.matches(search.query, profiles: profiles, people: PeopleSearch.people(controller), org: org)
+    }
+
+    private func results(_ matches: [String: ListMatch]?) -> [VoiceProfile] {
         var list = (PeopleSort(rawValue: sort) ?? .recent).order(profiles, stats: stats)
         if needsSample { list = list.filter { $0.isOwner || $0.embeddings.isEmpty } }
-        guard !q.isEmpty else { return list }
-        return list.filter { $0.name.localizedCaseInsensitiveContains(q) || ($0.email?.localizedCaseInsensitiveContains(q) ?? false) }
+        guard let matches else { return list }
+        return list.filter { matches[$0.name] != nil }
     }
 
     var body: some View {
@@ -61,7 +64,7 @@ struct PeopleView: View {
                 }
             } else if mode == .org {
                 DetailColumn { toolbar } content: {
-                    OrgChartView(org: org, profiles: profiles, stats: stats, query: query,
+                    OrgChartView(org: org, profiles: profiles, stats: stats, query: search.query,
                                  open: { name in mode = .list; select(name) }, importChart: { importing = true })
                 }
             } else {
@@ -77,6 +80,8 @@ struct PeopleView: View {
                 // Development hooks for screenshots: MOSSAD_PEOPLE_MODE=list|org, MOSSAD_ORG_IMPORT opens the import.
                 if let m = env["MOSSAD_PEOPLE_MODE"].flatMap(Mode.init) { previewMode = m }
                 if env["MOSSAD_ORG_IMPORT"] != nil { importing = true }
+                // MOSSAD_PEOPLE_QUERY types into the list's search.
+                if let q = env["MOSSAD_PEOPLE_QUERY"] { search.query = q }
             }
         }
         .sheet(item: Binding(get: { editing.map(Wrapped.init) }, set: { editing = $0?.profile })) { item in editSheet(item.profile) }
@@ -131,13 +136,14 @@ struct PeopleView: View {
     }
 
     private var listAndProfile: some View {
-        HStack(spacing: 0) {
-            ListColumn("People", widthKey: "people") {
+        let matches = matches, results = results(matches)
+        return HStack(spacing: 0) {
+            ListColumn("People", widthKey: "people", search: $search, searchPrompt: PeopleSearch.prompt) {
                 if !duplicates.isEmpty {
                     DuplicatesBanner(count: duplicates.count) { reviewingDuplicates = true }
                 }
                 PeopleList(owner: results.filter(\.isOwner), people: results.filter { !$0.isOwner }, stats: stats,
-                           selection: $selection, sort: $sort, needsSample: $needsSample, query: query,
+                           selection: $selection, sort: $sort, needsSample: $needsSample, query: search.trimmed, matches: matches ?? [:],
                            rename: startEditing, delete: { deleting = $0 })
             }
             DetailColumn { toolbar } content: {
@@ -163,14 +169,14 @@ struct PeopleView: View {
         }
     }
 
-    /// List or org chart, the search, and More. The org chart has no list column, so the row names the chart.
+    /// List or org chart, and More. The org chart has no list column, so the row names the chart and holds its search.
     private var toolbar: some View {
-        PageToolbar(title: mode == .org ? "People" : nil, subtitle: mode == .org ? subtitle : nil) {
+        PageToolbar(title: mode == .org ? "People" : nil, subtitle: mode == .org ? subtitle : nil,
+                    search: mode == .org ? $search : nil, searchPrompt: "Search the org chart") {
             ToolbarSegmented(selection: Binding(get: { mode }, set: { mode = $0 }), options: [
                 .init(value: .list, label: "List", icon: .viewList),
                 .init(value: .org, label: "Org chart", icon: .viewOrg),
             ], accessibilityLabel: "View")
-            ToolbarSearchField(prompt: "Search names and emails", query: $query)
             ToolbarCapsule {
                 ToolbarMenuButton(icon: .more, label: "More", help: "More for People") {
                     Button("Import org chart…", systemImage: "square.and.arrow.down") { importing = true }
@@ -311,6 +317,7 @@ extension PeopleSort {
 
 /// The list column: "You", then everyone else in the sort's order. The arrow keys move the selection.
 private struct PeopleList: View {
+    @EnvironmentObject var controller: AppController
     let owner: [VoiceProfile]
     let people: [VoiceProfile]
     let stats: [String: PersonStats]
@@ -318,6 +325,8 @@ private struct PeopleList: View {
     @Binding var sort: String
     @Binding var needsSample: Bool
     let query: String
+    /// Why each row is in a searched list; empty with no search.
+    let matches: [String: ListMatch]
     let rename: (VoiceProfile) -> Void
     let delete: (VoiceProfile) -> Void
     @FocusState private var focused: Bool
@@ -353,6 +362,11 @@ private struct PeopleList: View {
             .focusEffectDisabled()
             .onKeyPress(.downArrow) { move(1, proxy) }
             .onKeyPress(.upArrow) { move(-1, proxy) }
+            // Return or Down Arrow in the search field, or its close, gives the keys back to the list.
+            .onChange(of: controller.listFocusRequest) { _, _ in
+                focused = true
+                if selection.map({ !order.contains($0) }) ?? true, let first = order.first { selection = first }
+            }
         }
     }
 
@@ -393,7 +407,7 @@ private struct PeopleList: View {
     }
 
     private func row(_ p: VoiceProfile) -> some View {
-        PersonRow(profile: p, stats: stats[p.name], selected: selection == p.name) {
+        PersonRow(profile: p, stats: stats[p.name], selected: selection == p.name, match: matches[p.name]) {
             selection = p.name
             focused = true
         }
@@ -418,6 +432,7 @@ private struct PersonRow: View {
     let profile: VoiceProfile
     let stats: PersonStats?
     let selected: Bool
+    var match: ListMatch?
     let select: () -> Void
     @State private var hovering = false
 
@@ -426,10 +441,12 @@ private struct PersonRow: View {
             HStack(spacing: 10) {
                 PersonMark(name: profile.name, size: 28, isOwner: profile.isOwner)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(profile.name)
+                    Text(match?.title.boldMatches(size: 13) ?? AttributedString(profile.name))
                         .font(.system(size: 13, weight: profile.isOwner || selected ? .semibold : .medium))
                         .foregroundStyle(Palette.ink)
-                    if let sub {
+                    if let match, match.context != nil {
+                        ListMatchLine(match: match, lines: 1)
+                    } else if let sub {
                         Text(sub).font(.system(size: 12)).foregroundStyle(Palette.secondary)
                     } else if profile.embeddings.isEmpty {
                         Text("Needs a voice sample").font(.system(size: 12)).foregroundStyle(Palette.accent)

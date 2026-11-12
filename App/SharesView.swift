@@ -8,15 +8,32 @@ struct SharesView: View {
     @StateObject private var model = SharesModel()
     @State private var selection: String?
     @State private var editing: CallRecord?
+    @State private var search = ListSearchState()
 
     private var hasServer: Bool { ShareSample.kind != nil || controller.serverConnection != nil }
     private var links: [MeetingLink] { model.sampleLinks ?? controller.shareBook.links }
     private var rows: [ShareRow] { ShareRows.make(links: links, remote: model.remote) }
+
+    /// Why each share is in the searched list: its title, or a person of its meeting, shown under the row. Nil with
+    /// no search.
+    private func searched(_ rows: [ShareRow]) -> [String: ListMatch]? {
+        let words = ListSearch(search.query)
+        guard !words.isEmpty else { return nil }
+        var out: [String: ListMatch] = [:]
+        for row in rows {
+            let record = row.link.flatMap { link in controller.meetings.first { $0.id == link.callID } }
+            let people = record.map { Set($0.speakerNames.values.filter { !$0.hasPrefix("Speaker ") }).sorted() + $0.attendees } ?? []
+            out[row.id] = words.match(title: row.title, fields: people.map { ListField("People", $0) })
+        }
+        return out
+    }
     /// Development hook for screenshots: MOSSAD_SHARE_ROW=2 opens the third of the made-up shares.
     private static let previewRow = ShareSample.kind == nil ? nil : ProcessInfo.processInfo.environment["MOSSAD_SHARE_ROW"].flatMap { Int($0) }
 
     var body: some View {
-        let rows = rows
+        let all = rows
+        let matches = searched(all)
+        let rows = matches.map { m in all.filter { m[$0.id] != nil } } ?? all
         Group {
             if !hasServer {
                 DetailColumn { PageToolbar(title: "Shares") {} } content: {
@@ -25,7 +42,7 @@ struct SharesView: View {
                                action: ("Set up your server…", openServerSettings))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-            } else if rows.isEmpty {
+            } else if all.isEmpty {
                 DetailColumn { PageToolbar(title: "Shares") {} } content: {
                     VStack(spacing: 0) {
                         ServerNotice(server: model.server).padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop)
@@ -36,11 +53,20 @@ struct SharesView: View {
                     }
                 }
             } else {
-                // The chosen share, or the first one: a share that was stopped leaves the choice to the next.
-                let shown = rows.first { $0.id == selection } ?? Self.previewRow.flatMap { rows.indices.contains($0) ? rows[$0] : nil } ?? rows[0]
+                // The chosen share, or the first one: a share that was stopped, or that the search hides, leaves the
+                // choice to the next. With no share found, the detail keeps the chosen one.
+                let pool = rows.isEmpty ? all : rows
+                let shown = pool.first { $0.id == selection } ?? Self.previewRow.flatMap { pool.indices.contains($0) ? pool[$0] : nil } ?? pool[0]
                 HStack(spacing: 0) {
-                    ListColumn("Shares", widthKey: "shares") {
-                        ShareList(rows: rows, selection: Binding(get: { shown.id }, set: { selection = $0 }))
+                    ListColumn("Shares", widthKey: "shares", search: $search, searchPrompt: "Search shares and their people") {
+                        if rows.isEmpty {
+                            Text("No share matches “\(search.trimmed)”.")
+                                .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                                .padding(.horizontal, 24).padding(.top, Space.s)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            ShareList(rows: rows, matches: matches ?? [:], selection: Binding(get: { shown.id }, set: { selection = $0 }))
+                        }
                     }
                     ShareDetailPane(row: shown, model: model, edit: { editing = $0 })
                         .id(shown.id)
@@ -71,6 +97,7 @@ struct SharesView: View {
 
 private struct ShareList: View {
     let rows: [ShareRow]
+    let matches: [String: ListMatch]
     @Binding var selection: String?
     @FocusState private var focused: Bool
 
@@ -86,7 +113,7 @@ private struct ShareList: View {
                                 .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 4)
                                 .accessibilityAddTraits(.isHeader)
                         }
-                        ShareListRow(row: row, selected: current == row.id) {
+                        ShareListRow(row: row, selected: current == row.id, match: matches[row.id]) {
                             selection = row.id
                             focused = true
                         }
@@ -117,6 +144,7 @@ private struct ShareList: View {
 private struct ShareListRow: View {
     let row: ShareRow
     let selected: Bool
+    var match: ListMatch?
     let select: () -> Void
     @State private var hovering = false
 
@@ -124,7 +152,7 @@ private struct ShareListRow: View {
         Button(action: select) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(row.title)
+                    Text(match?.title.boldMatches(size: 13) ?? AttributedString(row.title))
                         .font(.system(size: 13, weight: selected ? .semibold : .medium))
                         .foregroundStyle(row.state == .live ? Palette.ink : Palette.secondary)
                         .lineLimit(1).truncationMode(.tail)
@@ -147,6 +175,7 @@ private struct ShareListRow: View {
                 if let numbers {
                     Text(numbers).font(.system(size: 12)).foregroundStyle(Palette.tertiary).lineLimit(1).monospacedDigit()
                 }
+                if let match { ListMatchLine(match: match, lines: 1).padding(.top, 1) }
             }
             .padding(.vertical, 9).padding(.horizontal, 10)
             .frame(maxWidth: .infinity, alignment: .leading)

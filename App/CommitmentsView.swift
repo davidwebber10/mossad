@@ -11,15 +11,29 @@ struct CommitmentsView: View {
     @State private var editing: Commitment?
     @State private var adding: Commitment?
     @State private var mode = Mode.open
-    @State private var query = ""
+    @State private var search = ListSearchState()
+    private var query: String { search.trimmed }
+    /// Why each task is in the searched list; nil with no search. Made once per change of the text or the tasks.
+    @State private var matches: [UUID: ListMatch]?
     /// A task opened from search: marked with the selection fill and scrolled to.
     @State private var opened: UUID?
 
     private var matching: [Commitment] {
-        book.visible.filter { c in
-            query.isEmpty || c.text.localizedCaseInsensitiveContains(query) || (c.to ?? "").localizedCaseInsensitiveContains(query)
-                || (c.callTitle ?? "").localizedCaseInsensitiveContains(query)
+        guard let matches else { return book.visible }
+        return book.visible.filter { matches[$0.id] != nil }
+    }
+
+    /// The task's words, then whom it is for, the meeting, and the words it came from. A row found by any but its
+    /// own words shows them in a line under it.
+    private func refilter() {
+        let words = ListSearch(query)
+        guard !words.isEmpty else { matches = nil; return }
+        var out: [UUID: ListMatch] = [:]
+        for c in book.visible {
+            let fields = [ListField("To", c.to ?? ""), ListField("Meeting", c.callTitle ?? ""), ListField("Said", c.quote ?? "")]
+            out[c.id] = words.match(title: c.text, fields: fields)
         }
+        matches = out
     }
 
     private var groups: [CommitmentGroup] { CommitmentGroup.make(matching) }
@@ -30,8 +44,10 @@ struct CommitmentsView: View {
         DetailColumn { toolbar } content: { page }
         .task(id: controller.commitmentsVersion) {
             book = controller.commitmentBook
+            refilter()
             takeOpenedTask()
         }
+        .onChange(of: search.query) { _, _ in refilter() }
         .onChange(of: controller.taskToOpen) { _, _ in takeOpenedTask() }
         .onAppear {
             // Development hook for screenshots: MOSSAD_COMMITMENTS=done opens the Done view.
@@ -97,17 +113,16 @@ struct CommitmentsView: View {
     private func takeOpenedTask() {
         guard let id = controller.taskToOpen, let c = book.visible.first(where: { $0.id == id }) else { return }
         controller.taskToOpen = nil
-        query = ""
+        search.close()
         mode = c.done == nil ? .open : .done
         opened = id
     }
 
     private var toolbar: some View {
-        PageToolbar(title: "Tasks", subtitle: subtitle) {
+        PageToolbar(title: "Tasks", subtitle: subtitle, search: $search, searchPrompt: "Search tasks, people, meetings") {
             ToolbarSegmented(selection: $mode, options: Mode.allCases.map { .init(value: $0, label: $0.rawValue) },
                            accessibilityLabel: "Show")
                 .help("Open or done tasks")
-            ToolbarSearchField(prompt: "Search tasks", query: $query)
             ToolbarCircleButton(icon: .plus, label: "Add", help: "Add a task", action: add)
         }
     }
@@ -144,7 +159,9 @@ struct CommitmentsView: View {
     // MARK: Rows
 
     private func row(_ c: Commitment, showPerson: Bool) -> some View {
-        CommitmentRow(commitment: c, showPerson: showPerson, open: { activate(c) }, toggleDone: { controller.toggleDone(c.id) }) {
+        let match = matches?[c.id]
+        return CommitmentRow(commitment: c, showPerson: showPerson, marked: match?.title.boldMatches(size: 13),
+                             matchLine: match?.line(size: 12), open: { activate(c) }, toggleDone: { controller.toggleDone(c.id) }) {
             trailing(c)
         }
         .padding(.vertical, c.status() == .overdue ? 11 : 10)

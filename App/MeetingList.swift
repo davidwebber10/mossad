@@ -55,8 +55,9 @@ struct MeetingList: View {
                     ForEach(Array(days.enumerated()), id: \.element.date) { i, day in
                         GroupHeader(title: day.title, first: i == 0 && live.isEmpty && upcoming.isEmpty)
                         ForEach(day.records, id: \.id) { r in
-                            MeetingRow(record: r, selected: selection == r.id)
-                                .listRow(selected: selection == r.id) { select(r.id) }
+                            let match = searching ? controller.meetingListMatches[r.id] : nil
+                            MeetingRow(record: r, selected: selection == r.id, match: match)
+                                .listRow(selected: selection == r.id) { open(r.id, at: match?.time) }
                                 .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
                         }
                     }
@@ -103,7 +104,21 @@ struct MeetingList: View {
                 // The arrow keys work as soon as the window opens, without a click in the list first.
                 focused = true
             }
+            // Return or Down Arrow in the search field, or its close, gives the keys back to the list.
+            .onChange(of: controller.listFocusRequest) { _, _ in
+                focused = true
+                if selection.map({ !order.contains($0) }) ?? true, let first = order.first { _ = jump(to: first, proxy) }
+            }
         }
+    }
+
+    private var searching: Bool { SearchIndex.isSearch(controller.meetingQuery) }
+
+    /// A row found by its transcript, a screen, a bookmark, or a decision opens the meeting at that moment.
+    private func open(_ id: String, at time: TimeInterval?) {
+        guard let time else { return select(id) }
+        focused = true
+        controller.showMoment(id, at: time)
     }
 
     private var nothingText: String {
@@ -220,12 +235,19 @@ private struct MeetingRow: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
     let selected: Bool
+    /// Why the row is in the searched list, with the title's matched words.
+    var match: ListMatch?
+
+    private var title: AttributedString {
+        guard let match, match.title.text == record.title else { return AttributedString(record.title) }
+        return match.title.boldMatches(size: 13)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             PlatformDot(platform: record.platform).padding(.top, 5)
             VStack(alignment: .leading, spacing: 2) {
-                Text(record.title)
+                Text(title)
                     .font(.system(size: 13, weight: selected ? .semibold : .medium))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
@@ -240,6 +262,7 @@ private struct MeetingRow: View {
                 }
                 .font(.system(size: 12))
                 .lineLimit(1)
+                if let match { ListMatchLine(match: match).padding(.top, 3) }
                 // The open meeting says how many voices, on a line of its own, as the canvas shows it.
                 if selected, record.badge == .needsNames {
                     let n = record.unknownSpeakers.count

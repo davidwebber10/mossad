@@ -7,11 +7,14 @@ public struct SearchList: Sendable, Equatable {
         case hit(SearchHit)
         /// "N more in this meeting": expands the meeting's moments in place.
         case more(callID: String, count: Int)
+        /// One of the owner's recent searches: runs it again.
+        case recent(String)
 
         public var id: String {
             switch self {
             case .hit(let hit): hit.id
             case .more(let callID, _): "more:\(callID)"
+            case .recent(let query): "recent:\(query)"
             }
         }
     }
@@ -47,14 +50,17 @@ public struct SearchList: Sendable, Equatable {
             (.people, results.people.map { .hit(.person($0)) }),
             (.moments, moments),
             (.decisionsAndActions, results.decisionsAndActions.map { .hit(.outcome($0)) }),
+            (.bookmarks, results.bookmarks.map { .hit(.outcome($0)) }),
             (.tasks, results.tasks.map { .hit(.task($0)) }),
             (.chats, results.chats.map { .hit(.chat($0)) }),
         ]
         self.init(sections: all.filter { !$0.1.isEmpty }.map { Section(id: $0.0.rawValue, title: $0.0.title, group: $0.0, rows: $0.1) })
     }
 
-    public init(suggestions: SearchSuggestions) {
+    /// Before anything is typed: the owner's recent searches, then recent meetings and the people met most.
+    public init(suggestions: SearchSuggestions, recent: [String] = []) {
         let all = [
+            Section(id: "searches", title: "Recent searches", group: .meetings, rows: recent.map { .recent($0) }),
             Section(id: "recent", title: "Recent meetings", group: .meetings, rows: suggestions.meetings.map { .hit(.meeting($0)) }),
             Section(id: "frequent", title: "People you meet most", group: .people, rows: suggestions.people.map { .hit(.person($0)) }),
         ]

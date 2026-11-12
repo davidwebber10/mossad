@@ -13,6 +13,34 @@ public struct SearchText: Sendable, Equatable, Hashable {
 
     public var matchedStrings: [String] { matches.map { String(text[$0]) } }
 
+    /// The text with each place marked where a word of the query occurs, without regard to case or accents, also
+    /// inside a word: the rule of the Bookmarks, Screens, and Log pages, which keep text that contains the words.
+    public static func marking(_ text: String, query: String) -> SearchText {
+        let terms = Set(MomentSearch.terms(query))
+        var ranges: [Range<String.Index>] = []
+        for term in terms {
+            var from = text.startIndex
+            while from < text.endIndex,
+                  let r = text.range(of: term, options: [.caseInsensitive, .diacriticInsensitive], range: from..<text.endIndex) {
+                ranges.append(r)
+                from = r.upperBound
+            }
+        }
+        ranges.sort { $0.lowerBound < $1.lowerBound }
+        var merged: [Range<String.Index>] = []
+        for r in ranges {
+            if let last = merged.last, r.lowerBound <= last.upperBound {
+                merged[merged.count - 1] = last.lowerBound..<max(last.upperBound, r.upperBound)
+            } else {
+                merged.append(r)
+            }
+        }
+        return SearchText(text, matches: merged)
+    }
+
+    /// About `length` characters around the matches that say the most, cut at spaces, never inside a match.
+    public func excerpt(length: Int) -> SearchText { Snippet.make(text, matches: matches, length: length) }
+
     /// The text with the matches strongly emphasized, which SwiftUI's `Text` shows in bold.
     public var attributed: AttributedString {
         var out = AttributedString(text)
@@ -116,23 +144,44 @@ extension String {
 enum Snippet {
     static let length = 120
 
-    /// About `length` characters of `text` centered on the first match, cut at spaces, with an ellipsis where
-    /// text was cut. The ranges are moved into the snippet.
-    static func make(_ text: String, matches: [Range<String.Index>], length: Int = length) -> SearchText {
+    /// About `length` characters of `text` around its matches, cut at spaces, with an ellipsis where text was cut.
+    /// The window holds the most informative matches: the most different words, each counted by its weight (a word
+    /// that the row's title lacks counts more), the earliest window on a tie. A cut never splits a matched word.
+    /// The ranges are moved into the snippet.
+    static func make(_ text: String, matches: [Range<String.Index>], length: Int = length, weights: [Int]? = nil) -> SearchText {
         let chars = Array(text)
         let total = chars.count
         let ranges = matches.map { (text.distance(from: text.startIndex, to: $0.lowerBound), text.distance(from: text.startIndex, to: $0.upperBound)) }
         guard total > length else { return SearchText(text, matches: matches) }
-        let first = ranges.first ?? (0, 0)
-        // A match too long to fit shows from its start.
-        let center = first.1 - first.0 >= length ? first.0 + length / 2 : (first.0 + first.1) / 2
-        var a = max(0, center - length / 2)
-        var b = min(total, a + length)
-        a = max(0, b - length)
-        // Move inward to whole words, but never past the match.
-        // A match longer than the snippet leaves no room on either side.
+        let keys = matches.map { text[$0].folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        let weight = { (i: Int) in weights.flatMap { i < $0.count ? $0[i] : nil } ?? 1 }
+        func window(_ r: (Int, Int)) -> (Int, Int) {
+            let center = r.1 - r.0 >= length ? r.0 + length / 2 : (r.0 + r.1) / 2
+            let b = min(total, max(0, center - length / 2) + length)
+            return (max(0, b - length), b)
+        }
+        // Two windows for each match: centered on it, and opening on it. The best is the one whose matches say the
+        // most; the earlier on a tie, and a centered one before one that opens on the match.
+        var first = ranges.first ?? (0, 0)
+        var (a, b) = window(first)
+        var best = -1
+        for r in ranges {
+            let open = max(0, min(r.0 - 12, total - length))
+            for (lo, hi) in [window(r), (open, min(total, open + length))] {
+                var seen: Set<String> = []
+                var score = 0
+                for (i, m) in ranges.enumerated() where m.0 >= lo && m.1 <= hi && seen.insert(keys[i]).inserted { score += weight(i) }
+                if score > best { best = score; first = r; (a, b) = (lo, hi) }
+            }
+        }
+        // Move inward to whole words, but never past the chosen match.
         if a > 0, a < first.0, let space = chars[a..<min(first.0, b)].firstIndex(where: \.isWhitespace) { a = space + 1 }
         if b < total, first.1 < b, let space = chars[max(first.1, a)..<b].lastIndex(where: \.isWhitespace) { b = space }
+        // Never split a matched word: a cut inside one moves out of it.
+        for r in ranges where r.1 - r.0 < length {
+            if r.0 < a, r.1 > a, r.1 <= first.0 { a = r.1 }
+            if r.0 < b, r.1 > b, r.0 >= first.1 { b = r.0 }
+        }
         while a < b, chars[a].isWhitespace { a += 1 }
         while b > a, chars[b - 1].isWhitespace { b -= 1 }
         let lead = a > 0 ? "…" : ""

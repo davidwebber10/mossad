@@ -12,7 +12,21 @@ extension AppController {
                 .sink { [weak self] _ in MainActor.assumeIsolated { self?.updateSearch() } },
             $chatsVersion.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in MainActor.assumeIsolated { self?.updateSearch() } },
+            // The Meetings list search runs again on each new index, so a changed meeting shows its new place.
+            search.$version.dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        guard let self, !self.meetingQuery.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        self.filterMeetings(debounce: false)
+                    }
+                },
         ]
+    }
+
+    /// Command-F: the page's own search when it has one, else the search of everything.
+    func find() {
+        guard !search.isOpen else { return }
+        if listSearches > 0 { findRequest += 1 } else { openSearch() }
     }
 
     func updateSearch() {
@@ -37,6 +51,7 @@ extension AppController {
     /// Transcript tab rather than its summary.
     func openResult(_ hit: SearchHit, transcript: Bool = false) {
         search.isOpen = false
+        search.remember(search.query)
         switch hit {
         case .meeting(let m):
             if transcript { openTranscript(m.callID) } else { openMeeting(m.callID) }
