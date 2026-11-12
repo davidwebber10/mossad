@@ -44,7 +44,8 @@ struct MeetingChatView: View {
                 seek(at)
                 return .handled
             }
-            return controller.openLink(url) ? .handled : .systemAction
+            if controller.openLink(url) { return .handled }
+            return ChatThread.opens(url) ? .systemAction : .discarded
         })
         .onAppear(perform: load)
         .onChange(of: record.id) { _, _ in load() }

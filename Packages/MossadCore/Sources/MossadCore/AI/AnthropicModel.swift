@@ -70,7 +70,9 @@ public struct AnthropicModel: LanguageModel {
                           inputTokens: u["input_tokens"] as? Int, outputTokens: u["output_tokens"] as? Int,
                           cacheReadTokens: u["cache_read_input_tokens"] as? Int, cacheWriteTokens: u["cache_creation_input_tokens"] as? Int)
         }
-        if reply["stop_reason"] as? String == "refusal" { throw SummaryError.refused }
+        // A stream cut before its end has no stop reason: its text is not a whole answer.
+        guard let stop = reply["stop_reason"] as? String else { throw SummaryError.cutOff }
+        if stop == "refusal" { throw SummaryError.refused }
         return reply
     }
 

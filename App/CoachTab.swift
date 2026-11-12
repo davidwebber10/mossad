@@ -64,7 +64,7 @@ struct CoachTab: View {
             if !cards.isEmpty || answeredHere {
                 LabelColumn(label: cards.isEmpty ? "Findings" : "Findings \u{00B7} \(cards.count)", labelTopPadding: 4) {
                     FindingsDeck(cards: cards, play: player.isAvailable ? { f in f.at.map { player.play(from: max(0, $0 - 1)) } } : nil,
-                                 stopPlaying: { player.pause() },
+                                 stopPlaying: { player.pause() }, stopsOnClose: false, playerRunning: player.isPlaying,
                                  offersNever: { FindingRules.offersNever($0, profile: profile) }, showsEmpty: false, preview: CoachView.deckPreview,
                                  answer: { controller.answerFinding($0, $1); answered.append($0) }, undo: { controller.takeBackFinding($0) },
                                  explain: { controller.explainFinding($0, note: $1) })

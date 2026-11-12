@@ -92,7 +92,7 @@ struct ChatMarkdown: View {
                 piece = AttributedString("\u{00A0}") + piece + AttributedString("\u{00A0}")
                 piece.link = url
                 piece.backgroundColor = Palette.accentTint
-                piece.foregroundColor = Palette.accent
+                piece.foregroundColor = TimeChip.ink
                 #if os(iOS)
                 piece.font = .footnote.monospacedDigit().weight(.medium)
                 #else
@@ -147,17 +147,32 @@ private struct QuoteBlock: View {
 struct TimeChip: View {
     let time: String
     let action: () -> Void
+    @Environment(\.chatMomentVerb) private var verb
+    /// Darker than the accent in light mode, so 11 pt text on the tint meets 4.5:1.
+    static let ink = Color(light: 0x8A3B0C, dark: 0xF2A05A)
 
     var body: some View {
         Button(action: action) {
             Text(time).font(.system(size: 11, weight: .medium)).monospacedDigit()
-                .foregroundStyle(Palette.accent)
+                .foregroundStyle(Self.ink)
                 .padding(.horizontal, 7).frame(height: 18)
                 .background(Palette.accentTint, in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Play from \(time)")
+        .accessibilityLabel("\(verb) \(time)")
+    }
+}
+
+private struct ChatMomentVerbKey: EnvironmentKey {
+    static let defaultValue = "Play from"
+}
+
+extension EnvironmentValues {
+    /// What a time chip does, for VoiceOver: "Play from" in a written meeting, "Show" on the live page.
+    var chatMomentVerb: String {
+        get { self[ChatMomentVerbKey.self] }
+        set { self[ChatMomentVerbKey.self] = newValue }
     }
 }
 
@@ -166,19 +181,21 @@ private struct TableBlock: View {
     let header: [AttributedString]
     let rows: [[AttributedString]]
     let bodyFont: Font
+    /// A row with more cells than the header keeps them.
+    private var columns: Int { max(header.count, rows.map(\.count).max() ?? 0) }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 7) {
                 GridRow {
-                    ForEach(Array(header.enumerated()), id: \.offset) { _, h in
-                        Text(h).font(bodyFont.weight(.semibold)).foregroundStyle(Palette.secondary)
+                    ForEach(0..<columns, id: \.self) { i in
+                        Text(i < header.count ? header[i] : "").font(bodyFont.weight(.semibold)).foregroundStyle(Palette.secondary)
                     }
                 }
                 Rectangle().fill(Palette.hairline).frame(height: 1).gridCellUnsizedAxes(.horizontal)
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     GridRow {
-                        ForEach(0..<header.count, id: \.self) { i in
+                        ForEach(0..<columns, id: \.self) { i in
                             Text(i < row.count ? row[i] : "").font(bodyFont).foregroundStyle(Palette.ink)
                                 .fixedSize(horizontal: false, vertical: true)
                         }

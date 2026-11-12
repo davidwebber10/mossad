@@ -30,6 +30,11 @@ struct FindingsDeck: View {
     var playing: String?
     /// Stops the moment that a card started: when a card is answered, leaves the top, or the deck closes.
     var stopPlaying: (() -> Void)?
+    /// False inside a meeting: the audio is the meeting's player, which the owner may follow on another tab.
+    var stopsOnClose = true
+    /// Whether that player plays now, when the deck shares it: a pause there forgets the card, so later audio that
+    /// the owner starts is never stopped by an answer.
+    var playerRunning: Bool?
     /// Whether a card offers "Never again". Not on a card of the active focus.
     var offersNever: (CoachFinding) -> Bool = { _ in true }
     /// Shows the calm empty state when there is no card. Inside a meeting the deck is then not there at all.
@@ -110,6 +115,8 @@ struct FindingsDeck: View {
                 if playback.closed() { stopPlaying?() }
             }
             .onChange(of: visible.first?.id) { _, top in if playback.topChanged(to: top) { stopPlaying?() } }
+            .onChange(of: playerRunning) { _, running in if running == false { playback.paused() } }
+            .onAppear { playback.stopsOnClose = stopsOnClose }
             // The page and the sheet do not scroll or close while a card moves to the side.
             .preference(key: DeckDragging.self, value: drag != .zero)
     }

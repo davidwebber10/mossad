@@ -81,16 +81,34 @@ public struct LiveTranscript: Codable, Equatable, Sendable {
     }
 
     /// The visible lines with who said each: the owner by name, a voice by the name the library gave it, else
-    /// "Speaker A", else "Others".
+    /// "Speaker A" ("Speaker A2" in the second stream session, whose letters start over), else "Others". A draft of
+    /// an older session will never end, so it counts as said.
     public func entries(owner: String) -> [LiveEntry] { entries(owner: owner, lines: visibleLines) }
 
     /// The same for lines whose echo filter already ran, as the live page keeps them.
     public func entries(owner: String, lines: [Line]) -> [LiveEntry] {
         lines.map { line in
             let named = line.speakerKey.flatMap { names[$0] }
-            let who = line.source == .me ? owner : named ?? line.speaker.map { "Speaker \($0)" } ?? "Others"
-            return LiveEntry(time: line.time, who: who, text: line.text, isFinal: line.isFinal, mine: line.source == .me || named == owner)
+            let who = line.source == .me ? owner : named ?? line.speaker.map { Self.label($0, session: line.session) } ?? "Others"
+            return LiveEntry(time: line.time, who: who, text: line.text, isFinal: line.isFinal || line.session < session,
+                             mine: line.source == .me || named == owner)
         }
+    }
+
+    static func label(_ letter: String, session: Int) -> String {
+        session == 0 ? "Speaker \(letter)" : "Speaker \(letter)\(session + 1)"
+    }
+
+    /// Each named voice by the label it had before its name: "Speaker A2" is Sam Carter.
+    public var voiceNames: [String: String] {
+        var out: [String: String] = [:]
+        for (key, name) in names {
+            guard let session = Int(key.prefix { $0.isNumber }) else { continue }
+            let letter = String(key.drop { $0.isNumber })
+            guard !letter.isEmpty else { continue }
+            out[Self.label(letter, session: session)] = name
+        }
+        return out
     }
 
     public func save(to url: URL) throws {

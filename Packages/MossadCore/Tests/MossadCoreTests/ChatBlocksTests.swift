@@ -63,6 +63,35 @@ final class ChatBlocksTests: XCTestCase {
         XCTAssertEqual(ChatBlocks.linkTimes("[99:99] stays", callID: "c1"), "[99:99] stays")
     }
 
+    func testTwoQuoteLinesThatEachStartWithATimeAreTwoQuotes() {
+        let blocks = ChatBlocks.parse("> [12:04](mossad://call/c1?t=724) Sam: A\n> [12:10](mossad://call/c1?t=730) Lee: B")
+        XCTAssertEqual(blocks, [
+            .quote(ChatQuote(speaker: "Sam", time: "12:04", link: "mossad://call/c1?t=724", text: "A")),
+            .quote(ChatQuote(speaker: "Lee", time: "12:10", link: "mossad://call/c1?t=730", text: "B")),
+        ])
+    }
+
+    func testAColonInTheWordsIsNoSpeaker() {
+        let blocks = ChatBlocks.parse("> [12:40](mossad://call/c1?t=760) Let's meet at 10:30 tomorrow")
+        XCTAssertEqual(blocks, [.quote(ChatQuote(speaker: nil, time: "12:40", link: "mossad://call/c1?t=760", text: "Let's meet at 10:30 tomorrow"))])
+        let long = ChatBlocks.parse("> [1:00](mossad://call/c1?t=60) The plan we agreed on last week: ship")
+        XCTAssertEqual(long, [.quote(ChatQuote(speaker: nil, time: "1:00", link: "mossad://call/c1?t=60", text: "The plan we agreed on last week: ship"))])
+    }
+
+    func testTheLinkTimeComesFromTheLabelAndNotTheModelsSum() {
+        XCTAssertEqual(ChatBlocks.linkTimes("At [47:38](mossad://call/c1?t=2800).", callID: nil),
+                       "At [47:38](mossad://call/c1?t=2858).")
+        XCTAssertEqual(ChatBlocks.linkTimes("[Budget, Oct 2](mossad://call/c1)", callID: nil), "[Budget, Oct 2](mossad://call/c1)")
+    }
+
+    func testAMinuteAboveNinetyNineIsATimeToo() {
+        XCTAssertEqual(ChatBlocks.linkTimes("At [100:05].", callID: "c1"), "At [100:05](mossad://call/c1?t=6005).")
+    }
+
+    func testAHashWithoutASpaceIsNoHeading() {
+        XCTAssertEqual(ChatBlocks.parse("#1 priority is the deck"), [.paragraph("#1 priority is the deck")])
+    }
+
     // MARK: A card's moment
 
     func testAnAnsweredCardStopsTheMomentItStarted() {
@@ -92,6 +121,15 @@ final class ChatBlocksTests: XCTestCase {
         XCTAssertTrue(p.topChanged(to: "b"))
         p.started("b")
         XCTAssertTrue(p.closed())
+    }
+
+    func testInAMeetingThePlayersOwnPauseForgetsTheCardAndALeavingTabDoesNotStopIt() {
+        var p = DeckPlayback(stopsOnClose: false)
+        p.started("a")
+        p.paused()
+        XCTAssertFalse(p.answered("b"), "the owner paused, then played from the lanes: that audio is theirs")
+        p.started("a")
+        XCTAssertFalse(p.closed(), "the owner went to the Transcript tab to read along")
     }
 
     func testAPauseForgetsTheCard() {

@@ -109,7 +109,7 @@ final class LiveChatTests: XCTestCase {
         var live = LiveTranscript()
         live.apply(turn(0, "How was the launch?", speaker: "A"), source: .them, at: 10)
         live.apply(turn(1, "And the hiring plan?", speaker: "A"), source: .them, at: 100)
-        XCTAssertEqual(LiveQuestions.forOwner(live.entries(owner: "Dana"), owner: "Dana", now: 120).map(\.time), [10, 100])
+        XCTAssertEqual(LiveQuestions.forOwner(live.entries(owner: "Dana"), owner: "Dana", now: 120, invitedOthers: 1).map(\.time), [10, 100])
     }
 
     func testAQuestionStillBeingSpokenIsNotYetOpen() {
@@ -167,37 +167,40 @@ final class LiveChatTests: XCTestCase {
         }
     }
 
+    let small = LiveLimits(verbatim: 40_000, keep: 20_000)
+
     func testAShortCallNeedsNoSummary() {
         XCTAssertNil(LiveSummaryRules.due(entries(10), summary: nil))
     }
 
     func testALongCallFoldsTheOlderLinesAndKeepsTheNewestWordForWord() throws {
         let all = entries(300)
-        let step = try XCTUnwrap(LiveSummaryRules.due(all, summary: nil))
+        let step = try XCTUnwrap(LiveSummaryRules.due(all, summary: nil, limits: small))
         XCTAssertEqual(step.fold.first?.time, 0)
         let kept = all.filter { $0.time >= step.through }
         let keptSize = kept.reduce(0) { $0 + $1.line.count + 1 }
-        XCTAssertLessThanOrEqual(keptSize, LiveSummaryRules.keepVerbatim)
-        XCTAssertGreaterThan(keptSize, LiveSummaryRules.keepVerbatim / 2)
+        XCTAssertLessThanOrEqual(keptSize, small.keep)
+        XCTAssertGreaterThan(keptSize, small.keep / 2)
         XCTAssertEqual(step.fold.count + kept.count, all.count)
     }
 
     func testOnceFoldedTheSummaryWaitsUntilTheNewPartIsLongAgain() throws {
         let all = entries(300)
-        let first = try XCTUnwrap(LiveSummaryRules.due(all, summary: nil))
+        let first = try XCTUnwrap(LiveSummaryRules.due(all, summary: nil, limits: small))
         let summary = LiveSummary(through: first.through, text: "So far.")
-        XCTAssertNil(LiveSummaryRules.due(all, summary: summary), "not on every question")
+        XCTAssertNil(LiveSummaryRules.due(all, summary: summary, limits: small), "not on every question")
         let more = entries(500)
-        let second = try XCTUnwrap(LiveSummaryRules.due(more, summary: summary))
+        let second = try XCTUnwrap(LiveSummaryRules.due(more, summary: summary, limits: small))
         XCTAssertEqual(second.fold.first?.time, first.through, "only the lines after the old summary are read")
     }
 
     func testALineStillBeingSpokenIsNeverFolded() {
-        var all = entries(300)
+        // All within the last few seconds, so the draft can still end.
+        var all = entries(300).map { e -> LiveEntry in var e = e; e.time /= 100; return e }
         all[5].isFinal = false
-        let step = LiveSummaryRules.due(all, summary: nil)
+        let step = LiveSummaryRules.due(all, summary: nil, limits: small)
+        XCTAssertEqual(step?.fold.count, 5, "only the lines before the draft")
         XCTAssertTrue((step?.fold ?? []).allSatisfy(\.isFinal))
-        XCTAssertLessThanOrEqual(step?.fold.count ?? 0, 5)
     }
 
     func testTheVerbatimPartStartsWhereTheSummaryEnds() {
@@ -210,22 +213,22 @@ final class LiveChatTests: XCTestCase {
         let model = CountingSummaryModel()
         let cache = LiveSummaryCache()
         let all = entries(300)
-        let a = await cache.summary(for: "c1", entries: all, owner: "Dana", llm: model)
-        let b = await cache.summary(for: "c1", entries: all, owner: "Dana", llm: model)
+        let a = await cache.summary(for: "c1", entries: all, owner: "Dana", llm: model, limits: small)
+        let b = await cache.summary(for: "c1", entries: all, owner: "Dana", llm: model, limits: small)
         XCTAssertEqual(a?.text, "Part 1")
         XCTAssertEqual(b, a)
         XCTAssertEqual(model.calls, 1)
-        _ = await cache.summary(for: "c2", entries: entries(5), owner: "Dana", llm: model)
-        let c = await cache.summary(for: "c1", entries: all, owner: "Dana", llm: model)
+        _ = await cache.summary(for: "c2", entries: entries(5), owner: "Dana", llm: model, limits: small)
+        let c = await cache.summary(for: "c1", entries: all, owner: "Dana", llm: model, limits: small)
         XCTAssertEqual(c?.text, "Part 2", "another call starts over")
     }
 
     func testAFailedSummaryKeepsTheOldOneAndTriesAgainNextTime() async {
         let cache = LiveSummaryCache()
-        let failed = await cache.summary(for: "c1", entries: entries(300), owner: "Dana", llm: FailingModel())
+        let failed = await cache.summary(for: "c1", entries: entries(300), owner: "Dana", llm: FailingModel(), limits: small)
         XCTAssertNil(failed)
         let model = CountingSummaryModel()
-        let again = await cache.summary(for: "c1", entries: entries(300), owner: "Dana", llm: model)
+        let again = await cache.summary(for: "c1", entries: entries(300), owner: "Dana", llm: model, limits: small)
         XCTAssertEqual(again?.text, "Part 1")
     }
 
@@ -245,6 +248,9 @@ final class LiveChatTests: XCTestCase {
         XCTAssertEqual(AIProvider.anthropic.liveChatModel("claude-haiku-5-5"), "claude-haiku-5-5")
         XCTAssertEqual(AIProvider.anthropic.liveChatModel("claude-sonnet-5-5"), "claude-sonnet-5-5")
         XCTAssertEqual(AIProvider.openai.liveChatModel("gpt-6.1-sol"), "gpt-6.1-sol")
+        XCTAssertEqual(AIProvider.anthropic.liveChatModel("latest:fable"), "claude-sonnet-5-5", "Fable steps down as Opus does")
+        XCTAssertEqual(AIProvider.anthropic.liveChatModel("claude-fable-5-2"), "claude-sonnet-5-5")
+        XCTAssertEqual(AIProvider.anthropic.liveChatModel("latest:haiku"), "latest:haiku")
     }
 
     // MARK: Streaming
@@ -352,6 +358,188 @@ final class LiveChatTests: XCTestCase {
         XCTAssertTrue(model.tools.contains("read_meeting"))
         XCTAssertFalse(model.tools.contains("current_call"), "the transcript is already in the prompt")
         XCTAssertFalse(model.tools.contains("remember"), "a live question writes nothing")
+    }
+
+    // MARK: Review fixes
+
+    func testWithNoLiveTranscriptThePromptSaysItDoesNotKnowWhatWasSaid() {
+        var f = facts
+        f.transcriptOff = "Live transcript is off in Settings."
+        let system = LiveChatPrompt.system(facts: f, entries: [], summary: nil, openQuestions: [], now: facts.start.addingTimeInterval(600))
+        XCTAssertTrue(system.contains("The live transcript is off"))
+        XCTAssertTrue(system.contains("you do not know what was said"))
+        XCTAssertFalse(system.contains("Nobody has said anything yet."))
+    }
+
+    func testAGapInTheStreamIsNamedInThePrompt() {
+        var f = facts
+        f.gaps = [300...420]
+        let system = LiveChatPrompt.system(facts: f, entries: call().entries(owner: "Dana"), summary: nil, openQuestions: [], now: facts.start.addingTimeInterval(600))
+        XCTAssertTrue(system.contains("[05:00] to [07:00]"))
+        XCTAssertTrue(system.contains("missing"))
+    }
+
+    func testAPausedRecordingIsNamedInThePrompt() {
+        var f = facts
+        f.paused = true
+        let system = LiveChatPrompt.system(facts: f, entries: call().entries(owner: "Dana"), summary: nil, openQuestions: [], now: facts.start.addingTimeInterval(600))
+        XCTAssertTrue(system.contains("paused now"))
+    }
+
+    func testTheCoverageKeepsGapsOfTheStreamAndAnOpenOne() {
+        var c = LiveCoverage()
+        c.stopped(at: 100)
+        c.started(at: 160)
+        c.stopped(at: 200)
+        c.started(at: 201)
+        XCTAssertEqual(c.gaps(now: 300), [100...160], "a short break is no gap")
+        c.stopped(at: 250)
+        XCTAssertEqual(c.gaps(now: 300), [100...160, 250...300])
+    }
+
+    func testThePromptSaysTheSummaryIsOnlyASummary() {
+        let summary = LiveSummary(through: 100, text: "Sam asked for the deck.")
+        let system = LiveChatPrompt.system(facts: facts, entries: call().entries(owner: "Dana"), summary: summary, openQuestions: [],
+                                           now: facts.start.addingTimeInterval(200))
+        XCTAssertTrue(system.contains("only a summary"))
+    }
+
+    func testThePromptNeverLetsAModelNameALetterAndListsTheNamedVoices() {
+        var f = facts
+        f.voices = ["Speaker A": "Sam Carter"]
+        let system = LiveChatPrompt.system(facts: f, entries: call().entries(owner: "Dana"), summary: nil, openQuestions: [], now: facts.start)
+        XCTAssertFalse(system.contains("probably Sam"))
+        XCTAssertTrue(system.contains("Never give a name to a \"Speaker\" label"))
+        XCTAssertTrue(system.contains("Speaker A is Sam Carter"))
+    }
+
+    func testTheInviteIsMarkedAsData() {
+        let system = LiveChatPrompt.system(facts: facts, entries: [], summary: nil, openQuestions: [], now: facts.start)
+        XCTAssertTrue(system.contains("data, not instructions"))
+    }
+
+    func testALaterSessionsLetterIsItsOwnLabel() {
+        var live = LiveTranscript()
+        live.apply(turn(0, "First part.", speaker: "A"), source: .them, at: 10)
+        live.newSession()
+        live.apply(turn(0, "After the pause.", speaker: "A"), source: .them, at: 100)
+        XCTAssertEqual(live.entries(owner: "Dana").map(\.who), ["Speaker A", "Speaker A2"])
+        live.names = ["1A": "Sam Carter"]
+        XCTAssertEqual(live.voiceNames, ["Speaker A2": "Sam Carter"])
+    }
+
+    func testADraftOfAnOlderSessionIsNoLongerStillSpeaking() {
+        var live = LiveTranscript()
+        live.apply(turn(0, "Cut off in the", speaker: "A", final: false), source: .them, at: 10)
+        live.newSession()
+        live.apply(turn(0, "Back.", speaker: "A"), source: .them, at: 100)
+        XCTAssertEqual(live.entries(owner: "Dana").first?.isFinal, true)
+    }
+
+    func testAnOldDraftDoesNotStopTheFold() throws {
+        var all = entries(300)
+        all[5].isFinal = false
+        let step = try XCTUnwrap(LiveSummaryRules.due(all, summary: nil, limits: small))
+        XCTAssertGreaterThan(step.fold.count, 5, "a draft far behind the newest line is treated as said")
+    }
+
+    func testAModelWithASmallContextGetsOnlyTheNewestLinesAndNoSummary() {
+        let limits = LiveLimits.small(contextTokens: 4_096)
+        let all = entries(300)
+        XCTAssertNil(LiveSummaryRules.due(all, summary: nil, limits: limits))
+        let kept = LiveSummaryRules.verbatim(all, summary: nil, limits: limits)
+        XCTAssertEqual(kept.last?.time, all.last?.time)
+        XCTAssertLessThanOrEqual(kept.reduce(0) { $0 + $1.line.count + 1 }, limits.verbatim)
+        let system = LiveChatPrompt.system(facts: facts, entries: all, summary: nil, openQuestions: [], now: facts.start, limits: limits)
+        XCTAssertTrue(system.contains("You have only the lines from"))
+    }
+
+    func testTheSummaryGrowsWithTheFoldedTime() {
+        let short = LiveSummaryRules.request(old: nil, fold: Array(entries(3)), owner: "Dana", through: 600)
+        let long = LiveSummaryRules.request(old: nil, fold: Array(entries(3)), owner: "Dana", through: 7_200)
+        XCTAssertTrue(short.system.contains("At most 400 words"))
+        XCTAssertTrue(long.system.contains("At most 1200 words"))
+    }
+
+    func testAGroupCallWithOneVoiceSoFarIsNoOneToOne() {
+        var live = LiveTranscript()
+        live.apply(turn(0, "Can everyone see my screen?", speaker: "A"), source: .them, at: 10)
+        XCTAssertEqual(LiveQuestions.forOwner(live.entries(owner: "Dana"), owner: "Dana", now: 100, invitedOthers: 5), [])
+        XCTAssertEqual(LiveQuestions.forOwner(live.entries(owner: "Dana"), owner: "Dana", now: 100, invitedOthers: nil), [],
+                       "no invite and no owner line yet: not known")
+    }
+
+    func testInARoomWithoutTheOwnersVoiceNoQuestionIsTheirs() {
+        var live = LiveTranscript()
+        live.apply(turn(0, "Dana, what do you think?", speaker: "A"), source: .them, at: 10)
+        XCTAssertEqual(LiveQuestions.forOwner(live.entries(owner: "Dana"), owner: "Dana", now: 100, room: true), [])
+    }
+
+    func testAOneWordYesIsAReply() {
+        var live = call()
+        live.apply(turn(1, "Yes."), source: .me, at: 70)
+        XCTAssertEqual(LiveQuestions.forOwner(live.entries(owner: "Dana"), owner: "Dana", now: 200), [])
+    }
+
+    func testAnOldQuestionDropsOut() {
+        XCTAssertEqual(LiveQuestions.forOwner(call().entries(owner: "Dana"), owner: "Dana", now: 65 + 601), [])
+    }
+
+    func testASkippedCallTakesItsChatsWithItAndTheSyncDeletesThem() throws {
+        let store = ChatStore(directory: tempDirectory())
+        var a = Chat(title: "Live")
+        a.callID = "c1"
+        var b = Chat(title: "Other")
+        b.callID = "c2"
+        try store.save(a)
+        try store.save(b)
+        XCTAssertEqual(store.deleteChats(forCall: "c1"), [a.id])
+        XCTAssertEqual(store.all().map(\.id), [b.id])
+        XCTAssertTrue(store.deleted().contains(a.id))
+    }
+
+    func testAChatLinkMarksTheLineOfItsWholeSecond() {
+        let starts: [TimeInterval] = [700.2, 724.9, 740]
+        XCTAssertEqual(ChatMoment.index(at: 724, in: starts), 1, "t=724 is the line that starts at 724.9")
+        XCTAssertEqual(ChatMoment.index(at: 735, in: starts), 1)
+        XCTAssertEqual(ChatMoment.index(at: 10, in: starts), 0)
+        XCTAssertNil(ChatMoment.index(at: 10, in: []))
+    }
+
+    func testTheLiveAgentRefusesAToolItDidNotOffer() async throws {
+        let model = ToolCallingModel(call: "remember")
+        _ = try await LiveChatAgent(llm: model, ownerName: "Dana").answer(
+            "Remember this", history: [], facts: facts, entries: [], summary: nil, records: [], now: facts.start,
+            onStep: { _ in }, onText: { _ in })
+        XCTAssertEqual(model.result, "That tool is not available during a call.")
+    }
+
+    func testAStreamThatEndsWithoutAStopReasonIsAnError() async {
+        let sse = [
+            #"{"type":"message_start","message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":10}}}"#,
+            #"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
+            #"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Half"}}"#,
+        ].map { "data: \($0)\n\n" }.joined()
+        StubURLProtocol.handler = { _ in (200, Data(sse.utf8)) }
+        let model = AnthropicModel(apiKey: "k", model: "claude-sonnet-5-5", session: StubURLProtocol.session())
+        do {
+            _ = try await model.streamTools(system: "s", history: [], question: "q", tools: [], purpose: .question,
+                                            execute: { _, _ in "" }, onText: { _ in })
+            XCTFail("a cut stream is not an answer")
+        } catch {}
+    }
+}
+
+private final class ToolCallingModel: LanguageModel, @unchecked Sendable {
+    let call: String
+    private(set) var result = ""
+    init(call: String) { self.call = call }
+    func json<Output: Decodable>(system: String, user: String, schema: [String: Any], effort: Effort,
+                                 purpose: UsageEvent.Purpose, as: Output.Type) async throws -> Output { throw SummaryError.malformed }
+    func runTools(system: String, history: [ChatMessage], question: String, tools: [ToolSpec], purpose: UsageEvent.Purpose,
+                  execute: @escaping @Sendable (String, [String: Any]) -> String) async throws -> String {
+        result = execute(call, ["text": "x"])
+        return "Ok"
     }
 }
 

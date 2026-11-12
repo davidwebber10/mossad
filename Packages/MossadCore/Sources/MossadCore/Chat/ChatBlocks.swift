@@ -103,7 +103,10 @@ public enum ChatBlocks {
             if line.hasPrefix(">") {
                 flushParagraph()
                 flushList()
-                quote.append(line.drop { $0 == ">" }.trimmingCharacters(in: .whitespaces))
+                let body = line.drop { $0 == ">" }.trimmingCharacters(in: .whitespaces)
+                // A line that starts with a time is the next quote, not more of this one.
+                if body.hasPrefix("["), Self.startsWithTime(body) { flushQuote() }
+                quote.append(body)
                 continue
             }
             flushQuote()
@@ -112,7 +115,7 @@ public enum ChatBlocks {
                 out.append(.rule)
                 continue
             }
-            if line.hasPrefix("#") {
+            if line.hasPrefix("#"), line.drop(while: { $0 == "#" }).first.map({ $0 == " " }) ?? true {
                 flush()
                 let level = min(3, line.prefix { $0 == "#" }.count)
                 out.append(.heading(level: level, text: line.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces)))
@@ -161,7 +164,7 @@ public enum ChatBlocks {
 
     // MARK: Quotes
 
-    private static let time = #"\[(\d{1,2}:\d{2}(?::\d{2})?)\](?:\((mossad://[^)\s]+)\))?"#
+    private static let time = #"\[(\d{1,3}:\d{2}(?::\d{2})?)\](?:\((mossad://[^)\s]+)\))?"#
     /// "[12:40](link) Sam Carter: words"
     private static let leading = try! NSRegularExpression(pattern: "^" + time + #"\s*(?:([^:"\x{201C}]{1,40}):\s*)?(.+)$"#)
     /// "words, Sam, [12:40](link)" after a dash
@@ -174,12 +177,27 @@ public enum ChatBlocks {
             return r.location == NSNotFound ? nil : ns.substring(with: r).trimmingCharacters(in: .whitespaces)
         }
         if let m = leading.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) {
-            return ChatQuote(speaker: group(m, 3), time: group(m, 1), link: group(m, 2), text: unquoted(group(m, 4) ?? ""))
+            let speaker = group(m, 3)
+            // A speaker is a name: four words at most and no digit. Else the colon was part of the words.
+            if let speaker, !isName(speaker) {
+                let words = ns.substring(from: m.range(at: 2).location == NSNotFound ? m.range(at: 1).upperBound + 1 : m.range(at: 2).upperBound + 1)
+                return ChatQuote(speaker: nil, time: group(m, 1), link: group(m, 2), text: unquoted(words.trimmingCharacters(in: .whitespaces)))
+            }
+            return ChatQuote(speaker: speaker, time: group(m, 1), link: group(m, 2), text: unquoted(group(m, 4) ?? ""))
         }
         if let m = trailing.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) {
             return ChatQuote(speaker: group(m, 2), time: group(m, 3), link: group(m, 4), text: unquoted(group(m, 1) ?? ""))
         }
         return ChatQuote(speaker: nil, time: nil, link: nil, text: text)
+    }
+
+    static func isName(_ s: String) -> Bool {
+        s.split(separator: " ").count <= 4 && !s.contains(where: \.isNumber)
+    }
+
+    private static func startsWithTime(_ s: String) -> Bool {
+        let ns = s as NSString
+        return leading.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) != nil
     }
 
     private static func unquoted(_ s: String) -> String {
@@ -188,29 +206,40 @@ public enum ChatBlocks {
 
     // MARK: Times
 
-    private static let bare = try! NSRegularExpression(pattern: #"\[(\d{1,2}):(\d{2})(?::(\d{2}))?\](?!\()"#)
+    private static let bare = try! NSRegularExpression(pattern: #"\[(\d{1,3}):(\d{2})(?::(\d{2}))?\](?:\((mossad://call/[^)?\s]+)(\?t=[0-9.]+)?\)|(?!\())"#)
 
-    /// "[12:04]" with no link becomes a link to that moment of `callID`, so it shows as a chip too.
+    /// Each time in an answer as a chip to its moment. A "[12:04]" with no link gets one to `callID`; a time link
+    /// to a moment gets its `t` from the label, so a wrong sum by the model never moves the chip.
     public static func linkTimes(_ text: String, callID: String?) -> String {
-        guard let callID else { return text }
         let ns = text as NSString
         var out = text
         for m in bare.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
-            let parts = (1...3).compactMap { i -> Int? in
+            func value(_ i: Int) -> String? {
                 let r = m.range(at: i)
-                return r.location == NSNotFound ? nil : Int(ns.substring(with: r))
+                return r.location == NSNotFound ? nil : ns.substring(with: r)
             }
+            let parts = (1...3).compactMap { value($0).flatMap(Int.init) }
             let seconds: Int
             if parts.count == 3 {
                 guard parts[1] < 60, parts[2] < 60 else { continue }
                 seconds = parts[0] * 3600 + parts[1] * 60 + parts[2]
             } else {
-                guard parts[1] < 60 else { continue }
+                guard parts.count == 2, parts[1] < 60 else { continue }
                 seconds = parts[0] * 60 + parts[1]
             }
-            let label = ns.substring(with: m.range).dropFirst().dropLast()
+            let label = ns.substring(with: m.range(at: 0)).prefix { $0 != "]" }.dropFirst()
+            let base: String
+            if let linked = value(4) {
+                // A link to the whole meeting under a time label is left as the model wrote it.
+                guard value(5) != nil else { continue }
+                base = linked
+            } else if let callID {
+                base = "mossad://call/\(callID)"
+            } else {
+                continue
+            }
             let range = Range(m.range, in: out)!
-            out.replaceSubrange(range, with: "[\(label)](mossad://call/\(callID)?t=\(seconds))")
+            out.replaceSubrange(range, with: "[\(label)](\(base)?t=\(seconds))")
         }
         return out
     }

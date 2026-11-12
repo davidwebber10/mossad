@@ -95,6 +95,15 @@ public struct ChatStore: Sendable {
         if record { setDeleted(deleted().union([id])) }
     }
 
+    /// Deletes every chat about one call, as a deleted chat, so the sync removes it elsewhere too. For a call that
+    /// was skipped or discarded: its chat quotes words whose audio is gone.
+    @discardableResult
+    public func deleteChats(forCall callID: String) -> [UUID] {
+        let ids = all().filter { $0.callID == callID }.map(\.id)
+        for id in ids { delete(id) }
+        return ids
+    }
+
     static let deletedFileName = "deleted.json"
 
     /// Chats deleted on this device that the store may still have.

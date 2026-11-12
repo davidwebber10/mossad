@@ -155,6 +155,14 @@ final class AppController: ObservableObject {
     private var liveFailures = 0
     private var liveTitling: Task<Void, Never>?
     private var liveStart = Date()
+    /// Where the live transcript listens in the recording's seconds, and since when this session's clock runs.
+    private var liveFileOffset: TimeInterval = 0
+    /// Where the live transcript did not listen in this call, for the live chat.
+    var liveCoverage = LiveCoverage()
+    /// Why this call has no live transcript, in words; nil when it runs. The live chat says it.
+    @Published var liveOffReason: String?
+    /// The live chat of each call, so an answer that runs survives a change of tab.
+    var liveChatSessions: [String: LiveChatSession] = [:]
     /// When the open streaming sessions started, to log the time AssemblyAI bills.
     private var liveOpened: Date?
     private var liveNaming: Task<Void, Never>?
@@ -1041,6 +1049,7 @@ final class AppController: ObservableObject {
     }
 
     func skipCurrentCall() {
+        if case .recording(_, let since) = status { forgetLiveChats(callID: CallRecorder.callID(for: since)) }
         let recorder = recorder
         CaptureQueue.queue.async {
             recorder.skip()
@@ -1234,17 +1243,30 @@ final class AppController: ObservableObject {
     private func startLive(reset: Bool) {
         stopLive()
         if reset { live.reset() } else { live.newSession() }
-        if reset { liveFailures = 0 }
-        guard liveTranscriptEnabled, case .recording(_, let since) = status, let key = keychain.get(.assemblyai) else { return }
+        if reset {
+            liveFailures = 0
+            liveCoverage = LiveCoverage()
+        }
+        guard case .recording(_, let since) = status else { return }
+        guard liveTranscriptEnabled else { liveOffReason = "Live transcript is off in Settings."; return }
+        guard let key = keychain.get(.assemblyai) else { liveOffReason = "Live transcript needs an AssemblyAI key."; return }
         // The two audio streams take about half a megabit of upload. On a network the owner marked to save data
         // (Low Data Mode), the call's own video and sound get all of it.
-        guard !NetworkPath.shared.isConstrained else { return Log.info("Live transcript is off: the network is in Low Data Mode") }
-        liveStart = since
+        guard !NetworkPath.shared.isConstrained else {
+            liveOffReason = "Live transcript is off on a network in Low Data Mode."
+            return Log.info("Live transcript is off: the network is in Low Data Mode")
+        }
+        liveOffReason = nil
         // In a room the mic hears everyone and there is no call audio: one stream, with speaker labels, shown
         // like call audio so each voice gets its own name.
         let room: Bool = if case .recording(.inPerson, _) = status { true } else { false }
         // A new call's stream starts with the file; after a pause it starts where the file is now.
         let themOffset = reset ? 0 : (room ? recorder.meDuration : recorder.themDuration)
+        // Line times are seconds of the recording, as the written meeting counts them: a pause records nothing, so a
+        // resumed session's clock starts where the file is now.
+        liveStart = reset ? since : Date()
+        liveFileOffset = themOffset
+        if !reset { liveCoverage.started(at: themOffset) }
         let dir = paths.callDirectory(CallRecorder.callID(for: since))
         let themURL = dir.appendingPathComponent(room ? Track.me.fileName : Track.them.fileName)
         // Saved for the current_call tool in Chat and in other AI apps.
@@ -1262,7 +1284,7 @@ final class AppController: ObservableObject {
                 let dropped = box.session?.droppedSeconds ?? 0
                 Task { @MainActor in
                     guard let self else { return }
-                    self.live.apply(message, source: source, at: Date().timeIntervalSince(self.liveStart),
+                    self.live.apply(message, source: source, at: self.liveFileOffset + Date().timeIntervalSince(self.liveStart),
                                     audioOffset: source == .them ? themOffset + dropped : 0)
                 }
             }
@@ -1307,6 +1329,9 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Seconds of the recording so far: the clock of the live lines.
+    var liveRecorded: TimeInterval { max(recorder.meDuration, recorder.themDuration) }
+
     private func isRecording(_ callID: String) -> Bool {
         if case .recording(_, let since) = status { return CallRecorder.callID(for: since) == callID }
         return false
@@ -1334,6 +1359,7 @@ final class AppController: ObservableObject {
     /// wait that grows with each failure in a row, and no more after six (a refused key would fail without end).
     private func liveSessionFailed() {
         guard !liveSessions.isEmpty, liveRestart == nil else { return }
+        liveCoverage.stopped(at: liveRecorded)
         if let opened = liveOpened, Date().timeIntervalSince(opened) > 120 { liveFailures = 0 }
         guard liveFailures < 6 else { return Log.error("Live transcript: giving up for this call after \(liveFailures) failures") }
         liveFailures += 1

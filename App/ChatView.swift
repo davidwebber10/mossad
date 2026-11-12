@@ -64,7 +64,10 @@ struct ChatView: View {
             }
         }
         .floatingComposer(composer)
-        .environment(\.openURL, OpenURLAction { url in controller.openLink(url) ? .handled : .systemAction })
+        .environment(\.openURL, OpenURLAction { url in
+            if controller.openLink(url) { return .handled }
+            return ChatThread.opens(url) ? .systemAction : .discarded
+        })
     }
 
     /// The reading column of a chat: the label column and an answer at a comfortable measure.
@@ -78,7 +81,7 @@ struct ChatView: View {
                         MeetingPill(record: r)
                     }
                     ForEach(current.messages) { m in
-                        ChatExchangeRow(message: m).id(m.id)
+                        ChatExchangeRow(message: m, callID: current.callID).id(m.id)
                     }
                     if running == current.id { ChatAnswering(steps: steps).id("running") }
                     if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }

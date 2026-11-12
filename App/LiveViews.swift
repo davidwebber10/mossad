@@ -97,7 +97,7 @@ struct LiveTranscriptPanel: View {
     let record: CallRecord
     var top: CGFloat = Space.xl
     /// A moment from a live chat answer: the line there is scrolled to and marked for a few seconds.
-    var jump: LiveJump?
+    @Binding var jump: LiveJump?
     @State private var marked: String?
     private var room: Bool { record.platform == .inPerson }
 
@@ -119,11 +119,17 @@ struct LiveTranscriptPanel: View {
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             .defaultScrollAnchor(.bottom, for: .sizeChanges)
             .task(id: jump) {
-                guard let jump, let line = LiveJump.line(at: jump.at, in: controller.live.visibleLines) else { return }
+                let lines = controller.live.visibleLines
+                guard let jump, let i = ChatMoment.index(at: jump.at, in: lines.map(\.time)) else { return }
                 // After the first layout, which starts at the newest line.
                 try? await Task.sleep(for: .milliseconds(120))
-                withAnimation { proxy.scrollTo(line, anchor: .center) }
-                marked = line
+                withAnimation { proxy.scrollTo(lines[i].id, anchor: .center) }
+                marked = lines[i].id
+                // Used once: a later return to this tab starts at the newest line again.
+                self.jump = nil
+            }
+            .task(id: marked) {
+                guard marked != nil else { return }
                 try? await Task.sleep(for: .seconds(4))
                 withAnimation { marked = nil }
             }
@@ -143,11 +149,6 @@ struct LiveTranscriptPanel: View {
 struct LiveJump: Equatable {
     let at: TimeInterval
     let id = UUID()
-
-    /// The line that was being said at that time: the last one that began by then, else the first.
-    static func line(at time: TimeInterval, in lines: [LiveTranscript.Line]) -> String? {
-        (lines.last { $0.time <= time + 0.5 } ?? lines.first)?.id
-    }
 }
 
 private struct LiveLines: View {

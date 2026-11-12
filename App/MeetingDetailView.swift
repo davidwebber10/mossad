@@ -125,12 +125,13 @@ struct MeetingDetailView: View {
                 .zIndex(1)
             if record.status == .recording {
                 if liveTab == .chat {
-                    LiveChatView(record: record, top: Self.underTabs + 14, focusRequest: $focusLiveChat) { at in
+                    LiveChatView(record: record, session: controller.liveChatSession(record.id), top: Self.underTabs + 14,
+                                 focusRequest: $focusLiveChat) { at in
                         liveJump = LiveJump(at: at)
                         liveTab = .transcript
                     }
                 } else {
-                    LiveTranscriptPanel(record: record, top: Self.underTabs + 28, jump: liveJump)
+                    LiveTranscriptPanel(record: record, top: Self.underTabs + 28, jump: $liveJump)
                 }
             } else if processingFirstTime, let step = ProcessingStep(status: record.status) {
                 // Until the first note is written the tabs have nothing to show, so the progress takes their place.
@@ -191,7 +192,8 @@ struct MeetingDetailView: View {
         tabBinding.wrappedValue = .transcript
         highlight = at
         Task {
-            await play(from: at)
+            // A second before, as a card's moment plays, so the first word is heard.
+            await play(from: max(0, at - 1))
             try? await Task.sleep(for: .seconds(4))
             if highlight == at { withAnimation { highlight = nil } }
         }

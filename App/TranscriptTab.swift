@@ -37,7 +37,7 @@ struct TranscriptTab: View {
     var body: some View {
         let matches = matched
         let current = player.isPlaying || player.time > 0 ? currentBlock : nil
-        let marked = highlight.flatMap { h in blocks.last { $0.start <= h + 0.5 }?.id }
+        let marked = highlight.flatMap { h in ChatMoment.index(at: h, in: blocks.map(\.start)).map { blocks[$0].id } }
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
                 tools(matches: matches, proxy: proxy)
