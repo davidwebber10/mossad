@@ -60,7 +60,7 @@ function waves() {
 const [WAVE1, WAVE2] = waves();
 
 const logo = (size) => read(join(src, 'partials', 'logo.svg.html')).trim().replaceAll('{{SIZE}}', String(size));
-const BOX = '<span class="box" aria-hidden="true"></span>';
+const BOX = '<span class="box" role="img" aria-label="Not done"></span>';
 const CHK = '<svg class="chk" width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Done"><rect width="16" height="16" rx="5" fill="#F2A05A"></rect><path d="M4.5 8.2l2.3 2.3 4.7-5" fill="none" stroke="#141210" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
 const DOWNLOAD_ICON = '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="#141210" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5v9M5 8l4 4 4-4M3 15.5h12"></path></svg>';
 
@@ -82,7 +82,7 @@ const pages = {
     path: '/privacy',
     title: 'Privacy: your meetings stay on your Mac | Mossad',
     ogTitle: 'Mossad privacy: your meetings stay on your Mac',
-    description: 'Mossad keeps your meetings, recordings, names, and words on your Mac. See what stays there, where your meetings can go when you choose, and how you stay in control.',
+    description: 'Mossad keeps your meetings, recordings, names, and words on your Mac. See what stays there and where your meetings can go when you choose.',
     robots: 'index, follow',
     home: '/',
   },
@@ -97,12 +97,14 @@ const pages = {
 };
 
 function jsonLD(faq) {
-  const org = { '@type': 'Organization', '@id': `${ORIGIN}/#organization`, name: 'Mossad', url: `${ORIGIN}/`, logo: { '@type': 'ImageObject', url: `${ORIGIN}/icon-512.png`, width: 512, height: 512 }, sameAs: [REPO] };
+  const org = { '@type': 'Organization', '@id': `${ORIGIN}/#organization`, name: 'Mossad', alternateName: 'Mossad for Mac', disambiguatingDescription: 'The makers of Mossad, a free, open source meeting notes app for the Mac.', url: `${ORIGIN}/`, logo: { '@type': 'ImageObject', url: `${ORIGIN}/icon-512.png`, width: 512, height: 512 }, sameAs: [REPO] };
   const website = { '@type': 'WebSite', '@id': `${ORIGIN}/#website`, name: 'Mossad', url: `${ORIGIN}/`, description: site.site.description, inLanguage: 'en', publisher: { '@id': `${ORIGIN}/#organization` } };
   const app = {
     '@type': ['SoftwareApplication', 'SoftwareSourceCode'],
     '@id': `${ORIGIN}/#app`,
     name: 'Mossad',
+    alternateName: 'Mossad for Mac',
+    disambiguatingDescription: 'Mossad is a meeting notes and work intelligence app for the Mac.',
     description: site.site.description,
     url: `${ORIGIN}/`,
     image: `${ORIGIN}/og.png`,
@@ -239,18 +241,15 @@ const links = [
 
 const llms = [
   '# Mossad', '', intro, '', ...summaryLines, '',
-  '## Features', '',
+  '**Features**', '',
   ...site.featureGroups.map((g) => `- **${g.title}.** ${g.intro} ${live(g).map((f) => f.title).join('; ')}.`), '',
-  '## Privacy', '', site.privacy.intro, '', ...privacyLines, `- ${site.privacy.leavesTheMac.neverLeaves}`, '',
-  '## Change it', '', `${site.makeItYours.title} ${site.makeItYours.intro}`, '',
-  ...site.makeItYours.changes.map((c) => `- ${c}`), '',
-  ...site.makeItYours.steps.map((t, i) => `${i + 1}. ${t}`), '',
-  `Needs: ${site.makeItYours.needs} Fork: ${site.makeItYours.action.href}`, '',
-  '## Install', '',
+  '**Privacy**', '', site.privacy.intro, '', ...privacyLines, `- ${site.privacy.leavesTheMac.neverLeaves}`, '',
+  `**${site.makeItYours.title}** ${site.makeItYours.intro} ${site.makeItYours.steps.join(' ')} Needs: ${site.makeItYours.needs}`, '',
+  '**Install**', '',
   `1. Download the latest release from ${DOWNLOAD} and move Mossad to Applications, or build it from the source with Xcode (see the README).`,
   '2. Open it, and follow setup: pick a transcription provider and a notes model, or models that run on your Mac, and grant the permissions it asks for.',
   '3. Take your calls as usual. Notes appear in ~/Mossad/Meetings.', '',
-  '## FAQ', '', ...FAQ.flatMap(({ q, a }) => [`### ${q}`, '', a, '']),
+  '**FAQ**', '', ...FAQ.flatMap(({ q, a }) => [`- **${q}** ${a}`]), '',
   ...links, '',
 ].join('\n');
 writeFileSync(join(out, 'llms.txt'), llms);
@@ -278,7 +277,11 @@ const full = [
   ]),
   '## Requirements', '', ...site.requirements.items.map((i) => `- **${i.label}:** ${i.value}`), '',
   '## Install', '',
-  `Download the latest release from ${DOWNLOAD}, or build it from the source. The README's steps to build it:`, '',
+  '### Download', '',
+  `1. Download the latest release from ${DOWNLOAD}, unzip it, and move Mossad to Applications.`,
+  '2. Open it, and follow setup: pick a transcription provider and a notes model, or models that run on your Mac, and grant the permissions it asks for.',
+  '3. Take your calls as usual. Notes appear in ~/Mossad/Meetings.', '',
+  '### Build from the source', '',
   readmeSection('Setup'), '',
   '## Privacy', '', site.privacy.intro, '',
   ...privacyLines, '',
@@ -290,7 +293,6 @@ const full = [
   ...site.makeItYours.steps.map((t, i) => `${i + 1}. ${t}`), '',
   `Needs: ${site.makeItYours.needs} Fork: ${site.makeItYours.action.href}`, '',
   '## FAQ', '', ...site.faq.flatMap((f) => [`### ${f.question}`, '', f.answer, '']),
-  ...FAQ.filter((f) => !site.faq.some((s) => s.question === f.q)).flatMap(({ q, a }) => [`### ${q}`, '', a, '']),
   '## Recording consent', '', 'Mossad does not announce itself on a call. Tell the people you record, and get consent where the law requires it. Voice fingerprints can be biometric data under some laws.', '',
   '## Legal', '', site.footer.text, '',
   ...links, '',
@@ -300,7 +302,7 @@ writeFileSync(join(out, 'llms-full.txt'), full);
 writeFileSync(join(out, '_headers'), `/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(), browsing-topics=()
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   Cross-Origin-Opener-Policy: same-origin
   Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; object-src 'none'

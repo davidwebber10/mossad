@@ -36,10 +36,21 @@ export function referrerHost(referrer: string | null, ownHosts: string[]): strin
     return '';
   }
   if (ownHosts.includes(host)) return '';
-  host = host.replace(/^www\./, '');
-  if (!/^[a-z0-9.-]{1,100}$/.test(host)) return '';
-  return host;
+  if (!isPublicHost(host)) return '';
+  return host.replace(/^www\./, '');
 }
+
+/** A host name that can be a public site: a dot, letters in its last label, and not a private or test name. */
+function isPublicHost(host: string): boolean {
+  if (!/^[a-z0-9.-]{1,100}$/.test(host)) return false;
+  if (!host.includes('.') || /^[\d.]+$/.test(host)) return false;
+  const last = host.slice(host.lastIndexOf('.') + 1);
+  if (!/^[a-z][a-z0-9-]*$/.test(last)) return false;
+  return !['local', 'localhost', 'internal', 'intranet', 'lan', 'home', 'corp', 'test', 'invalid', 'example', 'arpa'].includes(last);
+}
+
+/** The most referring sites a day keeps by name. Any more count as "other", so the table cannot grow without end. */
+export const REFERRERS_PER_DAY = 200;
 
 export interface View { day: string; path: string; country: string; referrer: string; device: Device }
 
@@ -55,9 +66,12 @@ export function viewOf(request: Request, day: string, country: string, ownHosts:
 
 export async function countView(db: D1Database, view: View): Promise<void> {
   await db.prepare(
-    `INSERT INTO page_views (day, path, country, referrer, device, views) VALUES (?, ?, ?, ?, ?, 1)
+    `INSERT INTO page_views (day, path, country, referrer, device, views) VALUES (?, ?, ?,
+       CASE WHEN ? = '' OR EXISTS (SELECT 1 FROM page_views WHERE day = ? AND referrer = ?)
+              OR (SELECT COUNT(DISTINCT referrer) FROM page_views WHERE day = ? AND referrer NOT IN ('', 'other')) < ?
+            THEN ? ELSE 'other' END, ?, 1)
      ON CONFLICT (day, path, country, referrer, device) DO UPDATE SET views = views + 1`,
-  ).bind(view.day, view.path, view.country, view.referrer, view.device).run();
+  ).bind(view.day, view.path, view.country, view.referrer, view.day, view.referrer, view.day, REFERRERS_PER_DAY, view.referrer, view.device).run();
 }
 
 export async function countClick(db: D1Database, day: string, target: string, country: string): Promise<void> {

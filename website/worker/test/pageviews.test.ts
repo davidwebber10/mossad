@@ -10,7 +10,7 @@ async function visit(env: ReturnType<typeof fakeEnv>['env'], url: string, header
   const { ctx, settle } = fakeContext();
   const request = new Request(url, { headers, ...init });
   Object.defineProperty(request, 'cf', { value: { country: 'GB' } });
-  const response = await handle(request, env, ctx, { now, ipLimiter: limiter() });
+  const response = await handle(request, env, ctx, { now, ipLimiter: limiter(), newInstallLimiter: limiter(), viewLimiter: limiter() });
   await settle();
   return response;
 }
@@ -38,6 +38,12 @@ describe('referrer hosts', () => {
     expect(referrerHost('https://www.getmossad.app/', own)).toBe('');
     expect(referrerHost('android-app://com.slack/', own)).toBe('');
     expect(referrerHost('not a url', own)).toBe('');
+    expect(referrerHost('http://192.168.1.20/', own)).toBe('');
+    expect(referrerHost('http://[2001:db8::1]/', own)).toBe('');
+    expect(referrerHost('http://localhost:3000/', own)).toBe('');
+    expect(referrerHost('https://wiki.acme.internal/page', own)).toBe('');
+    expect(referrerHost('https://printer.local/', own)).toBe('');
+    expect(referrerHost('https://intranet/', own)).toBe('');
     expect(referrerHost(null, own)).toBe('');
   });
 });
@@ -76,7 +82,7 @@ describe('the page-view counter', () => {
 describe('download clicks', () => {
   it('counts an allowed button and refuses anything else', async () => {
     const { env, db } = fakeEnv();
-    const click = (body: string) => visit(env, 'https://getmossad.com/api/click', { 'Content-Type': 'text/plain;charset=UTF-8' }, { method: 'POST', body });
+    const click = (body: string) => visit(env, 'https://getmossad.com/api/click', { 'Content-Type': 'text/plain;charset=UTF-8', 'Sec-Fetch-Site': 'same-origin' }, { method: 'POST', body });
     expect((await click('hero')).status).toBe(204);
     expect((await click('hero')).status).toBe(204);
     expect((await click('cta')).status).toBe(204);

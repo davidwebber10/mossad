@@ -10,7 +10,7 @@ const columns = (db: ReturnType<typeof fakeEnv>['db'], table: string) =>
 describe('nothing personal is stored', () => {
   it('a report row has exactly the report, the day, and the country', async () => {
     const { env, db } = fakeEnv();
-    await handle(post('/api/telemetry', JSON.stringify(validReport()), { 'User-Agent': 'Mossad/2.20.0 Sam', Referer: 'https://example.com/' }), env, fakeContext().ctx, { now, ipLimiter: limiter() });
+    await handle(post('/api/telemetry', JSON.stringify(validReport()), { 'User-Agent': 'Mossad/2.20.0 Sam', Referer: 'https://example.com/' }), env, fakeContext().ctx, { now, ipLimiter: limiter(), newInstallLimiter: limiter() });
     expect(columns(db, 'telemetry')).toEqual([
       'id', 'received_day', 'country', 'install_id', 'app_version', 'build', 'os', 'chip', 'locale',
       'days_active7', 'meetings7', 'meeting_minutes7',
@@ -42,7 +42,7 @@ describe('nothing personal is stored', () => {
     const { ctx, settle } = fakeContext();
     const request = new Request('https://getmossad.com/privacy?utm_source=sam', { headers: { 'CF-Connecting-IP': '203.0.113.9', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15', Referer: 'https://news.ycombinator.com/item?id=123' } });
     Object.defineProperty(request, 'cf', { value: { country: 'US', city: 'Austin' } });
-    await handle(request, env, ctx, { now, ipLimiter: limiter() });
+    await handle(request, env, ctx, { now, ipLimiter: limiter(), newInstallLimiter: limiter(), viewLimiter: limiter() });
     await settle();
     const rows = db.raw.prepare('SELECT * FROM page_views').all();
     expect(rows).toEqual([{ day: '2026-11-12', path: '/privacy', country: 'US', referrer: 'news.ycombinator.com', device: 'desktop', views: 1 }]);

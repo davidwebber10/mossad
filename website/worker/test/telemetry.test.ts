@@ -6,7 +6,7 @@ import { fakeContext, fakeEnv, limiter, post, validReport } from './fakes';
 const now = () => new Date('2026-11-12T10:00:00Z');
 
 function send(env: ReturnType<typeof fakeEnv>['env'], body: unknown, headers: Record<string, string> = {}, at = now) {
-  return handle(post('/api/telemetry', typeof body === 'string' ? body : JSON.stringify(body), headers), env, fakeContext().ctx, { now: at, ipLimiter: limiter() });
+  return handle(post('/api/telemetry', typeof body === 'string' ? body : JSON.stringify(body), headers), env, fakeContext().ctx, { now: at, ipLimiter: limiter(), newInstallLimiter: limiter() });
 }
 
 describe('parseReport', () => {
@@ -22,7 +22,13 @@ describe('parseReport', () => {
         expect(() => parseReport({ ...validReport(), providers: { transcription, summary } })).not.toThrow();
     for (const bucket of ['0', '1-5', '6-20', '21-100', '100+'])
       expect(() => parseReport({ ...validReport(), counts: { people: bucket, recurring: bucket, commitmentsOpen: bucket } })).not.toThrow();
-    for (const chip of ['M1', 'M2 Pro', 'M4 Max', 'M3 Ultra', 'M10', 'Other']) expect(() => parseReport({ ...validReport(), chip })).not.toThrow();
+    for (const chip of ['M1', 'M2 Pro', 'M4 Max', 'M3 Ultra', 'M10', 'Other', 'other']) expect(() => parseReport({ ...validReport(), chip })).not.toThrow();
+  });
+
+  it('stores other chips as Other, whatever the case', () => {
+    expect(parseReport({ ...validReport(), chip: 'other' }).chip).toBe('Other');
+    expect(parseReport({ ...validReport(), chip: 'OTHER' }).chip).toBe('Other');
+    expect(() => parseReport({ ...validReport(), chip: 'm3' })).toThrow(Invalid);
   });
 
   const bad: [string, (r: Record<string, any>) => void][] = [
@@ -95,7 +101,7 @@ describe('POST /api/telemetry', () => {
   it('answers 415 without a JSON content type, and 405 to a GET', async () => {
     const { env } = fakeEnv();
     expect((await send(env, validReport(), { 'Content-Type': 'text/plain' })).status).toBe(415);
-    const get = await handle(new Request('https://getmossad.com/api/telemetry'), env, fakeContext().ctx, { now, ipLimiter: limiter() });
+    const get = await handle(new Request('https://getmossad.com/api/telemetry'), env, fakeContext().ctx, { now, ipLimiter: limiter(), newInstallLimiter: limiter() });
     expect(get.status).toBe(405);
   });
 
@@ -115,10 +121,10 @@ describe('POST /api/telemetry', () => {
     let last = 0;
     for (let i = 0; i < 61; i++) {
       const report = { ...validReport(), installID: crypto.randomUUID() };
-      last = (await handle(post('/api/telemetry', JSON.stringify(report)), env, fakeContext().ctx, { now, ipLimiter: ip })).status;
+      last = (await handle(post('/api/telemetry', JSON.stringify(report)), env, fakeContext().ctx, { now, ipLimiter: ip, newInstallLimiter: limiter() })).status;
     }
     expect(last).toBe(429);
     const elsewhere = post('/api/telemetry', JSON.stringify({ ...validReport(), installID: crypto.randomUUID() }), { 'CF-Connecting-IP': '198.51.100.7' });
-    expect((await handle(elsewhere, env, fakeContext().ctx, { now, ipLimiter: ip })).status).toBe(204);
+    expect((await handle(elsewhere, env, fakeContext().ctx, { now, ipLimiter: ip, newInstallLimiter: limiter() })).status).toBe(204);
   });
 });

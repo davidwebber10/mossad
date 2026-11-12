@@ -36,7 +36,7 @@ const TOP_KEYS = ['v', 'installID', 'appVersion', 'build', 'os', 'chip', 'locale
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const APP_VERSION = /^\d{1,3}\.\d{1,3}(\.\d{1,3})?$/;
 const OS = /^(2[6-9]|[3-9]\d)(\.\d{1,2}){0,2}$/;
-const CHIP = /^(M\d{1,2}( Pro| Max| Ultra)?|Other)$/;
+const CHIP = /^(M\d{1,2}( Pro| Max| Ultra)?|[Oo][Tt][Hh][Ee][Rr])$/;
 const LOCALE = /^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|\d{3}))?$/;
 
 export class Invalid extends Error {}
@@ -84,7 +84,7 @@ export function parseReport(input: unknown): Report {
     appVersion: text(o.appVersion, APP_VERSION, 11, 'appVersion'),
     build: int(o.build, 1, 1_000_000, 'build'),
     os: text(o.os, OS, 8, 'os'),
-    chip: text(o.chip, CHIP, 8, 'chip'),
+    chip: text(o.chip, CHIP, 8, 'chip').replace(/^other$/i, 'Other'),
     locale: text(o.locale, LOCALE, 16, 'locale'),
     daysActive7: int(o.daysActive7, 0, 7, 'daysActive7'),
     meetings7: int(o.meetings7, 0, 500, 'meetings7'),

@@ -82,15 +82,52 @@ describe('verifyAccess', () => {
   });
 });
 
+describe('the key list', () => {
+  it('reads the keys again for an unknown key id, at most once a minute', async () => {
+    const before = await keyPair();
+    const beforeJwk = await crypto.subtle.exportKey('jwk', before.publicKey) as JsonWebKey;
+    const nowJwk = await crypto.subtle.exportKey('jwk', pair.publicKey) as JsonWebKey;
+    let rotated = false;
+    const calls: number[] = [];
+    const fetcher = async () => {
+      calls.push(1);
+      const keys = rotated ? [{ kid: 'k2', kty: 'RSA', n: nowJwk.n, e: nowJwk.e }] : [{ kid: 'k1', kty: 'RSA', n: beforeJwk.n, e: beforeJwk.e }];
+      return Response.json({ keys });
+    };
+    expect(await verifyAccess(await sign(before.privateKey, good(), 'k1'), config, fetcher, NOW)).not.toBeNull();
+    rotated = true;
+    const token = await sign(pair.privateKey, good(), 'k2');
+    expect(await verifyAccess(token, config, fetcher, NOW + 61_000)).not.toBeNull();
+    expect(calls).toHaveLength(2);
+    expect(await verifyAccess(await sign(pair.privateKey, good(), 'k9'), config, fetcher, NOW + 70_000)).toBeNull();
+    expect(calls).toHaveLength(2);
+  });
+
+  it('remembers a failed read for a minute', async () => {
+    let calls = 0;
+    const down = async () => { calls++; return new Response('no', { status: 500 }); };
+    const token = await sign(pair.privateKey, good());
+    await verifyAccess(token, config, down, NOW);
+    await verifyAccess(token, config, down, NOW + 30_000);
+    expect(calls).toBe(1);
+    await verifyAccess(token, config, down, NOW + 61_000);
+    expect(calls).toBe(2);
+  });
+
+  it('accepts a team domain typed with capitals', async () => {
+    expect(await verifyAccess(await sign(pair.privateKey, good()), { ...config, teamDomain: 'Team.CloudflareAccess.com' }, certsFetch, NOW)).not.toBeNull();
+  });
+});
+
 describe('GET /stats', () => {
   const get = async (env: ReturnType<typeof fakeEnv>['env'], token?: string) => {
     const headers: Record<string, string> = token ? { 'Cf-Access-Jwt-Assertion': token } : {};
-    return handle(new Request('https://getmossad.com/stats', { headers }), env, fakeContext().ctx, { now: () => new Date(NOW), ipLimiter: limiter(), fetchCerts: certsFetch });
+    return handle(new Request('https://getmossad.com/stats', { headers }), env, fakeContext().ctx, { now: () => new Date(NOW), ipLimiter: limiter(), newInstallLimiter: limiter(), fetchCerts: certsFetch });
   };
 
   it('answers 403 with no data without a valid token', async () => {
     const { env } = fakeEnv();
-    await handle(Object.assign(new Request('https://getmossad.com/api/telemetry', { method: 'POST', body: JSON.stringify(validReport()), headers: { 'Content-Type': 'application/json' } })), env, fakeContext().ctx, { now: () => new Date(NOW), ipLimiter: limiter() });
+    await handle(Object.assign(new Request('https://getmossad.com/api/telemetry', { method: 'POST', body: JSON.stringify(validReport()), headers: { 'Content-Type': 'application/json' } })), env, fakeContext().ctx, { now: () => new Date(NOW), ipLimiter: limiter(), newInstallLimiter: limiter() });
     for (const token of [undefined, 'x.y.z', await sign(pair.privateKey, { ...good(), email: 'someone@example.com' })]) {
       const response = await get(env, token);
       expect(response.status).toBe(403);
@@ -107,7 +144,7 @@ describe('GET /stats', () => {
 
   it('shows the dashboard to the owner, never cached', async () => {
     const { env } = fakeEnv();
-    await handle(new Request('https://getmossad.com/api/telemetry', { method: 'POST', body: JSON.stringify(validReport()), headers: { 'Content-Type': 'application/json' } }), env, fakeContext().ctx, { now: () => new Date(NOW), ipLimiter: limiter() });
+    await handle(new Request('https://getmossad.com/api/telemetry', { method: 'POST', body: JSON.stringify(validReport()), headers: { 'Content-Type': 'application/json' } }), env, fakeContext().ctx, { now: () => new Date(NOW), ipLimiter: limiter(), newInstallLimiter: limiter() });
     const response = await get(env, await sign(pair.privateKey, good()));
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toContain('no-store');

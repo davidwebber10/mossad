@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "about": {
-    "purpose": "The content of getmossad.com. The site renders this file; the design is separate.",
+    "purpose": "The content of getmossad.com. The privacy page, llms.txt, and llms-full.txt are built from this file. The home page's own words are in website/src/index.html; keep the two in step.",
     "comingSoon": "A feature with comingSoon true is on a branch and not yet in a release. Hide it, or show it with a 'Coming soon' mark. When it ships, set comingSoon to false and remove 'branch'.",
     "sources": "Paths are relative to the repository root. They are the code that proves each claim. A comingSoon feature names its branch; its sources are on that branch.",
     "style": "Plain, specific, no hype words, no emoji, no em dashes."
@@ -10,7 +10,7 @@
     "name": "Mossad",
     "domain": "getmossad.com",
     "title": "Mossad: meeting notes and work intelligence for your Mac",
-    "description": "Free, open source work intelligence for your Mac. Mossad turns your Zoom, Meet, and Teams calls into notes and transcripts, and keeps track of people and promises.",
+    "description": "Free, open source work intelligence for your Mac. Mossad turns Zoom, Meet, and Teams calls into notes and transcripts, and tracks people and promises.",
     "repository": "https://github.com/davidwebber10/mossad",
     "releases": "https://github.com/davidwebber10/mossad/releases",
     "license": "MIT"
@@ -883,8 +883,7 @@
         "Recordings, to Cloudflare R2, Amazon S3, or your own server, if you turn on backup.",
         "One meeting, to your own server, when you share it.",
         "Read-only requests to Google, if you connect Google.",
-        "The weekly review, to your own email address through your mail provider, if you turn it on.",
-        "A check for updates to GitHub."
+        "The weekly review, to your own email address through your mail provider, if you turn it on."
       ],
       "neverLeaves": "Voice fingerprints never leave your Mac. Shared-screen images never sync."
     }
@@ -962,8 +961,8 @@
       "answer": "No. Mossad records on your Mac from your microphone and the call app's audio. Nothing joins the call and nothing shows to the other people."
     },
     {
-      "question": "Can it run without the cloud?",
-      "answer": "Yes. Choose a transcription model that runs on your Mac (Parakeet, Whisper, Apple Speech, or Qwen3-ASR) and a local server such as Ollama or LM Studio, or Apple's on-device model, for the notes. Then audio and text stay on your Mac. Local models are free; quality and speed depend on the model and your Mac."
+      "question": "Can my meetings stay on my Mac?",
+      "answer": "Yes. Choose a transcription model that runs on your Mac (Parakeet, Whisper, Apple Speech, or Qwen3-ASR) and a local server such as Ollama or LM Studio, or Apple's on-device model, for the notes. Then nothing about your meetings has to leave your Mac. Local models are free; quality and speed depend on the model and your Mac."
     },
     {
       "question": "Is there an iPhone app?",

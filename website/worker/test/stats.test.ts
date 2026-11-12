@@ -4,7 +4,7 @@ import { barList, dayChart, loadStats } from '../src/stats';
 import { fakeContext, fakeEnv, limiter, post, validReport } from './fakes';
 
 async function report(env: ReturnType<typeof fakeEnv>['env'], at: string, change: Record<string, unknown> = {}) {
-  const r = await handle(post('/api/telemetry', JSON.stringify({ ...validReport(), ...change })), env, fakeContext().ctx, { now: () => new Date(at), ipLimiter: limiter() });
+  const r = await handle(post('/api/telemetry', JSON.stringify({ ...validReport(), ...change })), env, fakeContext().ctx, { now: () => new Date(at), ipLimiter: limiter(), newInstallLimiter: limiter() });
   expect(r.status).toBe(204);
 }
 

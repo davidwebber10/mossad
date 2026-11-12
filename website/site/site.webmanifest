@@ -1,7 +1,7 @@
 {
   "name": "Mossad",
   "short_name": "Mossad",
-  "description": "Free, open source work intelligence for your Mac. Mossad turns your Zoom, Meet, and Teams calls into notes and transcripts, and keeps track of people and promises.",
+  "description": "Free, open source work intelligence for your Mac. Mossad turns Zoom, Meet, and Teams calls into notes and transcripts, and tracks people and promises.",
   "start_url": "/",
   "display": "browser",
   "background_color": "#141210",

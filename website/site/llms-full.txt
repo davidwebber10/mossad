@@ -1,6 +1,6 @@
 # Mossad
 
-> Free, open source work intelligence for your Mac. Mossad turns your Zoom, Meet, and Teams calls into notes and transcripts, and keeps track of people and promises.
+> Free, open source work intelligence for your Mac. Mossad turns Zoom, Meet, and Teams calls into notes and transcripts, and tracks people and promises.
 
 Mossad is work intelligence for your Mac. It records your calls without a bot, then keeps meeting notes, transcripts that know who spoke, decisions, action items, the promises you made, and a page for each person you meet. Before a meeting, it shows who is coming, what happened last time, and what you still owe. It is free and open source under the MIT License.
 
@@ -257,7 +257,13 @@ Choose who transcribes and who writes the notes. Or keep it all on your Mac.
 
 ## Install
 
-Download the latest release from https://github.com/davidwebber10/mossad/releases/latest, or build it from the source. The README's steps to build it:
+### Download
+
+1. Download the latest release from https://github.com/davidwebber10/mossad/releases/latest, unzip it, and move Mossad to Applications.
+2. Open it, and follow setup: pick a transcription provider and a notes model, or models that run on your Mac, and grant the permissions it asks for.
+3. Take your calls as usual. Notes appear in ~/Mossad/Meetings.
+
+### Build from the source
 
 1. **Clone and set your signing team.** In `project.yml`, change `DEVELOPMENT_TEAM` to your own Apple team ID.
 
@@ -304,7 +310,6 @@ Mossad is local first. Your meetings stay in a folder on your Mac, and you decid
 - One meeting, to your own server, when you share it.
 - Read-only requests to Google, if you connect Google.
 - The weekly review, to your own email address through your mail provider, if you turn it on.
-- A check for updates to GitHub.
 
 Voice fingerprints never leave your Mac. Shared-screen images never sync.
 
@@ -367,9 +372,9 @@ Zoom, Microsoft Teams, and Google Meet. It reads meeting tabs in Chrome, Arc, Sa
 
 No. Mossad records on your Mac from your microphone and the call app's audio. Nothing joins the call and nothing shows to the other people.
 
-### Can it run without the cloud?
+### Can my meetings stay on my Mac?
 
-Yes. Choose a transcription model that runs on your Mac (Parakeet, Whisper, Apple Speech, or Qwen3-ASR) and a local server such as Ollama or LM Studio, or Apple's on-device model, for the notes. Then audio and text stay on your Mac. Local models are free; quality and speed depend on the model and your Mac.
+Yes. Choose a transcription model that runs on your Mac (Parakeet, Whisper, Apple Speech, or Qwen3-ASR) and a local server such as Ollama or LM Studio, or Apple's on-device model, for the notes. Then nothing about your meetings has to leave your Mac. Local models are free; quality and speed depend on the model and your Mac.
 
 ### Is there an iPhone app?
 
@@ -394,22 +399,6 @@ Rename a voice and every note updates. Edit a title, regenerate a summary, or tr
 ### Can I change how it works?
 
 Yes. Mossad is open source under the MIT License. Fork it, change the note, the prompts, the steps, the look, or the providers, and build your own copy with Xcode. The repository has an AGENTS.md, so your AI coding tool knows where everything is.
-
-### What does it cost?
-
-Mossad is free. If you use cloud AI providers, they bill you directly: cloud transcription is about $0.22 to $0.36 an hour of audio, and the notes model adds its own cost. Setup shows the cost per hour of your choices. With models on your Mac, it costs nothing to run.
-
-### Does a bot join my meetings?
-
-No. Nothing joins the call and nothing shows to the other people. That is also why telling them is your job.
-
-### Can it run with no cloud at all?
-
-Yes. Choose transcription and a notes model that run on your Mac, and your audio and text stay on it. Quality and speed then depend on the model and your Mac.
-
-### What if it gets something wrong?
-
-Rename a voice and every note updates. Edit a title, regenerate a summary, or transcribe a meeting again. Summaries, coaching, and person notes come from software and can be wrong, so check them before you act on them.
 
 ## Recording consent
 

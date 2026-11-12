@@ -1,6 +1,6 @@
 import { verifyAccess } from './access';
 import { CLICK_TARGETS, countClick, countView, viewOf } from './pageviews';
-import { allowInstall, CacheIpLimiter, type IpLimiter } from './ratelimit';
+import { allowInstall, CacheIpLimiter, DAY, knownInstall, MemoryIpLimiter, networkOf, NEW_INSTALLS_PER_DAY, VIEWS_PER_HOUR, type IpLimiter } from './ratelimit';
 import { loadStats, renderStats } from './stats';
 import { countryOf, dayOf, Invalid, parseReport, readLimited, reportRow } from './telemetry';
 import type { Env } from './types';
@@ -8,6 +8,8 @@ import type { Env } from './types';
 export interface Deps {
   now?: () => Date;
   ipLimiter?: IpLimiter;
+  newInstallLimiter?: IpLimiter;
+  viewLimiter?: IpLimiter;
   fetchCerts?: (url: string) => Promise<Response>;
 }
 
@@ -17,11 +19,27 @@ function ownHosts(env: Env): string[] {
   return [env.CANONICAL_HOST, ...(env.REDIRECT_HOSTS ?? '').split(',')].map((h) => h.trim().toLowerCase()).filter(Boolean);
 }
 
-async function telemetry(request: Request, env: Env, limiter: IpLimiter, now: Date): Promise<Response> {
+const SECURITY_HEADERS: Record<string, string> = {
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'X-Content-Type-Options': 'nosniff',
+};
+
+function secured(response: Response): Response {
+  const out = new Response(response.body, response);
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!out.headers.has(k)) out.headers.set(k, v);
+  return out;
+}
+
+const networkOfRequest = (request: Request) => networkOf(request.headers.get('cf-connecting-ip') ?? 'unknown');
+
+interface Limits { ip: IpLimiter; newInstall: IpLimiter; view: IpLimiter }
+
+async function telemetry(request: Request, env: Env, limits: Limits, now: Date): Promise<Response> {
   if (request.method !== 'POST') return empty(405, { Allow: 'POST' });
   const type = (request.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
   if (type !== 'application/json') return empty(415);
-  if (!(await limiter.hit(request.headers.get('cf-connecting-ip') ?? 'unknown', now))) return empty(429);
+  const network = networkOfRequest(request);
+  if (!(await limits.ip.hit(network, now))) return empty(429);
   let body: string | null;
   try { body = await readLimited(request); } catch { return empty(400); }
   if (body === null) return empty(413);
@@ -32,6 +50,7 @@ async function telemetry(request: Request, env: Env, limiter: IpLimiter, now: Da
     if (error instanceof Invalid || error instanceof SyntaxError) return empty(400);
     throw error;
   }
+  if (!(await knownInstall(env.DB, report.installID)) && !(await limits.newInstall.hit(network, now))) return empty(429);
   if (!(await allowInstall(env.DB, report.installID, now))) return empty(429);
   const row = reportRow(report, dayOf(now), countryOf(request));
   const columns = Object.keys(row);
@@ -41,7 +60,8 @@ async function telemetry(request: Request, env: Env, limiter: IpLimiter, now: Da
 
 async function click(request: Request, env: Env, limiter: IpLimiter, now: Date): Promise<Response> {
   if (request.method !== 'POST') return empty(405, { Allow: 'POST' });
-  if (!(await limiter.hit(request.headers.get('cf-connecting-ip') ?? 'unknown', now))) return empty(429);
+  if (request.headers.get('sec-fetch-site') !== 'same-origin') return empty(403);
+  if (!(await limiter.hit(networkOfRequest(request), now))) return empty(429);
   const body = await readLimited(request, 32).catch(() => null);
   const target = (body ?? '').trim();
   if (!(CLICK_TARGETS as readonly string[]).includes(target)) return empty(400);
@@ -66,29 +86,47 @@ async function stats(request: Request, env: Env, deps: Deps, now: Date): Promise
   });
 }
 
-let sharedLimiter: IpLimiter | undefined;
+const shared: Partial<Limits> = {};
 
-export async function handle(request: Request, env: Env, ctx: ExecutionContext, deps: Deps = {}): Promise<Response> {
+function limitsFor(deps: Deps): Limits {
+  return {
+    ip: deps.ipLimiter ?? (shared.ip ??= new CacheIpLimiter(caches.default)),
+    newInstall: deps.newInstallLimiter ?? (shared.newInstall ??= new CacheIpLimiter(caches.default, NEW_INSTALLS_PER_DAY, DAY, 'new-install')),
+    view: deps.viewLimiter ?? (shared.view ??= new MemoryIpLimiter(VIEWS_PER_HOUR, 3_600_000, 'view')),
+  };
+}
+
+async function route(request: Request, env: Env, ctx: ExecutionContext, deps: Deps): Promise<Response> {
   const url = new URL(request.url);
   const host = url.hostname.toLowerCase();
+  const local = host === 'localhost' || host === '127.0.0.1';
   const redirects = (env.REDIRECT_HOSTS ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
-  if (redirects.includes(host)) {
-    return new Response(null, { status: 301, headers: { Location: `https://${env.CANONICAL_HOST}${url.pathname}${url.search}` } });
+  if (redirects.includes(host) || (url.protocol === 'http:' && !local)) {
+    const target = redirects.includes(host) ? env.CANONICAL_HOST : host;
+    return new Response(null, { status: 301, headers: { Location: `https://${target}${url.pathname}${url.search}` } });
   }
   const now = deps.now?.() ?? new Date();
-  const limiter = deps.ipLimiter ?? (sharedLimiter ??= new CacheIpLimiter(caches.default));
+  const limits = limitsFor(deps);
   const path = url.pathname;
-  if (path === '/api/telemetry') return telemetry(request, env, limiter, now);
-  if (path === '/api/click') return click(request, env, limiter, now);
+  if (path === '/api/telemetry') return telemetry(request, env, limits, now);
+  if (path === '/api/click') return click(request, env, limits.ip, now);
   if (path.startsWith('/api/')) return empty(404);
   if (path === '/stats' || path.startsWith('/stats/')) return stats(request, env, deps, now);
 
   const response = await env.ASSETS.fetch(request);
   if (response.status === 200) {
     const view = viewOf(request, dayOf(now), countryOf(request), ownHosts(env));
-    if (view) ctx.waitUntil(countView(env.DB, view).catch(() => undefined));
+    if (view) {
+      ctx.waitUntil((async () => {
+        if (await limits.view.hit(networkOfRequest(request), now)) await countView(env.DB, view);
+      })().catch(() => undefined));
+    }
   }
   return response;
+}
+
+export async function handle(request: Request, env: Env, ctx: ExecutionContext, deps: Deps = {}): Promise<Response> {
+  return secured(await route(request, env, ctx, deps));
 }
 
 export default {

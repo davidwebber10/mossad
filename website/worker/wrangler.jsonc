@@ -25,15 +25,13 @@
   ],
   "vars": {
     "CANONICAL_HOST": "getmossad.com",
-    "REDIRECT_HOSTS": "www.getmossad.com,getmossad.app,www.getmossad.app",
-    // Cloudflare Access for /stats. Fill these after the Access application exists (website/README.md).
+    "REDIRECT_HOSTS": "www.getmossad.com,getmossad.app,www.getmossad.app"
+    // Cloudflare Access for /stats: ACCESS_TEAM_DOMAIN, ACCESS_AUD, and OWNER_EMAIL are secrets, set with
+    // `npx wrangler secret put <name>` (website/README.md), so the owner's email is never in this public file.
     // Until all three are set, /stats answers 403.
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": "",
-    "OWNER_EMAIL": ""
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "mossad-telemetry", "database_id": "<from wrangler d1 create mossad-telemetry>", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "mossad-telemetry", "database_id": "<from wrangler d1 create mossad-telemetry; not a secret>", "migrations_dir": "migrations" }
   ],
   "observability": { "enabled": false }
 }

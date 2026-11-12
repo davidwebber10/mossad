@@ -14,7 +14,7 @@ function checkHTML(file) {
   if (!html.startsWith('<!doctype html>')) fail(file, 'no doctype');
   if (!/<html lang="en">/.test(html)) fail(file, 'no lang');
   if (!/<meta name="viewport"/.test(html)) fail(file, 'no viewport');
-  if (!/<meta name="description" content="[^"]{50,170}">/.test(html)) fail(file, 'description missing or not 50 to 170 characters');
+  if (!/<meta name="description" content="[^"]{50,155}">/.test(html)) fail(file, 'description missing or not 50 to 155 characters');
   const title = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? '';
   if (title.length < 10 || title.length > 65) fail(file, `title length ${title.length}`);
   if (/[\u2013\u2014]/.test(html)) fail(file, 'an en or em dash');
@@ -127,8 +127,11 @@ for (const f of ['llms.txt', 'llms-full.txt']) {
 JSON.parse(readFileSync(join(site, 'site.webmanifest'), 'utf8'));
 
 // Claims that anonymous usage statistics would make false.
-const claims = /nothing (else )?leaves|no tracking|no telemetry|no analytics|sends no (analytics|usage|data)|never contacts|the one thing mossad does|nothing else leaves/i;
+const claims = /nothing (else )?leaves|no tracking|no telemetry|no analytics|sends no (analytics|usage|data)|never contacts|the one thing mossad does|nothing else leaves|no cloud|without the cloud/i;
 for (const f of [...pages, 'llms.txt', 'llms-full.txt']) if (claims.test(readFileSync(join(site, f), 'utf8'))) fail(f, `a claim the usage statistics would make false: ${readFileSync(join(site, f), 'utf8').match(claims)[0]}`);
+
+const content = readFileSync(join(site, '..', 'content', 'site.json'), 'utf8');
+if (claims.test(content)) fail('site.json', `a claim the usage statistics would make false: ${content.match(claims)[0]}`);
 
 if (errors.length) {
   console.error(errors.join('\n'));
