@@ -158,6 +158,9 @@ final class AppController: ObservableObject {
     /// When the open streaming sessions started, to log the time AssemblyAI bills.
     private var liveOpened: Date?
     private var liveNaming: Task<Void, Never>?
+    /// The calendar around the call that records, read once when it started: the live namer matches the invite
+    /// in it again with the call's times so far, as the pipeline will.
+    private var liveCalendar: (callID: String, platform: Platform, meetingID: String?, start: Date, events: [CalendarEventInfo])?
     /// One voice model for the pipeline and the live names, loaded once.
     private let embeddings = FluidEmbeddingProvider()
     /// 0 means on. Otherwise Mossad is off until this time (seconds since 1970; `.infinity` for "until I turn it on").
@@ -1265,7 +1268,7 @@ final class AppController: ObservableObject {
         liveOpened = Date()
         // A pause cancels the timer, so a resumed call starts it again; the recorder keeps only the first title.
         startLiveTitling(callID: CallRecorder.callID(for: since))
-        if voiceFingerprints { startLiveNaming(themURL: themURL, room: room) }
+        if voiceFingerprints { startLiveNaming(callID: CallRecorder.callID(for: since), themURL: themURL, room: room) }
     }
 
     /// Once per call, after about 5 minutes of live transcript, asks a small model for a provisional title so the
@@ -1305,7 +1308,8 @@ final class AppController: ObservableObject {
     }
 
     /// Every 20 s, names the call's voices that the voice library knows, for the live transcript and current_call.
-    private func startLiveNaming(themURL: URL, room: Bool) {
+    /// A name can change or go as a voice says more; the earlier lines of that voice follow it.
+    private func startLiveNaming(callID: String, themURL: URL, room: Bool) {
         let namer = LiveSpeakerNamer(library: library, provider: embeddings, room: room)
         liveNaming = Task { [weak self] in
             while !Task.isCancelled {
@@ -1314,8 +1318,12 @@ final class AppController: ObservableObject {
                 // A hot Mac needs its processor for the call; the names can wait.
                 let thermal = ProcessInfo.processInfo.thermalState
                 if thermal == .serious || thermal == .critical { continue }
-                let names = await Task.detached(priority: .utility) { await namer.names(for: snapshot, themURL: themURL) }.value
-                guard !Task.isCancelled, names.count > snapshot.names.count else { continue }
+                let calendar = self?.liveCalendar.flatMap { $0.callID == callID ? $0 : nil }
+                let names = await Task.detached(priority: .utility) {
+                    let invite = calendar.flatMap { CallInvite.live(platform: $0.platform, meetingID: $0.meetingID, start: $0.start, now: Date(), events: $0.events) }
+                    return await namer.names(for: snapshot, themURL: themURL, invite: invite)
+                }.value
+                guard !Task.isCancelled, names != snapshot.names else { continue }
                 Log.info("Live transcript: \(names.count) voices named")
                 self?.live.setNames(names)
             }
@@ -1789,6 +1797,7 @@ final class AppController: ObservableObject {
     /// The live call's invite, so it shows its real title while it runs instead of "Google Meet call".
     private func findInvite(callID: String, platform: Platform, meetingID: String?, start: Date, recorder: CallRecorder) async {
         let events = await calendar.events(from: start.addingTimeInterval(-900), to: start.addingTimeInterval(5400))
+        liveCalendar = (callID, platform, meetingID, start, events)
         guard let event = CalendarMatcher.bestEvent(for: platform, meetingID: meetingID, start: start,
                                                     end: start.addingTimeInterval(1800), in: events) else { return }
         CaptureQueue.queue.async {

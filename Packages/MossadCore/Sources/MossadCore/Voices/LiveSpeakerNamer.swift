@@ -22,21 +22,30 @@ public struct LiveNamingTries: Sendable, Equatable {
 }
 
 /// Puts names on the live transcript's call-audio speakers while the call records, from the voice library.
-/// It only reads the library: the full identification after the call is what teaches it.
+/// It only reads the library: the full identification after the call is what teaches it. Each voice is
+/// fingerprinted again as its speech grows (`LiveNamingTries`), and `LiveVoiceRules` decides all the names again
+/// each time, so a name can change or go, and the earlier lines of that voice follow it.
 public struct LiveSpeakerNamer: Sendable {
-    /// Clear speech a voice needs before a match is tried.
-    static let minimumSpeech: TimeInterval = 4
-
     private let library: VoiceLibrary
     private let identifier: SpeakerIdentifier
     /// In a room, one stream hears everyone, the owner too.
     private let room: Bool
-    /// One namer lives for one call and remembers what it tried.
-    private let tries = Tries()
+    /// One namer lives for one call and remembers what it tried and what it heard.
+    private let memory = Memory()
 
-    private final class Tries: Sendable {
-        private let state = Mutex(LiveNamingTries())
-        func withLock<T>(_ body: (inout LiveNamingTries) -> T) -> T { state.withLock { body(&$0) } }
+    struct Heard: Sendable {
+        var vector: [Float]
+        var seconds: TimeInterval
+        var mixed: Bool
+    }
+
+    private final class Memory: Sendable {
+        struct State {
+            var tries = LiveNamingTries()
+            var heard: [String: Heard] = [:]
+        }
+        private let state = Mutex(State())
+        func withLock<T>(_ body: (inout State) -> T) -> T { state.withLock { body(&$0) } }
     }
 
     public init(library: VoiceLibrary, provider: EmbeddingProvider, room: Bool = false) {
@@ -45,22 +54,30 @@ public struct LiveSpeakerNamer: Sendable {
         identifier = SpeakerIdentifier(library: library, provider: provider)
     }
 
-    /// Names for the speakers not named yet. A name already in use, and the owner's, are never given again.
-    public func names(for transcript: LiveTranscript, themURL: URL) async -> [String: String] {
-        var names = transcript.names
+    /// The names of the call-audio speakers, all of them: a name can be new, changed, or gone. `invite` is the
+    /// call's invite as `CallInvite.live` matches it, nil when it has none.
+    public func names(for transcript: LiveTranscript, themURL: URL, invite: CallInvite? = nil) async -> [String: String] {
         var lines: [String: [Utterance]] = [:]
         for line in transcript.lines where line.source == .them && line.isFinal {
-            guard let key = line.speakerKey, names[key] == nil, let start = line.audioStart, let end = line.audioEnd, end > start else { continue }
+            guard let key = line.speakerKey, let start = line.audioStart, let end = line.audioEnd, end > start else { continue }
             lines[key, default: []].append(Utterance(track: .them, speakerLabel: key, start: start, end: end, text: line.text))
         }
         for (key, utterances) in lines.sorted(by: { $0.key < $1.key }) {
             let speech = utterances.reduce(0) { $0 + $1.end - $1.start }
-            guard speech >= Self.minimumSpeech, tries.withLock({ $0.isDue(key, speech: speech) }) else { continue }
-            tries.withLock { $0.tried(key, speech: speech) }
-            guard let e = try? await identifier.embedding(for: utterances, in: themURL), let match = library.bestMatch(e),
-                  room || match.name != library.owner?.name, !names.values.contains(match.name) else { continue }
-            names[key] = match.name
+            guard speech >= LiveVoiceRules.minimumSpeech, memory.withLock({ $0.tries.isDue(key, speech: speech) }) else { continue }
+            memory.withLock { $0.tries.tried(key, speech: speech) }
+            guard let pieces = try? await identifier.pieceVectors(for: utterances, in: themURL),
+                  let f = SpeakerIdentifier.fingerprint(of: pieces) else { continue }
+            // Two voices under one key stay two voices for the rest of the call: no later try makes it one.
+            memory.withLock { m in
+                let mixed = m.heard[key]?.mixed == true || LiveVoiceRules.mixed(pieces) == true
+                m.heard[key] = Heard(vector: f.vector, seconds: f.seconds, mixed: mixed)
+            }
         }
-        return names
+        let heard = memory.withLock { $0.heard }
+        let voices = heard.map { LiveVoiceRules.Voice(key: $0.key, scores: library.ranked($0.value.vector), seconds: $0.value.seconds, mixed: $0.value.mixed) }
+        let roster = invite.map { InviteRoster(invite: $0, profiles: library.profiles, people: library.identity?.people.people ?? []) }
+        return LiveVoiceRules.names(voices, current: transcript.names, roster: roster, owner: library.owner?.name,
+                                    provisional: library.provisional, room: room, matchThreshold: library.matchThreshold)
     }
 }

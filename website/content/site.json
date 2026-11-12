@@ -202,7 +202,7 @@
           ],
           "icon": "captions.bubble",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Transcription/LiveTranscriber.swift", "Packages/MossadCore/Sources/MossadCore/Voices/LiveSpeakerNamer.swift", "App/LiveViews.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Transcription/LiveTranscriber.swift", "Packages/MossadCore/Sources/MossadCore/Voices/LiveSpeakerNamer.swift", "Packages/MossadCore/Sources/MossadCore/Voices/LiveVoiceRules.swift", "App/LiveViews.swift"]
         },
         {
           "id": "lanes-player",

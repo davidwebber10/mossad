@@ -39,23 +39,24 @@ final class LiveSpeakerNamerTests: XCTestCase {
 
     func testKnownVoicesGetNamesAndShortOrUnknownOnesWait() async throws {
         let them = dir.appendingPathComponent("them.caf")
-        try writeSegments(them, total: 30, [(0, 8, 400), (10, 18, 600), (20, 21, 400), (22, 29, 800)])
+        try writeSegments(them, total: 60, [(0, 12, 400), (14, 26, 600), (28, 37, 400), (40, 52, 800)])
         let library = VoiceLibrary(directory: dir)
         try library.add([1, 0, 0, 0], to: "Dana", isOwner: true)
         try library.add([0, 1, 0, 0], to: "Sam Lee")
         try library.add([0, 0, 1, 0], to: "Jo Park")
         var live = LiveTranscript()
-        live.apply(turn(0, "A", from: 0, to: 8), source: .them, at: 8)
-        live.apply(turn(1, "B", from: 10, to: 18), source: .them, at: 18)
-        live.apply(turn(2, "C", from: 20, to: 21), source: .them, at: 21)
-        live.apply(turn(3, "D", from: 22, to: 29), source: .them, at: 29)
+        live.apply(turn(0, "A", from: 0, to: 12), source: .them, at: 12)
+        live.apply(turn(1, "B", from: 14, to: 26), source: .them, at: 26)
+        live.apply(turn(2, "C", from: 28, to: 37), source: .them, at: 37)
+        live.apply(turn(3, "D", from: 40, to: 52), source: .them, at: 52)
         let provider = ToneEmbeddingProvider()
         let namer = LiveSpeakerNamer(library: library, provider: provider)
         let names = await namer.names(for: live, themURL: them)
-        XCTAssertEqual(names, ["0A": "Sam Lee", "0B": "Jo Park"])
+        XCTAssertEqual(names, ["0A": "Sam Lee", "0B": "Jo Park"], "9 s of speech is not enough, and an unknown voice has no name")
         live.names = names
         let calls = provider.calls
-        _ = await namer.names(for: live, themURL: them)
+        let again = await namer.names(for: live, themURL: them)
+        XCTAssertEqual(again, names)
         XCTAssertEqual(provider.calls - calls, 0, "a voice with no more speech than at the last try is not tried again")
     }
 
@@ -68,16 +69,54 @@ final class LiveSpeakerNamerTests: XCTestCase {
         let provider = ToneEmbeddingProvider()
         let namer = LiveSpeakerNamer(library: library, provider: provider)
         var live = LiveTranscript()
-        live.apply(turn(0, "A", from: 0, to: 8), source: .them, at: 8)
+        live.apply(turn(0, "A", from: 0, to: 10), source: .them, at: 10)
         _ = await namer.names(for: live, themURL: them)
         let first = provider.calls
         XCTAssertGreaterThan(first, 0)
-        live.apply(turn(1, "A", from: 9, to: 11), source: .them, at: 11)
+        live.apply(turn(1, "A", from: 11, to: 15), source: .them, at: 15)
         _ = await namer.names(for: live, themURL: them)
-        XCTAssertEqual(provider.calls, first, "10 s after 8 s is not half as much again")
-        live.apply(turn(2, "A", from: 12, to: 16), source: .them, at: 16)
+        XCTAssertEqual(provider.calls, first, "14 s after 10 s is not half as much again")
+        live.apply(turn(2, "A", from: 16, to: 18), source: .them, at: 18)
         _ = await namer.names(for: live, themURL: them)
-        XCTAssertGreaterThan(provider.calls, first, "14 s after 8 s is")
+        XCTAssertGreaterThan(provider.calls, first, "16 s after 10 s is")
+    }
+
+    /// The service gave one label to two people: the name it had goes, and its earlier lines show the letter again.
+    func testAKeyThatTurnsOutToHoldTwoVoicesLosesItsName() async throws {
+        let them = dir.appendingPathComponent("them.caf")
+        try writeSegments(them, total: 40, [(0, 12, 400), (14, 26, 800)])
+        let library = VoiceLibrary(directory: dir)
+        try library.add([0, 1, 0, 0], to: "Sam Lee")
+        try library.add([0, 0, 1, 0], to: "Jo Park")
+        let namer = LiveSpeakerNamer(library: library, provider: ToneEmbeddingProvider())
+        var live = LiveTranscript()
+        live.apply(turn(0, "A", from: 0, to: 12), source: .them, at: 12)
+        live.names = await namer.names(for: live, themURL: them)
+        XCTAssertEqual(live.names, ["0A": "Sam Lee"])
+        live.apply(turn(1, "A", from: 14, to: 26), source: .them, at: 26)
+        live.names = await namer.names(for: live, themURL: them)
+        XCTAssertEqual(live.names, [:])
+        XCTAssertEqual(live.text(owner: "Dana", since: nil).components(separatedBy: "\n").first, "[00:12] Speaker A: words")
+    }
+
+    /// A voice the library knows but the call did not invite needs a strong match; one that is only provisional
+    /// is named only on a call that invites them.
+    func testTheCallsInviteDecidesAsInThePipeline() async throws {
+        let them = dir.appendingPathComponent("them.caf")
+        try writeSegments(them, total: 30, [(0, 12, 400)])
+        let library = VoiceLibrary(directory: dir)
+        try library.add([0, 1, 0, 0], to: "Sam Lee", source: VoiceSampleSource(callID: "call-1", speakerKey: "them:A", recorded: Date(),
+                                                                              seconds: 30, quality: 0.8, origin: .inviteInference))
+        XCTAssertEqual(library.provisional["Sam Lee"], "call-1")
+        _ = try library.setEmail("sam@example.com", for: "Sam Lee", actor: "test")
+        var live = LiveTranscript()
+        live.apply(turn(0, "A", from: 0, to: 12), source: .them, at: 12)
+        let other = CallInvite(guests: [CallInvite.Guest(email: "jo@example.com")])
+        let withSam = CallInvite(guests: [CallInvite.Guest(email: "sam@example.com")])
+        let no = await LiveSpeakerNamer(library: library, provider: ToneEmbeddingProvider()).names(for: live, themURL: them, invite: other)
+        XCTAssertEqual(no, [:])
+        let yes = await LiveSpeakerNamer(library: library, provider: ToneEmbeddingProvider()).names(for: live, themURL: them, invite: withSam)
+        XCTAssertEqual(yes, ["0A": "Sam Lee"])
     }
 
     func testAVoiceWithAFullMinuteOfSpeechIsNotTriedAgain() {
@@ -109,13 +148,13 @@ final class LiveSpeakerNamerTests: XCTestCase {
     /// In a room the owner is one of the voices on the one stream, so the owner's name is allowed.
     func testInARoomTheOwnerGetsTheirName() async throws {
         let room = dir.appendingPathComponent("me.caf")
-        try writeSegments(room, total: 20, [(0, 8, 200), (10, 18, 400)])
+        try writeSegments(room, total: 30, [(0, 12, 200), (14, 26, 400)])
         let library = VoiceLibrary(directory: dir)
         try library.add([1, 0, 0, 0], to: "Dana", isOwner: true)
         try library.add([0, 1, 0, 0], to: "Sam Lee")
         var live = LiveTranscript()
-        live.apply(turn(0, "A", from: 0, to: 8), source: .them, at: 8)
-        live.apply(turn(1, "B", from: 10, to: 18), source: .them, at: 18)
+        live.apply(turn(0, "A", from: 0, to: 12), source: .them, at: 12)
+        live.apply(turn(1, "B", from: 14, to: 26), source: .them, at: 26)
         let call = await LiveSpeakerNamer(library: library, provider: ToneEmbeddingProvider()).names(for: live, themURL: room)
         XCTAssertEqual(call, ["0B": "Sam Lee"])
         let inRoom = await LiveSpeakerNamer(library: library, provider: ToneEmbeddingProvider(), room: true).names(for: live, themURL: room)
