@@ -40,6 +40,11 @@ enum DevHooks {
                 DispatchQueue.main.async { c.openPanelPreview() }
                 return
             }
+            // `AskPanel` in a preview: the quick panel in a window of its own (see `openAskPanelPreview`).
+            if preview, name == "AskPanel" {
+                DispatchQueue.main.async { c.openAskPanelPreview() }
+                return
+            }
             // `--open-window Onboarding` opens setup alone; MOSSAD_ONBOARDING_STEP picks the step in a preview.
             if name == "Onboarding" {
                 DispatchQueue.main.async { c.openOnboarding() }

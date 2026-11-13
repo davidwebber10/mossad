@@ -606,6 +606,20 @@
           "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/LiveChat.swift", "Packages/MossadCore/Sources/MossadCore/Chat/LiveSummary.swift", "App/LiveChatView.swift", "App/AppController+LiveChat.swift"]
         },
         {
+          "id": "ask-panel",
+          "title": "Ask without leaving the call",
+          "body": "Press Option-Command-M in any app, even with the call in full screen, ask your question, and keep your eyes on the call.",
+          "details": [
+            "The same conversation as the meeting's Chat tab, ready where you left it",
+            "Click a time in an answer to read those lines of the call right there",
+            "Between calls, the same shortcut asks about all your meetings",
+            "Choose your own shortcut in Settings"
+          ],
+          "icon": "sparkle.magnifyingglass",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/AskPanel.swift", "Packages/MossadCore/Sources/MossadCore/Support/HotKeyShortcut.swift", "App/AskPanelView.swift", "App/AskPanelController.swift", "App/ShortcutRecorder.swift"]
+        },
+        {
           "id": "mcp-local",
           "title": "MCP on your Mac",
           "body": "Run Mossad --mcp and Claude Desktop, Claude Code, or any MCP client can search and read your meetings.",

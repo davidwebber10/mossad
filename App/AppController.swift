@@ -159,10 +159,18 @@ final class AppController: ObservableObject {
     private var liveFileOffset: TimeInterval = 0
     /// Where the live transcript did not listen in this call, for the live chat.
     var liveCoverage = LiveCoverage()
-    /// Why this call has no live transcript, in words; nil when it runs. The live chat says it.
-    @Published var liveOffReason: String?
-    /// The live chat of each call, so an answer that runs survives a change of tab.
-    var liveChatSessions: [String: LiveChatSession] = [:]
+    /// Why this call has no live transcript; nil when it runs. The live chat and the quick panel say it.
+    @Published var liveOff: LiveOffReason?
+    var liveOffReason: String? { liveOff?.text }
+    /// The live chat of each call, so an answer that runs survives a change of tab or of view (the Chat tab and
+    /// the quick panel show the same one).
+    var liveChatSessions: [String: ChatSession] = [:]
+    /// The quick panel's chat when no call records, kept while the app runs.
+    var quickChat: ChatSession?
+    /// The quick panel: a small window over any app, the global shortcut's and the menu's "Ask about this call…".
+    var askPanel: AskPanelController?
+    /// A moment of the live call to show in its live transcript; the live page takes it.
+    @Published var liveJumpRequest: LiveJumpRequest?
     /// When the open streaming sessions started, to log the time AssemblyAI bills.
     private var liveOpened: Date?
     private var liveNaming: Task<Void, Never>?
@@ -342,7 +350,8 @@ final class AppController: ObservableObject {
     }
     /// When the last bookmark was made, so the controls can confirm it.
     @Published private(set) var lastBookmark: Date?
-    private var bookmarkKey: GlobalHotKey?
+    /// The system-wide shortcuts: the bookmark's and the quick panel's.
+    let hotKeys = GlobalHotKeys()
 
     let paths = Paths.live
     /// Held for the life of the app: only the copy that has it records, recovers, and processes in this folder.
@@ -702,7 +711,8 @@ final class AppController: ObservableObject {
             }
             requestPermissions()
             _ = updater
-            bookmarkKey = GlobalHotKey { [weak self] in self?.bookmarkCurrentCall() }
+            hotKeys.register(.bookmark, HotKeyShortcut.bookmark) { [weak self] in self?.bookmarkCurrentCall() }
+            registerAskShortcut()
 
             refreshUpcoming()
             // Chats and notes from the phone arrive within five minutes.
@@ -1254,15 +1264,15 @@ final class AppController: ObservableObject {
             liveCoverage = LiveCoverage()
         }
         guard case .recording(_, let since) = status else { return }
-        guard liveTranscriptEnabled else { liveOffReason = "Live transcript is off in Settings."; return }
-        guard let key = keychain.get(.assemblyai) else { liveOffReason = "Live transcript needs an AssemblyAI key."; return }
+        guard liveTranscriptEnabled else { liveOff = .setting; return }
+        guard let key = keychain.get(.assemblyai) else { liveOff = .noKey; return }
         // The two audio streams take about half a megabit of upload. On a network the owner marked to save data
         // (Low Data Mode), the call's own video and sound get all of it.
         guard !NetworkPath.shared.isConstrained else {
-            liveOffReason = "Live transcript is off on a network in Low Data Mode."
+            liveOff = .lowData
             return Log.info("Live transcript is off: the network is in Low Data Mode")
         }
-        liveOffReason = nil
+        liveOff = nil
         // In a room the mic hears everyone and there is no call audio: one stream, with speaker labels, shown
         // like call audio so each voice gets its own name.
         let room: Bool = if case .recording(.inPerson, _) = status { true } else { false }

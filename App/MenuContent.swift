@@ -295,11 +295,17 @@ private struct RecordingStatus: View {
             }
             CallControls(compact: true, showsStop: false)
                 .padding(.horizontal, 12).padding(.bottom, 8)
-            PanelRow(action: { controller.askAboutCall(); dismiss() }) {
+            PanelRow(action: {
+                dismiss()
+                // After the menu's own panel closes, so it does not take the keyboard back from the quick panel.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { controller.showAskPanel() }
+            }) {
                 Image(systemName: "bubble.left").font(.system(size: 13)).foregroundStyle(Palette.accent).frame(width: 16)
                 Text("Ask about this call…")
                 Spacer()
-                Text("⌥⌘K").font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                if let shortcut = controller.askShortcut {
+                    Text(shortcut.symbols).font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                }
             }
             .help("Ask what was said so far, what you missed, or what someone just asked you")
         }

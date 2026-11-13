@@ -7,7 +7,7 @@ import SwiftUI
 struct LiveChatView: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
-    @ObservedObject var session: LiveChatSession
+    @ObservedObject var session: ChatSession
     var top: CGFloat = 14
     /// Set by "Ask about this call…": focus the field once.
     @Binding var focusRequest: Bool

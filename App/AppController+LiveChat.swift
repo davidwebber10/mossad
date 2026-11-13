@@ -13,9 +13,9 @@ extension AppController {
     }
 
     /// The live chat of a call, kept while the app runs so an answer survives a change of tab.
-    func liveChatSession(_ callID: String) -> LiveChatSession {
+    func liveChatSession(_ callID: String) -> ChatSession {
         if let session = liveChatSessions[callID] { return session }
-        let session = LiveChatSession(callID: callID)
+        let session = ChatSession(callID: callID)
         liveChatSessions[callID] = session
         session.load(chats)
         return session
@@ -66,7 +66,8 @@ extension AppController {
         let snapshot = live.snapshot, owner = ownerName, records = meetings, paths = paths, cache = liveSummaries
         let personas = personasOn
         let facts = liveCallFacts(record, snapshot: snapshot)
-        return try await Task.detached(priority: .medium) {
+        // Detached, so the stop button's cancel is passed on by hand.
+        let work = Task.detached(priority: .medium) {
             try await UsageContext.$callID.withValue(facts.callID) {
                 // A model with a small context (Apple's on this Mac) gets the newest lines that fit and no summary.
                 var limits = LiveLimits.standard
@@ -78,7 +79,8 @@ extension AppController {
                     question, history: history, facts: facts, entries: entries, summary: summary, records: records,
                     paths: paths, personaTraits: personas, limits: limits, onStep: onStep, onText: onText)
             }
-        }.value
+        }
+        return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
     }
 
     /// A skipped call takes its chats with it: they quote words whose audio is gone. The sync deletes them elsewhere.

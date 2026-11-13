@@ -84,6 +84,7 @@ struct ChatView: View {
                         ChatExchangeRow(message: m, callID: current.callID).id(m.id)
                     }
                     if running == current.id { ChatAnswering(steps: steps).id("running") }
+                    if let quick = controller.quickChat, quick.chat?.id == current.id { QuickChatRun(session: quick) }
                     if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
                 }
                 .frame(maxWidth: Self.column, alignment: .leading)
@@ -178,6 +179,8 @@ struct ChatView: View {
     private func send() {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty, running == nil else { return }
+        // The quick panel answers in this chat now: one question at a time, so neither copy loses the other's.
+        if let quick = controller.quickChat, quick.running, quick.chat?.id == current.id { return }
         var chat = current
         let history = chat.messages
         if chat.messages.isEmpty { chat.title = Chat.title(from: q) }
@@ -222,6 +225,15 @@ struct ChatView: View {
         do { try controller.chats.save(chat) } catch { Log.error("Saving the chat failed: \(error)") }
         reload()
         selection = chat.id
+    }
+}
+
+/// The quick panel's answer on its way in the chat this page shows.
+private struct QuickChatRun: View {
+    @ObservedObject var session: ChatSession
+
+    var body: some View {
+        if session.running { ChatAnswering(steps: session.steps).id("running") }
     }
 }
 
