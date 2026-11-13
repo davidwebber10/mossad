@@ -163,7 +163,7 @@ struct TranscriptTab: View {
         return LazyVStack(alignment: .leading, spacing: Rhythm.pairGap) {
             ForEach(blocks, id: \.id) { block in
                 let previousEnd = block.id > 0 ? blocks[safe: block.id - 1]?.end ?? -1 : -1
-                ForEach(Array(breaks.filter { $0.offset > previousEnd && $0.offset <= block.start }.enumerated()), id: \.offset) { _, m in
+                ForEach(Array(breaks.filter { $0.offset > previousEnd && $0.offset <= block.start }.enumerated()), id: \.element.offset) { _, m in
                     MarkerLine(marker: m)
                 }
                 ForEach(screens.filter { $0.offset > previousEnd && $0.offset <= block.start }) { s in
@@ -175,7 +175,7 @@ struct TranscriptTab: View {
                         text: { i, text in highlighted(text, active: active == LineID(block: block.id, line: i)) })
                     .id(block.id)
             }
-            ForEach(Array(breaks.filter { $0.offset > (blocks.last?.end ?? -1) }.enumerated()), id: \.offset) { _, m in
+            ForEach(Array(breaks.filter { $0.offset > (blocks.last?.end ?? -1) }.enumerated()), id: \.element.offset) { _, m in
                 MarkerLine(marker: m)
             }
             ForEach(screens.filter { $0.offset > (blocks.last?.end ?? -1) }) { s in
@@ -293,7 +293,7 @@ private struct MarkerLine: View {
     var body: some View {
         HStack(spacing: Space.m) {
             // Lines up with the words, past the speaker column.
-            Color.clear.frame(width: Detail.labelColumn + Space.m - 10, height: 1)
+            Color.clear.frame(width: Detail.labelColumn, height: 1)
             if marker.isBookmark { BookmarkFlag().fill(Palette.accentFill).frame(width: 7, height: 9) }
             Text(marker.lineText)
                 .font(.system(size: Rhythm.secondarySize, weight: .medium))
