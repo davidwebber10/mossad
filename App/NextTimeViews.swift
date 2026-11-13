@@ -211,7 +211,8 @@ struct DiscussedRow: View {
                         let day = d.callID.flatMap { id in controller.meetings.first { $0.id == id }?.start } ?? d.date
                         Text(d.byOwner ? "Marked done \(shortDay(day))" : "Discussed \(shortDay(day))")
                             .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
-                        if let call = d.callID { SeriesMoment(callID: call, at: d.at) }
+                        // Only a meeting that exists: a chip to a skipped call would open "Select a meeting".
+                        if let call = d.callID, controller.meetings.contains(where: { $0.id == call }) { SeriesMoment(callID: call, at: d.at) }
                     }
                 }
                 if let q = point.done?.quote {
@@ -417,7 +418,7 @@ struct MeetingPointsGroup: View {
         let book = controller.series.book
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
-        // A meeting Mossad has only the notes of closes and carries nothing: its open points that came up are listed.
+        // A meeting the owner missed (notes only, with no line of theirs) closes and carries nothing: its open points that came up are listed.
         let mentioned = book.mentioned(in: callID)
         VStack(spacing: 0) {
             if !mentioned.isEmpty {

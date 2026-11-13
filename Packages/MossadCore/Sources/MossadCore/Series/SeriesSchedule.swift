@@ -92,6 +92,14 @@ public struct SeriesSchedule: Sendable, Equatable, Hashable {
         return words + " " + (time?(minute / 60, minute % 60) ?? String(format: "%d:%02d", minute / 60, minute % 60))
     }
 
+    /// The Stats tab's "Skipped" line, in the words of the page's band.
+    public func skippedText(gaps: Int, time: ((Int, Int) -> String)? = nil) -> String? {
+        guard let words = text(time: time) else { return nil }
+        let quiet = (words.first.map { String($0).lowercased() } ?? "") + words.dropFirst()
+        return gaps == 0 ? "Mossad recorded every meeting (\(quiet)) since the first."
+            : "\(gaps) \(gaps == 1 ? "time" : "times") with no meeting recorded (\(quiet)). Mossad cannot tell a cancelled meeting from one it did not record."
+    }
+
     static let shortNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     /// The weeks of history that the rule reads at most.
     static let weeksRead = 8

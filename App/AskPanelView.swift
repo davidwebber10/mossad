@@ -42,8 +42,14 @@ struct AskPanelView: View {
                          record: controller.meetings.first { $0.id == id }, actions: actions)
         case .quick:
             AskPanelChat(session: controller.quickChatSession(), model: model, mode: mode, record: nil, actions: actions)
-        case .noTranscript(_, let reason):
+        case .noTranscript(let id, let reason):
             AskPanelNotice(text: reason.panelText, button: reason.fix.map { fix in (fix.label, false, { controller.openSettings(for: fix) }) })
+            // With no live transcript the owner's ticks still work; Mossad marks nothing by itself.
+            if let record = controller.meetings.first(where: { $0.id == id }),
+               AskPanelCover.showsPoints(mode: mode, covered: AskPanelCover.state(for: controller, model: model) != .open, hasRecord: true,
+                                         panelOpen: model.isOpen) {
+                AskPanelPoints(model: controller.livePoints, record: record, divided: true) { _ in }
+            }
         case .ended(let id):
             AskPanelNotice(text: "The call ended. This chat is saved with the meeting, and you can continue it there.",
                            button: ("Open the meeting", true, { controller.openAskInWindow(.ended(id)) }))
@@ -203,20 +209,22 @@ private struct AskPanelChat: View {
     private var question: Binding<String> {
         Binding(get: { model.drafts[draftKey] ?? "" }, set: { model.drafts[draftKey] = $0 })
     }
-    /// The owner shares the screen (as far as Mossad can tell): the chat is covered until they choose to see it.
-    private var covered: Bool { controller.ownerSharing == true && !model.showDuringShare }
+    /// The owner shares the screen (as far as Mossad can tell), or Mossad is still checking after this open: the
+    /// chat is covered until they choose to see it.
+    private var cover: AskPanelCover.State { AskPanelCover.state(for: controller, model: model) }
+    private var covered: Bool { cover != .open }
 
     private var messages: [ChatMessage] { session.chat?.messages ?? [] }
     private var live: Bool { mode.callID != nil }
     private var hasThread: Bool { !messages.isEmpty || session.running || session.error != nil }
     private var threadMax: CGFloat { AskPanelSizing.threadMax(points: showsPoints ? pointsHeight : 0) }
     private var scrolls: Bool { threadHeight > threadMax }
-    private var showsPoints: Bool { live && !covered && record != nil }
+    private var showsPoints: Bool { AskPanelCover.showsPoints(mode: mode, covered: covered, hasRecord: record != nil, panelOpen: model.isOpen) }
 
     var body: some View {
         VStack(spacing: 0) {
             if covered {
-                ShareCover { model.showDuringShare = true }
+                ShareCover(checking: cover == .checking) { model.showDuringShare = true }
             } else if hasThread {
                 thread
             }
@@ -432,11 +440,14 @@ private struct AskPanelChat: View {
 
 /// While the owner shares the screen, the chat is covered: people in the call could see it.
 private struct ShareCover: View {
+    /// Mossad is reading whether the owner shares: an honest line for the moment before the answer.
+    let checking: Bool
     let show: () -> Void
 
     var body: some View {
         HStack(spacing: 16) {
-            Text("You seem to be sharing your screen, so the chat is hidden. People in the call could see it.")
+            Text(checking ? "Checking whether you share your screen before the chat shows."
+                 : "You seem to be sharing your screen, so the chat is hidden. People in the call could see it.")
                 .font(.system(size: 13)).foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -578,5 +589,14 @@ struct LivePeekView: View {
         .textSelection(.enabled)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Live transcript at \(LivePeekLine.clock(at))")
+    }
+}
+
+extension AskPanelCover {
+    /// The cover of the panel now, from the controller's share reads and the owner's choice for this open.
+    @MainActor
+    static func state(for controller: AppController, model: AskPanelModel) -> State {
+        state(sharing: controller.ownerSharing, readSinceOpen: controller.shareReadSinceOpen, permission: controller.sharePermission,
+              shownByOwner: model.showDuringShare)
     }
 }

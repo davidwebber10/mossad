@@ -176,6 +176,10 @@ public struct LivePointMarks: Codable, Equatable, Sendable {
 
 /// When the live check may ask, what the header says, and what the check after the call makes of the live marks.
 public enum LivePointRules {
+    /// Whether a change of the points sends the book at once.
+    /// During a call the disk and the network belong to the recording; the sync after the call sends the book.
+    public static func syncsAfterChange(recording: Bool) -> Bool { !recording }
+
     /// At most this many requests in one call.
     public static let perCall = 12
     /// At most one request for one point in this many seconds of the recording.
