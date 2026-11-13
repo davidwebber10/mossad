@@ -7,8 +7,8 @@ import Foundation
 /// of the last 8 weeks that had one. A weekday is the series' when two or more dates are on it and it has a date in
 /// more than half of those weeks, so a daily meeting has five, one week of meetings has none, and a meeting that
 /// moves about has none. With no calendar dates, the last three meetings decide when they are all on one weekday:
-/// a series that moved is under its new day at once. Each weekday has its own usual time, and the time is known
-/// only when more than half of the dates are within 10 minutes of their median. A series with no next meeting and
+/// a series that moved is under its new day at once. Each weekday has its own usual time: the calendar's next meetings say it, else the newest three when they agree,
+/// else the median when more than half of the dates are within 10 minutes of it. A series with no next meeting and
 /// none recently has ended: no day, no time.
 public struct SeriesSchedule: Sendable, Equatable, Hashable {
     public enum Repeat: Sendable, Equatable, Hashable {
@@ -131,7 +131,8 @@ public struct SeriesSchedule: Sendable, Equatable, Hashable {
             return SeriesSchedule(weekdays: [], times: [:], minuteOfDay: nil, rhythm: rhythm(gap, weekdays: [], days: days, calendar), ended: true)
         }
 
-        let minuteOfDay = usualTime(days, calendar)
+        let ahead = upcoming.isEmpty ? [] : distinctDays(upcoming, calendar)
+        let minuteOfDay = timeNow(days, ahead: ahead, calendar)
         guard days.count >= 2, let gap else {
             // One date says no habit: its weekday may not come back.
             return SeriesSchedule(weekdays: [], times: [:], minuteOfDay: minuteOfDay, rhythm: nil)
@@ -141,7 +142,9 @@ public struct SeriesSchedule: Sendable, Equatable, Hashable {
         var perWeekday: [Int: [Date]] = [:]
         for d in days { perWeekday[calendar.component(.weekday, from: d), default: []].append(d) }
         var weekdays = perWeekday.filter { $0.value.count >= 2 && $0.value.count * 2 > weeks }.map(\.key)
-        var times = Dictionary(uniqueKeysWithValues: weekdays.compactMap { w in usualTime(perWeekday[w] ?? [], calendar).map { (w, $0) } })
+        var times = Dictionary(uniqueKeysWithValues: weekdays.compactMap { w in
+            timeNow(perWeekday[w] ?? [], ahead: ahead.filter { calendar.component(.weekday, from: $0) == w }, calendar).map { (w, $0) }
+        })
 
         // With no calendar dates, a move shows at once: the newest three on one weekday are the series' day now.
         if upcoming.count < 2 {
@@ -150,7 +153,7 @@ public struct SeriesSchedule: Sendable, Equatable, Hashable {
             if newest.count >= 3, newest.prefix(3).allSatisfy({ calendar.component(.weekday, from: $0) == w }) {
                 let run = newest.prefix { calendar.component(.weekday, from: $0) == w }
                 weekdays = [w]
-                times = usualTime(Array(run), calendar).map { [w: $0] } ?? [:]
+                times = timeNow(Array(run.reversed()), ahead: ahead.filter { calendar.component(.weekday, from: $0) == w }, calendar).map { [w: $0] } ?? [:]
             }
         }
 
@@ -193,14 +196,27 @@ public struct SeriesSchedule: Sendable, Equatable, Hashable {
         return gaps.isEmpty ? nil : gaps[gaps.count / 2]
     }
 
+    /// The time of now: the calendar's next meetings say it when there are any; else the newest three dates when
+    /// they agree, else all of them. An organizer whose clock does not change moves by an hour on the owner's clock
+    /// twice a year; a median over both sides would give neither time.
+    static func timeNow(_ days: [Date], ahead: [Date], _ calendar: Calendar) -> Int? {
+        if !ahead.isEmpty { return usualTime(ahead, calendar) }
+        let newest = Array(days.suffix(3))
+        if newest.count == 3, let t = usualTime(newest, calendar),
+           newest.allSatisfy({ abs(minutes($0, calendar) - t) <= 10 }) { return t }
+        return usualTime(days, calendar)
+    }
+
+    static func minutes(_ date: Date, _ calendar: Calendar) -> Int {
+        let c = calendar.dateComponents([.hour, .minute], from: date)
+        return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+    }
+
     /// The median start, to five minutes, when more than half of the starts are within 10 minutes of it. A recording
     /// starts a minute or two either side of the hour; the median does not split them.
     static func usualTime(_ dates: [Date], _ calendar: Calendar) -> Int? {
         guard !dates.isEmpty else { return nil }
-        let minutes = dates.map { d -> Int in
-            let c = calendar.dateComponents([.hour, .minute], from: d)
-            return (c.hour ?? 0) * 60 + (c.minute ?? 0)
-        }.sorted()
+        let minutes = dates.map { Self.minutes($0, calendar) }.sorted()
         let median = minutes[(minutes.count - 1) / 2]
         guard minutes.filter({ abs($0 - median) <= 10 }).count * 2 > minutes.count else { return nil }
         // 23:58 is not midnight of the next day.

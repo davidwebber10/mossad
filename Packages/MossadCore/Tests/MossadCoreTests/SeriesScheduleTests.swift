@@ -355,4 +355,75 @@ final class SeriesScheduleTests: XCTestCase {
         XCTAssertEqual(SeriesWeek.skipped(sun, upcoming: [at(1, 3)], now: at(0, 7, "08:00"), calendar: sunday), [1])
         XCTAssertEqual(SeriesWeek.skipped(sun, upcoming: [at(1, 3)], now: at(0, 1, "08:00"), calendar: sunday), [])
     }
+
+    // MARK: Daylight time
+
+    private var newYork: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "America/New_York")!
+        return c
+    }
+
+    /// Each Tuesday from `from` for `weeks` weeks at `hour`:00 on the New York clock.
+    private func tuesdays(_ from: DateComponents, weeks: Int, hour: Int = 15) -> [Date] {
+        let first = newYork.date(from: from)!
+        return (0..<weeks).map { w in
+            let day = newYork.date(byAdding: .day, value: 7 * w, to: first)!
+            return newYork.date(bySettingHour: hour, minute: 0, second: 0, of: day)!
+        }
+    }
+
+    private func assertWeeklyTuesdayAt3(_ s: SeriesSchedule, _ name: String) {
+        XCTAssertEqual(s.weekdays, [3], name)
+        XCTAssertEqual(s.minute(on: 3), 15 * 60, name)
+        XCTAssertEqual(s.rhythm, .weekly, name)
+        XCTAssertEqual(SeriesFilter.Cadence(s)?.option, "Weekly", name)
+        XCTAssertEqual(s.text(), "Every Tuesday 15:00", name)
+    }
+
+    func testAWeeklySeriesKeepsItsLocalTimeAcrossTheAutumnChange() {
+        // Tuesdays from October 6 to November 24, 2026: the clocks went back on November 1.
+        let history = tuesdays(DateComponents(year: 2026, month: 10, day: 6), weeks: 8)
+        let now = newYork.date(from: DateComponents(year: 2026, month: 11, day: 25, hour: 9))!
+        assertWeeklyTuesdayAt3(SeriesSchedule.from(upcoming: [], history: history, now: now, calendar: newYork), "history, autumn")
+    }
+
+    func testAWeeklySeriesKeepsItsLocalTimeAcrossTheSpringChange() {
+        // Tuesdays from February 16 to March 30, 2027: the clocks went forward on March 14.
+        let history = tuesdays(DateComponents(year: 2027, month: 2, day: 16), weeks: 7)
+        let now = newYork.date(from: DateComponents(year: 2027, month: 3, day: 31, hour: 9))!
+        assertWeeklyTuesdayAt3(SeriesSchedule.from(upcoming: [], history: history, now: now, calendar: newYork), "history, spring")
+    }
+
+    func testTheCalendarsDatesKeepTheirLocalTimeAcrossAChange() {
+        let now = newYork.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 9))!
+        let autumn = tuesdays(DateComponents(year: 2026, month: 10, day: 20), weeks: 6)
+        assertWeeklyTuesdayAt3(SeriesSchedule.from(upcoming: autumn, history: [], now: now, calendar: newYork), "calendar, autumn")
+        let springNow = newYork.date(from: DateComponents(year: 2027, month: 3, day: 1, hour: 9))!
+        let spring = tuesdays(DateComponents(year: 2027, month: 3, day: 2), weeks: 6)
+        assertWeeklyTuesdayAt3(SeriesSchedule.from(upcoming: spring, history: [], now: springNow, calendar: newYork), "calendar, spring")
+    }
+
+    /// An organizer whose clock does not change (20:00 UTC) meets at 16:00 in New York before November 1 and at
+    /// 15:00 after it: the series' time is its next meeting's, not a median of the two.
+    func testAnOrganizerInAZoneWithNoChangeShowsTheNextMeetingsTime() {
+        var utcTuesdays: [Date] {
+            (0..<8).map { w in utc.date(from: DateComponents(year: 2026, month: 9, day: 29 + 7 * w, hour: 20))! }
+        }
+        let all = utcTuesdays
+        let before = all.filter { $0 < newYork.date(from: DateComponents(year: 2026, month: 11, day: 1))! }
+        let after = all.filter { !before.contains($0) }
+        XCTAssertEqual(before.count, 5)
+        // One next meeting in the calendar, after the change; the history before it.
+        let now = newYork.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 9))!
+        let one = SeriesSchedule.from(upcoming: [after[0]], history: before, now: now, calendar: newYork)
+        XCTAssertEqual(one.weekdays, [3])
+        XCTAssertEqual(one.minute(on: 3), 15 * 60)
+        XCTAssertEqual(one.minuteOfDay, 15 * 60)
+        // The calendar's next meetings alone.
+        XCTAssertEqual(SeriesSchedule.from(upcoming: after, history: before, now: now, calendar: newYork).minute(on: 3), 15 * 60)
+        // No calendar: the newest three meetings, all after the change, say the time of now.
+        let later = newYork.date(from: DateComponents(year: 2026, month: 11, day: 25, hour: 9))!
+        XCTAssertEqual(SeriesSchedule.from(upcoming: [], history: all, now: later, calendar: newYork).minute(on: 3), 15 * 60)
+    }
 }
