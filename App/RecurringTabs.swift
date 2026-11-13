@@ -157,11 +157,10 @@ struct SeriesStatsTab: View {
                      : "Started 5 min or more late \(report.startedLate) of \(report.planned) times; ran 5 min or more over \(report.ranOver) of \(report.planned) times.")
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let gaps = report.gaps, let cadence = series.cadence {
+            // The count from the dates; the words from the schedule, as the band says them.
+            if let gaps = report.gaps, let line = series.schedule.skippedText(gaps: gaps, time: clockTime) {
                 MeetingAnalyticsGroup("Skipped") {
-                    Text(gaps == 0 ? "Mossad recorded every meeting (\(firstLower(cadence.text(time: clockTime)))) since the first."
-                         : "\(gaps) \(gaps == 1 ? "time" : "times") with no meeting recorded (\(firstLower(cadence.text(time: clockTime)))). Mossad cannot tell a cancelled meeting from one it did not record.")
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(line).fixedSize(horizontal: false, vertical: true)
                 }
             }
         } else if report == nil {

@@ -243,6 +243,14 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
 
     /// The owner marks a point done by hand, or takes a done back. A "discussed" that the check found and the
     /// owner took back is never found again in that meeting.
+    /// A call that Mossad did not keep (skipped, too short) cannot hold a point's "done".
+    @discardableResult
+    public mutating func reopen(doneIn callID: String, at date: Date = Date()) -> Bool {
+        let ids = points.filter { $0.done?.callID == callID }.map(\.id)
+        for id in ids { update(id, at: date) { $0.done = nil } }
+        return !ids.isEmpty
+    }
+
     public mutating func toggleDone(_ id: UUID, at date: Date = Date()) {
         update(id, at: date) { p in
             if let d = p.done {

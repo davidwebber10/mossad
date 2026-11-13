@@ -74,6 +74,29 @@ public enum AskPanelRules {
     }
 }
 
+/// Whether the panel covers its chat because the owner may be sharing the screen.
+public enum AskPanelCover {
+    public enum State: Equatable, Sendable { case open, sharing, checking }
+
+    /// `readSinceOpen`: a share read answered since this open (or the watch ran while the panel was hidden). Until
+    /// then an old "not sharing" is not trusted. With no Screen Recording permission Mossad cannot know, and the
+    /// panel is not covered: the cover would claim something Mossad cannot see.
+    public static func state(sharing: Bool?, readSinceOpen: Bool, permission: Bool, shownByOwner: Bool) -> State {
+        if shownByOwner || !permission { return .open }
+        if sharing == true { return .sharing }
+        return readSinceOpen ? .open : .checking
+    }
+
+    /// The owner's points in the open panel during a call, with or without the live transcript (the ticks work
+    /// either way; with no transcript Mossad marks nothing). A hidden panel runs no loop for them.
+    public static func showsPoints(mode: AskPanelMode, covered: Bool, hasRecord: Bool, panelOpen: Bool) -> Bool {
+        switch mode {
+        case .call, .noTranscript: return panelOpen && !covered && hasRecord
+        case .ended, .quick: return false
+        }
+    }
+}
+
 /// A quick question in the panel: the Chat tab's chip, and whether it is drawn in the accent.
 public struct AskPanelChip: Equatable, Sendable, Identifiable {
     public var label: String

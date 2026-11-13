@@ -397,6 +397,11 @@ final class AppController: ObservableObject {
     var traitCards: [String: CoachFinding] = [:]
     /// Whether the owner shares the screen now; nil when Mossad cannot tell (+Personas).
     @Published var ownerSharing: Bool?
+    /// False from an open of the quick panel when the share watch was not running, until the first read answers: the
+    /// panel stays covered meanwhile (`AskPanelCover`), never shown on an old value (+Personas).
+    @Published var shareReadSinceOpen = true
+    /// Whether Mossad may read other apps' window titles (Screen Recording); without it a share cannot be known.
+    @Published var sharePermission = true
     /// The reads that the owner opened while they are covered, by person id: one click opens a card.
     @Published var shownCovered: Set<String> = []
     var personasRunning = false
@@ -1083,7 +1088,10 @@ final class AppController: ObservableObject {
     }
 
     func skipCurrentCall() {
-        if case .recording(_, let since) = status { forgetLiveChats(callID: CallRecorder.callID(for: since)) }
+        if case .recording(_, let since) = status {
+            forgetLiveChats(callID: CallRecorder.callID(for: since))
+            reopenTicks(ofGoneCall: CallRecorder.callID(for: since))
+        }
         let recorder = recorder
         CaptureQueue.queue.async {
             recorder.skip()
@@ -1100,9 +1108,11 @@ final class AppController: ObservableObject {
     /// new recording until the call really ends.
     func stopCurrentCall() {
         let recorder = recorder
+        let id: String? = if case .recording(_, let since) = status { CallRecorder.callID(for: since) } else { nil }
         CaptureQueue.queue.async {
             guard let record = recorder.end(at: Date(), trimTo: nil, byPerson: true) else {
-                Task { @MainActor in self.refresh() }
+                // Too short to keep: its ticks go back to open.
+                Task { @MainActor in self.refresh(); if let id { self.reopenTicks(ofGoneCall: id) } }
                 return
             }
             // The stopped record goes into the list at once, so its row stops saying "recording".
@@ -1877,8 +1887,9 @@ final class AppController: ObservableObject {
             if recorder.isManual { return }
             Log.info("Call ended")
             guard let record = recorder.end(at: at, trimTo: trimTo) else {
-                // A short call is deleted, so its row must leave the list too, or it still looks live.
-                Task { @MainActor in self.refresh() }
+                // A short call is deleted, so its row must leave the list too, or it still looks live; its ticks go
+                // back to open.
+                Task { @MainActor in self.refresh(); self.reopenTicks(ofGoneCall: CallRecorder.callID(for: at)) }
                 return
             }
             Task { @MainActor in self.update(record); self.refresh() }

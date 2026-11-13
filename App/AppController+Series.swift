@@ -180,7 +180,8 @@ extension AppController {
         guard !isInert || DevHooks.preview else { return }
         series.owner = self
         series.change(paths, change)
-        syncNow()
+        // During a call the disk and the network belong to the recording; the sync after the call sends the book.
+        if LivePointRules.syncsAfterChange(recording: isRecording) { syncNow() }
     }
 
     /// The owner's open points for an upcoming meeting: its series' and its people's. Reads no file.

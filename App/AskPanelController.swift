@@ -44,6 +44,8 @@ final class AskPanelController {
         model.keyboard = opened
         let takeKeyboard = AskPanelKeys.canBecomeKey(opened)
         if !controller.isRecording { controller.refreshQuickChat() }
+        // Before the first draw: an old share value never shows the chat (`AskPanelCover`).
+        if !panel.isVisible { controller.shareCheckForPanel() }
         model.opened()
         model.track(controller)
         if !panel.isVisible {

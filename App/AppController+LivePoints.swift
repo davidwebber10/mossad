@@ -41,6 +41,8 @@ final class LivePointsModel: ObservableObject {
         change(&marks)
         let copy = marks, dir = paths.callDirectory(id)
         saves.async {
+            // A call that was skipped or too short has no folder: nothing to save, and nothing to report.
+            guard FileManager.default.fileExists(atPath: dir.path) else { return }
             do { try copy.save(to: dir) } catch { Log.error("Saving the live marks of the points failed: \(error)") }
         }
     }
@@ -125,6 +127,13 @@ extension AppController {
         }
     }
 
+    /// A call that Mossad did not keep (skipped, or too short): the owner's ticks in it go back to open, so no point
+    /// says "Marked done" in a meeting that does not exist.
+    func reopenTicks(ofGoneCall callID: String) {
+        guard series.book.points.contains(where: { $0.done?.callID == callID }) else { return }
+        changeNextTime { $0.reopen(doneIn: callID) }
+    }
+
     /// "Not raised": the owner says Mossad's mark is wrong. The point is open again, and that line never marks it.
     func rejectLivePoint(_ p: NextTimePoint) {
         livePoints.change(paths) { $0.reject(p.id) }
@@ -194,7 +203,7 @@ extension AppController {
                 let mark = try await Task.detached(priority: .utility) {
                     try await UsageContext.$callID.withValue(callID) { try await confirmer.confirm(d) }
                 }.value
-                if let mark, livePoints.callID == callID { livePoints.change(paths) { $0.add(mark) } }
+                if let mark, livePoints.callID == callID, isLiveCall(callID) { livePoints.change(paths) { $0.add(mark) } }
             } catch {
                 Log.error("Hearing a point in \(callID) failed: \(error)")
             }

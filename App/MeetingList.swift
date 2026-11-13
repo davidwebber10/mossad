@@ -122,7 +122,10 @@ struct MeetingList: View {
             // Return or Down Arrow in the search field, or its close, gives the keys back to the list.
             .onChange(of: controller.listFocusRequest) { _, _ in
                 focused = true
-                if selection.map({ !order.contains($0) }) ?? true, let first = order.first { _ = jump(to: first, proxy) }
+                // A far invite opened from a search or a link stays when the search closes; it has no row.
+                let known = selection.map { id in controller.meetings.contains { $0.id == id } || controller.calendarUpcoming.contains { $0.id == id } } ?? false
+                if !MeetingListRows.keepsSelection(selection, query: controller.meetingQuery, inList: selection.map(order.contains) ?? false, known: known),
+                   let first = order.first { _ = jump(to: first, proxy) }
             }
         }
     }

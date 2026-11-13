@@ -294,3 +294,35 @@ final class AskPanelTests: XCTestCase {
         XCTAssertFalse(AskPanelKeys.focusesField(nil, visible: true))
     }
 }
+
+/// The release check of 2.23: the panel's cover on each open, and its points list.
+final class AskPanelReleaseTests: XCTestCase {
+    // M1
+    func testThePanelCoversItsChatUntilTheShareIsReadAfterAnOpen() {
+        // Not read since this open, with the permission: covered while Mossad checks.
+        XCTAssertEqual(AskPanelCover.state(sharing: nil, readSinceOpen: false, permission: true, shownByOwner: false), .checking)
+        // A stale "not sharing" from an earlier open is not trusted either.
+        XCTAssertEqual(AskPanelCover.state(sharing: false, readSinceOpen: false, permission: true, shownByOwner: false), .checking)
+        XCTAssertEqual(AskPanelCover.state(sharing: false, readSinceOpen: true, permission: true, shownByOwner: false), .open)
+        XCTAssertEqual(AskPanelCover.state(sharing: true, readSinceOpen: true, permission: true, shownByOwner: false), .sharing)
+        XCTAssertEqual(AskPanelCover.state(sharing: true, readSinceOpen: false, permission: true, shownByOwner: false), .sharing)
+        // The owner chose to see it.
+        XCTAssertEqual(AskPanelCover.state(sharing: true, readSinceOpen: true, permission: true, shownByOwner: true), .open)
+        XCTAssertEqual(AskPanelCover.state(sharing: nil, readSinceOpen: false, permission: true, shownByOwner: true), .open)
+        // No Screen Recording permission: Mossad cannot know, and the panel is not covered, as before.
+        XCTAssertEqual(AskPanelCover.state(sharing: nil, readSinceOpen: false, permission: false, shownByOwner: false), .open)
+        XCTAssertEqual(AskPanelCover.state(sharing: nil, readSinceOpen: true, permission: false, shownByOwner: false), .open)
+    }
+
+    // L6 and L7
+    func testThePointsShowInAnOpenPanelDuringACallWithOrWithoutTheLiveTranscript() {
+        XCTAssertTrue(AskPanelCover.showsPoints(mode: .call("c"), covered: false, hasRecord: true, panelOpen: true))
+        XCTAssertTrue(AskPanelCover.showsPoints(mode: .noTranscript("c", .setting), covered: false, hasRecord: true, panelOpen: true))
+        // A hidden panel runs no loop for them.
+        XCTAssertFalse(AskPanelCover.showsPoints(mode: .call("c"), covered: false, hasRecord: true, panelOpen: false))
+        XCTAssertFalse(AskPanelCover.showsPoints(mode: .call("c"), covered: true, hasRecord: true, panelOpen: true))
+        XCTAssertFalse(AskPanelCover.showsPoints(mode: .call("c"), covered: false, hasRecord: false, panelOpen: true))
+        XCTAssertFalse(AskPanelCover.showsPoints(mode: .ended("c"), covered: false, hasRecord: true, panelOpen: true))
+        XCTAssertFalse(AskPanelCover.showsPoints(mode: .quick, covered: false, hasRecord: true, panelOpen: true))
+    }
+}
