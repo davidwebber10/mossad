@@ -30,8 +30,8 @@ struct SettingsFootnote: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 12)).foregroundStyle(Palette.secondary)
-            .cssLineHeight(1.5, size: 12)
+            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
+            .cssLineHeight(1.5, size: Rhythm.secondarySize)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, Space.s)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -64,7 +64,7 @@ struct SettingsRow<Trailing: View>: View {
                 text.frame(minWidth: Self.textMinimum, idealWidth: Self.textMinimum, maxWidth: .infinity, alignment: .leading)
                 trailing
             }
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 text
                 trailing
             }
@@ -90,7 +90,7 @@ struct SettingsRowText: View {
     @Environment(\.rowStyle) private var style
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             Group {
                 if let titleNote {
                     Text("\(title) \(Text(titleNote).fontWeight(.regular).foregroundStyle(Palette.tertiary))")
@@ -131,7 +131,7 @@ struct SettingsButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
         configuration.label
-            .font(.system(size: 12, weight: accent ? .semibold : .medium))
+            .font(.system(size: Rhythm.secondarySize, weight: accent ? .semibold : .medium))
             .foregroundStyle(accent ? Palette.onAccent : Palette.ink)
             .lineLimit(1)
             .padding(.horizontal, 10)
@@ -155,7 +155,7 @@ struct SettingsTextButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: weight))
+            .font(.system(size: Rhythm.secondarySize, weight: weight))
             .foregroundStyle(color)
             .opacity(configuration.isPressed ? 0.6 : 1)
             .contentShape(Rectangle())
@@ -170,7 +170,7 @@ struct SettingsFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
             .textFieldStyle(.plain)
-            .font(monospaced ? .system(size: 11.5, design: .monospaced) : .system(size: 12))
+            .font(monospaced ? .system(size: Rhythm.secondarySize, design: .monospaced) : .system(size: Rhythm.secondarySize))
             .foregroundStyle(Palette.ink)
             .padding(.horizontal, Space.s)
             // The canvas gives a field's width without its 8 pt padding on each side (CSS content-box).
@@ -215,12 +215,12 @@ struct FillMenuLabel: View {
     var width: CGFloat?
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             Text(text).lineLimit(1).truncationMode(.tail)
             if width != nil { Spacer(minLength: 0) }
             IconImage(.chevronDown, size: 10).foregroundStyle(Palette.secondary)
         }
-        .font(.system(size: 12, weight: .medium))
+        .font(.system(size: Rhythm.secondarySize, weight: .medium))
         .foregroundStyle(Palette.ink)
         .padding(.leading, 10).padding(.trailing, Space.s)
         .frame(width: width, height: 24)
@@ -241,7 +241,7 @@ struct DaysField: View {
                 .multilineTextAlignment(.trailing)
                 .textFieldStyle(SettingsFieldStyle(width: 48))
             Stepper(title, value: $value, in: range).labelsHidden().controlSize(.small)
-            Text(value == 1 ? "day" : "days").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+            Text(value == 1 ? "day" : "days").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
         }
     }
 }
@@ -255,7 +255,7 @@ struct KeyStatus: View {
     var body: some View {
         let set = controller.hasKey(key)
         HStack(spacing: Space.s) {
-            Text(set ? "Key set" : "No key").font(.system(size: 12)).foregroundStyle(set ? Palette.secondary : Palette.accent)
+            Text(set ? "Key set" : "No key").font(.system(size: Rhythm.secondarySize)).foregroundStyle(set ? Palette.secondary : Palette.accent)
             Button(set ? "Change" : "Set key…") { edit(key) }
                 .buttonStyle(SettingsButtonStyle(accent: !set))
                 .accessibilityLabel(set ? "Change the \(key.displayName)" : "Set the \(key.displayName)")
@@ -276,11 +276,11 @@ struct RadioRow<Trailing: View>: View {
         Button(action: action) {
             HStack(spacing: Space.m) {
                 RadioMark(on: selected)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 13, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink)
-                        .cssLineHeight(size: 13)
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    Text(title).font(.system(size: Rhythm.bodySize, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink)
+                        .cssLineHeight(size: Rhythm.bodySize)
                     if let detail {
-                        Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary).cssLineHeight(size: 12)
+                        Text(detail).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).cssLineHeight(size: Rhythm.secondarySize)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -326,13 +326,13 @@ struct StatusLine: View {
     let model: Model
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             if model.busy {
                 ProgressView().controlSize(.mini)
             } else {
                 Circle().fill(model.color).frame(width: 7, height: 7)
             }
-            Text(model.text).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+            Text(model.text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
         }
         .fixedSize()
         .accessibilityElement(children: .combine)
@@ -348,9 +348,9 @@ struct CopyField: View {
     var body: some View {
         HStack(spacing: Space.s) {
             Text(text)
-                .font(.system(size: 11.5, design: .monospaced))
+                .font(.system(size: Rhythm.secondarySize, design: .monospaced))
                 .foregroundStyle(Palette.ink)
-                .cssLineHeight(1.4, size: 11.5)
+                .cssLineHeight(1.4, size: Rhythm.secondarySize)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, Space.s).padding(.vertical, 4)

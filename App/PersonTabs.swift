@@ -19,7 +19,7 @@ struct PersonOverviewTab: View {
     private var personID: String? { controller.personID(of: profile.name) }
 
     var body: some View {
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             if !profile.isOwner, let personID {
                 PersonNextTimeSection(personID: personID, name: profile.name, inColumn: true)
             }
@@ -64,7 +64,7 @@ struct PersonOverviewTab: View {
                                     .help("Meetings about \(t)")
                             }
                         }
-                        .frame(maxWidth: 680, alignment: .leading)
+                        .frame(maxWidth: Rhythm.measure, alignment: .leading)
                     }
                 }
             }
@@ -78,27 +78,27 @@ struct PersonOverviewTab: View {
 
     private var coachRead: some View {
         LabelColumn(label: "The coach’s read") {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 if let brief {
                     Text(brief.headline)
-                        .font(.system(size: 16, weight: .medium)).lineSpacing(3)
+                        .font(.system(size: Rhythm.leadSize, weight: .medium)).lineSpacing(Rhythm.secondaryLineGap)
                         .foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
-                    HStack(spacing: 6) {
+                    HStack(spacing: Space.s) {
                         Text("From \(brief.calls) \(brief.calls == 1 ? "call" : "calls") · updated \(brief.updated.formatted(.relative(presentation: .named)))")
                         refreshButton
                     }
-                    .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                 } else {
                     Text(stats.meetings.count >= 2
                          ? "The coach has not read the calls with \(first) yet."
                          : "After two calls with \(first), the coach writes how to work with them: their goals, how to get through to them, and how they communicate.")
-                        .font(.system(size: 13)).lineSpacing(2)
+                        .font(.system(size: Rhythm.bodySize)).lineSpacing(Rhythm.secondaryLineGap)
                         .foregroundStyle(Palette.secondary)
-                        .frame(maxWidth: 680, alignment: .leading)
+                        .frame(maxWidth: Rhythm.measure, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
-                    if stats.meetings.count >= 2 { refreshButton.font(.system(size: 12)) }
+                    if stats.meetings.count >= 2 { refreshButton.font(.system(size: Rhythm.secondarySize)) }
                 }
             }
         }
@@ -138,10 +138,10 @@ struct PersonOverviewTab: View {
             }
         }
         return Text(text)
-            .font(.system(size: 13)).lineSpacing(3)
+            .font(.system(size: Rhythm.bodySize)).lineSpacing(Rhythm.secondaryLineGap)
             .foregroundStyle(Palette.ink)
             .tint(Palette.tertiary)
-            .frame(maxWidth: 680, alignment: .leading)
+            .frame(maxWidth: Rhythm.measure, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
     }
@@ -157,8 +157,8 @@ struct PersonOverviewTab: View {
                 }
             }
         }
-        .font(.system(size: 12.5))
-        .frame(maxWidth: 680, alignment: .leading)
+        .readingText()
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
     }
 
     private func slotText(_ s: PersonRelation.Slot) -> String {
@@ -196,7 +196,7 @@ struct PersonKnowledgeTab: View {
     }
 
     var body: some View {
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             if controller.personaCovered(personID), read != nil {
                 LabelColumn(label: "How they think") { PersonaCoverRow { controller.uncover(personID) } }
             } else if confirmed.isEmpty, read?.traits.isEmpty ?? true, blocked.isEmpty {
@@ -207,12 +207,12 @@ struct PersonKnowledgeTab: View {
             } else {
                 if !confirmed.isEmpty {
                     LabelColumn(label: "You confirmed") {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                             ForEach(confirmed) { fact in
                                 Label { Text(fact.text).fixedSize(horizontal: false, vertical: true) } icon: {
-                                    Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.okText)
+                                    Image(systemName: "checkmark").font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.okText)
                                 }
-                                .font(.system(size: 13)).foregroundStyle(Palette.ink)
+                                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                             }
                         }
                     }
@@ -222,7 +222,7 @@ struct PersonKnowledgeTab: View {
                 } else if keepsRead {
                     LabelColumn(label: "How they think") {
                         Text(PersonaCard.needsMore(first: first, calls: calls))
-                            .font(.system(size: 13)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 if !blocked.isEmpty {
@@ -230,7 +230,7 @@ struct PersonKnowledgeTab: View {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(blocked) { a in
                                 HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                                    Text(a.text).font(.system(size: 13)).foregroundStyle(Palette.ink)
+                                    Text(a.text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                                         .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                                     Button("Undo") { controller.allowFindingAgain(a.id) }
                                         .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .semibold))
@@ -239,7 +239,7 @@ struct PersonKnowledgeTab: View {
                                 .padding(.vertical, 6)
                             }
                         }
-                        .frame(maxWidth: 680, alignment: .leading)
+                        .frame(maxWidth: Rhythm.measure, alignment: .leading)
                     }
                 }
             }
@@ -265,7 +265,7 @@ struct PersonVoiceTab: View {
     }
 
     var body: some View {
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             let list = samples
             if profile.embeddings.isEmpty, list?.isEmpty ?? true {
                 EmptyState(symbol: "waveform", title: "No voice sample yet",
@@ -273,9 +273,9 @@ struct PersonVoiceTab: View {
                     .frame(maxWidth: .infinity).padding(.top, Space.xl)
             } else {
                 LabelColumn(label: "Voice samples") {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                         Text("\(profile.embeddings.count) \(profile.embeddings.count == 1 ? "sample" : "samples"). Mossad recognizes \(profile.isOwner ? "you" : first) by voice in later calls.")
-                            .font(.system(size: 13)).foregroundStyle(Palette.ink)
+                            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                         if let list, !list.isEmpty { rows(list) }
                     }
                 }
@@ -290,8 +290,8 @@ struct PersonVoiceTab: View {
                     Button("Delete every person’s saved voices…", action: deleteAll)
                         .buttonStyle(.plain).fontWeight(.medium).foregroundStyle(Palette.recording)
                 }
-                .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
-                .frame(maxWidth: 680, alignment: .leading)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
+                .frame(maxWidth: Rhythm.measure, alignment: .leading)
             }
         }
     }
@@ -320,7 +320,7 @@ struct PersonVoiceTab: View {
                 if i < list.count - 1 { GridRow { Hairline().gridCellColumns(4) } }
             }
         }
-        .font(.system(size: 12.5))
-        .frame(maxWidth: 680, alignment: .leading)
+        .font(.system(size: Rhythm.bodySize))
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
     }
 }

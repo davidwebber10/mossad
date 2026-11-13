@@ -10,6 +10,17 @@ enum DevHooks {
     /// be checked while the installed copy records a call.
     static let preview = CommandLine.arguments.contains("--ui-preview")
 
+    /// A path as a page shows it. A preview shows a made-up one, so a capture never holds the Mac account's name.
+    static func shownPath(_ path: String) -> String {
+        guard AppIdentity.current.isPreview else { return path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }
+        return "~/Mossad/" + (path as NSString).lastPathComponent
+    }
+
+    /// The app's binary as a page shows it, with the same rule.
+    static func shownBinary(_ path: String) -> String {
+        AppIdentity.current.isPreview ? "/Applications/Mossad.app/Contents/MacOS/Mossad" : path
+    }
+
     #if DEBUG
     static let debug = true
     #else

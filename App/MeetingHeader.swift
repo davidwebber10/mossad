@@ -37,10 +37,9 @@ struct MeetingHeader: View {
                     .padding(.top, 38)
             }
         }
-        .frame(maxWidth: Detail.columnMax, alignment: .leading)
-        .padding(.horizontal, Detail.gutter)
+        .bandColumn()
         .padding(.vertical, Detail.bandPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .bandFrame()
         .background(Palette.band)
         .hairline(.bottom)
     }
@@ -62,7 +61,7 @@ struct MeetingHeader: View {
         FlowLayout(spacing: Space.s) {
             HStack(spacing: Space.s) {
                 PlatformDot(platform: record.platform)
-                Text(when).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                Text(when).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
             }
             .frame(minHeight: 20)
             if let source = record.sourceLabel { SourceMark(text: source).frame(minHeight: 20) }

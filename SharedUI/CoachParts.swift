@@ -25,7 +25,7 @@ struct FocusDots: View {
     var current: String?
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: Space.xs) {
             ForEach(results.suffix(10), id: \.callID) { r in
                 Circle()
                     .fill(r.outcome == .noChance ? Color.secondary.opacity(0.3) : r.outcome.tint)
@@ -61,11 +61,11 @@ struct FocusPanel: View {
 
     var body: some View {
         if let f = profile.activeFocus {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 label((f.goal == nil ? "YOUR FOCUS" : "YOUR GOAL") + (f.accepted.map { " · SINCE \($0.formatted(.dateTime.month(.abbreviated).day()).uppercased())" } ?? ""))
                 Text(f.plan).font(.headline)
                 if !f.results.isEmpty {
-                    HStack(spacing: 10) {
+                    HStack(spacing: Space.m) {
                         FocusDots(results: f.results, current: callID)
                         Text("\(f.chances.filter { $0.outcome == .hit }.count) of \(f.chances.count) \(f.goal == nil ? "chances" : "1:1s at the target")")
                             .font(.caption).foregroundStyle(.secondary)
@@ -77,7 +77,7 @@ struct FocusPanel: View {
                 }
             }
         } else if let f = profile.proposedFocus {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 label("PROPOSED FOCUS")
                 if editing {
                     TextField("Your focus", text: $text, axis: .vertical).textFieldStyle(.roundedBorder)
@@ -89,7 +89,7 @@ struct FocusPanel: View {
                     Text("Nothing counts until you accept it. Each review then reports how the call went on it.")
                         .font(.caption).foregroundStyle(.tertiary)
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: Space.s) {
                     Button(editing ? "Save" : "Accept") {
                         accept(f.id, editing ? text : nil)
                         editing = false
@@ -150,7 +150,7 @@ struct CoachLineView: View {
         if let line = review.shownLine {
             CoachLineRow(line: line, play: play)
         } else {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 Text(review.headline).font(.headline)
                 if review.saysNothing {
                     Text(CoachLineView.nothing).font(.subheadline).foregroundStyle(.secondary)
@@ -172,13 +172,13 @@ struct CoachLineRow: View {
     var play: ((TimeInterval) -> Void)?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: Space.m) {
             Image(systemName: line.symbol).foregroundStyle(line.tint).frame(width: 18)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(line.heading.uppercased()).font(.caption2.weight(.semibold)).kerning(0.5).foregroundStyle(line.tint)
                 Text(line.text).fixedSize(horizontal: false, vertical: true)
                 if line.quote != nil || line.at != nil {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         if let at = line.at {
                             if let play {
                                 Button(coachClock(at)) { play(at) }.buttonStyle(.plain).foregroundStyle(Color.accentColor)
@@ -213,8 +213,8 @@ struct GoalsGrid: View {
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 12, alignment: .topLeading)], alignment: .leading, spacing: 12) {
             ForEach(metrics.checks) { c in
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    HStack(spacing: Space.xs) {
                         Text(name(c.metric)).font(.caption).foregroundStyle(.secondary)
                         if c.metric == focus { Image(systemName: "scope").font(.caption2).foregroundStyle(Color.accentColor) }
                     }
@@ -251,7 +251,7 @@ struct CallStrip: View {
     let metrics: CallMetrics
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             Chart {
                 ForEach(metrics.timeline) { s in
                     BarMark(x: .value("Minute", s.start / 60 + 1.5), y: .value("Your share", s.share * 100), width: .ratio(0.8))

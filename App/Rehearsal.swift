@@ -20,7 +20,7 @@ enum Rehearsal {
 struct RehearsalMark: View {
     var body: some View {
         Text("Rehearsal")
-            .font(.system(size: 10.5, weight: .semibold))
+            .font(.system(size: Rhythm.noteSize, weight: .semibold))
             .tracking(0.3)
             .foregroundStyle(Palette.accent)
             .padding(.horizontal, 7).frame(height: 18)

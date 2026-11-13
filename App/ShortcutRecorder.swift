@@ -12,7 +12,7 @@ struct ShortcutSettings: View {
             ShortcutRecorderRow()
             SettingsRow(title: "Bookmark this moment", detail: "During a call, marks the moment for later.") {
                 Text(HotKeyShortcut.bookmark.symbols)
-                    .font(.system(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.secondarySize, weight: .medium)).monospacedDigit().foregroundStyle(Palette.secondary)
                     .padding(.horizontal, 8).frame(height: 24)
                     .background(Palette.fill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .accessibilityLabel(HotKeyShortcut.bookmark.spoken)
@@ -30,10 +30,10 @@ private struct ShortcutRecorderRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: "Ask Mossad", detail: "Opens a small window over any app, to ask about the call or your meetings.") {
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     Button(action: toggle) {
                         Text(recording ? "Type a shortcut" : controller.askShortcut?.symbols ?? "None")
-                            .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                            .font(.system(size: Rhythm.secondarySize, weight: .medium)).monospacedDigit()
                             .foregroundStyle(recording ? Palette.accent : Palette.ink)
                             .frame(minWidth: 96).padding(.horizontal, 8).frame(height: 24)
                             .background(recording ? Palette.accentTint : Palette.fill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -48,7 +48,7 @@ private struct ShortcutRecorderRow: View {
                     .accessibilityHint(recording ? "Press the keys, or Escape to keep the shortcut" : "Records a new shortcut")
                     if controller.askShortcut != nil, !recording {
                         Button { set(nil) } label: {
-                            Image(systemName: "xmark.circle.fill").font(.system(size: 13)).foregroundStyle(Palette.tertiary)
+                            Image(systemName: "xmark.circle.fill").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.tertiary)
                                 .frame(width: 20, height: 24).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -62,7 +62,7 @@ private struct ShortcutRecorderRow: View {
                 }
             }
             if let problem = problem ?? (controller.askShortcutFailed && !recording ? .taken : nil) {
-                Text(problem.message).font(.system(size: 12)).foregroundStyle(Palette.recording)
+                Text(problem.message).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.recording)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 10)
                     .accessibilityAddTraits(.updatesFrequently)

@@ -15,8 +15,8 @@ struct CoachMoment: View {
         // A ZStack exists even when empty, so the task below runs; an empty Group would drop it.
         ZStack {
             if let m = moment, m.record.id != seen {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+                    HStack(spacing: Space.s) {
                         Image(systemName: "sparkles").foregroundStyle(.tint)
                             .symbolEffect(.bounce, value: shown)
                         Text("\(m.line.heading) · \(m.record.title)").font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)

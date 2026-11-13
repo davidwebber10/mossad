@@ -14,8 +14,8 @@ struct QuestionsPanel: View {
 
     var body: some View {
         if let q = questions.first {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+                HStack(spacing: Space.s) {
                     Image(systemName: "questionmark.bubble").foregroundStyle(.tint)
                     Text("Is this true?").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                     Spacer()
@@ -23,7 +23,7 @@ struct QuestionsPanel: View {
                         Text("1 of \(questions.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
                 }
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     Text(q.statement).font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
                     if let name = q.personName {
                         Label("About \(name)", systemImage: "person.crop.circle").font(.subheadline).foregroundStyle(.secondary)
@@ -42,7 +42,7 @@ struct QuestionsPanel: View {
                 .id(q.id)
                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
                 if correcting {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Space.s) {
                         TextField("What is right?", text: $note, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
                             .focused($noteFocused)
@@ -53,7 +53,7 @@ struct QuestionsPanel: View {
                         Button("Cancel") { withAnimation(.snappy) { correcting = false } }
                     }
                 } else {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Space.s) {
                         Button("True") { send(q, .confirmed) }.buttonStyle(.borderedProminent)
                         Button("Not quite…") {
                             withAnimation(.snappy) { correcting = true }
@@ -91,9 +91,9 @@ struct AnsweredQuestions: View {
 
     var body: some View {
         ForEach(questions.filter { $0.status != .open }.suffix(12).reversed()) { q in
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 Image(systemName: symbol(q.status)).foregroundStyle(color(q.status)).font(.caption)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(q.statement).strikethrough(q.status == .rejected).foregroundStyle(q.status == .rejected ? .secondary : .primary)
                     if let note = q.note { Text(note).font(.footnote).foregroundStyle(.secondary) }
                 }

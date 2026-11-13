@@ -26,7 +26,7 @@ struct PermissionRow: View {
                         name.fixedSize()
                         chip
                     }
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         name
                         chip
                     }

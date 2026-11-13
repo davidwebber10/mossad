@@ -122,10 +122,10 @@ struct ShareSheet: View {
 
     private var noServer: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text("Share links need your own server").fontWeight(.semibold)
                 Text("Mossad puts the parts you choose on a small server in your own Cloudflare account and gives you a private link to send. Nobody else runs it, and nobody else can use it.")
-                    .foregroundStyle(Palette.secondary).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(Palette.secondary).lineSpacing(Rhythm.secondaryLineGap).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 22).padding(.vertical, 16)
             SheetFooter {
@@ -170,7 +170,7 @@ struct ShareSheet: View {
                 } icon: {
                     IconImage(.lock, size: 12).foregroundStyle(Palette.tertiaryMark)
                 }
-                .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 12)
 
@@ -199,7 +199,7 @@ struct ShareSheet: View {
 
     /// The PIN that the link will have, shown before anything is created, with a way to draw another.
     private var pinRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Space.m) {
             Color.clear.frame(width: 20, height: 1)
             PINDigits(pin: draft.pin)
             Spacer(minLength: 8)
@@ -221,11 +221,11 @@ struct ShareSheet: View {
                         .accessibilityAddTraits(.isHeader)
                 }
                 if let url = url(link) {
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                         Text(url.absoluteString).lineLimit(1).truncationMode(.middle)
                         if let pin = shownPIN { Text("PIN: \(pin)") }
                     }
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(size: Rhythm.secondarySize, design: .monospaced))
                     .textSelection(.enabled)
                     .padding(.horizontal, 12).padding(.vertical, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -233,7 +233,7 @@ struct ShareSheet: View {
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(shownPIN == nil ? "The link" : "The link and the PIN, as they are copied")
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: Space.s) {
                         Button { put(ShareMessage.text(url: url, pin: shownPIN), as: "all") } label: {
                             Label { Text(copied == "all" ? "Copied" : shownPIN == nil ? "Copy link" : "Copy link and PIN") }
                                 icon: { IconImage(copied == "all" ? .checkSmall : .link, size: 13) }
@@ -250,12 +250,12 @@ struct ShareSheet: View {
                 }
                 if let pinNote {
                     Text(pinNote)
-                        .font(.system(size: 11.5)).foregroundStyle(pinCheck == .locked ? Palette.recording : Palette.secondary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(pinCheck == .locked ? Palette.recording : Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 12)
                 }
                 Text(facts(link))
-                    .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 12)
                 if let error { ErrorCard(error: error).padding(.top, 12) }
@@ -383,12 +383,12 @@ private struct PartRow: View {
 
     var body: some View {
         Toggle(isOn: on) {
-            HStack(spacing: 12) {
+            HStack(spacing: Space.m) {
                 IconImage(icon, size: 15).foregroundStyle(Palette.accent).frame(width: 20)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(title).fontWeight(.medium)
-                    Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    Text(detail).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

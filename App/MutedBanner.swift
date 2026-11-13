@@ -8,7 +8,7 @@ struct MutedBanner: View {
     var compact = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Image(systemName: "mic.slash").font(.system(size: compact ? 12 : 13.5, weight: .medium)).foregroundStyle(Palette.secondary)
             Text("\(Text("Muted in \(platform.displayName).").fontWeight(.semibold).foregroundStyle(Palette.ink)) \(Text("Your mic is not recorded while you are muted.").foregroundStyle(Palette.secondary))")
                 .font(.system(size: compact ? 12 : 12.5))

@@ -28,7 +28,7 @@ struct LivePointsPanel: View {
                     Group {
                         if collapsed {
                             Text(points.filter { $0.done == nil && model.marks.mark(for: $0.id) == nil }.map(\.text).joined(separator: " · "))
-                                .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).lineLimit(1)
+                                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).lineLimit(1)
                                 .padding(.top, 2)
                         } else {
                             LivePointRows(model: model, record: record, points: points, show: show)
@@ -47,13 +47,13 @@ struct LivePointsPanel: View {
 
     private func header(open: Int, late: Bool) -> some View {
         Button { withAnimation(reduceMotion ? nil : .snappy) { collapsed.toggle() } } label: {
-            VStack(alignment: .trailing, spacing: 2) {
-                HStack(spacing: 5) {
+            VStack(alignment: .trailing, spacing: Rhythm.pairGap) {
+                HStack(spacing: Space.xs) {
                     Text("Your points").textRole(.label).foregroundStyle(Palette.secondary)
                     IconImage(collapsed ? .chevronRight : .chevronDown, size: 9).foregroundStyle(Palette.tertiary)
                 }
                 Text(open == 0 ? "All raised" : "\(open) open")
-                    .font(.system(size: 11.5, weight: late ? .semibold : .regular))
+                    .font(.system(size: Rhythm.secondarySize, weight: late ? .semibold : .regular))
                     .foregroundStyle(late ? Palette.accent : Palette.tertiary)
                     .monospacedDigit()
             }
@@ -103,7 +103,7 @@ struct LivePointRows: View {
             if points.count > Self.shownRows {
                 Button(showAll ? "Show fewer" : "\(points.count - Self.shownRows) more") { withAnimation(reduceMotion ? nil : .snappy) { showAll.toggle() } }
                     .buttonStyle(.plain)
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
+                    .font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.accent)
                     .padding(.horizontal, 8).padding(.top, 2)
             }
         }
@@ -115,7 +115,7 @@ struct LivePointRows: View {
     private func row(_ p: NextTimePoint) -> some View {
         let ticked = p.done?.callID == record.id
         let mark = ticked ? nil : model.marks.mark(for: p.id)
-        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+        return HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Button { controller.toggleLivePoint(p, callID: record.id) } label: {
                 Group {
                     if ticked {
@@ -133,7 +133,7 @@ struct LivePointRows: View {
             .help(ticked ? "Not raised yet: open it again" : mark != nil ? "Confirm: you raised it" : "Mark it raised now")
             .accessibilityLabel(ticked ? "Open \(p.text) again" : mark != nil ? "Confirm \(p.text) raised" : "Mark \(p.text) raised")
             .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(p.text)
                     .foregroundStyle(ticked || mark != nil ? Palette.secondary : Palette.ink)
                     .strikethrough(ticked, color: Palette.tertiaryMark)
@@ -141,17 +141,17 @@ struct LivePointRows: View {
                 if ticked {
                     note("You marked it", at: p.done?.at, help: nil)
                 } else if let mark {
-                    HStack(spacing: 10) {
+                    HStack(spacing: Space.m) {
                         note("Raised", at: mark.at, help: "Mossad heard \u{201C}\(mark.quote)\u{201D}. The check after the call confirms it.")
                         if hovered == p.id {
                             Button("Not raised") { controller.rejectLivePoint(p) }
                                 .buttonStyle(.plain)
-                                .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.secondary)
+                                .font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
                                 .help("Mossad heard it wrong: the point is open again")
                         }
                     }
                 } else if p.isForPerson, let name = p.personName {
-                    Text("For \(SeriesNames.first(name))").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                    Text("For \(SeriesNames.first(name))").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                 }
             }
             Spacer(minLength: 0)
@@ -179,11 +179,11 @@ struct LivePointRows: View {
 
     /// "Raised 12:04" with the time as a chip that shows the moment in the live transcript.
     private func note(_ words: String, at: TimeInterval?, help: String?) -> some View {
-        HStack(spacing: 6) {
-            Text(words).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+        HStack(spacing: Space.s) {
+            Text(words).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             if let at {
                 Button { show(at) } label: {
-                    Text(longClock(at)).font(.system(size: 11, weight: .semibold)).monospacedDigit().foregroundStyle(Palette.accent)
+                    Text(longClock(at)).font(.system(size: Rhythm.noteSize, weight: .semibold)).monospacedDigit().foregroundStyle(Palette.accent)
                         .padding(.horizontal, 6).frame(height: 17)
                         .background(Palette.accentTint, in: Capsule())
                         .contentShape(Capsule())

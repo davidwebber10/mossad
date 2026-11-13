@@ -17,25 +17,25 @@ struct CompanyDomainsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(icon: .people, title: "Company domains", subtitle: "One person can have an address on each.", close: { dismiss() })
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 Text("List every domain of your company, such as example.com and exampleinc.com. When an invite has an address on one of them that no person has, and exactly one person has the same name before the @ on another of them, Mossad knows that it is that person. When two people have that name, it is nobody.")
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 TextField("Domains", text: $text, prompt: Text("example.com, exampleinc.com"), axis: .vertical)
                     .textFieldStyle(SheetFieldStyle())
                     .lineLimit(1...3)
                 let refused = CompanyDomains.refused(in: text)
                 if !refused.isEmpty {
                     Text("\(refused.joined(separator: ", ")) is a mail service for anyone, so it is not in the list.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 let fresh = suggestions.filter { !draft.domains.contains($0) }
                 if !fresh.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Suggested from your email and the other addresses of the people you saved").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                    VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+                        Text("Suggested from your email and the other addresses of the people you saved").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                         FlowLayout(spacing: 6) {
                             ForEach(fresh, id: \.self) { d in
                                 Button { text = CompanyDomains(draft.domains + [d]).text } label: {
-                                    Label(d, systemImage: "plus").font(.system(size: 12))
+                                    Label(d, systemImage: "plus").font(.system(size: Rhythm.secondarySize))
                                         .padding(.horizontal, 8).frame(height: 22)
                                         .background(Palette.fill, in: Capsule())
                                 }

@@ -17,7 +17,7 @@ struct DateRangeButton: View {
             ToolbarIconButton(icon: .chevronLeft, label: "Earlier", help: "The period before", size: 14) { step(-1) }
             Button { picking.toggle() } label: {
                 Text(periodText(interval)).monospacedDigit()
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: Rhythm.bodySize, weight: .medium))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .fixedSize()
@@ -74,14 +74,14 @@ struct PeriodPanel: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: Space.m) {
             presets
                 // Wider than the canvas's 160 so "Last 30 days · Oct 8 – Nov 6" fits without cutting.
                 .frame(width: 214)
                 .padding(.trailing, 10)
                 .overlay(alignment: .trailing) { Hairline(axis: .vertical) }
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+                HStack(alignment: .top, spacing: Space.xl) {
                     PanelMonth(month: month, start: start, end: end ?? hover, tap: tap, hover: $hover,
                                shift: (-1, "Earlier months"), onShift: shift)
                     PanelMonth(month: Self.cal.date(byAdding: .month, value: 1, to: month)!, start: start, end: end ?? hover, tap: tap,
@@ -94,12 +94,12 @@ struct PeriodPanel: View {
             .padding(EdgeInsets(top: 4, leading: 4, bottom: 2, trailing: 4))
         }
         .padding(8)
-        .font(.system(size: 12.5))
+        .font(.system(size: Rhythm.bodySize))
         .foregroundStyle(Palette.ink)
     }
 
     private var presets: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             ForEach(PeriodChoice.Preset.picker) { p in
                 let on = p == preset
                 Button { pick(p) } label: {
@@ -108,7 +108,7 @@ struct PeriodPanel: View {
                         Spacer(minLength: 6)
                         if let range = p.range {
                             Text(shortPeriodText(range.interval(earliest: earliest)))
-                                .font(.system(size: 11)).monospacedDigit().opacity(on ? 0.85 : 1)
+                                .font(.system(size: Rhythm.noteSize)).monospacedDigit().opacity(on ? 0.85 : 1)
                                 .foregroundStyle(on ? Palette.onAccent : Palette.secondary)
                         }
                     }
@@ -126,7 +126,7 @@ struct PeriodPanel: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Space.m) {
             if let end {
                 let i = DateInterval(start: start, end: Self.cal.date(byAdding: .day, value: 1, to: end)!)
                 Text(periodText(i)).fontWeight(.semibold).monospacedDigit()
@@ -137,7 +137,7 @@ struct PeriodPanel: View {
             Spacer(minLength: 12)
             Toggle(isOn: $compareOn) {
                 Text("Compare with the \(days(pending)) \(days(pending) == 1 ? "day" : "days") before")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
             }
             .toggleStyle(PanelSwitchStyle())
             .fixedSize()
@@ -213,7 +213,7 @@ private struct PanelMonth: View {
 
     var body: some View {
         let days = self.days
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             HStack {
                 if let shift, shift.0 < 0 { arrow(shift) }
                 Text(month.formatted(.dateTime.month(.wide).year())).fontWeight(.semibold)
@@ -225,7 +225,7 @@ private struct PanelMonth: View {
             Grid(horizontalSpacing: 0, verticalSpacing: 0) {
                 GridRow {
                     ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, s in
-                        Text(s).font(.system(size: 10.5)).foregroundStyle(Palette.tertiary).frame(width: 32)
+                        Text(s).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary).frame(width: 32)
                     }
                 }
                 .padding(.bottom, 4)
@@ -243,7 +243,7 @@ private struct PanelMonth: View {
     private func arrow(_ shift: (Int, String)) -> some View {
         Button { onShift(shift.0) } label: {
             Image(systemName: shift.0 < 0 ? "chevron.left" : "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: Rhythm.noteSize, weight: .semibold))
                 .foregroundStyle(Palette.secondary)
                 .frame(width: 20, height: 20)
                 .contentShape(Rectangle())
@@ -263,7 +263,7 @@ private struct PanelMonth: View {
             let edge = isStart || isEnd
             Button { tap(day) } label: {
                 Text("\(cal.component(.day, from: day))")
-                    .font(.system(size: 12, weight: edge ? .semibold : .regular)).monospacedDigit()
+                    .font(.system(size: Rhythm.secondarySize, weight: edge ? .semibold : .regular)).monospacedDigit()
                     .foregroundStyle(edge ? Palette.onAccent : future ? Palette.tertiary : Palette.ink)
                     .frame(width: 26, height: 26)
                     .background {
@@ -319,7 +319,7 @@ private struct PanelMonth: View {
 private struct PanelSwitchStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 configuration.label
                 Capsule()
                     .fill(configuration.isOn ? Palette.accentFill : Palette.bar)

@@ -207,13 +207,13 @@ struct PeopleView: View {
     private func editSheet(_ p: VoiceProfile) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(icon: .pencil, title: "Edit \(p.name)", subtitle: "Mossad uses the email to match calendar invites.")
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 TextField("Name", text: $newName).textFieldStyle(SheetFieldStyle())
                 TextField("Email (optional)", text: $newEmail).textFieldStyle(SheetFieldStyle())
                     .onChange(of: newEmail) { _, _ in emailHolder = nil }
                 if let other = emailHolder {
                     Text("\(other) has this address. An address is one person’s only.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                     if !p.isOwner, let target = profiles.first(where: { $0.name == other }) {
                         Button("Merge \(p.name) into \(other)") {
                             editing = nil
@@ -296,7 +296,7 @@ private struct DuplicatesBanner: View {
                 Spacer()
                 Text("Review").fontWeight(.semibold).foregroundStyle(Palette.accent)
             }
-            .font(.system(size: 12.5))
+            .font(.system(size: Rhythm.bodySize))
             .padding(.horizontal, 10).padding(.vertical, Space.s)
             .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
             .contentShape(Rectangle())
@@ -340,7 +340,7 @@ private struct PeopleList: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
+                LazyVStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     if !owner.isEmpty {
                         header(Text("You"))
                         ForEach(owner, id: \.name) { row($0) }
@@ -354,7 +354,7 @@ private struct PeopleList: View {
                     ForEach(people, id: \.name) { row($0) }
                     if people.isEmpty {
                         Text(!query.isEmpty ? "No one matches “\(query)”." : needsSample ? "Everyone has a voice sample." : "Name voices after a call and they show here.")
-                            .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                             .padding(.horizontal, 10).padding(.top, Space.xs)
                     }
                 }
@@ -391,11 +391,11 @@ private struct PeopleList: View {
             Divider()
             Toggle("Needs a voice sample", isOn: $needsSample)
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: Space.xs) {
                 Text((PeopleSort(rawValue: sort) ?? .recent).title + (needsSample ? " · Needs a sample" : ""))
                 IconImage(.chevronDown, size: 9)
             }
-            .font(.system(size: 11.5, weight: .medium))
+            .font(.system(size: Rhythm.secondarySize, weight: .medium))
             .foregroundStyle(needsSample ? Palette.accent : Palette.secondary)
             .padding(.leading, Space.s).padding(.trailing, 6)
             .frame(height: 20)
@@ -443,27 +443,27 @@ private struct PersonRow: View {
 
     var body: some View {
         Button(action: select) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 PersonMark(name: profile.name, size: 28, isOwner: profile.isOwner)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(match?.title.boldMatches(size: 13) ?? AttributedString(profile.name))
-                        .font(.system(size: 13, weight: profile.isOwner || selected ? .semibold : .medium))
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    Text(match?.title.boldMatches(size: Rhythm.bodySize) ?? AttributedString(profile.name))
+                        .font(.system(size: Rhythm.bodySize, weight: profile.isOwner || selected ? .semibold : .medium))
                         .foregroundStyle(Palette.ink)
                     if let match, match.context != nil {
                         ListMatchLine(match: match, lines: 1)
                     } else if let sub {
-                        Text(sub).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        Text(sub).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     } else if profile.embeddings.isEmpty {
-                        Text("Needs a voice sample").font(.system(size: 12)).foregroundStyle(Palette.accent)
+                        Text("Needs a voice sample").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.accent)
                     }
                 }
                 .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 6)
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: Rhythm.pairGap) {
                     if !profile.isOwner { Text(meetingsText(stats?.meetings.count ?? 0)) }
                     if let last = stats?.lastHeard { Text(shortDay(last)) }
                 }
-                .font(.system(size: 12)).monospacedDigit()
+                .font(.system(size: Rhythm.secondarySize)).monospacedDigit()
                 .foregroundStyle(Palette.secondary)
             }
             .padding(.vertical, Space.s).padding(.horizontal, 10)

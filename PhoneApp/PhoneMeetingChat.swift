@@ -20,7 +20,7 @@ struct PhoneMeetingChat: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: Rhythm.groupGap) {
             if let chat {
                 ForEach(chat.messages) { MessageBubble(message: $0) }
             } else {
@@ -30,7 +30,7 @@ struct PhoneMeetingChat: View {
                 }
             }
             if running {
-                HStack(spacing: 10) {
+                HStack(spacing: Space.m) {
                     PhoneProcessingMark()
                     Text(run.steps.last ?? "Thinking…").textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
                 }

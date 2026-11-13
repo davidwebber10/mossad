@@ -28,7 +28,7 @@ private struct MoreVoices: View {
         if !rest.isEmpty {
             let share = rest.reduce(0) { $0 + $1.share }
             Text("+\(rest.count) more \(rest.count == 1 ? "voice" : "voices") with \(percentText(share)) of the talk")
-                .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
         }
     }
 }
@@ -44,16 +44,16 @@ struct TalkTimeSection: View {
 
     var body: some View {
         let a = analytics
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             if let finding = MeetingFindings.talk(a) {
                 SpeakerFinding(speaker: finding.subject.flatMap(people.speaker(forKey:)), callID: callID, text: finding.text)
             }
             if let owner = a.owner, a.speakers.count > 1, owner.seconds > 0 {
-                HStack(spacing: 12) {
-                    Text("You against the rest").font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize()
+                HStack(spacing: Space.m) {
+                    Text("You against the rest").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize()
                     BalanceBar(mine: owner.seconds, theirs: a.speechSeconds - owner.seconds).frame(maxWidth: 260)
                     Text("\(MeetingFindings.span(owner.seconds)) of \(MeetingFindings.span(a.speechSeconds))")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary).monospacedDigit().lineLimit(1)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).monospacedDigit().lineLimit(1)
                 }
             }
             rows
@@ -73,8 +73,8 @@ struct TalkTimeSection: View {
             ForEach(a.shown) { s in
                 let speaker = people.speaker(forKey: s.id)
                 let usual = a.usual(s, .talkShare)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    HStack(spacing: Space.m) {
                         SpeakerCell(speaker: speaker, name: s.name, callID: callID).frame(width: 150, alignment: .leading)
                         Capsule().fill(Palette.fill)
                             .overlay(alignment: .leading) {
@@ -91,12 +91,12 @@ struct TalkTimeSection: View {
                     }
                     if ranges, !s.isUnknown, let line = usualLine(s, usual?.usually) {
                         Text(line)
-                            .font(.system(size: 11.5))
+                            .font(.system(size: Rhythm.secondarySize))
                             .foregroundStyle(usual?.reading.stoodOut == true ? Palette.ink : Palette.tertiary)
                             .padding(.leading, 16)
                     }
                 }
-                .font(.system(size: 12.5)).monospacedDigit()
+                .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                 .padding(.vertical, 7)
                 .hairline()
             }
@@ -121,12 +121,12 @@ private struct OwnerWithRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Your share of this meeting, against meetings of this size with each person").font(.system(size: 12, weight: .semibold))
+            Text("Your share of this meeting, against meetings of this size with each person").font(.system(size: Rhythm.secondarySize, weight: .semibold))
                 .foregroundStyle(Palette.secondary)
                 .padding(.bottom, 6)
             ForEach(analytics.baselines.ownerWith) { w in
                 if let usual = w.reading.usual {
-                    HStack(spacing: 12) {
+                    HStack(spacing: Space.m) {
                         SpeakerCell(speaker: people.speaker(forKey: w.id), name: analytics.speaker(w.id)?.name ?? "", callID: callID)
                             .frame(width: 150, alignment: .leading)
                         let usually = MeetingFindings.usually(.talkShare, usual, context: w.context)
@@ -136,7 +136,7 @@ private struct OwnerWithRows: View {
                             .foregroundStyle(w.reading.stoodOut ? Palette.ink : Palette.tertiary).lineLimit(1)
                         Spacer(minLength: 0)
                     }
-                    .font(.system(size: 12.5)).monospacedDigit()
+                    .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                     .padding(.vertical, 6)
                     .hairline(.top)
                 }
@@ -154,8 +154,8 @@ private struct FloorStrip: View {
 
     var body: some View {
         let a = analytics
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Who held the floor").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.secondary)
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+            Text("Who held the floor").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
             GeometryReader { g in
                 Canvas { context, size in
                     context.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 3), with: .color(Palette.fill))
@@ -179,7 +179,7 @@ private struct FloorStrip: View {
                 Spacer()
                 Text(a.duration >= 3600 ? longClock(a.duration) : clock(a.duration))
             }
-            .font(.system(size: 10.5)).monospacedDigit().foregroundStyle(Palette.tertiary)
+            .font(.system(size: Rhythm.noteSize)).monospacedDigit().foregroundStyle(Palette.tertiary)
             .accessibilityHidden(true)
         }
         .padding(.top, 4)
@@ -201,7 +201,7 @@ struct FlowSection: View {
 
     var body: some View {
         let a = analytics
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             if let finding = MeetingFindings.flow(a) {
                 SpeakerFinding(speaker: finding.subject.flatMap(people.speaker(forKey:)), callID: callID, text: finding.text)
             }
@@ -216,7 +216,7 @@ struct FlowSection: View {
                 Text(flow.crossTalkMeasured
                      ? "Cut-ins and talking at once are measured between your microphone and the call. People in the call who talk over each other are not measured."
                      : "Cut-ins and talking at once are not measured in this call: every voice is on one audio track.")
-                    .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 FlowFigures(flow: flow, long: long)
                 if flow.crossTalkMeasured, !flow.interruptions.isEmpty { CutIns(flow: flow, people: people, callID: callID, long: long) }
@@ -242,9 +242,9 @@ struct FlowSection: View {
         out.append(SpeakerTable.Column("Longest turn", width: 132) { s in
             if let turn = s.longestTurn {
                 let u = a.usual(s, .longestTurn)
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     Marked(text: MeetingFindings.span(turn.seconds), reading: u?.reading, tip: u?.tip)
-                    PlayAt(at: turn.start, long: long).font(.system(size: 11.5))
+                    PlayAt(at: turn.start, long: long).font(.system(size: Rhythm.secondarySize))
                 }
             } else {
                 NoValue()
@@ -295,7 +295,7 @@ private struct FlowFigures: View {
     let long: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: Space.l) {
             if flow.crossTalkMeasured {
                 SmallFigure(value: "\(flow.overlapCount)",
                             label: flow.overlapCount == 0 ? "times you and someone in the call talked at once"
@@ -304,9 +304,9 @@ private struct FlowFigures: View {
             SmallFigure(value: flow.medianResponse.map(MeetingFindings.pause) ?? "–", label: "before an answer, at the median")
             SmallFigure(value: MeetingFindings.span(flow.silenceSeconds), label: "of silence, \(percentText(flow.silenceShare)) of the call")
             if let longest = flow.longestSilence {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     SmallFigure(value: MeetingFindings.span(longest.seconds), label: "the longest silence")
-                    PlayAt(at: longest.start, long: long, icon: true).font(.system(size: 11.5, weight: .semibold))
+                    PlayAt(at: longest.start, long: long, icon: true).font(.system(size: Rhythm.secondarySize, weight: .semibold))
                 }
             }
         }
@@ -325,18 +325,18 @@ private struct CutIns: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Cut-ins between you and others").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.secondary)
+            Text("Cut-ins between you and others").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
                 .padding(.bottom, 6)
             ForEach(flow.interruptions.prefix(6)) { cut in
-                HStack(spacing: 8) {
+                HStack(spacing: Space.s) {
                     name(cut.by)
                     Text("cut in on").foregroundStyle(Palette.secondary)
                     name(cut.of)
                     Text("\(cut.count)×").foregroundStyle(Palette.secondary)
                     Spacer(minLength: 8)
-                    ForEach(Array(cut.moments.prefix(4).enumerated()), id: \.offset) { _, at in PlayAt(at: at, long: long).font(.system(size: 11.5)) }
+                    ForEach(Array(cut.moments.prefix(4).enumerated()), id: \.offset) { _, at in PlayAt(at: at, long: long).font(.system(size: Rhythm.secondarySize)) }
                 }
-                .font(.system(size: 12.5)).monospacedDigit()
+                .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                 .lineLimit(1)
                 .padding(.vertical, 6)
                 .hairline(.top)
@@ -360,7 +360,7 @@ struct DeliverySection: View {
 
     var body: some View {
         let a = analytics
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             if let finding = MeetingFindings.delivery(a) {
                 SpeakerFinding(speaker: finding.subject.flatMap(people.speaker(forKey:)), callID: callID, text: finding.text)
             }

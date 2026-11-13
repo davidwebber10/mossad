@@ -19,7 +19,7 @@ struct ActionItemsView: View {
                 Section {
                     ForEach(Array(items(r).enumerated()), id: \.offset) { _, item in
                         Label {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                 Text(item.task)
                                 if !mine, let owner = item.owner { Text(owner).font(.caption).foregroundStyle(.secondary) }
                             }

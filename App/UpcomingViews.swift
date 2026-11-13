@@ -24,7 +24,7 @@ struct UpcomingRow: View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let soon = meeting.start.timeIntervalSince(context.date) < 600
             let joinable = meeting.start.timeIntervalSince(context.date) <= 60
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: Space.m) {
                 Group {
                     if let p = meeting.platform {
                         PlatformDot(platform: p, hollow: true)
@@ -33,15 +33,15 @@ struct UpcomingRow: View {
                     }
                 }
                 .padding(.top, 5)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(meeting.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.secondary).lineLimit(1)
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    Text(meeting.title).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.secondary).lineLimit(1)
                     HStack(spacing: 0) {
                         // The time stays whole in a narrow list; the platform and the length give way.
                         Text(upcomingWhen(meeting, now: context.date, dated: dated)).foregroundStyle(soon ? Palette.accent : Palette.secondary)
                             .fixedSize().layoutPriority(1)
                         Text(detail).foregroundStyle(Palette.secondary)
                     }
-                    .font(.system(size: 12))
+                    .font(.system(size: Rhythm.secondarySize))
                     .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -51,7 +51,7 @@ struct UpcomingRow: View {
                 } else if meeting.platform != nil {
                     RecordChoiceControl(meeting: meeting, size: .compact)
                 } else {
-                    Text(durationLabel(meeting.end.timeIntervalSince(meeting.start))).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary).fixedSize().padding(.top, 1)
+                    Text(durationLabel(meeting.end.timeIntervalSince(meeting.start))).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.secondary).fixedSize().padding(.top, 1)
                 }
             }
         }
@@ -95,7 +95,7 @@ struct RecordChoiceControl: View {
                 picks(choice)
             }
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: Space.xs) {
                 Image(systemName: records ? "record.circle" : "pause.circle")
                     .font(.system(size: size == .compact ? 10 : 12, weight: .semibold))
                     .foregroundStyle(records ? Palette.recording : Palette.tertiary)

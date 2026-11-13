@@ -10,8 +10,8 @@ struct PhonePairingRows: View {
 
     var body: some View {
         Group {
-            HStack(alignment: .center, spacing: 20) {
-                VStack(spacing: 10) {
+            HStack(alignment: .center, spacing: Space.xl) {
+                VStack(spacing: Rhythm.rowGap) {
                     IconImage(.qrLarge, size: 28).foregroundStyle(Palette.tertiaryMark)
                         .accessibilityHidden(true)
                     Button("Show code") { showCode = true }.buttonStyle(.settings)
@@ -20,7 +20,7 @@ struct PhonePairingRows: View {
                 .frame(width: 120, height: 120)
                 .background(Palette.fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Connect Mossad on your iPhone").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
+                    Text("Connect Mossad on your iPhone").font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
                     VStack(alignment: .leading, spacing: 0) {
                         step(1, "Open Mossad on your iPhone.")
                         step(2, "Tap the gear on the Meetings screen.")
@@ -28,7 +28,7 @@ struct PhonePairingRows: View {
                     }
                     .padding(.top, 6)
                     Text("The code holds your secret, so it hides again after a minute.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.tertiary).padding(.top, 6)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).padding(.top, 6)
                 }
             }
             .padding(.top, 9).padding(.bottom, 12)
@@ -41,11 +41,11 @@ struct PhonePairingRows: View {
     }
 
     private func step(_ n: Int, _ text: String) -> some View {
-        HStack(spacing: 10) {
-            Text("\(n)").font(.system(size: 10.5, weight: .bold)).foregroundStyle(Palette.secondary)
+        HStack(spacing: Space.m) {
+            Text("\(n)").font(.system(size: Rhythm.noteSize, weight: .bold)).foregroundStyle(Palette.secondary)
                 .frame(width: 18, height: 18).background(Palette.fill, in: Circle())
                 .accessibilityHidden(true)
-            Text(text).font(.system(size: 12.5)).foregroundStyle(Palette.ink)
+            Text(text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
         }
         .padding(.vertical, 3)
     }
@@ -59,7 +59,7 @@ private struct PairingCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Connect Mossad on your iPhone").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
+            Text("Connect Mossad on your iPhone").font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
             Group {
                 if let c = controller.serverConnection, let image = QRCode.image(ServerPairing.code(for: c)) {
                     Image(nsImage: image).interpolation(.none).resizable()
@@ -73,17 +73,17 @@ private struct PairingCard: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 14)
             .accessibilityLabel("Pairing code")
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text("1. Open Mossad on your iPhone.")
                 Text("2. Tap the gear on the Meetings screen.")
                 Text("3. Choose Your server, then Scan code.")
             }
-            .font(.system(size: 12.5)).foregroundStyle(Palette.ink)
+            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
             .padding(.top, 14)
             TimelineView(.periodic(from: shown, by: 1)) { context in
                 let left = max(0, 60 - Int(context.date.timeIntervalSince(shown)))
                 Text("The code holds your secret, so it hides again in 0:\(String(format: "%02d", left)).")
-                    .font(.system(size: 11.5)).foregroundStyle(Palette.secondary).monospacedDigit()
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).monospacedDigit()
                     .onChange(of: left) { _, l in if l == 0 { dismiss() } }
             }
             .padding(.top, Space.s)

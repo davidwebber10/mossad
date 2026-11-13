@@ -36,7 +36,7 @@ struct LogView: View {
     var body: some View {
         DetailColumn {
             PageToolbar(title: "Log", search: $search, searchPrompt: "Filter the lines") {
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     chip("Info", .info)
                     chip("Error", .error)
                     chip("Debug", .debug)
@@ -71,14 +71,12 @@ struct LogView: View {
                     ForEach(group.lines, id: \.id) { LogRow(line: $0.line, query: filter) }
                 }
                 if visible.isEmpty, !lines.isEmpty {
-                    Text("No lines match.").font(.system(size: 12)).foregroundStyle(Palette.tertiary).padding(.top, 14)
+                    Text("No lines match.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).padding(.top, 14)
                 }
             }
             .textSelection(.enabled)
             // The canvas starts the page 10 pt under the toolbar row, so the first day never sits under it.
-            .padding(EdgeInsets(top: Detail.bodyTop, leading: Detail.gutter, bottom: 24, trailing: Detail.gutter))
-            .frame(maxWidth: 1172, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(Rhythm.tableMax, bottom: Space.xl)
         }
         // Opens at the newest line, follows new lines, and a short log still starts at the top.
         .defaultScrollAnchor(.top, for: .alignment)
@@ -92,7 +90,7 @@ struct LogView: View {
             if on { levels.remove(level) } else { levels.insert(level) }
         } label: {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                 .foregroundStyle(on ? Palette.accent : Palette.secondary)
                 .padding(.horizontal, 11)
                 .frame(height: 26)
@@ -148,7 +146,7 @@ private struct LogRow: View {
     private var error: Bool { line.level == .error }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.l) {
             Text(line.date.map { LogView.time.string(from: $0) } ?? "")
                 // Tertiary loses contrast on the red ground.
                 .foregroundStyle(error ? Palette.secondary : Palette.tertiary)
@@ -158,13 +156,13 @@ private struct LogRow: View {
                 .foregroundStyle(error ? Palette.recording : Palette.tertiary)
                 .frame(width: 48, alignment: .leading)
             Text(query.isEmpty ? AttributedString(line.message)
-                 : SearchText.marking(line.message, query: query).boldMatches(size: 11.5, design: .monospaced))
+                 : SearchText.marking(line.message, query: query).boldMatches(size: Rhythm.secondarySize, design: .monospaced))
                 .foregroundStyle(error ? Palette.ink : Palette.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .font(.system(size: 11.5, design: .monospaced))
-        .cssLineHeight(1.5, size: 11.5)
+        .font(.system(size: Rhythm.secondarySize, design: .monospaced))
+        .cssLineHeight(1.5, size: Rhythm.secondarySize)
         .padding(.horizontal, 6).padding(.vertical, 2)
         .background(error ? Palette.errorWash : .clear, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         .padding(.horizontal, -6)

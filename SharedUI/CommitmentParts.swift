@@ -48,7 +48,7 @@ struct CommitmentRow<Trailing: View>: View {
     @ScaledMetric(relativeTo: .callout) private var detailSize: CGFloat = CommitmentRowMetrics.detail
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Space.m) {
             CommitmentRing(commitment: commitment, toggle: toggleDone)
             if let open {
                 Button(action: open) { content.contentShape(Rectangle()) }
@@ -61,7 +61,7 @@ struct CommitmentRow<Trailing: View>: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             Text(marked ?? AttributedString(commitment.text))
                 .font(.system(size: textSize, weight: .medium))
                 .cssLineHeight(size: textSize)
@@ -69,7 +69,7 @@ struct CommitmentRow<Trailing: View>: View {
                 .foregroundStyle(commitment.done == nil ? Palette.ink : Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if hasDetail {
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     if showPerson, let to = commitment.to {
                         Circle().fill(PersonMark.color(for: to)).frame(width: 7, height: 7).accessibilityHidden(true)
                     }
@@ -191,7 +191,7 @@ struct CommitmentEditor: View {
             }
             if let id = commitment.callID, let title = commitment.callTitle {
                 Section("Where you said it") {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         Text("\(title), \(commitment.madeAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))")
                         if let q = commitment.quote { Text("“\(q)”").italic().foregroundStyle(.secondary) }
                     }

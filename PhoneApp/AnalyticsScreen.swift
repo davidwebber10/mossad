@@ -31,7 +31,7 @@ struct AnalyticsScreen: View {
         NavigationStack(path: $store.analyticsPath) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                         periodMenu.frame(maxWidth: .infinity)
                         peopleLink
                         if let data {
@@ -75,7 +75,7 @@ struct AnalyticsScreen: View {
                     .foregroundStyle(Palette.accent)
                     .frame(width: 28)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text("People").textRole(.headline).foregroundStyle(Palette.ink)
                     Text(peopleCount).textRole(.secondary).foregroundStyle(Palette.secondary)
                 }
@@ -114,7 +114,7 @@ struct AnalyticsScreen: View {
             Divider()
             Button("Custom range…", systemImage: "calendar") { customizing = true }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 Image(systemName: "calendar").accessibilityHidden(true)
                 Text(data.map { shortPeriodText($0.now.interval) } ?? choice.preset.title)
                 Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).accessibilityHidden(true)
@@ -227,7 +227,7 @@ struct AnalyticsScreen: View {
 
     /// A section's label in caps, then its finding: the sentence first, the chart under it as the evidence.
     private func heading(_ label: String, _ finding: String?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             PhoneLabel(label)
             if let finding {
                 Text(finding).textRole(.lede).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
@@ -262,7 +262,7 @@ struct AnalyticsScreen: View {
         return Card {
             CardTitle(text: "Topics", symbol: "number")
             ForEach(top) { t in
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     HStack {
                         Text(t.name).lineLimit(1)
                         Spacer()
@@ -285,7 +285,7 @@ struct AnalyticsScreen: View {
             CardTitle(text: "Meeting value", symbol: "clock.badge.checkmark")
             Text("\(duration(r.valueSeconds[.low] ?? 0)) in meetings rated low").font(.headline)
             GeometryReader { g in
-                HStack(spacing: 2) {
+                HStack(spacing: Space.xs) {
                     ForEach(ratings, id: \.1) { rating in
                         Rectangle().fill(rating.2).frame(width: max(0, g.size.width * (r.valueSeconds[rating.0] ?? 0) / total - 2))
                     }
@@ -293,7 +293,7 @@ struct AnalyticsScreen: View {
                 .clipShape(.capsule)
             }
             .frame(height: 10)
-            HStack(spacing: 12) {
+            HStack(spacing: Space.m) {
                 ForEach(ratings, id: \.1) { rating in
                     Text("\(rating.1) \(pct((r.valueSeconds[rating.0] ?? 0) / total))").font(.caption).foregroundStyle(.secondary)
                 }
@@ -309,9 +309,9 @@ struct AnalyticsScreen: View {
             }
             ForEach(r.people.prefix(8)) { p in
                 NavigationLink(value: PersonLink(name: p.name)) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: Space.m) {
                         PersonMark(name: p.name, size: 34)
-                        VStack(alignment: .leading, spacing: 5) {
+                        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                             HStack {
                                 Text(p.name).font(.subheadline.weight(.medium)).foregroundStyle(.primary).lineLimit(1)
                                 Spacer()
@@ -420,14 +420,14 @@ private struct PhoneShareBar: View {
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             HStack {
                 Text(label).font(.subheadline.weight(.medium))
                 Spacer()
                 Text(detail).font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }
             GeometryReader { g in
-                HStack(spacing: 2) {
+                HStack(spacing: Space.xs) {
                     Rectangle().fill(Palette.accentFill).frame(width: max(0, g.size.width * share - 1))
                         .overlay { if g.size.width * share > 40 { Text("\(Int((share * 100).rounded()))%").font(.caption2.weight(.semibold)).foregroundStyle(Palette.onAccent) } }
                     Rectangle().fill(Palette.bar)
@@ -449,9 +449,9 @@ private struct PhoneBalance: View {
     var body: some View {
         let total = mine + theirs
         let share = total > 0 ? mine / total : 0.5
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             GeometryReader { g in
-                HStack(spacing: 1) {
+                HStack(spacing: Space.xs) {
                     Rectangle().fill(Palette.accentFill).frame(width: g.size.width * share)
                     Rectangle().fill(Palette.bar)
                 }

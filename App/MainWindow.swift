@@ -185,7 +185,7 @@ private struct Sidebar: View {
                 Spacer(minLength: 4)
                 trailing(section)
             }
-            .font(.system(size: 13, weight: on ? .medium : .regular))
+            .font(.system(size: Rhythm.bodySize, weight: on ? .medium : .regular))
             .padding(.horizontal, Chrome.navRowPadding)
             .frame(height: Chrome.navRowHeight)
             .background(on ? Palette.selection : hovered == section ? Palette.fill.opacity(0.5) : .clear,
@@ -221,12 +221,12 @@ private struct Sidebar: View {
         // No count on a closed Meetings row: the open tasks there would read as a number of meetings.
         case .coach where !controller.findings.isEmpty && !controller.sidebarOpen(.coach):
             Text("\(controller.findings.count)")
-                .font(.system(size: 11)).monospacedDigit()
+                .font(.system(size: Rhythm.noteSize)).monospacedDigit()
                 .foregroundStyle(Palette.tertiary)
                 .accessibilityLabel("\(controller.findings.count) to review")
         case .settings where !permissions.allGood:
             Text("\(permissions.problemCount)")
-                .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                .font(.system(size: Rhythm.noteSize, weight: .semibold)).monospacedDigit()
                 .foregroundStyle(Palette.onAccent)
                 .padding(.horizontal, 6)
                 .frame(minWidth: 18, minHeight: 18)
@@ -255,7 +255,7 @@ private struct SidebarStatus: View {
                         Text("Recording \(elapsed(since, context.date))\(controller.isMuted ? " · muted" : "")").monospacedDigit()
                     }
                 }
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Rhythm.secondarySize, weight: .medium))
                 .foregroundStyle(Palette.ink)
                 .padding(.horizontal, 10)
                 // One click releases every call that waits; the words say how many.
@@ -275,7 +275,7 @@ private struct SidebarStatus: View {
                     Circle().fill(Palette.accentFill).frame(width: 7, height: 7)
                     Text("Processing \(controller.processing) \(controller.processing == 1 ? "call" : "calls")")
                 }
-                .font(.system(size: 12))
+                .font(.system(size: Rhythm.secondarySize))
                 .foregroundStyle(Palette.secondary)
                 .padding(.horizontal, 10)
             }
@@ -310,7 +310,7 @@ private struct WaitingLine: View {
                 .padding(.leading, 7 + Space.s)
                 .help("Runs the rest of the waiting steps now, at low priority, while this call records")
         }
-        .font(.system(size: 12))
+        .font(.system(size: Rhythm.secondarySize))
         .lineLimit(1)
     }
 }
@@ -337,7 +337,7 @@ private struct SidebarCard<Lines: View>: View {
                 Text(action).fontWeight(.semibold).foregroundStyle(actionEnabled ? Palette.accent : Palette.secondary)
                     .padding(.top, 6)
             }
-            .font(.system(size: 12))
+            .font(.system(size: Rhythm.secondarySize))
             .lineSpacing(1.5)
             .padding(EdgeInsets(top: 10, leading: 10, bottom: 8, trailing: 10))
             .frame(maxWidth: .infinity, alignment: .leading)

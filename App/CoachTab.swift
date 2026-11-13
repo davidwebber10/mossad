@@ -55,7 +55,7 @@ struct CoachTab: View {
             (cards.first.map { [$0] } ?? []).contains { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text }
                 || answered.contains { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text }
         } ?? false
-        return LabelColumnStack(spacing: 18) {
+        return LabelColumnStack(spacing: Rhythm.sectionGap) {
             if let line {
                 if !lineIsTopCard { LabelColumn(label: line.heading) { LineRow(line: line, strong: true, long: record.isLong, player: player) } }
             } else {
@@ -93,20 +93,20 @@ struct CoachTab: View {
                     withAnimation(.snappy) { more.toggle() }
                 } label: {
                     Label(more ? "Less" : "Full review", systemImage: more ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                 }
                 .buttonStyle(.plain).foregroundStyle(Palette.accent)
                 .accessibilityHint("Shows the rest of the coach\u{2019}s review of this call")
             }
             if more { full(review, line: line, others: others, profile: profile) }
         }
-        .font(.system(size: 13))
+        .readingText()
         .foregroundStyle(Palette.ink)
     }
 
     private func read(_ review: CoachReview, nothing: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(review.headline).font(.system(size: 16, weight: .medium)).lineSpacing(3)
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+            Text(review.headline).font(.system(size: Rhythm.leadSize, weight: .medium)).lineSpacing(Rhythm.readingLineGap)
                 .fixedSize(horizontal: false, vertical: true)
             if nothing {
                 Text(CoachLineView.nothing).foregroundStyle(Palette.secondary)
@@ -128,7 +128,7 @@ struct CoachTab: View {
         if line != nil { LabelColumn(label: "The coach\u{2019}s read") { read(review, nothing: false) } }
         if !worked.isEmpty || !review.strengths.isEmpty {
             LabelColumn(label: "What worked") {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                     ForEach(Array(worked.enumerated()), id: \.offset) { _, l in LineRow(line: l, long: record.isLong, player: player) }
                     ForEach(Array(review.strengths.enumerated()), id: \.offset) { _, p in point(p, review) }
                 }
@@ -136,7 +136,7 @@ struct CoachTab: View {
         }
         if !change.isEmpty || !review.improvements.isEmpty {
             LabelColumn(label: "What to change") {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                     ForEach(Array(change.enumerated()), id: \.offset) { _, l in LineRow(line: l, titled: l.kind == .again, long: record.isLong, player: player) }
                     ForEach(Array(review.improvements.enumerated()), id: \.offset) { _, p in point(p, review) }
                 }
@@ -144,7 +144,7 @@ struct CoachTab: View {
         }
         if !metrics.checks.isEmpty {
             LabelColumn(label: "Against your goals") {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                     GoalsGrid(metrics: metrics, focus: profile.activeFocus?.metric)
                     CallStrip(metrics: metrics)
                 }
@@ -183,13 +183,13 @@ private struct LineRow: View {
 
     var body: some View {
         TimedRow(at: line.at, long: long, player: player) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(titled ? "\(line.title): \(line.text)" : line.text)
                     .font(.system(size: strong ? 16 : 13, weight: strong ? .medium : .regular)).lineSpacing(strong ? 3 : 0)
                     .fixedSize(horizontal: false, vertical: true)
                 if let q = line.quote { Text("\u{201C}\(q)\u{201D}").italic().foregroundStyle(Palette.secondary) }
                 if let number = line.number {
-                    Text(number).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(number).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 if let say = line.say {
                     Text("Say: \u{201C}\(say)\u{201D}")
@@ -214,7 +214,7 @@ private struct PointView: View {
     @State private var error: FriendlyError?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             Text("\(Text(point.title).fontWeight(.semibold)). \(point.observation)").fixedSize(horizontal: false, vertical: true)
             if !point.quote.isEmpty { Text("\u{201C}\(point.quote)\u{201D}").italic().foregroundStyle(Palette.secondary) }
             if let next = point.tryInstead {
@@ -231,20 +231,20 @@ private struct PointView: View {
     /// Right or wrong, and after wrong a line to say what it got wrong. The coach learns from both.
     @ViewBuilder
     private var rating: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             thumb(agree: true)
             thumb(agree: false)
-            Text(point.principle).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            Text(point.principle).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
             if let note = feedback?.note {
-                Text("You said: \(note)").font(.system(size: 11)).foregroundStyle(Palette.secondary).lineLimit(2)
+                Text("You said: \(note)").font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.secondary).lineLimit(2)
             } else if let feedback {
-                Text(feedback.agree ? "Marked right" : "Marked wrong").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                Text(feedback.agree ? "Marked right" : "Marked wrong").font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
             }
             if sending { ProgressView().controlSize(.mini) }
             Spacer()
         }
         if writing {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 TextField("What did it get wrong? The coach will remember.", text: $note, axis: .vertical)
                     .textFieldStyle(.roundedBorder).lineLimit(1...3)
                     .onSubmit { send(agree: false) }
@@ -260,7 +260,7 @@ private struct PointView: View {
             if agree { send(agree: true) } else { writing.toggle() }
         } label: {
             Image(systemName: agree ? (chosen ? "hand.thumbsup.fill" : "hand.thumbsup") : (chosen ? "hand.thumbsdown.fill" : "hand.thumbsdown"))
-                .font(.system(size: 11))
+                .font(.system(size: Rhythm.noteSize))
                 .foregroundStyle(chosen ? Palette.accent : Palette.tertiaryMark)
         }
         .buttonStyle(.plain)
@@ -297,7 +297,7 @@ private struct CoachThread: View {
 
     var body: some View {
         LabelColumn(label: "Talk to the coach") {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 if thread.isEmpty {
                     Text("Tell the coach what it missed or got wrong, or ask about this call. It answers and remembers what should change in later reviews.")
                         .foregroundStyle(.secondary)
@@ -309,7 +309,7 @@ private struct CoachThread: View {
                         .frame(maxWidth: .infinity, alignment: m.role == .user ? .trailing : .leading)
                         .textSelection(.enabled)
                 }
-                HStack(alignment: .bottom, spacing: 8) {
+                HStack(alignment: .bottom, spacing: Space.s) {
                     TextField("Reply to the coach", text: $draft, axis: .vertical)
                         .textFieldStyle(.roundedBorder).lineLimit(1...5)
                         .onSubmit(send)
@@ -366,10 +366,10 @@ private struct ValueCard: View {
 
     var body: some View {
         LabelColumn(label: "Meeting value") {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+                HStack(spacing: Space.s) {
                     Text(value.rating.rawValue.capitalized)
-                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(tint)
+                        .font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(tint)
                         .padding(.horizontal, 8).padding(.vertical, 2)
                         .background(tint.opacity(0.14), in: Capsule())
                     Text(action).fontWeight(.medium)
@@ -404,38 +404,38 @@ private struct ScorecardView: View {
 
     var body: some View {
         LabelColumn(label: "Scorecard") {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .center, spacing: 18) {
-                    VStack(spacing: 4) {
-                        (Text("\(card.score)").font(.system(size: 40, weight: .bold)) + Text("/5").font(.system(size: 17, weight: .semibold)).foregroundColor(.secondary))
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+                HStack(alignment: .center, spacing: Space.l) {
+                    VStack(spacing: Rhythm.pairGap) {
+                        (Text("\(card.score)").font(.system(size: 40, weight: .bold)) + Text("/5").font(.system(size: Rhythm.ledeSize, weight: .semibold)).foregroundColor(.secondary))
                             .foregroundStyle(color(card.score))
-                        HStack(spacing: 2) {
+                        HStack(spacing: Space.xs) {
                             ForEach(1...5, id: \.self) { i in
-                                Image(systemName: i <= card.score ? "star.fill" : "star").font(.system(size: 10))
+                                Image(systemName: i <= card.score ? "star.fill" : "star").font(.system(size: Rhythm.noteSize))
                                     .foregroundStyle(i <= card.score ? Palette.accentFill : Palette.tertiaryMark)
                             }
                         }
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Score \(card.score) of 5")
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                         Text(card.reason).fontWeight(.medium)
                         ForEach(card.dimensions, id: \.self) { d in
-                            HStack(spacing: 8) {
-                                Text(d.name).font(.system(size: 12)).foregroundStyle(.secondary).frame(width: 96, alignment: .leading)
-                                HStack(spacing: 3) {
+                            HStack(spacing: Space.s) {
+                                Text(d.name).font(.system(size: Rhythm.secondarySize)).foregroundStyle(.secondary).frame(width: 96, alignment: .leading)
+                                HStack(spacing: Space.xs) {
                                     ForEach(1...5, id: \.self) { i in
                                         Capsule().fill(i <= d.score ? color(d.score) : Palette.fill).frame(width: 22, height: 6)
                                     }
                                 }
-                                Text("\(d.score)").font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                                Text("\(d.score)").font(.system(size: Rhythm.secondarySize, weight: .semibold)).monospacedDigit()
                             }
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel("\(d.name): \(d.score) of 5")
                         }
                     }
                 }
-                HStack(alignment: .top, spacing: 18) {
+                HStack(alignment: .top, spacing: Space.l) {
                     points(card.positives, symbol: "checkmark.circle.fill", tint: Palette.ok)
                     points(card.negatives, symbol: "xmark.circle.fill", tint: Palette.accentFill)
                 }
@@ -445,7 +445,7 @@ private struct ScorecardView: View {
     }
 
     private func points(_ list: [String], symbol: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             ForEach(list, id: \.self) { p in
                 Label { Text(p) } icon: { Image(systemName: symbol).foregroundStyle(tint) }
             }

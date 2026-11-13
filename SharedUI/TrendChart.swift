@@ -363,7 +363,7 @@ private struct TrendPlot: View, Equatable {
     static let axisFont = Font.caption2
     #else
     private static let dateMarks = 7
-    static let axisFont = Font.system(size: 10.5)
+    static let axisFont = Font.system(size: Rhythm.noteSize)
     #endif
 
     /// "Sep 12"; "Sep 2025" when the period is longer than a year.

@@ -43,7 +43,7 @@ struct OnboardingView: View {
         .ignoresSafeArea()
         .background { WindowBackdrop() }
         .foregroundStyle(Palette.ink)
-        .font(.system(size: 13))
+        .font(.system(size: Rhythm.bodySize))
         .onAppear { permissions.setInterval(1) }
         .onDisappear { permissions.setInterval(10) }
     }
@@ -58,8 +58,8 @@ struct OnboardingView: View {
                 .padding(.top, Space.s)
                 .accessibilityAddTraits(.isHeader)
             Text(lede)
-                .font(.system(size: 14)).foregroundStyle(Palette.secondary)
-                .cssLineHeight(1.5, size: 14)
+                .font(.system(size: Rhythm.readingSize)).foregroundStyle(Palette.secondary)
+                .cssLineHeight(1.5, size: Rhythm.readingSize)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: Onboard.ledeMax, alignment: .leading)
                 .padding(.top, 10)
@@ -116,7 +116,7 @@ struct OnboardingView: View {
                     .buttonStyle(SettingsTextButtonStyle(color: Palette.secondary, weight: .medium))
                     .help("You can come back to it from the list on the left, or from Settings.")
             } else if model.step == .you, !OnboardingStep.you.isSatisfied(by: facts) {
-                Text("Mossad needs your name to continue.").font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                Text("Mossad needs your name to continue.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             }
             Spacer(minLength: Space.s)
             if model.step != .welcome {
@@ -157,7 +157,7 @@ private struct OnboardingRail: View {
             }
             Spacer(minLength: Space.m)
             Text("You can change all of this later in Settings.")
-                .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, Chrome.navRowPadding).padding(.bottom, 4)
         }
@@ -174,13 +174,13 @@ private struct OnboardingRail: View {
             HStack(spacing: Chrome.navIconGap) {
                 StepMark(step: step, state: state)
                 Text(step.title)
-                    .font(.system(size: 13, weight: on ? .semibold : .regular))
+                    .font(.system(size: Rhythm.bodySize, weight: on ? .semibold : .regular))
                     .foregroundStyle(on ? Palette.ink : state == .upcoming ? Palette.secondary : Palette.navText)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 switch state {
-                case .needsYou: Text("Needs you").font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.accent)
-                case .skipped: Text("Skipped").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                case .needsYou: Text("Needs you").font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(Palette.accent)
+                case .skipped: Text("Skipped").font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
                 default: EmptyView()
                 }
             }
@@ -211,16 +211,16 @@ private struct StepMark: View {
                 IconImage(.checkSmall, size: 11).foregroundStyle(Palette.okText)
             case .current:
                 Circle().fill(Palette.accentFill)
-                Text("\(step.number)").font(.system(size: 10.5, weight: .bold)).foregroundStyle(Palette.onAccent)
+                Text("\(step.number)").font(.system(size: Rhythm.noteSize, weight: .bold)).foregroundStyle(Palette.onAccent)
             case .needsYou:
                 Circle().fill(Palette.accentTint)
-                Text("!").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.accent)
+                Text("!").font(.system(size: Rhythm.noteSize, weight: .bold)).foregroundStyle(Palette.accent)
             case .skipped:
                 Circle().strokeBorder(Palette.ring, style: StrokeStyle(lineWidth: 1.2, dash: [2, 2]))
-                Text("\(step.number)").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Palette.tertiary)
+                Text("\(step.number)").font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.tertiary)
             case .upcoming:
                 Circle().strokeBorder(Palette.ring, lineWidth: 1.2)
-                Text("\(step.number)").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Palette.secondary)
+                Text("\(step.number)").font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.secondary)
             }
         }
         .frame(width: 20, height: 20)

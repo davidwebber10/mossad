@@ -24,10 +24,10 @@ struct CalendarsStep: View {
         VStack(alignment: .leading, spacing: Space.xl) {
             if !sample, let item = calendarItem, !item.state.isGood {
                 HStack(spacing: Space.m) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Allow Calendars first").font(.system(size: 13.5, weight: .semibold))
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                        Text("Allow Calendars first").font(.system(size: Rhythm.readingSize, weight: .semibold))
                         Text("Then choose which calendars Mossad reads. It never changes them.")
-                            .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     }
                     Spacer(minLength: Space.m)
                     Button(item.state == .notAsked ? "Allow…" : "Open Settings…") { permissions.fix(item) }
@@ -50,19 +50,19 @@ struct CalendarsStep: View {
         StepGroup(label: "Read these calendars", footer: "Your own calendars are checked to start. Shared and holiday calendars stay off.") {
             if calendars.isEmpty {
                 Text("No calendars on this Mac yet. Add your work account in System Settings › Internet Accounts.")
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, Onboard.rowPadding)
             }
             ForEach(Array(Dictionary(grouping: calendars, by: \.account).sorted { $0.key < $1.key }), id: \.key) { account, list in
                 VStack(alignment: .leading, spacing: 0) {
                     Text(account.isEmpty ? "On this Mac" : account)
-                        .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
                         .padding(.bottom, 4)
                         .accessibilityAddTraits(.isHeader)
                     ForEach(list) { c in
                         Toggle(isOn: Binding(get: { isChosen(c.id) }, set: { choose(c.id, $0) })) {
-                            Text(c.title).font(.system(size: 13)).foregroundStyle(Palette.ink)
+                            Text(c.title).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                         }
                         .toggleStyle(SettingsCheckboxStyle())
                         .padding(.vertical, 5)
@@ -79,28 +79,28 @@ struct CalendarsStep: View {
         let next = upcoming.first { $0.platform != nil } ?? upcoming.first
         return VStack(alignment: .leading, spacing: 0) {
             Text("Next meeting").textRole(.label).foregroundStyle(Palette.tertiary).padding(.bottom, Space.s)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 if let next {
-                    HStack(spacing: 6) {
+                    HStack(spacing: Space.s) {
                         if let platform = next.platform { PlatformDot(platform: platform, hollow: true) }
                         Text(next.start.formatted(.dateTime.weekday(.wide).hour().minute()))
-                            .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     }
-                    Text(next.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.ink)
+                    Text(next.title).font(.system(size: Rhythm.readingSize, weight: .semibold)).foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                     if !next.attendees.isEmpty {
                         Text(next.attendees.prefix(4).joined(separator: ", ") + (next.attendees.count > 4 ? ", and \(next.attendees.count - 4) more" : ""))
-                            .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                             .lineLimit(2)
                     }
                     Text(next.platform.map { "Mossad records it when the \($0.displayName) call starts, and names the note after this invite." }
                          ?? "This event has no call link. Mossad records it if a call starts at that time.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 4)
                 } else {
                     Text("No meetings in the next \(UpcomingMeeting.days) days on these calendars.")
-                        .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -141,13 +141,13 @@ struct CheckStep: View {
             if item(.microphone)?.state.isGood == false {
                 needsPermission("Allow the microphone first.", .microphone)
             } else {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                     Text(model.micHeard == true ? "Mossad hears you." : "Say something, such as your name.")
-                        .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     MicMeter(model: model)
                     if let problem = model.micProblem {
                         Text("\(problem). Check that no other app holds the microphone, then come back to this step.")
-                            .font(.system(size: 12)).foregroundStyle(Palette.accent).fixedSize(horizontal: false, vertical: true)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.accent).fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -159,8 +159,8 @@ struct CheckStep: View {
             if item(.systemAudio)?.state.isGood == false {
                 needsPermission("Allow System audio recording first.", .systemAudio)
             } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(toneText).font(.system(size: 12.5)).foregroundStyle(toneFailed ? Palette.accent : Palette.secondary)
+                VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+                    Text(toneText).font(.system(size: Rhythm.bodySize)).foregroundStyle(toneFailed ? Palette.accent : Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: Space.s) {
                         Button(model.tone == .idle ? "Play test tone" : "Play again") { model.playTone() }
@@ -196,7 +196,7 @@ struct CheckStep: View {
 
     private func needsPermission(_ text: String, _ kind: PermissionKind) -> some View {
         HStack(spacing: Space.m) {
-            Text(text).font(.system(size: 12.5)).foregroundStyle(Palette.accent)
+            Text(text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.accent)
             Spacer(minLength: Space.m)
             if let item = item(kind) {
                 Button(item.state == .notAsked ? "Allow…" : "Open Settings…") { permissions.fix(item) }
@@ -218,9 +218,9 @@ private struct CheckCard<Content: View>: View {
             IconImage(icon, size: 16).foregroundStyle(passed ? Palette.okText : Palette.accent)
                 .frame(width: 32, height: 32)
                 .background(passed ? Palette.ok.opacity(0.14) : Palette.accentTint, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 HStack {
-                    Text(title).font(.system(size: 14, weight: .semibold))
+                    Text(title).font(.system(size: Rhythm.readingSize, weight: .semibold))
                     Spacer(minLength: Space.s)
                     if passed { PassLine(text: "Works") }
                 }
@@ -245,7 +245,7 @@ private struct MicMeter: View {
             let history = model.micCheck.meter.history
             let recent = Array(history.suffix(Self.bars))
             let padded = Array(repeating: Float(0), count: max(0, Self.bars - recent.count)) + recent
-            HStack(alignment: .center, spacing: 3) {
+            HStack(alignment: .center, spacing: Space.xs) {
                 ForEach(Array(padded.enumerated()), id: \.offset) { _, level in
                     let f = AudioCheck.meterFraction(level)
                     Capsule().fill(f > 0.33 ? Palette.accentFill : Palette.bar)
@@ -275,7 +275,7 @@ struct SyncStep: View {
                          selected: controller.syncWith == .server) {
                     if controller.serverConnection == nil { settingUp = true } else { controller.chooseSync(.server) }
                 } trailing: {
-                    if controller.serverConnection == nil { Text("About 10 minutes").font(.system(size: 12)).foregroundStyle(Palette.tertiary) }
+                    if controller.serverConnection == nil { Text("About 10 minutes").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary) }
                 }
                 RadioRow(title: "Don’t sync", detail: "Everything stays on this Mac. The iPhone app gets no meetings.",
                          selected: controller.syncWith == .off) { controller.chooseSync(.off) } trailing: { EmptyView() }
@@ -338,22 +338,22 @@ struct DoneStep: View {
 private struct MenuBarPicture: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 0) {
-            HStack(spacing: 14) {
+            HStack(spacing: Space.l) {
                 Spacer()
-                Image(systemName: "wifi").font(.system(size: 12, weight: .medium))
+                Image(systemName: "wifi").font(.system(size: Rhythm.secondarySize, weight: .medium))
                 Image(nsImage: MenuBarIcon.idle).renderingMode(.template)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     .overlay { RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Palette.accentFill, lineWidth: 1.5) }
-                Image(systemName: "battery.75percent").font(.system(size: 13))
-                Text("Mon 9:41").font(.system(size: 12, weight: .medium)).monospacedDigit()
+                Image(systemName: "battery.75percent").font(.system(size: Rhythm.bodySize))
+                Text("Mon 9:41").font(.system(size: Rhythm.secondarySize, weight: .medium)).monospacedDigit()
             }
             .foregroundStyle(Palette.ink)
             .padding(.horizontal, 12).frame(height: 30)
             .background(Palette.glass)
             .hairline(.bottom)
             Spacer(minLength: 0)
-            Text("Mossad").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.accent)
+            Text("Mossad").font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.accent)
                 .padding(.trailing, 96).padding(.top, 6)
             Spacer(minLength: 0)
         }

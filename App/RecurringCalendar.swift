@@ -96,9 +96,9 @@ struct SeriesWeekCalendar: View {
         let line = [time, rhythm, b.skipped ? "not this week" : nil].compactMap { $0 }.joined(separator: " · ")
         return Button { open(b.id) } label: {
             VStack(alignment: .leading, spacing: 0) {
-                Text(s.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(height > 44 ? 2 : 1)
+                Text(s.title).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(height > 44 ? 2 : 1)
                 if height > 28 {
-                    Text(line).font(.system(size: 10.5)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Text(line).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.secondary).lineLimit(1)
                 }
             }
             .lineSpacing(1)
@@ -129,9 +129,9 @@ struct SeriesWeekCalendar: View {
                     if byID[e.id] != nil {
                         Button { open(e.id) } label: {
                             HStack(spacing: 6) {
-                                Text(e.title).font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
+                                Text(e.title).font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
                                 if let words = stripNote(e.schedule) {
-                                    Text(words).font(.system(size: 11)).foregroundStyle(Palette.tertiary).lineLimit(1)
+                                    Text(words).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary).lineLimit(1)
                                 }
                             }
                             .padding(.horizontal, 9).frame(minHeight: 24)

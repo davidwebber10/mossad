@@ -109,7 +109,7 @@ struct SearchPalette: View {
     // MARK: Field
 
     private var field: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             IconImage(.search, size: PaletteMetrics.fieldIcon).foregroundStyle(Palette.tertiaryMark)
             TextField("Search meetings, people, transcripts, and tasks", text: $model.query)
                 .textFieldStyle(.plain)
@@ -120,7 +120,7 @@ struct SearchPalette: View {
                 .onChange(of: model.query) { _, _ in model.search() }
             if !model.query.isEmpty {
                 Button { model.query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 15)).foregroundStyle(Palette.tertiaryMark)
+                    Image(systemName: "xmark.circle.fill").font(.system(size: Rhythm.headingSize)).foregroundStyle(Palette.tertiaryMark)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -213,7 +213,7 @@ struct SearchPalette: View {
 
     private func status(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
             .padding(.horizontal, 10).padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -240,7 +240,7 @@ struct SearchPalette: View {
 
     @ViewBuilder
     private var footer: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Space.l) {
             if showsSuggestions {
                 Text(hint).lineLimit(1).truncationMode(.tail)
             } else {
@@ -252,7 +252,7 @@ struct SearchPalette: View {
             Spacer(minLength: 8)
             keyHint("esc", "close")
         }
-        .font(.system(size: 11.5))
+        .font(.system(size: Rhythm.secondarySize))
         .foregroundStyle(Palette.tertiary)
         .padding(.horizontal, 18)
         .frame(height: PaletteMetrics.footerHeight)
@@ -266,7 +266,7 @@ struct SearchPalette: View {
     }
 
     private func keyHint(_ key: String, _ text: String) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Space.xs) {
             Text(key).fontWeight(.semibold).foregroundStyle(Palette.secondary)
             Text(text)
         }
@@ -310,7 +310,7 @@ private struct PaletteHeader: View {
             if let clear {
                 Button("Clear", action: clear)
                     .buttonStyle(.plain)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(.system(size: Rhythm.secondarySize, weight: .medium))
                     .foregroundStyle(Palette.secondary)
                     .accessibilityLabel("Clear recent searches")
             }
@@ -327,10 +327,10 @@ private struct RecentContent: View {
     let query: String
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             IconImage(.clock, size: 14).foregroundStyle(Palette.tertiaryMark)
                 .frame(width: PaletteMetrics.leading, height: 18)
-            Text(query).font(.system(size: 13)).foregroundStyle(Palette.ink).lineLimit(1)
+            Text(query).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).lineLimit(1)
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
@@ -372,12 +372,12 @@ private struct HitContent: View {
     private var titleSize: CGFloat { top ? 15 : 13 }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: Space.m) {
             mark.frame(width: leading, height: top ? 34 : 18, alignment: .center)
-            VStack(alignment: .leading, spacing: 2) { lines }
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) { lines }
                 .frame(maxWidth: .infinity, alignment: .leading)
             trailing
-                .font(.system(size: 12)).monospacedDigit()
+                .font(.system(size: Rhythm.secondarySize)).monospacedDigit()
                 .foregroundStyle(Palette.secondary)
                 .fixedSize()
                 .padding(.top, top ? 3 : 1)
@@ -407,7 +407,7 @@ private struct HitContent: View {
             if let context = m.context {
                 // The tag or person that matched, with its words in bold.
                 Text("\(dateText(m.start)) · \(context.attributed)")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
             } else {
                 detail([dateText(m.start), m.kind].compactMap { $0 })
             }
@@ -459,7 +459,7 @@ private struct HitContent: View {
             .font(.system(size: top ? 13 : 12.5))
             .foregroundStyle(Palette.ink.opacity(0.88))
             .lineLimit(2)
-            .lineSpacing(1.5)
+            .lineSpacing(Rhythm.secondaryLineGap)
     }
 
     /// A font with a weight set on the Text wins over the inline bold, so the matched runs get a bold font of their own.
@@ -475,7 +475,7 @@ private struct HitContent: View {
     private func detail(_ parts: [String]) -> some View {
         if !parts.isEmpty {
             Text(parts.joined(separator: " · "))
-                .font(.system(size: 12))
+                .font(.system(size: Rhythm.secondarySize))
                 .foregroundStyle(Palette.secondary)
                 .lineLimit(1)
         }
@@ -498,10 +498,10 @@ private struct MoreContent: View {
     let count: Int
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             Color.clear.frame(width: PaletteMetrics.leading, height: 1)
             Text("\(count) more in this meeting")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Rhythm.secondarySize, weight: .medium))
                 .foregroundStyle(Palette.accent)
             IconImage(.chevronDown, size: 12).foregroundStyle(Palette.accent)
         }

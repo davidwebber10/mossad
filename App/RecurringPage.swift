@@ -85,7 +85,7 @@ struct RecurringPage: View {
 
     @ViewBuilder
     private var content: some View {
-        VStack(alignment: .leading, spacing: 26) {
+        VStack(alignment: .leading, spacing: Rhythm.sectionGap) {
             switch tab {
             case .nextTime: NextTimeTab(series: series, suggestions: data?.suggestions ?? [])
             case .history: SeriesHistoryTab(series: series, report: data?.report)
@@ -94,7 +94,7 @@ struct RecurringPage: View {
             case .open: SeriesOpenTab(report: data?.report)
             }
         }
-        .font(.system(size: 13))
+        .readingText()
         .foregroundStyle(Palette.ink)
     }
 }
@@ -114,7 +114,7 @@ private struct RecurringHeader: View {
                     HStack(spacing: Space.s) {
                         if let p = series.next?.platform { PlatformDot(platform: p, hollow: true) }
                         Text(series.schedule.text(time: clockTime) ?? (series.recurringInCalendar ? "Repeats in your calendar" : "Recurring"))
-                            .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
                     }
                     .frame(minHeight: 20)
                     if series.recurringInCalendar { TagChip(text: "In your calendar") }
@@ -129,14 +129,14 @@ private struct RecurringHeader: View {
                     .textSelection(.enabled)
                     .accessibilityAddTraits(.isHeader)
                 if let line = report?.line {
-                    Text(line).font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.secondary).padding(.top, 6)
+                    Text(line).font(.system(size: Rhythm.headingSize, weight: .medium)).foregroundStyle(Palette.secondary).padding(.top, 6)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !series.usualPeople.isEmpty {
                     FlowLayout(spacing: 6) {
                         ForEach(series.usualPeople.prefix(12), id: \.self) { name in
                             PersonName(name)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: Rhythm.secondarySize, weight: .medium))
                                 .foregroundStyle(Palette.ink)
                                 .padding(.horizontal, 9).frame(minHeight: 24)
                                 .background(Palette.fill, in: Capsule())
@@ -149,11 +149,10 @@ private struct RecurringHeader: View {
                 numbers.padding(.top, 18)
                 next(now: context.date).padding(.top, 16)
             }
-            .frame(maxWidth: Detail.columnMax, alignment: .leading)
-            .padding(.horizontal, Detail.gutter)
+            .bandColumn()
             .padding(.top, Detail.bandPadding)
             .padding(.bottom, Detail.bandPadding + 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .bandFrame()
             .background(Palette.band)
             .hairline(.bottom)
         }
@@ -169,12 +168,12 @@ private struct RecurringHeader: View {
         }
         if let r, r.planned > 0 { cells.append(("Runs over", "\(r.ranOver) of \(r.planned)", "by 5 min or more")) }
         if let gaps = r?.gaps { cells.append(("Not recorded", "\(gaps)", gaps == 1 ? "week with no meeting" : "times with no meeting")) }
-        return HStack(alignment: .top, spacing: 28) {
+        return HStack(alignment: .top, spacing: Space.xl) {
             ForEach(cells, id: \.0) { c in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(c.0).textRole(.label).foregroundStyle(Palette.secondary)
-                    Text(c.1).font(.system(size: 17, weight: .semibold)).monospacedDigit().foregroundStyle(Palette.ink)
-                    if let note = c.2 { Text(note).font(.system(size: 11)).foregroundStyle(Palette.tertiary) }
+                    Text(c.1).font(.system(size: Rhythm.ledeSize, weight: .semibold)).monospacedDigit().foregroundStyle(Palette.ink)
+                    if let note = c.2 { Text(note).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary) }
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -186,26 +185,26 @@ private struct RecurringHeader: View {
         if let next = series.next {
             HStack(spacing: Space.m) {
                 Text("Next: \(UpcomingHeader.day(next.start)), \(next.start.formatted(date: .omitted, time: .shortened))")
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
-                Text(next.startsIn(now: now)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
+                Text(next.startsIn(now: now)).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 if next.platform != nil { RecordChoiceControl(meeting: next, size: .regular) }
                 if let link = next.link, next.start.timeIntervalSince(now) <= 60 {
                     Button { NSWorkspace.shared.open(link) } label: {
                         Text("Join \(next.platform?.displayName ?? "the call")")
-                            .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(Palette.onAccent)
+                            .font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.onAccent)
                             .padding(.horizontal, 14).frame(height: 28)
                             .background(Palette.accentFill, in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
                 Button("Prepare") { controller.openMeeting(next.id) }
-                .buttonStyle(.plain).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
+                .buttonStyle(.plain).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.accent)
                 .help("Open the page of this meeting")
                 Spacer(minLength: 0)
             }
         } else {
             Text(series.meetings.isEmpty ? "No date in your calendar." : "No meeting of this series with a call link in your calendar in the next \(UpcomingMeeting.days) days.")
-                .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
         }
     }
 }
@@ -224,13 +223,13 @@ struct NextTimeTab: View {
     var body: some View {
         let lists = controller.series.book.points(of: series)
         MeetingAnalyticsGroup("Your points") {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 if !controller.series.bookReadable {
                     Text("Mossad could not read your points, so it does not change them now.").foregroundStyle(Palette.recording)
                 }
                 if lists.open.isEmpty {
                     Text("What do you want to raise \(series.next.map { "on \(UpcomingHeader.day($0.start).replacingOccurrences(of: "Today", with: "today").replacingOccurrences(of: "Tomorrow", with: "tomorrow"))" } ?? "next time")? Your points show on the meeting's page and in the menu before it starts.")
-                        .font(.system(size: 12.5)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
                 }
                 NextTimeList(points: lists.open, add: { text in controller.changeNextTime { $0.add(text, series: series) } })
             }
@@ -243,13 +242,13 @@ struct NextTimeTab: View {
         let rest = usual.filter { p in !shown.contains { $0.id == p.id } }
         if !usual.isEmpty {
             MeetingAnalyticsGroup("For one person") {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                     ForEach(shown, id: \.id) { p in PersonNextTimeSection(personID: p.id, name: p.name) }
                     if !rest.isEmpty {
                         Menu {
                             ForEach(rest, id: \.id) { p in Button(p.name) { adding.insert(p.id) } }
                         } label: {
-                            Text("Add a point for one person").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
+                            Text("Add a point for one person").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.accent)
                         }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                         .help("A point for the next time you see this person, in this series or any other meeting")
@@ -259,7 +258,7 @@ struct NextTimeTab: View {
         }
         if !lists.done.isEmpty {
             MeetingAnalyticsGroup("Discussed") {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     ForEach(lists.done.prefix(10)) { DiscussedRow(point: $0) }
                 }
             }

@@ -13,10 +13,10 @@ struct FloatingComposer<Leading: View>: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Detail.composerHeight / 2, style: .continuous)
-        HStack(alignment: .bottom, spacing: 10) {
+        HStack(alignment: .bottom, spacing: Space.m) {
             leading
             TextField(prompt, text: $text, axis: .vertical)
-                .textFieldStyle(.plain).font(.system(size: 13.5)).lineLimit(1...6)
+                .textFieldStyle(.plain).font(.system(size: Rhythm.readingSize)).lineLimit(1...6)
                 .padding(.vertical, 8)
                 .frame(minHeight: Detail.composerSend)
                 .focused(focused)

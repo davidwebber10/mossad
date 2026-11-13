@@ -12,22 +12,22 @@ struct SheetHeader: View {
     var close: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: Space.m) {
+            HStack(spacing: Space.m) {
                 IconImage(icon, size: 16)
                     .foregroundStyle(Palette.accent)
                     .frame(width: 36, height: 36)
                     .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: Rhythm.headingSize, weight: .semibold))
                         .tracking(-0.15)
                         .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 12))
+                            .font(.system(size: Rhythm.secondarySize))
                             .foregroundStyle(Palette.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -51,7 +51,7 @@ struct SheetCloseButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "xmark")
-                .font(.system(size: 9.5, weight: .bold))
+                .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(hovering ? Palette.ink : Palette.secondary)
                 .frame(width: 22, height: 22)
                 .background(hovering ? Palette.selection : Palette.fill, in: Circle())
@@ -72,7 +72,7 @@ struct SheetFooter<Leading: View, Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             leading
             Spacer(minLength: 8)
             trailing
@@ -101,7 +101,7 @@ extension View {
         frame(width: width)
             .background(Palette.window)
             .foregroundStyle(Palette.ink)
-            .font(.system(size: 13))
+            .font(.system(size: Rhythm.bodySize))
     }
 
     /// A group inside a sheet: a hairline ring, no fill, so it stays on the window's paper.
@@ -168,7 +168,7 @@ struct SheetFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
             .textFieldStyle(.plain)
-            .font(monospaced ? .system(size: 12, design: .monospaced) : .system(size: 13))
+            .font(monospaced ? .system(size: Rhythm.secondarySize, design: .monospaced) : .system(size: Rhythm.bodySize))
             .padding(.horizontal, 10)
             .frame(height: 30)
             .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -182,7 +182,7 @@ struct SheetSwitchStyle: ToggleStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Space.m) {
                 configuration.label
                 Spacer(minLength: 0)
                 Capsule()
@@ -228,7 +228,7 @@ struct SheetCheckbox: View {
 struct SheetCheckboxStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Space.m) {
                 SheetCheckbox(isOn: configuration.isOn)
                 configuration.label
             }
@@ -253,7 +253,7 @@ struct GlassSegmented<Value: Hashable>: View {
                 let selected = choice.value == selection
                 Button { withAnimation(.snappy(duration: 0.2)) { selection = choice.value } } label: {
                     Text(choice.title)
-                        .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                        .font(.system(size: Rhythm.secondarySize, weight: selected ? .semibold : .regular))
                         .foregroundStyle(selected ? Palette.ink : Palette.secondary)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background {

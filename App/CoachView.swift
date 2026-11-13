@@ -76,9 +76,7 @@ struct CoachPageColumn<Content: View>: View {
         } content: {
             ScrollView {
                 content
-                    .padding(EdgeInsets(top: 10, leading: 36, bottom: 40, trailing: 36))
-                    .frame(maxWidth: 760 + 72, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .pageColumn(Rhythm.readingWidth)
             }
         }
     }
@@ -104,7 +102,7 @@ private struct FindingsPage: View {
                                  answer: { controller.answerFinding($0, $1) }, undo: { controller.takeBackFinding($0) },
                                  explain: { controller.explainFinding($0, note: $1) })
                     Text("Useful and Not useful teach the coach what helps you; True and Not true correct what it believes; Take it on starts a goal. \u{201C}Never again\u{201D} stops a subject for good, and on praise only the praise; you can undo it in Knowledge. At most two cards come from a call, and a card with no answer goes after two weeks.")
-                        .textRole(.secondary).foregroundStyle(Palette.tertiary).lineSpacing(2)
+                        .textRole(.secondary).foregroundStyle(Palette.tertiary).lineSpacing(Rhythm.secondaryLineGap)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: FindingsDeck.cardWidth, alignment: .leading)

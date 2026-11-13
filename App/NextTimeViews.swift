@@ -14,11 +14,11 @@ struct SeriesMoment: View {
         Button {
             if let at { controller.openMeeting(callID, at: at) } else { controller.openMeeting(callID) }
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: Space.xs) {
                 IconImage(at == nil ? .chevronRight : .play, size: 8)
                 Text(label ?? at.map(clock) ?? "Open meeting").monospacedDigit()
             }
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: Rhythm.secondarySize, weight: .semibold))
             .foregroundStyle(Palette.accent)
             .contentShape(Rectangle())
         }
@@ -37,7 +37,7 @@ struct QuietButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                 .foregroundStyle(accent ? Palette.onAccent : Palette.ink)
                 .padding(.horizontal, 10).frame(height: 24)
                 .background(accent ? Palette.accentFill : Palette.fill, in: Capsule())
@@ -65,7 +65,7 @@ struct NextTimeList: View {
     enum Field: Hashable { case add, edit(UUID) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             ForEach(Array(points.enumerated()), id: \.element.id) { n, p in
                 row(p, index: n)
                     .draggable(p.id.uuidString)
@@ -80,11 +80,11 @@ struct NextTimeList: View {
     }
 
     private var addRow: some View {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 IconImage(.plus, size: 12).foregroundStyle(Palette.tertiary).frame(width: 16)
                 TextField(placeholder, text: $draft)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(.system(size: Rhythm.bodySize))
                     .focused($focus, equals: .add)
                     .onSubmit {
                         guard case let text = draft.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
@@ -99,7 +99,7 @@ struct NextTimeList: View {
     }
 
     private func row(_ p: NextTimePoint, index: Int) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Button { controller.changeNextTime { $0.toggleDone(p.id) } } label: {
                 Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 14, height: 14).contentShape(Circle())
             }
@@ -107,7 +107,7 @@ struct NextTimeList: View {
             .help("Mark done")
             .accessibilityLabel("Mark \(p.text) done")
             .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 if editing == p.id {
                     TextField("", text: $editText)
                         .textFieldStyle(.plain)
@@ -135,7 +135,7 @@ struct NextTimeList: View {
             .fixedSize()
             .accessibilityLabel("More for \(p.text)")
         }
-        .font(.system(size: 13))
+        .font(.system(size: Rhythm.bodySize))
         .padding(.vertical, 6).padding(.horizontal, 8)
         .contentShape(Rectangle())
     }
@@ -147,7 +147,7 @@ struct NextTimeList: View {
         let parts = [carried > 0 ? "Not discussed in the last \(carried == 1 ? "meeting" : "\(carried) meetings")" : nil,
                      p.suggestion != nil ? "Kept from the coach" : nil, p.isForPerson ? p.personName.map { "For \($0)" } : nil].compactMap { $0 }
         if !parts.isEmpty {
-            Text(parts.joined(separator: " · ")).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+            Text(parts.joined(separator: " · ")).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
         }
         if p.isOpen, let m = p.lastMention { MentionNote(mention: m) }
     }
@@ -186,9 +186,9 @@ struct MentionNote: View {
     let mention: NextTimePoint.Mention
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             Text("Came up on \(mention.date.formatted(.dateTime.month(.abbreviated).day())), in a meeting Mossad has only the notes of")
-                .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             SeriesMoment(callID: mention.callID, at: mention.at)
         }
         .help("\u{201C}\(mention.quote)\u{201D}")
@@ -201,29 +201,29 @@ struct DiscussedRow: View {
     let point: NextTimePoint
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             IconImage(.checkSmall, size: 14).foregroundStyle(Palette.accent).frame(width: 14)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(point.text).foregroundStyle(Palette.secondary).strikethrough(color: Palette.tertiaryMark)
-                HStack(spacing: 8) {
+                HStack(spacing: Space.s) {
                     if let d = point.done {
                         // The day of the meeting, not of the check.
                         let day = d.callID.flatMap { id in controller.meetings.first { $0.id == id }?.start } ?? d.date
                         Text(d.byOwner ? "Marked done \(shortDay(day))" : "Discussed \(shortDay(day))")
-                            .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                         // Only a meeting that exists: a chip to a skipped call would open "Select a meeting".
                         if let call = d.callID, controller.meetings.contains(where: { $0.id == call }) { SeriesMoment(callID: call, at: d.at) }
                     }
                 }
                 if let q = point.done?.quote {
-                    Text("\u{201C}\(q)\u{201D}").font(.system(size: 12)).italic().foregroundStyle(Palette.secondary).lineLimit(2)
+                    Text("\u{201C}\(q)\u{201D}").font(.system(size: Rhythm.secondarySize)).italic().foregroundStyle(Palette.secondary).lineLimit(2)
                 }
             }
             Spacer(minLength: 8)
             QuietButton(title: "Undo") { controller.changeNextTime { $0.toggleDone(point.id) } }
                 .help(point.done?.byOwner == false ? "Not discussed after all: the point goes back to the list" : "Open the point again")
         }
-        .font(.system(size: 13))
+        .font(.system(size: Rhythm.bodySize))
         .padding(.vertical, 6).padding(.horizontal, 8)
     }
 }
@@ -239,34 +239,34 @@ struct SuggestionList: View {
     @State private var last: (key: String, words: String)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             if let last {
-                HStack(spacing: 8) {
-                    Text(last.words).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                HStack(spacing: Space.s) {
+                    Text(last.words).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     Button("Undo") {
                         controller.changeNextTime { $0.takeBack(last.key) }
                         self.last = nil
                     }
-                    .buttonStyle(.plain).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
+                    .buttonStyle(.plain).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.accent)
                 }
                 .padding(.horizontal, 8).padding(.bottom, 4)
             }
             OffKinds(answers: controller.series.book.answers)
             if suggestions.isEmpty {
                 Text("No suggestions now. The coach suggests a point only from something Mossad knows: an open action item, a task of yours that is due, a decision left open, a question with no answer, or your coach goal.")
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
             }
             ForEach(suggestions) { s in row(s) }
         }
     }
 
     private func row(_ s: SeriesSuggestion) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             IconImage(.sparkle, size: 13).foregroundStyle(Palette.accent).frame(width: 14)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(s.text).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    Text(s.source.label).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                HStack(spacing: Space.s) {
+                    Text(s.source.label).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                     if let call = s.source.callID { SeriesMoment(callID: call, at: s.source.at) }
                 }
             }
@@ -283,7 +283,7 @@ struct SuggestionList: View {
                 Button("Dismiss") { dismiss(s, .dismiss) }
                 Button("Never suggest \(s.kind.title.lowercased())") { dismiss(s, .never) }
             } label: {
-                Text("Dismiss").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.ink)
+                Text("Dismiss").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.ink)
             } primaryAction: {
                 dismiss(s, .dismiss)
             }
@@ -291,7 +291,7 @@ struct SuggestionList: View {
             .fixedSize()
             .help("Not useful: the coach suggests fewer of this kind")
         }
-        .font(.system(size: 13))
+        .font(.system(size: Rhythm.bodySize))
         .padding(.vertical, 7).padding(.horizontal, 8)
         .background(Palette.accentTint.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
@@ -310,11 +310,11 @@ private struct OffKinds: View {
     var body: some View {
         let training = SuggestionTraining(answers: answers)
         ForEach(training.off, id: \.self) { kind in
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 Text("Off: \(kind.title)\(training.isBlocked(kind) ? "" : ", after your dismissals")")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 Button("Turn on") { controller.changeNextTime { $0.allowAgain(kind) } }
-                    .buttonStyle(.plain).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
+                    .buttonStyle(.plain).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.accent)
             }
             .padding(.horizontal, 8)
         }
@@ -338,7 +338,7 @@ struct PersonNextTimeSection: View {
             if inColumn {
                 LabelColumn(label: title) { list }
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     Text(title).textRole(.label).foregroundStyle(Palette.secondary).accessibilityAddTraits(.isHeader)
                     list
                 }
@@ -384,18 +384,18 @@ struct PrepYourPoints: View {
         }
         if series != nil || !people.isEmpty {
             MeetingAnalyticsGroup("Your points") {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                     if let series {
                         NextTimeList(points: own, add: { text in controller.changeNextTime { $0.add(text, series: series) } })
                     }
                     ForEach(people, id: \.id) { p in PersonNextTimeSection(personID: p.id, name: p.name) }
                     if let series {
                         Button { controller.openSeries(series.id) } label: {
-                            HStack(spacing: 3) {
+                            HStack(spacing: Space.xs) {
                                 Text("All of \(series.title)")
                                 IconImage(.chevronRight, size: 9)
                             }
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
+                            .font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.accent)
                         }
                         .buttonStyle(.plain)
                     }
@@ -414,6 +414,13 @@ struct MeetingPointsGroup: View {
     @EnvironmentObject var controller: AppController
     let callID: String
 
+    /// Whether the group shows anything for this meeting. The page leaves the group out when it does not, so an
+    /// empty group takes no section gap; the page reads the book itself (`loadsPoints`).
+    static func hasContent(_ book: NextTimeBook, callID: String) -> Bool {
+        !book.discussed(in: callID).isEmpty || !book.mentioned(in: callID).isEmpty
+            || book.visible.contains { $0.isOpen && ($0.carried ?? []).contains(callID) }
+    }
+
     var body: some View {
         let book = controller.series.book
         let discussed = book.discussed(in: callID)
@@ -423,23 +430,23 @@ struct MeetingPointsGroup: View {
         VStack(spacing: 0) {
             if !mentioned.isEmpty {
                 LabelColumn(label: "Your open points in these notes") {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         ForEach(mentioned) { p in
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                                 Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 14, height: 14)
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                     Text(p.text)
                                     if let m = p.mentions?.first(where: { $0.callID == callID }) {
-                                        HStack(spacing: 8) {
-                                            Text("Still open. Mossad has only the notes of this meeting").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                                        HStack(spacing: Space.s) {
+                                            Text("Still open. Mossad has only the notes of this meeting").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                                             SeriesMoment(callID: callID, at: m.at)
                                         }
-                                        Text("\u{201C}\(m.quote)\u{201D}").font(.system(size: 12)).italic().foregroundStyle(Palette.secondary).lineLimit(2)
+                                        Text("\u{201C}\(m.quote)\u{201D}").font(.system(size: Rhythm.secondarySize)).italic().foregroundStyle(Palette.secondary).lineLimit(2)
                                     }
                                 }
                                 Spacer(minLength: 8)
                             }
-                            .font(.system(size: 13))
+                            .font(.system(size: Rhythm.bodySize))
                             .padding(.vertical, 6).padding(.horizontal, 8)
                         }
                     }
@@ -447,14 +454,14 @@ struct MeetingPointsGroup: View {
             }
             if !discussed.isEmpty || !carried.isEmpty {
                 LabelColumn(label: "Your points") {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         ForEach(discussed) { DiscussedRow(point: $0) }
                         ForEach(carried) { p in
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                                 Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 14, height: 14)
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                     Text(p.text)
-                                    Text("Not discussed: carried to the next meeting").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                                    Text("Not discussed: carried to the next meeting").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                                 }
                                 Spacer(minLength: 8)
                                 QuietButton(title: "It was discussed") {
@@ -467,6 +474,20 @@ struct MeetingPointsGroup: View {
                 }
             }
         }
-        .task { controller.series.owner = controller; controller.series.reload(controller.paths) }
+        .loadsPoints()
+    }
+}
+
+extension View {
+    /// Reads the owner's points book when the view appears, so a page that shows points never waits for another view
+    /// to read it. Put it on a view that always exists.
+    func loadsPoints() -> some View { modifier(LoadsPoints()) }
+}
+
+private struct LoadsPoints: ViewModifier {
+    @EnvironmentObject var controller: AppController
+
+    func body(content: Content) -> some View {
+        content.task { controller.series.owner = controller; controller.series.reload(controller.paths) }
     }
 }

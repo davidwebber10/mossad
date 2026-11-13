@@ -10,13 +10,13 @@ struct ExistingPersonHint: View {
     var body: some View {
         let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if !typed.isEmpty || !(email ?? "").isEmpty, let match = controller.library.existingName(name: typed, email: email) {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 IconImage(.check, size: 12).foregroundStyle(Palette.ok)
                     .accessibilityHidden(true)
                 Text(match == typed ? "\(match) is saved already. This voice joins them."
                                     : "Matches \(match), who is saved already. This voice joins them.")
             }
-            .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
         }
     }
 }
@@ -37,7 +37,7 @@ struct PeopleDuplicatesSheet: View {
             SheetHeader(icon: .people, title: "Possible duplicates",
                         subtitle: "Merge keeps the name you pick and moves voice samples, the email, and meetings to it.")
             ScrollView {
-                VStack(spacing: 10) {
+                VStack(spacing: Rhythm.rowGap) {
                     ForEach(pairs) { pair in row(pair) }
                 }
                 .padding(.horizontal, 22).padding(.vertical, 16)
@@ -53,27 +53,27 @@ struct PeopleDuplicatesSheet: View {
     }
 
     private func row(_ pair: PeopleDuplicates.Pair) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+            HStack(spacing: Space.m) {
                 person(pair.first).frame(maxWidth: .infinity, alignment: .leading)
                 IconImage(.merge, size: 13).foregroundStyle(Palette.tertiaryMark)
                     .accessibilityHidden(true)
                 person(pair.second).frame(maxWidth: .infinity, alignment: .leading)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 Label {
                     Text(reasonText(pair.reason))
                 } icon: {
                     IconImage(reasonIcon(pair.reason), size: 12).foregroundStyle(Palette.tertiaryMark)
                 }
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 Spacer()
                 Button("Not the same") { notSame(pair) }.buttonStyle(.sheetText)
                 Menu {
                     Button("Keep “\(pair.first)”") { merge(pair.second, pair.first) }
                     Button("Keep “\(pair.second)”") { merge(pair.first, pair.second) }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: Space.s) {
                         IconImage(.merge, size: 13)
                         Text("Merge")
                         IconImage(.chevronDown, size: 10).foregroundStyle(Palette.secondary)
@@ -91,12 +91,12 @@ struct PeopleDuplicatesSheet: View {
     private func person(_ name: String) -> some View {
         let count = stats[name]?.meetings.count ?? 0
         let meetings = "\(count) \(count == 1 ? "meeting" : "meetings")"
-        return HStack(spacing: 8) {
+        return HStack(spacing: Space.s) {
             PersonMark(name: name, size: 26)
             VStack(alignment: .leading, spacing: 0) {
                 Text(name).fontWeight(.medium).lineLimit(1).truncationMode(.tail)
                 Text(emails[name].map { "\($0) · \(meetings)" } ?? meetings)
-                    .font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(1).truncationMode(.middle)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1).truncationMode(.middle)
             }
         }
         .accessibilityElement(children: .combine)

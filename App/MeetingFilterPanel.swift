@@ -37,7 +37,7 @@ struct MeetingFilterPanel: View {
             .frame(maxHeight: Self.maxHeight)
         }
         .frame(width: Self.peopleWidth + 2 + Self.columnWidth * 2)
-        .font(.system(size: 12))
+        .font(.system(size: Rhythm.secondarySize))
         .foregroundStyle(Palette.ink)
         .background {
             // The same shortcut closes it, since the button behind does not get keys while the flyout has them.
@@ -48,7 +48,7 @@ struct MeetingFilterPanel: View {
 
     private func column<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) { content() }
+            VStack(alignment: .leading, spacing: Rhythm.groupGap) { content() }
                 .padding(EdgeInsets(top: 14, leading: 16, bottom: 18, trailing: 16))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -57,8 +57,8 @@ struct MeetingFilterPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Text("Filters").font(.system(size: 13, weight: .semibold))
+        HStack(spacing: Space.m) {
+            Text("Filters").font(.system(size: Rhythm.bodySize, weight: .semibold))
             Text(countText)
                 .foregroundStyle(Palette.secondary).monospacedDigit()
                 .contentTransition(.numericText())
@@ -210,10 +210,10 @@ struct FilterGroup<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+            HStack(spacing: Space.s) {
                 Text(title).textRole(.label).foregroundStyle(Palette.secondary)
-                if let note { Text(note).font(.system(size: 11)).foregroundStyle(Palette.tertiary) }
+                if let note { Text(note).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary) }
             }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
@@ -234,7 +234,7 @@ private struct MoreChip: View {
     var body: some View {
         Button(action: action) {
             Text(open ? "Fewer" : "\(more) more")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Rhythm.secondarySize, weight: .medium))
                 .foregroundStyle(Palette.accent)
                 .padding(.horizontal, 6)
                 .frame(height: FilterChip.height)

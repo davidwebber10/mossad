@@ -11,7 +11,7 @@ struct LiveBand: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 RecordingChip(paused: controller.isPaused, room: room)
                 LivePeopleLine(model: controller.live, record: record)
             }
@@ -35,11 +35,11 @@ private struct RecordingChip: View {
     @ScaledMetric(relativeTo: .caption) private var height: CGFloat = 22
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Space.s) {
             StatusDot(color: paused ? Palette.tertiaryMark : Palette.recording, size: 8, pulsing: !paused)
             Text(paused ? "Paused" : room ? "In-person meeting" : "Recording")
         }
-        .font(.system(size: 12, weight: .semibold))
+        .font(.system(size: Rhythm.secondarySize, weight: .semibold))
         .foregroundStyle(paused ? Palette.secondary : Palette.recording)
         .padding(.horizontal, 10)
         .frame(height: height)
@@ -54,7 +54,7 @@ private struct LivePeopleLine: View {
     let record: CallRecord
 
     var body: some View {
-        Text(text).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+        Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
     }
 
     private var text: String {
@@ -125,7 +125,7 @@ struct LiveTranscriptPanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.m) {
                     LabelColumn(label: room ? "Room transcript" : "Live transcript") {
-                        Text(note).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        Text(note).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if controller.liveTranscriptEnabled {
@@ -182,22 +182,22 @@ private struct LiveLines: View {
             ForEach(model.visibleLines) { line in
                 let speaker = who(line)
                 LabelColumnRow {
-                    HStack(spacing: 7) {
+                    HStack(spacing: Space.s) {
                         Text(speaker.name)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: Rhythm.bodySize, weight: .semibold))
                             .foregroundStyle(speaker.unnamed ? Palette.accent : Palette.ink)
                             .lineLimit(1)
                         Circle().fill(Palette.speaker(speaker.hue)).frame(width: 8, height: 8)
                     }
                     .padding(.top, 1)
                 } content: {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         Text(line.text)
-                            .font(.system(size: 13))
-                            .lineSpacing(3)
+                            .font(.system(size: Rhythm.bodySize))
+                            .lineSpacing(Rhythm.secondaryLineGap)
                             .foregroundStyle(line.isFinal ? Palette.ink : Palette.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(longClock(line.time)).font(.system(size: 11)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                        Text(longClock(line.time)).font(.system(size: Rhythm.noteSize)).monospacedDigit().foregroundStyle(Palette.tertiary)
                     }
                 }
                 .background {
@@ -209,7 +209,7 @@ private struct LiveLines: View {
                 .accessibilityElement(children: .combine)
             }
             LabelColumnRow { Color.clear.frame(height: 1) } content: {
-                Text(paused ? "Paused." : "Listening…").font(.system(size: 13)).foregroundStyle(Palette.tertiary)
+                Text(paused ? "Paused." : "Listening…").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.tertiary)
             }
         }
         .textSelection(.enabled)

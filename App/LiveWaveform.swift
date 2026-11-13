@@ -28,7 +28,7 @@ struct LiveWaveform: View {
     private func row(_ label: String, _ meter: LevelMeter, color: Color, running: Bool) -> some View {
         HStack(spacing: 10) {
             if showLabels {
-                Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).frame(width: 64, alignment: .leading)
+                Text(label).font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(.secondary).frame(width: 64, alignment: .leading)
             }
             WaveformBars(style: .row(meter, NSColor(color)), bars: bars, framesPerSecond: framesPerSecond, running: running)
                 .frame(height: rowHeight)

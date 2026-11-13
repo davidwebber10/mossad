@@ -15,11 +15,11 @@ private struct PrepMoment: View {
 
     var body: some View {
         Button { controller.openMeeting(callID, at: at) } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: Space.xs) {
                 IconImage(.play, size: 8)
                 Text(exact ? clock(at) : "about \(clock(at))").monospacedDigit()
             }
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: Rhythm.secondarySize, weight: .semibold))
             .foregroundStyle(Palette.accent)
             .contentShape(Rectangle())
         }
@@ -39,11 +39,11 @@ private struct PrepMore: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 3) {
+            HStack(spacing: Space.xs) {
                 Text(text)
                 IconImage(.chevronRight, size: 9)
             }
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: Rhythm.secondarySize, weight: .semibold))
             .foregroundStyle(Palette.accent)
             .contentShape(Rectangle())
         }
@@ -70,20 +70,20 @@ private struct PrepRow<Who: View>: View {
     private var done: Bool { commitment?.done != nil }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: Space.m) {
             mark
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.xs) {
                         words.lineLimit(1)
                         who(true).foregroundStyle(Palette.secondary).fixedSize()
                     }
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         words.fixedSize(horizontal: false, vertical: true)
-                        who(false).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        who(false).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     }
                 }
-                if let source { Text(source).font(.system(size: 12)).foregroundStyle(Palette.tertiary).lineLimit(1) }
+                if let source { Text(source).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).lineLimit(1) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(alignment: .firstTextBaseline, spacing: Space.m) {
@@ -124,7 +124,7 @@ struct PrepLastTime: View {
 
     var body: some View {
         MeetingAnalyticsGroup("Last time") {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 if let headline = last.headline {
                     Text(headline).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                 } else if !last.hasSummary {
@@ -132,14 +132,14 @@ struct PrepLastTime: View {
                         .foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 FlowLayout(spacing: 6) {
-                    Text(source).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Text(source).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
                     PrepMore(text: "Open the meeting", help: "Open \(last.meeting.title)") { controller.openMeeting(last.meeting.id) }
                 }
             }
         }
         if !last.decisions.isEmpty {
             MeetingAnalyticsGroup("Decisions") {
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     let timed = last.decisions.contains { $0.at != nil }
                     ForEach(Array(last.decisions.enumerated()), id: \.offset) { _, d in
                         HStack(alignment: .firstTextBaseline, spacing: timed ? 10 : 0) {
@@ -147,7 +147,7 @@ struct PrepLastTime: View {
                                 if let at = d.at {
                                     // The same quiet time as the summary's decisions.
                                     Button { controller.openMeeting(last.meeting.id, at: at) } label: {
-                                        Text(clock(at)).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.tertiary).contentShape(Rectangle())
+                                        Text(clock(at)).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary).contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
                                     .help("Open the meeting and play from \(clock(at))")
@@ -168,13 +168,13 @@ struct PrepLastTime: View {
         }
         if !last.items.isEmpty || last.absent > 0 {
             MeetingAnalyticsGroup("Action items from last time") {
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     ForEach(last.items) { item in
                         PrepRow(text: item.task, commitment: item.commitment, moment: item.at.map { (item.callID, $0, item.atIsExact) }, toggle: toggle) { dot in
                             if item.isOwners {
                                 Text(dot ? "· You" : "You")
                             } else if let owner = item.owner {
-                                HStack(spacing: 5) {
+                                HStack(spacing: Space.xs) {
                                     if dot { Text("·").accessibilityHidden(true) }
                                     PersonName(owner, shown: shortName(owner), person: .some(item.person)).lineLimit(1)
                                 }
@@ -189,13 +189,13 @@ struct PrepLastTime: View {
                         // Counted in the page's first line as "not for this meeting". No "more": the list above
                         // can be empty.
                         Text("Not shown: \(last.absent) \(last.absent == 1 ? "item of a person who is" : "items of people who are") not invited to this meeting.")
-                            .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.leading, 26)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).padding(.leading, 26)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     // In words, one time, and for VoiceOver too: a dot's tooltip is no place for it.
                     if last.items.contains(where: { $0.state == nil }) {
                         Text("Mossad knows the state of your own tasks only. An item with a dot can be done.")
-                            .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary).padding(.leading, 26).padding(.top, 1)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).padding(.leading, 26).padding(.top, 1)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -222,14 +222,14 @@ struct PrepPromises: View {
     let toggle: (Commitment) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             ForEach(promises) { p in
                 let c = p.commitment
                 // Only a moment of a meeting that is still there: a link to a deleted one opens nothing.
                 PrepRow(text: c.text, commitment: c, source: c.sourceText,
                         moment: p.playable ? c.callID.flatMap { id in c.at.map { (id, $0, true) } } : nil, toggle: toggle) { dot in
                     if let to = c.to {
-                        HStack(spacing: 5) {
+                        HStack(spacing: Space.xs) {
                             Text(dot ? "· for" : "For")
                             PersonName(to, shown: shortName(to), person: .some(p.person)).lineLimit(1)
                         }
@@ -256,7 +256,7 @@ struct PrepSeries: View {
     let planned: TimeInterval
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             Finding("Recorded \(series.meetings) times since \(since); this one is planned for \(durationLabel(planned)).")
             let tiles = self.tiles
             if !tiles.isEmpty {
@@ -278,8 +278,8 @@ struct PrepSeries: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(series.earlier) { m in
                 Button { controller.openMeeting(m.id) } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(shortDay(m.start)).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.tertiary).frame(width: 64, alignment: .leading)
+                    HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                        Text(shortDay(m.start)).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary).frame(width: 64, alignment: .leading)
                         Text(m.line).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.vertical, 6)
@@ -290,7 +290,7 @@ struct PrepSeries: View {
                 .help("Open this meeting")
             }
             if series.moreEarlier > 0 {
-                Text("and \(series.moreEarlier) earlier").font(.system(size: 12)).foregroundStyle(Palette.tertiary).padding(.top, 7)
+                Text("and \(series.moreEarlier) earlier").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).padding(.top, 7)
             }
         }
         .hairline(.top)
@@ -334,10 +334,10 @@ private struct SeriesTile: View {
     let span: Double?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
-            Text(value).font(.system(size: 20, weight: .semibold)).tracking(-0.4).monospacedDigit().lineLimit(1)
-            Text(detail).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+            Text(title).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
+            Text(value).font(.system(size: Rhythm.figureSize, weight: .semibold)).tracking(-0.4).monospacedDigit().lineLimit(1)
+            Text(detail).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
             if line.count >= MeetingAnalytics.Trends.minimumPoints {
                 Sparkline(values: line, median: true, minimumSpan: span)
                     .frame(height: 30)

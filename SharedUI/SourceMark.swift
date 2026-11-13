@@ -6,7 +6,7 @@ struct SourceMark: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10.5, weight: .semibold))
+            .font(.system(size: Rhythm.noteSize, weight: .semibold))
             .foregroundStyle(Palette.secondary)
             .lineLimit(1)
             .padding(.horizontal, 6)

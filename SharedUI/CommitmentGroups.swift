@@ -12,7 +12,7 @@ struct CommitmentSectionTitle: View {
     @ScaledMetric(relativeTo: .callout) private var noteSize: CGFloat = CommitmentRowMetrics.detail
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Text(title).textRole(.title).foregroundStyle(accent ? Palette.accent : Palette.ink)
             Text("\(count)").font(.system(size: countSize)).monospacedDigit().foregroundStyle(Palette.secondary)
             Spacer(minLength: Space.m)
@@ -56,7 +56,7 @@ struct CommitmentPersonHeading: View {
     @ScaledMetric(relativeTo: .callout) private var size: CGFloat = CommitmentRowMetrics.detail
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             if let name = group.name {
                 PersonMark(name: name, size: 18)
             } else {

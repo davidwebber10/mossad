@@ -93,7 +93,7 @@ struct ErrorCard: View {
                 Button {
                     withAnimation(.easeOut(duration: 0.15)) { details.toggle() }
                 } label: {
-                    HStack(spacing: 3) {
+                    HStack(spacing: Space.xs) {
                         Text(details ? "Hide details" : "Details")
                         Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
                             .rotationEffect(.degrees(details ? 180 : 0))
@@ -117,7 +117,7 @@ struct InlineError: View {
 
     var body: some View {
         let size = iconSize
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.s) {
             WarningMark(size: size)
                 .foregroundStyle(error.isAboutRecording ? Palette.recording : Palette.accent)
                 .alignmentGuide(.firstTextBaseline) { $0[.bottom] - size * 0.18 }

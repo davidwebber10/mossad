@@ -34,12 +34,12 @@ private struct HistoryRow: View {
 
     var body: some View {
         Button { controller.openMeeting(row.id) } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.l) {
                 Text(row.start.formatted(.dateTime.month(.abbreviated).day().year()))
-                    .font(.system(size: 12.5, weight: .medium)).monospacedDigit().foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.bodySize, weight: .medium)).monospacedDigit().foregroundStyle(Palette.secondary)
                     .frame(width: 92, alignment: .leading)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    HStack(spacing: Space.s) {
                         Text(row.headline ?? row.title).foregroundStyle(Palette.ink).lineLimit(1)
                         if row.notesOnly { TagChip(text: "Gemini notes") }
                     }
@@ -47,13 +47,13 @@ private struct HistoryRow: View {
                     line("Action items", row.actionItems.map { item in item.owner.map { "\($0): \(item.task)" } ?? item.task })
                     if !discussed.isEmpty {
                         Text("Your points discussed: " + discussed.map(\.text).joined(separator: "; "))
-                            .font(.system(size: 12)).foregroundStyle(Palette.accent).lineLimit(1)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.accent).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
-                Text("\(Int(row.minutes.rounded())) min").font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                Text("\(Int(row.minutes.rounded())) min").font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary)
             }
-            .font(.system(size: 13))
+            .font(.system(size: Rhythm.bodySize))
             .padding(.vertical, 9).padding(.horizontal, 8)
             .background(hovering ? Palette.fill.opacity(0.5) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .contentShape(Rectangle())
@@ -68,7 +68,7 @@ private struct HistoryRow: View {
     private func line(_ label: String, _ texts: [String]) -> some View {
         if let first = texts.first {
             Text("\(texts.count) \(texts.count == 1 ? String(label.lowercased().dropLast()) : label.lowercased()): \(first)\(texts.count > 1 ? "; …" : "")")
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
         }
     }
 }
@@ -92,7 +92,7 @@ struct SeriesPeopleTab: View {
                     .textRole(.label).foregroundStyle(Palette.secondary).padding(.bottom, 6)
                     ForEach(report.attendees) { a in
                         HStack(alignment: .firstTextBaseline) {
-                            HStack(spacing: 8) {
+                            HStack(spacing: Space.s) {
                                 PersonName(a.name).foregroundStyle(Palette.ink).lineLimit(1)
                                 switch a.trend {
                                 case .joined: TagChip(text: "Joined recently")
@@ -135,13 +135,13 @@ struct SeriesStatsTab: View {
         if let report, !report.rows.isEmpty {
             let rows = Array(report.rows.prefix(16).reversed())
             MeetingAnalyticsGroup("Length") {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     Text(lengthLine(report)).fixedSize(horizontal: false, vertical: true)
                     Bars(values: rows.map { Optional($0.minutes) }, marks: rows.map(\.plannedMinutes), format: { "\(Int($0.rounded())) min" }, dates: rows.map(\.start))
                 }
             }
             MeetingAnalyticsGroup("Talk balance") {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     Text(report.ownerShare.map { "You usually talk \(Int(($0 * 100).rounded()))% of the time" + (report.talksMost.map { $0 == "You" ? ", the most of anyone." : "; \($0) talks most." } ?? ".") }
                          ?? "Too few meetings with your voice to say.")
                     Bars(values: rows.map { $0.ownerShare.map { $0 * 100 } }, marks: [], top: 100, format: { "\(Int($0.rounded()))%" }, dates: rows.map(\.start))
@@ -191,7 +191,7 @@ private struct Bars: View {
 
     var body: some View {
         let top = self.top ?? max(1, (values.compactMap { $0 } + marks.compactMap { $0 }).max() ?? 1)
-        HStack(alignment: .bottom, spacing: 4) {
+        HStack(alignment: .bottom, spacing: Space.xs) {
             ForEach(values.indices, id: \.self) { i in
                 ZStack(alignment: .bottom) {
                     RoundedRectangle(cornerRadius: 2).fill(Palette.fill).frame(height: 70)
@@ -233,7 +233,7 @@ struct SeriesOpenTab: View {
                 let items = report.openItems.filter { $0.kind == kind }
                 if !items.isEmpty {
                     MeetingAnalyticsGroup(title) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                             ForEach(items) { item in row(item) }
                         }
                         .help(help)
@@ -246,7 +246,7 @@ struct SeriesOpenTab: View {
     }
 
     private func row(_ item: SeriesReport.OpenItem) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             if let c = item.commitment {
                 Button { controller.toggleDone(c.id) } label: {
                     Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 14, height: 14).contentShape(Circle())
@@ -255,10 +255,10 @@ struct SeriesOpenTab: View {
             } else {
                 Circle().fill(Palette.tertiaryMark).frame(width: 5, height: 5).frame(width: 14)
             }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(item.text).fixedSize(horizontal: false, vertical: true)
                 Text([item.owner, item.date.formatted(.dateTime.month(.abbreviated).day())].compactMap { $0 }.joined(separator: " · "))
-                    .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             }
             Spacer(minLength: 8)
             if let call = item.callID { SeriesMoment(callID: call, at: item.at) }

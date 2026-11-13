@@ -52,11 +52,11 @@ struct CalendarControls: View {
                 ToolbarIconButton(icon: .chevronLeft, label: "Previous", size: 14) { state.move(-1) }
                 Button("Today") { state.anchor = Date() }
                     .buttonStyle(ChromeCellStyle())
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: Rhythm.bodySize, weight: .medium))
                     .padding(.horizontal, 6)
                 ToolbarIconButton(icon: .chevronRight, label: "Next", size: 14) { state.move(1) }
             }
-            Text(state.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink).padding(.horizontal, 4).fixedSize()
+            Text(state.title).font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink).padding(.horizontal, 4).fixedSize()
             Picker("Scope", selection: $state.scope) {
                 ForEach(CalendarState.Scope.allCases, id: \.self) { Text($0.rawValue) }
             }
@@ -159,7 +159,7 @@ private struct HourGrid: View {
             HStack(spacing: 8) {
                 dayLabel(day)
                 Text("\(dayRecords.count) \(dayRecords.count == 1 ? "call" : "calls") · \(durationText(total)) recorded")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.leading, 6)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).padding(.leading, 6)
                 Spacer()
             }
             .padding(.leading, gutter + 10).padding(.vertical, 8)
@@ -185,7 +185,7 @@ private struct HourGrid: View {
                 .textRole(.label)
                 .foregroundStyle(today ? Palette.accent : Palette.tertiary)
             Text("\(state.calendar.component(.day, from: day))")
-                .font(.system(size: 13, weight: today ? .semibold : .regular)).monospacedDigit()
+                .font(.system(size: Rhythm.bodySize, weight: today ? .semibold : .regular)).monospacedDigit()
                 .foregroundStyle(today ? Palette.accent : Palette.ink)
         }
     }
@@ -250,7 +250,7 @@ private struct HourGrid: View {
                 HStack(alignment: .top, spacing: 6) {
                     PlatformDot(platform: r.platform, size: 7, hollow: r.status != .written).padding(.top, 5)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(r.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                        Text(r.title).font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                             .accessibilityAddTraits(.isHeader)
                         if height >= 40 {
                             HStack(spacing: 0) {
@@ -258,7 +258,7 @@ private struct HourGrid: View {
                                     .foregroundStyle(Palette.secondary)
                                 meta(r)
                             }
-                            .font(.system(size: 12))
+                            .font(.system(size: Rhythm.secondarySize))
                         }
                     }
                 }
@@ -266,7 +266,7 @@ private struct HourGrid: View {
                 if height >= 44 {
                     HStack(spacing: 4) {
                         ForEach(speakerNames(r), id: \.self) { name in
-                            Text(name).font(.system(size: 11)).foregroundStyle(Palette.ink).lineLimit(1)
+                            Text(name).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.ink).lineLimit(1)
                                 .padding(.horizontal, 7).padding(.vertical, 2)
                                 .background(Palette.fill, in: Capsule())
                         }
@@ -277,9 +277,9 @@ private struct HourGrid: View {
             HStack(alignment: .top, spacing: 6) {
                 PlatformDot(platform: r.platform, size: 7, hollow: r.status != .written && r.status != .recording).padding(.top, 4)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(r.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.ink)
+                    Text(r.title).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.ink)
                         .lineLimit(1)
-                    if height > 28 { meta(r).font(.system(size: 10.5)) }
+                    if height > 28 { meta(r).font(.system(size: Rhythm.noteSize)) }
                 }
                 .lineSpacing(1)
             }
@@ -322,16 +322,16 @@ private struct HourGrid: View {
         let x = rightSide + 290 > size.width ? gutter + CGFloat(dayIndex) * columnWidth - 298 : rightSide
         let names = Array(Set(r.utterances.map { MarkdownWriter.displayNames(r)[$0.speakerKey] ?? $0.speakerKey })).sorted()
         return VStack(alignment: .leading, spacing: 8) {
-            Text(r.title).font(.system(size: 13, weight: .semibold))
+            Text(r.title).font(.system(size: Rhythm.bodySize, weight: .semibold))
             Text("\((r.start..<max(r.end, r.start)).formatted(.interval.hour().minute())) · \(r.lengthText) · \(r.platform.displayName)")
                 .foregroundStyle(Palette.secondary)
             if !names.isEmpty {
                 FlowLayout(spacing: 4) {
-                    ForEach(names, id: \.self) { Text($0).font(.system(size: 11)).padding(.horizontal, 7).padding(.vertical, 2).background(Palette.fill, in: Capsule()) }
+                    ForEach(names, id: \.self) { Text($0).font(.system(size: Rhythm.noteSize)).padding(.horizontal, 7).padding(.vertical, 2).background(Palette.fill, in: Capsule()) }
                 }
             }
             if let line = r.headline ?? r.summary.map(firstSentence) {
-                Text(line).font(.system(size: 13)).lineSpacing(3)
+                Text(line).font(.system(size: Rhythm.bodySize)).lineSpacing(3)
             }
             HStack {
                 meta(r)
@@ -339,7 +339,7 @@ private struct HourGrid: View {
                 Button("Open meeting") { open(r, state.title) }.buttonStyle(.link).fontWeight(.medium)
             }
         }
-        .font(.system(size: 12))
+        .font(.system(size: Rhythm.secondarySize))
         .padding(.horizontal, 14).padding(.vertical, 12)
         .frame(width: 290, alignment: .leading)
         .mossadGlass(cornerRadius: 14)
@@ -377,7 +377,7 @@ struct HourLines: View {
                 context.fill(Path(CGRect(x: gutter, y: y, width: size.width - gutter - 12, height: 1)), with: .color(Palette.hairline))
                 if h > 0, h < 24 {
                     let label = Calendar.current.date(bySettingHour: h, minute: 0, second: 0, of: Date())!.formatted(.dateTime.hour())
-                    context.draw(Text(label).font(.system(size: 10.5)).monospacedDigit().foregroundStyle(Palette.tertiary),
+                    context.draw(Text(label).font(.system(size: Rhythm.noteSize)).monospacedDigit().foregroundStyle(Palette.tertiary),
                                  at: CGPoint(x: gutter - 10, y: y), anchor: .trailing)
                 }
             }
@@ -458,7 +458,7 @@ private struct MonthGrid: View {
         let number = cal.component(.day, from: day) == 1 ? day.formatted(.dateTime.month(.abbreviated).day()) : "\(cal.component(.day, from: day))"
         return VStack(alignment: .leading, spacing: 3) {
             Text(number)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Rhythm.secondarySize, weight: .medium))
                 .foregroundStyle(today ? Palette.onAccent : inMonth ? Palette.ink : Palette.tertiary)
                 .padding(.horizontal, 6)
                 .frame(minWidth: 22, minHeight: 22)
@@ -475,7 +475,7 @@ private struct MonthGrid: View {
             if items.count + coming.count > 3 {
                 // Shows the whole day over the grid; the calendar stays in Month.
                 Button("+\(items.count + coming.count - 3) more") { expanded = day }
-                    .buttonStyle(.plain).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary).padding(.leading, 5)
+                    .buttonStyle(.plain).font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.secondary).padding(.leading, 5)
                     // Each day closes only its own popover: the close of one must not undo the click on another day.
                     .popover(isPresented: Binding(get: { expanded == day }, set: { if !$0, expanded == day { expanded = nil } }), arrowEdge: .bottom) {
                         DayShelf(day: day, records: items, upcoming: coming, matches: matches, deleting: $deleting,
@@ -514,7 +514,7 @@ private struct MonthItem: View {
                 Spacer(minLength: 0)
                 if record.status == .recording { StatusDot(color: Palette.recording, size: 6, pulsing: true) }
             }
-            .font(.system(size: 11))
+            .font(.system(size: Rhythm.noteSize))
             .padding(.horizontal, 5).padding(.vertical, 2)
             .background(hovering ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
             .contentShape(Rectangle())
@@ -558,11 +558,11 @@ private struct UpcomingBlock: View {
                         Text(subtitle).font(.system(size: compact ? 10.5 : 12)).foregroundStyle(Palette.secondary).lineLimit(1)
                     }
                 } else if compact {
-                    Text(meeting.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Text(meeting.title).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary).lineLimit(1)
                 } else {
                     HStack(spacing: 8) {
-                        Text(meeting.title).font(.system(size: 13, weight: .semibold))
-                        Text(subtitle).font(.system(size: 12))
+                        Text(meeting.title).font(.system(size: Rhythm.bodySize, weight: .semibold))
+                        Text(subtitle).font(.system(size: Rhythm.secondarySize))
                     }
                     .foregroundStyle(Palette.secondary).lineLimit(1)
                 }
@@ -605,7 +605,7 @@ private struct MonthUpcomingItem: View {
                 Text(meeting.title).foregroundStyle(Palette.secondary).lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .font(.system(size: 11))
+            .font(.system(size: Rhythm.noteSize))
             .padding(.horizontal, 5).padding(.vertical, 2)
             .background(hovering ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
             .contentShape(Rectangle())
@@ -637,7 +637,7 @@ private struct DayShelf: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(day.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
+                .font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
                 .padding(.horizontal, 5).padding(.bottom, 4)
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
