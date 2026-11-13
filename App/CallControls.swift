@@ -63,7 +63,7 @@ struct CallControls: View {
                 BookmarkFlag().fill(Palette.accentFill).frame(width: 9, height: 11)
                 Text(justBookmarked ? "Bookmarked" : "Bookmark")
                 if !compact {
-                    Text("⌃⌥B").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                    Text("⌃⌥B").font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
                 }
             }
             .font(.system(size: compact ? 12 : 12.5, weight: .medium))
@@ -117,7 +117,7 @@ struct CallControls: View {
 private struct ControlLabel: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 6) {
-            configuration.icon.font(.system(size: 11, weight: .semibold))
+            configuration.icon.font(.system(size: Rhythm.noteSize, weight: .semibold))
             configuration.title
         }
     }

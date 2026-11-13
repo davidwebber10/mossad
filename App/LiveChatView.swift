@@ -55,17 +55,17 @@ struct LiveChatView: View {
     }
 
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Ask about this call").font(.system(size: 16, weight: .medium))
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+            Text("Ask about this call").font(.system(size: Rhythm.leadSize, weight: .medium))
             Text(controller.liveOffReason.map { "There is no live transcript in this call. \($0) Answers can still use the invite and your earlier meetings." }
                  ?? "Answers come from what was said so far, the invite, and your earlier meetings. Times in an answer show the moment in the live transcript.")
-                .font(.system(size: 13)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: ChatThread.answerMax, alignment: .leading)
     }
 
     private var composerStack: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Rhythm.itemGap) {
             if !session.running, controller.liveOffReason == nil {
                 LiveChipsRow(model: controller.live, owner: controller.ownerName, record: record,
                              invitedOthers: invitedOthers, openPoints: LivePointRules.open(controller.livePointList(), marks: controller.livePoints.marks).count,
@@ -133,7 +133,7 @@ private struct LiveChipsRow: View {
                 FlowLayout(spacing: Space.s) {
                     ForEach(chips) { chip in
                         Button { ask(chip.question) } label: {
-                            Text(chip.label).font(.system(size: 12)).foregroundStyle(Palette.ink).lineLimit(1).fixedSize()
+                            Text(chip.label).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.ink).lineLimit(1).fixedSize()
                                 .padding(.horizontal, 11).frame(height: 26)
                                 .background(.ultraThinMaterial, in: Capsule())
                                 .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 1))

@@ -61,7 +61,7 @@ struct MeetingHeader: View {
         FlowLayout(spacing: Space.s) {
             HStack(spacing: Space.s) {
                 PlatformDot(platform: record.platform)
-                Text(when).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                Text(when).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
             }
             .frame(minHeight: 20)
             if let source = record.sourceLabel { SourceMark(text: source).frame(minHeight: 20) }

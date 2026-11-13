@@ -396,13 +396,13 @@ struct SpeakerNamingPopover: View {
     @State private var email = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(speaker.isUnknown ? "Who is \(speaker.name)?" : "Who is this voice?").font(.system(size: 13, weight: .semibold))
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+            Text(speaker.isUnknown ? "Who is \(speaker.name)?" : "Who is this voice?").font(.system(size: Rhythm.bodySize, weight: .semibold))
             TextField("Name", text: $name).textFieldStyle(.roundedBorder)
             TextField("Email (optional)", text: $email).textFieldStyle(.roundedBorder)
             ExistingPersonHint(name: name, email: email)
             Text("Mossad saves this voice under the name and recognizes it in later calls.")
-                .font(.system(size: 11)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Cancel") { isPresented = false }

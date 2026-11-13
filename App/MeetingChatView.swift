@@ -53,10 +53,10 @@ struct MeetingChatView: View {
     }
 
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Ask about this meeting").font(.system(size: 16, weight: .medium))
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+            Text("Ask about this meeting").font(.system(size: Rhythm.leadSize, weight: .medium))
             Text("Claude reads this meeting's summary and transcript, and can look at your other meetings when that helps. Times in the answer play the moment.")
-                .font(.system(size: 13)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
             chips(examples).padding(.top, 4)
         }
         .frame(maxWidth: ChatThread.answerMax, alignment: .leading)
@@ -67,7 +67,7 @@ struct MeetingChatView: View {
         FlowLayout(spacing: Space.s) {
             ForEach(questions, id: \.self) { e in
                 Button { question = e; send() } label: {
-                    Text(e).font(.system(size: 12.5)).foregroundStyle(Palette.ink).lineLimit(1).fixedSize()
+                    Text(e).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).lineLimit(1).fixedSize()
                         .padding(.horizontal, 12).frame(height: 28)
                         .background(Palette.fill, in: Capsule())
                         .contentShape(Capsule())

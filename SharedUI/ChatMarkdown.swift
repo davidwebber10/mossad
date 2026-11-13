@@ -50,7 +50,7 @@ struct ChatMarkdown: View {
         case .list(let ordered, let items):
             VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                         Text(item.marker).font(bodyFont).monospacedDigit().foregroundStyle(Palette.tertiary)
                             .frame(minWidth: ordered ? 16 : 8, alignment: .trailing)
                         Text(inline(item.text)).font(bodyFont).lineSpacing(Rhythm.readingLineGap).fixedSize(horizontal: false, vertical: true)
@@ -114,7 +114,7 @@ struct ChatMarkdown: View {
                 #if os(iOS)
                 piece.font = .footnote.monospacedDigit().weight(.medium)
                 #else
-                piece.font = .system(size: 11, weight: .medium).monospacedDigit()
+                piece.font = .system(size: Rhythm.noteSize, weight: .medium).monospacedDigit()
                 #endif
             }
             out += piece
@@ -146,11 +146,11 @@ private struct QuoteBlock: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Space.m) {
             Capsule().fill(Palette.accent.opacity(0.45)).frame(width: 3)
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 if quote.speaker != nil || quote.time != nil {
-                    HStack(spacing: 6) {
+                    HStack(spacing: Space.s) {
                         if let speaker = quote.speaker {
                             Text(speaker).font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.secondary)
                         }
@@ -181,7 +181,7 @@ struct TimeChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(time).font(.system(size: 11, weight: .medium)).monospacedDigit()
+            Text(time).font(.system(size: Rhythm.noteSize, weight: .medium)).monospacedDigit()
                 .foregroundStyle(Self.ink)
                 .padding(.horizontal, 7).frame(height: 18)
                 .background(Palette.accentTint, in: Capsule())

@@ -147,11 +147,11 @@ private struct GoogleGuideStepRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: Space.m) {
             Text("\(step.number)")
-                .font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.accent)
+                .font(.system(size: Rhythm.noteSize, weight: .bold)).foregroundStyle(Palette.accent)
                 .frame(width: 20, height: 20)
                 .background(Palette.accentTint, in: Circle())
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 SettingsRowText(title: step.title, detail: step.detail)
                     .accessibilityLabel("Step \(step.number), \(step.title). \(step.detail)")
                 HStack(spacing: Space.m) {
@@ -179,7 +179,7 @@ private struct GoogleCopyRow: View {
         HStack(spacing: Space.s) {
             Text(copy.label).font(.system(size: style.detailSize)).foregroundStyle(Palette.secondary)
                 .frame(minWidth: 110, alignment: .leading)
-            Text(copy.value).font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Palette.ink)
+            Text(copy.value).font(.system(size: Rhythm.secondarySize, design: .monospaced)).foregroundStyle(Palette.ink)
                 .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
             Spacer(minLength: Space.s)
             Button(copied ? "Copied" : "Copy") {
@@ -205,7 +205,7 @@ struct GoogleClientRows: View {
 
     var body: some View {
         if !controller.googleClientSaved || replacing {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 SettingsRowText(title: "Client ID and secret", detail: "From the client of step 5 of the setup steps. The ID ends with .apps.googleusercontent.com.")
                 field("Client ID", text: $id, secure: false)
                 field("Client secret", text: $secret, secure: true)
@@ -256,7 +256,7 @@ struct GoogleConnectionRow: View {
 
     var body: some View {
         let connector = controller.googleConnector
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             HStack(spacing: Space.m) {
                 SettingsRowText(title: "Google account", detail: status)
                 Spacer(minLength: Space.m)
@@ -293,7 +293,7 @@ struct GoogleConnectionRow: View {
     private var result: some View {
         switch controller.googleConnector.phase {
         case .done(let report):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 if let event = report.event { PassLine(text: "Read \"\(event)\"") }
                 ForEach(GoogleScope.allCases.filter { report.parts[$0] != nil }) { scope in
                     if let error = report.parts[scope] ?? nil {
@@ -317,10 +317,10 @@ struct GoogleErrorLine: View {
     let part: String?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.s) {
             WarningMark(size: 12).foregroundStyle(Palette.accent)
             Text("\(Text((part.map { "\($0): " } ?? "") + error.title).fontWeight(.semibold).foregroundStyle(Palette.ink))\(Text(". " + error.advice).foregroundStyle(Palette.secondary))")
-                .font(.system(size: 12))
+                .font(.system(size: Rhythm.secondarySize))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
@@ -371,7 +371,7 @@ struct GooglePastNotesRows: View {
             }
         }
         if let line = c.pastLine {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 Text(line).font(.system(size: style.detailSize)).foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)

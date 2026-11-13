@@ -178,7 +178,7 @@ struct RecurringView: View {
 
     private var nothing: some View {
         Text(nothingText)
-            .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -240,7 +240,7 @@ private struct SeriesList: View {
         let firstRows = Set(Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }).values)
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
+                LazyVStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     ForEach(Array(days.enumerated()), id: \.element.id) { i, day in
                         GroupHeader(title: day.title, first: i == 0)
                         ForEach(day.ids, id: \.self) { id in
@@ -313,18 +313,18 @@ private struct SeriesRow: View {
 
     var body: some View {
         // The place is a button of its own beside the row's, not inside it, so its click opens the meeting.
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             Button(action: select) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    HStack(spacing: Space.s) {
                         Text(title)
-                            .font(.system(size: 13, weight: selected != .none ? .semibold : .medium))
+                            .font(.system(size: Rhythm.bodySize, weight: selected != .none ? .semibold : .medium))
                             .foregroundStyle(Palette.ink)
                             .lineLimit(1).truncationMode(.tail)
                         Spacer(minLength: 4)
                         if open > 0 {
                             Text("\(open)")
-                                .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                                .font(.system(size: Rhythm.noteSize, weight: .semibold)).monospacedDigit()
                                 .foregroundStyle(Palette.accent)
                                 .padding(.horizontal, 6).frame(minWidth: 18, minHeight: 16)
                                 .background(Palette.accentTint, in: Capsule())
@@ -333,7 +333,7 @@ private struct SeriesRow: View {
                         }
                     }
                     Text(subtitle)
-                        .font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(1)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())

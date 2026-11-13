@@ -26,7 +26,7 @@ struct MeetingsListView: View {
         Button { findings = true } label: {
             HStack(spacing: Space.m) {
                 Image(systemName: "rectangle.stack").foregroundStyle(Palette.accent).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(store.findings.count == 1 ? "1 finding to review" : "\(store.findings.count) findings to review").textRole(.headline).foregroundStyle(Palette.ink)
                     Text("From the coach. Swipe right if it is useful or true, or to take a goal; left if not.").textRole(.secondary).foregroundStyle(Palette.secondary)
                 }
@@ -108,9 +108,9 @@ struct MeetingsListView: View {
             HairlineRow(divided: i < entries.count - 1) {
                 HStack(alignment: .top, spacing: Space.m) {
                     Circle().fill(Palette.recording).frame(width: 8, height: 8).padding(.top, 6).accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         Text(item.recording.title ?? "In-person meeting").textRole(.headline).foregroundStyle(Palette.ink)
-                        HStack(spacing: 6) {
+                        HStack(spacing: Space.s) {
                             Text("\(item.recording.start.formatted(date: .omitted, time: .shortened)) · " + status(item))
                             if !item.isSent { PhoneProcessingMark() }
                         }
@@ -189,7 +189,7 @@ struct MeetingsListView: View {
 private struct RecordLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: Space.s) {
-            configuration.icon.font(.system(size: 10)).accessibilityHidden(true)
+            configuration.icon.font(.system(size: Rhythm.noteSize)).accessibilityHidden(true)
             configuration.title
         }
     }
@@ -217,7 +217,7 @@ struct PhoneMeetingRow: View {
         HairlineRow(divided: divided) {
             HStack(alignment: .top, spacing: Space.m) {
                 PlatformDot(platform: record.platform).padding(.top, 6).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(record.title)
                         .textRole(.headline)
                         .foregroundStyle(Palette.ink)

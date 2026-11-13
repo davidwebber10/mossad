@@ -12,14 +12,14 @@ struct YourTimeSection: View {
 
     var body: some View {
         SideBySide {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 HStack(alignment: .center) {
                     Finding(AnalyticsFindings.time(report))
                     Spacer(minLength: 12)
                     FillSegmented(selection: $measure, choices: Measure.allCases.map { ($0, $0.rawValue) })
                 }
                 TimeChart(report: report, measure: measure)
-                HStack(spacing: 14) {
+                HStack(spacing: Space.l) {
                     LegendKey(title: "Scheduled", color: Palette.accentFill)
                     LegendKey(title: "Unscheduled", color: Palette.bar)
                 }
@@ -70,7 +70,7 @@ private struct TimeChart: View {
                 AxisValueLabel {
                     if let n = v.as(Double.self) {
                         Text(measure == .calls ? "\(Int(n))" : n == 0 ? "0" : n >= 60 ? "\(Int(n / 60))h" : "\(Int(n))m")
-                            .font(.system(size: 10.5)).foregroundStyle(Palette.tertiary)
+                            .font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
                     }
                 }
             }
@@ -102,7 +102,7 @@ func quietDateAxis(_ report: AnalyticsReport) -> some AxisContent {
         AxisValueLabel {
             if let d = v.as(Date.self) {
                 Text(report.bucket == .month ? d.formatted(.dateTime.month(.abbreviated)) : d.formatted(.dateTime.month(.abbreviated).day()))
-                    .font(.system(size: 10.5)).foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
             }
         }
     }
@@ -114,7 +114,7 @@ struct ScrubLabel: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11.5, weight: .medium)).monospacedDigit()
+            .font(.system(size: Rhythm.secondarySize, weight: .medium)).monospacedDigit()
             .padding(.horizontal, 10).padding(.vertical, 5)
             .glassEffect(.regular, in: .capsule)
             .fixedSize()
@@ -134,8 +134,8 @@ private struct ScheduledSide: View {
             share("Time", "\(hours(r.scheduled.seconds)) of \(hours(r.callSeconds))", r.callSeconds > 0 ? r.scheduled.seconds / r.callSeconds : 0)
                 .padding(.top, 14)
             Text(averages)
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                .lineSpacing(2)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
+                .lineSpacing(Rhythm.secondaryLineGap)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 12)
         }
@@ -143,13 +143,13 @@ private struct ScheduledSide: View {
     }
 
     private func share(_ title: String, _ detail: String, _ part: Double) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             HStack {
                 Text(title).fontWeight(.semibold)
                 Spacer()
                 Text(detail).foregroundStyle(Palette.secondary).monospacedDigit()
             }
-            .font(.system(size: 12))
+            .font(.system(size: Rhythm.secondarySize))
             SplitBar(parts: [(part, Palette.accentFill), (1 - part, Palette.bar)])
         }
         .accessibilityElement(children: .ignore)
@@ -174,7 +174,7 @@ struct FillSegmented<Value: Hashable>: View {
                 let selected = value == selection
                 Button { withAnimation(.snappy(duration: 0.2)) { selection = value } } label: {
                     Text(title)
-                        .font(.system(size: 11.5, weight: selected ? .semibold : .medium))
+                        .font(.system(size: Rhythm.secondarySize, weight: selected ? .semibold : .medium))
                         .foregroundStyle(selected ? Palette.ink : Palette.secondary)
                         .padding(.horizontal, 10).padding(.vertical, 3)
                         .background {
@@ -203,13 +203,13 @@ struct YourWeekSection: View {
 
     var body: some View {
         SideBySide {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 Finding(AnalyticsFindings.busiestHours(report.heat) ?? "No calls at a regular time yet")
                 HeatChart(cells: report.heat)
             }
         } side: {
             let w = report.workday
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 if let finding = AnalyticsFindings.workdays(w) { Finding(finding) }
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
                     GridRow {
@@ -239,7 +239,7 @@ private struct HeatChart: View {
         Grid(horizontalSpacing: 3, verticalSpacing: 3) {
             ForEach(days, id: \.self) { day in
                 GridRow {
-                    Text(dayLabel(day)).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                    Text(dayLabel(day)).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
                         .frame(width: 32, alignment: .leading)
                     ForEach(first...last, id: \.self) { hour in
                         let s = cells.first { $0.weekday == day && $0.hour == hour }?.seconds ?? 0
@@ -258,7 +258,7 @@ private struct HeatChart: View {
             GridRow {
                 Color.clear.frame(width: 32, height: 1)
                 ForEach(first...last, id: \.self) { hour in
-                    Text(hourLabel(hour)).font(.system(size: 10.5)).foregroundStyle(Palette.tertiary).lineLimit(1).fixedSize()
+                    Text(hourLabel(hour)).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary).lineLimit(1).fixedSize()
                 }
             }
         }
@@ -295,14 +295,14 @@ struct TopicsSection: View {
 
     var body: some View {
         SideBySide {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 if let finding = AnalyticsFindings.topics(report) {
                     Finding(finding)
                     topics
                 } else {
                     Finding("No topics yet")
                     Text("Topics come with each summary. Older calls get theirs when Mossad summarizes them again.")
-                        .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                 }
             }
         } side: {
@@ -316,7 +316,7 @@ struct TopicsSection: View {
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(top) { s in
                 Button { controller.showTag(s.name) } label: {
-                    HStack(spacing: 14) {
+                    HStack(spacing: Space.l) {
                         Text(s.name).lineLimit(1).frame(width: 150, alignment: .leading)
                         Capsule().fill(Palette.fill)
                             .overlay(alignment: .leading) {
@@ -326,7 +326,7 @@ struct TopicsSection: View {
                         Text(hours(s.seconds)).foregroundStyle(Palette.secondary).monospacedDigit().lineLimit(1)
                             .frame(width: 72, alignment: .trailing)
                     }
-                    .font(.system(size: 12.5))
+                    .font(.system(size: Rhythm.bodySize))
                     .frame(height: 24)
                     .contentShape(Rectangle())
                 }
@@ -354,7 +354,7 @@ private struct ValueSide: View {
                 Finding(finding)
                 SplitBar(parts: Self.ratings.map { ((report.valueSeconds[$0.0] ?? 0) / total, $0.2) })
                     .padding(.top, 14)
-                HStack(spacing: 12) {
+                HStack(spacing: Space.m) {
                     ForEach(Self.ratings, id: \.1) { r in
                         LegendKey(title: "\(r.1) \(percentText((report.valueSeconds[r.0] ?? 0) / total))", color: r.2)
                     }
@@ -362,7 +362,7 @@ private struct ValueSide: View {
                 .padding(.top, 8)
                 .accessibilityElement(children: .combine)
                 if !report.lowValueRepeats.isEmpty {
-                    Text("Rated low more than once").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.secondary)
+                    Text("Rated low more than once").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
                         .padding(.top, 14)
                     ForEach(report.lowValueRepeats.prefix(4)) { s in
                         Button { controller.meetingQuery = s.name; controller.open(.meetings) } label: {
@@ -371,7 +371,7 @@ private struct ValueSide: View {
                                 Spacer()
                                 Text("\(s.calls)×").foregroundStyle(Palette.secondary).monospacedDigit()
                             }
-                            .font(.system(size: 12.5))
+                            .font(.system(size: Rhythm.bodySize))
                             .padding(.vertical, 3)
                             .contentShape(Rectangle())
                         }
@@ -379,13 +379,13 @@ private struct ValueSide: View {
                     }
                 }
                 Text("The coach rates each meeting's worth when it reviews the call.")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 12)
             } else {
                 Finding("No ratings yet")
                 Text("The coach rates each meeting's worth. Ratings show here after a few coached calls.")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 8)
             }

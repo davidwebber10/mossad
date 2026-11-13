@@ -44,9 +44,9 @@ struct MeetingAnalyticsTab: View {
                             MeetingAnalyticsPage(analytics: shown, record: record, people: people, openCoach: openCoach)
                         }
                     } else {
-                        HStack(spacing: 8) {
+                        HStack(spacing: Space.s) {
                             ProgressView().controlSize(.small)
-                            Text("Reading your earlier meetings…").font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                            Text("Reading your earlier meetings…").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                         }
                         .opacity(slow ? 1 : 0)
                         .frame(maxWidth: .infinity, minHeight: 320, alignment: .topLeading)
@@ -103,7 +103,7 @@ private struct MeetingAnalyticsPage: View {
                 .padding(.vertical, 18)
                 .hairline(.top)
                 .hairline()
-            VStack(alignment: .leading, spacing: 36) {
+            VStack(alignment: .leading, spacing: Rhythm.sectionGap) {
                 // With no history at all, "What stood out" already says so; the group shows only when it has more.
                 if a.baselines.meeting.context != nil || a.baselines.schedule != nil || a.baselines.trends != nil {
                     MeetingAnalyticsGroup("Against the usual") { UsualSection(analytics: a, record: record) }
@@ -152,18 +152,18 @@ private struct StandoutsSection: View {
         if b.standouts.isEmpty {
             Text(b.hasFirmHistory ? "Nothing unusual in this call."
                  : "Not enough history yet. Mossad calls a number unusual only against 5 or more earlier meetings like this one.")
-                .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(b.standouts) { s in
-                    HStack(alignment: .top, spacing: 12) {
+                    HStack(alignment: .top, spacing: Space.m) {
                         SpeakerSentence(speaker: s.subject.flatMap(people.speaker(forKey:)), callID: callID, text: s.text, size: 15)
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.system(size: Rhythm.headingSize, weight: .medium))
                             .foregroundStyle(Palette.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         evidence(s.evidence)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                             .padding(.top, 2)
                     }
                     .padding(.vertical, 8)
@@ -181,7 +181,7 @@ private struct StandoutsSection: View {
         case .person(let id):
             if let opener, let person = people.speaker(forKey: id)?.person {
                 Button { opener(person) } label: {
-                    HStack(spacing: 3) {
+                    HStack(spacing: Space.xs) {
                         Text("Profile")
                         IconImage(.chevronRight, size: 9)
                     }
@@ -210,7 +210,7 @@ private struct MeetingFigures: View {
 
     var body: some View {
         let a = analytics, m = a.baselines.meeting
-        HStack(alignment: .top, spacing: 24) {
+        HStack(alignment: .top, spacing: Space.xl) {
             Figure(title: "Length", value: hours(a.facts.values[.length] ?? 0), detail: lengthDetail, change: nil,
                    mark: mark(m[.length], .length, m.context, above: "longer", below: "shorter"))
             Figure(title: "People who spoke", value: "\(a.speakers.count)", detail: peopleDetail, change: nil,
@@ -292,7 +292,7 @@ private struct UsualSection: View {
 
     var body: some View {
         let b = analytics.baselines
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             if let context = b.meeting.context {
                 Finding(MeetingFindings.compared(context))
                 table(b.meeting, context)
@@ -314,7 +314,7 @@ private struct UsualSection: View {
     private func table(_ m: MeetingAnalytics.MeetingBaseline, _ context: MeetingAnalytics.Context) -> some View {
         VStack(spacing: 0) {
             ForEach(rows(m), id: \.1) { metric, title, reading, usual in
-                HStack(spacing: 12) {
+                HStack(spacing: Space.m) {
                     Text(title).foregroundStyle(Palette.secondary).lineLimit(1).frame(width: 170, alignment: .leading)
                     Marked(text: value(metric, reading.value), reading: reading,
                            tip: "\(sentenceCase(MeetingFindings.usually(metric, usual, context: context))) (\(MeetingFindings.basis(usual)))")
@@ -325,7 +325,7 @@ private struct UsualSection: View {
                         .lineLimit(1)
                     Spacer(minLength: 0)
                 }
-                .font(.system(size: 12.5)).monospacedDigit()
+                .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                 .padding(.vertical, 6)
                 .hairline()
             }
@@ -359,7 +359,7 @@ private struct ScheduleLine: View {
             Text("·").foregroundStyle(Palette.tertiary)
             Text(MeetingFindings.ended(s)).fontWeight(s.ranOver ? .semibold : .regular).foregroundStyle(s.ranOver ? Palette.ink : Palette.secondary)
         }
-        .font(.system(size: 12.5)).monospacedDigit()
+        .font(.system(size: Rhythm.bodySize)).monospacedDigit()
         .accessibilityElement(children: .combine)
     }
 }
@@ -370,8 +370,8 @@ private struct TrendsRow: View {
 
     var body: some View {
         let t = trends
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 24) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+            HStack(alignment: .top, spacing: Space.xl) {
                 if let last = t.talkShare.last {
                     TrendLine(title: "Your talk share", value: percentText(last.value), points: t.talkShare.map(\.value), domain: nil, minimumSpan: 0.2)
                 }
@@ -384,7 +384,7 @@ private struct TrendsRow: View {
                 }
             }
             Text("\(t.context.meetings) earlier \(t.context.meetings == 1 ? "meeting" : "meetings") \(t.context.label) and this call, oldest first. The dot is this call.")
-                .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
         }
         .padding(.top, 4)
     }
@@ -399,9 +399,9 @@ private struct TrendLine: View {
     var minimumSpan: Double?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-            Text(value).font(.system(size: 20, weight: .semibold)).tracking(-0.4).monospacedDigit()
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+            Text(title).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
+            Text(value).font(.system(size: Rhythm.figureSize, weight: .semibold)).tracking(-0.4).monospacedDigit()
             Sparkline(values: points, median: true, domain: domain, minimumSpan: minimumSpan)
                 .frame(height: 34)
                 .padding(.top, 8)
@@ -426,12 +426,12 @@ private struct WordsSection: View {
     var body: some View {
         let a = analytics
         let peak = max(a.speakers.map(\.words).max() ?? 1, 1)
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             Text("By words. This meeting was not recorded: its transcript is Gemini's, so there is no talk time, pace, or flow.")
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 0) {
-                HStack(spacing: 12) {
+                HStack(spacing: Space.m) {
                     Spacer().frame(width: 150)
                     Spacer()
                     Text("Words").frame(width: 70, alignment: .trailing)
@@ -439,11 +439,11 @@ private struct WordsSection: View {
                     Text("Questions").frame(width: 70, alignment: .trailing)
                     Text("Turns").frame(width: 50, alignment: .trailing)
                 }
-                .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.tertiary)
+                .font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(Palette.tertiary)
                 .padding(.bottom, 4)
                 ForEach(a.speakers) { s in
                     let speaker = people.speaker(forKey: s.id)
-                    HStack(spacing: 12) {
+                    HStack(spacing: Space.m) {
                         SpeakerCell(speaker: speaker, name: s.name, callID: callID).frame(width: 150, alignment: .leading)
                         Capsule().fill(Palette.fill)
                             .overlay(alignment: .leading) {
@@ -456,7 +456,7 @@ private struct WordsSection: View {
                         Text("\(s.questions)").frame(width: 70, alignment: .trailing)
                         Text("\(s.turns)").frame(width: 50, alignment: .trailing)
                     }
-                    .font(.system(size: 12.5)).monospacedDigit().foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.bodySize)).monospacedDigit().foregroundStyle(Palette.secondary)
                     .padding(.vertical, 7)
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(s.name): \(s.words) words, \(percentText(s.share)) of the words, \(s.questions) questions, \(s.turns) turns")

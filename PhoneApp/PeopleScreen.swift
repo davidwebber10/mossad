@@ -34,7 +34,7 @@ struct PeopleScreen: View {
                             ForEach(Sort.allCases, id: \.self) { Text($0.rawValue) }
                         }
                     } label: {
-                        HStack(spacing: 3) {
+                        HStack(spacing: Space.xs) {
                             Text(sort.rawValue)
                             Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
                         }
@@ -110,12 +110,12 @@ private struct PersonRow: View {
         HairlineRow(divided: divided) {
             HStack(spacing: Space.m) {
                 PersonMark(name: name, size: 36, isOwner: isOwner)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(name).textRole(.headline).foregroundStyle(Palette.ink).lineLimit(1)
                     Text(subtitle).textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: Rhythm.pairGap) {
                     if !isOwner { Text(meetingsText) }
                     if let last = stats.lastHeard { Text(shortDay(last)) }
                 }

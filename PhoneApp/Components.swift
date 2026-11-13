@@ -80,7 +80,7 @@ struct StatTile: View {
     var detail: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             Text(value).textRole(.title).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
             Text(label).textRole(.secondary).foregroundStyle(Palette.secondary)
             if let detail { Text(detail).textRole(.secondary).foregroundStyle(Palette.tertiary).lineLimit(2) }

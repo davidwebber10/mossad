@@ -63,17 +63,17 @@ private struct AskPanelHeader: View {
         HStack(spacing: 8) {
             switch mode {
             case .quick:
-                Text("Mossad").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
+                Text("Mossad").font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
             case .ended(let id):
                 dot(Palette.tertiaryMark)
                 title(id)
-                Text("Ended, \(minutes(to: model.endedAt ?? Date())) min").font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                Text("Ended, \(minutes(to: model.endedAt ?? Date())) min").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
             case .call(let id), .noTranscript(let id, _):
                 dot(Palette.recording)
                 title(id)
                 TimelineView(.periodic(from: .now, by: 20)) { context in
                     Text("\(controller.isPaused ? "Paused" : "Recording"), \(minutes(to: context.date)) min")
-                        .font(.system(size: 13)).foregroundStyle(Palette.secondary).monospacedDigit()
+                        .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).monospacedDigit()
                 }
             }
             Spacer(minLength: 8)
@@ -89,12 +89,12 @@ private struct AskPanelHeader: View {
             }
             HeaderButton(label: "Open in the Mossad window",
                          help: "Open this chat in the Mossad window (⌘↩)") {
-                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 13, weight: .medium))
+                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: Rhythm.bodySize, weight: .medium))
             } action: {
                 controller.openAskInWindow(mode)
             }
             HeaderButton(label: "Close", help: "Hide; the chat stays (esc)") {
-                Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                Image(systemName: "xmark").font(.system(size: Rhythm.secondarySize, weight: .semibold))
             } action: {
                 actions.hide()
             }
@@ -112,7 +112,7 @@ private struct AskPanelHeader: View {
 
     private func title(_ id: String) -> some View {
         Text(controller.meetings.first { $0.id == id }?.title ?? controller.recordingTitle ?? "This call")
-            .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+            .font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -164,12 +164,12 @@ private struct AskPanelNotice: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Text(text).font(.system(size: 14)).lineSpacing(3).foregroundStyle(Palette.ink)
+            Text(text).font(.system(size: Rhythm.readingSize)).lineSpacing(Rhythm.secondaryLineGap).foregroundStyle(Palette.ink)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let button {
                 Button(action: button.2) {
-                    Text(button.0).font(.system(size: 13, weight: button.1 ? .semibold : .medium))
+                    Text(button.0).font(.system(size: Rhythm.bodySize, weight: button.1 ? .semibold : .medium))
                         .foregroundStyle(button.1 ? Palette.onAccent : Palette.ink)
                         .padding(.horizontal, 14).frame(height: 30)
                         .background(button.1 ? Palette.accentFill : Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -267,7 +267,7 @@ private struct AskPanelChat: View {
                     if let queued = session.queued {
                         VStack(alignment: .trailing, spacing: 4) {
                             ChatQuestionBubble(text: queued)
-                            Text("Waits for this answer").font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                            Text("Waits for this answer").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .accessibilityElement(children: .ignore)
@@ -302,10 +302,10 @@ private struct AskPanelChat: View {
     private var answering: some View {
         if live, session.steps.isEmpty, session.partial.isEmpty {
             HStack(spacing: 10) {
-                Image(systemName: "waveform").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.accent)
+                Image(systemName: "waveform").font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.accent)
                     .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
                     .accessibilityHidden(true)
-                Text("Listening to the call…").font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                Text("Listening to the call…").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
             }
             .accessibilityElement(children: .combine)
         } else {
@@ -399,7 +399,7 @@ private struct AskPanelChat: View {
             Spacer(minLength: 8)
             KeyHint(keys: (controller.activeAskShortcut.map { [$0.symbols] } ?? []) + ["esc"], label: "Hide, the chat stays")
         }
-        .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
         .padding(.horizontal, 16)
         .frame(height: 32)
         .overlay(alignment: .top) { Rectangle().fill(Palette.hairline).frame(height: 1) }
@@ -437,11 +437,11 @@ private struct ShareCover: View {
     var body: some View {
         HStack(spacing: 16) {
             Text("You seem to be sharing your screen, so the chat is hidden. People in the call could see it.")
-                .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: show) {
-                Text("Show the chat").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
+                Text("Show the chat").font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
                     .padding(.horizontal, 14).frame(height: 30)
                     .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -460,7 +460,7 @@ private struct AgeDivider: View {
     var body: some View {
         HStack(spacing: 12) {
             Rectangle().fill(Palette.hairline).frame(height: 1)
-            Text(text).font(.system(size: 11.5)).foregroundStyle(Palette.secondary).fixedSize()
+            Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize()
             Rectangle().fill(Palette.hairline).frame(height: 1)
         }
         .accessibilityElement(children: .combine)
@@ -554,7 +554,7 @@ struct LivePeekView: View {
         let lines = LivePeek.lines(model.transcript, lines: model.visibleLines, at: at, owner: owner, room: room)
         VStack(alignment: .leading, spacing: 0) {
             if lines.isEmpty {
-                Text("This moment is not in the live transcript.").font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                Text("This moment is not in the live transcript.").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     .padding(.horizontal, 14).padding(.vertical, 4)
             }
             ForEach(lines) { line in
@@ -565,7 +565,7 @@ struct LivePeekView: View {
                         .foregroundStyle(line.marked ? Palette.ink : Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.system(size: 13)).lineSpacing(3)
+                .font(.system(size: Rhythm.bodySize)).lineSpacing(Rhythm.secondaryLineGap)
                 .padding(.horizontal, 14).padding(.vertical, line.marked ? 6 : 4)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(line.marked ? Palette.accent.opacity(0.12) : .clear)

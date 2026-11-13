@@ -61,7 +61,7 @@ struct SharesView: View {
                     ListColumn("Shares", widthKey: "shares", search: $search, searchPrompt: "Search shares and their people") {
                         if rows.isEmpty {
                             Text("No share matches “\(search.trimmed)”.")
-                                .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                                 .padding(.horizontal, 24).padding(.top, Space.s)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
@@ -111,7 +111,7 @@ private struct ShareList: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
+                LazyVStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     ForEach(rows) { row in
                         if row.state != .live, row.id == rows.first(where: { $0.state != .live })?.id {
                             Text("No longer working").textRole(.label).foregroundStyle(Palette.tertiary)
@@ -156,18 +156,18 @@ private struct ShareListRow: View {
 
     var body: some View {
         Button(action: select) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                HStack(spacing: Space.s) {
                     Text(match?.title.boldMatches(size: 13) ?? AttributedString(row.title))
-                        .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                        .font(.system(size: Rhythm.bodySize, weight: selected ? .semibold : .medium))
                         .foregroundStyle(row.state == .live ? Palette.ink : Palette.secondary)
                         .lineLimit(1).truncationMode(.tail)
                         .cssLineHeight(size: 13)
                     Spacer(minLength: 4)
                     if row.pin != .off {
-                        HStack(spacing: 3) {
+                        HStack(spacing: Space.xs) {
                             IconImage(.lock, size: 11)
-                            Text(row.pin == .locked ? "Locked" : "PIN").font(.system(size: 11, weight: .medium))
+                            Text(row.pin == .locked ? "Locked" : "PIN").font(.system(size: Rhythm.noteSize, weight: .medium))
                         }
                         .foregroundStyle(row.pin == .locked ? Palette.recording : Palette.secondary)
                         .accessibilityElement(children: .ignore)
@@ -175,11 +175,11 @@ private struct ShareListRow: View {
                     }
                 }
                 Text("\(row.created.formatted(.dateTime.month(.abbreviated).day())) · \(statusText)")
-                    .font(.system(size: 12))
+                    .font(.system(size: Rhythm.secondarySize))
                     .foregroundStyle(soon ? Palette.accent : Palette.secondary)
                     .lineLimit(1)
                 if let numbers {
-                    Text(numbers).font(.system(size: 12)).foregroundStyle(Palette.tertiary).lineLimit(1).monospacedDigit()
+                    Text(numbers).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).lineLimit(1).monospacedDigit()
                 }
                 if let match { ListMatchLine(match: match, lines: 1).padding(.top, 1) }
             }
@@ -233,15 +233,15 @@ struct ServerNotice: View {
     }
 
     private func notice(_ title: String, _ text: String, steps: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Space.m) {
             IconImage(.warning, size: 15).foregroundStyle(Palette.accent).padding(.top, 1)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
-                Text(text).font(.system(size: 12.5)).foregroundStyle(Palette.secondary).lineSpacing(2)
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                Text(title).font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
+                Text(text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).lineSpacing(Rhythm.secondaryLineGap)
                     .fixedSize(horizontal: false, vertical: true)
                 if steps {
                     Text(AppController.serverUpdateSteps)
-                        .font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Palette.ink)
+                        .font(.system(size: Rhythm.secondarySize, design: .monospaced)).foregroundStyle(Palette.ink)
                         .textSelection(.enabled)
                         .padding(.horizontal, 10).padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -271,8 +271,8 @@ private struct UndoStopBar: View {
 
     var body: some View {
         if let link = controller.stoppedShare {
-            HStack(spacing: 12) {
-                Text("Stopped sharing “\(link.title)”").font(.system(size: 12.5, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
+            HStack(spacing: Space.m) {
+                Text("Stopped sharing “\(link.title)”").font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
                 Button("Undo") { controller.undoStop(link) }
                     .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .semibold))
                     .keyboardShortcut("z")

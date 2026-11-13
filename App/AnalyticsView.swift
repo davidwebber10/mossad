@@ -147,7 +147,7 @@ private struct AnalyticsPage: View {
             HeadlineFigures(report: report, before: before)
                 .padding(.bottom, 18)
                 .hairline()
-            VStack(alignment: .leading, spacing: 36) {
+            VStack(alignment: .leading, spacing: Rhythm.sectionGap) {
                 AnalyticsGroup("Your time") { YourTimeSection(report: report) }
                 AnalyticsGroup("Your week") { YourWeekSection(report: report) }
                 AnalyticsGroup("What you meet about") { TopicsSection(report: report) }
@@ -189,7 +189,7 @@ private struct HeadlineFigures: View {
         // Whole days, as the finding counts them, so the figure and the sentence give the same weekly time.
         let weeks = max(1, (r.interval.duration / 86_400).rounded() / 7)
         let c = r.communication
-        HStack(alignment: .top, spacing: 24) {
+        HStack(alignment: .top, spacing: Space.xl) {
             Figure(title: "Time in calls", value: hours(r.callSeconds), detail: "\(hours(r.callSeconds / weeks)) a week",
                    change: b.map { .percent(r.callSeconds, $0.callSeconds) })
             Figure(title: "Calls", value: "\(r.calls)", detail: "\(Int((Double(r.calls) / weeks).rounded())) a week",
@@ -234,24 +234,24 @@ struct Figure: View {
     var mark: Mark?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+            Text(title).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 Text(value)
-                    .font(.system(size: 28, weight: .semibold)).tracking(-0.56).monospacedDigit()
+                    .font(.system(size: Rhythm.displaySize, weight: .semibold)).tracking(-0.56).monospacedDigit()
                     .contentTransition(.numericText())
                     .lineLimit(1).minimumScaleFactor(0.7)
                 if let c = change?.value { changeText(c.0, c.1) }
                 if let mark {
                     Text(mark.text)
-                        .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                        .font(.system(size: Rhythm.secondarySize, weight: .medium)).monospacedDigit()
                         .foregroundStyle(Palette.accent)
                         .lineLimit(1)
                         .help(mark.help)
                         .accessibilityLabel(mark.spoken)
                 }
             }
-            Text(detail.isEmpty ? " " : detail).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+            Text(detail.isEmpty ? " " : detail).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -263,7 +263,7 @@ struct Figure: View {
         let flat = abs(n) < 0.5
         let amount = "\(Int(abs(n).rounded()))\(unit)"
         return Text(flat ? "no change" : "\(n > 0 ? "↑" : "↓") \(amount)")
-            .font(.system(size: 12, weight: .medium)).monospacedDigit()
+            .font(.system(size: Rhythm.secondarySize, weight: .medium)).monospacedDigit()
             .foregroundStyle(Palette.secondary)
             .help("Compared with the period before")
             .accessibilityLabel(flat ? "No change from the period before" : "\(n > 0 ? "Up" : "Down") \(amount) from the period before")
@@ -280,7 +280,7 @@ struct Finding: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 15, weight: .medium))
+            .font(.system(size: Rhythm.headingSize, weight: .medium))
             .foregroundStyle(Palette.ink)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityAddTraits(.isHeader)
@@ -293,9 +293,9 @@ struct SmallFigure: View {
     let label: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(value).font(.system(size: 20, weight: .semibold)).tracking(-0.4).monospacedDigit().contentTransition(.numericText())
-            Text(label).font(.system(size: 11.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+            Text(value).font(.system(size: Rhythm.figureSize, weight: .semibold)).tracking(-0.4).monospacedDigit().contentTransition(.numericText())
+            Text(label).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -308,11 +308,11 @@ struct LegendKey: View {
     let color: Color
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: Space.xs) {
             RoundedRectangle(cornerRadius: 2, style: .continuous).fill(color).frame(width: 8, height: 8)
             Text(title)
         }
-        .font(.system(size: 11.5))
+        .font(.system(size: Rhythm.secondarySize))
         .foregroundStyle(Palette.secondary)
     }
 }
@@ -324,7 +324,7 @@ struct SplitBar: View {
     var body: some View {
         GeometryReader { g in
             let gaps = CGFloat(max(0, parts.filter { $0.share > 0 }.count - 1)) * 2
-            HStack(spacing: 2) {
+            HStack(spacing: Space.xs) {
                 ForEach(Array(parts.enumerated()), id: \.offset) { _, p in
                     if p.share > 0 { Rectangle().fill(p.color).frame(width: max(0, (g.size.width - gaps) * p.share)) }
                 }
@@ -344,7 +344,7 @@ struct SideBySide<Main: View, Side: View>: View {
     @ViewBuilder let side: Side
 
     var body: some View {
-        HStack(alignment: .top, spacing: 28) {
+        HStack(alignment: .top, spacing: Space.xl) {
             if sideLeading { side.frame(width: sideWidth, alignment: .leading) }
             main.frame(maxWidth: .infinity, alignment: .leading)
             if !sideLeading { side.frame(width: sideWidth, alignment: .leading) }

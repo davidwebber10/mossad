@@ -29,22 +29,55 @@ enum Rhythm {
     /// The smallest text: a step under an answer, a chip.
     static let noteSize: CGFloat = 11
 
+    /// Interface text that is scanned, not read: a list row's title, a setting, a control's label.
+    #if os(iOS)
+    static let bodySize: CGFloat = 15
+    #else
+    static let bodySize: CGFloat = 13
+    #endif
+    /// A group's heading inside a page, and a small figure.
+    static let headingSize: CGFloat = 15
+    /// A page's second heading (`TextRole.lede`).
+    static let ledeSize = TextRole.lede.size
+    /// A large number in a row of figures.
+    static let figureSize: CGFloat = 20
+    /// A page title (`TextRole.title`) and the display size (`TextRole.display`).
+    static let titleSize = TextRole.title.size
+    static let displaySize = TextRole.display.size
+
     static var reading: Font { .system(size: readingSize) }
     static var secondary: Font { .system(size: secondarySize) }
+    static var body: Font { .system(size: bodySize) }
+    static var note: Font { .system(size: noteSize) }
 
     // MARK: Gaps
 
     /// A row and its own second line (a task and its owner), so the two read as a pair.
     static let pairGap: CGFloat = 4
+    /// Between the small parts of one item: a label over its control, a row of chips over the next, a heading over
+    /// its list.
+    static let itemGap: CGFloat = 8
     /// Between the rows of a list. At least about 60% of a line's pitch more than the line gap, so a wrapped row
     /// never reads as two rows.
     static let rowGap: CGFloat = 14
     /// Between the blocks of one section: paragraphs, a list after a paragraph.
     static let blockGap: CGFloat = 14
+    /// Between the groups of one section or card: a card's header and its body, two cards side by side.
+    static let groupGap: CGFloat = 20
     /// Between the sections of a page.
     static let sectionGap: CGFloat = 28
     /// Between a section's label column and its content.
     static let labelGap = Detail.labelGap
+
+    // MARK: Lists
+
+    /// A row of the list column: its padding above and below, and at its sides.
+    static let listRowPadding: CGFloat = 10
+    static let listRowInset: CGFloat = 10
+    /// A group header of a list (a day): the room above it, less for the first, and the pair gap to its first row.
+    static let listHeaderTop = rowGap
+    static let listHeaderTopFirst: CGFloat = 10
+    static let listHeaderBottom = pairGap
 
     // MARK: Measure and layout
 

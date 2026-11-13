@@ -41,7 +41,7 @@ struct MenuContent: View {
                     }
                     Text(next.title).lineLimit(1).truncationMode(.tail)
                     Spacer(minLength: 6)
-                    Text(upcomingWhen(next)).font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize()
+                    Text(upcomingWhen(next)).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize()
                     if let link = next.link {
                         Button("Join") { NSWorkspace.shared.open(link); dismiss() }
                             .buttonStyle(PanelCapsuleStyle(height: 22))
@@ -64,7 +64,7 @@ struct MenuContent: View {
                             let n = r.unknownSpeakers.count
                             NeedsYouChip(text: n > 1 ? "\(n) voices" : "Name voices").fixedSize()
                         }
-                        Text(panelDay(r.start)).font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize()
+                        Text(panelDay(r.start)).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize()
                     }
                 }
             }
@@ -72,7 +72,7 @@ struct MenuContent: View {
             PanelRow(action: { go { controller.open(controller.section) } }) {
                 Text("Open Mossad").fontWeight(.medium)
                 Spacer()
-                Text("⌘O").font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                Text("⌘O").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             }
             .keyboardShortcut("o")
             if let first = controller.callsNeedingNames.first {
@@ -80,7 +80,7 @@ struct MenuContent: View {
                     Text("Name voices")
                     Spacer()
                     Text("\(controller.callsNeedingNames.count)")
-                        .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                        .font(.system(size: Rhythm.noteSize, weight: .semibold)).monospacedDigit()
                         .foregroundStyle(Palette.onAccent)
                         .padding(.horizontal, 6)
                         .frame(minWidth: 18, minHeight: 18)
@@ -107,11 +107,11 @@ struct MenuContent: View {
             PanelRow(action: { NSApp.terminate(nil) }) {
                 Text("Quit Mossad")
                 Spacer()
-                Text("⌘Q").font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                Text("⌘Q").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             }
             .keyboardShortcut("q")
         }
-        .font(.system(size: 13))
+        .font(.system(size: Rhythm.bodySize))
         .foregroundStyle(Palette.ink)
         .padding(6)
         .frame(width: 320)
@@ -134,7 +134,7 @@ struct MenuContent: View {
             }
             if controller.otherCopyQuit {
                 PanelRow(action: { controller.restartAsWorkingCopy() }) {
-                    Image(systemName: "arrow.clockwise").font(.system(size: 13)).foregroundStyle(Palette.accent).frame(width: 16)
+                    Image(systemName: "arrow.clockwise").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.accent).frame(width: 16)
                     Text("Restart Mossad")
                     Spacer()
                 }
@@ -151,7 +151,7 @@ struct MenuContent: View {
                 Circle().fill(Palette.inPerson).frame(width: 8, height: 8)
             } action: {
                 TurnOffMenu {
-                    HStack(spacing: 5) {
+                    HStack(spacing: Space.xs) {
                         Text("Turn off")
                         Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
                     }
@@ -159,7 +159,7 @@ struct MenuContent: View {
                 }
             }
             PanelRow(action: { controller.recordInPerson() }) {
-                Image(systemName: "mic").font(.system(size: 13)).foregroundStyle(Palette.accent).frame(width: 16)
+                Image(systemName: "mic").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.accent).frame(width: 16)
                 Text("Record a meeting in person")
                 Spacer()
             }
@@ -172,11 +172,11 @@ struct MenuContent: View {
     private var processingRow: some View {
         PanelRow(action: { go { controller.open(.meetings) } }) {
             ProgressView().controlSize(.mini).frame(width: 16)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text("Processing \(controller.processing) \(controller.processing == 1 ? "call" : "calls")")
                 if let r = controller.meetings.filter({ ProcessingStep(status: $0.status) != nil }).min(by: { $0.start < $1.start }),
                    let text = controller.progressText(r) {
-                    Text(text).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -193,10 +193,10 @@ struct MenuContent: View {
     private func waitingRow(_ calls: [String]) -> some View {
         PanelRow(action: { calls.forEach(controller.processNow) }) {
             Image(systemName: "pause.circle").frame(width: 16).foregroundStyle(Palette.secondary)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(ProcessNowLabel.title(waiting: calls.count) ?? "Process now")
                 Text(calls.count == 1 ? "1 call waits for this call to end" : "\(calls.count) calls wait for this call to end")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -218,10 +218,10 @@ private struct NextPointsRows: View {
     var body: some View {
         Group {
         if !points.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Your points").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary)
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                Text("Your points").font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.secondary)
                 ForEach(points.prefix(3)) { p in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         Circle().strokeBorder(Palette.ring, lineWidth: 1).frame(width: 7, height: 7)
                         Text(p.text).lineLimit(1).truncationMode(.tail)
                     }
@@ -230,7 +230,7 @@ private struct NextPointsRows: View {
                     Button("and \(points.count - 3) more", action: open).buttonStyle(.plain).foregroundStyle(Palette.accent)
                 }
             }
-            .font(.system(size: 12))
+            .font(.system(size: Rhythm.secondarySize))
             .foregroundStyle(Palette.ink)
             .padding(.leading, 32).padding(.trailing, 12).padding(.bottom, 6)
             .accessibilityElement(children: .combine)
@@ -246,11 +246,11 @@ private struct StatusRow<Dot: View, Action: View>: View {
     @ViewBuilder var action: Action
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: Space.m) {
             dot.frame(width: 8, height: 8).padding(.top, 5).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(title).fontWeight(.semibold).monospacedDigit()
-                Text(detail).font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(detail).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 6)
@@ -270,12 +270,12 @@ private struct RecordingStatus: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: Space.m) {
                 StatusDot(color: controller.isPaused ? Palette.inPerson : Palette.recording, size: 8, pulsing: !controller.isPaused)
                     .background { if !controller.isPaused { Circle().fill(Palette.recordingTint).frame(width: 16, height: 16) } }
                     .padding(.top, 5)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         Text("\(controller.isPaused ? "Paused" : "Recording") · \(platform.displayName) · \(elapsed(since, context.date))")
                             .fontWeight(.semibold).monospacedDigit().lineLimit(1)
@@ -300,11 +300,11 @@ private struct RecordingStatus: View {
                 // After the menu's own panel closes, so it does not take the keyboard back from the quick panel.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { controller.showAskPanel() }
             }) {
-                Image(systemName: "bubble.left").font(.system(size: 13)).foregroundStyle(Palette.accent).frame(width: 16)
+                Image(systemName: "bubble.left").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.accent).frame(width: 16)
                 Text("Ask about this call…")
                 Spacer()
                 if let shortcut = controller.activeAskShortcut {
-                    Text(shortcut.symbols).font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                    Text(shortcut.symbols).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                 }
             }
             .help("Ask what was said so far, what you missed, or what someone just asked you")
@@ -319,7 +319,7 @@ private struct PanelVoicesLine: View {
     let title: String?
 
     var body: some View {
-        Text(text).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(2)
+        Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -343,7 +343,7 @@ private struct TalkShareStrip: View {
             GeometryReader { g in
                 let total = shares.reduce(0) { $0 + $1.seconds }
                 let gaps = CGFloat(shares.count - 1)
-                HStack(spacing: 1) {
+                HStack(spacing: Space.xs) {
                     // Each voice's hue is the one its lines have in the live transcript.
                     ForEach(Array(shares.enumerated()), id: \.offset) { _, share in
                         Rectangle().fill(Palette.speaker(share.hue))
@@ -419,7 +419,7 @@ private struct PanelRow<Content: View>: View {
     }
 
     private var row: some View {
-        HStack(spacing: 10) { content() }
+        HStack(spacing: Space.m) { content() }
             .padding(.horizontal, 12)
             .frame(minHeight: 30)
             .background(hovering ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -439,7 +439,7 @@ private struct PanelCapsuleStyle: ButtonStyle {
 
 private extension View {
     func panelCapsule(accent: Bool = false, height: CGFloat = 24, pressed: Bool = false) -> some View {
-        font(.system(size: 12, weight: .semibold))
+        font(.system(size: Rhythm.secondarySize, weight: .semibold))
             .foregroundStyle(accent ? Palette.onAccent : Palette.ink)
             .lineLimit(1)
             .padding(.horizontal, height < 24 ? 9 : 10)

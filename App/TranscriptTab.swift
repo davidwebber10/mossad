@@ -89,13 +89,13 @@ struct TranscriptTab: View {
     // MARK: Tools
 
     private func tools(matches: [LineID], proxy: ScrollViewProxy) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             findField(count: matches.count)
-            Text(stats).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+            Text(stats).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
             if player.isAvailable {
                 Button { follow.toggle() } label: {
                     Text(follow ? "· follows playback" : "· Follow playback")
-                        .font(.system(size: 12, weight: follow ? .regular : .semibold))
+                        .font(.system(size: Rhythm.secondarySize, weight: follow ? .regular : .semibold))
                         .foregroundStyle(follow ? Palette.secondary : Palette.accent)
                         .lineLimit(1).fixedSize()
                 }
@@ -114,7 +114,7 @@ struct TranscriptTab: View {
                     jump += 1
                 } label: {
                     Text("Jump to \(target.name)")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                         .foregroundStyle(Palette.accent)
                         .padding(.horizontal, 10)
                         .frame(height: 26)
@@ -127,7 +127,7 @@ struct TranscriptTab: View {
     }
 
     private func findField(count: Int) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Space.s) {
             IconImage(.search, size: 13).foregroundStyle(Palette.tertiaryMark)
             TextField("Find in transcript", text: $find).textFieldStyle(.plain).focused($findFocused)
                 .onSubmit { step(1, count: count) }
@@ -141,7 +141,7 @@ struct TranscriptTab: View {
                     .buttonStyle(.plain).keyboardShortcut("g", modifiers: .command).accessibilityLabel("Next match")
             }
         }
-        .font(.system(size: 12.5))
+        .font(.system(size: Rhythm.bodySize))
         .padding(.horizontal, 10)
         .frame(minWidth: 160, idealWidth: 300, maxWidth: 300, minHeight: 28, maxHeight: 28)
         .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -160,7 +160,7 @@ struct TranscriptTab: View {
             .sorted { $0.offset < $1.offset }
         let screens = record.screens ?? []
         let active = matches.indices.contains(matchIndex) ? matches[matchIndex] : nil
-        return LazyVStack(alignment: .leading, spacing: 2) {
+        return LazyVStack(alignment: .leading, spacing: Rhythm.pairGap) {
             ForEach(blocks, id: \.id) { block in
                 let previousEnd = block.id > 0 ? blocks[safe: block.id - 1]?.end ?? -1 : -1
                 ForEach(Array(breaks.filter { $0.offset > previousEnd && $0.offset <= block.start }.enumerated()), id: \.offset) { _, m in
@@ -234,19 +234,19 @@ private struct TurnRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 // A saved person's name opens their profile. An unnamed voice keeps "Name this voice" under its words.
                 PersonName(block.speaker, person: .some(speaker?.person))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                     .foregroundStyle(unknown ? Palette.accent : Palette.ink)
                     .lineLimit(1).truncationMode(.tail)
                 Circle().fill(speaker?.color ?? Palette.tertiaryMark).frame(width: 8, height: 8).offset(y: -1)
             }
-            .frame(width: 150, alignment: .trailing)
-            VStack(alignment: .leading, spacing: 3) {
+            .frame(width: Detail.labelColumn, alignment: .trailing)
+            VStack(alignment: .leading, spacing: Rhythm.readingLineGap) {
                 ForEach(Array(block.lines.enumerated()), id: \.offset) { i, line in
                     Text(text(i, line.text))
-                        .font(.system(size: 13)).lineSpacing(13 * 0.45 - 3)
+                        .font(.system(size: Rhythm.readingSize)).lineSpacing(Rhythm.readingLineGap)
                         .foregroundStyle(Palette.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -258,14 +258,14 @@ private struct TurnRow: View {
                 HStack(spacing: Space.s) {
                     Button(longClock(block.start)) { player.play(from: block.start) }
                         .buttonStyle(.plain)
-                        .font(.system(size: 11.5)).monospacedDigit()
+                        .font(.system(size: Rhythm.secondarySize)).monospacedDigit()
                         .foregroundStyle(Palette.tertiary)
                         .disabled(!player.isAvailable)
                         .help(player.isAvailable ? "Play from here" : "The audio is not available")
                     if unknown, editable, let speaker {
                         Button { naming = true } label: {
                             Text("Name this voice ▾")
-                                .font(.system(size: 11.5, weight: .semibold))
+                                .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                                 .foregroundStyle(Palette.accent)
                                 .padding(.horizontal, 7)
                                 .frame(height: 17)
@@ -277,7 +277,7 @@ private struct TurnRow: View {
                         }
                     }
                 }
-                .padding(.top, 3)
+                .padding(.top, Rhythm.pairGap)
             }
             .padding(.trailing, Space.s)
         }
@@ -291,17 +291,17 @@ private struct MarkerLine: View {
     let marker: TranscriptMarker
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             // Lines up with the words, past the speaker column.
-            Color.clear.frame(width: 150 + Space.m - 10, height: 1)
+            Color.clear.frame(width: Detail.labelColumn + Space.m - 10, height: 1)
             if marker.isBookmark { BookmarkFlag().fill(Palette.accentFill).frame(width: 7, height: 9) }
             Text(marker.lineText)
-                .font(.system(size: 11.5, weight: .medium))
+                .font(.system(size: Rhythm.secondarySize, weight: .medium))
                 .foregroundStyle(marker.isBookmark ? Palette.accent : Palette.secondary)
                 .lineLimit(2)
             Hairline()
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, Rhythm.itemGap)
     }
 }
 

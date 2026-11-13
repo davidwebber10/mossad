@@ -56,9 +56,9 @@ struct PersonView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Space.l) {
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .top, spacing: Space.l) {
                 PersonMark(name: name, size: 56, isOwner: isOwner)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(name).textRole(.title).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                     // The job and the team from the Mac's directory; the photo stays on the Mac.
@@ -107,7 +107,7 @@ struct PersonView: View {
     }
 
     private func figure(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             Text(value).textRole(.title).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7).monospacedDigit()
             Text(label).textRole(.secondary).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
         }
@@ -170,7 +170,7 @@ struct PersonView: View {
     private var meetingsList: some View {
         if let meetings, !meetings.rows.isEmpty {
             let rows = meetings.matching(query)
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Palette.tertiary).accessibilityHidden(true)
                 TextField("Search these meetings", text: $query).textRole(.body)
             }
@@ -185,9 +185,9 @@ struct PersonView: View {
                         HairlineRow(divided: i < rows.count - 1) {
                             HStack(alignment: .top, spacing: Space.m) {
                                 PlatformDot(platform: m.platform).padding(.top, 6).accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 3) {
+                                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                     Text(m.title).textRole(.headline).foregroundStyle(Palette.ink).lineLimit(2).multilineTextAlignment(.leading)
-                                    HStack(spacing: 6) {
+                                    HStack(spacing: Space.s) {
                                         Text(Calendar.current.isDate(m.start, equalTo: Date(), toGranularity: .year)
                                              ? m.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
                                              : m.start.formatted(.dateTime.month(.abbreviated).day().year()))
@@ -243,7 +243,7 @@ struct PersonView: View {
     }
 
     private func item(item task: String, _ title: String, _ date: Date) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             Text(task).textRole(.body).foregroundStyle(Palette.ink)
             Text("\(title) · \(date.formatted(.dateTime.month(.abbreviated).day()))").textRole(.secondary).foregroundStyle(Palette.secondary)
         }
@@ -261,10 +261,10 @@ struct PersonView: View {
         } else {
             if !confirmed.isEmpty {
                 LabelColumn(label: "You confirmed") {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                         ForEach(confirmed) { fact in
                             Label { Text(fact.text).fixedSize(horizontal: false, vertical: true) } icon: {
-                                Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.okText)
+                                Image(systemName: "checkmark").font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.okText)
                             }
                             .textRole(.body).foregroundStyle(Palette.ink)
                         }
@@ -358,14 +358,14 @@ private struct PhoneRelationAnalytics: View {
     @ViewBuilder
     private func balance(_ label: String, _ b: PersonRelation.Balance?) -> some View {
         if let b, let share = b.share {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 HStack {
                     Text(label).font(.subheadline.weight(.medium))
                     Spacer()
                     Text("You \(Int((share * 100).rounded()))% · \(first) \(Int(((1 - share) * 100).rounded()))%").font(.caption).foregroundStyle(.secondary)
                 }
                 GeometryReader { g in
-                    HStack(spacing: 1) {
+                    HStack(spacing: Space.xs) {
                         Rectangle().fill(Palette.accentFill).frame(width: g.size.width * share)
                         Rectangle().fill(Palette.bar)
                     }

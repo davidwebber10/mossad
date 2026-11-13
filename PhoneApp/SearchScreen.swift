@@ -112,7 +112,7 @@ struct SearchScreen: View {
     private func momentGroup(_ group: MomentGroup) -> some View {
         let all = expanded[group.callID]
         resultButton { open(.meeting(group.callID)) } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(group.title).textRole(.headline).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                 Text(group.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
                     .textRole(.secondary).foregroundStyle(Palette.secondary)
@@ -230,7 +230,7 @@ private struct MeetingHitRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: Space.m) {
             PlatformDot(platform: hit.platform).padding(.top, 6).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(hit.title.attributed).textRole(.headline).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                 Text("\(when(hit.start)) · \(hit.platform.shortName)").textRole(.secondary).foregroundStyle(Palette.secondary)
                 if let context = hit.context {
@@ -252,7 +252,7 @@ private struct PersonHitRow: View {
     var body: some View {
         HStack(spacing: Space.m) {
             PersonMark(name: hit.name.text, size: 32, isOwner: isOwner)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(hit.name.attributed).textRole(.headline).foregroundStyle(Palette.ink)
                 Text(detail).textRole(.secondary).foregroundStyle(Palette.secondary)
             }
@@ -274,11 +274,11 @@ private struct MomentHitRow: View {
     let showMeeting: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             if showMeeting {
                 Text(hit.meetingTitle).textRole(.headline).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
             }
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 Text(hit.speaker).fontWeight(.medium).foregroundStyle(Palette.ink)
                 Text(clock(hit.time)).monospacedDigit().foregroundStyle(Palette.accent)
                 if showMeeting { Text(shortDay(hit.meetingStart)).foregroundStyle(Palette.secondary) }
@@ -300,7 +300,7 @@ private struct OutcomeHitRow: View {
                 .foregroundStyle(Palette.accent)
                 .frame(width: 20)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(hit.text.attributed).textRole(.body).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                 Text("\(hit.kind == .decision ? "Decision" : hit.kind == .bookmark ? "Bookmark" : "Action item") · \(hit.meetingTitle) · \(shortDay(hit.meetingStart))")
                     .textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(2)
@@ -319,7 +319,7 @@ private struct TaskHitRow: View {
                 .foregroundStyle(hit.isDone ? Palette.ok : Palette.secondary)
                 .frame(width: 20)
                 .accessibilityLabel(hit.isDone ? "Done" : "Open")
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(hit.text.attributed).textRole(.body).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                 if !detail.isEmpty { Text(detail).textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(2) }
             }
@@ -348,7 +348,7 @@ private struct ChatHitRow: View {
                 .foregroundStyle(Palette.accent)
                 .padding(.top, 1)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(hit.title.attributed).textRole(.headline).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                 if let snippet = hit.snippet {
                     Text(snippet.attributed).textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(3)

@@ -59,7 +59,7 @@ struct UpcomingHeader: View {
                 } else {
                     Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 8, height: 8)
                 }
-                Text(when).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                Text(when).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
             }
             .frame(minHeight: 20)
             if let kind = prep?.kind { TagChip(text: kind) }
@@ -87,13 +87,13 @@ struct UpcomingHeader: View {
         let fits = invited.count > maxRows ? maxRows - 1 : maxRows
         let known = Dictionary((prep?.people ?? []).map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
         func rows(_ entries: [MeetingPrep.Invited]) -> some View {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 ForEach(entries) { entry in
                     InvitedRow(entry: entry, person: entry.person.flatMap { known[$0] }, loaded: prep != nil, wide: wide)
                 }
             }
         }
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             if showAll, invited.count > fits {
                 ScrollView(.vertical) { rows(invited) }
                     .frame(height: CGFloat(maxRows) * UpcomingDetailView.personRow)
@@ -103,7 +103,7 @@ struct UpcomingHeader: View {
             if invited.count > fits {
                 Button { withAnimation(.snappy(duration: 0.2)) { showAll.toggle() } } label: {
                     Text(showAll ? "Show fewer" : "and \(invited.count - fits) more invited")
-                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -124,7 +124,7 @@ struct UpcomingHeader: View {
                 if joinable {
                     Button { NSWorkspace.shared.open(link) } label: {
                         Text("Join \(meeting.platform?.displayName ?? "the call")")
-                            .font(.system(size: 12.5, weight: .semibold))
+                            .font(.system(size: Rhythm.bodySize, weight: .semibold))
                             .foregroundStyle(Palette.onAccent)
                             .padding(.horizontal, 14)
                             .frame(height: 28)
@@ -135,10 +135,10 @@ struct UpcomingHeader: View {
                     .help("Open the call")
                 } else {
                     Text("Join shows here a minute before the start.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.tertiary).lineLimit(1)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).lineLimit(1)
                 }
             } else {
-                Text("This invite has no call link.").font(.system(size: 12)).foregroundStyle(Palette.tertiary).lineLimit(1)
+                Text("This invite has no call link.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -169,7 +169,7 @@ private struct InvitedRow: View {
 
     private var name: some View {
         PersonName(entry.name, person: .some(entry.person))
-            .font(.system(size: 13))
+            .font(.system(size: Rhythm.bodySize))
             .foregroundStyle(entry.person == nil ? Palette.secondary : Palette.ink)
             .lineLimit(1)
             // A long address keeps its start, which names the person; the whole entry is the tooltip.
@@ -199,7 +199,7 @@ private struct InvitedRow: View {
                 Text(" ")
             }
         }
-        .font(.system(size: 12)).monospacedDigit()
+        .font(.system(size: Rhythm.secondarySize)).monospacedDigit()
         .foregroundStyle(Palette.secondary)
     }
 

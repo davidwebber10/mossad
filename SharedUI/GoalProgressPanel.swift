@@ -32,7 +32,7 @@ struct GoalProgressPanel: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: Space.l) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(progress.goal.measure?.title ?? "").textRole(.headline).foregroundStyle(Palette.ink)
                     .accessibilityAddTraits(.isHeader)
                 // A change is news and reads in ink; "too early" and "no clear change" stay quiet.
@@ -50,7 +50,7 @@ struct GoalProgressPanel: View {
             #if os(macOS)
             HStack(alignment: .top, spacing: Space.xl) {
                 ForEach(figures, id: \.label) { f in
-                    VStack(alignment: .trailing, spacing: 1) {
+                    VStack(alignment: .trailing, spacing: Rhythm.pairGap) {
                         Text(f.value).textRole(.title).foregroundStyle(f.label == "target" ? TrendChart.targetColor : Palette.ink).monospacedDigit()
                         Text(f.label).textRole(.secondary).foregroundStyle(Palette.secondary)
                     }
@@ -81,17 +81,17 @@ struct GoalProgressPanel: View {
     /// Three marks; the target and the day of the goal are labels on the chart.
     @ViewBuilder
     private var keys: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             Circle().fill(TrendChart.pointColor).frame(width: 7, height: 7)
             Text("Each 1:1")
         }
         if !progress.series.line.isEmpty {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 Capsule().fill(Palette.accentFill).frame(width: 14, height: 2.5)
                 Text(progress.typicalSince == nil ? "Median before the goal" : "Median before and since the goal")
             }
         }
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Palette.accentTint).frame(width: 14, height: 9)
             Text("Before the goal \(CommunicationTrends.range(.talkShare, progress.series.usual?.low ?? progress.goal.low, progress.series.usual?.high ?? progress.goal.high))")
         }

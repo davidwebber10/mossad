@@ -30,7 +30,7 @@ struct PlayAt: View {
 
     var body: some View {
         Button { player?.play(at) } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: Space.xs) {
                 if icon { IconImage(.play, size: 8) }
                 if let lead { Text(lead).foregroundStyle(Palette.ink) }
                 Text(long ? longClock(at) : clock(at)).foregroundStyle(icon ? Palette.accent : Palette.tertiary)
@@ -60,7 +60,7 @@ struct Marked: View {
 
     var body: some View {
         let out = reading?.stoodOut == true
-        HStack(spacing: 3) {
+        HStack(spacing: Space.xs) {
             mark.frame(width: Self.markWidth)
             Text(text).fontWeight(out ? .semibold : .regular).foregroundStyle(Palette.ink)
         }
@@ -72,8 +72,8 @@ struct Marked: View {
     @ViewBuilder
     private var mark: some View {
         switch reading?.standing {
-        case .above: Text("↑").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.accent)
-        case .below: Text("↓").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.accent)
+        case .above: Text("↑").font(.system(size: Rhythm.noteSize, weight: .bold)).foregroundStyle(Palette.accent)
+        case .below: Text("↓").font(.system(size: Rhythm.noteSize, weight: .bold)).foregroundStyle(Palette.accent)
         case .usual: Circle().fill(Palette.tertiaryMark).frame(width: 3, height: 3)
         case nil: Color.clear
         }
@@ -94,17 +94,17 @@ struct Marked: View {
 struct MarkKey: View {
     var body: some View {
         FlowLayout(spacing: 12) {
-            HStack(spacing: 4) {
-                Text("↑ ↓").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.accent)
+            HStack(spacing: Space.xs) {
+                Text("↑ ↓").font(.system(size: Rhythm.noteSize, weight: .bold)).foregroundStyle(Palette.accent)
                 Text("far from the person’s usual")
             }
-            HStack(spacing: 5) {
+            HStack(spacing: Space.xs) {
                 Circle().fill(Palette.tertiaryMark).frame(width: 3, height: 3)
                 Text("as usual")
             }
             Text("No mark: fewer than 5 earlier meetings. Point at a number for the range.")
         }
-        .font(.system(size: 11.5))
+        .font(.system(size: Rhythm.secondarySize))
         .foregroundStyle(Palette.tertiary)
         .accessibilityHidden(true)
     }
@@ -206,7 +206,7 @@ struct SpeakerFinding: View {
 
     var body: some View {
         SpeakerSentence(speaker: speaker, callID: callID, text: text, size: 15)
-            .font(.system(size: 15, weight: .medium))
+            .font(.system(size: Rhythm.headingSize, weight: .medium))
             .foregroundStyle(Palette.ink)
             .accessibilityAddTraits(.isHeader)
     }
@@ -243,7 +243,7 @@ struct MeetingAnalyticsGroup<Content: View>: View {
             if wide {
                 LabelColumn(label: label, labelTopPadding: 4) { content }
             } else {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     Text(label).textRole(.label).foregroundStyle(Palette.secondary).accessibilityAddTraits(.isHeader)
                     content.frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -287,7 +287,7 @@ struct SpeakerTable: View {
                 Text("Name").frame(minWidth: Self.nameWidth, maxWidth: .infinity, alignment: .leading)
                 ForEach(columns) { c in Text(c.id).lineLimit(1).frame(width: c.width, alignment: .trailing) }
             }
-            .font(.system(size: 11))
+            .font(.system(size: Rhythm.noteSize))
             .foregroundStyle(Palette.tertiary)
             .padding(.bottom, 6)
             .hairline()
@@ -298,7 +298,7 @@ struct SpeakerTable: View {
                         .frame(minWidth: Self.nameWidth, maxWidth: .infinity, alignment: .leading)
                     ForEach(columns) { c in c.cell(s).frame(width: c.width, alignment: .trailing) }
                 }
-                .font(.system(size: 12.5)).monospacedDigit()
+                .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                 .padding(.vertical, 7)
                 .hairline()
             }
@@ -313,7 +313,7 @@ struct SpeakerCell: View {
     let callID: String
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             Circle().fill(speaker?.color ?? Palette.tertiaryMark).frame(width: 8, height: 8)
             Group {
                 if let speaker { SpeakerName(speaker: speaker, callID: callID) } else { Text(name) }

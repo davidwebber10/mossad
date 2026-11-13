@@ -16,13 +16,13 @@ struct PersonBriefCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             LabelColumn(label: "The coach’s read") {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     if let brief {
                         Text(brief.headline)
-                            .textRole(.lede).lineSpacing(3)
+                            .textRole(.lede).lineSpacing(Rhythm.secondaryLineGap)
                             .foregroundStyle(Palette.ink)
                             .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 6) {
+                        HStack(spacing: Space.s) {
                             Text("From \(brief.calls) \(brief.calls == 1 ? "call" : "calls") · updated \(brief.updated.formatted(.relative(presentation: .named)))")
                             refreshButton
                         }
@@ -70,7 +70,7 @@ struct PersonBriefCard: View {
             }
         }
         return Text(text)
-            .textRole(.body).lineSpacing(3)
+            .textRole(.body).lineSpacing(Rhythm.secondaryLineGap)
             .foregroundStyle(Palette.ink)
             .tint(Palette.tertiary)
             .fixedSize(horizontal: false, vertical: true)

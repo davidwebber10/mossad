@@ -227,7 +227,7 @@ struct ListColumn<Accessory: View, Content: View>: View {
             HStack(spacing: Space.s) {
                 if leads { HistorySlot() }
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
+                    .font(.system(size: Rhythm.headingSize, weight: .semibold)).tracking(-0.15)
                     .foregroundStyle(Palette.ink)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
@@ -363,9 +363,9 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
             if leads { HistorySlot().padding(.leading, Chrome.listTitleLeading - Chrome.toolbarInsets.leading) }
             if let title {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.system(size: 15, weight: .semibold)).tracking(-0.15).foregroundStyle(Palette.ink)
+                    Text(title).font(.system(size: Rhythm.headingSize, weight: .semibold)).tracking(-0.15).foregroundStyle(Palette.ink)
                     if let subtitle, !subtitle.isEmpty {
-                        Text(subtitle).font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                        Text(subtitle).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     }
                 }
                 .lineLimit(1)
@@ -527,7 +527,7 @@ struct ToolbarSegmented<Value: Hashable>: View {
                             IconImage(icon, size: 15).frame(width: Chrome.segment.width, height: Chrome.segment.height)
                         } else {
                             Text(option.label)
-                                .font(.system(size: 12, weight: on ? .semibold : .regular))
+                                .font(.system(size: Rhythm.secondarySize, weight: on ? .semibold : .regular))
                                 .padding(.horizontal, 12)
                                 .frame(height: Chrome.segment.height)
                         }

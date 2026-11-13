@@ -242,7 +242,7 @@ struct HistoryButtons: View {
             }
         } label: {
             Image(systemName: back ? "chevron.backward" : "chevron.forward")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: Rhythm.bodySize, weight: .semibold))
                 .frame(width: Chrome.iconCell.width, height: Chrome.iconCell.height)
                 .contentShape(Capsule())
         } primaryAction: {

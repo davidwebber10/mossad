@@ -39,11 +39,11 @@ struct IconLine: View {
             IconImage(icon, size: 16).foregroundStyle(Palette.accent)
                 .frame(width: 32, height: 32)
                 .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(text).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Palette.ink)
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                Text(text).font(.system(size: Rhythm.readingSize, weight: .medium)).foregroundStyle(Palette.ink)
                     .cssLineHeight(size: 13.5)
                 if let detail {
-                    Text(detail).font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                    Text(detail).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                         .cssLineHeight(1.45, size: 12.5)
                 }
             }
@@ -60,9 +60,9 @@ struct PassLine: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             IconImage(.checkSmall, size: 12).foregroundStyle(Palette.ok)
-            Text(text).font(.system(size: 12.5, weight: .medium)).foregroundStyle(Palette.okText)
+            Text(text).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.okText)
         }
         .accessibilityElement(children: .combine)
     }
@@ -118,15 +118,15 @@ struct YouStep: View {
 
     private func field(_ title: String, note: String?, text: Binding<String>, prompt: String, help: String) -> some View {
         GridRow {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
-                if let note { Text(note).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary) }
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                Text(title).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
+                if let note { Text(note).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary) }
             }
             .frame(width: 120, alignment: .leading)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 TextField(title, text: text, prompt: Text(prompt)).textFieldStyle(SheetFieldStyle())
                     .frame(maxWidth: 380)
-                Text(help).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Text(help).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -151,13 +151,13 @@ struct PermissionsStep: View {
                 ForEach(items) { item in PermissionRow(item: item) { permissions.fix(item) } }
             }
             if !lines.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     Text("You can continue now. Until you allow them:")
-                        .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(Palette.ink)
+                        .font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
                     ForEach(lines, id: \.self) { line in
                         HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                             Circle().fill(Palette.tertiaryMark).frame(width: 4, height: 4).alignmentGuide(.firstTextBaseline) { $0[.bottom] + 4 }
-                            Text(line).font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                            Text(line).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -187,7 +187,7 @@ struct AIStep: View {
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
                 // The amount that Settings › AI shows, with the live transcript and the coach while they are on.
                 Text(Onboarding.costLine(controller.hourCost))
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)

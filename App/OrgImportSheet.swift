@@ -58,7 +58,7 @@ struct OrgImportSheet: View {
     private var chooseFirst: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             Text("Export the people list from your HR system (Paylocity calls it an employee roster) as CSV, then choose it here. Mossad copies it to the People folder and matches it to the people it knows by name.")
-                .font(.system(size: 13)).foregroundStyle(Palette.secondary).lineSpacing(2)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).lineSpacing(Rhythm.secondaryLineGap)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Choose file…") { choosing = true }.buttonStyle(.mossadFill)
         }
@@ -92,23 +92,23 @@ struct OrgImportSheet: View {
         let tops = chart.people.filter { $0.managerID == nil }.count
         return LabelColumnStack(spacing: Space.l) {
             LabelColumn(label: "File") {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     HStack(spacing: Space.m) {
-                        Text("Last Name, First Name, Position Title, Supervisor").font(.system(size: 12, design: .monospaced))
+                        Text("Last Name, First Name, Position Title, Supervisor").font(.system(size: Rhythm.secondarySize, design: .monospaced))
                             .foregroundStyle(Palette.ink)
                         Button("Replace CSV…") { choosing = true }.buttonStyle(.mossadFill)
                     }
                     Text("\(chart.people.count.formatted()) people · \(managers) \(managers == 1 ? "manager" : "managers") · \(tops) at the top. The supervisor is written “Last, First”. The file has no emails, so Mossad matches by name.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             LabelColumn(label: "Matched") {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text("\(placed) of your \(people.count) saved people are in the org chart.")
-                        .font(.system(size: 16, weight: .medium)).foregroundStyle(Palette.ink)
+                        .font(.system(size: Rhythm.leadSize, weight: .medium)).foregroundStyle(Palette.ink)
                     Text("Full names first, then common nicknames: Ben for Benjamin, Zach for Zachary, Jim for James.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 }
             }
             if !rows.isEmpty {
@@ -149,10 +149,10 @@ struct OrgImportSheet: View {
         }
 
         var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 HStack(spacing: Space.m) {
                     PersonMark(name: profile.name, size: 26, isOwner: isOwner)
-                    Text(profile.name).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
+                    Text(profile.name).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Group {
                         if state == .none || changing { picker } else { placed }
@@ -167,7 +167,7 @@ struct OrgImportSheet: View {
                                 search = ""
                                 setChanging(false)
                             } label: {
-                                HStack(spacing: 6) {
+                                HStack(spacing: Space.s) {
                                     Text(hit.fullName).foregroundStyle(Palette.ink)
                                     Text(hit.title).foregroundStyle(Palette.secondary)
                                     if let m = chart.manager(of: hit.id) {
@@ -176,7 +176,7 @@ struct OrgImportSheet: View {
                                     Spacer(minLength: 0)
                                 }
                                 .lineLimit(1)
-                                .font(.system(size: 12.5))
+                                .font(.system(size: Rhythm.bodySize))
                                 .padding(.vertical, 5).padding(.horizontal, Space.s)
                                 .contentShape(Rectangle())
                             }
@@ -193,11 +193,11 @@ struct OrgImportSheet: View {
 
         private var picker: some View {
             HStack(spacing: Space.s) {
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     IconImage(.search, size: 13).foregroundStyle(Palette.secondary)
                         .accessibilityHidden(true)
                     TextField("Find in \(org.fileName)", text: $search)
-                        .textFieldStyle(.plain).font(.system(size: 12.5))
+                        .textFieldStyle(.plain).font(.system(size: Rhythm.bodySize))
                         .focused($focused)
                         .onSubmit {
                             if let first = hits.first {
@@ -219,7 +219,7 @@ struct OrgImportSheet: View {
                 .buttonStyle(.mossadFill)
                 if changing {
                     Button("Cancel") { search = ""; setChanging(false) }
-                        .buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                        .buttonStyle(.plain).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                 }
             }
             .onAppear { if changing { focused = true } }
@@ -227,7 +227,7 @@ struct OrgImportSheet: View {
 
         private var placed: some View {
             HStack(spacing: Space.s) {
-                if state == .nickname { Text("Matched by nickname").font(.system(size: 12)).foregroundStyle(Palette.secondary) }
+                if state == .nickname { Text("Matched by nickname").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary) }
                 if state == .outside {
                     TagChip(text: "Outside the company")
                 } else if let m = org.match(profile.name) {
@@ -235,7 +235,7 @@ struct OrgImportSheet: View {
                 }
                 Button("Change") { setChanging(true) }
                     .buttonStyle(.plain)
-                    .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(Palette.accent)
+                    .font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.accent)
                     .padding(.horizontal, 4)
                     .accessibilityLabel("Change the match for \(profile.name)")
             }

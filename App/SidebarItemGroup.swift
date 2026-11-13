@@ -43,11 +43,11 @@ struct SidebarItemGroup<ID: Hashable, Item: View>: View {
                 Text(child.title).foregroundStyle(on ? Palette.ink : Palette.navText).lineLimit(1)
                 Spacer(minLength: 4)
                 if let count = child.count, count > 0 {
-                    Text("\(count)").font(.system(size: 11)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                    Text("\(count)").font(.system(size: Rhythm.noteSize)).monospacedDigit().foregroundStyle(Palette.tertiary)
                         .accessibilityLabel(child.countLabel ?? "\(count) to review")
                 }
             }
-            .font(.system(size: 12.5, weight: on ? .medium : .regular))
+            .font(.system(size: Rhythm.bodySize, weight: on ? .medium : .regular))
             // Under the item's name: past its icon and the gap after it.
             .padding(.leading, Chrome.navRowPadding + Chrome.navIcon + Chrome.navIconGap)
             .padding(.trailing, Chrome.navRowPadding)

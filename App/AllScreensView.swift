@@ -51,7 +51,7 @@ struct AllScreensView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if groups.isEmpty {
-                        Text("No screen has that text.").font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                        Text("No screen has that text.").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     }
                     ForEach(Array(groups.enumerated()), id: \.element.id) { i, group in
                         MomentGroupHeading(title: group.title, start: group.start, count: group.screens.count, noun: "screen") {
@@ -119,7 +119,7 @@ private struct AllScreensTile: View {
 
     var body: some View {
         Button(action: open) {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 FrameThumbnail(url: url)
                     .aspectRatio(16 / 10, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
@@ -128,8 +128,8 @@ private struct AllScreensTile: View {
                             .strokeBorder(matches ? Palette.accentFill : Palette.hairline, lineWidth: matches ? 1.5 : 1)
                     }
                     .opacity(hovered ? 0.88 : 1)
-                Text(time).font(.system(size: 11.5)).monospacedDigit().foregroundStyle(Palette.tertiary)
-                Text(line).font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(matches ? 2 : 1)
+                Text(time).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                Text(line).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(matches ? 2 : 1)
             }
             .contentShape(Rectangle())
         }

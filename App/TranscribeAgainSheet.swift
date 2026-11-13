@@ -21,23 +21,23 @@ struct TranscribeAgainSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(icon: .waveform, title: "Transcribe “\(record.title)” again",
                         subtitle: "\(dayWord(record.start)), \(record.start.formatted(date: .omitted, time: .shortened)) · \(record.lengthText) · \(record.platform.displayName)")
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 Text("Mossad sends the audio to \(controller.transcriptionProvider.displayName) again, names the voices it knows, and writes a new summary and note.")
                     .foregroundStyle(Palette.secondary)
-                    .lineSpacing(3)
+                    .lineSpacing(Rhythm.secondaryLineGap)
                     .fixedSize(horizontal: false, vertical: true)
 
                 VStack(alignment: .leading, spacing: 0) {
                     Toggle(isOn: $knowsCount.animation(.snappy)) {
-                        VStack(alignment: .leading, spacing: 1) {
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                             Text("I know how many people spoke").fontWeight(.medium)
                             Text("The exact number gives the best split between voices.")
-                                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         }
                     }
                     .toggleStyle(SheetSwitchStyle())
                     if knowsCount {
-                        HStack(spacing: 10) {
+                        HStack(spacing: Space.m) {
                             Text("\(count) \(count == 1 ? "person" : "people")").fontWeight(.semibold).monospacedDigit()
                             Text(room ? "in the room" : "on the call, you included").foregroundStyle(Palette.secondary)
                             Spacer()
@@ -59,7 +59,7 @@ struct TranscribeAgainSheet: View {
                 }
                 .sheetCard(horizontal: 14, vertical: 12)
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     note(.clock) {
                         Text("About \(Pricing.transcribeAgainEstimate(record, tracks: tracks).formatted(.currency(code: "USD")))")
                             .fontWeight(.semibold).foregroundStyle(Palette.ink)
@@ -67,7 +67,7 @@ struct TranscribeAgainSheet: View {
                     note(.people) { Text("Voice names you gave stay, through the voice library.") }
                     note(.chevronLeft) { Text("Restore previous transcript stays in the More menu.") }
                 }
-                .font(.system(size: 12))
+                .font(.system(size: Rhythm.secondarySize))
                 .foregroundStyle(Palette.secondary)
             }
             .padding(.horizontal, 22).padding(.vertical, 16)
@@ -95,7 +95,7 @@ struct TranscribeAgainSheet: View {
     }
 
     private func note<Content: View>(_ icon: Icon, @ViewBuilder _ text: () -> Content) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             IconImage(icon, size: 12).foregroundStyle(Palette.tertiaryMark).frame(width: 16)
                 .accessibilityHidden(true)
             text()
@@ -119,7 +119,7 @@ private struct CountStepper: View {
 
     private func step(_ symbol: String, _ label: String, enabled: Bool, run: @escaping () -> Void) -> some View {
         Button(action: run) {
-            Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
+            Image(systemName: symbol).font(.system(size: Rhythm.noteSize, weight: .semibold))
                 .frame(width: 30, height: 26).contentShape(Rectangle())
         }
         .buttonStyle(.plain)

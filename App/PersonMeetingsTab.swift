@@ -18,13 +18,13 @@ struct PersonMeetingsTab: View {
             VStack(alignment: .leading, spacing: 0) {
                 if let meetings, !meetings.rows.isEmpty {
                     HStack(spacing: Space.m) {
-                        Text(summary(meetings)).font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                        Text(summary(meetings)).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                         Spacer(minLength: Space.m)
                         SearchField(prompt: "Search these meetings", query: $query).frame(maxWidth: 260)
                     }
                     .padding(.bottom, Space.m)
                     if rows.isEmpty {
-                        Text("No meeting matches “\(query)”.").font(.system(size: 13)).foregroundStyle(Palette.secondary).padding(.top, Space.m)
+                        Text("No meeting matches “\(query)”.").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).padding(.top, Space.m)
                     }
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
@@ -72,10 +72,10 @@ private struct PersonMeetingRow: View {
             HStack(spacing: Space.m) {
                 Text(day).frame(width: 92, alignment: .leading).foregroundStyle(Palette.secondary)
                 HStack(spacing: Space.s) {
-                    Text(row.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text(row.title).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
                     if row.notesOnly { SourceMark(text: "Gemini notes") }
                     if row.part == .invited, let onlyInvited {
-                        Text("Invited").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Palette.secondary)
+                        Text("Invited").font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.secondary)
                             .padding(.horizontal, 6).frame(height: 16)
                             .overlay(Capsule().strokeBorder(Palette.bar, lineWidth: 1))
                             .fixedSize()
@@ -83,7 +83,7 @@ private struct PersonMeetingRow: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     PlatformDot(platform: row.platform)
                     Text(row.platform.shortName)
                 }
@@ -91,7 +91,7 @@ private struct PersonMeetingRow: View {
                 .foregroundStyle(Palette.secondary)
                 Text(durationLabel(row.seconds)).frame(width: 64, alignment: .trailing).foregroundStyle(Palette.secondary)
             }
-            .font(.system(size: 12)).monospacedDigit()
+            .font(.system(size: Rhythm.secondarySize)).monospacedDigit()
             .padding(.vertical, 9).padding(.horizontal, Space.s)
             .background(hovering ? Palette.fill.opacity(0.5) : .clear, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
             .contentShape(Rectangle())
@@ -118,9 +118,9 @@ private struct SearchField: View {
     @Binding var query: String
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Palette.tertiary).accessibilityHidden(true)
-            TextField(prompt, text: $query).textFieldStyle(.plain).font(.system(size: 12.5))
+        HStack(spacing: Space.s) {
+            Image(systemName: "magnifyingglass").font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary).accessibilityHidden(true)
+            TextField(prompt, text: $query).textFieldStyle(.plain).font(.system(size: Rhythm.bodySize))
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.tertiary) }
                     .buttonStyle(.plain).accessibilityLabel("Clear the search")

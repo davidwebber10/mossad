@@ -42,7 +42,7 @@ struct RowLink: View {
 
     var body: some View {
         Link(destination: destination) {
-            HStack(spacing: 3) {
+            HStack(spacing: Space.xs) {
                 Text(text)
                 IconImage(.arrowUp, size: 10).rotationEffect(.degrees(45))
             }
@@ -63,7 +63,7 @@ struct ChoiceRow<Control: View, Below: View>: View {
     @Environment(\.rowStyle) private var style
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             // In a narrow column a wide control goes under its name.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Space.m) {
@@ -71,7 +71,7 @@ struct ChoiceRow<Control: View, Below: View>: View {
                     Spacer(minLength: Space.m)
                     control
                 }
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     name
                     control
                 }

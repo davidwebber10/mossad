@@ -28,7 +28,7 @@ struct AISettings: View {
                 let cost = controller.hourCost
                 ChoiceRow(title: "An hour of meetings", detail: [cost.detail, cost.emailDetail].compactMap { $0 }.joined(separator: " ")) {
                     // As tall as a control, so the line under it sits where it does in the other rows.
-                    Text(cost.headline).font(.system(size: 13, weight: .medium)).monospacedDigit().foregroundStyle(Palette.ink)
+                    Text(cost.headline).font(.system(size: Rhythm.bodySize, weight: .medium)).monospacedDigit().foregroundStyle(Palette.ink)
                         .fixedSize()
                         .frame(height: 24)
                 }
@@ -71,7 +71,7 @@ struct ModelPicker: View {
         let current = model.isEmpty ? provider.defaultModel : model
         Group {
             if provider == .openrouter {
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     TextField("Model", text: $model, prompt: Text("provider/model")).textFieldStyle(SettingsFieldStyle(width: 190, monospaced: true))
                     Menu {
                         let q = model.lowercased()
@@ -86,7 +86,7 @@ struct ModelPicker: View {
                     .disabled(models.isEmpty)
                 }
             } else if provider == .localServer, models.isEmpty, current.isEmpty {
-                Text("Check the server for its models").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Text("Check the server for its models").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
             } else {
                 let known = models.contains { $0.id == current } || current.isEmpty || LatestModel.isAlias(current)
                 let list = known ? models : [ModelInfo(id: current, name: current)] + models
@@ -122,8 +122,8 @@ private struct MCPSetup: View {
 
     private func row(_ title: String, _ hint: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
-            Text(hint).font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.top, 2).padding(.bottom, 6)
+            Text(title).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
+            Text(hint).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).padding(.top, 2).padding(.bottom, 6)
             CopyField(text: text)
         }
         .padding(.vertical, 9)

@@ -36,7 +36,7 @@ struct VoiceNamingView: View {
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(icon: .waveform, title: title, subtitle: subtitle)
             ScrollView {
-                VStack(spacing: 12) {
+                VStack(spacing: Rhythm.rowGap) {
                     ForEach(asking, id: \.self) { key in
                         card(key, people: people, talk: talk[people.name(forKey: key)] ?? 0)
                     }
@@ -58,7 +58,7 @@ struct VoiceNamingView: View {
             .fixedSize(horizontal: false, vertical: true)
             SheetFooter {
                 Text("Skipped voices stay as letters in the transcript.")
-                    .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             } trailing: {
                 Button("Later") {
                     saveSkips()
@@ -120,10 +120,10 @@ struct VoiceNamingView: View {
 
     private func card(_ key: String, people: MeetingPeople, talk: TimeInterval) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 playButton(key, size: 30)
                 Button { nextSample(key) } label: {
-                    Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .semibold))
+                    Image(systemName: "arrow.clockwise").font(.system(size: Rhythm.noteSize, weight: .semibold))
                         .foregroundStyle(Palette.ink)
                         .frame(width: 26, height: 26)
                         .background(Palette.fill, in: Circle())
@@ -134,7 +134,7 @@ struct VoiceNamingView: View {
                 .disabled(ClipExtractor.candidates(for: key, utterances: record.utterances).count < 2)
                 Text(people.name(forKey: key)).fontWeight(.semibold).foregroundStyle(Palette.accent)
                 Circle().fill(people.color(forKey: key)).frame(width: 8, height: 8).accessibilityHidden(true)
-                Text(meta(key, talk: talk)).font(.system(size: 12)).foregroundStyle(Palette.secondary).monospacedDigit()
+                Text(meta(key, talk: talk)).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).monospacedDigit()
                 Spacer()
                 Button("Skip") {
                     if restored.contains(key) { restored.remove(key) } else { dismissed.insert(key) }
@@ -146,10 +146,10 @@ struct VoiceNamingView: View {
                 .help("Stop asking for this voice. Its lines stay in the transcript.")
             }
             if let quote = sampleText[key] ?? longestLine(of: key) {
-                Text("“\(quote)”").italic().foregroundStyle(Palette.secondary).lineSpacing(4).lineLimit(3)
+                Text("“\(quote)”").italic().foregroundStyle(Palette.secondary).lineSpacing(Rhythm.readingLineGap).lineLimit(3)
                     .padding(.top, 8)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 TextField("Name", text: Binding(get: { names[key, default: ""] }, set: { names[key] = $0 }))
                     .textFieldStyle(SheetFieldStyle())
                 // Typed by hand when the invite only lists a group address, or has no invite at all.
@@ -178,11 +178,11 @@ struct VoiceNamingView: View {
     }
 
     private func skippedRow(_ key: String, people: MeetingPeople, talk: TimeInterval) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             playButton(key, size: 24)
             Text(people.name(forKey: key)).fontWeight(.medium)
             Circle().fill(people.color(forKey: key)).frame(width: 8, height: 8).accessibilityHidden(true)
-            Text(meta(key, talk: talk)).font(.system(size: 12)).foregroundStyle(Palette.secondary).monospacedDigit()
+            Text(meta(key, talk: talk)).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).monospacedDigit()
             Spacer()
             Button("Name") {
                 if dismissed.contains(key) { dismissed.remove(key) } else { restored.insert(key) }

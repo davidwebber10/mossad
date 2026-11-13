@@ -181,7 +181,7 @@ struct NotesRows: View {
     /// Whether Apple's on-device model can run here, and why not when it cannot.
     private var appleRow: some View {
         let reason = AppleModelInfo.unavailableReason()
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             HStack(spacing: Space.m) {
                 SettingsRowText(title: "Apple Intelligence", detail: "No key needed. The model runs on this Mac, and nothing leaves it.")
                 Spacer(minLength: Space.m)
@@ -225,7 +225,7 @@ struct KeyRow: View {
                     Spacer(minLength: Space.m)
                     controls(state, saved: saved)
                 }
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     names(saved: saved, wraps: true)
                     HStack(spacing: Space.m) { controls(state, saved: saved) }
                 }
@@ -238,13 +238,13 @@ struct KeyRow: View {
 
     /// The key's name, what it is for, and where to get one.
     private func names(saved: Bool, wraps: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             SettingsRowText(title: key.displayName, titleNote: optional ? "optional" : nil)
                 .fixedSize(horizontal: !wraps, vertical: true)
             if wraps {
                 about(saved: saved, wraps: true)
             } else {
-                HStack(spacing: 6) { about(saved: saved, wraps: false) }
+                HStack(spacing: Space.s) { about(saved: saved, wraps: false) }
             }
         }
     }
@@ -331,26 +331,26 @@ struct RatingView: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 14) {
+            HStack(spacing: Space.l) {
                 ForEach(shown, id: \.self, content: stars)
                 price
             }
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 14) { ForEach(shown.prefix(2), id: \.self, content: stars) }
-                HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                HStack(spacing: Space.l) { ForEach(shown.prefix(2), id: \.self, content: stars) }
+                HStack(spacing: Space.l) {
                     ForEach(shown.dropFirst(2), id: \.self, content: stars)
                     price
                 }
             }
         }
-        .font(.system(size: 11.5))
+        .font(.system(size: Rhythm.secondarySize))
         .foregroundStyle(Palette.secondary)
         .help(rating.basis)
     }
 
     private func stars(_ aspect: String) -> some View {
         let stars = rating.stars[aspect] ?? 0
-        return HStack(spacing: 5) {
+        return HStack(spacing: Space.xs) {
             Text(aspect)
             Text("\(Text(String(repeating: "★", count: stars)))\(Text(String(repeating: "★", count: max(0, 5 - stars))).foregroundStyle(Palette.ring))")
                 .tracking(1)

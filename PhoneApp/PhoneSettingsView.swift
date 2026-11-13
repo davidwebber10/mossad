@@ -96,12 +96,12 @@ struct PhoneSettingsView: View {
         Button {
             if c == .server, store.server == nil { connecting = true } else { store.choose(c) }
         } label: {
-            HStack(spacing: 14) {
+            HStack(spacing: Space.l) {
                 // The accent tint, not a brand color: platform colors are only for dots.
                 Image(systemName: symbol).font(.body.weight(.semibold)).foregroundStyle(Palette.accent)
                     .frame(width: 36, height: 36).background(Palette.accentTint, in: .rect(cornerRadius: 9))
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(title).textRole(.headline).foregroundStyle(Palette.ink)
                     Text(detail).textRole(.secondary).foregroundStyle(Palette.secondary)
                 }
@@ -134,7 +134,7 @@ struct ConnectServerView: View {
                 VStack(spacing: Space.l) {
                     VStack(spacing: Space.s) {
                         Image(systemName: connected == nil ? "qrcode" : "checkmark")
-                            .font(.system(size: 28, weight: .medium))
+                            .font(.system(size: Rhythm.displaySize, weight: .medium))
                             .foregroundStyle(connected == nil ? Palette.accent : Palette.ok)
                             .frame(width: 64, height: 64)
                             .background(connected == nil ? Palette.accentTint : Palette.fill, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
@@ -154,7 +154,7 @@ struct ConnectServerView: View {
                         .buttonStyle(.phoneFill(wide: true))
                         .disabled(!DataScannerViewController.isSupported)
                         if let shared = ServerPairing.shared() {
-                            VStack(alignment: .leading, spacing: 6) {
+                            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                                 Button { check(shared) } label: {
                                     HStack(spacing: Space.m) {
                                         Image(systemName: "key").foregroundStyle(Palette.accent).accessibilityHidden(true)

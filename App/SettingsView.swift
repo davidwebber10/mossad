@@ -82,7 +82,7 @@ private struct SettingsList: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 ForEach(SettingsPage.allCases) { p in
                     SettingsListRow(page: p, selected: p == selection, needsYou: attention.contains(p)) {
                         selection = p
@@ -117,14 +117,14 @@ private struct SettingsListRow: View {
 
     var body: some View {
         Button(action: select) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 IconImage(page.icon, size: 15)
                     .foregroundStyle(Palette.accent)
                     .frame(width: 28, height: 28)
                     .background(Palette.fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(page.title).font(.system(size: 13, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink).cssLineHeight(size: 13)
-                    Text(page.contents).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    Text(page.title).font(.system(size: Rhythm.bodySize, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink).cssLineHeight(size: 13)
+                    Text(page.contents).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         .lineLimit(1).truncationMode(.tail)
                 }
                 Spacer(minLength: 4)

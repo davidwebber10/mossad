@@ -20,13 +20,13 @@ struct FilterChip: View {
     var body: some View {
         let empty = count == 0 && !on
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 if let platform { PlatformDot(platform: platform, size: 7) }
                 // The width of the heavier weight always, so turning a chip on never moves its neighbors.
                 Text(text).fontWeight(.medium).hidden()
                     .overlay { Text(text).fontWeight(on ? .medium : .regular).fixedSize() }
                 if let count {
-                    Text("\(count)").font(.system(size: 11)).monospacedDigit()
+                    Text("\(count)").font(.system(size: Rhythm.noteSize)).monospacedDigit()
                         .foregroundStyle(on ? Palette.accent.opacity(0.8) : Palette.secondary)
                         .contentTransition(.numericText())
                 }
@@ -83,11 +83,11 @@ struct FilterPeoplePicker: View {
     var body: some View {
         let people = shown
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 // Not the People page's count, which has only the meetings where the person spoke.
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     Text("People").textRole(.label).foregroundStyle(Palette.secondary)
-                    Text("spoke or invited").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                    Text("spoke or invited").font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isHeader)
@@ -99,7 +99,7 @@ struct FilterPeoplePicker: View {
             field.padding(.horizontal, 12)
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 1) {
+                    LazyVStack(spacing: Rhythm.pairGap) {
                         ForEach(people) { p in
                             PersonRow(person: p, on: chosen.contains(p.who), highlighted: highlighted == p.id, noun: noun) { choose(p.who) }
                                 .id(p.id)
@@ -132,11 +132,11 @@ struct FilterPeoplePicker: View {
     }
 
     private var field: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             IconImage(.search, size: 13).foregroundStyle(Palette.tertiaryMark)
             TextField("Search people", text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
+                .font(.system(size: Rhythm.bodySize))
                 .focused($searching)
                 .onKeyPress(.downArrow) { move(1) }
                 .onKeyPress(.upArrow) { move(-1) }
@@ -175,7 +175,7 @@ struct FilterPeoplePicker: View {
                 let on = mode == choice
                 Button { withAnimation(.snappy(duration: 0.2)) { mode = choice } } label: {
                     Text(word)
-                        .font(.system(size: 11, weight: on ? .semibold : .regular))
+                        .font(.system(size: Rhythm.noteSize, weight: on ? .semibold : .regular))
                         .foregroundStyle(on ? Palette.ink : Palette.secondary)
                         .padding(.horizontal, 8)
                         .frame(height: 16)
@@ -205,16 +205,16 @@ private struct PersonRow: View {
     var body: some View {
         let empty = person.count == 0 && !on
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 PersonMark(name: person.who.name, size: 20)
                 Text(person.who.name).lineLimit(1).truncationMode(.tail)
                     .fontWeight(on ? .medium : .regular)
                 Spacer(minLength: 6)
-                Text("\(person.count)").font(.system(size: 11)).monospacedDigit().foregroundStyle(Palette.secondary)
+                Text("\(person.count)").font(.system(size: Rhythm.noteSize)).monospacedDigit().foregroundStyle(Palette.secondary)
                     .contentTransition(.numericText())
                 IconImage(.checkSmall, size: 12).foregroundStyle(Palette.accent).opacity(on ? 1 : 0)
             }
-            .font(.system(size: 12.5))
+            .font(.system(size: Rhythm.bodySize))
             .foregroundStyle(Palette.ink)
             .padding(.leading, 8).padding(.trailing, 8)
             .frame(height: 30)
@@ -245,12 +245,12 @@ struct FilterWeekdays: View {
 
     var body: some View {
         let days = MeetingFilter.weekdayOrder(calendar)
-        HStack(spacing: 2) {
+        HStack(spacing: Space.xs) {
             ForEach(days, id: \.self) { day in
                 let on = chosen.contains(day), n = counts.count(day), empty = n == 0 && !on
                 Button { toggle(day) } label: {
                     Text(calendar.shortWeekdaySymbols[day - 1])
-                        .font(.system(size: 11.5, weight: on ? .medium : .regular))
+                        .font(.system(size: Rhythm.secondarySize, weight: on ? .medium : .regular))
                         .foregroundStyle(on ? Palette.accent : Palette.ink)
                         .frame(maxWidth: .infinity)
                         .frame(height: 20)
@@ -282,7 +282,7 @@ struct FilterDateRange: View {
     let setTo: (Date) -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             field("From", Binding(get: { min(from, to) }, set: setFrom))
             Text("to").foregroundStyle(Palette.secondary)
             field("To", Binding(get: { max(from, to) }, set: setTo))
@@ -353,7 +353,7 @@ struct FilterMinuteSlider: View {
     private var lower: Int { range.lower }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Space.m) {
             GeometryReader { geometry in
                 let span = max(1, geometry.size.width - Self.thumb)
                 let low = CGFloat(lower) / CGFloat(Self.top) * span, high = CGFloat(upper) / CGFloat(Self.top) * span
@@ -368,7 +368,7 @@ struct FilterMinuteSlider: View {
             }
             .frame(height: Self.thumb)
             Text(range.label)
-                .font(.system(size: 12)).monospacedDigit()
+                .font(.system(size: Rhythm.secondarySize)).monospacedDigit()
                 .foregroundStyle(Palette.secondary)
                 .frame(width: 96, alignment: .trailing)
         }

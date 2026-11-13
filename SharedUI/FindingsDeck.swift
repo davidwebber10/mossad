@@ -292,7 +292,7 @@ struct FindingsDeck: View {
         let yes = x >= 0
         return Label(yes ? kind.yes : kind.no, systemImage: yes ? "checkmark" : "xmark")
             .labelStyle(.titleAndIcon)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: Rhythm.secondarySize, weight: .semibold))
             .foregroundStyle(yes ? Palette.okText : Palette.secondary)
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background((yes ? Palette.ok : Palette.secondary).opacity(0.14), in: Capsule())
@@ -563,7 +563,7 @@ struct FindingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             HStack(spacing: 6) {
-                Image(systemName: finding.kind.symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(finding.kind.tint)
+                Image(systemName: finding.kind.symbol).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(finding.kind.tint)
                 Text(finding.kind.title).textRole(.label).foregroundStyle(finding.kind.tint)
                 Spacer(minLength: Space.s)
                 if let source {
@@ -647,7 +647,7 @@ struct FindingCard: View {
                     if let at = finding.at {
                         Button { play?() } label: {
                             Label(coachClock(at), systemImage: isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 11.5, weight: .semibold)).monospacedDigit()
+                                .font(.system(size: Rhythm.secondarySize, weight: .semibold)).monospacedDigit()
                                 .padding(.horizontal, 9).padding(.vertical, 4)
                                 .foregroundStyle(play == nil ? Palette.secondary : Palette.accent)
                                 .background(play == nil ? Palette.fill : Palette.accentTint, in: Capsule())
@@ -703,7 +703,7 @@ struct FindingsEmpty: View {
                         .frame(width: 112 - CGFloat(i) * 10, height: 72)
                         .offset(y: CGFloat(i) * 8)
                 }
-                Image(systemName: "checkmark").font(.system(size: 17, weight: .medium)).foregroundStyle(Palette.okText)
+                Image(systemName: "checkmark").font(.system(size: Rhythm.ledeSize, weight: .medium)).foregroundStyle(Palette.okText)
             }
             .frame(height: 92)
             .accessibilityHidden(true)

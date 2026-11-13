@@ -110,7 +110,7 @@ struct ChatView: View {
                 .padding(.top, Space.l)
                 .accessibilityAddTraits(.isHeader)
             Text("Every call is searchable: who said what, what people agreed to and by when, what was decided, which meetings covered a topic. Answers link to the meeting and the moment.")
-                .font(.system(size: 14)).lineSpacing(4)
+                .font(.system(size: Rhythm.readingSize)).lineSpacing(Rhythm.readingLineGap)
                 .foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, Space.s)
@@ -259,7 +259,7 @@ private struct ChatList: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
+                LazyVStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     ForEach(chats) { chat in
                         ChatListRow(chat: chat, selected: selection == chat.id) {
                             if selection != chat.id { navigation?.jumpNext() }
@@ -275,7 +275,7 @@ private struct ChatList: View {
                     }
                     if chats.isEmpty {
                         Text("Your chats show here.")
-                            .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                             .padding(.horizontal, 10).padding(.top, Space.s)
                     }
                 }
@@ -307,20 +307,20 @@ private struct ChatListRow: View {
 
     var body: some View {
         Button(action: select) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(chat.title)
-                    .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                    .font(.system(size: Rhythm.bodySize, weight: selected ? .semibold : .medium))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1).truncationMode(.tail)
                     .cssLineHeight(size: 13)
-                HStack(spacing: 5) {
+                HStack(spacing: Space.xs) {
                     if chat.callID != nil {
                         IconImage(.waveform, size: 11).foregroundStyle(Palette.tertiaryMark)
                             .accessibilityLabel("About one meeting")
                     }
                     Text(shortTime(chat.updated))
                 }
-                .font(.system(size: 12))
+                .font(.system(size: Rhythm.secondarySize))
                 .foregroundStyle(Palette.secondary)
             }
             .padding(.vertical, 9).padding(.horizontal, 10)
@@ -345,7 +345,7 @@ private struct ExampleQuestion: View {
     var body: some View {
         Button(action: ask) {
             HStack(spacing: Space.s) {
-                Text(text).font(.system(size: 13)).foregroundStyle(Palette.ink).cssLineHeight(size: 13)
+                Text(text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).cssLineHeight(size: 13)
                 Spacer(minLength: Space.s)
                 IconImage(.arrowUp, size: 11).rotationEffect(.degrees(45))
                     .foregroundStyle(Palette.tertiaryMark)
@@ -369,12 +369,12 @@ struct MeetingPill: View {
 
     var body: some View {
         Button { controller.openMeeting(record.id) } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 PlatformDot(platform: record.platform, size: 7)
                 Text(record.title).foregroundStyle(Palette.ink).lineLimit(1)
                 Text(record.start.formatted(.dateTime.month(.abbreviated).day())).foregroundStyle(Palette.secondary)
             }
-            .font(.system(size: 12.5, weight: .medium))
+            .font(.system(size: Rhythm.bodySize, weight: .medium))
             .padding(.horizontal, 10).frame(height: 26)
             .background(Palette.fill, in: Capsule())
             .contentShape(Capsule())

@@ -55,7 +55,7 @@ struct BookmarksView: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if groups.isEmpty {
                         Text("No bookmark matches “\(query.trimmingCharacters(in: .whitespaces))”.")
-                            .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     }
                     ForEach(Array(groups.enumerated()), id: \.element.id) { i, group in
                         MomentGroupHeading(title: group.title, start: group.start, count: group.bookmarks.count, noun: "bookmark") {
@@ -85,17 +85,17 @@ struct MomentGroupHeading: View {
     @State private var hovered = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Button(action: open) {
-                Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ink).underline(hovered).lineLimit(1)
+                Text(title).font(.system(size: Rhythm.headingSize, weight: .semibold)).foregroundStyle(Palette.ink).underline(hovered).lineLimit(1)
             }
             .buttonStyle(.plain)
             .onHover { hovered = $0 }
             .help("Open the meeting")
             Text(start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute()))
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
             Spacer(minLength: Space.m)
-            Text("\(count) \(count == 1 ? noun : noun + "s")").font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.tertiary)
+            Text("\(count) \(count == 1 ? noun : noun + "s")").font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary)
         }
         .padding(.bottom, 8)
         .accessibilityElement(children: .combine)
@@ -112,7 +112,7 @@ private struct BookmarkRow: View {
     @State private var hovered = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Space.m) {
             Button(action: play) {
                 IconImage(.play, size: 12).foregroundStyle(Palette.onAccent)
                     .frame(width: 26, height: 26)
@@ -121,21 +121,21 @@ private struct BookmarkRow: View {
             .buttonStyle(.plain)
             .help("Play from \(clock(mark.offset))")
             .accessibilityLabel("Play from \(clock(mark.offset))")
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                HStack(spacing: Space.s) {
                     BookmarkFlag().fill(Palette.accentFill).frame(width: 8, height: 10).accessibilityHidden(true)
-                    Text(mark.time.formatted(date: .omitted, time: .shortened)).font(.system(size: 12.5, weight: .medium)).foregroundStyle(Palette.ink)
-                    Text("at \(clock(mark.offset))").font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                    Text(mark.time.formatted(date: .omitted, time: .shortened)).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
+                    Text("at \(clock(mark.offset))").font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary)
                 }
                 if let note = mark.note {
                     Text(SearchText.marking(note, query: query).boldMatches(size: 13))
-                        .font(.system(size: 13)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                 }
                 if let said = mark.said {
                     Text("\(Text(said.speaker + ":").fontWeight(.medium)) “\(Text(SearchText.marking(said.text, query: query).boldMatches(size: 12.5)))”")
-                        .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).lineLimit(2)
+                        .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).lineLimit(2)
                 } else if mark.note == nil {
-                    Text("No note").font(.system(size: 12.5)).foregroundStyle(Palette.tertiary)
+                    Text("No note").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.tertiary)
                 }
             }
             Spacer(minLength: 0)

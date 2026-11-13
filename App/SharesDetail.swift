@@ -67,13 +67,13 @@ struct ShareDetailPane: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             Text(row.title)
-                .font(.system(size: 22, weight: .semibold)).tracking(-0.4)
+                .font(.system(size: Rhythm.titleSize, weight: .semibold)).tracking(-0.4)
                 .foregroundStyle(Palette.ink)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 Text(subtitle).foregroundStyle(Palette.secondary)
                 if let link, record != nil {
                     Text("·").foregroundStyle(Palette.tertiaryMark)
@@ -81,7 +81,7 @@ struct ShareDetailPane: View {
                         .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .medium))
                 }
             }
-            .font(.system(size: 12.5))
+            .font(.system(size: Rhythm.bodySize))
         }
     }
 
@@ -100,13 +100,13 @@ struct ShareDetailPane: View {
 
     @ViewBuilder
     private var linkGroup: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             if let address, let url = row.url(on: address) {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     Text(url.absoluteString).lineLimit(1).truncationMode(.middle)
                     if case .on(let pin) = row.pin { Text("PIN: \(pin)") }
                 }
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(size: Rhythm.secondarySize, design: .monospaced))
                 .foregroundStyle(row.state == .live ? Palette.ink : Palette.tertiary)
                 .textSelection(.enabled)
                 .padding(.horizontal, 12).padding(.vertical, 10)
@@ -116,7 +116,7 @@ struct ShareDetailPane: View {
             switch row.state {
             case .live:
                 if let text = copyText, let address, let url = row.url(on: address) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Space.s) {
                         Button(copied == "all" ? "Copied" : row.copyTitle) { put(text, as: "all") }.buttonStyle(.settingsAccent)
                         if case .on = row.pin {
                             Button(copied == "link" ? "Copied" : "Copy link only") { put(url.absoluteString, as: "link") }.buttonStyle(.settings)
@@ -139,7 +139,7 @@ struct ShareDetailPane: View {
     }
 
     private func note(_ text: String, color: Color = Palette.secondary) -> some View {
-        Text(text).font(.system(size: 12.5)).foregroundStyle(color).lineSpacing(2)
+        Text(text).font(.system(size: Rhythm.bodySize)).foregroundStyle(color).lineSpacing(Rhythm.secondaryLineGap)
             .frame(maxWidth: 520, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -150,7 +150,7 @@ struct ShareDetailPane: View {
     private var viewsGroup: some View {
         if let remote = row.remote, numbers || remote.viewers != nil {
             let counted = row.countedViews
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: Rhythm.groupGap) {
                 if counted == 0, let earlier = remote.earlierViews, earlier > 0 {
                     // Only views from before the server counted people and days: there are no people or days to show.
                     SmallFigure(value: "\(earlier)", label: earlier == 1 ? "view before the server update" : "views before the server update")
@@ -166,12 +166,12 @@ struct ShareDetailPane: View {
                 if !more.isEmpty { note(more.joined(separator: ". ") + ".") }
                 if let detail, counted > 0 {
                     ViewsChart(days: ShareDetail.filled(detail.days), total: counted)
-                    HStack(alignment: .top, spacing: 36) {
+                    HStack(alignment: .top, spacing: Space.xxl) {
                         breakdown("Opened on", detail.devices.map { (ShareDetail.deviceName($0.name), $0.count) })
                         breakdown("From", detail.countries.map { (ShareDetail.countryName($0.name), $0.count) })
                     }
                     Text("A person is one browser. The count holds no names and no addresses. Your own visits from “Open in browser” are left out.")
-                        .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                         .frame(maxWidth: 520, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -200,15 +200,15 @@ struct ShareDetailPane: View {
     }
 
     private func breakdown(_ title: String, _ rows: [(String, Int)]) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Palette.secondary)
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+            Text(title).font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(Palette.secondary)
             ForEach(rows, id: \.0) { name, count in
-                HStack(spacing: 10) {
+                HStack(spacing: Space.m) {
                     Text(name).foregroundStyle(Palette.ink)
                     Spacer(minLength: 12)
                     Text("\(count)").monospacedDigit().foregroundStyle(Palette.secondary)
                 }
-                .font(.system(size: 12.5))
+                .font(.system(size: Rhythm.bodySize))
             }
         }
         .frame(width: 190, alignment: .leading)
@@ -223,24 +223,24 @@ struct ShareDetailPane: View {
         if !numbers {
             note("Update your server to protect a link with a PIN.")
         } else {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 switch row.pin {
                 case .on(let pin):
-                    HStack(spacing: 14) {
+                    HStack(spacing: Space.l) {
                         PINDigits(pin: pin, size: 17)
                         Button("New PIN") { setPIN(SharePIN.random()) }.buttonStyle(.settings)
                         Button("Remove PIN") { setPIN(nil) }.buttonStyle(SettingsTextButtonStyle(color: Palette.secondary, weight: .medium))
                     }
                     note(wrongText ?? "People need the link and these 4 digits. A new PIN ends the access of everyone who used the old one.")
                 case .off:
-                    HStack(spacing: 14) {
-                        Text("No PIN").font(.system(size: 13)).foregroundStyle(Palette.ink)
+                    HStack(spacing: Space.l) {
+                        Text("No PIN").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                         Button("Add a PIN") { setPIN(SharePIN.random()) }.buttonStyle(.settings)
                     }
                     note("Anyone who has the link can open the page.")
                 case .unknown, .locked:
-                    HStack(spacing: 14) {
-                        Text(row.pin == .locked ? "Locked" : "On").font(.system(size: 13, weight: .medium))
+                    HStack(spacing: Space.l) {
+                        Text(row.pin == .locked ? "Locked" : "On").font(.system(size: Rhythm.bodySize, weight: .medium))
                             .foregroundStyle(row.pin == .locked ? Palette.recording : Palette.ink)
                         Button("New PIN") { setPIN(SharePIN.random()) }.buttonStyle(.settingsAccent)
                         Button("Remove PIN") { setPIN(nil) }.buttonStyle(SettingsTextButtonStyle(color: Palette.secondary, weight: .medium))
@@ -264,9 +264,9 @@ struct ShareDetailPane: View {
     // MARK: Expiry
 
     private var expiryGroup: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 14) {
-                Text(expiryLine).font(.system(size: 13)).foregroundStyle(Palette.ink)
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+            HStack(spacing: Space.l) {
+                Text(expiryLine).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                 if link != nil, row.state != .missing {
                     Menu(row.state == .live ? "Change" : "Share again") {
                         ForEach(ShareOptions.expiryChoices, id: \.self) { days in
@@ -364,14 +364,14 @@ private struct ViewsChart: View {
         .chartXAxis {
             AxisMarks(values: .stride(by: .day, count: max(1, points.count / 6))) { _ in
                 AxisValueLabel(format: .dateTime.month(.abbreviated).day(), centered: true)
-                    .font(.system(size: 10.5)).foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
             }
         }
         .chartYAxis {
             AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { v in
                 AxisGridLine().foregroundStyle(Palette.hairline)
                 AxisValueLabel {
-                    if let n = v.as(Int.self) { Text("\(n)").font(.system(size: 10.5)).foregroundStyle(Palette.tertiary) }
+                    if let n = v.as(Int.self) { Text("\(n)").font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary) }
                 }
             }
         }

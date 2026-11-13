@@ -27,14 +27,14 @@ struct ProcessingCard: View {
 
     private var card: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(current.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ink)
-                Text("step \(current.rawValue) of \(ProcessingStep.total)").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                Text(current.title).font(.system(size: Rhythm.headingSize, weight: .semibold)).foregroundStyle(Palette.ink)
+                Text("step \(current.rawValue) of \(ProcessingStep.total)").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 Spacer(minLength: Space.s)
                 if let started = progress?.started {
                     TimelineView(.periodic(from: started, by: 1)) { context in
                         Text(clock(context.date.timeIntervalSince(started)))
-                            .font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.secondary)
                     }
                     .accessibilityLabel("Time taken")
                 }
@@ -56,7 +56,7 @@ struct ProcessingCard: View {
             .padding(.top, Space.l)
 
             if let lines = subLines, !lines.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                     ForEach(lines, id: \.text) { line in row(line) }
                 }
                 .padding(.top, 14)
@@ -76,21 +76,21 @@ struct ProcessingCard: View {
     }
 
     private func row(_ line: SubLine) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             Image(systemName: line.symbol)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                 .foregroundStyle(line.done ? Palette.ok : Palette.accent)
                 .frame(width: 14)
                 .contentTransition(.symbolEffect(.replace))
             Text(line.text)
-                .font(.system(size: 12.5)).monospacedDigit()
+                .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                 .foregroundStyle(line.done ? Palette.secondary : Palette.ink)
                 .lineLimit(1)
             Spacer(minLength: Space.s)
             switch line.trailing {
             case .fraction(let f): ProgressBar(fraction: f, height: 4, track: Palette.fill).frame(width: 120)
             case .waiting: WaitingBar().frame(width: 120)
-            case .hint(let text): Text(text).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+            case .hint(let text): Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             case .processNow:
                 Button("Process now") { controller.processNow(record.id) }
                     .buttonStyle(SheetButtonStyle(kind: .secondary, compact: true))
@@ -147,7 +147,7 @@ private struct StepMark: View {
     let state: State
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             ZStack {
                 if state == .waiting {
                     Circle().strokeBorder(Palette.hairline, lineWidth: 1.5)
@@ -162,7 +162,7 @@ private struct StepMark: View {
             }
             .frame(width: 16, height: 16)
             Text(title)
-                .font(.system(size: 12, weight: state == .active ? .semibold : .regular))
+                .font(.system(size: Rhythm.secondarySize, weight: state == .active ? .semibold : .regular))
                 .foregroundStyle(state == .waiting ? Palette.tertiary : state == .active ? Palette.ink : Palette.secondary)
                 .fixedSize()
         }
