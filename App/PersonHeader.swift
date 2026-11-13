@@ -209,16 +209,7 @@ struct PersonHeader: View {
     }
 
     /// "meetings together" only when each one proves it; else what they are: "meetings · 2 only invited · 1 from notes".
-    static func countLabel(_ t: PersonMeetings.Together, owner: Bool) -> String {
-        let word = t.meetings == 1 ? "meeting" : "meetings"
-        if owner { return word }
-        if t.met == t.meetings, t.meetings > 0 { return word + " together" }
-        var parts = [word]
-        if t.invitedOnly > 0 { parts.append("\(t.invitedOnly) only invited") }
-        let notes = t.meetings - t.met - t.invitedOnly
-        if notes > 0 { parts.append("\(notes) from notes") }
-        return parts.joined(separator: " · ")
-    }
+    static func countLabel(_ t: PersonMeetings.Together, owner: Bool) -> String { t.countLabel(owner: owner) }
 }
 
 /// One more address for a person. An address is one person's only: one that someone else has is never moved;

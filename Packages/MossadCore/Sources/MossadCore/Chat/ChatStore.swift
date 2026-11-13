@@ -12,11 +12,32 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
     public var live: Bool?
     /// When the owner asked it; nil on a question from an older build.
     public var asked: Date?
+    /// What the answer did or proposes to do (`ChatActionRecord`); nil from an older build and for most answers.
+    public var actions: [ChatActionRecord]?
 
     public init(role: Role, text: String, steps: [String] = []) {
         self.role = role
         self.text = text
         self.steps = steps
+    }
+
+    enum CodingKeys: String, CodingKey { case id, role, text, steps, live, asked, actions }
+
+    /// An action this build cannot read (a kind or a state of a later build) is left out; the chat is kept.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        role = try c.decode(Role.self, forKey: .role)
+        text = try c.decode(String.self, forKey: .text)
+        steps = try c.decode([String].self, forKey: .steps)
+        live = try c.decodeIfPresent(Bool.self, forKey: .live)
+        asked = try c.decodeIfPresent(Date.self, forKey: .asked)
+        actions = try c.decodeIfPresent([Lossy].self, forKey: .actions)?.compactMap(\.value)
+    }
+
+    private struct Lossy: Decodable {
+        let value: ChatActionRecord?
+        init(from decoder: Decoder) throws { value = try? ChatActionRecord(from: decoder) }
     }
 }
 
@@ -46,6 +67,17 @@ public struct Chat: Codable, Equatable, Sendable, Identifiable {
         let other = out == a ? b : a
         let ids = Set(out.messages.map(\.id))
         out.messages += other.messages.filter { !ids.contains($0.id) }
+        // A copy from an older build has no receipts, and an old copy can hold a card that was clicked since: each
+        // action keeps its later state, from whichever copy has it.
+        for i in out.messages.indices {
+            guard let theirs = other.messages.first(where: { $0.id == out.messages[i].id }) else { continue }
+            // An answer saved before its text came (a receipt first) never replaces the text of the other copy.
+            if theirs.text.count > out.messages[i].text.count, out.messages[i].text.isEmpty || out.messages[i].text == ChatThreadEdits.stoppedText {
+                out.messages[i].text = theirs.text
+                out.messages[i].steps = theirs.steps
+            }
+            if let acts = theirs.actions, !acts.isEmpty { out.messages[i].actions = ChatThreadEdits.merge(out.messages[i].actions ?? [], acts) }
+        }
         return out
     }
 

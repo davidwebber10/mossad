@@ -62,12 +62,15 @@ extension AppController {
 
     /// Answers off the main thread. The request goes at normal priority; capture runs on its own queue and comes
     /// first. Its cost is logged with the call. Nothing is written into the call's folder.
-    func liveChatAnswer(_ question: String, history: [ChatMessage], record: CallRecord,
-                        onStep: @escaping @Sendable (String) -> Void, onText: @escaping @Sendable (String) -> Void) async throws -> String {
+    func liveChatAnswer(_ question: String, history: [ChatMessage], record: CallRecord, earlier: [ChatActionRecord] = [],
+                        questionID: UUID = UUID(), onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
+                        onStep: @escaping @Sendable (String) -> Void, onText: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         guard let llm = liveChatLLM else { throw MissingAPIKey(service: aiProvider.displayName) }
         let small = liveSummaryLLM ?? llm
         let snapshot = live.snapshot, owner = ownerName, records = meetings, paths = paths, cache = liveSummaries
         let personas = personasOn
+        // Only the light actions during a call: points, tasks, this moment's bookmark. No sync until the call ends.
+        let host = isInert ? nil : chatActionHost
         let facts = liveCallFacts(record, snapshot: snapshot)
         // Detached, so the stop button's cancel is passed on by hand.
         let work = Task.detached(priority: .medium) {
@@ -80,7 +83,8 @@ extension AppController {
                                                   voices: facts.voices)
                 return try await LiveChatAgent(llm: llm, ownerName: owner).answer(
                     question, history: history, facts: facts, entries: entries, summary: summary, records: records,
-                    paths: paths, personaTraits: personas, limits: limits, onStep: onStep, onText: onText)
+                    paths: paths, personaTraits: personas, limits: limits, actions: host, earlier: earlier, questionID: questionID, onAction: onAction,
+                    onStep: onStep, onText: onText)
             }
         }
         return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }

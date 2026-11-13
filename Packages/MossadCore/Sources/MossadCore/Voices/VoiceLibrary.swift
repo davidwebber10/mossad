@@ -57,6 +57,11 @@ public final class VoiceLibrary: @unchecked Sendable {
         }
     }
 
+    /// The voices as the file has them, only read: a damaged file stays where it is for the app to handle.
+    public static func peek(in directory: URL) -> [VoiceProfile]? {
+        (try? Data(contentsOf: directory.appendingPathComponent("voices.json"))).flatMap { try? JSONDecoder().decode([VoiceProfile].self, from: $0) }
+    }
+
     /// The people and the samples that follow this library, once the app has them. Without it the library works
     /// as before, on `voices.json` alone.
     public var identity: VoiceIdentity? {

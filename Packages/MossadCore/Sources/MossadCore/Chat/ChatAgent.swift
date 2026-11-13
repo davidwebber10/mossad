@@ -120,16 +120,56 @@ public struct ChatAgent: Sendable {
 
     private struct SummaryOutput: Decodable { let summary: String }
 
-    /// `onStep` reports each lookup as it starts, for the "Reading Launch sync" line.
+    /// The tools of the app's own chat: every read, and with actions the action tools in place of the MCP's one
+    /// write. While a call records, only the light actions.
+    static func tools(paths: Paths?, actions: Bool, calling: Bool = false) -> [ToolSpec] {
+        guard paths != nil else { return ChatTools.definitions }
+        guard actions else { return ChatTools.allDefinitions }
+        return ChatTools.allDefinitions.filter { $0.name != "add_next_time_point" } + ChatActions.definitions(live: calling)
+    }
+
+    /// `onStep` reports each lookup as it starts, for the "Reading Launch sync" line. `actions` makes the chat able
+    /// to do what the owner asks (`ChatActions`, from the owner's message); `onAction` gets each receipt and card the
+    /// moment it exists, so it is saved whatever happens to the answer, and `earlier` are the ones the chat already
+    /// has, so a Retry does no action again.
     public func answer(_ question: String, history: [ChatMessage], records: [CallRecord], paths: Paths? = nil, now: Date = Date(),
-                       about callID: String? = nil, personaTraits: Bool = true, onStep: @escaping @Sendable (String) -> Void) async throws -> String {
+                       about callID: String? = nil, personaTraits: Bool = true, actions: ChatActionHost? = nil, earlier: [ChatActionRecord] = [],
+                       questionID: UUID = UUID(), onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
+                       onStep: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         let tools = ChatTools(records: records, owner: ownerName, paths: paths, personaTraits: personaTraits)
         let live = history.contains { $0.live == true }
-        return try await llm.runTools(system: Self.system(owner: ownerName, tools: tools, now: now, about: callID, liveHistory: live),
-                                      history: history, question: question,
-                                      tools: paths == nil ? ChatTools.definitions : ChatTools.allDefinitions, purpose: .question) { name, input in
+        // While a call records, only the light actions, from any chat.
+        let calling = actions?.liveMoment() != nil
+        let doer = actions.map { ChatActions(message: question, question: questionID, tools: tools, host: $0, live: calling, earlier: earlier, onRecord: onAction) }
+        let system = Self.system(owner: ownerName, tools: tools, now: now, about: callID, liveHistory: live)
+            + (doer == nil ? "" : ChatActions.prompt(owner: ownerName, live: calling))
+        let offered = Self.tools(paths: paths, actions: doer != nil, calling: calling)
+        let names = Set(offered.map(\.name))
+        let text = try await llm.runTools(system: system, history: history, question: question, tools: offered, purpose: .question) { name, input in
+            // Only what was offered runs, whatever the model asks.
+            guard names.contains(name) else { return "That tool is not available here." }
             onStep(ChatTools.step(name, input: input) { id in tools.records.first { $0.id == id }?.title })
+            if let done = doer?.run(name, input: input) { return done }
             return tools.run(name, input: input)
         }
+        return ChatReply(text: text, actions: doer?.records ?? [])
+    }
+}
+
+/// An answer and what it did or proposes to do.
+public struct ChatReply: Sendable {
+    public var text: String
+    public var actions: [ChatActionRecord]
+
+    public init(text: String, actions: [ChatActionRecord] = []) {
+        self.text = text
+        self.actions = actions
+    }
+
+    /// The answer's message, with its receipts and cards.
+    public func message(steps: [String]) -> ChatMessage {
+        var m = ChatMessage(role: .assistant, text: text, steps: steps)
+        if !actions.isEmpty { m.actions = actions }
+        return m
     }
 }

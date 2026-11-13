@@ -1,11 +1,15 @@
-import { MeetingTools, toolDefinitions } from './tools';
+import { MeetingTools, toolDefinitions as meetingToolDefinitions } from './tools';
+import { OwnerData, ownerToolDefinitions, ownerToolNames, runOwnerTool, safeZone } from './owner';
 import type { Env, Line, MeetingView } from './types';
 
 /** A stateless Streamable HTTP MCP server: each POST is one JSON-RPC message and gets one JSON reply. */
 
 const fallbackVersion = '2025-06-18';
 
-async function config(env: Env): Promise<Record<string, string>> {
+/** The meeting tools, then the reads of what else the Mac syncs. All read only. */
+export const toolDefinitions = [...meetingToolDefinitions, ...ownerToolDefinitions];
+
+export async function config(env: Env): Promise<Record<string, string>> {
   const { results } = await env.DB.prepare('SELECT key, value FROM config').all<{ key: string; value: string }>();
   return Object.fromEntries(results.map((r) => [r.key, r.value]));
 }
@@ -61,7 +65,7 @@ export async function toolsFor(env: Env, name: string, args: Record<string, unkn
     const m = list.find((v) => v.id === id);
     if (m) m.lines = await linesFor(env, id);
   }
-  return new MeetingTools(list, c.owner ?? 'the owner', c.timeZone);
+  return new MeetingTools(list, c.owner ?? 'the owner', c.timeZone ? safeZone(c.timeZone) : undefined);
 }
 
 type RPC = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
@@ -82,7 +86,7 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
         protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : fallbackVersion,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'mossad', version: '1.0' },
-        instructions: `Search and read ${c.owner ?? 'the owner'}'s recorded meetings: transcripts, summaries, decisions, and action items. Read a meeting before saying what someone agreed to.`,
+        instructions: `Search and read ${c.owner ?? 'the owner'}'s recorded meetings (transcripts, summaries, decisions, and action items), the people in them (read_person), their tasks, points for next time, the coach's notes, and earlier chats. Read a meeting before saying what someone agreed to.`,
       });
     }
     case 'ping':
@@ -93,14 +97,22 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
       const name = typeof params.name === 'string' ? params.name : '';
       const args = (params.arguments as Record<string, unknown>) ?? {};
       if (!toolDefinitions.some((t) => t.name === name)) return reply({ content: [{ type: 'text', text: `Unknown tool ${name}.` }], isError: true });
-      const tools = await toolsFor(env, name, args);
+      if (ownerToolNames.has(name)) return reply({ content: [{ type: 'text', text: await runOwnerTool(env, name, args, await config(env), () => meetings(env)) }] });
+      const id = typeof args.id === 'string' ? args.id : '';
+      // A kind prefix: "person:<id>" and "task:<id>" are the owner's data; "meeting:<id>" and a bare id are meetings.
+      const meetingArgs = name === 'fetch' && id.startsWith('meeting:') ? { ...args, id: id.slice(8) } : args;
+      const tools = await toolsFor(env, name, meetingArgs);
       if (name === 'search') {
-        const result = tools.search(typeof args.query === 'string' ? args.query : '');
+        const query = typeof args.query === 'string' ? args.query : '';
+        const owner = await OwnerData.load(env, tools.meetings, await config(env));
+        const result = { results: [...tools.search(query).results, ...owner.search(query)] };
         return reply({ content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result });
       }
       if (name === 'fetch') {
-        const doc = tools.fetch(typeof args.id === 'string' ? args.id : '');
-        if (!doc) return reply({ content: [{ type: 'text', text: 'No meeting with that id.' }], isError: true });
+        const doc = id.startsWith('person:') || id.startsWith('task:')
+          ? (await OwnerData.load(env, tools.meetings, await config(env))).fetch(id)
+          : tools.fetch(typeof meetingArgs.id === 'string' ? meetingArgs.id : '');
+        if (!doc) return reply({ content: [{ type: 'text', text: 'Nothing with that id.' }], isError: true });
         return reply({ content: [{ type: 'text', text: JSON.stringify(doc) }], structuredContent: doc });
       }
       return reply({ content: [{ type: 'text', text: tools.run(name, args) }] });

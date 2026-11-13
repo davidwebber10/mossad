@@ -187,12 +187,12 @@ export const toolDefinitions = [
   },
   {
     name: 'search',
-    description: 'Searches the meetings by title, tags, summary, and transcript. Returns ids to pass to fetch.',
+    description: 'Searches the meetings by title, tags, summary, and transcript, and the people and the owner\'s tasks by their words. Returns ids to pass to fetch: a meeting\'s call id, person:<id>, or task:<id>.',
     inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
   },
   {
     name: 'fetch',
-    description: 'Reads one meeting in full by the id from search.',
+    description: 'Reads one result of search in full by its id: a meeting, a person (person:<id>), or a task (task:<id>).',
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   },
 ].map((t) => ({ ...t, annotations: { readOnlyHint: true } }));

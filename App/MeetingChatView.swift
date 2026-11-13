@@ -25,7 +25,7 @@ struct MeetingChatView: View {
                 VStack(alignment: .leading, spacing: Space.l) {
                     if messages.isEmpty && !running { welcome }
                     ForEach(messages) { m in
-                        ChatExchangeRow(message: m, callID: record.id).id(m.id)
+                        ChatExchangeRow(message: m, callID: record.id, chatID: chat?.id).id(m.id)
                     }
                     if running { ChatAnswering(steps: steps, callID: record.id).id("running") }
                     if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
@@ -90,7 +90,7 @@ struct MeetingChatView: View {
 
     private var composer: some View {
         FloatingComposer(prompt: messages.isEmpty ? "Ask about this meeting" : "Ask a follow-up", text: $question,
-                         focused: $focused, hasLeading: chat != nil, send: send) {
+                         focused: $focused, hasLeading: chat != nil, send: { send() }) {
             if chat != nil {
                 Button(action: newChat) {
                     IconImage(.compose, size: 15).foregroundStyle(Palette.secondary)
@@ -114,32 +114,51 @@ struct MeetingChatView: View {
         focused = true
     }
 
-    private func send() {
-        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func send(again: ChatMessage? = nil) {
+        let q = (again?.text ?? question).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty, !running else { return }
         var current = chat ?? {
             var c = Chat(title: Chat.title(from: q))
             c.callID = record.id
             return c
         }()
-        let history = current.messages
-        current.messages.append(ChatMessage(role: .user, text: q))
+        // A Retry asks the question that is there, by its id; a new question is added.
+        let asking: ChatMessage
+        let history: [ChatMessage]
+        if let again, let i = current.messages.firstIndex(where: { $0.id == again.id }) {
+            asking = again
+            history = Array(current.messages[..<i])
+        } else {
+            history = current.messages
+            asking = ChatMessage(role: .user, text: q)
+            current.messages.append(asking)
+            question = ""
+        }
         current.updated = Date()
         save(current)
-        question = ""
         error = nil
         steps = []
         running = true
         let sink = StepSink { step in Task { @MainActor in steps.append(step) } }
+        // Each receipt goes into the chat the moment its action is done; the answer joins the file's copy.
+        let answerID = UUID(), asked = current, questionID = asking.id
+        let actionSink = ActionSink { r in Task { @MainActor in chat = controller.saveChatAction(r, chat: asked, answer: answerID) } }
+        let earlier = controller.chatActions(current)
         Task {
             do {
-                let answer = try await controller.chatAnswer(q, history: history, about: record.id, onStep: sink.add)
-                current.messages.append(ChatMessage(role: .assistant, text: answer, steps: steps))
-                current.updated = Date()
-                save(current)
-                controller.summarizeChat(current.id)
-                controller.syncNow()
+                let answer = try await controller.chatAnswer(q, history: history, about: record.id, earlier: earlier, questionID: questionID,
+                                                             onAction: actionSink.add, onStep: sink.add)
+                var message = answer.message(steps: steps)
+                message.id = answerID
+                save(controller.finishChatAnswer(message, chat: asked))
+                // During a call the disk and the network belong to the recording: no model request, no sync.
+                if !controller.isRecording {
+                    controller.summarizeChat(current.id)
+                    controller.syncNow()
+                }
             } catch {
+                // The question stays for Retry, with what was done.
+                chat = controller.stopChatAnswer(chat: asked, answer: answerID, question: questionID, byOwner: false).chat
                 Log.error("Chat failed: \(error)")
                 let friendly = FriendlyError(error, context: .chatting)
                 if friendly.shouldShow(failures: 1) { self.error = friendly }
@@ -149,13 +168,10 @@ struct MeetingChatView: View {
         }
     }
 
-    /// Asks the last question again: it leaves the chat and goes back through send.
+    /// Asks the last question again, the same message by its id, also after a stopped answer with what it did.
     private func retry() {
-        guard var c = chat, let last = c.messages.last, last.role == .user else { return }
-        c.messages.removeLast()
-        chat = c
-        question = last.text
-        send()
+        guard let c = chat, let question = ChatThreadEdits.retryQuestion(c) else { return }
+        send(again: question)
     }
 
     private func save(_ c: Chat) {

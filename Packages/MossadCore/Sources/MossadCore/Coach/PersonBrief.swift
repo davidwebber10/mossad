@@ -83,8 +83,11 @@ public struct PersonBriefWriter: Sendable {
                 count[name, default: 0] += 1
             }
         }
+        let off = saved.notProfiled
         return latest.filter { name, last in
             guard (count[name] ?? 0) >= minimumCalls else { return false }
+            // No read of a person who keeps none.
+            if let id = saved.id(of: name), off.contains(saved.canonical(id)) { return false }
             guard let brief = profile.note(on: name, people: saved)?.value.brief else { return true }
             if (brief.style ?? 1) < PersonBrief.currentStyle { return true }
             return last > brief.updated && now.timeIntervalSince(brief.updated) >= minimumGap

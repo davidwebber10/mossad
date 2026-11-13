@@ -37,10 +37,8 @@ struct PeopleView: View {
     @AppStorage("peopleNotDuplicates") private var notDuplicates = ""
 
     private var duplicates: [PeopleDuplicates.Pair] {
-        let dismissed = Set(notDuplicates.split(separator: "\n").map(String.init))
         // The owner's "not the same person" is kept by the ids too, so a rename does not bring a pair back.
-        let people = controller.library.identity?.people.people ?? []
-        return PeopleDuplicates.find(profiles).filter { !dismissed.contains($0.id) && !PeopleDuplicates.isDistinct($0, among: people) }
+        PeopleDuplicates.shown(profiles, people: controller.library.identity?.people.people ?? [], dismissed: notDuplicates)
     }
 
     private var selected: VoiceProfile? { profiles.first { $0.name == selection } }

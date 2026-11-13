@@ -97,7 +97,7 @@ final class ChatTests: XCTestCase {
         let log = UsageLog(directory: tempDirectory())
         let agent = ChatAgent(apiKey: "k", session: StubURLProtocol.session(), ownerName: "Avery Lane", usage: log)
         let steps = StepCollector()
-        let answer = try await agent.answer("What did Jen agree to?", history: [], records: records) { steps.add($0) }
+        let answer = try await agent.answer("What did Jen agree to?", history: [], records: records) { steps.add($0) }.text
         XCTAssertTrue(answer.contains("mossad://call/both?t=30"))
         XCTAssertEqual(steps.all, ["Finding meetings with Jen"])
         XCTAssertEqual(log.all().count, 2)

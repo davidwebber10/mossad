@@ -73,7 +73,8 @@ extension AppController {
         updateSharedServer()
         let owner = ownerName
         // Rehearsal never writes to a server: a setup walkthrough must not change the owner's real one.
-        if !Rehearsal.isOn { Task { try? await ServerClient(c).putConfig(owner: owner) } }
+        let personas = personasInServerMCP
+        if !Rehearsal.isOn { Task { try? await ServerClient(c).putConfig(owner: owner, personasInMCP: personas) } }
         syncNow()
     }
 
@@ -146,6 +147,12 @@ extension AppController {
         return sync
     }
 
+    /// What the server's MCP was told, this launch: a send that failed is tried again at the next sync.
+    static var serverConfig = ServerConfigState()
+
+    /// The coach's reads of people go to other AI apps through the owner's server by the same switch as `--mcp`.
+    var personasInServerMCP: Bool { MCPServer.showsPersonas(coachEnabled: coachEnabled, personaEnabled: personaEnabled, personaInMCP: personaInMCP) }
+
     /// Uploads new and changed meetings and pulls what the iPhone changed. One sync at a time; a sync asked for
     /// during one runs again after it.
     func syncNow() {
@@ -154,22 +161,42 @@ extension AppController {
         let main = currentSync
         // No store to pull from: a file that was set aside has no other copy to wait for.
         if main == nil { CloudSync.nothingToMerge(paths: paths) }
+        // The config again when the owner's name or the switch of the reads for other AI apps changed.
+        let config = "\(ownerName)|\(personasInServerMCP)"
+        // Also with sync off: a connected server must hear that the reads went off.
+        if Self.serverConfig.needsSend(config), let c = serverConnection {
+            let first = !serverConfigSent
+            serverConfigSent = true
+            Self.serverConfig.sending(config)
+            let owner = ownerName, personas = personasInServerMCP
+            Task {
+                do {
+                    try await ServerClient(c).putConfig(owner: owner, personasInMCP: personas)
+                    Self.serverConfig.arrived(config)
+                } catch {
+                    Self.serverConfig.failed()
+                    Log.error("Telling your server the owner's name and the switch of the reads failed; it is tried again at the next sync: \(error)")
+                }
+            }
+            // Once a launch: a server that was updated may keep recordings now.
+            if first {
+                let kept = serverKeepsRecordings
+                refreshServerFacts { if self.serverKeepsRecordings != kept { self.syncCloud() } }
+            }
+        }
         guard let cloud = main ?? mirror else { return }
         if syncRunning { syncAgain = true; return }
-        if !serverConfigSent, let c = serverConnection {
-            serverConfigSent = true
-            let owner = ownerName
-            Task { try? await ServerClient(c).putConfig(owner: owner) }
-            // Once a launch: a server that was updated may keep recordings now.
-            let kept = serverKeepsRecordings
-            refreshServerFacts { if self.serverKeepsRecordings != kept { self.syncCloud() } }
-        }
         syncRunning = true
         syncActivity.running = true
         let place = syncWith == .server ? "your server" : "iCloud"
         // The reduced copy of the reads for the phone's card: shown traits and pointers, no words. None before the
         // reads were read once, so a sync at launch does not empty the phone's copy; an empty one when they are off.
         let personas: SyncedPersonas? = !personasOn ? SyncedPersonas([]) : personaReadsMade ? SyncedPersonas(Array(personaReads.values)) : nil
+        let calling = isRecording
+        let recorder = self.recorder, connection = serverConnection, owner = ownerName, personasHere = personasInServerMCP
+        let serverIsMain = syncWith == .server
+        // A call that starts during a long copy stops it at the next batch.
+        let callStarted: @Sendable () -> Bool = { CaptureQueue.queue.sync { recorder.isRecording } }
         Task.detached(priority: .utility) {
             var received = 0
             var failure: FriendlyError?
@@ -180,6 +207,8 @@ extension AppController {
                     received = try await cloud.pull(includeMeetings: false)
                     let shared = try await cloud.pushShared(people: true, personas: personas)
                     if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
+                    // The server's tools read what time the Mac last sent everything: never the age of one record.
+                    if serverIsMain, let connection { try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date()) }
                     if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
                 } catch {
                     failure = FriendlyError(error, context: .syncing, service: place)
@@ -191,6 +220,15 @@ extension AppController {
                 do {
                     let copied = try await mirror.push()
                     if copied > 0 { Log.info("Server: \(copied) meetings copied for ChatGPT and share links") }
+                    // What the server's MCP reads besides the meetings, one way, by the same allowed-field lists:
+                    // never during a call, when the disk and the network belong to the recording.
+                    if !calling {
+                        let shared = try await mirror.pushShared(people: true, personas: personas, mirror: true, stop: callStarted)
+                        if shared > 0 { Log.info("Server: \(shared) people, tasks, points, coach, and chat records copied") }
+                        if !callStarted(), let connection {
+                            try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date())
+                        }
+                    }
                 } catch {
                     Log.error("Copying meetings to your server failed: \(error)")
                 }

@@ -93,7 +93,7 @@ struct ServerGroup: View {
     private var jobs: String {
         var list: [String] = []
         if controller.syncWith == .server { list.append("syncs your meetings") }
-        else if controller.syncWith == .icloud { list.append("keeps a copy of your meetings for AI apps and share links") }
+        else if controller.syncWith == .icloud { list.append("keeps a one-way copy of your meetings, the people in them, your tasks and points, the coach's notes, and your chats for AI apps and share links") }
         if controller.backupChoice == .server, controller.serverKeepsRecordings { list.append("keeps your recordings") }
         if controller.syncWith != .icloud { list.append("serves share links") }
         guard let first = list.first else { return "Connected." }
@@ -118,7 +118,7 @@ private struct AIAccessRows: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsRowText(title: "AI access",
-                            detail: "ChatGPT, Claude, and other AI apps can search and read your meetings after you sign in: titles, summaries, action items, and transcripts. They cannot see the coach or change anything.")
+                            detail: "ChatGPT, Claude, and other AI apps can read what your server has after you sign in: your meetings with their transcripts, the people in them, your tasks and points for next time, the coach's notes, and earlier chats. How to present to a person only when Settings › Coach allows it, and never what the coach learned about a person you keep no read on. They cannot change anything.")
                 .padding(.top, 9)
             if controller.serverMCP.isEmpty {
                 Text("Click Check above to get your server’s AI address.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.accent)

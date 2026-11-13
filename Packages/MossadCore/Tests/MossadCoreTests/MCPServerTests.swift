@@ -50,7 +50,7 @@ final class MCPServerTests: XCTestCase {
         let found = try XCTUnwrap(reply(s, ["jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": ["name": "find_meetings", "arguments": ["people": ["Austin"]]]]))
         let text = (((found["result"] as? [String: Any])?["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
         XCTAssertTrue(text.contains("call_id: c1"), text)
-        XCTAssertTrue(text.contains("/notes/Launch sync.md"), text)
+        XCTAssertTrue(text.contains("note: Launch sync.md"), text)
         let read = try XCTUnwrap(reply(s, ["jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": ["name": "read_meeting", "arguments": ["call_id": "c1"]]]))
         let body = (((read["result"] as? [String: Any])?["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
         XCTAssertTrue(body.contains("I will send the deck by Friday."))

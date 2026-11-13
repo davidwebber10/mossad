@@ -155,15 +155,3 @@ func talkText(_ seconds: TimeInterval) -> String {
     let minutes = s / 60
     return minutes < 60 ? "\(minutes) min" : "\(minutes / 60) h \(minutes % 60) min"
 }
-
-extension PersonMeetings.Cadence {
-    var word: String {
-        switch self {
-        case .daily: "Daily"
-        case .severalAWeek: "Several a week"
-        case .weekly: "Weekly"
-        case .everyOtherWeek: "Every 2 weeks"
-        case .monthly: "Monthly"
-        }
-    }
-}

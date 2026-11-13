@@ -1,0 +1,126 @@
+{
+  "people" : [
+    {
+      "created" : "2027-01-15T08:00:00Z",
+      "displayName" : "Dana Lee",
+      "distinctFrom" : [
+
+      ],
+      "doNotProfile" : true,
+      "emails" : [
+
+      ],
+      "forms" : [
+        {
+          "confirmed" : true,
+          "firstSeen" : "2027-01-15T08:00:00Z",
+          "key" : "dana lee",
+          "kind" : "display",
+          "lastSeen" : "2027-01-15T08:00:00Z",
+          "source" : "migration",
+          "text" : "Dana Lee"
+        }
+      ],
+      "id" : "id-dana",
+      "isOwner" : false,
+      "mergedFrom" : [
+
+      ],
+      "name" : {
+        "family" : "lee",
+        "given" : "dana",
+        "middle" : [
+
+        ]
+      },
+      "provisional" : false,
+      "updated" : "2027-01-15T08:00:00Z"
+    },
+    {
+      "created" : "2027-01-15T08:00:00Z",
+      "displayName" : "Avery Webb",
+      "distinctFrom" : [
+
+      ],
+      "doNotProfile" : false,
+      "emails" : [
+
+      ],
+      "forms" : [
+        {
+          "confirmed" : true,
+          "firstSeen" : "2027-01-15T08:00:00Z",
+          "key" : "avery webb",
+          "kind" : "display",
+          "lastSeen" : "2027-01-15T08:00:00Z",
+          "source" : "owner",
+          "text" : "Avery Webb"
+        }
+      ],
+      "id" : "id-owner",
+      "isOwner" : true,
+      "mergedFrom" : [
+
+      ],
+      "name" : {
+        "family" : "webb",
+        "given" : "avery",
+        "middle" : [
+
+        ]
+      },
+      "provisional" : false,
+      "updated" : "2027-01-15T08:00:00Z"
+    },
+    {
+      "created" : "2027-01-15T08:00:00Z",
+      "directory" : {
+        "department" : "Platform",
+        "jobTitle" : "Staff Engineer",
+        "source" : "googleDirectory",
+        "updated" : "2027-01-15T08:00:00Z"
+      },
+      "displayName" : "Sam Carter",
+      "distinctFrom" : [
+
+      ],
+      "doNotProfile" : false,
+      "emails" : [
+        {
+          "address" : "sam@example.com",
+          "firstSeen" : "2027-01-15T08:00:00Z",
+          "lastSeen" : "2027-01-15T08:00:00Z",
+          "shared" : false,
+          "source" : "owner",
+          "state" : "verified"
+        }
+      ],
+      "forms" : [
+        {
+          "confirmed" : true,
+          "firstSeen" : "2027-01-15T08:00:00Z",
+          "key" : "sam carter",
+          "kind" : "display",
+          "lastSeen" : "2027-01-15T08:00:00Z",
+          "source" : "migration",
+          "text" : "Sam Carter"
+        }
+      ],
+      "id" : "id-sam",
+      "isOwner" : false,
+      "mergedFrom" : [
+
+      ],
+      "name" : {
+        "family" : "carter",
+        "given" : "sam",
+        "middle" : [
+
+        ]
+      },
+      "provisional" : false,
+      "updated" : "2027-01-15T08:00:00Z"
+    }
+  ],
+  "version" : 1
+}

@@ -117,6 +117,33 @@ public struct PersonMeetings: Sendable, Equatable {
     private static func fold(_ s: String) -> String { s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
 }
 
+extension PersonMeetings.Cadence {
+    /// The band's word.
+    public var word: String {
+        switch self {
+        case .daily: "Daily"
+        case .severalAWeek: "Several a week"
+        case .weekly: "Weekly"
+        case .everyOtherWeek: "Every 2 weeks"
+        case .monthly: "Monthly"
+        }
+    }
+}
+
+extension PersonMeetings.Together {
+    /// "meetings together" only when each one proves it; else what they are: "meetings · 2 only invited · 1 from notes".
+    public func countLabel(owner: Bool) -> String {
+        let word = meetings == 1 ? "meeting" : "meetings"
+        if owner { return word }
+        if met == meetings, meetings > 0 { return word + " together" }
+        var parts = [word]
+        if invitedOnly > 0 { parts.append("\(invitedOnly) only invited") }
+        let notes = meetings - met - invitedOnly
+        if notes > 0 { parts.append("\(notes) from notes") }
+        return parts.joined(separator: " · ")
+    }
+}
+
 extension CallRecord {
     /// The recorded length; for a joined meeting the length of its audio, without the time between its parts.
     public var recordedSeconds: TimeInterval {

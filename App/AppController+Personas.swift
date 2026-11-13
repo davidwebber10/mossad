@@ -10,6 +10,10 @@ extension AppController {
 
     var personasOn: Bool { coachEnabled && personaEnabled }
 
+    /// The coach's memory as the pages show it: nothing it learned about a person who keeps no read. A view; the
+    /// file keeps it all.
+    var visibleCoachProfile: CoachProfile { shownCoachProfile.withoutCoachData(on: personaPeople) }
+
     /// The people for the reads: the store's when it runs, else a look at `people.json` that only reads (a preview,
     /// or the time before the store is ready). The reads are by id, so they need the ids either way.
     var personaPeople: CoachPeople {
@@ -40,6 +44,8 @@ extension AppController {
         guard let store = library.identity?.people, let id = personID(of: name) else { return }
         do {
             try store.setDoNotProfile(!on, for: PersonID(rawValue: id))
+            // The coach's memory is kept as it is: the pages and the tools hide it while the switch is off, and the
+            // next sync overwrites the copies that left the Mac without it.
             if !on { forgetPersona(id) } else { rereadCalls(of: id) }
             Log.info(on ? "The coach keeps a read on a person again" : "The coach keeps no read on a person; its files are deleted")
         } catch {

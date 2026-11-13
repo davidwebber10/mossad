@@ -293,6 +293,10 @@ struct MessageBubble: View {
                 }
                 ChatMarkdown(text: message.text, timeChips: true)
                     .foregroundStyle(Palette.ink)
+                // What the Mac's chat did or proposes, as plain lines: Undo and "Do it" are on the Mac.
+                ForEach(Array(message.actionLines.enumerated()), id: \.offset) { _, line in
+                    Text(line).textRole(.secondary).foregroundStyle(Palette.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .textSelection(.enabled)

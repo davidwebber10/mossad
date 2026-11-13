@@ -32,12 +32,18 @@ public struct MeetingFilterPeople: Sendable {
 
     /// From the voice library's people. With a people store, each gets the id of its person there.
     public init(profiles: [VoiceProfile], store: PeopleStore?, owner: String) {
+        self.init(profiles: profiles, people: store?.people, owner: owner)
+    }
+
+    /// The same from the people file as it was read, for the tools of other AI apps, which read the files only.
+    public init(profiles: [VoiceProfile], people: [Person]?, owner: String) {
         var ids: [String: String] = [:]
-        if let store {
-            for p in profiles { ids[p.name] = store.id(forVoiceName: p.name, isOwner: p.isOwner)?.rawValue }
+        if let people {
+            for p in profiles { ids[p.name] = PeopleStore.id(forVoiceName: p.name, isOwner: p.isOwner, in: people)?.rawValue }
         }
-        self.init(directory: PersonDirectory(profiles: profiles, people: store?.people), ids: ids, owner: owner,
-                  ownerNames: profiles.filter(\.isOwner).map(\.name) + (store?.ownerNames ?? []))
+        let ownerNames = people?.first { $0.isOwner && $0.isLive }?.forms.map(\.text) ?? []
+        self.init(directory: PersonDirectory(profiles: profiles, people: people), ids: ids, owner: owner,
+                  ownerNames: profiles.filter(\.isOwner).map(\.name) + ownerNames)
     }
 
     private func who(saved name: String) -> MeetingFilter.Who { MeetingFilter.Who(id: ids[name], name: name) }

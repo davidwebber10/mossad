@@ -77,9 +77,13 @@ public struct LivePointFact: Equatable, Sendable {
     public var text: String
     public var state: State
 
-    public init(text: String, state: State) {
+    /// The point's id, for the chat's action that ticks it.
+    public var id: UUID?
+
+    public init(text: String, state: State, id: UUID? = nil) {
         self.text = text
         self.state = state
+        self.id = id
     }
 
     public var isOpen: Bool { state == .open }
@@ -87,9 +91,9 @@ public struct LivePointFact: Equatable, Sendable {
     /// The page's list as facts: each point's state from the owner's tick in this call or a live mark.
     public static func from(_ points: [NextTimePoint], marks: LivePointMarks, callID: String) -> [LivePointFact] {
         points.map { p in
-            if let d = p.done, d.callID == callID { return LivePointFact(text: p.text, state: .ticked(d.at)) }
-            if let m = marks.mark(for: p.id) { return LivePointFact(text: p.text, state: .heard(m.at, quote: m.quote)) }
-            return LivePointFact(text: p.text, state: .open)
+            if let d = p.done, d.callID == callID { return LivePointFact(text: p.text, state: .ticked(d.at), id: p.id) }
+            if let m = marks.mark(for: p.id) { return LivePointFact(text: p.text, state: .heard(m.at, quote: m.quote), id: p.id) }
+            return LivePointFact(text: p.text, state: .open, id: p.id)
         }
     }
 }
@@ -289,11 +293,13 @@ public enum LiveChatPrompt {
                      + (entries.isEmpty ? empty : lines.map(\.line).joined(separator: "\n")))
         if !facts.points.isEmpty {
             let list = facts.points.map { p -> String in
+                // The id, for the action that ticks it.
+                let id = p.id.map { " (point_id: \($0.uuidString))" } ?? ""
                 switch p.state {
-                case .open: return "- Open: \(p.text)"
-                case .ticked(let at): return "- Raised" + (at.map { " at \(LiveEntry.stamp($0))" } ?? "") + ": \(p.text) (marked by \(owner))"
+                case .open: return "- Open: \(p.text)\(id)"
+                case .ticked(let at): return "- Raised" + (at.map { " at \(LiveEntry.stamp($0))" } ?? "") + ": \(p.text) (marked by \(owner))\(id)"
                 case .heard(let at, let quote):
-                    return "- Raised at \(LiveEntry.stamp(at)): \(p.text) (heard by Mossad in the line \u{201C}\(quote)\u{201D}; checked again after the call)"
+                    return "- Raised at \(LiveEntry.stamp(at)): \(p.text) (heard by Mossad in the line \u{201C}\(quote)\u{201D}; checked again after the call)\(id)"
                 }
             }
             parts.append("""
@@ -327,20 +333,28 @@ public struct LiveChatAgent: Sendable {
             + ChatTools.coachDefinitions.filter { ["people", "commitments"].contains($0.name) }
     }
 
+    /// `actions`: the light actions of a call (points, tasks, this moment's bookmark), from the owner's message only.
     public func answer(_ question: String, history: [ChatMessage], facts: LiveCallFacts, entries: [LiveEntry], summary: LiveSummary?,
                        records: [CallRecord], paths: Paths? = nil, now: Date = Date(), personaTraits: Bool = true, limits: LiveLimits = .standard,
-                       onStep: @escaping @Sendable (String) -> Void, onText: @escaping @Sendable (String) -> Void) async throws -> String {
+                       actions: ChatActionHost? = nil, earlier: [ChatActionRecord] = [], questionID: UUID = UUID(),
+                       onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
+                       onStep: @escaping @Sendable (String) -> Void, onText: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         let open = LiveQuestions.forOwner(entries, owner: ownerName, now: facts.now(now),
                                           invitedOthers: facts.invited.isEmpty ? nil : facts.invited.count, room: facts.room)
-        let system = LiveChatPrompt.system(facts: facts, entries: entries, summary: summary, openQuestions: open, now: now, limits: limits)
         let tools = ChatTools(records: records, owner: ownerName, paths: paths, personaTraits: personaTraits)
-        let offered = Set(Self.tools.map(\.name))
-        return try await llm.streamTools(system: system, history: history, question: question, tools: Self.tools, purpose: .question,
-                                         execute: { name, input in
-            // Only what was offered: nothing that writes runs, whatever the model asks.
+        let doer = actions.map { ChatActions(message: question, question: questionID, tools: tools, host: $0, live: true, earlier: earlier, onRecord: onAction) }
+        let system = LiveChatPrompt.system(facts: facts, entries: entries, summary: summary, openQuestions: open, now: now, limits: limits)
+            + (doer == nil ? "" : ChatActions.prompt(owner: ownerName, live: true))
+        let offeredTools = Self.tools + (doer == nil ? [] : ChatActions.definitions(live: true))
+        let offered = Set(offeredTools.map(\.name))
+        let text = try await llm.streamTools(system: system, history: history, question: question, tools: offeredTools, purpose: .question,
+                                             execute: { name, input in
+            // Only what was offered: no other write runs, whatever the model asks.
             guard offered.contains(name) else { return "That tool is not available during a call." }
             onStep(ChatTools.step(name, input: input) { id in tools.records.first { $0.id == id }?.title })
+            if let done = doer?.run(name, input: input) { return done }
             return tools.run(name, input: input)
         }, onText: onText)
+        return ChatReply(text: text, actions: doer?.records ?? [])
     }
 }

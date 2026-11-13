@@ -237,8 +237,15 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
 
     public func events(from: Date, to: Date) async -> [CalendarEventInfo] {
         let local = await mac.events(from: from, to: to)
-        return CalendarMerge.merge(mac: local, google: await googlePage(from: from, to: to))
+        let on = google()?.isOn == true
+        let page = await googlePage(from: from, to: to)
+        lock.withLock { googleRead = !on ? .no : page == nil ? .failed : .yes }
+        return CalendarMerge.merge(mac: local, google: page)
     }
+
+    /// How the last read of Google went: not connected, read, or failed (the Mac's calendar alone then).
+    public var lastGoogleRead: CalendarSnapshot.Access.Read { lock.withLock { googleRead } }
+    private var googleRead: CalendarSnapshot.Access.Read = .no
 
     private func googlePage(from: Date, to: Date) async -> GoogleCalendarAPI.Page? {
         // Not connected is not a failure: nothing to wait for and nothing to mark.

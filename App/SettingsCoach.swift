@@ -44,8 +44,9 @@ struct CoachSettings: View {
                     }
                     if controller.personaEnabled {
                         SettingsSwitchRow(title: "Share the reads with other AI apps",
-                                          detail: "Apps connected through Mossad's MCP read the traits in the people tool. Chat in Mossad always can.",
+                                          detail: "Apps connected through Mossad's MCP, on this Mac or through your own server, read the traits on each person. Chat in Mossad always can. Your server follows a change at its next sync.",
                                           isOn: $controller.personaInMCP)
+                            .onChange(of: controller.personaInMCP) { _, _ in controller.syncNow() }
                     }
                 }
             }

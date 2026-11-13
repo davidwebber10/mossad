@@ -273,7 +273,7 @@ struct CoachKnowledgePage: View {
     @EnvironmentObject var controller: AppController
 
     var body: some View {
-        let profile = controller.shownCoachProfile
+        let profile = controller.visibleCoachProfile
         // A conclusion that is a card is answered in Findings.
         let carded = Set(controller.findings.compactMap(\.questionID))
         let waiting = profile.openQuestions.filter { !carded.contains($0.id) }

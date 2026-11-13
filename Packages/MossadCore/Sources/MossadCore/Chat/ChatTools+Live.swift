@@ -20,11 +20,38 @@ extension ChatTools {
         if let pause = LiveChatPrompt.pauseNote(clock: clockTime, recorded: elapsed) { parts.append(pause) }
         if !r.attendees.isEmpty { parts.append("Invited: \(r.attendees.joined(separator: ", "))") }
         guard let transcript else {
+            if let points = livePoints(r, heard: []) { parts.append(points) }
             parts.append("No live transcript yet. It needs Live transcript on in Settings and an AssemblyAI key; the full transcript comes after the call.")
             return parts.joined(separator: "\n")
         }
+        if let points = livePoints(r, heard: Array(Set(transcript.voiceNames.values))) { parts.append(points) }
         let text = transcript.text(owner: owner, since: minutes.map { elapsed - $0 * 60 })
         parts.append(text.isEmpty ? "Nothing said in that time." : "Transcript (minutes:seconds into the recording):\n" + text)
         return parts.joined(separator: "\n")
+    }
+
+    /// "Your points" of the call that records now, as its panel lists them: the series' and each person's, with
+    /// the owner's ticks and what Mossad heard. The check after the call decides.
+    /// The call's own points, as its panel lists them (`LivePoints`).
+    func livePointList(_ r: CallRecord, heard: [String] = []) -> [NextTimePoint] {
+        guard let book else { return [] }
+        let (all, _, snapshot) = catalog(now: now)
+        let series = LivePoints.series(ofLive: r, in: all, records: records, owner: owner, directory: PersonDirectory(profiles: profiles),
+                                       ownerEmails: [settings.ownerEmail], aliases: SeriesCatalog.aliases(snapshot?.calendarEvents ?? []))
+        let names = heard.isEmpty ? Array(Set(r.speakerNames.values)) : heard
+        let people = LivePoints.personIDs(attendees: r.attendees, heard: names, people: saved)
+        return LivePoints.list(book, series: series, people: people, callID: r.id, canonical: saved.canonical)
+    }
+
+    func livePoints(_ r: CallRecord, heard: [String]) -> String? {
+        guard let paths else { return nil }
+        let list = livePointList(r, heard: heard)
+        guard !list.isEmpty else { return nil }
+        let marks = LivePointMarks.load(from: paths.callDirectory(r.id)) ?? LivePointMarks()
+        return "Your points for this call:\n" + list.map { p in
+            var line = "- \(p.text) (point_id: \(p.id.uuidString))"
+            if p.done?.callID == r.id { line += " | ticked by the owner" } else if let m = marks.mark(for: p.id) { line += " | Mossad heard it raised at \(MarkdownWriter.timestamp(m.at)), not yet sure" }
+            return line
+        }.joined(separator: "\n")
     }
 }

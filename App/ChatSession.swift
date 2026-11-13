@@ -39,6 +39,9 @@ final class ChatSession: ObservableObject {
         }
     }
 
+    /// The chat as its one writer saved it (a receipt, a click): shown also while an answer comes.
+    func show(_ c: Chat) { chat = c }
+
     /// The quick chat to continue, or none for a new one. Not while an answer comes: it saves its own copy.
     func adopt(_ found: Chat?) {
         guard !running else { return }
@@ -57,7 +60,9 @@ final class ChatSession: ObservableObject {
     }
 
     /// Asks a question. While an answer comes, the question waits for it (only the newest one waits).
-    func send(_ question: String, record: CallRecord?, controller: AppController) {
+    /// `again`: Retry of a question that is in the chat, by its id: it is not added a second time, and its actions
+    /// that stand are not done again.
+    func send(_ question: String, record: CallRecord?, controller: AppController, again: ChatMessage? = nil) {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         guard !running else { queued = q; return }
@@ -67,10 +72,18 @@ final class ChatSession: ObservableObject {
             c.callID = callID
             return c
         }()
-        let history = current.messages
-        var asked = ChatMessage(role: .user, text: q)
-        asked.asked = Date()
-        current.messages.append(asked)
+        let asked: ChatMessage
+        let history: [ChatMessage]
+        if let again, let i = current.messages.firstIndex(where: { $0.id == again.id }) {
+            asked = again
+            history = Array(current.messages[..<i])
+        } else {
+            history = current.messages
+            var m = ChatMessage(role: .user, text: q)
+            m.asked = Date()
+            asked = m
+            current.messages.append(m)
+        }
         current.updated = Date()
         save(current, controller)
         error = nil
@@ -80,20 +93,27 @@ final class ChatSession: ObservableObject {
         stopped = false
         let stepSink = StepSink { [weak self] step in Task { @MainActor in self?.steps.append(step) } }
         let textSink = StepSink { [weak self] text in Task { @MainActor in self?.setPartial(text) } }
+        // Each receipt goes into the chat the moment its action is done, whatever happens to the answer.
+        let answerID = UUID(), asked0 = current
+        let actionSink = ActionSink { r in Task { @MainActor in _ = controller.saveChatAction(r, chat: asked0, answer: answerID) } }
+        let earlier = controller.chatActions(current)
         task = Task {
             var failed = false
             do {
-                let answer: String
+                let answer: ChatReply
                 if let record {
-                    answer = try await controller.liveChatAnswer(q, history: history, record: record, onStep: stepSink.add, onText: textSink.add)
+                    answer = try await controller.liveChatAnswer(q, history: history, record: record, earlier: earlier, questionID: asked.id,
+                                                                 onAction: actionSink.add, onStep: stepSink.add, onText: textSink.add)
                 } else {
-                    answer = try await controller.chatAnswer(q, history: history, onStep: stepSink.add)
+                    answer = try await controller.chatAnswer(q, history: history, earlier: earlier, questionID: asked.id, onAction: actionSink.add,
+                                                             onStep: stepSink.add)
                 }
                 guard !stopped else { throw CancellationError() }
-                var message = ChatMessage(role: .assistant, text: answer, steps: steps)
+                var message = answer.message(steps: steps)
+                message.id = answerID
                 if record != nil { message.live = true }
-                current.messages.append(message)
-                current.updated = Date()
+                // Joined to the file's copy: its receipts and any click saved meanwhile stay.
+                current = controller.finishChatAnswer(message, chat: asked0)
                 save(current, controller)
                 if record != nil {
                     controller.liveChatsToSummarize.insert(current.id)
@@ -104,9 +124,11 @@ final class ChatSession: ObservableObject {
                 }
                 AccessibilityNotification.Announcement("Answer ready").post()
             } catch {
+                // What was done stays with its question, whatever happened to the answer.
+                let stop = controller.stopChatAnswer(chat: asked0, answer: answerID, question: asked.id, byOwner: stopped)
+                current = stop.chat
                 if stopped {
                     // A stopped answer leaves no question without its answer, and a first question no empty chat.
-                    if current.messages.last?.id == asked.id { current.messages.removeLast() }
                     if ChatRunRules.removesChat(messagesLeft: current.messages.count) {
                         controller.chats.delete(current.id, record: false)
                         chat = nil
@@ -116,6 +138,7 @@ final class ChatSession: ObservableObject {
                         save(current, controller)
                     }
                 } else {
+                    save(current, controller)
                     failed = true
                     Log.error("\(record == nil ? "Quick chat" : "Live chat") failed: \(error)")
                     let friendly = FriendlyError(error, context: .chatting)
@@ -154,12 +177,10 @@ final class ChatSession: ObservableObject {
         task?.cancel()
     }
 
-    /// Asks the last question again: it leaves the chat and goes back through send.
+    /// Asks the last question again, the same message by its id, also after a stopped answer with what it did.
     func retry(record: CallRecord?, controller: AppController) {
-        guard !running, var c = chat, let last = c.messages.last, last.role == .user else { return }
-        c.messages.removeLast()
-        chat = c
-        send(last.text, record: record, controller: controller)
+        guard !running, let c = chat, let question = ChatThreadEdits.retryQuestion(c) else { return }
+        send(question.text, record: record, controller: controller, again: question)
     }
 
     /// The streamed text at most ten times a second: each change draws the whole answer again.

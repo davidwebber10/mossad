@@ -2,6 +2,17 @@ import Foundation
 
 public enum FocusOutcome: String, Codable, Sendable, CaseIterable { case hit, missed, noChance }
 
+extension FocusOutcome {
+    /// The word of the Goals page's rows.
+    public var label: String {
+        switch self {
+        case .hit: "Hit"
+        case .missed: "Missed"
+        case .noChance: "No chance to try"
+        }
+    }
+}
+
 /// How one call went on the focus.
 public struct FocusResult: Codable, Equatable, Sendable, Hashable {
     public var callID: String

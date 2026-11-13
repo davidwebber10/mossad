@@ -162,7 +162,9 @@ public actor CloudSync {
     /// `people`: the Mac sends the people too; the phone only reads them.
     @discardableResult
     /// `personas`: the reduced copy of the reads (`SyncedPersonas`), from the Mac, with the people.
-    public func pushShared(people sendPeople: Bool = false, personas: SyncedPersonas? = nil) async throws -> Int {
+    /// `stop`: true stops the upload before its next batch (a call started).
+    public func pushShared(people sendPeople: Bool = false, personas: SyncedPersonas? = nil, mirror: Bool = false,
+                           stop: @Sendable () -> Bool = { false }) async throws -> Int {
         try await prepare()
         let chats = ChatStore(directory: paths.chats)
         var payloads = chats.all().map(SharedPayload.chat)
@@ -177,7 +179,7 @@ public actor CloudSync {
         func waiting(_ name: String) -> Bool { files.first { $0.lastPathComponent == name }.map(StoredFile.awaitsMerge) ?? false }
         if !waiting(CoachProfile.fileName), FileManager.default.fileExists(atPath: paths.coach.appendingPathComponent(CoachProfile.fileName).path),
            let profile = try? CoachProfile.load(from: paths.coach) {
-            payloads.append(.profile(profile))
+            payloads.append(.profile(profile, people: PeopleStore.peek(in: paths.people) ?? []))
         }
         if !waiting(CommitmentBook.fileName), FileManager.default.fileExists(atPath: paths.commitments.appendingPathComponent(CommitmentBook.fileName).path),
            let book = try? CommitmentBook.load(from: paths.commitments) {
@@ -198,13 +200,23 @@ public actor CloudSync {
         if sendPeople, store.wantsMeetingView, let personas {
             payloads.append(.personas(personas))
         }
-        let deleted = chats.deleted()
-        let plan = try loadState().planShared(payloads, deletedChats: deleted)
+        var deleted = chats.deleted()
+        let state = try loadState()
+        if mirror {
+            // The server's copy finds its own deletes: each chat it holds whose file is gone from this Mac. A file that
+            // is there and does not read is not a deleted chat. The main sync may have cleared its notes already.
+            for key in state.uploaded.keys where key.hasPrefix("chat:") {
+                guard let id = UUID(uuidString: String(key.dropFirst("chat:".count))) else { continue }
+                if !FileManager.default.fileExists(atPath: paths.chats.appendingPathComponent("\(id.uuidString).json").path) { deleted.insert(id) }
+            }
+        }
+        let plan = state.planShared(payloads, deletedChats: deleted)
         guard !plan.upload.isEmpty || !plan.delete.isEmpty else { return 0 }
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
         var changed = 0
         for chunk in stride(from: 0, to: plan.upload.count, by: Self.batch).map({ Array(plan.upload[$0..<min($0 + Self.batch, plan.upload.count)]) }) {
+            if stop() { return changed }
             let records = try chunk.map { p -> StoredRecord in
                 let type = switch p.kind {
                 case .chat: Self.chatType
@@ -231,9 +243,12 @@ public actor CloudSync {
             try update { state in
                 for key in done { state.uploaded[key] = nil }
             }
-            // The store has the delete now; the note of it can go.
-            let ids = Set(done.compactMap { UUID(uuidString: String($0.dropFirst("chat:".count))) })
-            chats.setDeleted(chats.deleted().subtracting(ids))
+            // The store has the delete now; the note of it can go. Not for the server's mirror: the main sync has
+            // still to send the delete.
+            if !mirror {
+                let ids = Set(done.compactMap { UUID(uuidString: String($0.dropFirst("chat:".count))) })
+                chats.setDeleted(chats.deleted().subtracting(ids))
+            }
             changed += done.count
         }
         return changed

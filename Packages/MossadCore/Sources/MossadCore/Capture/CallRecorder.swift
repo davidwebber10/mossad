@@ -596,6 +596,13 @@ public final class CallRecorder: @unchecked Sendable {
     /// Where the recording is now, in file seconds. Both tracks share one timeline; the paused time is left out.
     private var recordedLength: TimeInterval { max(0, me?.writer.position ?? 0) }
 
+    /// The call that records and the second of its recording now, for the chat's tick of a point. Call it on the
+    /// capture queue; nil while nothing records.
+    public var liveMoment: (callID: String, at: TimeInterval)? {
+        guard isRecording, let r = record else { return nil }
+        return (r.id, recordedLength)
+    }
+
     static func time(_ date: Date) -> String { date.formatted(date: .omitted, time: .shortened) }
 
     /// The invite found while the call runs, so the live call already shows its real title.

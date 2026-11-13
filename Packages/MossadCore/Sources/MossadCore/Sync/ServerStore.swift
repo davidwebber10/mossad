@@ -131,9 +131,14 @@ public struct ServerClient: Sendable {
         return data
     }
 
-    /// The owner's name and time zone, for the MCP's answers and dates.
-    public func putConfig(owner: String, timeZone: String = TimeZone.current.identifier) async throws {
-        let body = try JSONSerialization.data(withJSONObject: ["owner": owner, "timeZone": timeZone])
+    /// The owner's name and time zone, for the MCP's answers and dates, and whether its MCP may give the coach's
+    /// reads of how people think (`MCPServer.showsPersonas`; a server that never hears it gives none).
+    /// `syncedAt`: when the Mac last sent every kind the server's tools read, without an error.
+    public func putConfig(owner: String, timeZone: String = TimeZone.current.identifier, personasInMCP: Bool? = nil, syncedAt: Date? = nil) async throws {
+        var config: [String: Any] = ["owner": owner, "timeZone": timeZone]
+        if let personasInMCP { config["mcpPersonas"] = personasInMCP }
+        if let syncedAt { config["syncedAt"] = ISO8601DateFormatter().string(from: syncedAt) }
+        let body = try JSONSerialization.data(withJSONObject: config)
         try await send(connection.request("api/config", method: "PUT"), body: body)
     }
 }
@@ -235,5 +240,21 @@ public struct ServerStore: RecordStore {
             if let l = v["l"] as? [String] { return .strings(l) }
             return nil
         }
+    }
+}
+
+/// What the server's MCP was told, so a config that did not arrive is sent again.
+public struct ServerConfigState: Equatable, Sendable {
+    /// What the server answered for with a success.
+    private var arrivedConfig: String?
+    private var inFlight: String?
+
+    public init() {}
+    public func needsSend(_ config: String) -> Bool { inFlight == nil && arrivedConfig != config }
+    public mutating func sending(_ config: String) { inFlight = config }
+    public mutating func failed() { inFlight = nil }
+    public mutating func arrived(_ config: String) {
+        inFlight = nil
+        arrivedConfig = config
     }
 }

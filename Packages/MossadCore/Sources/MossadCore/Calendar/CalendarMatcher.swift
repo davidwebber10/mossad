@@ -335,3 +335,8 @@ public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
         }
     }
 }
+
+extension CalendarSnapshot.Access.Read {
+    /// Whether Mossad may read the Mac's calendars now.
+    public static var macCalendar: CalendarSnapshot.Access.Read { EKEventStore.authorizationStatus(for: .event) == .fullAccess ? .yes : .no }
+}

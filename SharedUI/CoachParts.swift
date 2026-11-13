@@ -17,14 +17,6 @@ extension FocusOutcome {
         case .noChance: .secondary
         }
     }
-
-    var label: String {
-        switch self {
-        case .hit: "Hit"
-        case .missed: "Missed"
-        case .noChance: "No chance to try"
-        }
-    }
 }
 
 /// One dot per call on the focus, oldest first; the open call's dot has a ring.

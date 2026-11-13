@@ -105,7 +105,11 @@ export async function handleAPI(request: Request, env: Env): Promise<Response> {
 
 async function putConfig(request: Request, env: Env): Promise<Response> {
   const body = (await request.json()) as Record<string, unknown>;
-  const rows = ['owner', 'timeZone'].filter((k) => typeof body[k] === 'string')
+  // `mcpPersonas` is "1" when the Mac lets the coach's reads of people go to other AI apps, "0" when not.
+  if (typeof body.mcpPersonas === 'boolean') body.mcpPersonas = body.mcpPersonas ? '1' : '0';
+  // `syncedAt`: when the Mac last sent every kind the MCP reads, without an error (an ISO date).
+  if (typeof body.syncedAt === 'string' && Number.isNaN(Date.parse(body.syncedAt))) delete body.syncedAt;
+  const rows = ['owner', 'timeZone', 'mcpPersonas', 'syncedAt'].filter((k) => typeof body[k] === 'string')
     .map((k) => env.DB.prepare('INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(k, body[k] as string));
   if (rows.length) await env.DB.batch(rows);
   return json({ ok: true });
