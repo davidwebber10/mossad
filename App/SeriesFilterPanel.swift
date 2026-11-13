@@ -5,6 +5,8 @@ import SwiftUI
 /// is one. It opens the flyout beside the list.
 struct SeriesFilterButton: View {
     @ObservedObject var filters: SeriesFilterModel
+    /// Where the flyout opens: beside the list, or below the toolbar row in Calendar mode, over the calendar.
+    var edge = Edge.trailing
     @State private var hovering = false
 
     var body: some View {
@@ -29,7 +31,7 @@ struct SeriesFilterButton: View {
         .help(count == 0 ? "Filter recurring meetings (⌥⌘F)" : "\(count) \(count == 1 ? "filter" : "filters") on (⌥⌘F)")
         .accessibilityLabel("Filter recurring meetings")
         .accessibilityValue(count == 0 ? "No filters" : "\(count) \(count == 1 ? "filter" : "filters") on")
-        .popover(isPresented: $filters.isOpen, arrowEdge: .trailing) {
+        .popover(isPresented: $filters.isOpen, arrowEdge: edge) {
             SeriesFilterPanel(filters: filters)
         }
         .animation(.snappy(duration: 0.2), value: count)

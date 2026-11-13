@@ -405,7 +405,7 @@
             "The last meeting's decisions and action items",
             "Your open tasks for these people",
             "Join from the same page",
-            "Your next 45 days of meetings in the list, by day"
+            "Your next two work days of meetings in the list, and 45 days on the calendar"
           ],
           "icon": "calendar.badge.clock",
           "comingSoon": false,
@@ -424,11 +424,12 @@
             "Tick a point as you raise it, or let Mossad mark it when it hears you",
             "A heads-up near the planned end while points are still open, with no pop-up and no sound",
             "A meeting you only have notes of never closes your points: you see where they came up",
-            "Search and filter the series by people, cadence, next meeting, last met, length, and open items"
+            "Search and filter the series by people, cadence, next meeting, last met, length, and open items",
+            "See your recurring meetings by weekday, or as one typical week on a calendar"
           ],
           "icon": "repeat",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/LivePoints.swift", "App/LivePointsPanel.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesFilter.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesListSearch.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/LivePoints.swift", "App/LivePointsPanel.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesFilter.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSchedule.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesWeek.swift", "App/RecurringCalendar.swift"]
         },
         {
           "id": "filters",
