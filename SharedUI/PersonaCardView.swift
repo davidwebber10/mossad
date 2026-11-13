@@ -36,7 +36,7 @@ struct PersonaCardView: View {
                     LabelColumn(label: line.kind.title) {
                         VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                             Text(line.text).textRole(.body).lineSpacing(Rhythm.secondaryLineGap).foregroundStyle(Palette.ink)
-                                .frame(maxWidth: 680, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: Rhythm.measure, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                             PersonaEvidenceLine(text: line.confidenceLine, moment: line.moment)
                         }
                     }
@@ -79,7 +79,7 @@ struct PersonaTraitsView: View {
                 ForEach(read.traits) { trait in
                     VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         Text(trait.statement).textRole(.body).foregroundStyle(Palette.ink)
-                            .frame(maxWidth: 680, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: Rhythm.measure, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: Space.s) {
                             Text(trait.confidenceLine.prefix(1).uppercased() + trait.confidenceLine.dropFirst())
                             Text("·").accessibilityHidden(true)
@@ -141,7 +141,7 @@ struct PersonaCoverRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(maxWidth: 680, alignment: .leading)
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
         .accessibilityLabel("The coach’s read is hidden. Show it")
     }
 }

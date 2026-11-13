@@ -19,7 +19,7 @@ struct PersonOverviewTab: View {
     private var personID: String? { controller.personID(of: profile.name) }
 
     var body: some View {
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             if !profile.isOwner, let personID {
                 PersonNextTimeSection(personID: personID, name: profile.name, inColumn: true)
             }
@@ -64,7 +64,7 @@ struct PersonOverviewTab: View {
                                     .help("Meetings about \(t)")
                             }
                         }
-                        .frame(maxWidth: 680, alignment: .leading)
+                        .frame(maxWidth: Rhythm.measure, alignment: .leading)
                     }
                 }
             }
@@ -96,7 +96,7 @@ struct PersonOverviewTab: View {
                          : "After two calls with \(first), the coach writes how to work with them: their goals, how to get through to them, and how they communicate.")
                         .font(.system(size: Rhythm.bodySize)).lineSpacing(Rhythm.secondaryLineGap)
                         .foregroundStyle(Palette.secondary)
-                        .frame(maxWidth: 680, alignment: .leading)
+                        .frame(maxWidth: Rhythm.measure, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
                     if stats.meetings.count >= 2 { refreshButton.font(.system(size: Rhythm.secondarySize)) }
                 }
@@ -141,7 +141,7 @@ struct PersonOverviewTab: View {
             .font(.system(size: Rhythm.bodySize)).lineSpacing(Rhythm.secondaryLineGap)
             .foregroundStyle(Palette.ink)
             .tint(Palette.tertiary)
-            .frame(maxWidth: 680, alignment: .leading)
+            .frame(maxWidth: Rhythm.measure, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
     }
@@ -157,8 +157,8 @@ struct PersonOverviewTab: View {
                 }
             }
         }
-        .font(.system(size: Rhythm.bodySize))
-        .frame(maxWidth: 680, alignment: .leading)
+        .readingText()
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
     }
 
     private func slotText(_ s: PersonRelation.Slot) -> String {
@@ -196,7 +196,7 @@ struct PersonKnowledgeTab: View {
     }
 
     var body: some View {
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             if controller.personaCovered(personID), read != nil {
                 LabelColumn(label: "How they think") { PersonaCoverRow { controller.uncover(personID) } }
             } else if confirmed.isEmpty, read?.traits.isEmpty ?? true, blocked.isEmpty {
@@ -239,7 +239,7 @@ struct PersonKnowledgeTab: View {
                                 .padding(.vertical, 6)
                             }
                         }
-                        .frame(maxWidth: 680, alignment: .leading)
+                        .frame(maxWidth: Rhythm.measure, alignment: .leading)
                     }
                 }
             }
@@ -265,7 +265,7 @@ struct PersonVoiceTab: View {
     }
 
     var body: some View {
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             let list = samples
             if profile.embeddings.isEmpty, list?.isEmpty ?? true {
                 EmptyState(symbol: "waveform", title: "No voice sample yet",
@@ -291,7 +291,7 @@ struct PersonVoiceTab: View {
                         .buttonStyle(.plain).fontWeight(.medium).foregroundStyle(Palette.recording)
                 }
                 .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
-                .frame(maxWidth: 680, alignment: .leading)
+                .frame(maxWidth: Rhythm.measure, alignment: .leading)
             }
         }
     }
@@ -321,6 +321,6 @@ struct PersonVoiceTab: View {
             }
         }
         .font(.system(size: Rhythm.bodySize))
-        .frame(maxWidth: 680, alignment: .leading)
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
     }
 }

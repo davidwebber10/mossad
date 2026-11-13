@@ -14,7 +14,7 @@ struct PersonAnalyticsTab: View {
 
     var body: some View {
         let r = relation
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             if r.calls == 0 {
                 EmptyState(symbol: "chart.bar", title: "Nothing to measure yet",
                            message: "After a recorded call where \(first) speaks, how the two of you talk shows here.")
@@ -25,7 +25,7 @@ struct PersonAnalyticsTab: View {
                         balance("One to one", r.oneOnOne)
                         balance("In groups", r.group)
                     }
-                    .frame(maxWidth: 680, alignment: .leading)
+                    .frame(maxWidth: Rhythm.measure, alignment: .leading)
                 }
                 LabelColumn(label: "How you talk") {
                     Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 7) {
@@ -43,12 +43,12 @@ struct PersonAnalyticsTab: View {
                     .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                 }
                 LabelColumn(label: "How often") {
-                    WeeklyChart(weeks: r.weekly).frame(maxWidth: 680)
+                    WeeklyChart(weeks: r.weekly).frame(maxWidth: Rhythm.measure)
                 }
                 if !stats.meetings.isEmpty {
                     LabelColumn(label: "Talk time by meeting") { PersonTalkByMeeting(profile: profile, stats: stats) }
                 }
-                LabelColumn(label: "How it went") { ValueStrip(value: r.value).frame(maxWidth: 680, alignment: .leading) }
+                LabelColumn(label: "How it went") { ValueStrip(value: r.value).frame(maxWidth: Rhythm.measure, alignment: .leading) }
             }
         }
     }
@@ -115,7 +115,7 @@ struct PersonTalkByMeeting: View {
             }
         }
         .font(.system(size: Rhythm.bodySize))
-        .frame(maxWidth: 680, alignment: .leading)
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
     }
 }
 
@@ -131,7 +131,7 @@ struct PersonTasksTab: View {
     private var first: String { profile.name.split(separator: " ").first.map(String.init) ?? profile.name }
 
     var body: some View {
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             if profile.isOwner {
                 if stats.actionItems.isEmpty {
                     empty("No action items for you yet.")
@@ -209,7 +209,7 @@ struct PersonTasksTab: View {
             }
         }
         .font(.system(size: Rhythm.bodySize))
-        .frame(maxWidth: 680, alignment: .leading)
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
     }
 }
 
