@@ -1262,6 +1262,14 @@ public actor Pipeline {
         save(&r, dir: paths.callDirectory(callID))
     }
 
+    /// Takes away the bookmark within a second of `offset` and rewrites the note: the Undo of one the chat added.
+    @discardableResult
+    public func removeBookmark(callID: String, offset: TimeInterval) -> Bool {
+        guard var r = edit(callID, { $0.removeBookmark(at: offset) }) else { return false }
+        save(&r, dir: paths.callDirectory(callID))
+        return true
+    }
+
     /// Adds a bookmark without a note after the call, from the player. Returns false when one is already within a
     /// second of `offset`, so a double click does not make two.
     @discardableResult

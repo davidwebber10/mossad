@@ -100,7 +100,7 @@ extension ChatCoachToolsTests {
         let agent = ChatAgent(apiKey: key, ownerName: "Avery Lane")
         let records = ProcessingQueue(paths: paths).allRecords()
         let answer = try await agent.answer("from the coach, whats the #1 key point of feedback. 1 positive and 1 negative.", history: [],
-                                            records: records, paths: paths) { print("LIVE step: \($0)") }
+                                            records: records, paths: paths) { print("LIVE step: \($0)") }.text
         print("LIVE coach chat: \(answer)")
         XCTAssertTrue(answer.lowercased().contains("budget") || answer.lowercased().contains("owner"))
         let remember = try await agent.answer("For future advice: I'm responsible for all vendor contracts for data tools.", history: [],

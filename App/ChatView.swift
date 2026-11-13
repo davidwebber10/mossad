@@ -81,7 +81,7 @@ struct ChatView: View {
                         MeetingPill(record: r)
                     }
                     ForEach(current.messages) { m in
-                        ChatExchangeRow(message: m, callID: current.callID).id(m.id)
+                        ChatExchangeRow(message: m, callID: current.callID, chatID: current.id).id(m.id)
                     }
                     if running == current.id { ChatAnswering(steps: steps).id("running") }
                     if let session = controller.session(answering: current, create: false) { SessionRun(session: session) }
@@ -201,7 +201,7 @@ struct ChatView: View {
         Task {
             do {
                 let answer = try await controller.chatAnswer(q, history: history, about: chat.callID, onStep: collector.add)
-                chat.messages.append(ChatMessage(role: .assistant, text: answer, steps: steps))
+                chat.messages.append(answer.message(steps: steps))
                 chat.updated = Date()
                 store(chat)
                 controller.summarizeChat(chat.id)

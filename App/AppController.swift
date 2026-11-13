@@ -366,7 +366,7 @@ final class AppController: ObservableObject {
         var screen: String?
     }
     /// When the last bookmark was made, so the controls can confirm it.
-    @Published private(set) var lastBookmark: Date?
+    @Published var lastBookmark: Date?
     /// The system-wide shortcuts: the bookmark's and the quick panel's.
     let hotKeys = GlobalHotKeys()
     /// The quick panel's shortcut could not be registered: Settings says so, and no key shows for it.
@@ -429,7 +429,7 @@ final class AppController: ObservableObject {
     let notifier = Notifier()
     var pipeline: Pipeline!
     /// Used only on `CaptureQueue.queue`, except its meters, sinks, and track durations, which any thread can read.
-    private nonisolated let recorder: CallRecorder
+    nonisolated let recorder: CallRecorder
     private var window: NSWindow?
     var mainWindow: NSWindow? { window }
     private var trafficLights: TrafficLights?
@@ -1625,13 +1625,15 @@ final class AppController: ObservableObject {
         open(.chat)
     }
 
+    /// The answer, with what it did or proposes (`ChatActions`): the app's own chat can act, the MCPs cannot.
     func chatAnswer(_ question: String, history: [ChatMessage], about callID: String? = nil,
-                    onStep: @escaping @Sendable (String) -> Void) async throws -> String {
+                    onStep: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
         // The chat's `remember` tool writes the coach's profile.
         defer { coachVersion += 1 }
         return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths,
-                                                                          about: callID, personaTraits: personasOn, onStep: onStep)
+                                                                          about: callID, personaTraits: personasOn,
+                                                                          actions: isInert ? nil : chatActionHost, onStep: onStep)
     }
 
     /// Writes the chat's short summary for later chats to recall, and syncs it.
@@ -1647,8 +1649,19 @@ final class AppController: ObservableObject {
         }
     }
 
-    /// Opens a `mossad://call/<id>?t=<seconds>` link from a chat answer.
+    /// Opens a `mossad://call/<id>?t=<seconds>` link from a chat answer, and the places of the chat's receipts:
+    /// `mossad://series/<id>`, `mossad://person/<id>`, `mossad://tasks`.
     func openLink(_ url: URL) -> Bool {
+        if url.scheme == "mossad", url.host != "call" {
+            let id = url.pathComponents.dropFirst().first ?? ""
+            switch url.host {
+            case "series" where !id.isEmpty: openSeries(id)
+            case "person" where !id.isEmpty: openPerson(id)
+            case "tasks": open(.commitments)
+            default: return false
+            }
+            return true
+        }
         guard let link = ChatLink.parse(url), meetings.contains(where: { $0.id == link.callID }) else { return false }
         if let at = link.at { openMeeting(link.callID, at: at) } else { openMeeting(link.callID) }
         return true

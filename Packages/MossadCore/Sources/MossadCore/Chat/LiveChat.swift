@@ -327,20 +327,27 @@ public struct LiveChatAgent: Sendable {
             + ChatTools.coachDefinitions.filter { ["people", "commitments"].contains($0.name) }
     }
 
+    /// `actions`: the light actions of a call (points, tasks, this moment's bookmark), from the owner's message only.
     public func answer(_ question: String, history: [ChatMessage], facts: LiveCallFacts, entries: [LiveEntry], summary: LiveSummary?,
                        records: [CallRecord], paths: Paths? = nil, now: Date = Date(), personaTraits: Bool = true, limits: LiveLimits = .standard,
-                       onStep: @escaping @Sendable (String) -> Void, onText: @escaping @Sendable (String) -> Void) async throws -> String {
+                       actions: ChatActionHost? = nil,
+                       onStep: @escaping @Sendable (String) -> Void, onText: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         let open = LiveQuestions.forOwner(entries, owner: ownerName, now: facts.now(now),
                                           invitedOthers: facts.invited.isEmpty ? nil : facts.invited.count, room: facts.room)
-        let system = LiveChatPrompt.system(facts: facts, entries: entries, summary: summary, openQuestions: open, now: now, limits: limits)
         let tools = ChatTools(records: records, owner: ownerName, paths: paths, personaTraits: personaTraits)
-        let offered = Set(Self.tools.map(\.name))
-        return try await llm.streamTools(system: system, history: history, question: question, tools: Self.tools, purpose: .question,
-                                         execute: { name, input in
-            // Only what was offered: nothing that writes runs, whatever the model asks.
+        let doer = actions.map { ChatActions(message: question, tools: tools, host: $0, live: true) }
+        let system = LiveChatPrompt.system(facts: facts, entries: entries, summary: summary, openQuestions: open, now: now, limits: limits)
+            + (doer == nil ? "" : ChatActions.prompt(owner: ownerName, live: true))
+        let offeredTools = Self.tools + (doer == nil ? [] : ChatActions.definitions(live: true))
+        let offered = Set(offeredTools.map(\.name))
+        let text = try await llm.streamTools(system: system, history: history, question: question, tools: offeredTools, purpose: .question,
+                                             execute: { name, input in
+            // Only what was offered: no other write runs, whatever the model asks.
             guard offered.contains(name) else { return "That tool is not available during a call." }
             onStep(ChatTools.step(name, input: input) { id in tools.records.first { $0.id == id }?.title })
+            if let done = doer?.run(name, input: input) { return done }
             return tools.run(name, input: input)
         }, onText: onText)
+        return ChatReply(text: text, actions: doer?.records ?? [])
     }
 }

@@ -159,7 +159,7 @@ extension ChatTools {
         guard !list.isEmpty else { return "No commitments match." }
         let day = Date.FormatStyle().year().month(.abbreviated).day()
         return list.map { c in
-            var line = "- \(c.text)"
+            var line = "- \(c.text) (task_id: \(c.id.uuidString))"
             if let to = c.to { line += " (to \(to))" }
             line += c.done.map { " | done \($0.formatted(day))" } ?? (c.due.map { " | due \($0.formatted(day))" + (c.status(now: now) == .overdue ? ", overdue" : "") } ?? " | no date")
             if let id = c.callID { line += " | made in call_id \(id)" + (c.callTitle.map { " (\($0))" } ?? "") + (c.at.map { " at \(Int($0)) s" } ?? "") }

@@ -154,12 +154,12 @@ final class LiveAPITests: XCTestCase {
         let agent = ChatAgent(apiKey: key, ownerName: "Avery Lane")
         let records = [syntheticCall()]
         let question = "What did Alex agree to do last call, and was there a deadline?"
-        let first = try await agent.answer(question, history: [], records: records) { print("LIVE step: \($0)") }
+        let first = try await agent.answer(question, history: [], records: records) { print("LIVE step: \($0)") }.text
         print("LIVE chat: \(first)")
         XCTAssertTrue(first.contains("mossad://call/live"))
         let follow = try await agent.answer("And when does the freight leave?", history: [ChatMessage(role: .user, text: question),
                                                                                          ChatMessage(role: .assistant, text: first)],
-                                            records: records) { print("LIVE step: \($0)") }
+                                            records: records) { print("LIVE step: \($0)") }.text
         print("LIVE follow-up: \(follow)")
         XCTAssertTrue(follow.lowercased().contains("friday"))
     }
@@ -179,7 +179,7 @@ final class LiveAPITests: XCTestCase {
         print("LIVE \(label) coach: \(coach.review.headline) | value: \(coach.review.value?.rating.rawValue ?? "-")")
         XCTAssertFalse(coach.review.improvements.isEmpty)
         let answer = try await ChatAgent(llm: llm, ownerName: "Avery Lane")
-            .answer("What did Alex agree to do last call, and was there a deadline?", history: [], records: [syntheticCall()]) { print("LIVE \(label) step: \($0)") }
+            .answer("What did Alex agree to do last call, and was there a deadline?", history: [], records: [syntheticCall()]) { print("LIVE \(label) step: \($0)") }.text
         print("LIVE \(label) chat: \(answer)")
         XCTAssertTrue(answer.contains("mossad://call/live"))
     }

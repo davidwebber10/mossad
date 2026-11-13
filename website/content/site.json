@@ -579,7 +579,7 @@
     {
       "id": "chat",
       "title": "Chat and MCP for other AI apps",
-      "intro": "Ask your meetings a question, here or in the AI app you already use.",
+      "intro": "Ask your meetings a question, or tell Mossad what to do, here or in the AI app you already use.",
       "image": "The Chat page: an answer with links that open the meeting at the moment it cites.",
       "features": [
         {
@@ -626,15 +626,34 @@
           "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/AskPanel.swift", "Packages/MossadCore/Sources/MossadCore/Support/HotKeyShortcut.swift", "App/AskPanelView.swift", "App/AskPanelController.swift", "App/ShortcutRecorder.swift"]
         },
         {
+          "id": "chat-actions",
+          "title": "Tell it what to do",
+          "body": "Say \"add a note to my and Jeff's next meeting to discuss pricing\" and it is done, with a receipt and Undo right in the conversation.",
+          "details": [
+            "Save, change, or tick your points for next time",
+            "Add a task with a due date, mark it done, or move its date",
+            "Bookmark a moment of a past meeting, or this moment of the call you are on",
+            "Bigger changes wait for your click: naming a voice, renaming a meeting, its tags, whether to record a meeting",
+            "When two people or meetings fit, it asks which one"
+          ],
+          "icon": "checklist",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/ChatAction.swift", "Packages/MossadCore/Sources/MossadCore/Chat/ChatActionRules.swift", "Packages/MossadCore/Sources/MossadCore/Chat/ChatActionTools.swift", "App/AppController+ChatActions.swift", "App/ChatParts.swift"]
+        },
+        {
           "id": "mcp-local",
           "title": "MCP on your Mac",
-          "body": "Run Mossad --mcp and Claude Desktop, Claude Code, or any MCP client can search and read your meetings.",
+          "body": "Run Mossad --mcp and Claude Desktop, Claude Code, or any MCP client can read everything Mossad knows about your meetings and the people in them.",
           "details": [
-            "The same tools as Chat: find meetings, search transcripts, read a meeting, action items, screens, and the coach"
+            "Meetings, transcripts, screens, bookmarks, and each meeting's numbers",
+            "Each person as their page shows them, with how to present to them when you keep a read",
+            "Your next meetings, the prep for each, recurring meetings, and your points for next time",
+            "Your tasks, the coach's cards and goal, and your analytics",
+            "It can save a point for next time; nothing else changes"
           ],
           "icon": "puzzlepiece.extension",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/MCPServer.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/MCPServer.swift", "Packages/MossadCore/Sources/MossadCore/Chat/ChatTools+People.swift", "Packages/MossadCore/Sources/MossadCore/Chat/ChatTools+Series.swift", "Packages/MossadCore/Sources/MossadCore/Chat/ChatTools+Pages.swift"]
         },
         {
           "id": "mcp-remote",

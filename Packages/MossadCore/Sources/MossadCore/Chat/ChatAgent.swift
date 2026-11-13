@@ -120,16 +120,51 @@ public struct ChatAgent: Sendable {
 
     private struct SummaryOutput: Decodable { let summary: String }
 
-    /// `onStep` reports each lookup as it starts, for the "Reading Launch sync" line.
+    /// The tools of the app's own chat: every read, and with `actions` the action tools in place of the MCP's one write.
+    static func tools(paths: Paths?, actions: Bool) -> [ToolSpec] {
+        guard paths != nil else { return ChatTools.definitions }
+        guard actions else { return ChatTools.allDefinitions }
+        return ChatTools.allDefinitions.filter { $0.name != "add_next_time_point" } + ChatActions.definitions(live: false)
+    }
+
+    /// `onStep` reports each lookup as it starts, for the "Reading Launch sync" line. `actions` makes the chat able
+    /// to do what the owner asks (`ChatActions`, from the owner's message); its records go on the answer.
     public func answer(_ question: String, history: [ChatMessage], records: [CallRecord], paths: Paths? = nil, now: Date = Date(),
-                       about callID: String? = nil, personaTraits: Bool = true, onStep: @escaping @Sendable (String) -> Void) async throws -> String {
+                       about callID: String? = nil, personaTraits: Bool = true, actions: ChatActionHost? = nil,
+                       onStep: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         let tools = ChatTools(records: records, owner: ownerName, paths: paths, personaTraits: personaTraits)
         let live = history.contains { $0.live == true }
-        return try await llm.runTools(system: Self.system(owner: ownerName, tools: tools, now: now, about: callID, liveHistory: live),
-                                      history: history, question: question,
-                                      tools: paths == nil ? ChatTools.definitions : ChatTools.allDefinitions, purpose: .question) { name, input in
+        // While a call records, only the light actions, from any chat.
+        let calling = actions?.liveMoment() != nil
+        let doer = actions.map { ChatActions(message: question, tools: tools, host: $0, live: calling) }
+        let system = Self.system(owner: ownerName, tools: tools, now: now, about: callID, liveHistory: live)
+            + (doer == nil ? "" : ChatActions.prompt(owner: ownerName, live: calling))
+        let offered = doer == nil ? Self.tools(paths: paths, actions: false)
+            : ChatTools.allDefinitions.filter { $0.name != "add_next_time_point" } + ChatActions.definitions(live: calling)
+        let text = try await llm.runTools(system: system, history: history, question: question,
+                                          tools: paths == nil ? ChatTools.definitions : offered, purpose: .question) { name, input in
             onStep(ChatTools.step(name, input: input) { id in tools.records.first { $0.id == id }?.title })
+            if let done = doer?.run(name, input: input) { return done }
             return tools.run(name, input: input)
         }
+        return ChatReply(text: text, actions: doer?.records ?? [])
+    }
+}
+
+/// An answer and what it did or proposes to do.
+public struct ChatReply: Sendable {
+    public var text: String
+    public var actions: [ChatActionRecord]
+
+    public init(text: String, actions: [ChatActionRecord] = []) {
+        self.text = text
+        self.actions = actions
+    }
+
+    /// The answer's message, with its receipts and cards.
+    public func message(steps: [String]) -> ChatMessage {
+        var m = ChatMessage(role: .assistant, text: text, steps: steps)
+        if !actions.isEmpty { m.actions = actions }
+        return m
     }
 }

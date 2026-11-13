@@ -24,7 +24,7 @@ struct LiveChatView: View {
                 VStack(alignment: .leading, spacing: Space.l) {
                     if messages.isEmpty && !session.running { welcome }
                     ForEach(messages) { m in
-                        ChatExchangeRow(message: m, callID: record.id).id(m.id)
+                        ChatExchangeRow(message: m, callID: record.id, chatID: session.chat?.id).id(m.id)
                     }
                     if session.running {
                         ChatAnswering(steps: session.steps, partial: session.partial, callID: record.id, waiting: "Reading the call…").id("running")

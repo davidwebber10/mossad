@@ -264,7 +264,7 @@ private struct AskPanelChat: View {
                         VStack(alignment: .leading, spacing: Space.l) {
                             ForEach(messages) { m in
                                 if let line = dividers[m.id] { AgeDivider(text: line) }
-                                ChatExchangeRow(message: m, callID: mode.callID)
+                                ChatExchangeRow(message: m, callID: mode.callID, chatID: session.chat?.id)
                                     .environment(\.openURL, OpenURLAction { open($0, in: m.id) })
                                     .environment(\.chatMomentPeek, peek(for: m.id))
                                     .id(m.id)

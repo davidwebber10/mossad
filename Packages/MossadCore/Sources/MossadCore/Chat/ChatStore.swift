@@ -12,6 +12,8 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
     public var live: Bool?
     /// When the owner asked it; nil on a question from an older build.
     public var asked: Date?
+    /// What the answer did or proposes to do (`ChatActionRecord`); nil from an older build and for most answers.
+    public var actions: [ChatActionRecord]?
 
     public init(role: Role, text: String, steps: [String] = []) {
         self.role = role

@@ -24,17 +24,104 @@ extension EnvironmentValues {
     @Entry var chatCompact = false
 }
 
-/// One message: a question bubble, or an answer with its lookups.
+/// One message: a question bubble, or an answer with its lookups and what it did.
 struct ChatExchangeRow: View {
     let message: ChatMessage
     /// The meeting the chat is about, so a bare time in an answer is a chip too.
     var callID: String?
+    /// The chat the message is in, for a card's click and a receipt's Undo.
+    var chatID: UUID?
     @Environment(\.chatCompact) private var compact
 
     var body: some View {
         switch message.role {
         case .user: ChatQuestionBubble(text: message.text).padding(.top, compact ? 0 : Space.l)
-        case .assistant: ChatAnswer(text: message.text, steps: message.steps, callID: callID, live: message.live == true)
+        case .assistant:
+            VStack(alignment: .leading, spacing: compact ? Rhythm.itemGap : Rhythm.rowGap) {
+                ChatAnswer(text: message.text, steps: message.steps, callID: callID, live: message.live == true)
+                if let actions = message.actions, !actions.isEmpty, let chatID {
+                    ChatActionRows(actions: actions, chatID: chatID, messageID: message.id)
+                }
+            }
+        }
+    }
+}
+
+/// What an answer did and proposes: a receipt for each done action (what, where, Undo while it holds), and a card
+/// for each one that waits ("Do it", "Not now"). The quick panel shows each in one line.
+struct ChatActionRows: View {
+    @EnvironmentObject var controller: AppController
+    let actions: [ChatActionRecord]
+    let chatID: UUID
+    let messageID: UUID
+    @Environment(\.chatCompact) private var compact
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 0 : Rhythm.itemGap) {
+            ForEach(actions) { a in
+                if a.state == .proposed { card(a) } else { receipt(a) }
+            }
+        }
+        .frame(maxWidth: ChatThread.answerMax, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func receipt(_ a: ChatActionRecord) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Rhythm.itemGap) {
+            Image(systemName: icon(a.state)).font(.system(size: 11, weight: .semibold)).foregroundStyle(a.state == .done ? Palette.okText : Palette.tertiary)
+            Text(words(a)).font(Rhythm.secondary).foregroundStyle(a.state == .done ? Palette.ink : Palette.secondary)
+                .strikethrough(a.state == .undone).lineLimit(compact ? 1 : 3).truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let place = a.place.flatMap(URL.init(string:)), a.state != .undone {
+                Button("Open") { _ = controller.openLink(place) }.buttonStyle(SettingsTextButtonStyle(color: Palette.accent))
+            }
+            if a.state == .done, a.undo != nil {
+                Button("Undo") { controller.undoChatAction(chatID: chatID, messageID: messageID, actionID: a.id) }
+                    .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .semibold))
+                    .accessibilityLabel("Undo: \(a.summary)")
+            }
+        }
+        .frame(minHeight: compact ? AskPanelSizing.actionRow : nil)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func card(_ a: ChatActionRecord) -> some View {
+        let live = controller.isRecording && a.request.kind.needsClick && a.request.kind != .batch
+        return VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+            if !compact { Text("Waiting for you").font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(Palette.tertiary) }
+            HStack(alignment: .firstTextBaseline, spacing: Rhythm.itemGap) {
+                Text(a.summary).font(Rhythm.secondary).foregroundStyle(Palette.ink)
+                    .lineLimit(compact ? 1 : 4).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
+                Button("Not now") { controller.answerActionCard(chatID: chatID, messageID: messageID, actionID: a.id, doIt: false) }
+                    .buttonStyle(SettingsTextButtonStyle())
+                Button("Do it") { controller.answerActionCard(chatID: chatID, messageID: messageID, actionID: a.id, doIt: true) }
+                    .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .semibold))
+                    .disabled(live)
+                    .help(live ? "After the call" : a.summary)
+            }
+        }
+        .padding(.horizontal, compact ? 0 : Rhythm.listRowPadding).padding(.vertical, compact ? 0 : Rhythm.itemGap)
+        .frame(minHeight: compact ? AskPanelSizing.actionRow : nil)
+        .background { if !compact { RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.fill) } }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Waiting for you: \(a.summary)")
+    }
+
+    private func icon(_ s: ChatActionRecord.State) -> String {
+        switch s {
+        case .done: "checkmark"
+        case .undone: "arrow.uturn.backward"
+        case .declined, .proposed: "minus"
+        case .failed: "exclamationmark"
+        }
+    }
+
+    private func words(_ a: ChatActionRecord) -> String {
+        switch a.state {
+        case .done, .proposed: a.summary
+        case .undone: "Undone: \(a.summary)"
+        case .declined: "Not done: \(a.summary)"
+        case .failed: "Could not do it: \(a.summary)"
         }
     }
 }

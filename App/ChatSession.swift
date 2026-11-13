@@ -83,14 +83,14 @@ final class ChatSession: ObservableObject {
         task = Task {
             var failed = false
             do {
-                let answer: String
+                let answer: ChatReply
                 if let record {
                     answer = try await controller.liveChatAnswer(q, history: history, record: record, onStep: stepSink.add, onText: textSink.add)
                 } else {
                     answer = try await controller.chatAnswer(q, history: history, onStep: stepSink.add)
                 }
                 guard !stopped else { throw CancellationError() }
-                var message = ChatMessage(role: .assistant, text: answer, steps: steps)
+                var message = answer.message(steps: steps)
                 if record != nil { message.live = true }
                 current.messages.append(message)
                 current.updated = Date()

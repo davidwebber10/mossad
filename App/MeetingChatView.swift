@@ -25,7 +25,7 @@ struct MeetingChatView: View {
                 VStack(alignment: .leading, spacing: Space.l) {
                     if messages.isEmpty && !running { welcome }
                     ForEach(messages) { m in
-                        ChatExchangeRow(message: m, callID: record.id).id(m.id)
+                        ChatExchangeRow(message: m, callID: record.id, chatID: chat?.id).id(m.id)
                     }
                     if running { ChatAnswering(steps: steps, callID: record.id).id("running") }
                     if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
@@ -134,7 +134,7 @@ struct MeetingChatView: View {
         Task {
             do {
                 let answer = try await controller.chatAnswer(q, history: history, about: record.id, onStep: sink.add)
-                current.messages.append(ChatMessage(role: .assistant, text: answer, steps: steps))
+                current.messages.append(answer.message(steps: steps))
                 current.updated = Date()
                 save(current)
                 controller.summarizeChat(current.id)

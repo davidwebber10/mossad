@@ -516,7 +516,7 @@ final class PhoneStore {
                 onStep: @escaping @Sendable (String) -> Void) async throws -> String {
         guard let llm = languageModel else { throw NoSharedKey() }
         return try await ChatAgent(llm: llm, ownerName: owner).answer(question, history: history, records: meetings, paths: paths,
-                                                                      about: callID, onStep: onStep)
+                                                                      about: callID, onStep: onStep).text
     }
 
     /// Writes the chat's short summary for later chats to recall, then syncs it.
