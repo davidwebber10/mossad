@@ -7,8 +7,8 @@ enum ChatThread {
     /// The widest a question bubble gets.
     static let bubbleMax: CGFloat = 520
     /// The measure of an answer.
-    static let answerMax: CGFloat = 720
-    static let bodyFont = Font.system(size: 14)
+    static let answerMax = Rhythm.measure
+    static let bodyFont = Rhythm.reading
     /// The bubble: the accent text color in light mode, where the fill color is too light for white text.
     static let bubbleFill = Color(light: 0xA84D14, dark: 0xE8964E)
 
@@ -39,7 +39,7 @@ struct ChatQuestionBubble: View {
         HStack(spacing: 0) {
             Spacer(minLength: 80)
             Text(text)
-                .font(ChatThread.bodyFont).lineSpacing(4)
+                .font(ChatThread.bodyFont).lineSpacing(Rhythm.readingLineGap)
                 .foregroundStyle(Palette.onAccent)
                 .padding(.horizontal, 15).padding(.vertical, 10)
                 .background(ChatThread.bubbleFill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -62,22 +62,22 @@ struct ChatAnswer: View {
     @State private var showSteps = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             ChatMarkdown(text: text, bodyFont: ChatThread.bodyFont, timeChips: true, callID: callID)
                 .foregroundStyle(Palette.ink)
             if live {
                 Label("Asked during the call. Names were not final.", systemImage: "waveform")
-                    .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
             }
             if !steps.isEmpty {
                 Button { withAnimation(.snappy(duration: 0.2)) { showSteps.toggle() } } label: {
                     Label("\(steps.count) \(steps.count == 1 ? "lookup" : "lookups")", systemImage: showSteps ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                        .font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
                 }
                 .buttonStyle(.plain)
                 if showSteps {
                     ForEach(Array(steps.enumerated()), id: \.offset) { _, s in
-                        Text(s).font(.system(size: 11)).foregroundStyle(Palette.tertiary).padding(.leading, 16)
+                        Text(s).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary).padding(.leading, 16)
                     }
                 }
             }
@@ -97,12 +97,12 @@ struct ChatAnswering: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             ForEach(Array(steps.enumerated()), id: \.offset) { _, s in
-                Label(s, systemImage: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Label(s, systemImage: "magnifyingglass").font(Rhythm.secondary).foregroundStyle(Palette.secondary)
             }
             if partial.isEmpty {
-                Text(steps.isEmpty ? waiting : "Reading…").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Text(steps.isEmpty ? waiting : "Reading…").font(Rhythm.secondary).foregroundStyle(Palette.secondary)
                     .phaseAnimator(reduceMotion ? [1] : [0.45, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
             } else {
                 ChatMarkdown(text: partial, bodyFont: ChatThread.bodyFont, timeChips: true, callID: callID)
