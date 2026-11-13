@@ -34,7 +34,7 @@ struct CostsSection: View {
                 if c.total > 0 {
                     Finding("\(money(c.total)) this period, \(money(c.perCall)) a call")
                     Text("About \(money(c.total / days * 30)) a month at this rate")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.top, 2)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).padding(.top, 2)
                     table {
                         row("Per call", money(c.perCall))
                         row("Per hour of calls", money(c.perCallHour))
@@ -47,7 +47,7 @@ struct CostsSection: View {
                     .padding(.top, 10)
                     if c.estimatedShare > 0.01 {
                         Text("\(percentText(c.estimatedShare)) is estimated from call length and transcript size, for calls from before Mossad logged usage.")
-                            .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.top, 10)
                     }
@@ -59,26 +59,26 @@ struct CostsSection: View {
     }
 
     private func table<Rows: View>(@ViewBuilder _ rows: () -> Rows) -> some View {
-        VStack(alignment: .leading, spacing: 5) { rows() }
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) { rows() }
             .padding(.top, 10)
             .hairline(.top)
     }
 
     private func row(_ title: String, _ value: String, swatch: Color? = nil) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             if let swatch { RoundedRectangle(cornerRadius: 2, style: .continuous).fill(swatch).frame(width: 8, height: 8) }
             Text(title).foregroundStyle(Palette.secondary)
             Spacer(minLength: 12)
             Text(value).foregroundStyle(Palette.ink).monospacedDigit()
         }
-        .font(.system(size: 12.5))
+        .font(.system(size: Rhythm.bodySize))
         .accessibilityElement(children: .combine)
     }
 
     private var chart: some View {
         // Bottom to top: transcription services, then language models, as the canvas stacks AssemblyAI under Claude.
         let stacked = services.reversed()
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             Chart {
                 ForEach(report.days) { bar in
                     ForEach(stacked, id: \.1) { s in
@@ -96,7 +96,7 @@ struct CostsSection: View {
                     AxisValueLabel {
                         if let d = v.as(Double.self) {
                             Text(d.formatted(.currency(code: "USD").precision(.fractionLength(0))))
-                                .font(.system(size: 10.5)).foregroundStyle(Palette.tertiary)
+                                .font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiary)
                         }
                     }
                 }
@@ -106,7 +106,7 @@ struct CostsSection: View {
             .accessibilityLabel("API cost by day, \(money(report.cost.total)) in all")
             .accessibilityChartDescriptor(DateSeriesDescriptor(title: "API cost", unit: "dollars",
                                                                points: report.days.map { ($0.date, $0.cost.values.reduce(0, +)) }))
-            HStack(spacing: 14) {
+            HStack(spacing: Space.l) {
                 ForEach(services, id: \.1) { s in LegendKey(title: s.1, color: s.2) }
             }
         }

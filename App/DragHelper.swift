@@ -87,9 +87,9 @@ private struct DragHelperView: View {
                 .frame(width: 72, height: 72)
                 .shadow(color: Color(red: 0.16, green: 0.27, blue: 0.63).opacity(0.25), radius: 10, y: 8)
                 .help("Drag into the list")
-            Text("Drag Mossad into the list").font(.system(size: 13, weight: .semibold))
+            Text("Drag Mossad into the list").font(.system(size: Rhythm.bodySize, weight: .semibold))
             Text("Drop the icon into System Settings › Privacy & Security › \(pane), then turn it on.")
-                .font(.system(size: 12)).foregroundStyle(.secondary).multilineTextAlignment(.center).lineSpacing(3)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(.secondary).multilineTextAlignment(.center).lineSpacing(3)
             Image(systemName: "arrow.down").foregroundStyle(.tertiary)
         }
         .padding(16)

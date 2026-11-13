@@ -133,7 +133,7 @@ struct PhoneSegments<Value: Hashable>: View {
     }
 
     private var segments: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: Space.xs) {
             ForEach(options, id: \.0) { value, title in
                 let on = value == selection
                 Button {

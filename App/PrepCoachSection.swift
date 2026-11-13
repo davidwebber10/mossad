@@ -15,11 +15,11 @@ struct PrepCoachSection: View {
     var uncover: (String?) -> Void = { _ in }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             ForEach(input.people) { person in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     PersonName(person.name, person: .some(person.name))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                         .foregroundStyle(Palette.secondary)
                     if covered(person.personID) {
                         PersonaCoverRow { uncover(person.personID) }.padding(.top, 2)
@@ -36,12 +36,12 @@ struct PrepCoachSection: View {
                     // What the owner confirmed about this person in the findings deck.
                     ForEach(covered(person.personID) ? [] : person.learnings, id: \.self) { learning in
                         Label(learning, systemImage: "checkmark.circle").labelStyle(.titleAndIcon)
-                            .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
         }
-        .font(.system(size: 13))
+        .readingText()
         .textSelection(.enabled)
     }
 }

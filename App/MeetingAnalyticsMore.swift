@@ -8,7 +8,7 @@ private struct Subheading: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Text(text).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.secondary)
+        Text(text).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
     }
 }
 
@@ -18,12 +18,12 @@ private struct ValueRow: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             Text(title).foregroundStyle(Palette.secondary)
             Spacer(minLength: 12)
             Text(value).foregroundStyle(Palette.ink).monospacedDigit()
         }
-        .font(.system(size: 12.5))
+        .font(.system(size: Rhythm.bodySize))
         .accessibilityElement(children: .combine)
     }
 }
@@ -42,7 +42,7 @@ struct ParticipationSection: View {
     var body: some View {
         let p = participation
         let silent = p.didNotSpeak, unsure = p.unnamedVoices > 0 ? p.withoutVoice : []
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             Finding(MeetingFindings.participation(p))
             SplitBar(parts: [(fraction(p.spoke.count, p.invited.count), Palette.accentFill), (fraction(p.withoutVoice.count, p.invited.count), Palette.bar),
                              (fraction(p.notMatched.count, p.invited.count), Palette.fill)])
@@ -62,23 +62,23 @@ struct ParticipationSection: View {
     }
 
     private func speakers(_ title: String, _ ids: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             Subheading("\(title) · \(ids.count)")
             FlowLayout(spacing: 14) {
                 ForEach(ids, id: \.self) { id in
                     SpeakerCell(speaker: people.speaker(forKey: id), name: people.name(forKey: id), callID: callID)
                 }
             }
-            .font(.system(size: 12.5))
+            .font(.system(size: Rhythm.bodySize))
         }
     }
 
     private func list(_ title: String, _ attendees: [MeetingAnalytics.Participation.Attendee], note: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             Subheading("\(title) · \(attendees.count)")
             FlowLayout(spacing: 14) {
                 ForEach(attendees) { a in
-                    HStack(spacing: 8) {
+                    HStack(spacing: Space.s) {
                         if let speaker = a.speaker.flatMap(people.speaker(forKey:)) {
                             Circle().fill(speaker.color).frame(width: 8, height: 8)
                         } else {
@@ -88,9 +88,9 @@ struct ParticipationSection: View {
                     }
                 }
             }
-            .font(.system(size: 12.5))
+            .font(.system(size: Rhythm.bodySize))
             if let note {
-                Text(note).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+                Text(note).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -108,7 +108,7 @@ struct MeetingOutcomesSection: View {
 
     var body: some View {
         let o = outcomes
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             Finding(MeetingFindings.outcomes(o))
             if !o.owners.isEmpty { owners }
             if !o.tasks.isEmpty { tasks }
@@ -119,10 +119,10 @@ struct MeetingOutcomesSection: View {
         let peak = max(outcomes.owners.map(\.tasks.count).max() ?? 1, 1)
         return VStack(spacing: 0) {
             ForEach(outcomes.owners) { owner in
-                HStack(spacing: 12) {
+                HStack(spacing: Space.m) {
                     Group {
                         if let name = owner.name {
-                            HStack(spacing: 8) {
+                            HStack(spacing: Space.s) {
                                 if let speaker = owner.speaker.flatMap(people.speaker(forKey:)) {
                                     Circle().fill(speaker.color).frame(width: 8, height: 8)
                                 } else {
@@ -146,7 +146,7 @@ struct MeetingOutcomesSection: View {
                         .frame(width: 60, alignment: .trailing)
                     Spacer(minLength: 0)
                 }
-                .font(.system(size: 12.5)).monospacedDigit()
+                .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                 .padding(.vertical, 6)
                 .hairline()
                 .help(owner.tasks.joined(separator: "\n"))
@@ -158,15 +158,15 @@ struct MeetingOutcomesSection: View {
     /// The owner's own tasks from this call, which the Tasks page keeps.
     private var tasks: some View {
         let done = outcomes.tasks.filter(\.done).count, all = outcomes.tasks.count
-        return HStack(spacing: 8) {
+        return HStack(spacing: Space.s) {
             Text("\(all) of your tasks \(all == 1 ? "comes" : "come") from this call; \(done == all ? (all == 1 ? "it is done" : "all are done") : "\(done) done")")
-                .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
             Button("Open in Tasks") {
                 controller.taskToOpen = outcomes.tasks.first { !$0.done }?.id ?? outcomes.tasks.first?.id
                 controller.open(.commitments)
             }
             .buttonStyle(.plain)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: Rhythm.secondarySize, weight: .semibold))
             .foregroundStyle(Palette.accent)
         }
     }
@@ -180,17 +180,17 @@ struct MeetingCoachSection: View {
     let open: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             HStack(alignment: .firstTextBaseline) {
                 Finding(MeetingFindings.coach(coach) ?? "The coach reviewed this call")
                 Spacer(minLength: 12)
                 Button("Open the review", action: open)
                     .buttonStyle(.plain)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                     .foregroundStyle(Palette.accent)
             }
             if let value = coach.value {
-                Text(value.reason).font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                Text(value.reason).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let card = coach.scorecard {
@@ -204,9 +204,9 @@ struct MeetingCoachSection: View {
     }
 
     private func row(_ title: String, _ score: Int) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Space.m) {
             Text(title).foregroundStyle(Palette.secondary).frame(width: 150, alignment: .leading)
-            HStack(spacing: 3) {
+            HStack(spacing: Space.xs) {
                 ForEach(1...5, id: \.self) { i in
                     Capsule().fill(i <= score ? (title == "Overall" ? Palette.accentFill : Palette.bar) : Palette.fill).frame(width: 26, height: 6)
                 }
@@ -215,7 +215,7 @@ struct MeetingCoachSection: View {
             Text("\(score) of 5").foregroundStyle(Palette.ink)
             Spacer(minLength: 0)
         }
-        .font(.system(size: 12.5)).monospacedDigit()
+        .font(.system(size: Rhythm.bodySize)).monospacedDigit()
         .padding(.vertical, 6)
         .hairline()
         .accessibilityElement(children: .combine)
@@ -231,7 +231,7 @@ struct MeetingScreensSection: View {
 
     var body: some View {
         let finding = MeetingFindings.screens(screens)
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             Group {
                 if let subject = finding.subject {
                     FlowLayout(spacing: 15 * 0.26) {
@@ -248,12 +248,12 @@ struct MeetingScreensSection: View {
                     Text(finding.text)
                 }
             }
-            .font(.system(size: 15, weight: .medium))
+            .font(.system(size: Rhythm.headingSize, weight: .medium))
             .foregroundStyle(Palette.ink)
             .accessibilityAddTraits(.isHeader)
             VStack(spacing: 0) {
                 ForEach(screens.presenters) { p in
-                    HStack(spacing: 12) {
+                    HStack(spacing: Space.m) {
                         Group {
                             if let name = p.name { PersonName(name).fontWeight(.medium) } else { Text("No name shown").foregroundStyle(Palette.secondary) }
                         }
@@ -262,9 +262,9 @@ struct MeetingScreensSection: View {
                         Text("\(p.screens) \(p.screens == 1 ? "screen" : "screens")").frame(width: 84, alignment: .trailing)
                         Text("\(p.sessions) \(p.sessions == 1 ? "time" : "times")").foregroundStyle(Palette.secondary).frame(width: 64, alignment: .trailing)
                         Text(p.seconds >= 1 ? MeetingFindings.span(p.seconds) : "–").foregroundStyle(Palette.secondary).frame(width: 84, alignment: .trailing)
-                        PlayAt(at: p.first, long: long).font(.system(size: 11.5)).frame(width: 56, alignment: .trailing)
+                        PlayAt(at: p.first, long: long).font(.system(size: Rhythm.secondarySize)).frame(width: 56, alignment: .trailing)
                     }
-                    .font(.system(size: 12.5)).monospacedDigit()
+                    .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                     .padding(.vertical, 6)
                     .hairline()
                 }
@@ -290,8 +290,8 @@ struct MeetingCostSection: View {
         VStack(alignment: .leading, spacing: 0) {
             Finding("\(money(cost.total)) for this call")
             Text("Transcription \(money(cost.transcription)) · AI \(money(cost.ai))")
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary).padding(.top, 2)
-            VStack(alignment: .leading, spacing: 5) {
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).padding(.top, 2)
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 ForEach(cost.lines) { line in ValueRow(title: Self.purposes[line.purpose] ?? line.purpose.rawValue, value: money(line.dollars)) }
             }
             .padding(.top, 10)
@@ -300,7 +300,7 @@ struct MeetingCostSection: View {
             .frame(maxWidth: 320)
             if cost.estimated {
                 Text("Estimated from the call's length and transcript size: this call ended before Mossad began to log usage.")
-                    .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 10)
             }

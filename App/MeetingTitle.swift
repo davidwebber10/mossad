@@ -17,7 +17,7 @@ struct EditableMeetingTitle: View {
 
     var body: some View {
         if editing {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 TextField("Meeting title", text: $draft)
                     .textFieldStyle(.plain)
                     .font(.system(size: size, weight: .semibold))
@@ -33,7 +33,7 @@ struct EditableMeetingTitle: View {
                     .onChange(of: focused) { _, now in if !now { cancel() } }
                     .accessibilityLabel("Meeting title")
                 Text("Return to save · Esc to cancel")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize()
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize()
             }
             .onAppear { focused = true }
         } else {
@@ -84,11 +84,11 @@ struct EditableMeetingTitle: View {
 /// "Named by Mossad": the title came from what was said, not from an invite or the owner.
 struct NamedByMossadTag: View {
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: Space.xs) {
             IconImage(.sparkle, size: 10)
             Text("Named by Mossad")
         }
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: Rhythm.noteSize, weight: .medium))
         .foregroundStyle(Palette.secondary)
         .padding(.horizontal, Space.s)
         .frame(height: 18)

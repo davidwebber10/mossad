@@ -99,7 +99,7 @@ private struct PhoneGoalsScreen: View {
                                         close()
                                         store.openMeeting(point.id)
                                     } label: {
-                                        VStack(alignment: .leading, spacing: 3) {
+                                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                             HStack {
                                                 Text(goal.meets(point.value) ? "At the target" : "Over the target")
                                                     .font(.subheadline.weight(.semibold)).foregroundStyle(goal.meets(point.value) ? Palette.okText : Palette.secondary)
@@ -117,7 +117,7 @@ private struct PhoneGoalsScreen: View {
                     } else if let active = p.activeFocus, !active.results.isEmpty {
                         Section("Call by call") {
                             ForEach(active.results.reversed(), id: \.callID) { r in
-                                VStack(alignment: .leading, spacing: 3) {
+                                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                     HStack {
                                         Text(r.outcome.label).font(.subheadline.weight(.semibold)).foregroundStyle(r.outcome == .hit ? Palette.okText : Palette.secondary)
                                         Spacer()
@@ -230,7 +230,7 @@ private struct PhoneKnowledgeScreen: View {
                 let standings = p.standings()
                 Section("Patterns") {
                     ForEach(p.patterns, id: \.self) { pattern in
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                             HStack {
                                 Image(systemName: pattern.kind == .strength ? "plus.circle.fill" : "arrow.up.forward.circle.fill")
                                     .foregroundStyle(pattern.kind == .strength ? Palette.ok : Palette.accent)
@@ -264,7 +264,7 @@ private struct PhoneKnowledgeScreen: View {
                 Section {
                     ForEach(blocked) { a in
                         HStack {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                 Text(a.kind.isBehavior || a.kind == .goalOffer ? CoachSkill.subject(of: a.skill) : a.text)
                                 if a.kind == .didWell {
                                     Text("No more praise for this. Advice on it still comes.").font(.footnote).foregroundStyle(.secondary)

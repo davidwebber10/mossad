@@ -16,13 +16,13 @@ struct Card<Accessory: View, Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 accessory()
             }
-            content().font(.system(size: 13)).lineSpacing(3)
+            content().font(.system(size: Rhythm.bodySize)).lineSpacing(Rhythm.secondaryLineGap)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -62,7 +62,7 @@ struct SectionHeading: View {
     var detail: String?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.s) {
             Text(title).font(.title3.weight(.semibold))
             if let detail { Text(detail).font(.callout).foregroundStyle(.secondary) }
             Spacer()

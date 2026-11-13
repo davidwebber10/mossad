@@ -94,16 +94,16 @@ struct CoachGoalsPage: View {
     /// What the app measures for the goal: the target, what was usual before, when to look at it again, and the
     /// owner's ways out of it.
     private func measured(_ focus: CoachFocus, _ goal: CoachGoal) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             // An offer says the same numbers in its reason.
             if focus.status == .active {
                 Text("Target: \(goal.targetText) of the talk in your 1:1s. Before the goal: \(goal.typicalText), \(goal.usualText).")
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
             }
             Text("The app measures each 1:1 from the transcript. A group meeting does not count." + (focus.reviewDate.map { " Look at the goal again on \(day($0))." } ?? ""))
-                .font(.system(size: 12)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
             if focus.status == .active {
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     Button("End this goal") { controller.dismissFocus(focus.id) }.buttonStyle(.settings)
                         .help("The goal moves to Ended. You can take it up again there.")
                     if progress?.reached == true, progress?.goal == goal {
@@ -129,19 +129,19 @@ struct CoachGoalsPage: View {
     private func results(_ focus: CoachFocus) -> some View {
         if focus.results.isEmpty {
             Text(focus.goal == nil ? "No call had a chance for it yet. Each review says how the call went on it." : "No 1:1 since you took the goal. Each 1:1 shows here with its number.")
-                .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
         } else {
             // The dots and the count are in the goal above: here each call, the newest first.
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(focus.results.reversed(), id: \.callID) { r in
                     HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                        Text(day(r.date)).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary).frame(width: 52, alignment: .leading)
+                        Text(day(r.date)).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.secondary).frame(width: 52, alignment: .leading)
                         Text(focus.goal != nil && r.outcome == .hit ? "At the target" : focus.goal != nil && r.outcome == .missed ? "Over the target" : r.outcome.label)
-                            .font(.system(size: 12, weight: .medium)).foregroundStyle(r.outcome == .hit ? Palette.okText : Palette.secondary)
+                            .font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(r.outcome == .hit ? Palette.okText : Palette.secondary)
                             .frame(width: 104, alignment: .leading)
                         Button(r.evidence) { controller.openMeeting(r.callID) }
                             .buttonStyle(.plain)
-                            .font(.system(size: 12.5)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .help("Open this meeting")
                         if let at = r.at {
@@ -161,9 +161,9 @@ struct CoachGoalsPage: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(foci) { f in
                 HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(f.plan).font(.system(size: 13)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                        Text(detail(f)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                        Text(f.plan).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                        Text(detail(f)).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     if f.id == again {
@@ -184,19 +184,19 @@ struct CoachGoalsPage: View {
         if let progress, let goal = focus.goal, progress.goal == goal {
             if progress.since.isEmpty {
                 Text("No 1:1 since you took the goal. Each 1:1 shows here with its number.")
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(progress.since.reversed()) { p in
                         let at = focus.results.first { $0.callID == p.id }?.at
                         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                            Text(day(p.date)).font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary).frame(width: 52, alignment: .leading)
+                            Text(day(p.date)).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.secondary).frame(width: 52, alignment: .leading)
                             Text(goal.meets(p.value) ? "At the target" : "Over the target")
-                                .font(.system(size: 12, weight: .medium)).foregroundStyle(goal.meets(p.value) ? Palette.okText : Palette.secondary)
+                                .font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(goal.meets(p.value) ? Palette.okText : Palette.secondary)
                                 .frame(width: 104, alignment: .leading)
                             Button("You talked \(CommunicationTrends.short(.talkShare, p.value)) in \u{201C}\(p.title)\u{201D}") { controller.openMeeting(p.id) }
                                 .buttonStyle(.plain)
-                                .font(.system(size: 12.5)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .help("Open this meeting")
                             if let at {
@@ -255,10 +255,10 @@ struct WeeklyReviewPage: View {
 
     private func digest(_ d: WeeklyDigest) -> some View {
         VStack(alignment: .leading, spacing: Space.s) {
-            Text(d.subject).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.ink)
-            Text(d.intro).font(.system(size: 12.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-            ForEach(d.improved, id: \.self) { Label($0, systemImage: "arrow.up.right").font(.system(size: 12.5)).foregroundStyle(Palette.ink) }
-            ForEach(d.toWork, id: \.self) { Label($0, systemImage: "scope").font(.system(size: 12.5)).foregroundStyle(Palette.ink) }
+            Text(d.subject).font(.system(size: Rhythm.readingSize, weight: .semibold)).foregroundStyle(Palette.ink)
+            Text(d.intro).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+            ForEach(d.improved, id: \.self) { Label($0, systemImage: "arrow.up.right").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink) }
+            ForEach(d.toWork, id: \.self) { Label($0, systemImage: "scope").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -289,7 +289,7 @@ struct CoachKnowledgePage: View {
                                 .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
                         } label: {
                             Text("\(profile.questions.filter { $0.status != .open }.count) answered")
-                                .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                         }
                     }
                 }
@@ -314,7 +314,7 @@ private struct WhyRules: View {
                           footer: "From the line \u{201C}Why was \u{2026} not useful?\u{201D} or \u{201C}Why is \u{2026} not true?\u{201D} after a no. The coach keeps the newest \(CoachProfile.reasonLimit) and uses each for its subject only.") {
                 ForEach(rules) { g in
                     HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                        Text(g.text).font(.system(size: 12.5)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                        Text(g.text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Button("Remove") { controller.removeCoachGuidance(g.text) }
                             .buttonStyle(SettingsTextButtonStyle())
@@ -347,8 +347,8 @@ private struct PersonLearnings: View {
                             .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .semibold))
                             .frame(width: 150, alignment: .leading)
                             .help("Open \(row.name)\u{2019}s page")
-                        VStack(alignment: .leading, spacing: 3) {
-                            ForEach(row.facts) { Text($0.text).font(.system(size: 12.5)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true) }
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                            ForEach(row.facts) { Text($0.text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true) }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }

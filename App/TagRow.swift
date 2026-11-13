@@ -40,14 +40,14 @@ struct TagRow: View {
     }
 
     private var addPopover: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             TextField("Tag", text: $draft).textFieldStyle(.roundedBorder)
                 .onSubmit { add(draft) }
             ForEach(suggestions, id: \.self) { tag in
                 Button(tag) { add(tag) }.buttonStyle(.plain).foregroundStyle(Palette.ink)
             }
         }
-        .font(.system(size: 12))
+        .font(.system(size: Rhythm.secondarySize))
         .padding(12)
         .frame(width: 220)
     }

@@ -28,6 +28,8 @@ struct GeneralSettings: View {
                     .onChange(of: launchAtLogin) { _, on in
                         guard !Rehearsal.isOn else { return }
                         do {
+                            // A preview never changes the login item.
+                            guard !AppIdentity.current.isPreview else { return }
                             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
                         } catch {
                             Log.error("Launch at login change failed: \(error)")
@@ -62,8 +64,8 @@ struct GeneralSettings: View {
                         PermissionRow(item: item) { permissions.fix(item) }.hairline(.bottom)
                     }
                     Text("\(Text("Recording consent.").fontWeight(.semibold).foregroundStyle(Palette.ink)) Mossad does not announce itself on calls. Tell the people you meet with that the call is recorded. Some places require the consent of every person on the call. This is not legal advice.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                        .lineSpacing(3)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
+                        .lineSpacing(Rhythm.secondaryLineGap)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, Space.s)
                 }
@@ -89,7 +91,7 @@ struct GeneralSettings: View {
 
     private var power: some View {
         HStack(spacing: Space.m) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 HStack(spacing: Space.s) {
                     Group {
                         if controller.isOn { Circle().fill(Palette.inPerson) } else { Circle().strokeBorder(Palette.ring, lineWidth: 1.5) }
@@ -97,9 +99,9 @@ struct GeneralSettings: View {
                     .frame(width: 8, height: 8)
                     .accessibilityHidden(true)
                     Text(controller.isOn ? "Mossad is on" : "Mossad is off")
-                        .font(.system(size: 17, weight: .semibold)).tracking(-0.17).foregroundStyle(Palette.ink)
+                        .font(.system(size: Rhythm.ledeSize, weight: .semibold)).tracking(-0.17).foregroundStyle(Palette.ink)
                 }
-                Text(powerDetail).font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                Text(powerDetail).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: Space.m)

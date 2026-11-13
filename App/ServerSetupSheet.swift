@@ -46,12 +46,12 @@ struct ServerSetupSheet: View {
                     SetupStep(number: 1, title: "Deploy the server", state: deployDone ? .done : .active,
                               summary: "Deployed in your Cloudflare account.") {
                         Text("The server is a small Cloudflare Worker that runs in your own Cloudflare account. One person’s use is free.")
-                            .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: Space.s) {
                             Button("Open the setup guide") { NSWorkspace.shared.open(Self.guide) }.buttonStyle(.sheetSecondary)
                             Button("Copy the first commands") { copy(Self.commands) }.buttonStyle(.sheetSecondary)
                         }
-                        Text("Already deployed? Go on to step 2.").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                        Text("Already deployed? Go on to step 2.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                     }
                     SetupStep(number: 2, title: "Address", state: foundAddress != nil ? .done : .active,
                               summary: foundAddress.map { "\($0.host ?? "") · answers" }, monospacedSummary: true) {
@@ -71,9 +71,9 @@ struct ServerSetupSheet: View {
                             .onChange(of: makeNew) { _, _ in secretCheck = .idle; hello = nil }
                         if makeNew {
                             Text("Put this secret on your server. In the server folder, run the command, paste the secret when it asks, then deploy again.")
-                                .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                             Text(Self.secretCommand)
-                                .font(.system(size: 11.5, design: .monospaced)).textSelection(.enabled)
+                                .font(.system(size: Rhythm.secondarySize, design: .monospaced)).textSelection(.enabled)
                                 .padding(.horizontal, 10).padding(.vertical, 7)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -95,7 +95,7 @@ struct ServerSetupSheet: View {
                                 Button("Check", action: checkSecret).buttonStyle(.sheetPrimary).disabled(secret.isEmpty || secretCheck == .checking)
                             }
                             Text("Mossad keeps it in the Keychain. Paste the same secret into the server.")
-                                .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         }
                         CheckLabel(check: secretCheck, ok: "Your server accepts this secret.")
                     }
@@ -103,13 +103,13 @@ struct ServerSetupSheet: View {
                               summary: "Your meetings are on your server.", last: true,
                               todoDetail: "Sends your \(controller.meetings.count) meetings to the server. Audio stays on this Mac.") {
                         Text("Mossad sends your meetings’ notes and transcripts to your server, so ChatGPT can read them. Audio stays on this Mac.")
-                            .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                         if AppController.hasICloud {
                             Toggle(isOn: $syncThere) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Sync my iPhone through the server, not iCloud").font(.system(size: 13))
+                                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                                    Text("Sync my iPhone through the server, not iCloud").font(.system(size: Rhythm.bodySize))
                                     Text("Then connect the iPhone with the code in Settings. Leave this off to keep iCloud.")
-                                        .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                                 }
                             }
                             .toggleStyle(SheetSwitchStyle())
@@ -123,7 +123,7 @@ struct ServerSetupSheet: View {
                             HStack(spacing: Space.s) {
                                 ProgressView().controlSize(.small)
                                 Text(controller.syncActivity.progress.map { "Sending your meetings… \($0.done) of \($0.total)" } ?? "Sending your meetings…")
-                                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).monospacedDigit()
+                                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).monospacedDigit()
                             }
                         }
                     }
@@ -225,20 +225,20 @@ private struct SetupStep<Content: View>: View {
         HStack(alignment: .top, spacing: Space.m) {
             mark
             VStack(alignment: .leading, spacing: 0) {
-                Text(title).font(.system(size: 13, weight: .semibold))
+                Text(title).font(.system(size: Rhythm.bodySize, weight: .semibold))
                     .foregroundStyle(state == .todo ? Palette.tertiary : Palette.ink)
                     .frame(minHeight: 22)
                 switch state {
                 case .done:
                     if let summary {
                         Text(summary)
-                            .font(monospacedSummary ? .system(size: 12, design: .monospaced) : .system(size: 12))
+                            .font(monospacedSummary ? .system(size: Rhythm.secondarySize, design: .monospaced) : .system(size: Rhythm.secondarySize))
                             .foregroundStyle(Palette.secondary).padding(.top, 2)
                     }
                 case .active:
-                    VStack(alignment: .leading, spacing: 10) { content }.padding(.top, Space.s)
+                    VStack(alignment: .leading, spacing: Rhythm.rowGap) { content }.padding(.top, Space.s)
                 case .todo:
-                    if let todoDetail { Text(todoDetail).font(.system(size: 12)).foregroundStyle(Palette.tertiary).padding(.top, 2) }
+                    if let todoDetail { Text(todoDetail).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).padding(.top, 2) }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -258,10 +258,10 @@ private struct SetupStep<Content: View>: View {
                 IconImage(.check, size: 12).foregroundStyle(.white)
             case .active:
                 Circle().fill(Palette.accentFill)
-                Text("\(number)").font(.system(size: 11.5, weight: .bold)).foregroundStyle(Palette.onAccent)
+                Text("\(number)").font(.system(size: Rhythm.secondarySize, weight: .bold)).foregroundStyle(Palette.onAccent)
             case .todo:
                 Circle().strokeBorder(Palette.ring, lineWidth: 1.5)
-                Text("\(number)").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.tertiary)
+                Text("\(number)").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.tertiary)
             }
         }
         .frame(width: 22, height: 22)
@@ -277,15 +277,15 @@ private struct CheckLabel: View {
         switch check {
         case .idle: EmptyView()
         case .checking:
-            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Checking…").foregroundStyle(Palette.secondary) }.font(.system(size: 12))
+            HStack(spacing: Space.s) { ProgressView().controlSize(.small); Text("Checking…").foregroundStyle(Palette.secondary) }.font(.system(size: Rhythm.secondarySize))
         case .ok:
             Label { Text(ok).foregroundStyle(Palette.okText) } icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.ok) }
-                .font(.system(size: 12))
+                .font(.system(size: Rhythm.secondarySize))
         case .problem(let error):
             InlineError(error: error)
         case .failed(let message):
             Label { Text(message).foregroundStyle(Palette.ink) } icon: { WarningMark(size: 13).foregroundStyle(Palette.accent) }
-                .font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: Rhythm.secondarySize)).fixedSize(horizontal: false, vertical: true)
         }
     }
 }

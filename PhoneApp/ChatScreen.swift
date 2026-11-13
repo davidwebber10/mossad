@@ -61,7 +61,7 @@ struct ChatScreen: View {
     private var conversation: some View {
         ScrollViewReader { scroller in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
+                LazyVStack(alignment: .leading, spacing: Rhythm.groupGap) {
                     ForEach(chat.messages) { MessageBubble(message: $0).id($0.id) }
                     if running { thinking.id("thinking") }
                     if let error {
@@ -79,7 +79,7 @@ struct ChatScreen: View {
     }
 
     private var thinking: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             PhoneProcessingMark()
             Text(steps.last ?? "Thinking…").textRole(.secondary).foregroundStyle(Palette.secondary).lineLimit(1)
                 .contentTransition(.opacity)
@@ -180,7 +180,7 @@ private struct ChatList: View {
                         selected = chat.id
                         onPick()
                     } label: {
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                             Text(chat.title).font(.body).foregroundStyle(.primary).lineLimit(1)
                             if let summary = chat.summary {
                                 Text(summary).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
@@ -277,7 +277,7 @@ struct MessageBubble: View {
                 .padding(.leading, 44)
                 .textSelection(.enabled)
         case .assistant:
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 if !message.steps.isEmpty {
                     Button { withAnimation { showSteps.toggle() } } label: {
                         Label("\(message.steps.count) \(message.steps.count == 1 ? "lookup" : "lookups")",

@@ -54,9 +54,9 @@ struct AskPanelPoints: View {
         } label: {
             HStack(spacing: 7) {
                 IconImage(isOpen ? .chevronDown : .chevronRight, size: 9).foregroundStyle(Palette.tertiary).frame(width: 12)
-                Text("Your points").font(.system(size: 12.5, weight: .medium)).foregroundStyle(Palette.ink)
+                Text("Your points").font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
                 Text(open == 0 ? "all raised" : "\(open) open")
-                    .font(.system(size: 12.5, weight: late ? .semibold : .regular)).monospacedDigit()
+                    .font(.system(size: Rhythm.bodySize, weight: late ? .semibold : .regular)).monospacedDigit()
                     .foregroundStyle(late ? Palette.accent : Palette.secondary)
                 Spacer(minLength: 0)
             }

@@ -40,7 +40,7 @@ struct OrgChartView: View {
                        action: ("Import org chart…", importChart))
                 .overlay(alignment: .bottom) {
                     Button("Download template", action: downloadTemplate).buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.accent)
+                        .font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(Palette.accent)
                         .padding(.bottom, 20)
                 }
                 .frame(maxHeight: .infinity)
@@ -54,19 +54,19 @@ struct OrgChartView: View {
     // MARK: Header
 
     private func fileHeader(_ chart: OrgChart) -> some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Space.l) {
             IconImage(.note, size: 16).foregroundStyle(Palette.secondary)
                 .frame(width: 32, height: 32)
                 .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 (Text(org.fileName).fontWeight(.semibold).foregroundStyle(Palette.ink)
                  + Text(" · \(chart.people.count.formatted()) people, \(chart.levels) \(chart.levels == 1 ? "level" : "levels")\(importedText)")
                     .foregroundStyle(Palette.secondary))
-                    .font(.system(size: 13)).lineLimit(1)
-                (Text("Columns: ") + Text("Last Name, First Name, Position Title, Supervisor").font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: Rhythm.bodySize)).lineLimit(1)
+                (Text("Columns: ") + Text("Last Name, First Name, Position Title, Supervisor").font(.system(size: Rhythm.noteSize, design: .monospaced))
                  + Text(" · people are matched to meetings by name"))
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
             }
             Spacer(minLength: Space.m)
             Button("Review matches…", action: importChart).buttonStyle(.mossadFill)
@@ -138,7 +138,7 @@ struct OrgChartView: View {
         let center = focus ?? home(chart, place)
         return ScrollView([.vertical, .horizontal]) {
             // The outside column starts level with the first row of columns, as the canvas places it.
-            HStack(alignment: .orgRow, spacing: 20) {
+            HStack(alignment: .orgRow, spacing: Space.xl) {
                 if let center {
                     tree(chart.team(around: center), chart: chart, place: place, home: home(chart, place))
                 }
@@ -222,7 +222,7 @@ struct OrgChartView: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.accent)
+                        .font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(Palette.accent)
                         .padding(.vertical, 2)
                         .background(Palette.window)
                     }
@@ -323,20 +323,20 @@ private struct OrgCard: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 PersonMark(name: name, size: 32, isOwner: isOwner, hollow: hollow)
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(name).font(.system(size: 13, weight: .semibold))
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    HStack(spacing: Space.s) {
+                        Text(name).font(.system(size: Rhythm.bodySize, weight: .semibold))
                             .foregroundStyle(hollow ? Palette.secondary : Palette.ink)
                         if isOwner {
-                            Text("You").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Palette.secondary)
+                            Text("You").font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.secondary)
                                 .padding(.horizontal, 6).frame(height: 16)
                                 .background(Palette.fill, in: Capsule())
                         }
                     }
                     (Text(title.isEmpty ? "" : "\(title) ") + Text("· \(meta)").foregroundStyle(metaColor))
-                        .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 }
                 .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 0)

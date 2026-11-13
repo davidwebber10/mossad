@@ -28,7 +28,7 @@ struct CoachSection: View {
             (cards.first.map { [$0] } ?? []).contains { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text }
                 || answered.contains { $0.kind.isBehavior && $0.skill == l.skill && $0.text == l.text }
         } ?? false
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             if !cards.isEmpty || answeredHere {
                 VStack(alignment: .leading, spacing: Space.m) {
                     PhoneLabel(cards.isEmpty ? "Findings" : "Findings \u{00B7} \(cards.count)")
@@ -91,13 +91,13 @@ private struct ScorecardCard: View {
 
     var body: some View {
         Card {
-            HStack(alignment: .center, spacing: 14) {
+            HStack(alignment: .center, spacing: Space.l) {
                 Text("\(card.score)")
                     .font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
                     .foregroundStyle(scoreColor(card.score))
                     .frame(width: 64, height: 64)
                     .background(scoreColor(card.score).opacity(0.15), in: .circle)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text("out of 5").font(.caption).foregroundStyle(.secondary)
                     Text(card.reason).font(.subheadline)
                 }
@@ -182,7 +182,7 @@ private struct PointView: View {
     @State private var error: FriendlyError?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             HStack(alignment: .firstTextBaseline) {
                 Text(point.title).font(.subheadline.weight(.semibold))
                 Spacer()
@@ -194,7 +194,7 @@ private struct PointView: View {
             Text(point.observation).font(.subheadline)
             Text("“\(point.quote)”").font(.subheadline).italic().foregroundStyle(.secondary)
             if let next = point.tryInstead {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text("TRY").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
                     Text(next).font(.subheadline)
                 }
@@ -209,7 +209,7 @@ private struct PointView: View {
     /// 👍 / 👎, and after 👎 a line to say what it got wrong. The coach learns from both.
     @ViewBuilder
     private var rating: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Space.l) {
             thumb(agree: true)
             thumb(agree: false)
             if sending { ProgressView() }
@@ -280,10 +280,10 @@ private struct CoachThread: View {
             }
             ForEach(thread) { MessageBubble(message: $0) }
             if sending {
-                HStack(spacing: 8) { ProgressView(); Text("The coach is thinking…").font(.subheadline).foregroundStyle(.secondary) }
+                HStack(spacing: Space.s) { ProgressView(); Text("The coach is thinking…").font(.subheadline).foregroundStyle(.secondary) }
             }
             if let error { ErrorCard(error: error, retry: error.canRetry && !sending ? { send() } : nil) }
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .bottom, spacing: Space.s) {
                 TextField("Reply to the coach", text: $message, axis: .vertical)
                     .lineLimit(1...5)
                     .padding(.horizontal, 12).padding(.vertical, 8)

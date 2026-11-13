@@ -13,10 +13,10 @@ struct MeetingFilterButton: View {
     var body: some View {
         let count = filters.filter.active.count
         Button { filters.toggleOpen() } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "line.3.horizontal.decrease").font(.system(size: 13, weight: .medium))
+            HStack(spacing: Space.xs) {
+                Image(systemName: "line.3.horizontal.decrease").font(.system(size: Rhythm.bodySize, weight: .medium))
                 if count > 0 {
-                    Text("\(count)").font(.system(size: 11.5, weight: .semibold)).monospacedDigit()
+                    Text("\(count)").font(.system(size: Rhythm.secondarySize, weight: .semibold)).monospacedDigit()
                         .contentTransition(.numericText())
                 }
             }
@@ -54,7 +54,7 @@ struct MeetingFilterChips: View {
                 ForEach(Array(choices.enumerated()), id: \.element) { i, choice in
                     // With "All", "and" between the people says what the chips alone do not.
                     if i > 0, filters.filter.peopleMode == .all, case .person = choice {
-                        Text("and").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary).frame(height: 22)
+                        Text("and").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).frame(height: 22)
                     }
                     ActiveChip(text: filters.label(choice, calendar: calendar)) {
                         withAnimation(.snappy(duration: 0.2)) { filters.filter.remove(choice) }
@@ -67,7 +67,7 @@ struct MeetingFilterChips: View {
                         }
                     }
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: Space.s) {
                     // The answer for these chips; a moment of the older number would be a wrong one.
                     if filters.answered == filters.filter {
                         Text("\(filters.facets.matches.count) of \(filters.facets.total)")
@@ -79,7 +79,7 @@ struct MeetingFilterChips: View {
                         .fontWeight(.medium)
                         .foregroundStyle(Palette.accent)
                 }
-                .font(.system(size: 11.5))
+                .font(.system(size: Rhythm.secondarySize))
                 .frame(height: 22)
                 .padding(.leading, 2)
             }
@@ -98,13 +98,13 @@ struct ActiveChip<Mark: View>: View {
 
     var body: some View {
         Button(action: remove) {
-            HStack(spacing: 5) {
+            HStack(spacing: Space.xs) {
                 mark
                 Text(text).lineLimit(1).truncationMode(.tail)
-                Image(systemName: "xmark").font(.system(size: 7.5, weight: .bold))
+                Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
                     .foregroundStyle(hovering ? Palette.ink : Palette.tertiaryMark)
             }
-            .font(.system(size: 11.5, weight: .medium))
+            .font(.system(size: Rhythm.secondarySize, weight: .medium))
             .foregroundStyle(Palette.ink)
             .padding(.leading, 8).padding(.trailing, 7)
             .frame(height: 22)

@@ -28,6 +28,8 @@ public struct SharedAIKey: Codable, Equatable, Sendable {
     }
 
     public static func load() -> SharedAIKey? {
+        // A preview never reads the owner's iCloud Keychain.
+        guard !AppIdentity.current.isPreview else { return nil }
         var q = query
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -37,6 +39,7 @@ public struct SharedAIKey: Codable, Equatable, Sendable {
     }
 
     public func save() throws {
+        guard !AppIdentity.current.isPreview else { return }
         let data = try JSONEncoder().encode(self)
         let status = SecItemUpdate(Self.query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecItemNotFound {
@@ -51,6 +54,7 @@ public struct SharedAIKey: Codable, Equatable, Sendable {
     }
 
     public static func delete() {
+        guard !AppIdentity.current.isPreview else { return }
         SecItemDelete(query as CFDictionary)
     }
 }

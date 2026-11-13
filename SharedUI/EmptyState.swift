@@ -20,7 +20,7 @@ struct EmptyState: View {
     #endif
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: Rhythm.itemGap) {
             Image(systemName: symbol)
                 .font(.system(size: symbolSize, weight: .light))
                 .foregroundStyle(Palette.tertiaryMark)

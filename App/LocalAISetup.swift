@@ -12,17 +12,17 @@ struct LocalServerSetup: View {
     enum CheckState: Equatable { case idle, checking, found(Int), failed(FriendlyError) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             // In a narrow column the address and its buttons go under the name, and the address takes the width.
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     name
                     Spacer(minLength: Space.m)
                     address(width: 200)
                 }
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     name
-                    HStack(spacing: 6) { address(width: nil) }
+                    HStack(spacing: Space.s) { address(width: nil) }
                 }
             }
             switch state {
@@ -34,10 +34,10 @@ struct LocalServerSetup: View {
                 EmptyView()
             }
             if !LocalServer.isOnThisMac(controller.localServerBase) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                     WarningMark(size: 13).foregroundStyle(Palette.accent)
                     Text("This address is not on this Mac. Your meeting text goes to that computer.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -47,7 +47,7 @@ struct LocalServerSetup: View {
     }
 
     private var name: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
             Text("Server").font(.system(size: style.titleSize, weight: .medium)).foregroundStyle(Palette.ink)
             RowLink(text: "Get Ollama", destination: LocalServer.getOllama, spoken: "Get Ollama on its website")
         }

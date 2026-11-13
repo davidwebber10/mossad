@@ -98,7 +98,7 @@ struct LanesPlayer: View {
         ZStack(alignment: .bottom) {
             LinearGradient(colors: [Palette.bandOpaque.opacity(0), Palette.bandOpaque], startPoint: .top, endPoint: .bottom)
             Text("+\(n) more \(n == 1 ? "voice" : "voices") · scroll")
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                 .foregroundStyle(Palette.secondary)
                 .padding(.horizontal, 9).padding(.vertical, 2)
                 .background(Palette.fill, in: Capsule())
@@ -120,7 +120,7 @@ struct LanesPlayer: View {
                     .frame(width: 1.5, height: max(g.size.height - 22 + 4, 0))
                     .offset(x: x - 0.75, y: -4)
                 Text(longClock(time))
-                    .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                    .font(.system(size: Rhythm.noteSize, weight: .semibold)).monospacedDigit()
                     .foregroundStyle(Palette.window)
                     .padding(.horizontal, 6).padding(.vertical, 1)
                     .background(Palette.ink, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
@@ -196,7 +196,7 @@ private struct LaneRow: View, @MainActor Equatable {
                 }
                 Text(minutes).foregroundStyle(Palette.tertiary).frame(width: 30, alignment: .trailing)
             }
-            .font(.system(size: 12)).monospacedDigit()
+            .font(.system(size: Rhythm.secondarySize)).monospacedDigit()
             .frame(width: Detail.labelColumn, alignment: .trailing)
             .contentShape(Rectangle())
             .onHover { hovered = $0 }
@@ -294,7 +294,7 @@ private struct PlayerRuler: View {
                     Hairline().frame(width: w).offset(y: 3)
                     ForEach(Array(ticks.enumerated()), id: \.offset) { i, t in
                         Text(t.label)
-                            .font(.system(size: 10.5)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                            .font(.system(size: Rhythm.noteSize)).monospacedDigit().foregroundStyle(Palette.tertiary)
                             .frame(width: 60, alignment: i == 0 ? .leading : i == ticks.count - 1 ? .trailing : .center)
                             .position(x: i == 0 ? 30 : i == ticks.count - 1 ? w - 30 : w * t.fraction, y: 18)
                     }
@@ -368,8 +368,25 @@ private struct PlayerTransport: View {
     @State private var adding = false
 
     var body: some View {
+        // A narrow window moves the notice under the controls rather than cut it to a letter.
+        ViewThatFits(in: .horizontal) {
+            row(note: true)
+            if let noAudio {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    row(note: false)
+                    notice(noAudio).padding(.leading, LanesPlayer.gutter)
+                }
+            }
+        }
+    }
+
+    private func notice(_ text: String) -> some View {
+        Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
+    }
+
+    private func row(note: Bool) -> some View {
         let enabled = player.isAvailable
-        HStack(spacing: Detail.transportGap) {
+        return HStack(spacing: Detail.transportGap) {
             HStack(spacing: 4) {
                 skip(-15)
                 Button { player.toggle() } label: {
@@ -387,7 +404,7 @@ private struct PlayerTransport: View {
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.45)
             bookmarkButton.padding(.leading, 6)
-            if let noAudio { Text(noAudio).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1) }
+            if note, let noAudio { notice(noAudio).fixedSize() }
             Spacer(minLength: 0)
             SpeedControl(rate: $player.rate).disabled(!enabled).opacity(enabled ? 1 : 0.45).fixedSize()
         }
@@ -417,7 +434,7 @@ private struct PlayerTransport: View {
                 }
                 BookmarkFlag().fill(Palette.accentFill).frame(width: 9, height: 11)
             }
-            .font(.system(size: 12.5, weight: .semibold))
+            .font(.system(size: Rhythm.bodySize, weight: .semibold))
             .foregroundStyle(open ? Palette.accent : Palette.ink)
             .padding(.leading, 10).padding(.trailing, 12)
             .frame(height: Detail.bookmarkHeight)
@@ -456,7 +473,7 @@ private struct SkipGlyph: View {
         ZStack {
             SkipArrow(forward: forward)
                 .stroke(style: StrokeStyle(lineWidth: 1.8 * 18 / 24, lineCap: .round, lineJoin: .round))
-            Text("15").font(.system(size: 7.5 * 18 / 24, weight: .bold)).offset(y: 0.9)
+            Text("15").font(.system(size: 8 * 18 / 24, weight: .bold)).offset(y: 0.9)
         }
         .frame(width: 18, height: 18)
     }
@@ -496,7 +513,7 @@ private struct SpeedControl: View {
                 let on = s == rate
                 Button { rate = s } label: {
                     Text(s == 1 ? "1×" : "\(s.formatted())×")
-                        .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                        .font(.system(size: Rhythm.noteSize, weight: .semibold)).monospacedDigit()
                         .fixedSize()
                         .foregroundStyle(on ? Palette.ink : Palette.secondary)
                         .padding(.horizontal, 9).padding(.vertical, 3)
@@ -531,13 +548,13 @@ struct BookmarkNotePopover: View {
                 BookmarkFlag().fill(Palette.accentFill).frame(width: 9, height: 11)
                 Text("Bookmarked at \(longClock(at))").monospacedDigit()
             }
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: Rhythm.bodySize, weight: .semibold))
             VStack(alignment: .leading, spacing: 5) {
                 Text("Note \(Text("(optional)").foregroundStyle(Palette.tertiary))")
-                    .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 TextField("What happened here?", text: $note)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(.system(size: Rhythm.bodySize))
                     .padding(.horizontal, 10)
                     .frame(height: 30)
                     .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -547,11 +564,11 @@ struct BookmarkNotePopover: View {
             .padding(.top, 10)
             HStack(spacing: Space.s) {
                 Text(note.isEmpty ? "Press Return to skip the note" : "Press Return to save the note")
-                    .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                 Spacer(minLength: 0)
                 Button(action: finish) {
                     Text("Done")
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.system(size: Rhythm.bodySize, weight: .semibold))
                         .foregroundStyle(Palette.onAccent)
                         .padding(.horizontal, 11)
                         .frame(height: 26)

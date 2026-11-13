@@ -47,7 +47,7 @@ private struct ThisMacGroup: View {
     var body: some View {
         SettingsGroup(label: "On this Mac") {
             SettingsRow(title: "Notes, transcripts, and summaries", detail: "Every meeting is always on this Mac. Only audio goes, by the rules below.") {
-                Text("Always kept").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Text("Always kept").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
             }
             SettingsRow(title: "Raw tracks",
                         detail: "Your microphone and the call as two separate tracks. “Transcribe again” needs them. They go after this time, once the recording exists.") {
@@ -369,9 +369,9 @@ private struct BackupGroup: View {
     private var moveResult: some View {
         let date = controller.backupMoveDate > 0 ? Date(timeIntervalSince1970: controller.backupMoveDate).formatted(.dateTime.month(.abbreviated).day().hour().minute()) : nil
         return HStack(alignment: .firstTextBaseline, spacing: Space.s) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(moving ? "State of the move" : "Last move")\(date.map { " · \($0)" } ?? "")").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
-                Text(result).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                Text("\(moving ? "State of the move" : "Last move")\(date.map { " · \($0)" } ?? "")").font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
+                Text(result).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: Space.m)
@@ -394,7 +394,7 @@ private struct BackupGroup: View {
     }
 
     private func note(_ text: String) -> some View {
-        Text(text).font(.system(size: 12)).foregroundStyle(Palette.accent)
+        Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.accent)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 9)
     }
@@ -442,13 +442,13 @@ private struct BucketFields: View {
         if !r2 { field("Region", text: $controller.cloudRegion, prompt: "us-east-1") }
         field("Access key ID", text: $controller.cloudAccessKeyID, prompt: "")
         HStack(spacing: Space.m) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Secret access key").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                Text("Secret access key").font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
                 SettingsHelpLink(title: r2 ? "Make an R2 API token" : "Make an access key", url: keysPage)
             }
             Spacer(minLength: Space.m)
             if controller.hasKey(.cloudSecret), !replacing {
-                Text("Saved in the Keychain").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Text("Saved in the Keychain").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 Button("Change") { replacing = true; secret = "" }.buttonStyle(.settings)
                     .accessibilityLabel("Change the secret access key")
             } else {

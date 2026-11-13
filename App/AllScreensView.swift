@@ -51,13 +51,13 @@ struct AllScreensView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if groups.isEmpty {
-                        Text("No screen has that text.").font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                        Text("No screen has that text.").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     }
                     ForEach(Array(groups.enumerated()), id: \.element.id) { i, group in
                         MomentGroupHeading(title: group.title, start: group.start, count: group.screens.count, noun: "screen") {
                             controller.openMeeting(group.callID)
                         }
-                        .padding(.top, i == 0 ? 0 : 32)
+                        .padding(.top, i == 0 ? 0 : Rhythm.sectionGap)
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 260), spacing: Space.m)], alignment: .leading, spacing: Space.m) {
                             ForEach(group.screens) { screen in
                                 AllScreensTile(url: frameURL(group.callID, screen),
@@ -69,9 +69,7 @@ struct AllScreensView: View {
                         }
                     }
                 }
-                .frame(maxWidth: Detail.listMax, alignment: .leading)
-                .padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop).padding(.bottom, Space.xxl)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .pageColumn(Rhythm.gridMax)
             }
         }
     }
@@ -113,13 +111,13 @@ private struct AllScreensTile: View {
     private var line: AttributedString {
         guard matches else { return AttributedString(ScreenText.excerpt(text)) }
         let flat = text.split(whereSeparator: \.isNewline).joined(separator: " ")
-        return SearchText.marking(flat, query: query).excerpt(length: 48).boldMatches(size: 11.5)
+        return SearchText.marking(flat, query: query).excerpt(length: 48).boldMatches(size: Rhythm.secondarySize)
     }
     @State private var hovered = false
 
     var body: some View {
         Button(action: open) {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 FrameThumbnail(url: url)
                     .aspectRatio(16 / 10, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
@@ -128,8 +126,8 @@ private struct AllScreensTile: View {
                             .strokeBorder(matches ? Palette.accentFill : Palette.hairline, lineWidth: matches ? 1.5 : 1)
                     }
                     .opacity(hovered ? 0.88 : 1)
-                Text(time).font(.system(size: 11.5)).monospacedDigit().foregroundStyle(Palette.tertiary)
-                Text(line).font(.system(size: 11.5)).foregroundStyle(Palette.secondary).lineLimit(matches ? 2 : 1)
+                Text(time).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                Text(line).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(matches ? 2 : 1)
             }
             .contentShape(Rectangle())
         }

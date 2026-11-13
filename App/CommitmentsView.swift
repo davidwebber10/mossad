@@ -97,12 +97,10 @@ struct CommitmentsView: View {
                     }
                     if (mode == .open ? openGroups.isEmpty : doneItems.isEmpty) && !query.isEmpty {
                         Text("No tasks match “\(query)”.")
-                            .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     }
                 }
-                .frame(maxWidth: Detail.listMax, alignment: .leading)
-                .padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop).padding(.bottom, Space.xxl)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .pageColumn(Rhythm.tableMax)
             }
             .task(id: opened) {
                 guard let id = opened else { return }
@@ -165,8 +163,8 @@ struct CommitmentsView: View {
 
     private func row(_ c: Commitment, showPerson: Bool) -> some View {
         let match = matches?[c.id]
-        return CommitmentRow(commitment: c, showPerson: showPerson, marked: match?.title.boldMatches(size: 13),
-                             matchLine: match?.line(size: 12), open: { activate(c) }, toggleDone: { controller.toggleDone(c.id) }) {
+        return CommitmentRow(commitment: c, showPerson: showPerson, marked: match?.title.boldMatches(size: Rhythm.bodySize),
+                             matchLine: match?.line(size: Rhythm.secondarySize), open: { activate(c) }, toggleDone: { controller.toggleDone(c.id) }) {
             trailing(c)
         }
         .padding(.vertical, c.status() == .overdue ? 11 : 10)
@@ -186,10 +184,10 @@ struct CommitmentsView: View {
     private func trailing(_ c: Commitment) -> some View {
         if let done = c.done {
             Text("Done \(done.formatted(.dateTime.month(.abbreviated).day()))")
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                 .fixedSize()
         } else {
-            VStack(alignment: .trailing, spacing: 3) {
+            VStack(alignment: .trailing, spacing: Rhythm.pairGap) {
                 CommitmentDue(commitment: c)
                 DueDateButton(commitment: c) { due in
                     var changed = c
@@ -260,7 +258,7 @@ private struct DueDateButton: View {
     var body: some View {
         Button(title) { picking = true }
             .buttonStyle(.plain)
-            .font(.system(size: 12))
+            .font(.system(size: Rhythm.secondarySize))
             .foregroundStyle(hovering ? Palette.ink : Palette.secondary)
             .underline(hovering, color: Palette.secondary)
             .fixedSize()
@@ -294,7 +292,7 @@ private struct DuePicker: View {
             if due != nil {
                 Button("Remove date", role: .destructive) { pick(nil) }
                     .buttonStyle(.plain)
-                    .font(.system(size: 12.5))
+                    .font(.system(size: Rhythm.bodySize))
                     .foregroundStyle(Palette.recording)
             }
         }

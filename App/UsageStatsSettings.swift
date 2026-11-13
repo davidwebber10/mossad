@@ -10,7 +10,7 @@ struct UsageStatsGroup: View {
     var body: some View {
         SettingsGroup(label: "Usage statistics") {
             HStack(alignment: .center, spacing: Space.m) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     SettingsRowText(title: "Send anonymous usage statistics",
                                     detail: "Counts only: app version, Mac model, how many meetings, which features are on. Never names, words, or files.")
                     Button("What is sent") { showing = true }
@@ -39,14 +39,14 @@ struct UsageStatsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(icon: .analytics, title: "What is sent", subtitle: "The next report, exactly as Mossad would send it.", close: { dismiss() })
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 Text(controller.usageStatsEnabled
                      ? "At most once a day, Mossad sends this to getmossad.com. A report never starts while a call records. The server also keeps the day and the country of the request, and not your IP address."
                      : "The setting is off, so Mossad sends nothing. This is what a report would hold.")
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 ScrollView {
                     Text(text.isEmpty ? " " : text)
-                        .font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Palette.ink)
+                        .font(.system(size: Rhythm.secondarySize, design: .monospaced)).foregroundStyle(Palette.ink)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
@@ -54,7 +54,7 @@ struct UsageStatsSheet: View {
                 .frame(height: 320)
                 .background(Palette.fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Text("The ID is a random number made on this Mac. It is not from your Mac or your account, and it only tells one report from the next.")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 22).padding(.vertical, 16)
             SheetFooter {

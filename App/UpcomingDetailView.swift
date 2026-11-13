@@ -107,12 +107,12 @@ struct UpcomingDetailView: View {
                            message: prep.people.isEmpty ? "Mossad has no earlier meeting with this title, and it does not know the invited people yet."
                                : "Mossad has no earlier meeting of this series or with these people.")
             } else {
-                VStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .leading, spacing: Rhythm.sectionGap) {
                     // The owner's own points first: what they wanted to raise.
                     PrepYourPoints(meeting: meeting)
                     if let line = prep.inOneLine {
                         MeetingAnalyticsGroup("Before this meeting") {
-                            Text(line).font(.system(size: 16, weight: .medium)).lineSpacing(3).foregroundStyle(Palette.ink)
+                            Text(line).font(.system(size: Rhythm.leadSize, weight: .medium)).lineSpacing(Rhythm.secondaryLineGap).foregroundStyle(Palette.ink)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .textSelection(.enabled)
                         }
@@ -135,13 +135,13 @@ struct UpcomingDetailView: View {
                         }
                     }
                 }
-                .font(.system(size: 13))
+                .font(.system(size: Rhythm.bodySize))
                 .foregroundStyle(Palette.ink)
             }
         } else {
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 ProgressView().controlSize(.small)
-                Text("Reading your earlier meetings…").font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                Text("Reading your earlier meetings…").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
             }
             .opacity(slow ? 1 : 0)
             .frame(maxWidth: .infinity, minHeight: 240, alignment: .topLeading)

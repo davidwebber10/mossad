@@ -12,10 +12,10 @@ struct SeriesFilterButton: View {
     var body: some View {
         let count = filters.filter.active.count
         Button { filters.toggleOpen() } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "line.3.horizontal.decrease").font(.system(size: 13, weight: .medium))
+            HStack(spacing: Space.xs) {
+                Image(systemName: "line.3.horizontal.decrease").font(.system(size: Rhythm.bodySize, weight: .medium))
                 if count > 0 {
-                    Text("\(count)").font(.system(size: 11.5, weight: .semibold)).monospacedDigit()
+                    Text("\(count)").font(.system(size: Rhythm.secondarySize, weight: .semibold)).monospacedDigit()
                         .contentTransition(.numericText())
                 }
             }
@@ -48,7 +48,7 @@ struct SeriesFilterChips: View {
             FlowLayout(spacing: 6) {
                 ForEach(Array(choices.enumerated()), id: \.element) { i, choice in
                     if i > 0, filters.filter.peopleMode == .all, case .person = choice {
-                        Text("and").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary).frame(height: 22)
+                        Text("and").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).frame(height: 22)
                     }
                     ActiveChip(text: filters.label(choice)) {
                         withAnimation(.snappy(duration: 0.2)) { filters.filter.remove(choice) }
@@ -60,7 +60,7 @@ struct SeriesFilterChips: View {
                         }
                     }
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: Space.s) {
                     if filters.answered == filters.filter {
                         Text("\(filters.facets.matches.count) of \(filters.facets.total)")
                             .foregroundStyle(Palette.tertiary).monospacedDigit()
@@ -71,7 +71,7 @@ struct SeriesFilterChips: View {
                         .fontWeight(.medium)
                         .foregroundStyle(Palette.accent)
                 }
-                .font(.system(size: 11.5))
+                .font(.system(size: Rhythm.secondarySize))
                 .frame(height: 22)
                 .padding(.leading, 2)
             }
@@ -111,7 +111,7 @@ struct SeriesFilterPanel: View {
             .frame(maxHeight: Self.maxHeight)
         }
         .frame(width: Self.peopleWidth + 2 + Self.columnWidth * 2)
-        .font(.system(size: 12))
+        .font(.system(size: Rhythm.secondarySize))
         .foregroundStyle(Palette.ink)
         .background {
             Button("Close") { filters.isOpen = false }.keyboardShortcut("f", modifiers: [.command, .option])
@@ -121,7 +121,7 @@ struct SeriesFilterPanel: View {
 
     private func column<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) { content() }
+            VStack(alignment: .leading, spacing: Rhythm.groupGap) { content() }
                 .padding(EdgeInsets(top: 14, leading: 16, bottom: 18, trailing: 16))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -130,8 +130,8 @@ struct SeriesFilterPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Text("Filters").font(.system(size: 13, weight: .semibold))
+        HStack(spacing: Space.m) {
+            Text("Filters").font(.system(size: Rhythm.bodySize, weight: .semibold))
             Text(countText)
                 .foregroundStyle(Palette.secondary).monospacedDigit()
                 .contentTransition(.numericText())

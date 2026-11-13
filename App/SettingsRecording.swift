@@ -52,10 +52,10 @@ struct RecordingSettings: View {
                 case .needsAccess:
                     if let item = calendarItem { PermissionRow(item: item) { permissions.fix(item) } }
                 case .notRead:
-                    Text("Reading your calendars…").font(.system(size: 12.5)).foregroundStyle(Palette.secondary).padding(.vertical, 9)
+                    Text("Reading your calendars…").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).padding(.vertical, 9)
                 case .none:
                     Text("No calendars on this Mac yet. Add your work account in System Settings › Internet Accounts.")
-                        .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, 9)
                 case .listed:
@@ -64,7 +64,7 @@ struct RecordingSettings: View {
                 ForEach(Array(Dictionary(grouping: controller.calendars, by: \.account).sorted { $0.key < $1.key }), id: \.key) { account, list in
                     VStack(alignment: .leading, spacing: 0) {
                         Text(account.isEmpty ? "On this Mac" : account)
-                            .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
                             .padding(.bottom, 2)
                             .accessibilityAddTraits(.isHeader)
                         ForEach(list) { c in
@@ -72,7 +72,7 @@ struct RecordingSettings: View {
                                                  set: { on in
                                                      if on { controller.chosenCalendars.insert(c.id) } else { controller.chosenCalendars.remove(c.id) }
                                                  })) {
-                                Text(c.title).font(.system(size: 12.5)).foregroundStyle(Palette.ink)
+                                Text(c.title).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                             }
                             .toggleStyle(SettingsCheckboxStyle())
                             .padding(.vertical, 5)
@@ -86,7 +86,7 @@ struct RecordingSettings: View {
                           : "Removes every \"Don't record\" choice you made for upcoming meetings.") {
                 Button("Reset do-not-record list") { controller.resetNoRecordList() }
                     .buttonStyle(SettingsTextButtonStyle(color: Palette.recording, weight: .medium))
-                    .font(.system(size: 13))
+                    .font(.system(size: Rhythm.bodySize))
                     .padding(.vertical, 9)
             }
             SettingsGroup(label: "Folders") {
@@ -119,10 +119,10 @@ struct RecordingSettings: View {
     }
 
     private func folderRow(_ title: String, _ url: URL) -> some View {
-        HStack(spacing: 6) {
-            Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
-            Text(url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                .font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Palette.tertiary)
+        HStack(spacing: Space.s) {
+            Text(title).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
+            Text(DevHooks.shownPath(url.path))
+                .font(.system(size: Rhythm.secondarySize, design: .monospaced)).foregroundStyle(Palette.tertiary)
                 .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: Space.m)
             Button("Open") { NSWorkspace.shared.open(url) }

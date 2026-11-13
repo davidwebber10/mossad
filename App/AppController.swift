@@ -222,7 +222,7 @@ final class AppController: ObservableObject {
     /// The one controller, for the app delegate's Dock handling.
     nonisolated(unsafe) static weak var current: AppController?
     /// Checks GitHub releases for new versions; never in an inert copy.
-    private(set) lazy var updater = Updater(start: !isInert) { [weak self] in self?.isRecording ?? false }
+    private(set) lazy var updater = Updater(start: !isInert && !AppIdentity.current.isPreview) { [weak self] in self?.isRecording ?? false }
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
     /// alive, so animations check this and stop while it is hidden.
     @Published private(set) var windowVisible = false
@@ -631,9 +631,9 @@ final class AppController: ObservableObject {
                 Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
             }
         }
-        let inert = preview || Rehearsal.isOn || isSecondCopy
+        let inert = preview || AppIdentity.current.isPreview || Rehearsal.isOn || isSecondCopy
         isInert = inert
-        // Reading the calendar records nothing, so the preview shows the real upcoming meetings too.
+        // Reading the calendar records nothing. A preview lists made-up calendars, and its invites come from MOSSAD_UPCOMING.
         if inert { refreshUpcoming() }
         if !inert {
             startPeople()
@@ -2042,7 +2042,7 @@ final class AppController: ObservableObject {
     }
 
     private func enableLaunchAtLoginOnce() {
-        guard !UserDefaults.standard.bool(forKey: "didSetLoginItem") else { return }
+        guard !AppIdentity.current.isPreview, !UserDefaults.standard.bool(forKey: "didSetLoginItem") else { return }
         do {
             try SMAppService.mainApp.register()
             UserDefaults.standard.set(true, forKey: "didSetLoginItem")
@@ -2053,7 +2053,8 @@ final class AppController: ObservableObject {
 
     func refreshUpcoming() {
         let calendar = calendar
-        calendars = macCalendar.calendars()
+        // A preview lists made-up calendars: a capture never shows the owner's accounts or calendar names.
+        calendars = AppIdentity.current.isPreview ? OnboardingSample.calendars : macCalendar.calendars()
         if UserDefaults.standard.stringArray(forKey: "calendarIDs") == nil, !calendars.isEmpty {
             // The first time, read only the owner's own calendars, not shared or subscribed ones.
             chosenCalendars = CalendarInfo.defaults(calendars, ownerName: ownerName,

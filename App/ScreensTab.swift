@@ -202,26 +202,26 @@ struct ScreensTab: View {
         let shown = q.isEmpty ? sessions : ShareSession.group(screens.filter { ScreenText.contains($0.text, query: q) })
         let count = shown.reduce(0) { $0 + $1.count }
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 ScreenFindField(text: $find)
                 Text(q.isEmpty ? "\(screens.count) \(screens.count == 1 ? "screen" : "screens")"
                      : "\(count) of \(screens.count) with “\(q)”")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .detailColumn(top: top, bottom: Space.s)
+            .detailColumn(top: top, bottom: Space.s, width: Rhythm.wideWidth)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Space.xl) {
                     if picturesGone {
                         Text("The pictures were removed with the recording. Their text is still in the transcript.")
-                            .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     }
                     ForEach(shown) { session in
                         VStack(alignment: .leading, spacing: Space.m) {
                             Group {
                                 if let presenter = session.presenter {
                                     // The presenter's name opens their profile.
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: Space.xs) {
                                         PersonName(presenter)
                                         Text(record.headingTail(session))
                                     }
@@ -229,7 +229,7 @@ struct ScreensTab: View {
                                     Text(record.heading(session))
                                 }
                             }
-                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
+                            .font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
                             .accessibilityAddTraits(.isHeader)
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 260), spacing: Space.m)], alignment: .leading, spacing: Space.m) {
                                 ForEach(session.screens) { screen in
@@ -242,10 +242,10 @@ struct ScreensTab: View {
                         }
                     }
                     if shown.isEmpty, !q.isEmpty {
-                        Text("No screen has that text.").font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                        Text("No screen has that text.").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     }
                 }
-                .detailColumn(top: Space.s)
+                .detailColumn(top: Space.s, width: Rhythm.wideWidth)
             }
         }
     }
@@ -263,12 +263,12 @@ private struct ScreenFindField: View {
     @Binding var text: String
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Space.s) {
             IconImage(.search, size: 13).foregroundStyle(Palette.tertiaryMark)
             TextField("Find on screens", text: $text).textFieldStyle(.plain)
                 .onExitCommand { text = "" }
         }
-        .font(.system(size: 12.5))
+        .font(.system(size: Rhythm.bodySize))
         .padding(.horizontal, 10)
         .frame(minWidth: 160, idealWidth: 260, maxWidth: 260, minHeight: 28, maxHeight: 28)
         .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -287,7 +287,7 @@ private struct ScreenTile: View {
 
     var body: some View {
         Button(action: open) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 FrameThumbnail(url: url)
                     .aspectRatio(16 / 10, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
@@ -296,7 +296,7 @@ private struct ScreenTile: View {
                             .strokeBorder(matches ? Palette.accentFill : Palette.hairline, lineWidth: matches ? 1.5 : 1)
                     }
                     .opacity(hovered && enabled ? 0.88 : 1)
-                Text(time).font(.system(size: 11.5)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                Text(time).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary)
             }
             .contentShape(Rectangle())
         }
@@ -338,17 +338,17 @@ private struct ScreenViewer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 Button { selected = nil } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Space.xs) {
                         IconImage(.chevronLeft, size: 11)
                         Text("All screens")
                     }
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
+                    .font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.accent)
                 }
                 .buttonStyle(.plain)
                 ScreenFindField(text: $find)
-                Text("\(index + 1) of \(screens.count)").font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.secondary)
+                Text("\(index + 1) of \(screens.count)").font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.secondary)
                 Spacer(minLength: 0)
                 step(-1, icon: .chevronLeft, label: "Previous screen")
                 step(1, icon: .chevronRight, label: "Next screen")
@@ -428,10 +428,10 @@ private struct ScreenViewer: View {
         // Until the task ran for this frame, the lines of the frame before are not shown.
         let lines = context.file == screen.file ? context.lines : []
         return VStack(alignment: .leading, spacing: Space.m) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 title
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
-                Text(longClock(screen.offset)).font(.system(size: 11.5)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                    .font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
+                Text(longClock(screen.offset)).font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary)
             }
             PlayFromHere(player: player, at: max(0, screen.offset - 5))
             HStack(spacing: Space.m) {
@@ -441,24 +441,24 @@ private struct ScreenViewer: View {
             }
             Button("Delete screen…") { delete(screen) }
                 .buttonStyle(.plain)
-                .font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.recording)
+                .font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(Palette.recording)
                 .help("Removes this picture and its line in the transcript")
             Hairline()
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.s) {
                     if lines.isEmpty, context.file == screen.file {
                         Text("Nobody spoke within 30 seconds of this screen.")
-                            .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     }
                     ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                PersonName(line.speaker).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                            HStack(spacing: Space.s) {
+                                PersonName(line.speaker).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                                 Button(longClock(line.start)) { player.play(from: line.start) }
                                     .buttonStyle(.plain)
-                                    .font(.system(size: 11)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                                    .font(.system(size: Rhythm.noteSize)).monospacedDigit().foregroundStyle(Palette.tertiary)
                             }
-                            Text(line.text).font(.system(size: 12.5)).foregroundStyle(Palette.ink)
+                            Text(line.text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -472,7 +472,7 @@ private struct ScreenViewer: View {
     private func action(_ title: String, _ run: @escaping () -> Void) -> some View {
         Button(title, action: run)
             .buttonStyle(.plain)
-            .font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.accent)
+            .font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(Palette.accent)
             .lineLimit(1).fixedSize()
     }
 }
@@ -484,11 +484,11 @@ private struct PlayFromHere: View {
 
     var body: some View {
         Button { player.play(from: at) } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 IconImage(.play, size: 9)
                 Text("Play from here")
             }
-            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.onAccent)
+            .font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.onAccent)
             .padding(.horizontal, 12).frame(height: 26)
             .background(Palette.accentFill, in: Capsule())
         }
@@ -619,14 +619,14 @@ struct ScreenLine: View {
 
     var body: some View {
         Button(action: open) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 // Lines up with the words, past the speaker column.
                 Color.clear.frame(width: 150 + Space.m - 10, height: 1)
                 FrameThumbnail(url: url, longEdge: 160)
                     .frame(width: 56, height: 35)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     .overlay { RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Palette.hairline, lineWidth: 1) }
-                Text(title).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Palette.secondary).lineLimit(1)
+                Text(title).font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(Palette.secondary).lineLimit(1)
                 Hairline()
             }
             .padding(.vertical, 5)

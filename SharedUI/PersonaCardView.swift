@@ -12,9 +12,9 @@ struct PersonaCardView: View {
 
     var body: some View {
         if compact {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 ForEach(card.lines) { line in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         Text(line.kind.title).textRole(.label).foregroundStyle(Palette.secondary)
                         Text(line.text).textRole(.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                         PersonaEvidenceLine(text: line.confidenceLine, moment: line.moment)
@@ -25,18 +25,18 @@ struct PersonaCardView: View {
         } else {
             // The headline is the opening line's words: it stands once, with that line's counts.
             let lead = card.lines.first { $0.text == card.headline }
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: Rhythm.groupGap) {
                 LabelColumn(label: "How to present to \(first)") {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(card.headline).textRole(.lede).lineSpacing(3).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                        Text(card.headline).textRole(.lede).lineSpacing(Rhythm.secondaryLineGap).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                         if let lead { PersonaEvidenceLine(text: lead.confidenceLine, moment: lead.moment) }
                     }
                 }
                 ForEach(card.lines.filter { $0.id != lead?.id }) { line in
                     LabelColumn(label: line.kind.title) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(line.text).textRole(.body).lineSpacing(2).foregroundStyle(Palette.ink)
-                                .frame(maxWidth: 680, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                            Text(line.text).textRole(.body).lineSpacing(Rhythm.secondaryLineGap).foregroundStyle(Palette.ink)
+                                .frame(maxWidth: Rhythm.measure, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                             PersonaEvidenceLine(text: line.confidenceLine, moment: line.moment)
                         }
                     }
@@ -53,7 +53,7 @@ struct PersonaEvidenceLine: View {
     let moment: PersonaPointer?
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             Text(text.prefix(1).uppercased() + text.dropFirst())
             if let url = moment?.link {
                 Text("·").accessibilityHidden(true)
@@ -75,12 +75,12 @@ struct PersonaTraitsView: View {
 
     var body: some View {
         LabelColumn(label: "How they think") {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 ForEach(read.traits) { trait in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         Text(trait.statement).textRole(.body).foregroundStyle(Palette.ink)
-                            .frame(maxWidth: 680, alignment: .leading).fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 6) {
+                            .frame(maxWidth: Rhythm.measure, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: Space.s) {
                             Text(trait.confidenceLine.prefix(1).uppercased() + trait.confidenceLine.dropFirst())
                             Text("·").accessibilityHidden(true)
                             // The number lives here, in the trait's detail; the card says it in words.
@@ -129,7 +129,7 @@ struct PersonaCoverRow: View {
 
     var body: some View {
         Button(action: open) {
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 Image(systemName: "eye.slash").foregroundStyle(Palette.tertiary)
                 Text("The coach’s read (\(why))").foregroundStyle(Palette.secondary)
                 Spacer(minLength: 8)
@@ -141,7 +141,7 @@ struct PersonaCoverRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(maxWidth: 680, alignment: .leading)
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
         .accessibilityLabel("The coach’s read is hidden. Show it")
     }
 }

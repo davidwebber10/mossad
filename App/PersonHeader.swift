@@ -30,7 +30,7 @@ struct PersonHeader: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: Space.l) {
                 avatar
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                     HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         Text(profile.name)
                             .font(.system(size: Detail.titleSize, weight: .semibold)).tracking(Detail.titleSize * -0.02)
@@ -39,13 +39,13 @@ struct PersonHeader: View {
                             .textSelection(.enabled)
                             .accessibilityAddTraits(.isHeader)
                         if profile.isOwner {
-                            Text("You").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary)
+                            Text("You").font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.secondary)
                                 .padding(.horizontal, 7).frame(height: 18)
                                 .background(Palette.fill, in: Capsule())
                         }
                     }
                     if let role = roleLine {
-                        Text(role).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
+                        Text(role).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
                     }
                     emails
                 }
@@ -54,11 +54,10 @@ struct PersonHeader: View {
             }
             figures.padding(.top, 26)
         }
-        .frame(maxWidth: Detail.columnMax, alignment: .leading)
-        .padding(.horizontal, Detail.gutter)
+        .bandColumn()
         .padding(.top, Detail.bandPadding)
         .padding(.bottom, Detail.bandPadding + 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .bandFrame()
         .background(Palette.band)
         .hairline(.bottom)
     }
@@ -106,7 +105,7 @@ struct PersonHeader: View {
         FlowLayout(spacing: Space.s) {
             ForEach(profile.emails, id: \.self) { email in
                 Text(email)
-                    .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                    .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     .textSelection(.enabled)
                     .contextMenu {
                         Button("Copy") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(email, forType: .string) }
@@ -116,7 +115,7 @@ struct PersonHeader: View {
                     }
             }
             ForEach(directoryEmails, id: \.self) { email in
-                Text(email).font(.system(size: 12.5)).foregroundStyle(Palette.tertiary)
+                Text(email).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.tertiary)
                     .textSelection(.enabled)
                     .help("From Google's directory")
                     .contextMenu {
@@ -126,7 +125,7 @@ struct PersonHeader: View {
             }
             Button { adding = true } label: {
                 Label(profile.emails.isEmpty ? "Add email" : "Add", systemImage: "plus")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: Rhythm.secondarySize, weight: .medium))
             }
             .buttonStyle(.plain)
             .foregroundStyle(Palette.accent)
@@ -234,8 +233,8 @@ private struct AddEmailPopover: View {
     @State private var problem: EmailAddResult?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Add an address of \(profile.name)").font(.system(size: 13, weight: .semibold))
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+            Text("Add an address of \(profile.name)").font(.system(size: Rhythm.bodySize, weight: .semibold))
             TextField("Email", text: $text, prompt: Text("name@example.com"))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(add)
@@ -243,7 +242,7 @@ private struct AddEmailPopover: View {
             switch problem {
             case .belongsTo(let other):
                 Text("\(other) has this address. An address is one person’s only.")
-                    .font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 if let target = others.first(where: { $0.name == other }), !profile.isOwner {
                     Button("Merge \(profile.name) into \(other)") {
                         merge(target)
@@ -252,11 +251,11 @@ private struct AddEmailPopover: View {
                     .help("They are one person: one page with every address and every voice sample")
                 }
             case .notAnAddress:
-                Text("That is not an email address.").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Text("That is not an email address.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
             case .alreadyTheirs:
-                Text("\(profile.name) has this address already.").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                Text("\(profile.name) has this address already.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
             default:
-                Text("Mossad finds \(profile.name) in invites by each address.").font(.system(size: 11)).foregroundStyle(Palette.secondary)
+                Text("Mossad finds \(profile.name) in invites by each address.").font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.secondary)
             }
             HStack {
                 Spacer()

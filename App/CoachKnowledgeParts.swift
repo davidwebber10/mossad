@@ -10,20 +10,20 @@ struct FocusProse: View {
 
     var body: some View {
         if let f = profile.activeFocus {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(f.plan).font(.system(size: 16, weight: .medium)).cssLineHeight(1.4, size: 16).foregroundStyle(Palette.ink)
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+                Text(f.plan).font(.system(size: Rhythm.leadSize, weight: .medium)).cssLineHeight(1.4, size: Rhythm.leadSize).foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 if !f.results.isEmpty {
-                    HStack(spacing: 10) {
+                    HStack(spacing: Space.m) {
                         FocusDots(results: f.results)
                         Text("\(f.chances.filter { $0.outcome == .hit }.count) of \(f.chances.count) \(f.goal == nil ? "chances" : "1:1s at the target")")
-                            .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                     }
                     .padding(.top, 4)
                 }
                 if let since = f.accepted {
                     Text("Since \(since.formatted(.dateTime.month(.wide).day())). " + (f.goal == nil ? "Each review reports how the call went on it." : "The app measures each 1:1."))
-                        .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                 }
             }
             .padding(.top, 4).padding(.bottom, 12)
@@ -34,13 +34,13 @@ struct FocusProse: View {
                 if editing {
                     TextField("Your focus", text: $text, axis: .vertical).textFieldStyle(SheetFieldStyle())
                 } else {
-                    Text(f.plan).font(.system(size: 16, weight: .medium)).cssLineHeight(1.4, size: 16).foregroundStyle(Palette.ink)
+                    Text(f.plan).font(.system(size: Rhythm.leadSize, weight: .medium)).cssLineHeight(1.4, size: Rhythm.leadSize).foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(f.why).font(.system(size: 12.5)).foregroundStyle(Palette.secondary).cssLineHeight(1.45, size: 12.5)
+                Text(f.why).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).cssLineHeight(1.45, size: Rhythm.bodySize)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     Button(editing ? "Save" : "Accept") {
                         controller.acceptFocus(f.id, plan: editing ? text : nil)
                         editing = false
@@ -50,7 +50,7 @@ struct FocusProse: View {
                     Button(editing ? "Cancel" : "Not now") { if editing { editing = false } else { controller.dismissFocus(f.id) } }
                         .buttonStyle(.settings)
                     Text("Nothing counts until you accept it. Each review then reports how the call went on it.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.leading, 6)
                 }
@@ -79,24 +79,24 @@ struct QuestionProse: View {
                     Text("Is this true?").textRole(.label).foregroundStyle(Palette.accent)
                     Spacer()
                     if questions.count > 1 {
-                        Text("1 of \(questions.count)").font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(Palette.tertiary)
+                        Text("1 of \(questions.count)").font(.system(size: Rhythm.noteSize, weight: .medium)).monospacedDigit().foregroundStyle(Palette.tertiary)
                     }
                 }
                 .accessibilityElement(children: .combine)
-                Text(q.statement).font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.ink)
-                    .cssLineHeight(size: 14)
+                Text(q.statement).font(.system(size: Rhythm.readingSize, weight: .medium)).foregroundStyle(Palette.ink)
+                    .cssLineHeight(size: Rhythm.readingSize)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
                 if let name = q.personName {
                     Label("About \(name)", systemImage: "person.crop.circle")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         .padding(.top, 3)
                 }
                 if !q.evidence.isEmpty {
                     Button {
                         if let id = q.callID { controller.showMoment(id, at: q.at ?? 0) }
                     } label: {
-                        Text(q.evidence).font(.system(size: 12.5)).italic().foregroundStyle(Palette.secondary)
+                        Text(q.evidence).font(.system(size: Rhythm.bodySize)).italic().foregroundStyle(Palette.secondary)
                             .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                     }
                     .buttonStyle(.plain)
@@ -104,7 +104,7 @@ struct QuestionProse: View {
                     .help("Show this moment in the call")
                     .padding(.top, 4)
                 }
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     if correcting {
                         TextField("What is right?", text: $note, axis: .vertical)
                             .textFieldStyle(SettingsFieldStyle())
@@ -119,7 +119,7 @@ struct QuestionProse: View {
                         // Not a plain no: the coach never asks this again.
                         Button("Not true") { send(q, .rejected) }.buttonStyle(.settings)
                         Text("Your answer shapes how the coach reads your calls.")
-                            .font(.system(size: 12)).foregroundStyle(Palette.tertiary).padding(.leading, 6)
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).padding(.leading, 6)
                     }
                 }
                 .padding(.top, 10)
@@ -160,10 +160,10 @@ struct NeverAgain: View {
             SettingsGroup(label: "Never again", footer: "From \u{201C}Never again\u{201D} on a card in Findings. Undo lets the coach bring it up again.") {
                 ForEach(blocked) { a in
                     HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                             Text(a.kind.isBehavior || a.kind == .goalOffer ? CoachSkill.subject(of: a.skill) : a.text)
-                                .font(.system(size: 12.5)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                            Text(effect(a)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                            Text(effect(a)).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Button("Undo") { controller.allowFindingAgain(a.id) }
@@ -197,14 +197,14 @@ struct CoachKnowledge: View {
     var body: some View {
         SettingsGroup(label: "What the coach knows about you") {
             Text("The coach judges each call against this. It also adds to it when you tell it something in a reply.")
-                .font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, Space.s).padding(.bottom, 4)
             ForEach(CoachFact.Kind.allCases, id: \.self) { kind in
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(profile.facts(kind)) { fact in
                         entry(kind.title) {
-                            Text(fact.text).font(.system(size: 12.5)).foregroundStyle(Palette.ink)
+                            Text(fact.text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                                 .fixedSize(horizontal: false, vertical: true)
                         } action: {
                             Button("Remove") { controller.removeCoachFact(fact.text) }
@@ -231,7 +231,7 @@ struct CoachKnowledge: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(profile.ownGuidance.enumerated()), id: \.element.id) { i, g in
                         entry(i == 0 ? "Your coaching preferences" : "") {
-                            Text(g.text).font(.system(size: 12.5)).foregroundStyle(Palette.ink)
+                            Text(g.text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
                                 .fixedSize(horizontal: false, vertical: true)
                         } action: {
                             Button("Remove") { controller.removeCoachGuidance(g.text) }
@@ -246,8 +246,8 @@ struct CoachKnowledge: View {
 
     private func entry<Value: View, Action: View>(_ key: String, @ViewBuilder value: () -> Value, @ViewBuilder action: () -> Action) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-            Text(key).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                .cssLineHeight(size: 12)
+            Text(key).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
+                .cssLineHeight(size: Rhythm.secondarySize)
                 .frame(width: 150, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             value().frame(maxWidth: .infinity, alignment: .leading)

@@ -22,7 +22,7 @@ struct PhoneMeetingPoints: View {
                             Button { read(m?.at) } label: {
                                 HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                                     Image(systemName: "circle").font(.caption).foregroundStyle(Palette.tertiary)
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                         Text(p.text).textRole(.body).foregroundStyle(Palette.ink)
                                         Text("Still open. Mossad has only the notes of this meeting" + (m.map { " · at \(meetingClock($0.at, length: 0))" } ?? ""))
                                             .textRole(.secondary).foregroundStyle(Palette.secondary)
@@ -42,7 +42,7 @@ struct PhoneMeetingPoints: View {
                             Button { read(p.done?.at) } label: {
                                 HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                                     Image(systemName: "checkmark").font(.caption.weight(.semibold)).foregroundStyle(Palette.accent)
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                         Text(p.text).textRole(.body).foregroundStyle(Palette.ink)
                                         Text("Discussed" + (p.done?.at.map { " at \(meetingClock($0, length: 0))" } ?? "")).textRole(.secondary).foregroundStyle(Palette.secondary)
                                     }
@@ -54,7 +54,7 @@ struct PhoneMeetingPoints: View {
                         ForEach(carried) { p in
                             HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                                 Image(systemName: "circle").font(.caption).foregroundStyle(Palette.tertiary)
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                     Text(p.text).textRole(.body).foregroundStyle(Palette.ink)
                                     Text("Not discussed: carried to next time").textRole(.secondary).foregroundStyle(Palette.secondary)
                                 }

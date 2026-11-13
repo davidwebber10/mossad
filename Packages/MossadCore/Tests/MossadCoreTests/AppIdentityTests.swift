@@ -94,3 +94,91 @@ final class AppIdentityBuildTests: XCTestCase {
         XCTAssertNotNil(AppIdentity(bundleID: AppIdentity.rehearsalBundleID).mismatch(rehearsalBuild: false))
     }
 }
+
+final class AppIdentityPreviewTests: XCTestCase {
+    private let home = URL(fileURLWithPath: "/Users/someone")
+    private let main = AppIdentity.mainBundleID
+
+    private func id(_ arguments: [String], _ environment: [String: String] = [:]) -> AppIdentity {
+        AppIdentity(bundleID: main, arguments: ["Mossad"] + arguments, environment: environment)
+    }
+
+    func testAPlainLaunchAndTheLoginItemAreTheRealApp() {
+        for launch in [id([]), id(["-psn_0_12345"])] {
+            XCTAssertFalse(launch.isPreview)
+            XCTAssertNil(launch.defaultsSuite)
+            XCTAssertEqual(launch.keychainService, main)
+            XCTAssertNil(launch.refusal(home: home, environment: [:]))
+        }
+    }
+
+    func testOnlyTheUIPreviewArgumentMakesAPreview() {
+        let preview = id(["--ui-preview"], ["MOSSAD_ROOT": "/tmp/demo"])
+        XCTAssertTrue(preview.isPreview)
+        XCTAssertEqual(preview.keychainService, "com.dwebber.mossad.preview")
+        XCTAssertNotNil(preview.defaultsSuite)
+        XCTAssertNil(preview.refusal(home: home, environment: ["MOSSAD_ROOT": "/tmp/demo"]))
+    }
+
+    func testAHandRunOnAnotherFolderKeepsTheRealSettings() {
+        let run = id([], ["MOSSAD_ROOT": "/tmp/demo"])
+        XCTAssertFalse(run.isPreview)
+        XCTAssertNil(run.defaultsSuite)
+        XCTAssertEqual(run.keychainService, main)
+        XCTAssertEqual(run.dataRoot(home: home, environment: ["MOSSAD_ROOT": "/tmp/demo"]).path, "/tmp/demo")
+    }
+
+    func testAPreviewWithoutAMadeUpFolderRefusesToStart() {
+        XCTAssertNotNil(id(["--ui-preview"]).refusal(home: home, environment: [:]))
+        XCTAssertNotNil(id(["--ui-preview"]).refusal(home: home, environment: ["MOSSAD_ROOT": ""]))
+        XCTAssertNotNil(id(["--ui-preview"]).refusal(home: home, environment: ["MOSSAD_ROOT": "/Users/someone/Mossad"]))
+        XCTAssertNotNil(id(["--ui-preview"]).refusal(home: home, environment: ["MOSSAD_ROOT": "/Users/someone/Mossad/"]))
+        XCTAssertNotNil(id(["--ui-preview"]).refusal(home: home, environment: ["MOSSAD_ROOT": "/Users/someone/./Mossad"]))
+    }
+
+    func testACommandNeverTakesThePreviewIdentity() {
+        for flag in ["--mcp", "--people-migration", "--persona-fill", "--persona-eval", "--import-keys"] {
+            for env in [[:], ["MOSSAD_ROOT": "/tmp/demo"]] {
+                XCTAssertFalse(id([flag], env).isPreview, flag)
+                XCTAssertFalse(id(["--ui-preview", flag], env).isPreview, flag)
+                XCTAssertEqual(id(["--ui-preview", flag], env).keychainService, main, flag)
+            }
+        }
+    }
+
+    func testEachMadeUpFolderHasItsOwnSettings() {
+        let a = id(["--ui-preview"], ["MOSSAD_ROOT": "/tmp/a"]).defaultsSuite
+        let b = id(["--ui-preview"], ["MOSSAD_ROOT": "/tmp/b"]).defaultsSuite
+        XCTAssertNotNil(a)
+        XCTAssertNotEqual(a, b)
+        XCTAssertEqual(a, id(["--ui-preview"], ["MOSSAD_ROOT": "/tmp/a"]).defaultsSuite)
+    }
+
+    func testARehearsalPreviewNeverReadsRehearsalsKeys() {
+        let preview = AppIdentity(bundleID: AppIdentity.rehearsalBundleID, arguments: ["--ui-preview"], environment: ["MOSSAD_ROOT": "/tmp/demo"])
+        XCTAssertEqual(preview.keychainService, "com.dwebber.mossad.rehearsal.preview")
+        XCTAssertNotNil(preview.refusal(home: home, environment: ["MOSSAD_ROOT": "/Users/someone/Mossad Rehearsal"]))
+    }
+
+    func testTheRealIdentityLeavesTheSettingsAlone() {
+        XCTAssertNil(id([]).previewSettings())
+        XCTAssertNil(id([], ["MOSSAD_ROOT": "/tmp/demo"]).previewSettings())
+    }
+
+    func testAPreviewEmptiesOnlyItsOwnSuite() throws {
+        let preview = id(["--ui-preview"], ["MOSSAD_ROOT": "/tmp/br-isolate-test"])
+        let suite = try XCTUnwrap(preview.defaultsSuite)
+        let other = "com.dwebber.mossad.test-untouched"
+        UserDefaults(suiteName: suite)?.set("old", forKey: "ownerName")
+        UserDefaults(suiteName: other)?.set("kept", forKey: "ownerName")
+        defer {
+            UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
+            UserDefaults(suiteName: other)?.removePersistentDomain(forName: other)
+        }
+        let settings = try XCTUnwrap(preview.previewSettings(arguments: [:]))
+        XCTAssertEqual(settings.string(forKey: "ownerName"), "Avery Webb")
+        XCTAssertNil(settings.persistentDomain(forName: suite)?["ownerName"])
+        XCTAssertEqual(UserDefaults(suiteName: other)?.string(forKey: "ownerName"), "kept")
+        XCTAssertEqual(try XCTUnwrap(preview.previewSettings(arguments: ["ownerName": "Sam Carter"])).string(forKey: "ownerName"), "Sam Carter")
+    }
+}

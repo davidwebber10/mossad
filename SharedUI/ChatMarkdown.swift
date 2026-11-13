@@ -12,14 +12,12 @@ struct ChatMarkdown: View {
     var timeChips = false
     /// The meeting a chat is about: a bare "[12:04]" becomes a chip to that moment.
     var callID: String?
-    /// The space between the lines of a block: chat answers are read, not scanned, so they get room.
-    static let lineGap: CGFloat = 6
     @Environment(\.chatMomentPeek) private var peek
 
     var body: some View {
         let blocks = ChatBlocks.parse(ChatBlocks.linkTimes(text, callID: callID))
         let peekAfter = peek.flatMap { p in blocks.firstIndex { Self.moments(of: $0).contains(p.seconds) } }
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Rhythm.blockGap) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { i, block in
                 view(block, first: i == 0)
                 if i == peekAfter, let peek { peek.content }
@@ -44,18 +42,18 @@ struct ChatMarkdown: View {
     private func view(_ block: ChatBlock, first: Bool) -> some View {
         switch block {
         case .paragraph(let s):
-            Text(inline(s)).font(bodyFont).lineSpacing(Self.lineGap).fixedSize(horizontal: false, vertical: true)
+            Text(inline(s)).font(bodyFont).lineSpacing(Rhythm.readingLineGap).fixedSize(horizontal: false, vertical: true)
         case .heading(let level, let s):
             Text(inline(s)).font(headingFont(level)).foregroundStyle(Palette.ink)
                 .padding(.top, first ? 0 : 8)
                 .accessibilityAddTraits(.isHeader)
         case .list(let ordered, let items):
-            VStack(alignment: .leading, spacing: 9) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                         Text(item.marker).font(bodyFont).monospacedDigit().foregroundStyle(Palette.tertiary)
                             .frame(minWidth: ordered ? 16 : 8, alignment: .trailing)
-                        Text(inline(item.text)).font(bodyFont).lineSpacing(Self.lineGap).fixedSize(horizontal: false, vertical: true)
+                        Text(inline(item.text)).font(bodyFont).lineSpacing(Rhythm.readingLineGap).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.leading, CGFloat(item.level) * 20)
                 }
@@ -80,7 +78,7 @@ struct ChatMarkdown: View {
         #if os(iOS)
         level == 1 ? .title3.weight(.semibold) : level == 2 ? .headline : bodyFont.weight(.semibold)
         #else
-        .system(size: level == 1 ? 17 : level == 2 ? 15 : 13.5, weight: .semibold)
+        .system(size: level == 1 ? 17 : level == 2 ? 15 : Rhythm.readingSize, weight: .semibold)
         #endif
     }
 
@@ -88,7 +86,7 @@ struct ChatMarkdown: View {
         #if os(iOS)
         .footnote.monospaced()
         #else
-        .system(size: 12, design: .monospaced)
+        .system(size: Rhythm.secondarySize, design: .monospaced)
         #endif
     }
 
@@ -116,7 +114,7 @@ struct ChatMarkdown: View {
                 #if os(iOS)
                 piece.font = .footnote.monospacedDigit().weight(.medium)
                 #else
-                piece.font = .system(size: 11, weight: .medium).monospacedDigit()
+                piece.font = .system(size: Rhythm.noteSize, weight: .medium).monospacedDigit()
                 #endif
             }
             out += piece
@@ -148,13 +146,13 @@ private struct QuoteBlock: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Space.m) {
             Capsule().fill(Palette.accent.opacity(0.45)).frame(width: 3)
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 if quote.speaker != nil || quote.time != nil {
-                    HStack(spacing: 6) {
+                    HStack(spacing: Space.s) {
                         if let speaker = quote.speaker {
-                            Text(speaker).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.secondary)
+                            Text(speaker).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
                         }
                         if let time = quote.time {
                             TimeChip(time: time) { if let link = quote.link.flatMap(URL.init(string:)) { openURL(link) } }
@@ -162,7 +160,7 @@ private struct QuoteBlock: View {
                         }
                     }
                 }
-                Text(text).font(bodyFont).foregroundStyle(Palette.ink).lineSpacing(ChatMarkdown.lineGap)
+                Text(text).font(bodyFont).foregroundStyle(Palette.ink).lineSpacing(Rhythm.readingLineGap)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -183,7 +181,7 @@ struct TimeChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(time).font(.system(size: 11, weight: .medium)).monospacedDigit()
+            Text(time).font(.system(size: Rhythm.noteSize, weight: .medium)).monospacedDigit()
                 .foregroundStyle(Self.ink)
                 .padding(.horizontal, 7).frame(height: 18)
                 .background(Palette.accentTint, in: Capsule())

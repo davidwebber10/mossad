@@ -10,14 +10,14 @@ struct PeopleSection: View {
     let report: AnalyticsReport
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             HStack(alignment: .firstTextBaseline) {
                 Finding(AnalyticsFindings.people(report) ?? "No named people in this period")
                 Spacer(minLength: 12)
                 if !report.people.isEmpty {
                     Button("See all \(report.people.count)") { controller.open(.people) }
                         .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: Rhythm.secondarySize, weight: .semibold))
                         .foregroundStyle(Palette.accent)
                 }
             }
@@ -42,7 +42,7 @@ private struct PeopleTable: View {
         VStack(spacing: 0) {
             row(name: Text("Name"), calls: Text("Calls"), time: Text("Time"), share: Text("Of your time"),
                 balance: AnyView(Text("Talk balance")), trend: AnyView(Text("Trend")), last: Text("Last met"))
-                .font(.system(size: 11))
+                .font(.system(size: Rhythm.noteSize))
                 .foregroundStyle(Palette.tertiary)
                 .padding(.bottom, 6)
                 .hairline()
@@ -56,7 +56,7 @@ private struct PeopleTable: View {
                         balance: AnyView(BalanceBar(mine: p.mySpeech, theirs: p.theirSpeech)),
                         trend: AnyView(TrendBars(values: p.trend)),
                         last: Text(p.lastMet.map { $0.formatted(.relative(presentation: .named)) } ?? "–").foregroundStyle(Palette.secondary))
-                        .font(.system(size: 12.5)).monospacedDigit()
+                        .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                         .padding(.vertical, 8)
                         .background(hovered == p.name ? Palette.fill : .clear)
                         .hairline()
@@ -81,8 +81,8 @@ private struct PeopleTable: View {
     }
 
     private func row(name: Text, dot: Color? = nil, calls: Text, time: Text, share: Text, balance: AnyView, trend: AnyView, last: Text) -> some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 8) {
+        HStack(spacing: Space.l) {
+            HStack(spacing: Space.s) {
                 if let dot { Circle().fill(dot).frame(width: 8, height: 8) }
                 name.lineLimit(1)
             }
@@ -108,7 +108,7 @@ struct BalanceBar: View {
     var body: some View {
         let total = mine + theirs
         let share = total > 0 ? mine / total : 0
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             Capsule().fill(Palette.bar)
                 .overlay(alignment: .leading) {
                     GeometryReader { g in Rectangle().fill(Palette.accentFill).frame(width: g.size.width * share) }
@@ -116,7 +116,7 @@ struct BalanceBar: View {
                 .clipShape(Capsule())
                 .frame(height: 6)
             if showsShare {
-                Text(total > 0 ? percentText(share) : "–").font(.system(size: 11.5)).foregroundStyle(Palette.secondary).monospacedDigit()
+                Text(total > 0 ? percentText(share) : "–").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).monospacedDigit()
                     .frame(width: 30, alignment: .leading)
             }
         }
@@ -211,9 +211,9 @@ struct OutcomesSection: View {
 
     var body: some View {
         let o = report.outcomes
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             if let finding = AnalyticsFindings.outcomes(o) { Finding(finding) }
-            HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: Space.l) {
                 SmallFigure(value: String(format: "%.1f", o.itemsPerHour), label: "action items an hour")
                 SmallFigure(value: String(format: "%.1f", o.decisionsPerHour), label: "decisions an hour")
                 SmallFigure(value: o.withOutcomesShare.map(percentText) ?? "–", label: "of calls with an item or a decision")

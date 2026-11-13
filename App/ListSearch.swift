@@ -67,11 +67,11 @@ struct ListSearchField: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             IconImage(.search, size: 13).foregroundStyle(Palette.tertiaryMark)
             TextField(prompt, text: $state.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: Rhythm.bodySize))
                 .foregroundStyle(Palette.ink)
                 .focused($focused)
                 .onExitCommand(perform: close)
@@ -83,7 +83,7 @@ struct ListSearchField: View {
                 }
                 .accessibilityLabel(prompt)
             Button(action: close) {
-                Image(systemName: "xmark.circle.fill").font(.system(size: 13)).foregroundStyle(Palette.tertiaryMark)
+                Image(systemName: "xmark.circle.fill").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.tertiaryMark)
             }
             .buttonStyle(.plain)
             .help("Close the search (Esc)")
@@ -127,8 +127,8 @@ struct ListMatchLine: View {
 
     var body: some View {
         if let context = match.context {
-            (Text(lead).foregroundStyle(Palette.tertiary) + Text(context.boldMatches(size: 12)).foregroundStyle(Palette.secondary))
-                .font(.system(size: 12))
+            (Text(lead).foregroundStyle(Palette.tertiary) + Text(context.boldMatches(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary))
+                .font(.system(size: Rhythm.secondarySize))
                 .lineLimit(lines)
                 .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)

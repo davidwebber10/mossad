@@ -10,12 +10,12 @@ struct SettingsHelpLink: View {
 
     var body: some View {
         Link(destination: url) {
-            HStack(spacing: 3) {
+            HStack(spacing: Space.xs) {
                 Text(title)
                 IconImage(.arrowUp, size: 9).rotationEffect(.degrees(45))
             }
         }
-        .font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.accent)
+        .font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(Palette.accent)
         .accessibilityLabel("\(title), opens in the browser")
     }
 }
@@ -51,10 +51,10 @@ struct SettingsCheckFailure: View {
 
     var body: some View {
         if case .failed(let message) = state {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 WarningMark(size: 12).foregroundStyle(Palette.accent)
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
-                Text(message).font(.system(size: 12)).foregroundStyle(Palette.ink)
+                Text(message).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.bottom, 9)

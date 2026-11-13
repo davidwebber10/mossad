@@ -240,13 +240,27 @@ final class DetailCache {
 }
 
 extension View {
-    /// The detail's reading column: the page gutter, at most 980 pt, from the left like the header.
-    func detailColumn(top: CGFloat, bottom: CGFloat = Space.xxl) -> some View {
-        frame(maxWidth: Detail.columnMax, alignment: .leading)
-            .padding(.horizontal, Detail.gutter)
+    /// A tab's content under a band: at most `width` (the reading width, or `Rhythm.wideWidth` for charts and
+    /// grids), inside the page gutter, centered under the centered tabs. Narrower than that, it fills the column.
+    func detailColumn(top: CGFloat, bottom: CGFloat = Rhythm.pageBottom, width: CGFloat = Rhythm.readingWidth) -> some View {
+        frame(maxWidth: width, alignment: .leading)
+            .padding(.horizontal, Rhythm.gutter)
             .padding(.top, top)
             .padding(.bottom, bottom)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// A band's content (title, lanes, player, a person's figures): the detail column's full width inside the page
+    /// gutter, up to `Rhythm.bandMax`, so lanes stay readable on a very wide display. The caller adds its vertical
+    /// padding, then `bandFrame()`.
+    func bandColumn() -> some View {
+        frame(maxWidth: Rhythm.bandMax, alignment: .leading)
+            .padding(.horizontal, Rhythm.gutter)
+    }
+
+    /// The band across the column, its content centered past `Rhythm.bandMax` as the tabs are.
+    func bandFrame() -> some View {
+        frame(maxWidth: .infinity, alignment: .center)
     }
 }
 
@@ -382,13 +396,13 @@ struct SpeakerNamingPopover: View {
     @State private var email = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(speaker.isUnknown ? "Who is \(speaker.name)?" : "Who is this voice?").font(.system(size: 13, weight: .semibold))
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
+            Text(speaker.isUnknown ? "Who is \(speaker.name)?" : "Who is this voice?").font(.system(size: Rhythm.bodySize, weight: .semibold))
             TextField("Name", text: $name).textFieldStyle(.roundedBorder)
             TextField("Email (optional)", text: $email).textFieldStyle(.roundedBorder)
             ExistingPersonHint(name: name, email: email)
             Text("Mossad saves this voice under the name and recognizes it in later calls.")
-                .font(.system(size: 11)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Cancel") { isPresented = false }

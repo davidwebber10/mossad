@@ -15,7 +15,7 @@ struct SpeakerChip: View {
     @ScaledMetric(relativeTo: .body) private var dot: CGFloat = 8
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             Circle().fill(color).frame(width: dot, height: dot)
             Text(name).fontWeight(needsYou ? .medium : .regular)
             if let note { Text(note).foregroundStyle(needsYou ? Palette.accent : Palette.secondary) }
@@ -56,7 +56,7 @@ struct NeedsYouChip: View {
     @ScaledMetric(relativeTo: .caption) private var height: CGFloat = 20
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: Space.xs) {
             if let systemImage { Image(systemName: systemImage).font(.system(size: textSize * 0.82, weight: .semibold)) }
             Text(text).lineLimit(1)
         }

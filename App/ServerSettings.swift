@@ -44,10 +44,10 @@ struct ServerGroup: View {
     private func connectionRow(_ connection: ServerConnection) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: Space.m) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(connection.address.host ?? "")
-                        .font(.system(size: 12.5, weight: .semibold, design: .monospaced)).foregroundStyle(Palette.ink)
-                    Text(jobs).font(.system(size: 12)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: Rhythm.bodySize, weight: .semibold, design: .monospaced)).foregroundStyle(Palette.ink)
+                    Text(jobs).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: Space.m)
                 HStack(spacing: Space.s) {
@@ -121,7 +121,7 @@ private struct AIAccessRows: View {
                             detail: "ChatGPT, Claude, and other AI apps can search and read your meetings after you sign in: titles, summaries, action items, and transcripts. They cannot see the coach or change anything.")
                 .padding(.top, 9)
             if controller.serverMCP.isEmpty {
-                Text("Click Check above to get your server’s AI address.").font(.system(size: 12)).foregroundStyle(Palette.accent)
+                Text("Click Check above to get your server’s AI address.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.accent)
                     .padding(.vertical, 9)
             } else {
                 CopyField(text: controller.serverMCP).padding(.top, Space.s)
@@ -137,7 +137,7 @@ private struct AIAccessRows: View {
                         }
                     }
                 }
-                .font(.system(size: 12))
+                .font(.system(size: Rhythm.secondarySize))
                 .padding(.top, Space.s).padding(.bottom, 9)
             }
         }

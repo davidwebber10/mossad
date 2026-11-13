@@ -113,8 +113,8 @@ struct MeetingView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+            HStack(spacing: Space.s) {
                 PlatformDot(platform: record.platform).accessibilityHidden(true)
                 Text(when).lineLimit(2)
             }
@@ -167,7 +167,7 @@ private struct SummarySection: View {
         VStack(alignment: .leading, spacing: 0) {
             if let line = oneLine {
                 LabelColumn(label: "In one line") {
-                    Text(rich(line)).textRole(.lede).lineSpacing(3).foregroundStyle(Palette.ink)
+                    Text(rich(line)).textRole(.lede).lineSpacing(Rhythm.secondaryLineGap).foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -218,7 +218,7 @@ private struct SummarySection: View {
                 let note = b.note?.trimmingCharacters(in: .whitespacesAndNewlines)
                 Button { read(b.offset) } label: {
                     HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: Space.xs) {
                             Image(systemName: "bookmark.fill").font(.caption2).foregroundStyle(Palette.accent)
                                 .accessibilityHidden(true)
                             Text(meetingClock(b.offset, length: length))
@@ -295,10 +295,10 @@ struct SummaryBlocks: View {
         VStack(alignment: .leading, spacing: Space.s) {
             ForEach(Array(SummaryBlock.parse(markdown).enumerated()), id: \.offset) { _, block in
                 switch block {
-                case .paragraph(let text): Text(rich(text)).textRole(.body).lineSpacing(3)
+                case .paragraph(let text): Text(rich(text)).textRole(.body).lineSpacing(Rhythm.secondaryLineGap)
                 case .heading(let text): Text(text).textRole(.headline).padding(.top, 4)
                 case .bullets(let items):
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         ForEach(items, id: \.self) { item in
                             HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                                 Text("•").foregroundStyle(Palette.secondary)
@@ -387,8 +387,8 @@ private struct TranscriptSection: View {
                 ContentUnavailableView.search(text: q)
             }
             ForEach(shown) { block in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         Circle().fill(hues[block.speaker] ?? Palette.tertiaryMark).frame(width: 7, height: 7)
                             .accessibilityHidden(true)
                         Text(block.speaker).textRole(.headline).foregroundStyle(Palette.ink)
@@ -396,7 +396,7 @@ private struct TranscriptSection: View {
                         Text(meetingClock(block.start, length: record.end.timeIntervalSince(record.start))).textRole(.secondary).foregroundStyle(Palette.secondary)
                     }
                     Text(highlighted(text(block), q)).textRole(.body).foregroundStyle(Palette.ink)
-                        .lineSpacing(3)
+                        .lineSpacing(Rhythm.secondaryLineGap)
                         .textSelection(.enabled)
                 }
                 .padding(.vertical, Space.s)

@@ -10,7 +10,7 @@ struct LabelColumn<Content: View>: View {
     /// A second line under the label, in the accent: "3 need attention".
     var note: String?
     /// Lines up the label with the first row's text when the rows have their own padding.
-    var labelTopPadding: CGFloat = 2
+    var labelTopPadding: CGFloat = Rhythm.readingLabelOffset
     @ViewBuilder let content: Content
 
     @ScaledMetric(relativeTo: .caption) private var noteSize: CGFloat = 11
@@ -23,7 +23,7 @@ struct LabelColumn<Content: View>: View {
 
     var body: some View {
         if stacked {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                 labelView(alignment: .leading).padding(.top, Space.l)
                 content.frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -38,7 +38,7 @@ struct LabelColumn<Content: View>: View {
     }
 
     private func labelView(alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: 3) {
+        VStack(alignment: alignment, spacing: Rhythm.pairGap) {
             Text(label).textRole(.label).foregroundStyle(Palette.secondary)
             if let note {
                 // Sentence case: the canvas sets only the label itself in caps.
@@ -54,7 +54,7 @@ struct LabelColumn<Content: View>: View {
 
 /// Label column groups one after another, with a hairline or a gap between them.
 struct LabelColumnStack<Content: View>: View {
-    var spacing: CGFloat = 26
+    var spacing: CGFloat = Rhythm.sectionGap
     var divided = false
     @ViewBuilder let content: Content
 

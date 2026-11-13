@@ -14,7 +14,7 @@ struct PersonAnalyticsTab: View {
 
     var body: some View {
         let r = relation
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             if r.calls == 0 {
                 EmptyState(symbol: "chart.bar", title: "Nothing to measure yet",
                            message: "After a recorded call where \(first) speaks, how the two of you talk shows here.")
@@ -25,7 +25,7 @@ struct PersonAnalyticsTab: View {
                         balance("One to one", r.oneOnOne)
                         balance("In groups", r.group)
                     }
-                    .frame(maxWidth: 680, alignment: .leading)
+                    .frame(maxWidth: Rhythm.measure, alignment: .leading)
                 }
                 LabelColumn(label: "How you talk") {
                     Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 7) {
@@ -40,33 +40,33 @@ struct PersonAnalyticsTab: View {
                              help: "Starting while the other is still talking, and taking the floor")
                         pair("Usual reply", seconds(r.myReply), seconds(r.theirReply), help: "The pause before answering the other")
                     }
-                    .font(.system(size: 13)).monospacedDigit()
+                    .font(.system(size: Rhythm.bodySize)).monospacedDigit()
                 }
                 LabelColumn(label: "How often") {
-                    WeeklyChart(weeks: r.weekly).frame(maxWidth: 680)
+                    WeeklyChart(weeks: r.weekly).frame(maxWidth: Rhythm.measure)
                 }
                 if !stats.meetings.isEmpty {
                     LabelColumn(label: "Talk time by meeting") { PersonTalkByMeeting(profile: profile, stats: stats) }
                 }
-                LabelColumn(label: "How it went") { ValueStrip(value: r.value).frame(maxWidth: 680, alignment: .leading) }
+                LabelColumn(label: "How it went") { ValueStrip(value: r.value).frame(maxWidth: Rhythm.measure, alignment: .leading) }
             }
         }
     }
 
     @ViewBuilder
     private func balance(_ label: String, _ b: PersonRelation.Balance?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
             HStack {
-                Text(label).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
+                Text(label).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
                 Spacer()
                 if let share = b?.share {
-                    Text("You \(percent(share)) · \(first) \(percent(1 - share))").font(.system(size: 12)).foregroundStyle(Palette.secondary).monospacedDigit()
+                    Text("You \(percent(share)) · \(first) \(percent(1 - share))").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).monospacedDigit()
                 }
             }
             if let b, b.share != nil {
                 BalanceBar(mine: b.mine, theirs: b.theirs, showsShare: false)
             } else {
-                Text("No calls like this yet.").font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+                Text("No calls like this yet.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             }
         }
     }
@@ -114,8 +114,8 @@ struct PersonTalkByMeeting: View {
                 }
             }
         }
-        .font(.system(size: 12.5))
-        .frame(maxWidth: 680, alignment: .leading)
+        .font(.system(size: Rhythm.bodySize))
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
     }
 }
 
@@ -131,7 +131,7 @@ struct PersonTasksTab: View {
     private var first: String { profile.name.split(separator: " ").first.map(String.init) ?? profile.name }
 
     var body: some View {
-        LabelColumnStack(spacing: 18) {
+        LabelColumnStack(spacing: Rhythm.sectionGap) {
             if profile.isOwner {
                 if stats.actionItems.isEmpty {
                     empty("No action items for you yet.")
@@ -146,7 +146,7 @@ struct PersonTasksTab: View {
                     empty("No tasks between you and \(first) yet. What you promise \(first) in a call, and what \(first) takes on, shows here.")
                 } else {
                     LabelColumn(label: "You promised \(first)") {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                             if open.isEmpty { quiet("Nothing open for \(first).") } else { items(open.map(commitment)) }
                             if !done.isEmpty {
                                 Button(showsDone ? "Hide done" : "\(done.count) done") { withAnimation(.snappy) { showsDone.toggle() } }
@@ -180,7 +180,7 @@ struct PersonTasksTab: View {
     }
 
     private func quiet(_ text: String) -> some View {
-        Text(text).font(.system(size: 13)).foregroundStyle(Palette.secondary)
+        Text(text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
     }
 
     private func items(_ rows: [(String, String, Bool?, () -> Void)]) -> some View {
@@ -191,12 +191,12 @@ struct PersonTasksTab: View {
                         // An action item has no state of its own: no circle, so it does not look like an open task.
                         if let done = row.2 {
                             Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 11)).foregroundStyle(done ? Palette.ok : Palette.tertiaryMark)
+                                .font(.system(size: Rhythm.noteSize)).foregroundStyle(done ? Palette.ok : Palette.tertiaryMark)
                                 .accessibilityHidden(true)
                         }
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                             Text(row.0).foregroundStyle(Palette.ink).strikethrough(row.2 == true).multilineTextAlignment(.leading)
-                            if !row.1.isEmpty { Text(row.1).font(.system(size: 12)).foregroundStyle(Palette.secondary) }
+                            if !row.1.isEmpty { Text(row.1).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary) }
                         }
                         Spacer(minLength: 0)
                     }
@@ -208,8 +208,8 @@ struct PersonTasksTab: View {
                 if i < rows.count - 1 { Hairline() }
             }
         }
-        .font(.system(size: 13))
-        .frame(maxWidth: 680, alignment: .leading)
+        .font(.system(size: Rhythm.bodySize))
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
     }
 }
 
@@ -254,11 +254,11 @@ private struct ValueStrip: View {
     var body: some View {
         let total = value.values.reduce(0, +)
         if total == 0 {
-            Text("The coach rates each meeting's worth. Ratings show here after coached calls.").font(.system(size: 13)).foregroundStyle(Palette.secondary)
+            Text("The coach rates each meeting's worth. Ratings show here after coached calls.").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
         } else {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 GeometryReader { g in
-                    HStack(spacing: 2) {
+                    HStack(spacing: Space.xs) {
                         ForEach(Self.ratings, id: \.1) { r in
                             Rectangle().fill(r.2).frame(width: max(0, g.size.width * Double(value[r.0] ?? 0) / Double(total) - 2))
                         }
@@ -266,15 +266,15 @@ private struct ValueStrip: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                 }
                 .frame(height: 10)
-                HStack(spacing: 12) {
+                HStack(spacing: Space.m) {
                     ForEach(Self.ratings, id: \.1) { r in
-                        HStack(spacing: 5) {
+                        HStack(spacing: Space.xs) {
                             Circle().fill(r.2).frame(width: 7, height: 7)
                             Text("\(r.1) \(value[r.0] ?? 0)").monospacedDigit()
                         }
                     }
                 }
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
             }
         }
     }

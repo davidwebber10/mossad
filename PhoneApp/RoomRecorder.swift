@@ -401,7 +401,7 @@ struct RecordingView: View {
 
     private var status: some View {
         let live = recorder.state == .recording
-        return HStack(spacing: 6) {
+        return HStack(spacing: Space.s) {
             Image(systemName: "circle.fill").font(.system(size: 7))
                 .foregroundStyle(live ? Palette.recording : Palette.tertiaryMark)
                 .symbolEffect(.pulse, isActive: live && !reduceMotion)
@@ -417,7 +417,7 @@ struct RecordingView: View {
 
     /// The last second of the room's level, newest on the right.
     private var meter: some View {
-        HStack(alignment: .center, spacing: 3) {
+        HStack(alignment: .center, spacing: Space.xs) {
             ForEach(Array(recorder.levels.enumerated()), id: \.offset) { _, l in
                 Capsule()
                     .fill(recorder.state == .recording ? Palette.recording.opacity(0.85) : Palette.bar)

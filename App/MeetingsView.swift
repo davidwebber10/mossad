@@ -295,9 +295,9 @@ struct PaneBackBar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 Button { back() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "chevron.left").font(.system(size: Rhythm.secondarySize, weight: .semibold))
                         .frame(width: 26, height: 26)
                         .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
                 }
@@ -306,12 +306,12 @@ struct PaneBackBar: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 ForEach(Array(crumbs.enumerated()), id: \.offset) { _, crumb in
                     Button(crumb) { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
-                    Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
+                    Image(systemName: "chevron.right").font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.tertiaryMark)
                 }
                 Text(title).fontWeight(.medium).lineLimit(1)
                 Spacer()
             }
-            .font(.system(size: 13))
+            .font(.system(size: Rhythm.bodySize))
             .padding(EdgeInsets(top: 14, leading: 24, bottom: 10, trailing: 24))
             Hairline()
         }
@@ -466,11 +466,11 @@ struct MeetingMenuItems: View {
 /// "Name voices" and the More button, in a detail header.
 private struct EmptyMeetings: View {
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: Rhythm.rowGap) {
             Image(systemName: "waveform").font(.system(size: 34)).foregroundStyle(.tertiary)
-            Text("No meetings yet").font(.system(size: 15, weight: .semibold))
+            Text("No meetings yet").font(.system(size: Rhythm.headingSize, weight: .semibold))
             Text("Mossad records Zoom, Google Meet, and Microsoft Teams calls on its own. Join a call and it appears here.")
-                .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
+                .font(.system(size: Rhythm.bodySize)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -516,7 +516,7 @@ private struct MergeSheet: View {
                 .frame(maxHeight: 330)
                 if !chosen.isEmpty {
                     Text("Audio, transcripts, and speaker names are joined, and Mossad writes one new summary and note. \(chosen.count > 1 ? "The other meetings are" : "The other meeting is") removed from the list.")
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 12)
                 }
@@ -543,7 +543,7 @@ private struct MergeSheet: View {
     @ViewBuilder
     private func row(_ r: CallRecord, locked: Bool) -> some View {
         if locked {
-            HStack(spacing: 12) {
+            HStack(spacing: Space.m) {
                 SheetCheckbox(isOn: true)
                 rowText(r)
             }
@@ -563,18 +563,18 @@ private struct MergeSheet: View {
     }
 
     private func rowText(_ r: CallRecord) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+            HStack(spacing: Space.s) {
                 Text(r.title).fontWeight(.medium).lineLimit(1)
                 if r.id == earliest, !chosen.isEmpty {
                     Text("Joins into this one")
-                        .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.secondary)
+                        .font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(Palette.secondary)
                         .padding(.horizontal, 8).frame(height: 18)
                         .background(Palette.fill, in: Capsule())
                 }
             }
             Text("\(dayWord(r.start)), \((r.start..<max(r.end, r.start)).formatted(.interval.hour().minute())) · \(r.lengthText)")
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary).monospacedDigit()
+                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
