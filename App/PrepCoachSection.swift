@@ -41,7 +41,7 @@ struct PrepCoachSection: View {
                 }
             }
         }
-        .font(.system(size: Rhythm.bodySize))
+        .readingText()
         .textSelection(.enabled)
     }
 }
