@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.25.0",
+      "date": "2026-11-13",
+      "notes": [
+        "Tell Mossad to do things: add a point for a meeting, add a task, bookmark a moment, with a receipt and Undo. Your AI apps can read everything in the app: people, recurring meetings, your points, the coach, and more."
+      ]
+    },
+    {
       "version": "2.24.0",
       "date": "2026-11-13",
       "notes": [
