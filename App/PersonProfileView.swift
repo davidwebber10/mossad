@@ -76,7 +76,7 @@ struct PersonProfileView: View {
         case .analytics:
             ScrollView {
                 if let relation {
-                    PersonAnalyticsTab(profile: profile, stats: stats, relation: relation).detailColumn(top: top)
+                    PersonAnalyticsTab(profile: profile, stats: stats, relation: relation).detailColumn(top: top, width: Rhythm.wideWidth)
                 } else {
                     ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.top, top + 20)
                 }

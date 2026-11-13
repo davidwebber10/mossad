@@ -37,10 +37,9 @@ struct MeetingHeader: View {
                     .padding(.top, 38)
             }
         }
-        .frame(maxWidth: Detail.columnMax, alignment: .leading)
-        .padding(.horizontal, Detail.gutter)
+        .bandColumn()
         .padding(.vertical, Detail.bandPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .bandFrame()
         .background(Palette.band)
         .hairline(.bottom)
     }

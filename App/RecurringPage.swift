@@ -149,11 +149,10 @@ private struct RecurringHeader: View {
                 numbers.padding(.top, 18)
                 next(now: context.date).padding(.top, 16)
             }
-            .frame(maxWidth: Detail.columnMax, alignment: .leading)
-            .padding(.horizontal, Detail.gutter)
+            .bandColumn()
             .padding(.top, Detail.bandPadding)
             .padding(.bottom, Detail.bandPadding + 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .bandFrame()
             .background(Palette.band)
             .hairline(.bottom)
         }

@@ -209,7 +209,7 @@ struct ScreensTab: View {
                     .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .detailColumn(top: top, bottom: Space.s)
+            .detailColumn(top: top, bottom: Space.s, width: Rhythm.wideWidth)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Space.xl) {
                     if picturesGone {
@@ -245,7 +245,7 @@ struct ScreensTab: View {
                         Text("No screen has that text.").font(.system(size: 12.5)).foregroundStyle(Palette.secondary)
                     }
                 }
-                .detailColumn(top: Space.s)
+                .detailColumn(top: Space.s, width: Rhythm.wideWidth)
             }
         }
     }

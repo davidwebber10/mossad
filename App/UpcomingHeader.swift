@@ -41,10 +41,9 @@ struct UpcomingHeader: View {
                 if !invited.isEmpty { people.padding(.top, 30) }
                 controls(joinable: left <= 60).padding(.top, invited.isEmpty ? 24 : 16)
             }
-            .frame(maxWidth: Detail.columnMax, alignment: .leading)
-            .padding(.horizontal, Detail.gutter)
+            .bandColumn()
             .padding(.vertical, Detail.bandPadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .bandFrame()
             .background(Palette.band)
             .hairline(.bottom)
         }

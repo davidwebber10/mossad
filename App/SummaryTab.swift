@@ -20,45 +20,53 @@ struct SummaryTab: View {
             EmptyState(symbol: "mic.slash", title: "No speech detected", message: "The call was recorded, but nobody spoke.",
                        action: delete.map { ("Delete…", $0) })
         } else {
-            LabelColumnStack(spacing: Space.l) {
+            LabelColumnStack(spacing: Rhythm.sectionGap) {
                 if let line = oneLine {
-                    LabelColumn(label: "In one line") {
-                        Text(line).font(.system(size: 16, weight: .medium)).lineSpacing(3).foregroundStyle(Palette.ink)
+                    LabelColumn(label: "In one line", labelTopPadding: Self.leadLabelTop) {
+                        Text(line).font(.system(size: Rhythm.leadSize, weight: .medium)).foregroundStyle(Palette.ink)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                 }
                 if !record.decisions.isEmpty {
-                    LabelColumn(label: "Decisions") { decisions }
+                    LabelColumn(label: "Decisions", labelTopPadding: Self.labelTop) { decisions }
                 }
                 if !bookmarks.isEmpty {
-                    LabelColumn(label: "Bookmarks") { bookmarkList }
+                    LabelColumn(label: "Bookmarks", labelTopPadding: Self.labelTop) { bookmarkList }
                 }
                 // A meeting that only shared information has no action items at all.
                 if record.summary != nil, record.hasOutcomes != false || !record.actionItems.isEmpty {
-                    LabelColumn(label: "Action items") { actionItems }
+                    LabelColumn(label: "Action items", labelTopPadding: Self.labelTop) { actionItems }
                 }
                 MeetingPointsGroup(callID: record.id)
                 overview
                 if !record.topics.isEmpty {
-                    LabelColumn(label: "Topics") {
-                        VStack(alignment: .leading, spacing: 0) {
+                    LabelColumn(label: "Topics", labelTopPadding: Self.labelTop) {
+                        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                             ForEach(record.topics, id: \.self) { TopicRow(topic: $0) }
                         }
                     }
                 }
                 // Gemini's notes give words, not times: the share by words is on the Analytics tab.
                 if !record.isNotesOnly, people.speakers.contains(where: { $0.seconds > 0 }) {
-                    LabelColumn(label: "Talk share") { TalkShare(people: people) }
+                    LabelColumn(label: "Talk share", labelTopPadding: 0) {
+                        TalkShare(people: people).padding(.top, Self.barTop)
+                    }
                 }
                 if !people.attendees.isEmpty {
-                    LabelColumn(label: "Invited") { invited }
+                    LabelColumn(label: "Invited", labelTopPadding: Self.labelTop) { invited }
                 }
             }
-            .font(.system(size: 13))
+            .readingText()
             .foregroundStyle(Palette.ink)
         }
     }
+
+    /// Moves each label down so its baseline meets the first line of its content.
+    private static let labelTop = Rhythm.labelOffset(toContent: Rhythm.readingSize)
+    private static let leadLabelTop = Rhythm.labelOffset(toContent: Rhythm.leadSize, weight: .medium)
+    /// The talk share's bar sits centered on the label's capitals.
+    private static let barTop = max(0, Rhythm.capCenter(TextRole.label.size) - TalkShare.barHeight / 2)
 
     /// The summary's headline; an older meeting without one shows the overview's first sentence.
     private var oneLine: String? {
@@ -78,7 +86,7 @@ struct SummaryTab: View {
             : nil
         // Older meetings have no decision times: then the text starts at the column, with no empty gutter.
         let timed = record.decisions.contains { $0.at != nil }
-        return VStack(alignment: .leading, spacing: 7) {
+        return VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             ForEach(Array(record.decisions.enumerated()), id: \.offset) { i, d in
                 TimedRow(at: d.at, strong: i == current, long: record.isLong, reserve: timed, player: player) {
                     Text(d.text).fixedSize(horizontal: false, vertical: true)
@@ -91,13 +99,13 @@ struct SummaryTab: View {
     private var bookmarks: [TranscriptMarker] { record.transcriptMarkers.filter(\.isBookmark) }
 
     private var bookmarkList: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             ForEach(Array(bookmarks.enumerated()), id: \.offset) { _, b in
                 TimedRow(at: b.offset, flag: true, long: record.isLong, player: player) {
                     if let note = b.note?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty {
                         Text(note).fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text("Bookmark \(Text("· no note").font(.system(size: 12)).foregroundStyle(Palette.tertiary))")
+                        Text("Bookmark \(Text("· no note").font(Rhythm.secondary).foregroundStyle(Palette.tertiary))")
                             .foregroundStyle(Palette.secondary)
                     }
                 }
@@ -112,10 +120,12 @@ struct SummaryTab: View {
         if record.actionItems.isEmpty {
             Text("None.").foregroundStyle(Palette.secondary)
         } else {
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 ForEach(record.actionItems, id: \.self) { item in
-                    HStack(alignment: .top, spacing: 10) {
-                        Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 15, height: 15).padding(.top, 1)
+                    HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                        // Centered on the first line's capitals.
+                        Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 15, height: 15)
+                            .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + Rhythm.capHalf(Rhythm.readingSize) }
                         ActionItemLine(item: item)
                     }
                 }
@@ -129,15 +139,15 @@ struct SummaryTab: View {
     private var overview: some View {
         if let summary = record.summary {
             LabelColumn(label: "Summary") {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Rhythm.blockGap) {
                     ForEach(Array(SummaryBlock.parse(summary).enumerated()), id: \.offset) { _, block in
                         switch block {
                         case .paragraph(let text): inline(text)
-                        case .heading(let text): Text(text).font(.system(size: 13, weight: .semibold)).padding(.top, 2)
+                        case .heading(let text): Text(text).font(.system(size: Rhythm.readingSize, weight: .semibold))
                         case .bullets(let items):
-                            VStack(alignment: .leading, spacing: 3) {
+                            VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                                         Text("•").foregroundStyle(Palette.tertiary)
                                         inline(item)
                                     }
@@ -146,7 +156,7 @@ struct SummaryTab: View {
                         }
                     }
                 }
-                .frame(maxWidth: 680, alignment: .leading)
+                .frame(maxWidth: Rhythm.measure, alignment: .leading)
                 .textSelection(.enabled)
             }
         } else if record.status == .written {
@@ -169,11 +179,11 @@ struct SummaryTab: View {
     // MARK: Invited
 
     private var invited: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             ForEach(Array(people.attendees.enumerated()), id: \.offset) { _, a in
-                HStack(spacing: Space.s) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                     PersonName(a.email ?? a.name, shown: a.name).lineLimit(1)
-                    if let email = a.email { Text(email).font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1) }
+                    if let email = a.email { Text(email).font(Rhythm.secondary).foregroundStyle(Palette.secondary).lineLimit(1) }
                 }
             }
         }
@@ -189,13 +199,13 @@ private struct ActionItemLine: View {
     var body: some View {
         if let owner = item.owner {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                     Text(item.task).lineLimit(1).textSelection(.enabled)
                     name(owner)
                 }
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(item.task).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-                    name(owner, dot: false).font(.system(size: 12))
+                    name(owner, dot: false)
                 }
             }
         } else {
@@ -204,10 +214,11 @@ private struct ActionItemLine: View {
     }
 
     private func name(_ owner: String, dot: Bool = true) -> some View {
-        HStack(spacing: 5) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.xs) {
             if dot { Text("·").accessibilityHidden(true) }
             PersonName(owner, shown: shortName(owner)).lineLimit(1)
         }
+        .font(Rhythm.secondary)
         .foregroundStyle(Palette.secondary)
         .fixedSize()
     }
@@ -220,7 +231,7 @@ extension CallRecord {
 
 func inline(_ text: String) -> Text {
     let attributed = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
-    return Text(attributed).font(.system(size: 13))
+    return Text(attributed).font(Rhythm.reading)
 }
 
 /// A time in a 44 pt column, then the text. The time plays from there; no time leaves the column empty.
@@ -236,7 +247,7 @@ struct TimedRow<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: at == nil && !reserve ? 0 : 10) {
+        HStack(alignment: .firstTextBaseline, spacing: at == nil && !reserve ? 0 : Space.m) {
             Group {
                 if let at {
                     Button { player.play(from: at) } label: {
@@ -244,7 +255,7 @@ struct TimedRow<Content: View>: View {
                             if flag { BookmarkFlag().fill(Palette.accentFill).frame(width: 7, height: 9) }
                             Text(long ? longClock(at) : clock(at))
                         }
-                        .font(.system(size: 12, weight: strong ? .semibold : .regular)).monospacedDigit()
+                        .font(.system(size: Rhythm.secondarySize, weight: strong ? .semibold : .regular)).monospacedDigit()
                         .foregroundStyle(strong ? Palette.ink : Palette.tertiary)
                         .contentShape(Rectangle())
                     }
@@ -252,7 +263,7 @@ struct TimedRow<Content: View>: View {
                     .disabled(!player.isAvailable)
                     .help(player.isAvailable ? "Play from \(clock(at))" : "The audio is not available")
                 } else if reserve {
-                    Text(" ").font(.system(size: 12))
+                    Text(" ").font(Rhythm.secondary)
                 }
             }
             .frame(width: at == nil && !reserve ? 0 : (flag ? 14 : 0) + (long ? 54 : 44), alignment: .leading)
@@ -264,11 +275,12 @@ struct TimedRow<Content: View>: View {
 /// Everyone's share of the talk as one bar in their hues, then the few who talked most in words.
 struct TalkShare: View {
     let people: MeetingPeople
+    static let barHeight: CGFloat = 8
 
     var body: some View {
         let talkers = people.speakers.filter { $0.seconds > 0 }
         let total = max(talkers.reduce(0) { $0 + $1.seconds }, 1)
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.readingLineGap) {
             GeometryReader { g in
                 let gaps = CGFloat(max(talkers.count - 1, 0))
                 let width = max(g.size.width - gaps, 0)
@@ -278,11 +290,11 @@ struct TalkShare: View {
                     }
                 }
             }
-            .frame(height: 8)
+            .frame(height: Self.barHeight)
             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             .frame(maxWidth: 520)
             .accessibilityHidden(true)
-            caption(talkers, total: total).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+            caption(talkers, total: total).font(Rhythm.secondary).foregroundStyle(Palette.secondary)
         }
     }
 
@@ -313,27 +325,28 @@ private struct TopicRow: View {
     @State private var open = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Rhythm.readingLineGap) {
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) { open.toggle() }
             } label: {
-                HStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s - 2) {
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                         .rotationEffect(.degrees(open ? 90 : 0)).foregroundStyle(Palette.tertiaryMark).frame(width: 12)
-                    Text(topic.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
+                        .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + Rhythm.capHalf(Rhythm.readingSize) }
+                    Text(topic.title).font(.system(size: Rhythm.readingSize, weight: .medium)).foregroundStyle(Palette.ink)
                     Spacer()
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             if open {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                     ForEach(Array(SummaryBlock.parse(topic.summary).enumerated()), id: \.offset) { _, block in
                         switch block {
                         case .paragraph(let text), .heading(let text): inline(text)
                         case .bullets(let items):
                             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                                     Text("•").foregroundStyle(Palette.tertiary)
                                     inline(item)
                                 }
@@ -341,12 +354,15 @@ private struct TopicRow: View {
                         }
                     }
                 }
-                .padding(.leading, 18)
+                .padding(.leading, Self.indent)
+                .frame(maxWidth: Rhythm.measure, alignment: .leading)
                 .textSelection(.enabled)
             }
         }
-        .padding(.vertical, 5)
     }
+
+    /// The chevron's column and its gap, so the topic's text lines up under its title.
+    private static let indent: CGFloat = 12 + Space.s - 2
 }
 
 private struct Skeleton: View {

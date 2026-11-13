@@ -54,11 +54,10 @@ struct PersonHeader: View {
             }
             figures.padding(.top, 26)
         }
-        .frame(maxWidth: Detail.columnMax, alignment: .leading)
-        .padding(.horizontal, Detail.gutter)
+        .bandColumn()
         .padding(.top, Detail.bandPadding)
         .padding(.bottom, Detail.bandPadding + 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .bandFrame()
         .background(Palette.band)
         .hairline(.bottom)
     }

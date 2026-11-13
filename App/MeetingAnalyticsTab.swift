@@ -52,7 +52,7 @@ struct MeetingAnalyticsTab: View {
                         .frame(maxWidth: .infinity, minHeight: 320, alignment: .topLeading)
                     }
                 }
-                .detailColumn(top: top)
+                .detailColumn(top: top, width: Rhythm.wideWidth)
             }
             // Development hook for screenshots: MOSSAD_SCROLL_TO names a group's label, such as "Conversation flow".
             .onChange(of: shown?.facts.id) { _, _ in
