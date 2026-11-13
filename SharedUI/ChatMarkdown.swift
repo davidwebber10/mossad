@@ -12,9 +12,11 @@ struct ChatMarkdown: View {
     var timeChips = false
     /// The meeting a chat is about: a bare "[12:04]" becomes a chip to that moment.
     var callID: String?
+    /// The space between the lines of a block: chat answers are read, not scanned, so they get room.
+    static let lineGap: CGFloat = 6
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             ForEach(Array(ChatBlocks.parse(ChatBlocks.linkTimes(text, callID: callID)).enumerated()), id: \.offset) { i, block in
                 view(block, first: i == 0)
             }
@@ -26,18 +28,18 @@ struct ChatMarkdown: View {
     private func view(_ block: ChatBlock, first: Bool) -> some View {
         switch block {
         case .paragraph(let s):
-            Text(inline(s)).font(bodyFont).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
+            Text(inline(s)).font(bodyFont).lineSpacing(Self.lineGap).fixedSize(horizontal: false, vertical: true)
         case .heading(let level, let s):
             Text(inline(s)).font(headingFont(level)).foregroundStyle(Palette.ink)
-                .padding(.top, first ? 0 : 6)
+                .padding(.top, first ? 0 : 8)
                 .accessibilityAddTraits(.isHeader)
         case .list(let ordered, let items):
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 9) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(item.marker).font(bodyFont).monospacedDigit().foregroundStyle(Palette.tertiary)
                             .frame(minWidth: ordered ? 16 : 8, alignment: .trailing)
-                        Text(inline(item.text)).font(bodyFont).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
+                        Text(inline(item.text)).font(bodyFont).lineSpacing(Self.lineGap).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.leading, CGFloat(item.level) * 20)
                 }
@@ -118,9 +120,9 @@ private struct QuoteBlock: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             Capsule().fill(Palette.accent.opacity(0.45)).frame(width: 3)
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 7) {
                 if quote.speaker != nil || quote.time != nil {
                     HStack(spacing: 6) {
                         if let speaker = quote.speaker {
@@ -132,11 +134,11 @@ private struct QuoteBlock: View {
                         }
                     }
                 }
-                Text(text).font(bodyFont).foregroundStyle(Palette.ink).lineSpacing(4)
+                Text(text).font(bodyFont).foregroundStyle(Palette.ink).lineSpacing(ChatMarkdown.lineGap)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 10).padding(.trailing, 12).padding(.leading, 10)
+        .padding(.vertical, 13).padding(.trailing, 14).padding(.leading, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.fill.opacity(0.7), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .accessibilityElement(children: .combine)

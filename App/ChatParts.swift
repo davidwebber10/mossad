@@ -8,7 +8,7 @@ enum ChatThread {
     static let bubbleMax: CGFloat = 520
     /// The measure of an answer.
     static let answerMax: CGFloat = 720
-    static let bodyFont = Font.system(size: 13.5)
+    static let bodyFont = Font.system(size: 14)
     /// The bubble: the accent text color in light mode, where the fill color is too light for white text.
     static let bubbleFill = Color(light: 0xA84D14, dark: 0xE8964E)
 
@@ -26,7 +26,7 @@ struct ChatExchangeRow: View {
 
     var body: some View {
         switch message.role {
-        case .user: ChatQuestionBubble(text: message.text).padding(.top, Space.s)
+        case .user: ChatQuestionBubble(text: message.text).padding(.top, Space.l)
         case .assistant: ChatAnswer(text: message.text, steps: message.steps, callID: callID, live: message.live == true)
         }
     }
@@ -39,9 +39,9 @@ struct ChatQuestionBubble: View {
         HStack(spacing: 0) {
             Spacer(minLength: 80)
             Text(text)
-                .font(ChatThread.bodyFont).lineSpacing(3)
+                .font(ChatThread.bodyFont).lineSpacing(4)
                 .foregroundStyle(Palette.onAccent)
-                .padding(.horizontal, 14).padding(.vertical, 9)
+                .padding(.horizontal, 15).padding(.vertical, 10)
                 .background(ChatThread.bubbleFill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .frame(maxWidth: ChatThread.bubbleMax, alignment: .trailing)
                 .fixedSize(horizontal: false, vertical: true)
