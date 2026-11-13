@@ -102,6 +102,25 @@ struct LiveTranscriptPanel: View {
     private var room: Bool { record.platform == .inPerson }
 
     var body: some View {
+        let points = !controller.livePointList().isEmpty
+        VStack(spacing: 0) {
+            // The owner's points stay over the transcript, which scrolls under them.
+            LivePointsPanel(model: controller.livePoints, record: record, top: top) { at in jump = LiveJump(at: at) }
+            transcript(top: points ? Space.m : top)
+        }
+        .task(id: record.id) {
+            // The catalog, the invite, and the names heard change during the call.
+            // Often at first, while the catalog is made, then every 10 s.
+            var n = 0
+            while !Task.isCancelled {
+                controller.refreshLivePoints(record)
+                n += 1
+                try? await Task.sleep(for: .seconds(n < 5 ? 1 : 10))
+            }
+        }
+    }
+
+    private func transcript(top: CGFloat) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.m) {

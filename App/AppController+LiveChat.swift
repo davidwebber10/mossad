@@ -54,6 +54,7 @@ extension AppController {
         facts.paused = isPaused
         facts.recorded = recorded
         facts.voices = snapshot.voiceNames
+        facts.points = livePointFacts(callID: record.id)
         return facts
     }
 

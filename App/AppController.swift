@@ -163,6 +163,8 @@ final class AppController: ObservableObject {
     @Published var liveOffReason: String?
     /// The live chat of each call, so an answer that runs survives a change of tab.
     var liveChatSessions: [String: LiveChatSession] = [:]
+    /// The owner's points on the live call's page: what Mossad heard, and the call's series and people.
+    let livePoints = LivePointsModel()
     /// When the open streaming sessions started, to log the time AssemblyAI bills.
     private var liveOpened: Date?
     private var liveNaming: Task<Void, Never>?
@@ -1308,6 +1310,7 @@ final class AppController: ObservableObject {
         // A pause cancels the timer, so a resumed call starts it again; the recorder keeps only the first title.
         startLiveTitling(callID: CallRecorder.callID(for: since))
         if voiceFingerprints { startLiveNaming(callID: CallRecorder.callID(for: since), themURL: themURL, room: room) }
+        startLiveHearing(callID: CallRecorder.callID(for: since))
     }
 
     /// Once per call, after about 5 minutes of live transcript, asks a small model for a provisional title so the
@@ -1418,6 +1421,7 @@ final class AppController: ObservableObject {
         liveNaming = nil
         liveTitling?.cancel()
         liveTitling = nil
+        stopLiveHearing()
         recorder.meSink.set(nil)
         recorder.themSink.set(nil)
         liveSessions.forEach { $0.stop() }

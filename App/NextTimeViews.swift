@@ -149,6 +149,7 @@ struct NextTimeList: View {
         if !parts.isEmpty {
             Text(parts.joined(separator: " · ")).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
         }
+        if let m = p.lastMention { MentionNote(mention: m) }
     }
 
     private func startEdit(_ p: NextTimePoint) {
@@ -176,6 +177,21 @@ struct NextTimeList: View {
         ids.removeAll { $0 == id }
         ids.insert(id, at: ids.firstIndex(of: target) ?? ids.count)
         controller.changeNextTime { $0.reorder(ids) }
+    }
+}
+
+/// "Came up while you were out · Nov 3 ▸ 12:04": a point that came up in a meeting the owner missed. It stays open.
+struct MentionNote: View {
+    let mention: NextTimePoint.Mention
+    var day = true
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Came up while you were out" + (day ? " · \(shortDay(mention.date))" : ""))
+                .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+            SeriesMoment(callID: mention.callID, at: mention.at)
+        }
+        .help("\u{201C}\(mention.quote)\u{201D}")
     }
 }
 
@@ -401,7 +417,33 @@ struct MeetingPointsGroup: View {
         let book = controller.series.book
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
+        // A meeting the owner missed closes and carries nothing: its points came up while the owner was out.
+        let mentioned = book.mentioned(in: callID)
         VStack(spacing: 0) {
+            if !mentioned.isEmpty {
+                LabelColumn(label: "Came up while you were out") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(mentioned) { p in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 14, height: 14)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(p.text)
+                                    if let m = p.mentions?.first(where: { $0.callID == callID }) {
+                                        HStack(spacing: 8) {
+                                            Text("Still open: you were not in this meeting").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                                            SeriesMoment(callID: callID, at: m.at)
+                                        }
+                                        Text("\u{201C}\(m.quote)\u{201D}").font(.system(size: 12)).italic().foregroundStyle(Palette.secondary).lineLimit(2)
+                                    }
+                                }
+                                Spacer(minLength: 8)
+                            }
+                            .font(.system(size: 13))
+                            .padding(.vertical, 6).padding(.horizontal, 8)
+                        }
+                    }
+                }
+            }
             if !discussed.isEmpty || !carried.isEmpty {
                 LabelColumn(label: "Your points") {
                     VStack(alignment: .leading, spacing: 2) {

@@ -23,6 +23,24 @@ public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashabl
         }
     }
 
+    /// Where a point came up in a meeting the owner missed. The point stays open: the owner has not raised it.
+    public struct Mention: Codable, Equatable, Sendable, Hashable {
+        public var callID: String
+        /// The second of the call of the quoted line.
+        public var at: TimeInterval
+        /// The words of the call, as the transcript has them.
+        public var quote: String
+        /// When the meeting was.
+        public var date: Date
+
+        public init(callID: String, at: TimeInterval, quote: String, date: Date) {
+            self.callID = callID
+            self.at = at
+            self.quote = quote
+            self.date = date
+        }
+    }
+
     public var id = UUID()
     public var text: String
     /// The series it is for: its id, the keys it had when the point was saved, and its title then.
@@ -39,6 +57,9 @@ public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashabl
     public var carried: [String]?
     /// Meetings whose "discussed" the owner took back: the check never marks it from them again.
     public var reopened: [String]?
+    /// The meetings the owner missed in which it came up, oldest first. Added to and never rewritten: an older
+    /// build that saves the point leaves this out, and the next merge brings it back from the copy that has it.
+    public var mentions: [Mention]?
     /// The suggestion it came from, when the owner kept one.
     public var suggestion: String?
     public var deleted = false
@@ -59,6 +80,8 @@ public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashabl
     }
 
     public var isOpen: Bool { !deleted && done == nil }
+    /// The newest meeting the owner missed in which it came up.
+    public var lastMention: Mention? { mentions?.max { $0.date < $1.date } }
     public var isForPerson: Bool { personID != nil && seriesID == nil }
 
     public func belongs(to s: MeetingSeries) -> Bool { s.matches(id: seriesID, keys: seriesKeys) }
@@ -165,6 +188,17 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         visible.filter { $0.done?.callID == callID }
     }
 
+    /// The points that came up in a meeting the owner missed.
+    public func mentioned(in callID: String) -> [NextTimePoint] {
+        visible.filter { $0.mentions?.contains { $0.callID == callID } == true }
+    }
+
+    /// Notes that a point came up in a meeting the owner missed, once for each meeting.
+    public mutating func mention(_ id: UUID, _ m: NextTimePoint.Mention, at date: Date = Date()) {
+        guard let p = points.first(where: { $0.id == id }), !(p.mentions ?? []).contains(where: { $0.callID == m.callID }) else { return }
+        update(id, at: date) { $0.mentions = (($0.mentions ?? []) + [m]).sorted { ($0.date, $0.callID) < ($1.date, $1.callID) } }
+    }
+
     // MARK: Changes
 
     /// Adds a point at the end of its list.
@@ -235,14 +269,17 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         for i in answers.indices where answers[i].kind == kind.rawValue && answers[i].verdict != .keep && answers[i].counts { answers[i].withdrawn = date }
     }
 
-    /// Both devices' changes: the newer copy of each point, every answer, and every checked call.
+    /// Both devices' changes: the newer copy of each point with the mentions of both copies, every answer, and
+    /// every checked call. A copy saved by an older build has no mentions; the other copy's stay.
     public func merged(with other: NextTimeBook) -> NextTimeBook {
         var out = NextTimeBook()
         var byID: [UUID: NextTimePoint] = [:]
         var order: [UUID] = []
         for p in points + other.points {
             if let old = byID[p.id] {
-                if p.updated > old.updated { byID[p.id] = p }
+                var newer = p.updated > old.updated ? p : old
+                newer.mentions = Self.union(old.mentions, p.mentions)
+                byID[p.id] = newer
             } else {
                 byID[p.id] = p
                 order.append(p.id)
@@ -256,6 +293,12 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         out.version = max(version, other.version)
         out.checked = checked.union(other.checked)
         return out
+    }
+
+    static func union(_ a: [NextTimePoint.Mention]?, _ b: [NextTimePoint.Mention]?) -> [NextTimePoint.Mention]? {
+        var out: [NextTimePoint.Mention] = []
+        for m in (a ?? []) + (b ?? []) where !out.contains(where: { $0.callID == m.callID }) { out.append(m) }
+        return out.isEmpty ? nil : out.sorted { ($0.date, $0.callID) < ($1.date, $1.callID) }
     }
 
     // MARK: File
