@@ -58,6 +58,21 @@ You need a Cloudflare account with a domain on it, and Node.js.
 
 Add a custom connector with the MCP address, such as `https://mcp.example.com/mossad`. A Mossad sign-in page opens: paste your secret (Settings > Storage & Sync > Copy secret) and click Allow. The AI app can read your meetings, but it cannot change anything.
 
+The tools, all read only:
+
+| Tool | What it reads |
+| --- | --- |
+| `find_meetings`, `search_transcripts`, `read_meeting`, `action_items` | The meetings and their lines. |
+| `people`, `read_person` | The people the Mac sends (names, every written form, addresses, job and team), the meetings with each person by their id, the owner's points for next time with them, their action items, and the owner's promises to them. How to present to a person only when the Mac allows it (Settings > Coach > Share the reads with other AI apps, sent as the `mcpPersonas` config key; a server that never heard it gives none), and never for a person the coach keeps no read on. |
+| `next_time_points` | The owner's points for next time, with what happened to each. |
+| `commitments` | The owner's tasks. |
+| `coach_profile`, `read_coach_review` | The coach's memory and one meeting's review. |
+| `past_chats`, `read_chat` | The newest 60 chats. |
+| `shares` | The share links with their expiry, PIN state, and views. Never a token or a PIN. |
+| `search`, `fetch` | ChatGPT's pair: meetings (a call id, or `meeting:<id>`), people (`person:<id>`), and tasks (`task:<id>`). |
+
+Recurring meetings, the prep page, upcoming meetings, each meeting's numbers, analytics, the coach's cards and goal, bookmarks, screens, the live call, and the app's settings are in `Mossad --mcp` on the Mac only: they are rules over the Mac's history and calendar that this server does not repeat.
+
 ## Share links
 
 A share page shows the parts of one meeting that you chose, and it does not name Mossad. It asks no other site for anything: the text face comes from this Worker.

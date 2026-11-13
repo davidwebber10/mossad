@@ -73,7 +73,8 @@ extension AppController {
         updateSharedServer()
         let owner = ownerName
         // Rehearsal never writes to a server: a setup walkthrough must not change the owner's real one.
-        if !Rehearsal.isOn { Task { try? await ServerClient(c).putConfig(owner: owner) } }
+        let personas = personasInServerMCP
+        if !Rehearsal.isOn { Task { try? await ServerClient(c).putConfig(owner: owner, personasInMCP: personas) } }
         syncNow()
     }
 
@@ -146,6 +147,12 @@ extension AppController {
         return sync
     }
 
+    /// What the server's MCP was last told, this launch.
+    static var serverConfigSentFor: String?
+
+    /// The coach's reads of people go to other AI apps through the owner's server by the same switch as `--mcp`.
+    var personasInServerMCP: Bool { MCPServer.showsPersonas(coachEnabled: coachEnabled, personaEnabled: personaEnabled, personaInMCP: personaInMCP) }
+
     /// Uploads new and changed meetings and pulls what the iPhone changed. One sync at a time; a sync asked for
     /// during one runs again after it.
     func syncNow() {
@@ -156,13 +163,19 @@ extension AppController {
         if main == nil { CloudSync.nothingToMerge(paths: paths) }
         guard let cloud = main ?? mirror else { return }
         if syncRunning { syncAgain = true; return }
-        if !serverConfigSent, let c = serverConnection {
+        // The config again when the owner's name or the switch of the reads for other AI apps changed.
+        let config = "\(ownerName)|\(personasInServerMCP)"
+        if !serverConfigSent || Self.serverConfigSentFor != config, let c = serverConnection {
+            let first = !serverConfigSent
             serverConfigSent = true
-            let owner = ownerName
-            Task { try? await ServerClient(c).putConfig(owner: owner) }
+            Self.serverConfigSentFor = config
+            let owner = ownerName, personas = personasInServerMCP
+            Task { try? await ServerClient(c).putConfig(owner: owner, personasInMCP: personas) }
             // Once a launch: a server that was updated may keep recordings now.
-            let kept = serverKeepsRecordings
-            refreshServerFacts { if self.serverKeepsRecordings != kept { self.syncCloud() } }
+            if first {
+                let kept = serverKeepsRecordings
+                refreshServerFacts { if self.serverKeepsRecordings != kept { self.syncCloud() } }
+            }
         }
         syncRunning = true
         syncActivity.running = true

@@ -131,9 +131,12 @@ public struct ServerClient: Sendable {
         return data
     }
 
-    /// The owner's name and time zone, for the MCP's answers and dates.
-    public func putConfig(owner: String, timeZone: String = TimeZone.current.identifier) async throws {
-        let body = try JSONSerialization.data(withJSONObject: ["owner": owner, "timeZone": timeZone])
+    /// The owner's name and time zone, for the MCP's answers and dates, and whether its MCP may give the coach's
+    /// reads of how people think (`MCPServer.showsPersonas`; a server that never hears it gives none).
+    public func putConfig(owner: String, timeZone: String = TimeZone.current.identifier, personasInMCP: Bool? = nil) async throws {
+        var config: [String: Any] = ["owner": owner, "timeZone": timeZone]
+        if let personasInMCP { config["mcpPersonas"] = personasInMCP }
+        let body = try JSONSerialization.data(withJSONObject: config)
         try await send(connection.request("api/config", method: "PUT"), body: body)
     }
 }

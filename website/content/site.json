@@ -658,13 +658,15 @@
         {
           "id": "mcp-remote",
           "title": "MCP for web AI apps",
-          "body": "With your own server, ChatGPT, Claude, and other web AI apps can read your meetings after you sign in.",
+          "body": "With your own server, ChatGPT, Claude, and other web AI apps can read your meetings and the people in them after you sign in.",
           "details": [
+            "Meetings, people, your tasks, your points for next time, the coach's notes, earlier chats, and share links",
+            "How to present to someone only when you allow it",
             "Read only: an AI app cannot change anything"
           ],
           "icon": "network",
           "comingSoon": false,
-          "sources": ["server/src/mcp.ts", "server/src/tools.ts"]
+          "sources": ["server/src/mcp.ts", "server/src/tools.ts", "server/src/owner.ts"]
         },
         {
           "id": "agents",

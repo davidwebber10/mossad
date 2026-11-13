@@ -120,11 +120,14 @@ S for analytics: later, with the meeting digest (the numbers are Swift rules).
 
 ## Count
 
-- 52 surfaces in the tables above.
-- Covered today, local: 14. Covered today, server: 4.
-- Missing locally and added in this branch: 33 (through 12 new tools and 6 extended ones).
-- Left out on purpose: 5 (the Log, voice fingerprints, raw audio and screen pictures, keys and secrets, the org
-  chart place).
+- 49 surfaces in the tables above.
+- Before this branch, local: 10 fully covered, 9 in part, 26 missing, 4 left out on purpose (the Log, voice
+  fingerprints, raw audio and screen pictures, keys and secrets).
+- Before this branch, server: 3 fully covered (the list, the transcript, action items) and 1 in part (the Summary).
+- After this branch, local: every surface but the 4 left out and the org chart's place on a person's page (HR data
+  that the MCP process cannot read without the app's import state; the directory's job and team are given).
+- After this branch, server: people, a person (without the Mac's numbers), points, tasks, the coach's memory and
+  reviews, chats, and shares. The rest is the digest design below.
 
 ## Local MCP and Chat: the tools
 
@@ -165,7 +168,7 @@ next-time points, coach); the calendar, shares, screens, and app status are Mac 
 | `notes-<call id>/data` | both | the owner's ratings and conversation on a review |
 | D1 `shares` | Mac | each share by the hash of its token; title, expiry, views (no token, PIN only as a hash) |
 
-### Tools added in this branch (no new payload)
+### Tools added in this branch (no new payload, no D1 migration)
 
 - `people`, `read_person`: from `people/data`; the meetings with a person by their id in each view (`persons`,
   `speakerId`, `ownerId`), by the server's existing find rule. The persona card from `personas/data` only when
@@ -226,3 +229,10 @@ sends a digest: one more shared payload, Mac to server only, like `SyncedPersona
 1. Deploy the Worker (the agent never deploys). No D1 migration is needed for this branch.
 2. Upcoming meetings on the server: yes or no (the digest design keeps it off by default).
 3. The digest payload: build it next, or keep the server to the reads above.
+
+## Chat actions (added later in this branch, the app's own chat only)
+
+The owner then asked for a chat that can act ("add a note to my and Jeff's next meeting to discuss X"). Those
+tools are in the app's Chat page, a meeting's Chat tab, the live Chat tab, and the quick panel, never in either
+MCP: the local MCP keeps its one write (`add_next_time_point`) and the server MCP stays read only. See the Chat row
+of `AGENTS.md` (`ChatAction`, `ChatActionRules`, `ChatActionTools`, `AppController+ChatActions`).
