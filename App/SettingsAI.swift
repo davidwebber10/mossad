@@ -111,7 +111,7 @@ struct ModelPicker: View {
 
 /// The commands that connect other AI apps to Mossad's MCP server.
 private struct MCPSetup: View {
-    private var binary: String { Bundle.main.executablePath ?? "/Applications/Mossad.app/Contents/MacOS/Mossad" }
+    private var binary: String { DevHooks.shownBinary(Bundle.main.executablePath ?? "/Applications/Mossad.app/Contents/MacOS/Mossad") }
     private var claudeCode: String { "claude mcp add --scope user mossad -- \"\(binary)\" --mcp" }
     private var desktop: String { "\"mossad\": { \"command\": \"\(binary)\", \"args\": [\"--mcp\"] }" }
 

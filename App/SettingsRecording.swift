@@ -121,7 +121,7 @@ struct RecordingSettings: View {
     private func folderRow(_ title: String, _ url: URL) -> some View {
         HStack(spacing: Space.s) {
             Text(title).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
-            Text(url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+            Text(DevHooks.shownPath(url.path))
                 .font(.system(size: Rhythm.secondarySize, design: .monospaced)).foregroundStyle(Palette.tertiary)
                 .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: Space.m)

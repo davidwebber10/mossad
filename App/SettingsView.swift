@@ -19,9 +19,7 @@ struct SettingsView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         content
-                            .padding(EdgeInsets(top: 10, leading: 36, bottom: 40, trailing: 36))
-                            .frame(maxWidth: 760 + 72, alignment: .leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .pageColumn(Rhythm.readingWidth)
                     }
                     // Development hook for screenshots: MOSSAD_SCROLL_TO names a group's label, such as "Your server".
                     .task {
