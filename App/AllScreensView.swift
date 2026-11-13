@@ -57,7 +57,7 @@ struct AllScreensView: View {
                         MomentGroupHeading(title: group.title, start: group.start, count: group.screens.count, noun: "screen") {
                             controller.openMeeting(group.callID)
                         }
-                        .padding(.top, i == 0 ? 0 : 32)
+                        .padding(.top, i == 0 ? 0 : Rhythm.sectionGap)
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 260), spacing: Space.m)], alignment: .leading, spacing: Space.m) {
                             ForEach(group.screens) { screen in
                                 AllScreensTile(url: frameURL(group.callID, screen),
@@ -69,9 +69,7 @@ struct AllScreensView: View {
                         }
                     }
                 }
-                .frame(maxWidth: Detail.listMax, alignment: .leading)
-                .padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop).padding(.bottom, Space.xxl)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .pageColumn(Rhythm.gridMax)
             }
         }
     }

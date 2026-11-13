@@ -100,9 +100,7 @@ struct CommitmentsView: View {
                             .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     }
                 }
-                .frame(maxWidth: Detail.listMax, alignment: .leading)
-                .padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop).padding(.bottom, Space.xxl)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .pageColumn(Rhythm.tableMax)
             }
             .task(id: opened) {
                 guard let id = opened else { return }

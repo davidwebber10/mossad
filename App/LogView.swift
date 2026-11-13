@@ -76,9 +76,7 @@ struct LogView: View {
             }
             .textSelection(.enabled)
             // The canvas starts the page 10 pt under the toolbar row, so the first day never sits under it.
-            .padding(EdgeInsets(top: Detail.bodyTop, leading: Detail.gutter, bottom: 24, trailing: Detail.gutter))
-            .frame(maxWidth: 1172, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(Rhythm.tableMax, bottom: Space.xl)
         }
         // Opens at the newest line, follows new lines, and a short log still starts at the top.
         .defaultScrollAnchor(.top, for: .alignment)

@@ -89,6 +89,10 @@ enum Rhythm {
     static let wideWidth = Detail.columnMax
     /// A band (title, lanes, player) stretches with the window up to this, so lanes stay readable on a wide display.
     static let bandMax: CGFloat = 1600
+    /// A table that stretches with the window (Tasks, the log): up to this, then centered.
+    static let tableMax: CGFloat = 1200
+    /// A grid that adds columns with the width (Screens, Bookmarks): up to the band's width, then centered.
+    static let gridMax = bandMax
     /// The page's side gutter, for the band and the content.
     static let gutter = Detail.gutter
     /// Under the tabs that hang from the band, before a tab's content.

@@ -40,19 +40,17 @@ struct ShareDetailPane: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
-                    ServerNotice(server: model.server).padding(.top, 18)
-                    if let error { ErrorCard(error: error).padding(.top, 14) }
-                    LabelColumnStack(spacing: 30, divided: true) {
+                    ServerNotice(server: model.server).padding(.top, Rhythm.groupGap)
+                    if let error { ErrorCard(error: error).padding(.top, Rhythm.rowGap) }
+                    LabelColumnStack(spacing: Rhythm.sectionGap, divided: true) {
                         LabelColumn(label: "Link", labelTopPadding: 9) { linkGroup }
                         LabelColumn(label: "Views", labelTopPadding: 4) { viewsGroup }
                         if link != nil, row.state == .live { LabelColumn(label: "PIN", labelTopPadding: 5) { pinGroup } }
                         LabelColumn(label: "Expires", labelTopPadding: 5) { expiryGroup }
                     }
-                    .padding(.top, 26)
+                    .padding(.top, Rhythm.sectionGap)
                 }
-                .frame(maxWidth: 820, alignment: .leading)
-                .padding(.horizontal, Detail.gutter).padding(.top, Detail.bodyTop).padding(.bottom, 72)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .pageColumn(Rhythm.readingWidth, bottom: 72)
             }
         }
         .task(id: row.id) { await model.loadDetail(row.id, controller) }
