@@ -55,7 +55,8 @@ struct MeetingList: View {
                     }
                     if let list = upcomingList, list.more > 0 {
                         MoreUpcomingRow(count: list.more) { showCalendar(list.after) }
-                            .padding(.top, live.isEmpty ? 6 : 10)
+                            // Under the call that records now, the gap of a new group: the row is the far end of the invites, not of "Now".
+                            .padding(.top, live.isEmpty ? 6 : 14)
                     }
                     ForEach(Array(upcomingDays.enumerated()), id: \.element.date) { i, day in
                         GroupHeader(title: day.title, first: i == 0 && live.isEmpty && (upcomingList?.more ?? 0) == 0)
