@@ -297,6 +297,8 @@ public actor Pipeline {
         r.unknownSpeakers = []
         r.speakerEmbeddings = [:]
         r.speakerSamples = nil
+        // The old summary describes the old transcript; undo brings it back.
+        r.clearSummary()
         r.fromInvite = nil
         r.status = .recorded
         r.failedStep = nil
@@ -824,7 +826,9 @@ public actor Pipeline {
                 let s = try await UsageContext.$callID.withValue(r.id) {
                     try await summarizer.summarize(transcript: transcript, title: title, knownTags: known, people: people)
                 }
-                r.apply(s)
+                if !r.applyUnlessIncomplete(s) {
+                    Log.info("The new summary for \(r.id) has no overview or an empty topic; the meeting keeps its summary")
+                }
                 r.summaryMissing = nil
             } catch where Self.keyRejected(error) {
                 // Not the call's fault, and not billed: wait for a good key without using up attempts.
@@ -1020,7 +1024,10 @@ public actor Pipeline {
         }), !inFlight.contains(id),
               // Names changed during the request: that save's own summary is newer.
               var latest = edit(id, { $0.speakerNames == names }) else { return }
-        latest.apply(s)
+        guard latest.applyUnlessIncomplete(s) else {
+            Log.info("The new summary for \(id) has no overview or an empty topic; the meeting keeps its summary")
+            return
+        }
         latest.summaryMissing = nil
         save(&latest, dir: dir)
     }

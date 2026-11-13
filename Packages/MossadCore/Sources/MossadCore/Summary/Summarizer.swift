@@ -41,7 +41,41 @@ public struct MeetingSummary: Sendable, Equatable {
     }
 }
 
+extension MeetingSummary {
+    /// Has an overview, and a title and text in every topic. A reply without them can still carry action items.
+    public var isComplete: Bool {
+        summary.nonBlank != nil && topics.allSatisfy { $0.title.nonBlank != nil && $0.summary.nonBlank != nil }
+    }
+}
+
 extension CallRecord {
+    /// Applies a summary unless it is incomplete and the meeting already has one. A second request (naming a voice,
+    /// asking for a new summary, the backfill) can come back without an overview or with an empty topic, and must not
+    /// erase a good summary. A first summary has nothing to keep, so it is applied as it came, with no paid retry.
+    /// Returns false when the meeting kept its summary; that still counts as done, so the backfill does not pay again.
+    @discardableResult
+    mutating func applyUnlessIncomplete(_ s: MeetingSummary) -> Bool {
+        guard s.isComplete || summary?.nonBlank == nil else {
+            // The title is its own field, so a good one still replaces a guess such as "with Speaker A".
+            if let title = s.title { generatedTitle = title }
+            summaryVersion = SummaryBackfill.currentVersion
+            return false
+        }
+        apply(s)
+        return true
+    }
+
+    /// Drops the summary, so it is written again: after a merge, or for a new transcript.
+    mutating func clearSummary() {
+        summary = nil
+        headline = nil
+        topics = []
+        kind = nil
+        hasOutcomes = nil
+        actionItems = []
+        decisions = []
+    }
+
     mutating func apply(_ s: MeetingSummary) {
         summary = s.summary
         topics = s.topics
