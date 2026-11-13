@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.24.0",
+      "date": "2026-11-13",
+      "notes": [
+        "More room to read on every page, with one spacing scale for the whole app. Pages use a wide window well: a full-width top and centered content. A transcript no longer drops a line beside two bookmarks."
+      ]
+    },
+    {
       "version": "2.23.0",
       "date": "2026-11-13",
       "notes": [
