@@ -18,15 +18,22 @@ enum ChatThread {
     }
 }
 
+extension EnvironmentValues {
+    /// The quick panel's sizes: a smaller bubble, no extra room before a question, and no note on live answers
+    /// (every answer there is from the call).
+    @Entry var chatCompact = false
+}
+
 /// One message: a question bubble, or an answer with its lookups.
 struct ChatExchangeRow: View {
     let message: ChatMessage
     /// The meeting the chat is about, so a bare time in an answer is a chip too.
     var callID: String?
+    @Environment(\.chatCompact) private var compact
 
     var body: some View {
         switch message.role {
-        case .user: ChatQuestionBubble(text: message.text).padding(.top, Space.l)
+        case .user: ChatQuestionBubble(text: message.text).padding(.top, compact ? 0 : Space.l)
         case .assistant: ChatAnswer(text: message.text, steps: message.steps, callID: callID, live: message.live == true)
         }
     }
@@ -34,16 +41,17 @@ struct ChatExchangeRow: View {
 
 struct ChatQuestionBubble: View {
     let text: String
+    @Environment(\.chatCompact) private var compact
 
     var body: some View {
         HStack(spacing: 0) {
             Spacer(minLength: 80)
             Text(text)
-                .font(ChatThread.bodyFont).lineSpacing(4)
+                .font(ChatThread.bodyFont).lineSpacing(compact ? 2 : 4)
                 .foregroundStyle(Palette.onAccent)
-                .padding(.horizontal, 15).padding(.vertical, 10)
-                .background(ChatThread.bubbleFill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .frame(maxWidth: ChatThread.bubbleMax, alignment: .trailing)
+                .padding(.horizontal, compact ? 14 : 15).padding(.vertical, compact ? 9 : 10)
+                .background(ChatThread.bubbleFill, in: RoundedRectangle(cornerRadius: compact ? 17 : 18, style: .continuous))
+                .frame(maxWidth: compact ? 420 : ChatThread.bubbleMax, alignment: .trailing)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         }
@@ -60,12 +68,13 @@ struct ChatAnswer: View {
     /// Given during the call, from the live transcript.
     var live = false
     @State private var showSteps = false
+    @Environment(\.chatCompact) private var compact
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ChatMarkdown(text: text, bodyFont: ChatThread.bodyFont, timeChips: true, callID: callID)
                 .foregroundStyle(Palette.ink)
-            if live {
+            if live, !compact {
                 Label("Asked during the call. Names were not final.", systemImage: "waveform")
                     .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             }
