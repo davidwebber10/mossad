@@ -21,7 +21,7 @@ enum Rhythm {
     static let secondarySize: CGFloat = 12
     #endif
     /// The space between the lines of reading text.
-    static let readingLineGap: CGFloat = 6
+    static let readingLineGap: CGFloat = 5
     /// The one sentence that leads a page, such as "In one line".
     static let leadSize: CGFloat = 16
     /// Text under or beside reading text: an owner, an address, a caption, a time.
@@ -36,12 +36,13 @@ enum Rhythm {
 
     /// A row and its own second line (a task and its owner), so the two read as a pair.
     static let pairGap: CGFloat = 4
-    /// Between the rows of a list.
-    static let rowGap: CGFloat = 10
+    /// Between the rows of a list. At least about 60% of a line's pitch more than the line gap, so a wrapped row
+    /// never reads as two rows.
+    static let rowGap: CGFloat = 14
     /// Between the blocks of one section: paragraphs, a list after a paragraph.
     static let blockGap: CGFloat = 14
     /// Between the sections of a page.
-    static let sectionGap = Space.xl
+    static let sectionGap: CGFloat = 28
     /// Between a section's label column and its content.
     static let labelGap = Detail.labelGap
 
