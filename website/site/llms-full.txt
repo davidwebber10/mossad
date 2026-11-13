@@ -4,7 +4,7 @@
 
 Mossad is work intelligence for your Mac. It records your calls without a bot, then keeps meeting notes, transcripts that know who spoke, decisions, action items, the promises you made, and a page for each person you meet. Before a meeting, it shows who is coming, what happened last time, and what you still owe. It is free and open source under the MIT License.
 
-- Latest version: 2.22.1
+- Latest version: 2.23.0
 - Requires: macOS 26 or later on Apple silicon
 - Price: free. Cloud AI providers that you connect bill you directly; models on your Mac cost nothing.
 - Website: https://getmossad.com/
@@ -125,13 +125,18 @@ Find any meeting, prepare for the next one, and keep the moments that matter.
   - The last meeting's decisions and action items
   - Your open tasks for these people
   - Join from the same page
-  - Your next 45 days of meetings in the list, by day
+  - Your next two work days of meetings in the list, and 45 days on the calendar
 - **Recurring meetings.** Each series gets its own report and a list of points for next time, which Mossad checks off when you raise them.
   - A point counts as discussed only with a quote from the transcript
   - The coach suggests points from open action items, open decisions, and unanswered questions
   - Add a point from Chat or from another AI app
   - Points for a person show on that person's page
+  - Your points sit above the live transcript during the call, so nothing you meant to raise slips by
+  - Tick a point as you raise it, or let Mossad mark it when it hears you
+  - A heads-up near the planned end while points are still open, with no pop-up and no sound
+  - A meeting you missed never closes your points: you see where they came up
   - Search and filter the series by people, cadence, next meeting, last met, length, and open items
+  - See your recurring meetings by weekday, or as one typical week on a calendar
 - **Filter by anything.** Narrow your meetings by person, length, date, topic, kind, size, platform, or the coach's rating.
   - Only meetings with action items, decisions, or screens
   - Each choice shows how many meetings match
@@ -179,10 +184,16 @@ Ask your meetings a question, here or in the AI app you already use.
 - **Ask the call you are on.** Fell behind for a minute? Ask what you missed, what was decided so far, or what someone just asked you, and get a short answer while the call goes on.
   - One-click questions: what did I miss, a summary so far, action items so far
   - Finds the questions put to you that you have not answered yet
+  - Ask which of your points for this meeting are still open
   - Each answer links to the moment in the live transcript
   - Knows your past meetings too, so "what did Sam promise last time?" works
   - Option-Command-K, or Ask about this call in the menu bar
   - The conversation stays with the meeting after the call
+- **Ask without leaving the call.** Press Option-Command-M in any app, even with the call in full screen, ask your question, and keep your eyes on the call.
+  - The same conversation as the meeting's Chat tab, ready where you left it
+  - Click a time in an answer to read those lines of the call right there
+  - Between calls, the same shortcut asks about all your meetings
+  - Choose your own shortcut in Settings
 - **MCP on your Mac.** Run Mossad --mcp and Claude Desktop, Claude Code, or any MCP client can search and read your meetings.
   - The same tools as Chat: find meetings, search transcripts, read a meeting, action items, screens, and the coach
 - **MCP for web AI apps.** With your own server, ChatGPT, Claude, and other web AI apps can read your meetings after you sign in.
