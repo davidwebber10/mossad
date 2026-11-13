@@ -38,7 +38,7 @@ struct SummaryTab: View {
                 if record.summary != nil, record.hasOutcomes != false || !record.actionItems.isEmpty {
                     LabelColumn(label: "Action items", labelTopPadding: Self.labelTop) { actionItems }
                 }
-                MeetingPointsGroup(callID: record.id)
+                if MeetingPointsGroup.hasContent(controller.series.book, callID: record.id) { MeetingPointsGroup(callID: record.id) }
                 overview
                 if !record.topics.isEmpty {
                     LabelColumn(label: "Topics", labelTopPadding: Self.labelTop) {
@@ -59,11 +59,13 @@ struct SummaryTab: View {
             }
             .readingText()
             .foregroundStyle(Palette.ink)
+            // The stack always exists, so the points book is read even when this meeting has no points yet.
+            .loadsPoints()
         }
     }
 
     /// Moves each label down so its baseline meets the first line of its content.
-    private static let labelTop = Rhythm.labelOffset(toContent: Rhythm.readingSize)
+    private static let labelTop = Rhythm.readingLabelOffset
     private static let leadLabelTop = Rhythm.labelOffset(toContent: Rhythm.leadSize, weight: .medium)
     /// The talk share's bar sits centered on the label's capitals.
     private static let barTop = max(0, Rhythm.capCenter(TextRole.label.size) - TalkShare.barHeight / 2)
@@ -125,7 +127,7 @@ struct SummaryTab: View {
                     HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                         // Centered on the first line's capitals.
                         Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 15, height: 15)
-                            .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + Rhythm.capHalf(Rhythm.readingSize) }
+                            .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + Rhythm.readingCapHalf }
                         ActionItemLine(item: item)
                     }
                 }
@@ -332,7 +334,7 @@ private struct TopicRow: View {
                 HStack(alignment: .firstTextBaseline, spacing: Space.s - 2) {
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                         .rotationEffect(.degrees(open ? 90 : 0)).foregroundStyle(Palette.tertiaryMark).frame(width: 12)
-                        .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + Rhythm.capHalf(Rhythm.readingSize) }
+                        .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + Rhythm.readingCapHalf }
                     Text(topic.title).font(.system(size: Rhythm.readingSize, weight: .medium)).foregroundStyle(Palette.ink)
                     Spacer()
                 }

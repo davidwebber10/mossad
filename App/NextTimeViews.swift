@@ -414,14 +414,20 @@ struct MeetingPointsGroup: View {
     @EnvironmentObject var controller: AppController
     let callID: String
 
+    /// Whether the group shows anything for this meeting. The page leaves the group out when it does not, so an
+    /// empty group takes no section gap; the page reads the book itself (`loadsPoints`).
+    static func hasContent(_ book: NextTimeBook, callID: String) -> Bool {
+        !book.discussed(in: callID).isEmpty || !book.mentioned(in: callID).isEmpty
+            || book.visible.contains { $0.isOpen && ($0.carried ?? []).contains(callID) }
+    }
+
     var body: some View {
         let book = controller.series.book
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
         // A meeting the owner missed (notes only, with no line of theirs) closes and carries nothing: its open points that came up are listed.
         let mentioned = book.mentioned(in: callID)
-        // A group, not a stack: with no points it adds nothing, so it takes no section gap of the page.
-        Group {
+        VStack(spacing: 0) {
             if !mentioned.isEmpty {
                 LabelColumn(label: "Your open points in these notes") {
                     VStack(alignment: .leading, spacing: Rhythm.pairGap) {
@@ -468,6 +474,20 @@ struct MeetingPointsGroup: View {
                 }
             }
         }
-        .task { controller.series.owner = controller; controller.series.reload(controller.paths) }
+        .loadsPoints()
+    }
+}
+
+extension View {
+    /// Reads the owner's points book when the view appears, so a page that shows points never waits for another view
+    /// to read it. Put it on a view that always exists.
+    func loadsPoints() -> some View { modifier(LoadsPoints()) }
+}
+
+private struct LoadsPoints: ViewModifier {
+    @EnvironmentObject var controller: AppController
+
+    func body(content: Content) -> some View {
+        content.task { controller.series.owner = controller; controller.series.reload(controller.paths) }
     }
 }
