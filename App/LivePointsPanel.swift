@@ -13,6 +13,7 @@ struct LivePointsPanel: View {
     /// Shows a moment in the live transcript.
     let show: (TimeInterval) -> Void
     @AppStorage("livePointsCollapsed") private var collapsed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let points = controller.livePointList()
@@ -45,7 +46,7 @@ struct LivePointsPanel: View {
     }
 
     private func header(open: Int, late: Bool) -> some View {
-        Button { withAnimation(.snappy) { collapsed.toggle() } } label: {
+        Button { withAnimation(reduceMotion ? nil : .snappy) { collapsed.toggle() } } label: {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 5) {
                     Text("Your points").textRole(.label).foregroundStyle(Palette.secondary)
@@ -62,11 +63,13 @@ struct LivePointsPanel: View {
         .buttonStyle(.plain)
         .help(collapsed ? "Show your points" : "Hide your points")
         .accessibilityLabel("Your points, \(open == 0 ? "all raised" : "\(open) open")\(late ? ", the meeting ends soon" : "")")
+        .accessibilityHint(collapsed ? "Shows the list" : "Hides the list")
     }
 }
 
 /// The checklist itself, one component for the live page and the quick panel: open, heard by Mossad (confirm or
-/// "Not raised"), and the owner's tick, with the time chips. Four rows, then "N more".
+/// "Not raised"), and the owner's tick, with the time chips. The open points first (`LivePointRules.shownOrder`),
+/// four rows, then "N more", which scrolls past a height.
 struct LivePointRows: View {
     @EnvironmentObject var controller: AppController
     @ObservedObject var model: LivePointsModel
@@ -77,16 +80,28 @@ struct LivePointRows: View {
     var compact = false
     @State private var showAll = false
     @State private var hovered: UUID?
+    @State private var allHeight: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private static let shownRows = 4
+    /// "N more" opens to this height at most, then scrolls, so the transcript under it stays on the page.
+    private static let allMax: CGFloat = 260
 
-    var body: some View { rows(points) }
+    var body: some View { rows(LivePointRules.shownOrder(points, marks: model.marks)) }
 
     @ViewBuilder
     private func rows(_ points: [NextTimePoint]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(showAll ? points : Array(points.prefix(Self.shownRows))) { row($0) }
+            if showAll {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) { ForEach(points) { row($0) } }
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { allHeight = $0 }
+                }
+                .frame(height: min(allHeight, Self.allMax))
+            } else {
+                ForEach(Array(points.prefix(Self.shownRows))) { row($0) }
+            }
             if points.count > Self.shownRows {
-                Button(showAll ? "Show fewer" : "\(points.count - Self.shownRows) more") { withAnimation(.snappy) { showAll.toggle() } }
+                Button(showAll ? "Show fewer" : "\(points.count - Self.shownRows) more") { withAnimation(reduceMotion ? nil : .snappy) { showAll.toggle() } }
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.accent)
                     .padding(.horizontal, 8).padding(.top, 2)
@@ -155,7 +170,11 @@ struct LivePointRows: View {
                 Button(ticked ? "Not raised yet" : "Mark raised") { controller.toggleLivePoint(p, callID: record.id) }
             }
         }
-        .accessibilityAction(named: "Not raised") { if mark != nil { controller.rejectLivePoint(p) } }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(p.text), \(ticked ? "you marked it raised" : mark != nil ? "Mossad heard it raised" : "open")")
+        .accessibilityActions {
+            if mark != nil { Button("Not raised") { controller.rejectLivePoint(p) } }
+        }
     }
 
     /// "Raised 12:04" with the time as a chip that shows the moment in the live transcript.
@@ -171,6 +190,7 @@ struct LivePointRows: View {
                 }
                 .buttonStyle(.plain)
                 .help("Show this moment in the live transcript")
+                .accessibilityLabel("Show \(longClock(at)) in the live transcript")
             }
         }
         .help(help ?? "")

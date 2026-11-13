@@ -113,7 +113,7 @@ struct LiveTranscriptPanel: View {
             // Often at first, while the catalog is made, then every 10 s.
             var n = 0
             while !Task.isCancelled {
-                controller.refreshLivePoints(record)
+                controller.refreshLivePoints(callID: record.id)
                 n += 1
                 try? await Task.sleep(for: .seconds(n < 5 ? 1 : 10))
             }

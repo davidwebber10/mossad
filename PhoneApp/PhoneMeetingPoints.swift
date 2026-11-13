@@ -15,7 +15,7 @@ struct PhoneMeetingPoints: View {
         let mentioned = book.mentioned(in: callID)
         VStack(spacing: 0) {
             if !mentioned.isEmpty {
-                LabelColumn(label: "Came up while you were out") {
+                LabelColumn(label: "Your open points in these notes") {
                     VStack(alignment: .leading, spacing: Space.s) {
                         ForEach(mentioned) { p in
                             let m = p.mentions?.first { $0.callID == callID }
@@ -24,7 +24,7 @@ struct PhoneMeetingPoints: View {
                                     Image(systemName: "circle").font(.caption).foregroundStyle(Palette.tertiary)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(p.text).textRole(.body).foregroundStyle(Palette.ink)
-                                        Text("Still open: you were not in this meeting" + (m.map { " · at \(meetingClock($0.at, length: 0))" } ?? ""))
+                                        Text("Still open. Mossad has only the notes of this meeting" + (m.map { " · at \(meetingClock($0.at, length: 0))" } ?? ""))
                                             .textRole(.secondary).foregroundStyle(Palette.secondary)
                                     }
                                 }

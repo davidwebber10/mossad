@@ -188,9 +188,10 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         visible.filter { $0.done?.callID == callID }
     }
 
-    /// The points that came up in a meeting the owner missed.
+    /// The points still open that came up in a meeting the owner may have missed. A closed one is not listed:
+    /// what the meeting said of it no longer matters.
     public func mentioned(in callID: String) -> [NextTimePoint] {
-        visible.filter { $0.mentions?.contains { $0.callID == callID } == true }
+        visible.filter { $0.isOpen && $0.mentions?.contains { $0.callID == callID } == true }
     }
 
     /// Notes that a point came up in a meeting the owner missed, once for each meeting.

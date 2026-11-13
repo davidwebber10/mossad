@@ -39,7 +39,7 @@ struct AskPanelPoints: View {
             // The catalog, the invite, and the names heard change during the call; the live page may be closed.
             var n = 0
             while !Task.isCancelled {
-                controller.refreshLivePoints(record)
+                controller.refreshLivePoints(callID: record.id)
                 n += 1
                 try? await Task.sleep(for: .seconds(n < 5 ? 1 : 10))
             }

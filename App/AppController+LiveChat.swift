@@ -54,6 +54,8 @@ extension AppController {
         facts.paused = isPaused
         facts.recorded = recorded
         facts.voices = snapshot.voiceNames
+        // Also when the live page was never opened.
+        refreshLivePoints(callID: record.id)
         facts.points = livePointFacts(callID: record.id)
         return facts
     }

@@ -149,7 +149,7 @@ struct NextTimeList: View {
         if !parts.isEmpty {
             Text(parts.joined(separator: " · ")).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
         }
-        if let m = p.lastMention { MentionNote(mention: m) }
+        if p.isOpen, let m = p.lastMention { MentionNote(mention: m) }
     }
 
     private func startEdit(_ p: NextTimePoint) {
@@ -180,14 +180,14 @@ struct NextTimeList: View {
     }
 }
 
-/// "Came up while you were out · Nov 3 ▸ 12:04": a point that came up in a meeting the owner missed. It stays open.
+/// "Came up on Nov 12, in a meeting Mossad has only the notes of ▸ 12:04": words that are true whether or not the
+/// owner listened. The lists hold open points only, so it never shows on a closed one.
 struct MentionNote: View {
     let mention: NextTimePoint.Mention
-    var day = true
 
     var body: some View {
         HStack(spacing: 8) {
-            Text("Came up while you were out" + (day ? " · \(shortDay(mention.date))" : ""))
+            Text("Came up on \(mention.date.formatted(.dateTime.month(.abbreviated).day())), in a meeting Mossad has only the notes of")
                 .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
             SeriesMoment(callID: mention.callID, at: mention.at)
         }
@@ -417,11 +417,11 @@ struct MeetingPointsGroup: View {
         let book = controller.series.book
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
-        // A meeting the owner missed closes and carries nothing: its points came up while the owner was out.
+        // A meeting Mossad has only the notes of closes and carries nothing: its open points that came up are listed.
         let mentioned = book.mentioned(in: callID)
         VStack(spacing: 0) {
             if !mentioned.isEmpty {
-                LabelColumn(label: "Came up while you were out") {
+                LabelColumn(label: "Your open points in these notes") {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(mentioned) { p in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -430,7 +430,7 @@ struct MeetingPointsGroup: View {
                                     Text(p.text)
                                     if let m = p.mentions?.first(where: { $0.callID == callID }) {
                                         HStack(spacing: 8) {
-                                            Text("Still open: you were not in this meeting").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                                            Text("Still open. Mossad has only the notes of this meeting").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
                                             SeriesMoment(callID: callID, at: m.at)
                                         }
                                         Text("\u{201C}\(m.quote)\u{201D}").font(.system(size: 12)).italic().foregroundStyle(Palette.secondary).lineLimit(2)

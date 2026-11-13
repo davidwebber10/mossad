@@ -133,9 +133,9 @@ final class LivePointsTests: XCTestCase {
         let p = NextTimePoint(text: "API sunset plan", rank: 1)
         let theirs = LiveEntry(time: 30, who: "Sam Carter", text: "The API sunset plan is ready", isFinal: true, mine: false)
         let draft = LiveEntry(time: 40, who: owner, text: "So the API sunset plan", isFinal: false, mine: true)
-        XCTAssertTrue(LivePointRules.due([p], entries: [theirs, draft], marks: .init(), now: 60, transcriptOn: true).isEmpty)
+        XCTAssertTrue(LivePointRules.due([p], entries: [theirs, draft], marks: .init(), now: 60, transcriptOn: true, callStart: .distantFuture).isEmpty)
         let mine = LiveEntry(time: 50, who: owner, text: "Where are we on the API sunset plan?", isFinal: true, mine: true)
-        let due = LivePointRules.due([p], entries: [theirs, mine], marks: .init(), now: 60, transcriptOn: true)
+        let due = LivePointRules.due([p], entries: [theirs, mine], marks: .init(), now: 60, transcriptOn: true, callStart: .distantFuture)
         XCTAssertEqual(due.map(\.point.id), [p.id])
         // The lines around the owner's go with it, so an answer by another speaker can be the proof.
         XCTAssertEqual(due.first?.lines.count, 2)
@@ -148,26 +148,26 @@ final class LivePointsTests: XCTestCase {
         let p = NextTimePoint(text: "API sunset plan", rank: 1)
         let line = { (t: Double) in LiveEntry(time: t, who: self.owner, text: "Back to the API sunset plan", isFinal: true, mine: true) }
         // No request when the live transcript is off.
-        XCTAssertTrue(LivePointRules.due([p], entries: [line(10)], marks: .init(), now: 20, transcriptOn: false).isEmpty)
+        XCTAssertTrue(LivePointRules.due([p], entries: [line(10)], marks: .init(), now: 20, transcriptOn: false, callStart: .distantFuture).isEmpty)
         var marks = LivePointMarks()
         marks.asks = [.init(point: p.id, at: 20, through: 10)]
         // One request per point per 3 minutes, and only for lines after the last one read.
-        XCTAssertTrue(LivePointRules.due([p], entries: [line(10), line(100)], marks: marks, now: 199, transcriptOn: true).isEmpty)
-        XCTAssertTrue(LivePointRules.due([p], entries: [line(10)], marks: marks, now: 400, transcriptOn: true).isEmpty)
-        XCTAssertEqual(LivePointRules.due([p], entries: [line(10), line(100)], marks: marks, now: 200, transcriptOn: true).count, 1)
+        XCTAssertTrue(LivePointRules.due([p], entries: [line(10), line(100)], marks: marks, now: 199, transcriptOn: true, callStart: .distantFuture).isEmpty)
+        XCTAssertTrue(LivePointRules.due([p], entries: [line(10)], marks: marks, now: 400, transcriptOn: true, callStart: .distantFuture).isEmpty)
+        XCTAssertEqual(LivePointRules.due([p], entries: [line(10), line(100)], marks: marks, now: 200, transcriptOn: true, callStart: .distantFuture).count, 1)
         // At most 12 in a call, across points.
         let many = (0..<20).map { NextTimePoint(text: "API sunset plan \($0)", rank: Double($0)) }
-        XCTAssertEqual(LivePointRules.due(many, entries: [line(10)], marks: .init(), now: 20, transcriptOn: true).count, 12)
+        XCTAssertEqual(LivePointRules.due(many, entries: [line(10)], marks: .init(), now: 20, transcriptOn: true, callStart: .distantFuture).count, 12)
         var spent = LivePointMarks()
         spent.asks = (0..<11).map { _ in .init(point: UUID(), at: 0, through: 0) }
-        XCTAssertEqual(LivePointRules.due(many, entries: [line(10)], marks: spent, now: 20, transcriptOn: true).count, 1)
+        XCTAssertEqual(LivePointRules.due(many, entries: [line(10)], marks: spent, now: 20, transcriptOn: true, callStart: .distantFuture).count, 1)
         // A point heard or ticked is not asked about.
         var heard = LivePointMarks()
         heard.add(.init(point: p.id, at: 10, quote: "back to the API sunset plan"))
-        XCTAssertTrue(LivePointRules.due([p], entries: [line(10)], marks: heard, now: 20, transcriptOn: true).isEmpty)
+        XCTAssertTrue(LivePointRules.due([p], entries: [line(10)], marks: heard, now: 20, transcriptOn: true, callStart: .distantFuture).isEmpty)
         var ticked = p
         ticked.done = .init(callID: "live", at: 15, quote: nil, date: now, byOwner: true)
-        XCTAssertTrue(LivePointRules.due([ticked], entries: [line(10)], marks: .init(), now: 20, transcriptOn: true).isEmpty)
+        XCTAssertTrue(LivePointRules.due([ticked], entries: [line(10)], marks: .init(), now: 20, transcriptOn: true, callStart: .distantFuture).isEmpty)
     }
 
     func testTheConfirmationNeedsAQuoteFromALineSent() async throws {
@@ -319,5 +319,101 @@ final class LivePointsTests: XCTestCase {
         let entries = [LiveEntry(time: 5, who: "Sam Carter", text: "Hello", isFinal: true, mine: false)]
         XCTAssertEqual(LiveChips.chips(entries, owner: owner, openQuestions: 0, openPoints: 2).last?.label, "My open points")
         XCTAssertFalse(LiveChips.chips(entries, owner: owner, openQuestions: 0, openPoints: 0).contains { $0.label == "My open points" })
+    }
+
+    // MARK: The review's fixes
+
+    func testALineTheOwnerRejectedNeverClosesThePointAfterTheCall() {
+        let s = series([call("a", daysAgo: 14), call("b", daysAgo: 7)])
+        var book = NextTimeBook()
+        let p = book.add("API sunset plan", series: s, at: now.addingTimeInterval(-30 * 86_400))!
+        let r = call("c", daysAgo: 1, lines: [(0, 728, "Where are we on the API sunset plan for next year?"), (0, 1500, "So the API sunset plan is final then, March it is")])
+        var marks = LivePointMarks()
+        marks.add(.init(point: p.id, at: 724, quote: "where are we on the API sunset plan"))
+        marks.reject(p.id)
+        // The final transcript's line is a few seconds off the live one: the same words, so the same line.
+        let same = NextTimeChecker.Found(point: p.id, at: 728, quote: "on the API sunset plan for next")
+        NextTimeRules.apply([same], checked: [p], call: r, to: &book, at: now, rejected: marks.rejected ?? [])
+        XCTAssertTrue(book.points[0].isOpen)
+        XCTAssertEqual(book.points[0].carried, ["c"])
+        // A later, different line still closes it.
+        var again = NextTimeBook()
+        let q = again.add("API sunset plan", series: s, at: now.addingTimeInterval(-30 * 86_400))!
+        var other = LivePointMarks()
+        other.add(.init(point: q.id, at: 724, quote: "where are we on the API sunset plan"))
+        other.reject(q.id)
+        let later = NextTimeChecker.Found(point: q.id, at: 1500, quote: "the API sunset plan is final then")
+        NextTimeRules.apply([later], checked: [q], call: r, to: &again, at: now, rejected: other.rejected ?? [])
+        XCTAssertEqual(again.points[0].done?.at, 1500)
+    }
+
+    func testAPointAddedDuringTheCallIsMatchedOnlyAgainstLinesSaidAfterIt() {
+        let start = now.addingTimeInterval(-3600)
+        let p = { () -> NextTimePoint in var p = NextTimePoint(text: "API sunset pricing", rank: 1); p.created = start.addingTimeInterval(1800); return p }()
+        let early = LiveEntry(time: 600, who: owner, text: "What about the API sunset pricing?", isFinal: true, mine: true)
+        let late = LiveEntry(time: 2400, who: owner, text: "Back to the API sunset pricing", isFinal: true, mine: true)
+        XCTAssertTrue(LivePointRules.due([p], entries: [early], marks: .init(), now: 2500, transcriptOn: true, callStart: start).isEmpty)
+        XCTAssertEqual(LivePointRules.due([p], entries: [early, late], marks: .init(), now: 2500, transcriptOn: true, callStart: start).first?.through, 2400)
+    }
+
+    func testTheCheckAfterTheCallReadsAPointAddedDuringItOnlyAfterItExisted() {
+        let s = series([call("a", daysAgo: 14), call("b", daysAgo: 7)])
+        let r = call("c", daysAgo: 1)
+        var book = NextTimeBook()
+        let added = book.add("API sunset pricing", series: s, at: r.start.addingTimeInterval(900))!
+        // It existed at the end of the call, so the check reads it, and the meeting is still to check.
+        XCTAssertEqual(NextTimeRules.points(for: r, in: book, series: s, people: PersonReferences(people: [])).map(\.id), [added.id])
+        XCTAssertEqual(NextTimeRules.pending([r], book: book, now: now).map(\.id), ["c"])
+        // A line from before it existed does not close it, and a point of this call is not carried.
+        NextTimeRules.apply([.init(point: added.id, at: 300, quote: "what about the API sunset pricing then")], checked: [added], call: r, to: &book, at: now)
+        XCTAssertTrue(book.points[0].isOpen)
+        XCTAssertNil(book.points[0].carried)
+        NextTimeRules.apply([.init(point: added.id, at: 1200, quote: "back to the API sunset pricing now")], checked: [added], call: r, to: &book, at: now)
+        XCTAssertEqual(book.points[0].done?.at, 1200)
+    }
+
+    func testAMeetingWithOnlyNotesListsOnlyThePointsStillOpen() {
+        var book = NextTimeBook()
+        let p = book.add("Hiring", personID: "p1", personName: "Sam Carter", at: now)!
+        book.mention(p.id, .init(callID: "c", at: 5, quote: "we need to talk about hiring soon", date: now), at: now)
+        XCTAssertEqual(book.mentioned(in: "c").map(\.id), [p.id])
+        book.toggleDone(p.id, at: now)
+        XCTAssertTrue(book.mentioned(in: "c").isEmpty)
+    }
+
+    func testOnePointCannotTakeEveryRequestAndARequestSendsOnlyTheLinesAroundEachHit() {
+        let p = NextTimePoint(text: "Hiring", rank: 1)
+        var marks = LivePointMarks()
+        marks.asks = (0..<3).map { _ in .init(point: p.id, at: 0, through: 0) }
+        let line = LiveEntry(time: 5000, who: owner, text: "Hiring again", isFinal: true, mine: true)
+        XCTAssertTrue(LivePointRules.due([p], entries: [line], marks: marks, now: 6000, transcriptOn: true, callStart: now).isEmpty)
+        // Hits at minute 1 and minute 30: the request has the lines near each, not the half hour between.
+        var entries = [LiveEntry(time: 60, who: owner, text: "Hiring first", isFinal: true, mine: true)]
+        entries += (1..<200).map { LiveEntry(time: 60 + Double($0) * 9, who: "Sam Carter", text: "Line \($0)", isFinal: true, mine: false) }
+        entries.append(LiveEntry(time: 1800, who: owner, text: "Hiring later", isFinal: true, mine: true))
+        let due = LivePointRules.due([p], entries: entries.sorted { $0.time < $1.time }, marks: .init(), now: 1900, transcriptOn: true, callStart: now)
+        XCTAssertLessThanOrEqual(due.first?.lines.count ?? 99, LivePointRules.linesMax)
+        XCTAssertTrue(due.first?.lines.contains { $0.text == "Hiring later" } == true)
+    }
+
+    func testTheChecklistShowsOpenPointsFirst() {
+        var ticked = NextTimePoint(text: "A", rank: 1)
+        ticked.done = .init(callID: "live", at: 1, quote: nil, date: now, byOwner: true)
+        let heard = NextTimePoint(text: "B", rank: 2), open = NextTimePoint(text: "C", rank: 3)
+        var marks = LivePointMarks()
+        marks.add(.init(point: heard.id, at: 5, quote: "q"))
+        XCTAssertEqual(LivePointRules.shownOrder([ticked, heard, open], marks: marks).map(\.text), ["C", "B", "A"])
+    }
+
+    func testATickTakesTheHeardMomentOrTheRecordingNowOnlyOnTheLiveCall() {
+        XCTAssertEqual(LivePointRules.tickTime(heard: 724, recording: 1300, live: true), 724)
+        XCTAssertEqual(LivePointRules.tickTime(heard: nil, recording: 1300, live: true), 1300)
+        XCTAssertNil(LivePointRules.tickTime(heard: nil, recording: 1300, live: false))
+    }
+
+    func testAModelOnThisMacOrAHotMacSendsNoAutomaticRequestDuringTheCall() {
+        XCTAssertTrue(LivePointRules.hears(modelOnThisMac: false, hot: false))
+        XCTAssertFalse(LivePointRules.hears(modelOnThisMac: true, hot: false))
+        XCTAssertFalse(LivePointRules.hears(modelOnThisMac: false, hot: true))
     }
 }

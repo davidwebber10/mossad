@@ -124,15 +124,15 @@ public enum AskPanelSizing {
     /// The panel's tallest.
     public static var limit: CGFloat { header + threadLimit + chips + field + footer }
 
-    public static func minimum(chips withChips: Bool, points: CGFloat = 0) -> CGFloat {
-        header + field + footer + (withChips ? chips : 0) + Self.points(content: points)
+    public static func minimum(chips withChips: Bool) -> CGFloat {
+        header + field + footer + (withChips ? chips : 0)
     }
 
     /// The points row's height as shown: its content up to `pointsMax`.
     public static func points(content: CGFloat) -> CGFloat { min(max(0, content), pointsMax) }
 
     /// The thread's tallest beside a points row of this height: the thread gives way first.
-    public static func threadMax(points content: CGFloat, chips withChips: Bool = true) -> CGFloat {
+    public static func threadMax(points content: CGFloat) -> CGFloat {
         max(0, threadLimit - points(content: content))
     }
 
