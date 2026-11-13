@@ -92,7 +92,7 @@ public enum SeriesWeek {
     }
 
     /// One series at its usual time on one weekday, in minutes after midnight.
-    public struct Block: Sendable, Equatable {
+    public struct Block: Sendable, Hashable {
         public var id: String
         public var weekday: Int
         public var start: Int

@@ -220,8 +220,9 @@ private struct ListRow: ViewModifier {
     }
 }
 
-/// "TODAY", "WEDNESDAY": the label role in tertiary, more space above than below so it binds to its rows.
-private struct GroupHeader: View {
+/// "TODAY", "WEDNESDAY": the label role in tertiary, more space above than below so it binds to its rows. The
+/// Recurring list's weekdays use it too.
+struct GroupHeader: View {
     let title: String
     var color: Color = Palette.tertiary
     var first = false

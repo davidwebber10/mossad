@@ -420,11 +420,12 @@
             "The coach suggests points from open action items, open decisions, and unanswered questions",
             "Add a point from Chat or from another AI app",
             "Points for a person show on that person's page",
-            "Search and filter the series by people, cadence, next meeting, last met, length, and open items"
+            "Search and filter the series by people, cadence, next meeting, last met, length, and open items",
+            "See your recurring meetings by weekday, or as one typical week on a calendar"
           ],
           "icon": "repeat",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesFilter.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesListSearch.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesFilter.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSchedule.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesWeek.swift", "App/RecurringCalendar.swift"]
         },
         {
           "id": "filters",

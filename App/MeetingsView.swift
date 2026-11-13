@@ -275,6 +275,18 @@ struct MeetingsView: View {
 
     /// Back, then "Meetings › <period> › <title>".
     private func backBar(title: String, back: @escaping () -> Void) -> some View {
+        PaneBackBar(crumbs: ["Meetings", openedFrom], title: title, back: back)
+    }
+}
+
+/// The bar over a page that a calendar opened full-pane: Back, then the way to it ("Meetings › <period> › <title>").
+/// Escape goes back too.
+struct PaneBackBar: View {
+    let crumbs: [String]
+    let title: String
+    let back: () -> Void
+
+    var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Button { back() } label: {
@@ -285,10 +297,10 @@ struct MeetingsView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
                 .keyboardShortcut(.escape, modifiers: [])
-                Button("Meetings") { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
-                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
-                Button(openedFrom) { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
-                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
+                ForEach(Array(crumbs.enumerated()), id: \.offset) { _, crumb in
+                    Button(crumb) { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
+                    Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
+                }
                 Text(title).fontWeight(.medium).lineLimit(1)
                 Spacer()
             }

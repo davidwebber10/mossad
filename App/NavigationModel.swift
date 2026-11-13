@@ -31,7 +31,7 @@ final class NavigationModel: ObservableObject {
     private var monitor: Any?
     private weak var controller: AppController?
     /// The saved choices that are part of a place: the tabs and Settings' page (AppStorage).
-    private static let keys = ["detailTab", "personTab", "recurringTab", "settingsPage", "meetingsMode", "peopleMode"]
+    private static let keys = ["detailTab", "personTab", "recurringTab", "settingsPage", "meetingsMode", "peopleMode", "recurringMode"]
 
     func part(_ section: AppController.Section) -> Part? { parts[section] }
 

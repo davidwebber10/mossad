@@ -34,7 +34,11 @@ final class SeriesFilterModel: ObservableObject {
     private var midnight: Task<Void, Never>?
     private weak var controller: AppController?
     private var observers: [AnyCancellable] = []
-    private var rows: [SeriesFilterRow] = []
+    private var rows: [SeriesFilterRow] = [] {
+        didSet { lengths = Dictionary(rows.compactMap { r in r.seconds.map { (r.id, $0) } }, uniquingKeysWith: { a, _ in a }) }
+    }
+    /// The usual length of each series, the median that the filter reads, for the blocks of Recurring's calendar.
+    @Published private(set) var lengths: [String: TimeInterval] = [:]
     private var searchRows: [SeriesSearchRow] = []
     private var reading: Task<Void, Never>?
     private var readAgain = false
