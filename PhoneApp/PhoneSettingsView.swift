@@ -134,7 +134,7 @@ struct ConnectServerView: View {
                 VStack(spacing: Space.l) {
                     VStack(spacing: Space.s) {
                         Image(systemName: connected == nil ? "qrcode" : "checkmark")
-                            .font(.system(size: Rhythm.displaySize, weight: .medium))
+                            .font(.system(size: 28, weight: .medium))
                             .foregroundStyle(connected == nil ? Palette.accent : Palette.ok)
                             .frame(width: 64, height: 64)
                             .background(connected == nil ? Palette.accentTint : Palette.fill, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))

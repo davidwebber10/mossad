@@ -10,7 +10,7 @@ struct LabelColumn<Content: View>: View {
     /// A second line under the label, in the accent: "3 need attention".
     var note: String?
     /// Lines up the label with the first row's text when the rows have their own padding.
-    var labelTopPadding: CGFloat = Rhythm.labelOffset(toContent: Rhythm.readingSize)
+    var labelTopPadding: CGFloat = Rhythm.readingLabelOffset
     @ViewBuilder let content: Content
 
     @ScaledMetric(relativeTo: .caption) private var noteSize: CGFloat = 11

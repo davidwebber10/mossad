@@ -109,6 +109,10 @@ enum Rhythm {
         return max(0, (content.ascender - label.ascender).rounded(.toNearestOrAwayFromZero))
     }
 
+    /// The label offset and the half cap height at the reading size, kept once: views read them at each layout.
+    static let readingLabelOffset = labelOffset(toContent: readingSize)
+    static let readingCapHalf = capHalf(readingSize)
+
     /// From the middle of a line's capitals down to its baseline, to center a mark on the first line of a row.
     static func capHalf(_ size: CGFloat) -> CGFloat { PlatformFont.systemFont(ofSize: size).capHeight / 2 }
 

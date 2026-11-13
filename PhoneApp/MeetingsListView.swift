@@ -189,7 +189,7 @@ struct MeetingsListView: View {
 private struct RecordLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: Space.s) {
-            configuration.icon.font(.system(size: Rhythm.noteSize)).accessibilityHidden(true)
+            configuration.icon.font(.system(size: 10)).accessibilityHidden(true)
             configuration.title
         }
     }

@@ -152,7 +152,7 @@ private struct QuoteBlock: View {
                 if quote.speaker != nil || quote.time != nil {
                     HStack(spacing: Space.s) {
                         if let speaker = quote.speaker {
-                            Text(speaker).font(.system(size: Rhythm.noteSize, weight: .semibold)).foregroundStyle(Palette.secondary)
+                            Text(speaker).font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.secondary)
                         }
                         if let time = quote.time {
                             TimeChip(time: time) { if let link = quote.link.flatMap(URL.init(string:)) { openURL(link) } }

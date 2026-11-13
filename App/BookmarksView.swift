@@ -11,8 +11,6 @@ struct BookmarksView: View {
     /// All bookmarks, also the ones the search hides, for the subtitle and the empty states.
     @State private var total = 0
     @State private var loaded = false
-    /// The narrowest a meeting's cell gets before the grid drops a column: one reading line of a note.
-    private static let cellMin: CGFloat = 420
 
     var body: some View {
         DetailColumn {
@@ -59,22 +57,18 @@ struct BookmarksView: View {
                         Text("No bookmark matches “\(query.trimmingCharacters(in: .whitespaces))”.")
                             .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
                     }
-                    // Each meeting is a cell: a wide window shows more meetings side by side.
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.cellMin), spacing: Rhythm.sectionGap, alignment: .topLeading)],
-                              alignment: .leading, spacing: Rhythm.sectionGap) {
-                        ForEach(groups) { group in
-                            VStack(alignment: .leading, spacing: 0) {
-                                MomentGroupHeading(title: group.title, start: group.start, count: group.bookmarks.count, noun: "bookmark") {
-                                    controller.openMeeting(group.callID)
-                                }
-                                ForEach(group.bookmarks) { mark in
-                                    BookmarkRow(mark: mark, query: query) { controller.openMeeting(mark.callID, at: mark.offset) }
-                                }
-                            }
+                    // One column, as before: the meetings read top to bottom, centered at the reading width.
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { i, group in
+                        MomentGroupHeading(title: group.title, start: group.start, count: group.bookmarks.count, noun: "bookmark") {
+                            controller.openMeeting(group.callID)
+                        }
+                        .padding(.top, i == 0 ? 0 : Rhythm.sectionGap)
+                        ForEach(group.bookmarks) { mark in
+                            BookmarkRow(mark: mark, query: query) { controller.openMeeting(mark.callID, at: mark.offset) }
                         }
                     }
                 }
-                .pageColumn(Rhythm.gridMax)
+                .pageColumn(Rhythm.readingWidth)
             }
         }
     }
