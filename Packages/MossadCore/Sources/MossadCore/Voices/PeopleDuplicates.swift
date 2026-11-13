@@ -3,7 +3,26 @@ import Foundation
 /// Saved people who are probably one person: the same email, the same name written another way, a name one or
 /// two letters off, or the same voice. Shown on the People page to merge.
 public enum PeopleDuplicates {
-    public enum Reason: String, Sendable { case sameEmail, sameName, similarName, sameVoice }
+    public enum Reason: String, Sendable {
+        case sameEmail, sameName, similarName, sameVoice
+
+        /// The words of the People page's sheet.
+        public var words: String {
+            switch self {
+            case .sameEmail: "Same email"
+            case .sameName: "Same name"
+            case .similarName: "Names almost match"
+            case .sameVoice: "Same voice"
+            }
+        }
+    }
+
+    /// The pairs the People page shows: none that the owner called two people, by the pair (`dismissed`, the
+    /// saved lines of "Not the same person") or by the ids.
+    public static func shown(_ profiles: [VoiceProfile], people: [Person], dismissed: String) -> [Pair] {
+        let gone = Set(dismissed.split(separator: "\n").map(String.init))
+        return find(profiles).filter { !gone.contains($0.id) && !isDistinct($0, among: people) }
+    }
 
     public struct Pair: Equatable, Sendable, Identifiable {
         public let first: String

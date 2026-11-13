@@ -2074,9 +2074,18 @@ final class AppController: ObservableObject {
                                              attendees: ["Jordan Lee", "Casey Brooks", "Riley Chen"], text: "", isAllDay: false)]
             }
             // Development hook for screenshots: MOSSAD_UPCOMING=<file> shows only the made-up invites of that file.
-            if let sample = DevHooks.sampleInvites() { events = sample }
+            var sampled = CommandLine.arguments.contains("--sample-upcoming")
+            if let sample = DevHooks.sampleInvites() { events = sample; sampled = true }
             calendarEvents = events
             calendarRead = true
+            // For Chat's and other AI apps' tools, which cannot read the calendar: the events as read, without their
+            // notes (`CalendarSnapshot`). Never made-up invites.
+            if !isInert, !sampled {
+                let snapshot = CalendarSnapshot(events, saved: now), dir = paths.calendar
+                Task.detached(priority: .utility) {
+                    do { try snapshot.save(to: dir) } catch { Log.error("Saving the calendar for the tools failed: \(error)") }
+                }
+            }
             // Development hook for screenshots: MOSSAD_UPCOMING_OPEN=<title> opens that invite's page.
             if DevHooks.preview, let title = ProcessInfo.processInfo.environment["MOSSAD_UPCOMING_OPEN"],
                let invite = calendarUpcoming.first(where: { $0.title == title }) {

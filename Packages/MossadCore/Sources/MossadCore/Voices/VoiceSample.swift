@@ -265,6 +265,11 @@ public final class VoiceSampleStore: @unchecked Sendable {
     public var samples: [VoiceSample] { lock.withLock { storage } }
     public func samples(of person: PersonID) -> [VoiceSample] { samples.filter { $0.personID == person } }
 
+    /// The samples as the file has them, only read: a damaged file stays where it is for the app to handle.
+    public static func peek(in directory: URL) -> [VoiceSample]? {
+        (try? Data(contentsOf: directory.appendingPathComponent(fileName))).flatMap { try? JSONDecoder.callRecord.decode(File.self, from: $0).samples }
+    }
+
     /// Changes the samples and saves. Nothing is written when nothing changed.
     public func change(_ body: (inout [VoiceSample]) -> Void) throws {
         try lock.withLock {

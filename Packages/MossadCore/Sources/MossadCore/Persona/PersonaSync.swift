@@ -72,8 +72,9 @@ public enum PersonaReads {
 
     /// The traits that the deck may ask about, with candidates just below the line: only on the Mac, which has the
     /// evidence.
-    public static func sources(paths: Paths, saved: CoachPeople, answers: [FindingAnswer]) -> [PersonaFindings.Source] {
-        let store = PersonaStore(paths: paths)
+    /// `readOnly`: for Chat and other AI apps, which only read; a damaged file stays where it is for the app.
+    public static func sources(paths: Paths, saved: CoachPeople, answers: [FindingAnswer], readOnly: Bool = false) -> [PersonaFindings.Source] {
+        let store = PersonaStore(directory: PersonaStore(paths: paths).directory, readOnly: readOnly)
         let off = saved.notProfiled
         var out: [PersonaFindings.Source] = []
         for id in Set(store.people().map { saved.isEmpty ? $0 : saved.canonical($0) }) where !off.contains(id) {

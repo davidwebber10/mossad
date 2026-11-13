@@ -45,11 +45,12 @@ public struct MCPServer: Sendable {
             result = ["protocolVersion": params["protocolVersion"] as? String ?? Self.fallbackVersion,
                       "capabilities": ["tools": ["listChanged": false]],
                       "serverInfo": ["name": "mossad", "version": "1.0"],
-                      "instructions": "Search and read \(owner)'s recorded meetings: transcripts, summaries, decisions, and action items. Read a meeting before saying what someone agreed to."]
+                      "instructions": "Search and read \(owner)'s recorded meetings and everything Mossad shows about them: transcripts, summaries, decisions, action items, people (read_person), upcoming meetings and their prep, recurring meetings, points for next time, tasks, bookmarks, the coach, and analytics. Read a meeting before saying what someone agreed to."]
         case "ping":
             result = [:]
         case "tools/list":
-            result = ["tools": Self.tools.map { ["name": $0.name, "description": $0.description, "inputSchema": $0.schema] as [String: Any] }]
+            result = ["tools": Self.tools.map { ["name": $0.name, "description": $0.description, "inputSchema": $0.schema,
+                                                 "annotations": ["readOnlyHint": $0.readOnly]] as [String: Any] }]
         case "tools/call":
             let name = params["name"] as? String ?? ""
             guard Self.tools.contains(where: { $0.name == name }) else {
@@ -75,4 +76,9 @@ public struct MCPServer: Sendable {
     private func encode(_ object: [String: Any]) -> String {
         (try? JSONSerialization.data(withJSONObject: object)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
     }
+}
+
+extension ToolSpec {
+    /// False for the tools that change something: the MCP marks the rest as reads for the apps that ask.
+    public var readOnly: Bool { !ChatTools.writes.contains(name) }
 }

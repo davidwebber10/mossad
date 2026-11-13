@@ -5,7 +5,7 @@ import Foundation
 extension ChatTools {
     public static var coachDefinitions: [ToolSpec] { [
         ToolSpec(name: "coach_profile",
-                 description: "What the communication coach knows about the owner: role, responsibilities, goals, relationships, coaching preferences, current focus, patterns with trends, notes on people, and the owner's recent ratings of the coach's advice.",
+                 description: "What the communication coach knows about the owner (Coach › Knowledge and Weekly review): role, responsibilities, goals, relationships, coaching preferences, current focus, patterns with trends, notes on people, the owner's recent ratings of the coach's advice, the coach's questions waiting for the owner, rules from the owner's answers, what the owner blocked for good, the recent advice lines, and a weekly review written and not sent. Use coach_goals for the goal's progress and coach_findings for the cards.",
                  schema: ["type": "object", "properties": [:] as [String: Any]]),
         ToolSpec(name: "coach_reviews",
                  description: "Lists the coach's reviews of meetings, newest first: call_id, title, date, score out of 5 with its reason, meeting value, and the key positive (+) and negative (-) points. Filter by people and dates (YYYY-MM-DD).",
@@ -16,10 +16,10 @@ extension ChatTools {
                  description: "Reads one meeting's full coach review: scorecard, strengths and improvements with quotes and what to say instead, meeting value, delivery numbers (pace, fillers, talk share, interruptions, voice), and the owner's own ratings and conversation with the coach.",
                  schema: ["type": "object", "properties": ["call_id": ["type": "string"]], "required": ["call_id"]]),
         ToolSpec(name: "people",
-                 description: "The people the owner meets with: meetings together, time, when last seen, the coach's note, and how each person thinks (traits seen in several calls, with the count, and how to present to them). Filter by a name.",
-                 schema: ["type": "object", "properties": ["query": ["type": "string"], "limit": ["type": "integer"]] as [String: Any]]),
+                 description: "The people the owner meets with, most meetings first: person_id, job title, meetings together, time, when last seen, the coach's note, and how each person thinks (traits seen in several calls, with the count, and how to present to them). Filter by a name. duplicates: true lists the people who may be one person, and why (only the owner merges). Use read_person for one person in full.",
+                 schema: ["type": "object", "properties": ["query": ["type": "string"], "limit": ["type": "integer"], "duplicates": ["type": "boolean"]] as [String: Any]]),
         ToolSpec(name: "stats",
-                 description: "The numbers for a period (YYYY-MM-DD, default the last 30 days): calls, hours, average length, talk share, scheduled share, meeting value, top topics and people, delivery trends, and API cost.",
+                 description: "The Analytics page for a period (YYYY-MM-DD, default the last 30 days): calls, hours, average length, talk share, scheduled share, meeting value, top topics and people, delivery, the working week (hours a work day, back to back, call-free days), outcomes (items and decisions an hour, tasks done), how the owner talks (questions, cut-ins, 1:1 and group share), the trend of each number with the sentence the page shows (a change is said only when it is clear), and API cost by purpose.",
                  schema: ["type": "object", "properties": ["from": ["type": "string"], "to": ["type": "string"]] as [String: Any]]),
         ToolSpec(name: "remember",
                  description: "Saves something lasting about the owner for every later chat and coach review. kind is role, responsibility, goal, relationship, or preference (how they want to be coached or answered). Use it when they tell you something that should change future advice; tell them you saved it.",
@@ -67,7 +67,7 @@ extension ChatTools {
         case "read_coach_review":
             guard let id = input["call_id"] as? String, let v = review(id) else { return "No coach review for that call_id." }
             return reviewText(v, title: records.first { $0.id == id }?.title ?? id)
-        case "people": return peopleText(query: input["query"] as? String, limit: limit)
+        case "people": return input["duplicates"] as? Bool == true ? duplicatesText() : peopleText(query: input["query"] as? String, limit: limit)
         case "commitments": return commitmentsText(status: input["status"] as? String ?? "open", person: input["person"] as? String, limit: limit)
         case "stats":
             let end = to ?? Date(), start = from ?? end.addingTimeInterval(-30 * 86_400)
@@ -137,6 +137,7 @@ extension ChatTools {
         if !scored.isEmpty {
             parts.append("Recent scores: " + scored.suffix(10).map { "\($0.0.title) \($0.1)/5" }.joined(separator: ", "))
         }
+        if let more = coachKnowledgeText().nonBlank { parts.append(more) }
         return parts.isEmpty ? "The coach has no notes yet." : parts.joined(separator: "\n\n")
     }
 
@@ -206,10 +207,17 @@ extension ChatTools {
         guard !names.isEmpty else { return "No people match." }
         return names.prefix(min(limit, Self.maxLimit)).map { name in
             let s = stats[name]!
-            var line = "\(name) | \(s.meetings.count) meetings | talked \(Int(s.totalTalk / 60)) min"
+            let id = PeopleStore.id(forVoiceName: name, isOwner: false, in: savedPeople)
+            var line = name
+            if let id, let p = saved.person(id.rawValue) {
+                line += " | person_id: \(id.rawValue)"
+                if let job = p.directory?.jobTitle?.nonBlank { line += " | \(job)" }
+            }
+            line += " | \(s.meetings.count) meetings | talked \(Int(s.totalTalk / 60)) min"
             if let last = s.lastHeard { line += " | last \(last.formatted(.dateTime.month(.abbreviated).day()))" }
             if let note = notes[name]?.note { line += " | coach: \(note)" }
-            let read = coachPeople.id(of: name).flatMap { reads[$0] }
+            // Never the read of a person who keeps none, also from a copy that another device made.
+            let read = coachPeople.id(of: name).flatMap { coachPeople.notProfiled.contains($0) ? nil : reads[$0] }
             if let read, !read.traits.isEmpty {
                 line += "\n  How they think:\n" + read.text(name: name).split(separator: "\n").map { "  " + $0 }.joined(separator: "\n")
             }
@@ -233,7 +241,8 @@ extension ChatTools {
 
     func statsText(_ interval: DateInterval, usage: [UsageEvent]) -> String {
         let reviews = Dictionary(uniqueKeysWithValues: records.compactMap { r in review(r.id).map { (r.id, $0) } })
-        let r = AnalyticsReport(records: records, usage: usage, owner: owner, interval: interval, reviews: reviews)
+        let commitments = paths.flatMap { CommitmentBook.peek(in: $0.commitments) }?.items ?? []
+        let r = AnalyticsReport(records: records, usage: usage, owner: owner, interval: interval, reviews: reviews, commitments: commitments)
         var lines = ["\(r.calls) call\(r.calls == 1 ? "" : "s"), \(Int(r.callSeconds / 3600))h \(Int(r.callSeconds / 60) % 60)m in calls, average \(Int(r.averageSeconds / 60)) min, \(String(format: "%.1f", r.callsPerDay)) a day"]
         if let share = r.talkShare { lines.append("Talk share \(Int(share * 100))%") }
         lines.append("Scheduled \(r.scheduled.calls), unscheduled \(r.unscheduled.calls)")
@@ -243,7 +252,31 @@ extension ChatTools {
         if !r.delivery.isEmpty {
             lines.append("Pace " + r.delivery.map { "\(Int($0.wordsPerMinute))" }.joined(separator: ", ") + " wpm; fillers " + r.delivery.map { String(format: "%.1f", $0.fillersPerMinute) }.joined(separator: ", ") + " per min")
         }
-        lines.append(String(format: "API cost $%.2f", r.cost.total))
+        let w = r.workday
+        if w.workdays > 0 {
+            lines.append(String(format: "Workdays: %.1f h in calls a work day, %d%% of 8 to 6 in calls, ", w.hoursPerWorkday, Int((w.coreHoursShare * 100).rounded()))
+                         + (w.backToBackShare.map { "\(Self.percent($0)) of calls back to back, " } ?? "") + "\(w.callFreeDays) of \(w.workdays) work days with no calls")
+        }
+        let o = r.outcomes
+        lines.append(String(format: "Outcomes: %.1f action items and %.1f decisions an hour", o.itemsPerHour, o.decisionsPerHour)
+                     + (o.withOutcomesShare.map { ", \(Self.percent($0)) of calls with an item or a decision" } ?? "")
+                     + ", items yours \(o.mine) and others' \(o.others)" + (o.commitmentsMade > 0 ? ", \(o.commitmentsDone) of your \(o.commitmentsMade) tasks done" : ""))
+        let c = r.communication
+        var talk: [String] = []
+        if let q = c.questionsPerHour { talk.append(String(format: "%.1f questions an hour", q)) }
+        if let m = c.interruptionsMadePerHour { talk.append(String(format: "you cut in %.1f an hour", m)) }
+        if let m = c.interruptionsReceivedPerHour { talk.append(String(format: "you were cut off %.1f an hour", m)) }
+        if let s = c.oneOnOneShare { talk.append("talk share \(Self.percent(s)) in 1:1s") }
+        if let s = c.groupShare { talk.append("\(Self.percent(s)) in groups") }
+        if !talk.isEmpty { lines.append("How you talk: " + talk.joined(separator: ", ")) }
+        // The charts of "How you communicate", in their own sentences.
+        let trends = CommunicationTrends(facts: MeetingFactsCache().facts(for: records, owner: owner), interval: interval)
+        for series in trends.series(.all) {
+            lines.append("Trend, \(CommunicationTrends.title(series.metric).lowercased()): \(series.sentence)" + (series.usualText.map { ". \($0)" } ?? ""))
+        }
+        let parts = UsageEvent.Purpose.allCases.compactMap { p in r.cost.byPurpose[p].flatMap { $0 >= 0.005 ? String(format: "%@ $%.2f", p.rawValue, $0) : nil } }
+        lines.append(String(format: "API cost $%.2f", r.cost.total) + (parts.isEmpty ? "" : " (" + parts.joined(separator: ", ") + ")")
+                     + (r.cost.estimatedShare > 0 ? String(format: ", %d%% estimated from older calls", Int((r.cost.estimatedShare * 100).rounded())) : ""))
         return lines.joined(separator: "\n")
     }
 }

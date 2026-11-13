@@ -102,14 +102,7 @@ struct PeopleDuplicatesSheet: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func reasonText(_ r: PeopleDuplicates.Reason) -> String {
-        switch r {
-        case .sameEmail: "Same email"
-        case .sameName: "Same name"
-        case .similarName: "Names almost match"
-        case .sameVoice: "Same voice"
-        }
-    }
+    private func reasonText(_ r: PeopleDuplicates.Reason) -> String { r.words }
 
     private func reasonIcon(_ r: PeopleDuplicates.Reason) -> Icon {
         switch r {

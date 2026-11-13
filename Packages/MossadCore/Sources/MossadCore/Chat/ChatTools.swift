@@ -20,6 +20,8 @@ public struct ChatTools: Sendable {
     }
 
     public static let defaultLimit = 20
+    /// The tools that change something; every other tool only reads.
+    public static let writes: Set<String> = ["add_next_time_point", "remember"]
     static let maxLimit = 60
     /// About 40k tokens: room for a long meeting, but one read cannot fill the context.
     static let maxMeetingCharacters = 160_000
@@ -39,8 +41,18 @@ public struct ChatTools: Sendable {
     /// Whether the `people` tool gives the coach's reads of how each person thinks: on in Chat, and in other AI apps
     /// unless the owner turned it off.
     let personaTraits: Bool
+    /// The people file as it was read: every saved person, live or not.
+    let savedPeople: [Person]
+    /// The voice library's people, as the People page lists them. Their fingerprints are only compared, never given.
+    let profiles: [VoiceProfile]
+    let settings: ToolSettings
+    /// A fixed clock for tests; the time of the call otherwise.
+    private let fixedNow: Date?
+    var now: Date { fixedNow ?? Date() }
 
-    public init(records: [CallRecord], owner: String, paths: Paths? = nil, people: [Person]? = nil, personaTraits: Bool = true) {
+    public init(records: [CallRecord], owner: String, paths: Paths? = nil, people: [Person]? = nil, profiles: [VoiceProfile]? = nil,
+                personaTraits: Bool = true, settings: ToolSettings? = nil, now: Date? = nil) {
+        fixedNow = now
         self.records = records.filter { $0.status == .written }.sorted { $0.start > $1.start }
         live = records.filter { $0.status == .recording }.max { $0.start < $1.start }
         self.owner = owner
@@ -49,6 +61,11 @@ public struct ChatTools: Sendable {
         self.saved = PersonReferences(people: list)
         coachPeople = CoachPeople(people: list)
         self.personaTraits = personaTraits
+        savedPeople = list
+        // Without the voice library (the iPhone, a test), each live person as the People page would list them.
+        self.profiles = profiles ?? paths.flatMap { VoiceLibrary.peek(in: $0.voices) }
+            ?? list.filter(\.isLive).map { VoiceProfile(name: $0.displayName, isOwner: $0.isOwner, embeddings: [], email: $0.email) }
+        self.settings = settings ?? .read(.standard)
     }
 
     /// Whether a name or an id that the model gave is someone of this meeting.
@@ -86,6 +103,11 @@ public struct ChatTools: Sendable {
 
     public func findMeetings(query: String? = nil, people names: [String] = [], from: Date? = nil, to: Date? = nil,
                              tag: String? = nil, limit: Int = defaultLimit) -> [CallRecord] {
+        Array(matching(query: query, people: names, from: from, to: to, tag: tag).prefix(min(limit, Self.maxLimit)))
+    }
+
+    /// Every meeting the words, people, dates, and tag find, newest first.
+    func matching(query: String? = nil, people names: [String] = [], from: Date? = nil, to: Date? = nil, tag: String? = nil) -> [CallRecord] {
         records.filter { r in
             if let from, r.start < from { return false }
             if let to, r.start >= to { return false }
@@ -95,7 +117,7 @@ public struct ChatTools: Sendable {
             if let q = query?.trimmingCharacters(in: .whitespaces), !q.isEmpty, !MeetingSearch.matches(r, q),
                !(r.summary ?? "").localizedCaseInsensitiveContains(q) { return false }
             return true
-        }.prefix(min(limit, Self.maxLimit)).map { $0 }
+        }
     }
 
     public func searchTranscripts(query: String, people names: [String] = [], from: Date? = nil, to: Date? = nil,
@@ -123,13 +145,21 @@ public struct ChatTools: Sendable {
     public func readMeeting(_ id: String) -> String? {
         guard let r = records.first(where: { $0.id == id }) else { return nil }
         var parts = [header(r)]
+        var about = ["Platform: \(r.platform.displayName)"]
+        if let k = r.kind?.nonBlank { about.append("Kind: \(k)") }
+        if r.isNotesOnly { about.append("Source: Gemini notes (not recorded by Mossad; times are placed by words)") } else if r.gemini != nil { about.append("Also has Gemini notes") }
+        parts.append(about.joined(separator: " | "))
         if !r.attendees.isEmpty { parts.append("Invited: \(r.attendees.joined(separator: ", "))") }
         // The ids let a later call name the person under any name: "people" in find_meetings takes them.
         if let persons = MeetingView.persons(r) { parts.append("person_ids: " + persons.map { "\($0.name)=\($0.id)" }.joined(separator: "; ")) }
         if let s = r.summary { parts.append("Summary:\n\(s)") }
         for t in r.topics { parts.append("### \(t.title)\n\(t.summary)") }
-        if !r.decisions.isEmpty { parts.append("Decisions:\n" + r.decisions.map { "- \($0.text)" }.joined(separator: "\n")) }
+        if !r.decisions.isEmpty { parts.append("Decisions:\n" + r.decisions.map { "- " + ($0.at.map { "[\(MarkdownWriter.timestamp($0))] " } ?? "") + $0.text }.joined(separator: "\n")) }
         if !r.actionItems.isEmpty { parts.append("Action items:\n" + r.actionItems.map { "- \($0.text)" }.joined(separator: "\n")) }
+        if let marks = BookmarkIndex.groups([r]).first?.bookmarks {
+            parts.append("Bookmarks:\n" + marks.map { "- [\(MarkdownWriter.timestamp($0.offset))]" + ($0.note.map { " \($0)" } ?? "") + ($0.said.map { " (\($0.speaker): \($0.text))" } ?? "") }.joined(separator: "\n"))
+        }
+        if let points = meetingPoints(r.id) { parts.append(points) }
         let transcript = MarkdownWriter.transcript(r)
         parts.append("Transcript:\n" + String(transcript.prefix(Self.maxMeetingCharacters))
                      + (transcript.count > Self.maxMeetingCharacters ? "\n(Transcript cut here; use search_transcripts for later parts.)" : ""))
@@ -146,10 +176,11 @@ public struct ChatTools: Sendable {
         }
     }
 
-    private func header(_ r: CallRecord) -> String {
+    func header(_ r: CallRecord) -> String {
         var line = "call_id: \(r.id) | \(r.title) | \(day(r.start)) | \(Int((r.end.timeIntervalSince(r.start) / 60).rounded())) min | people: \(people(r).joined(separator: ", "))"
         if !r.tags.isEmpty { line += " | tags: \(r.tags.joined(separator: ", "))" }
         if let h = r.headline { line += " | \(h)" }
+        if r.isNotesOnly { line += " | from Gemini notes" }
         if let note = r.markdownPath { line += " | note: \(note)" }
         return line
     }
@@ -161,16 +192,27 @@ public struct ChatTools: Sendable {
     // MARK: Claude
 
     /// The meeting tools, plus the coach, people, stats, memory, and chat tools.
-    public static var allDefinitions: [ToolSpec] { definitions + coachDefinitions + [nextTimeDefinition] }
+    public static var allDefinitions: [ToolSpec] { definitions + coachDefinitions + readDefinitions + [nextTimeDefinition] }
+
+    /// The reads of the app's other pages: people, the calendar, recurring meetings, the coach's deck and goals,
+    /// shares, and the app itself. Mac only where the data is only on the Mac.
+    public static var readDefinitions: [ToolSpec] { peopleDefinitions + seriesDefinitions + calendarDefinitions + pageDefinitions + macPageDefinitions }
 
     public static var definitions: [ToolSpec] { [
         ToolSpec(name: "find_meetings",
-                 description: "Lists meetings, newest first, with call_id, title, date, length, people, tags, and a one-line summary. Every filter is optional and they combine. people matches first names, short forms (\"Jen\" finds Jennifer), last names, full names, or a person id from a person_ids line of read_meeting; every person listed must be in the meeting. Dates are YYYY-MM-DD in local time; to is inclusive.",
+                 description: "Lists meetings, newest first, with call_id, title, date, length, people, tags, and a one-line summary. Every filter is optional and they combine. people matches first names, short forms (\"Jen\" finds Jennifer), last names, full names, or a person id from a person_ids line of read_meeting; every person listed must be in the meeting. Dates are YYYY-MM-DD in local time; to is inclusive. The Meetings filter's choices narrow further: size, platform, kind, rating (the coach's), length, and has. facets: true adds how many of the matching meetings have each choice.",
                  schema: ["type": "object", "properties": [
                     "query": ["type": "string", "description": "Words in the title, tags, summary, or transcript."],
                     "people": ["type": "array", "items": ["type": "string"]],
                     "from": ["type": "string"], "to": ["type": "string"],
                     "tag": ["type": "string"], "limit": ["type": "integer"],
+                    "size": ["type": "array", "items": ["type": "string", "enum": MeetingFilterInput.sizes.map(\.0)]],
+                    "platform": ["type": "array", "items": ["type": "string", "enum": Platform.allCases.map(\.rawValue)]],
+                    "kind": ["type": "string", "description": "A kind of meeting, such as \"Weekly sync\"."],
+                    "rating": ["type": "array", "items": ["type": "string", "enum": MeetingFilterInput.ratings.map(\.0)]],
+                    "length": ["type": "array", "items": ["type": "string", "enum": MeetingFilterInput.lengths.map(\.0)]],
+                    "has": ["type": "array", "items": ["type": "string", "enum": MeetingFilterInput.flags.map(\.0)]],
+                    "facets": ["type": "boolean"],
                  ] as [String: Any]]),
         ToolSpec(name: "search_transcripts",
                  description: "Finds transcript lines that contain a word or phrase, with the meeting, the time, and the speaker. Narrow by people and dates like find_meetings.",
@@ -197,8 +239,12 @@ public struct ChatTools: Sendable {
         let limit = input["limit"] as? Int ?? Self.defaultLimit
         switch name {
         case "find_meetings":
-            let found = findMeetings(query: input["query"] as? String, people: people, from: from, to: to, tag: input["tag"] as? String, limit: limit)
-            return found.isEmpty ? "No meetings match." : found.map(header).joined(separator: "\n")
+            let filter = MeetingFilterInput(input)
+            guard !filter.isEmpty || input["facets"] as? Bool == true else {
+                let found = findMeetings(query: input["query"] as? String, people: people, from: from, to: to, tag: input["tag"] as? String, limit: limit)
+                return found.isEmpty ? "No meetings match." : found.map(header).joined(separator: "\n")
+            }
+            return filtered(filter, input: input, people: people, from: from, to: to, limit: limit)
         case "search_transcripts":
             let hits = searchTranscripts(query: input["query"] as? String ?? "", people: people, from: from, to: to, limit: limit)
             return hits.isEmpty ? "No transcript lines match." : hits.map { "call_id: \($0.callID) | \($0.title) | \(day($0.date)) | \($0.line)" }.joined(separator: "\n")
@@ -208,6 +254,30 @@ public struct ChatTools: Sendable {
             return (input["call_id"] as? String).flatMap(readMeeting) ?? "No meeting with that call_id."
         case "add_next_time_point":
             return addNextTimePoint(input)
+        case "read_person":
+            return readPerson(input)
+        case "upcoming_meetings":
+            return upcomingText(input, now: now)
+        case "prep":
+            return prepText(input, now: now)
+        case "recurring":
+            return recurringText(input, now: now)
+        case "read_series":
+            return readSeries(input, now: now)
+        case "next_time_points":
+            return nextTimeText(input, now: now)
+        case "bookmarks":
+            return bookmarksText(input)
+        case "meeting_analytics":
+            return meetingAnalyticsText(input)
+        case "coach_findings":
+            return findingsText(input)
+        case "coach_goals":
+            return goalsText()
+        case "shares":
+            return sharesText(input)
+        case "app_status":
+            return statusText()
         case "list_screens":
             return listScreens(input)
         case "get_screen":
@@ -247,6 +317,18 @@ public struct ChatTools: Sendable {
         case "coach_reviews": return "Reading the coach's reviews"
         case "read_coach_review": return "Reading the coach's review of \((input["call_id"] as? String).flatMap(title) ?? "a meeting")"
         case "people": return (input["query"] as? String).map { "Looking up \($0)" } ?? "Looking at the people you meet"
+        case "read_person": return "Reading about \((input["person"] as? String) ?? "a person")"
+        case "upcoming_meetings": return "Looking at your calendar"
+        case "prep": return "Preparing for \((input["meeting"] as? String).map { _ in "that meeting" } ?? "your next call")"
+        case "recurring": return "Looking at your recurring meetings"
+        case "read_series": return "Reading \((input["series"] as? String) ?? "a recurring meeting")"
+        case "next_time_points": return "Reading your points for next time"
+        case "bookmarks": return "Reading your bookmarks"
+        case "meeting_analytics": return "Reading the numbers of \((input["call_id"] as? String).flatMap(title) ?? "a meeting")"
+        case "coach_findings": return "Reading the coach's cards"
+        case "coach_goals": return "Reading your goal"
+        case "shares": return "Reading your share links"
+        case "app_status": return "Checking how Mossad is set up"
         case "stats": return "Adding up your numbers"
         case "commitments": return "Checking your tasks"
         case "remember": return "Remembering that"

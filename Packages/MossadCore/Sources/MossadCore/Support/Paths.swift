@@ -36,6 +36,9 @@ public struct Paths: Sendable {
     public var shares: URL { root.appendingPathComponent("Shares") }
     /// The upcoming meetings the owner chose not to record.
     public var noRecord: URL { root.appendingPathComponent("NoRecord") }
+    /// `upcoming.json`: the calendar's events as the app last read them, for the tools of other AI apps, which
+    /// cannot read the calendar themselves.
+    public var calendar: URL { root.appendingPathComponent("Calendar") }
     /// `usage.jsonl`: each billed request, for the costs in Analytics.
     public var usage: URL { root.appendingPathComponent("Usage") }
 
