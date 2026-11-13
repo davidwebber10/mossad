@@ -159,13 +159,12 @@ struct TranscriptTab: View {
         let breaks = (record.recordingMarkers + (record.screenGaps ?? []).map { TranscriptMarker(offset: $0.offset, text: $0.text) })
             .sorted { $0.offset < $1.offset }
         let screens = record.screens ?? []
+        let placed = TranscriptMarkerRows.place(breaks, blocks: blocks)
         let active = matches.indices.contains(matchIndex) ? matches[matchIndex] : nil
         return LazyVStack(alignment: .leading, spacing: Rhythm.pairGap) {
             ForEach(blocks, id: \.id) { block in
                 let previousEnd = block.id > 0 ? blocks[safe: block.id - 1]?.end ?? -1 : -1
-                ForEach(Array(breaks.filter { $0.offset > previousEnd && $0.offset <= block.start }.enumerated()), id: \.element.offset) { _, m in
-                    MarkerLine(marker: m)
-                }
+                ForEach(placed.before[block.id] ?? []) { MarkerLine(marker: $0.marker).id($0.id) }
                 ForEach(screens.filter { $0.offset > previousEnd && $0.offset <= block.start }) { s in
                     screenLine(s)
                 }
@@ -175,9 +174,7 @@ struct TranscriptTab: View {
                         text: { i, text in highlighted(text, active: active == LineID(block: block.id, line: i)) })
                     .id(block.id)
             }
-            ForEach(Array(breaks.filter { $0.offset > (blocks.last?.end ?? -1) }.enumerated()), id: \.element.offset) { _, m in
-                MarkerLine(marker: m)
-            }
+            ForEach(placed.after) { MarkerLine(marker: $0.marker).id($0.id) }
             ForEach(screens.filter { $0.offset > (blocks.last?.end ?? -1) }) { s in
                 screenLine(s)
             }
