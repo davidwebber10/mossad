@@ -121,7 +121,7 @@ struct ChatView: View {
             }
             .padding(.top, 22)
         }
-        .frame(maxWidth: 620, alignment: .leading)
+        .frame(maxWidth: Rhythm.measure, alignment: .leading)
     }
 
     private var examples: [String] {
