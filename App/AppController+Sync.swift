@@ -149,7 +149,7 @@ extension AppController {
     /// Uploads new and changed meetings and pulls what the iPhone changed. One sync at a time; a sync asked for
     /// during one runs again after it.
     func syncNow() {
-        guard !isInert else { return }
+        guard !isInert, !AppIdentity.current.isPreview else { return }
         let mirror = mirrorSync
         let main = currentSync
         // No store to pull from: a file that was set aside has no other copy to wait for.

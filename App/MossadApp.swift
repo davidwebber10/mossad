@@ -5,8 +5,16 @@ import MossadCore
 @main
 struct MossadEntry {
     static func main() {
-        // First of all: a preview reads and writes its own empty settings, never the real app's.
-        AppIdentity.current.isolateDefaults()
+        // First of all: a preview runs only on a made-up folder, and reads and writes its own empty settings.
+        let identity = AppIdentity.current
+        if let refusal = identity.refusal(home: FileManager.default.homeDirectoryForCurrentUser, environment: ProcessInfo.processInfo.environment) {
+            FileHandle.standardError.write(Data((refusal + "\n").utf8))
+            exit(2)
+        }
+        if !identity.isolateDefaults() {
+            FileHandle.standardError.write(Data("Mossad: the preview could not use its own settings; not starting.\n".utf8))
+            exit(2)
+        }
         // Before any resolver: the app, `--mcp`, and each command-line step read the same company domains.
         CompanyDomains.loadSaved()
         // The build flag says what this copy does; the bundle id picks its folder and Keychain. They must agree.

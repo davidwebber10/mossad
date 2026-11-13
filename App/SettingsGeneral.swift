@@ -28,6 +28,8 @@ struct GeneralSettings: View {
                     .onChange(of: launchAtLogin) { _, on in
                         guard !Rehearsal.isOn else { return }
                         do {
+                            // A preview never changes the login item.
+                            guard !AppIdentity.current.isPreview else { return }
                             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
                         } catch {
                             Log.error("Launch at login change failed: \(error)")

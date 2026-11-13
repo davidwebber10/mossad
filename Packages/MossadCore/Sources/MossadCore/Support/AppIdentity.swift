@@ -2,20 +2,26 @@ import Foundation
 import ObjectiveC
 
 /// Which copy of the Mac app is running: the real Mossad, Mossad Rehearsal, which walks through setup with its
-/// own folder, its own Keychain service, and its own permissions, or a preview (`--ui-preview`, or any run on a
-/// `MOSSAD_ROOT`), which has its own empty settings and Keychain service. Neither ever touches the real app's
-/// settings or secrets: a signed preview could otherwise show the owner's server, keys, or Google account.
+/// own folder, its own Keychain service, and its own permissions, or a preview: a run with the exact argument
+/// `--ui-preview` (and no command such as `--mcp`). A preview has its own emptied settings for its data folder and its
+/// own empty Keychain service, so a signed preview never shows or changes the owner's settings or secrets. A run on a
+/// `MOSSAD_ROOT` alone is the real app on another folder.
 public struct AppIdentity: Sendable, Equatable {
     public static let mainBundleID = "com.dwebber.mossad"
     public static let rehearsalBundleID = "com.dwebber.mossad.rehearsal"
+    /// The commands that run without the window. They read the real settings, never a preview's.
+    public static let commands = ["--mcp", "--people-migration", "--persona-fill", "--persona-eval", "--import-keys"]
 
     public let bundleID: String?
-    /// A preview or a run on a made-up folder.
+    /// A `--ui-preview` run.
     public let isPreview: Bool
+    /// The data folder a preview was started on, for its own settings suite.
+    private let previewRoot: String?
 
     public init(bundleID: String?, arguments: [String] = [], environment: [String: String] = [:]) {
         self.bundleID = bundleID
-        isPreview = arguments.contains("--ui-preview") || !(environment["MOSSAD_ROOT"] ?? "").isEmpty
+        isPreview = arguments.contains("--ui-preview") && !arguments.contains(where: Self.commands.contains)
+        previewRoot = isPreview ? environment["MOSSAD_ROOT"].flatMap { $0.isEmpty ? nil : Self.standard($0) } : nil
     }
 
     public static let current = AppIdentity(bundleID: Bundle.main.bundleIdentifier, arguments: CommandLine.arguments,
@@ -35,8 +41,31 @@ public struct AppIdentity: Sendable, Equatable {
     public var appID: String { isRehearsal ? Self.rehearsalBundleID : Self.mainBundleID }
     /// A preview's service holds nothing: the Keychain of the copy it runs as stays unread.
     public var keychainService: String { isPreview ? appID + ".preview" : appID }
-    /// The settings a preview reads and writes instead of the app's own. Nil for the real copies.
-    public var defaultsSuite: String? { isPreview ? appID + ".preview" : nil }
+    /// The settings a preview reads and writes instead of the app's own, one suite for each data folder, so two
+    /// previews on two folders never empty each other's. Nil for the real copies.
+    public var defaultsSuite: String? {
+        guard isPreview else { return nil }
+        // FNV-1a of the folder: stable across launches, unlike `hashValue`.
+        let hash = (previewRoot ?? "").utf8.reduce(UInt64(0xcbf29ce484222325)) { ($0 ^ UInt64($1)) &* 0x100000001b3 }
+        return appID + ".preview." + String(hash, radix: 16)
+    }
+
+    /// Why a preview must not start: it has no made-up data folder, or its folder is the real one. Nil when it may.
+    public func refusal(home: URL, environment: [String: String]) -> String? {
+        guard isPreview else { return nil }
+        guard let root = environment["MOSSAD_ROOT"], !root.isEmpty else {
+            return "Mossad: --ui-preview needs MOSSAD_ROOT set to a made-up data folder; not starting."
+        }
+        let real = [home.appendingPathComponent("Mossad"), home.appendingPathComponent("Mossad Rehearsal")].map { Self.standard($0.path) }
+        if real.contains(Self.standard(root)) {
+            return "Mossad: --ui-preview with MOSSAD_ROOT on the real data folder (\(root)); not starting."
+        }
+        return nil
+    }
+
+    private static func standard(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+    }
 
     /// `~/Mossad`, `~/Mossad Rehearsal` for Rehearsal, or `$MOSSAD_ROOT` when set.
     public func dataRoot(home: URL, environment: [String: String]) -> URL {
@@ -49,20 +78,26 @@ extension AppIdentity {
     /// The few settings a page needs in a preview. Made up.
     public static let previewDefaults: [String: String] = ["ownerName": "Avery Webb"]
 
-    /// In a preview, points `UserDefaults.standard` (and `@AppStorage`) at the preview's own settings, emptied at
-    /// each launch, so nothing a page shows or saves comes from or goes to the real app's settings. Values given as
-    /// launch arguments (`-ownerName "Sam Carter"`) still apply. Call it first, before anything reads a setting.
-    @discardableResult
-    public func isolateDefaults() -> UserDefaults? {
+    /// A preview's own settings, emptied, with the made-up defaults under the launch arguments
+    /// (`-ownerName "Sam Carter"` still applies). Nil for the real copies, which keep their settings untouched.
+    public func previewSettings(arguments: [String: Any]? = nil) -> UserDefaults? {
         guard let suite = defaultsSuite, let defaults = UserDefaults(suiteName: suite) else { return nil }
         defaults.removePersistentDomain(forName: suite)
-        // A made-up owner, so no page falls back to the Mac account's real name; launch arguments win.
-        let arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        defaults.register(defaults: (Self.previewDefaults as [String: Any]).merging(arguments) { $1 })
-        let block: @convention(block) (AnyObject) -> UserDefaults = { _ in defaults }
-        guard let method = class_getClassMethod(UserDefaults.self, #selector(getter: UserDefaults.standard)) else { return nil }
-        method_setImplementation(method, imp_implementationWithBlock(block))
+        let given = arguments ?? UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        defaults.register(defaults: (Self.previewDefaults as [String: Any]).merging(given) { $1 })
         return defaults
+    }
+
+    /// In a preview, points `UserDefaults.standard` (and `@AppStorage`) at the preview's own settings, so nothing a
+    /// page shows or saves comes from or goes to the real app's settings. Call it first, before anything reads a
+    /// setting. False when a preview could not be isolated: the caller must then stop.
+    public func isolateDefaults() -> Bool {
+        guard isPreview else { return true }
+        guard let defaults = previewSettings(),
+              let method = class_getClassMethod(UserDefaults.self, #selector(getter: UserDefaults.standard)) else { return false }
+        let block: @convention(block) (AnyObject) -> UserDefaults = { _ in defaults }
+        method_setImplementation(method, imp_implementationWithBlock(block))
+        return UserDefaults.standard === defaults
     }
 }
 

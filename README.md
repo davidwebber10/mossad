@@ -218,7 +218,8 @@ The tests cover detection, recording, merging, voice matching, the pipeline, and
 
 Two hooks help when testing by hand:
 
-- `MOSSAD_ROOT=/some/folder` makes the app use a different data folder instead of `~/Mossad`.
+- `MOSSAD_ROOT=/some/folder` makes the app use a different data folder instead of `~/Mossad`. It moves only the data: the settings and the keys stay the real ones. It is for development and tests.
+- `--ui-preview` (with `MOSSAD_ROOT` on a made-up folder) opens a preview for screenshots: its own empty settings and keys, no recording, sync, updates, login item, or usage statistics. Without `MOSSAD_ROOT`, or with it on the real data folder, a preview does not start.
 - `--open-window Settings` (or `Meetings`, `People`, `Log`) opens the window on launch.
 
 ### Releases
