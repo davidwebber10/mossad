@@ -5,7 +5,14 @@ import MossadCore
 /// next time, read again when the file changes (Chat, the MCP, and the phone write it too).
 @MainActor
 final class SeriesModel: ObservableObject {
-    @Published private(set) var all: [MeetingSeries] = [] { willSet { owner?.objectWillChange.send() } }
+    @Published private(set) var all: [MeetingSeries] = [] {
+        willSet { owner?.objectWillChange.send() }
+        didSet { version += 1 }
+    }
+    /// Counts the catalogs made, so a page that derives from `all` makes its part again only on a change.
+    private(set) var version = 0
+    /// A series that a link asked to open: Calendar mode opens its page full-pane (`SeriesShown.fullPane`).
+    @Published var toOpen: String?
     @Published private(set) var book = NextTimeBook() { willSet { owner?.objectWillChange.send() } }
     /// False when the file is there and cannot be read: then nothing is saved over it.
     @Published private(set) var bookReadable = true { willSet { owner?.objectWillChange.send() } }
@@ -77,6 +84,8 @@ final class SeriesModel: ObservableObject {
         let file = inputs.peopleDir.appendingPathComponent(PeopleStore.fileName)
         h.combine((try? FileManager.default.attributesOfItem(atPath: file.path))?[.modificationDate] as? Date)
         h.combine(Calendar.current.startOfDay(for: Date()))
+        // The weekdays and the times of the schedules are the owner's clock's.
+        h.combine(TimeZone.current.identifier)
         let key = h.finalize()
         guard key != builtFor else { return }
         builtFor = key
@@ -163,6 +172,7 @@ extension AppController {
         }
         series.selected = series.series(id)?.id ?? id
         series.asked = true
+        series.toOpen = series.selected
         open(.recurring)
     }
 
@@ -170,7 +180,8 @@ extension AppController {
         guard !isInert || DevHooks.preview else { return }
         series.owner = self
         series.change(paths, change)
-        syncNow()
+        // During a call the disk and the network belong to the recording; the sync after the call sends the book.
+        if LivePointRules.syncsAfterChange(recording: isRecording) { syncNow() }
     }
 
     /// The owner's open points for an upcoming meeting: its series' and its people's. Reads no file.

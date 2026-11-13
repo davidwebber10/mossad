@@ -11,12 +11,15 @@ let package = Package(
         .package(url: "https://github.com/soniqo/speech-swift", exact: "0.0.29"),
     ],
     targets: [
+        // An Objective-C exception (AVFAudio raises them) becomes a Swift error: Swift cannot catch one.
+        .target(name: "MossadObjC"),
         .target(name: "MossadCore", dependencies: [
+            "MossadObjC",
             .product(name: "FluidAudio", package: "FluidAudio"),
             .product(name: "WhisperKit", package: "WhisperKit", condition: .when(platforms: [.macOS])),
             .product(name: "Qwen3ASR", package: "speech-swift", condition: .when(platforms: [.macOS])),
             .product(name: "AudioCommon", package: "speech-swift", condition: .when(platforms: [.macOS])),
         ]),
-        .testTarget(name: "MossadCoreTests", dependencies: ["MossadCore"]),
+        .testTarget(name: "MossadCoreTests", dependencies: ["MossadCore", "MossadObjC"]),
     ]
 )

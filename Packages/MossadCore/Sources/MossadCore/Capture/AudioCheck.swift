@@ -57,8 +57,15 @@ extension AudioCheck {
         let engine = AVAudioEngine()
         let player = AVAudioPlayerNode()
         let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)!
-        engine.attach(player)
-        engine.connect(player, to: engine.mainMixerNode, format: format)
+        // With no output device, or one that changes now, these raise: a failed check, never a crash.
+        do {
+            try ObjCException.catching {
+                engine.attach(player)
+                engine.connect(player, to: engine.mainMixerNode, format: format)
+            }
+        } catch {
+            return .failed("The tone could not play: \(error)")
+        }
         func buffer(_ samples: [Float]) -> AVAudioPCMBuffer {
             let b = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(1, samples.count)))!
             b.frameLength = AVAudioFrameCount(samples.count)
@@ -66,16 +73,23 @@ extension AudioCheck {
             return b
         }
         do {
-            try engine.start()
+            var startError: Error?
+            try ObjCException.catching {
+                do { try engine.start() } catch { startError = error }
+            }
+            if let startError { throw startError }
+            // Silence first, so macOS lists Mossad as a process that plays audio before the tap looks for it.
+            try ObjCException.catching {
+                queue(buffer([Float](repeating: 0, count: 9_600)), on: player)
+                player.play()
+            }
         } catch {
+            try? ObjCException.catching { engine.stop() }
             return .failed("The tone could not play: \(error)")
         }
-        // Silence first, so macOS lists Mossad as a process that plays audio before the tap looks for it.
-        queue(buffer([Float](repeating: 0, count: 9_600)), on: player)
-        player.play()
         try? await Task.sleep(for: .milliseconds(300))
         guard let me = ownProcessObject() else {
-            engine.stop()
+            try? ObjCException.catching { engine.stop() }
             return .failed("Mossad's audio process was not found")
         }
         let meter = LevelMeter(capacity: 400)
@@ -86,15 +100,18 @@ extension AudioCheck {
         } catch {
             tap.stop()
             feed.close()
-            engine.stop()
+            try? ObjCException.catching { engine.stop() }
             return .failed("The tap could not start: \(error)")
         }
-        queue(buffer(tone(seconds: 1.2, sampleRate: 48_000)), on: player)
+        // The engine stops itself on a route change; a player on a stopped engine raises.
+        try? ObjCException.catching { queue(buffer(tone(seconds: 1.2, sampleRate: 48_000)), on: player) }
         try? await Task.sleep(for: .milliseconds(1_600))
         tap.stop()
         feed.close()
-        player.stop()
-        engine.stop()
+        try? ObjCException.catching {
+            player.stop()
+            engine.stop()
+        }
         return heardTone(meter.history) ? .heard : .silent
     }
 

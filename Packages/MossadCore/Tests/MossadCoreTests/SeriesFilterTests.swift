@@ -35,9 +35,23 @@ final class SeriesFilterTests: XCTestCase {
             MeetingSeries.Occurrence(id: $0.id, title: title, start: $0.start, end: $0.start.addingTimeInterval($0.seconds), notesOnly: notesOnly.contains($0.id))
         }
         let upcoming = next.map { [UpcomingMeeting(title: title, start: $0, end: $0.addingTimeInterval(1800), attendees: [], platform: .zoom)] } ?? []
-        return MeetingSeries(id: id, keys: [id], title: title, meetings: occurrences, upcoming: upcoming,
-                             cadence: rhythm.map { SeriesCadence(rhythm: $0, hour: 10, minute: 0, interval: 7) }, recurringInCalendar: next != nil,
-                             usualPeople: [])
+        var s = MeetingSeries(id: id, keys: [id], title: title, meetings: occurrences, upcoming: upcoming,
+                              cadence: rhythm.map { SeriesCadence(rhythm: $0, hour: 10, minute: 0, interval: 7) }, recurringInCalendar: next != nil,
+                              usualPeople: [])
+        s.schedule = rhythm.map(schedule) ?? .none
+        return s
+    }
+
+    /// The schedule that the catalog makes for such dates.
+    func schedule(_ rhythm: SeriesCadence.Rhythm) -> SeriesSchedule {
+        switch rhythm {
+        case .weekly(let d): SeriesSchedule(weekdays: [d], minuteOfDay: 600, rhythm: .weekly)
+        case .everyOtherWeek(let d): SeriesSchedule(weekdays: [d], minuteOfDay: 600, rhythm: .weeks(2))
+        case .monthly: SeriesSchedule(weekdays: [], minuteOfDay: 600, rhythm: .monthly)
+        case .weekdays: SeriesSchedule(weekdays: [2, 3, 4, 5, 6], minuteOfDay: 600, rhythm: .weekly)
+        case .daily: SeriesSchedule(weekdays: [2, 3, 4, 5, 6, 7, 1], minuteOfDay: 600, rhythm: .weekly)
+        case .everyDays(let n): SeriesSchedule(weekdays: [], minuteOfDay: 600, rhythm: .days(n))
+        }
     }
 
     func row(_ s: MeetingSeries, _ meetings: [MeetingFilterRow], invited: [String] = [], openItems: Bool? = nil) -> SeriesFilterRow {
@@ -117,6 +131,31 @@ final class SeriesFilterTests: XCTestCase {
     func testANotesOnlyMeetingHasNoLength() {
         let m = [meeting("a", at(11, 3, 10), minutes: 30), meeting("b", at(10, 27, 10), minutes: 90)]
         XCTAssertEqual(row(series("s", meetings: m, notesOnly: ["b"]), m).seconds, 30 * 60)
+    }
+
+    // M6: the filter's group, the search's words, and the page's line read the schedule that the day groups read.
+    func testTheCadenceGroupIsTheSchedules() {
+        XCTAssertEqual(SeriesFilter.Cadence(SeriesSchedule(weekdays: [2, 5], minuteOfDay: 600, rhythm: .weekly)), .weekly)
+        XCTAssertEqual(SeriesFilter.Cadence(SeriesSchedule(weekdays: [5], minuteOfDay: 600, rhythm: .weeks(2))), .everyTwoWeeks)
+        XCTAssertEqual(SeriesFilter.Cadence(SeriesSchedule(weekdays: [5], minuteOfDay: 600, rhythm: .weeks(3))), .other)
+        XCTAssertEqual(SeriesFilter.Cadence(SeriesSchedule(weekdays: [], minuteOfDay: nil, rhythm: .monthly)), .monthly)
+        XCTAssertNil(SeriesFilter.Cadence(SeriesSchedule.none))
+    }
+
+    func testTheSearchFindsEachWeekdayOfTheSchedule() {
+        var s = series("a", title: "Hiring panel", rhythm: .everyDays(4))
+        s.schedule = SeriesSchedule(weekdays: [2, 5], minuteOfDay: 780, rhythm: .weekly)
+        let rows = [searchRow(s)]
+        func found(_ q: String) -> Bool { SeriesListSearch.matches(rows, query: q, meetings: [:])["a"] != nil }
+        XCTAssertTrue(found("thursday"))
+        XCTAssertTrue(found("monday"))
+        XCTAssertTrue(found("weekly"))
+        XCTAssertFalse(found("tuesday"))
+        // The old cadence of all of the history says nothing now.
+        var moved = series("b", title: "Board", rhythm: .weekly(weekday: 3))
+        moved.schedule = SeriesSchedule(weekdays: [5], minuteOfDay: 600, rhythm: .weekly)
+        XCTAssertNil(SeriesListSearch.matches([searchRow(moved)], query: "tuesday", meetings: [:])["b"])
+        XCTAssertEqual(row(moved, []).cadence, .weekly)
     }
 
     func testTheCadenceGroups() {

@@ -75,44 +75,77 @@ final class GoogleReleaseTests: XCTestCase {
 
     // MARK: S-02
 
-    func testTwoCallersWithTwoWindowsGetTheirOwnEvents() async throws {
+    /// Answers each read with one event an hour after the start of its window, after a short wait.
+    private final class ByWindow: GoogleTransport, @unchecked Sendable {
+        private let lock = NSLock()
+        private var n = 0
+        private var windows: [Date] = []
+        var calls: Int { lock.withLock { n } }
+        /// The start of each window that was read, in order.
+        var starts: [Date] { lock.withLock { windows } }
+        func send(_ request: URLRequest) async throws -> (Data, Int) {
+            let iso = ISO8601DateFormatter()
+            let from = iso.date(from: request.query("timeMin") ?? "")!
+            lock.withLock { n += 1; windows.append(from) }
+            try? await Task.sleep(for: .milliseconds(300))
+            let start = from.addingTimeInterval(3600)
+            return (StubTransport.json(["summary": "owner@example.com", "items": [
+                ["id": "g\(Int(from.timeIntervalSince1970))", "iCalUID": "u\(Int(from.timeIntervalSince1970))", "summary": "At \(iso.string(from: start))",
+                 "start": ["dateTime": iso.string(from: start)], "end": ["dateTime": iso.string(from: start.addingTimeInterval(1800))]],
+            ]]), 200)
+        }
+    }
+
+    private func windowSource() throws -> (MergedCalendarSource, ByWindow) {
         struct Mac: CalendarSource {
             func events(from: Date, to: Date) async -> [CalendarEventInfo] { [] }
-        }
-        /// Answers each read with one event an hour after the start of its window, after a short wait.
-        final class ByWindow: GoogleTransport, @unchecked Sendable {
-            private let lock = NSLock()
-            private var n = 0
-            var calls: Int { lock.withLock { n } }
-            func send(_ request: URLRequest) async throws -> (Data, Int) {
-                lock.withLock { n += 1 }
-                try? await Task.sleep(for: .milliseconds(300))
-                let iso = ISO8601DateFormatter()
-                let from = iso.date(from: request.query("timeMin") ?? "")!
-                let start = from.addingTimeInterval(3600)
-                return (StubTransport.json(["summary": "owner@example.com", "items": [
-                    ["id": "g\(Int(from.timeIntervalSince1970))", "iCalUID": "u\(Int(from.timeIntervalSince1970))", "summary": "At \(iso.string(from: start))",
-                     "start": ["dateTime": iso.string(from: start)], "end": ["dateTime": iso.string(from: start.addingTimeInterval(1800))]],
-                ]]), 200)
-            }
         }
         let secrets = MemorySecrets()
         try secrets.setClient(testClient)
         try secrets.setTokens(GoogleTokens(accessToken: "a", refreshToken: "r", expiry: Date().addingTimeInterval(3600), scopes: [.calendar]))
         let transport = ByWindow()
         let session = GoogleSession(secrets: secrets, transport: transport)
-        let source = MergedCalendarSource(mac: Mac(), google: { GoogleCalendarSource(session: session) }, waitLimit: .seconds(5))
+        return (MergedCalendarSource(mac: Mac(), google: { GoogleCalendarSource(session: session) }, waitLimit: .seconds(5)), transport)
+    }
+
+    /// Waits until the transport has seen `count` reads, so the order of the callers is the test's, not the scheduler's.
+    private func waitFor(_ transport: ByWindow, calls count: Int) async throws {
+        for _ in 0..<500 where transport.calls < count { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertGreaterThanOrEqual(transport.calls, count)
+    }
+
+    func testTwoCallersWithTwoWindowsGetTheirOwnEvents() async throws {
+        let (source, transport) = try windowSource()
         let day = ISO8601DateFormatter().date(from: "2030-01-01T00:00:00Z")!
-        // A wide window, a small one inside it, and one on another day.
-        async let wide = source.events(from: day, to: day.addingTimeInterval(7 * 86_400))
+        // The wide read runs first; then a small window inside it and one on another day.
+        let wide = Task { await source.events(from: day, to: day.addingTimeInterval(7 * 86_400)) }
+        try await waitFor(transport, calls: 1)
         async let inside = source.events(from: day.addingTimeInterval(1800), to: day.addingTimeInterval(7200))
         async let other = source.events(from: day.addingTimeInterval(-86_400), to: day.addingTimeInterval(-79_200))
-        let (w, i, o) = await (wide, inside, other)
+        let (i, o) = await (inside, other)
+        let w = await wide.value
         XCTAssertEqual(w.count, 1)
         XCTAssertEqual(i.map(\.title), w.map(\.title), "the small window joins the wide read and is cut to its own times")
         XCTAssertEqual(o.count, 1)
         XCTAssertNotEqual(o.first?.title, w.first?.title, "another window gets its own events, not the other caller's")
-        XCTAssertLessThanOrEqual(transport.calls, 3)
+        XCTAssertEqual(transport.calls, 2)
+    }
+
+    /// The other order: a small read runs first, and a wide caller must not join it, since it does not cover the
+    /// wide window; each caller gets the events of its own window only.
+    func testAWideCallerDoesNotJoinASmallerReadInFlight() async throws {
+        let (source, transport) = try windowSource()
+        let day = ISO8601DateFormatter().date(from: "2030-01-01T00:00:00Z")!
+        let small = Task { await source.events(from: day.addingTimeInterval(1800), to: day.addingTimeInterval(7200)) }
+        try await waitFor(transport, calls: 1)
+        let w = await source.events(from: day, to: day.addingTimeInterval(7 * 86_400))
+        let s = await small.value
+        XCTAssertEqual(transport.calls, 2)
+        XCTAssertEqual(transport.starts, [day.addingTimeInterval(1800), day])
+        XCTAssertEqual(s.map(\.start), [day.addingTimeInterval(1800 + 3600)])
+        // The wide window's own read answered it; the small read's event lies in it too, but was never handed over.
+        XCTAssertEqual(w.map(\.start), [day.addingTimeInterval(3600)])
+        XCTAssertTrue((s + w).allSatisfy { $0.start >= day && $0.start < day.addingTimeInterval(7 * 86_400) })
     }
 
     func testAReadThatForgetOvertookDoesNotFillTheCache() async throws {

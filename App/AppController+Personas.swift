@@ -140,7 +140,25 @@ extension AppController {
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
             // Only while there are reads to cover.
-            guard let self, self.personasOn else { return }
+            // Also while the quick panel shows, which covers its chat during a share.
+            guard let self, self.personasOn || self.askPanel?.isVisible == true else { return }
+            self.readShare()
+            }
+        }
+    }
+
+    /// An open of the quick panel. When the watch did not run while the panel was hidden, the last value is old:
+    /// the panel stays covered until a read made now answers.
+    func shareCheckForPanel() {
+        let permission = CGPreflightScreenCaptureAccess()
+        if sharePermission != permission { sharePermission = permission }
+        guard !personasOn, permission else { return }
+        shareReadSinceOpen = false
+        readShare()
+    }
+
+    /// One read of the call apps' share bars, off the main thread.
+    func readShare() {
             DispatchQueue.global(qos: .utility).async {
                 // With no Screen Recording permission the titles of other apps cannot be read: not known.
                 let own = ProcessInfo.processInfo.processIdentifier
@@ -156,9 +174,10 @@ extension AppController {
                     self.coverWasRecording = self.isRecording
                     if self.ownerSharing != sharing { self.ownerSharing = sharing }
                     if sharing != true, !self.isRecording, !self.shownCovered.isEmpty { self.shownCovered = [] }
+                    let permission = sharing != nil
+                    if self.sharePermission != permission { self.sharePermission = permission }
+                    if !self.shareReadSinceOpen { self.shareReadSinceOpen = true }
                 }
             }
-            }
-        }
     }
 }

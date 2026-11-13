@@ -18,8 +18,8 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
     /// True when the calendar says that the invite repeats (a Google series id, or an EventKit recurrence rule).
     public var isRecurring = false
 
-    /// How far ahead the calendar is read, and what every list of upcoming meetings shows: the Meetings list, the
-    /// calendar, the prep pages, and the recurring meetings, so a monthly series has its next date.
+    /// How far ahead the calendar is read, and what the calendar, the prep pages, and the recurring meetings show, so
+    /// a monthly series has its next date. The Meetings list shows the next two work days of it (`listPart`).
     public static let days = 45
     /// The menu bar's short count.
     public static let limit = 12
@@ -71,6 +71,49 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
                 meetings: buckets[day, default: []].sorted { $0.start > $1.start })
         }
     }
+
+    /// The end of the Meetings list's window of invites: the end of the second work day, with today the first when
+    /// it is a work day. Work days are the calendar's (its locale's weekend, not a fixed Saturday and Sunday): on a
+    /// Friday that is Friday and Monday, on a weekend Monday and Tuesday. The calendar shows the rest.
+    public static func listWindowEnd(now: Date, calendar: Calendar = .current) -> Date {
+        var day = calendar.startOfDay(for: now)
+        var found = 0
+        // A calendar with no work day at all would never stop: a week is the most there can be to look through.
+        for _ in 0..<14 {
+            if !calendar.isDateInWeekend(day) {
+                found += 1
+                if found == 2 { break }
+            }
+            day = calendar.date(byAdding: .day, value: 1, to: day) ?? day.addingTimeInterval(86_400)
+        }
+        return calendar.date(byAdding: .day, value: 1, to: day) ?? day.addingTimeInterval(86_400)
+    }
+
+    /// What the Meetings list shows of the invites. With no search: the ones that start before the window's end
+    /// (a weekend meeting inside it too), and how many more the read holds, with the first day after the window.
+    /// With a search: every invite of the read that the words find, by title or by person, as a search asks for
+    /// more than the list shows by default.
+    public struct ListPart: Equatable, Sendable {
+        public var meetings: [UpcomingMeeting]
+        /// The invites of the read after the window; 0 while a search is on.
+        public var more: Int
+        /// The start of the first day after the window.
+        public var after: Date
+    }
+
+    public static func listPart(_ meetings: [UpcomingMeeting], query: String = "", now: Date, calendar: Calendar = .current) -> ListPart {
+        let end = listWindowEnd(now: now, calendar: calendar)
+        let search = ListSearch(query)
+        if !search.isEmpty {
+            let found = meetings.filter { search.match(title: $0.title, fields: [ListField("People", $0.attendees.joined(separator: ", "))]) != nil }
+            return ListPart(meetings: found, more: 0, after: end)
+        }
+        let shown = meetings.filter { $0.start < end }
+        return ListPart(meetings: shown, more: meetings.count - shown.count, after: end)
+    }
+
+    /// "12 more in the next 45 days".
+    public static func moreText(_ n: Int) -> String { "\(n) more in the next \(days) days" }
 
     /// "Today", "Tomorrow", then the weekday with the date ("Tuesday, Nov 17"), so an upcoming day never reads like
     /// a past day's header ("Tuesday").

@@ -10,6 +10,8 @@ struct MeetingList: View {
     let live: [CallRecord]
     @Binding var selection: String?
     @Binding var deleting: CallRecord?
+    /// Opens the calendar at a day: the "more" row over the invites.
+    var showCalendar: (Date) -> Void = { _ in }
     @FocusState private var focused: Bool
     /// Letters typed in a row select the first title that starts with them, as in Finder.
     @State private var typed = ""
@@ -21,12 +23,14 @@ struct MeetingList: View {
     /// The arrow keys, Home, End, and typing scroll on their own; their selection change must not scroll again.
     @State private var scrolledHere: String?
 
-    /// Invites show only without a search or a filter: both narrow what was recorded. Every invite of the calendar's
-    /// read, by day, latest on top, so time runs one way down the whole list and the next meeting sits just above
-    /// the ones that happened.
-    private var upcomingDays: [UpcomingMeeting.Day] {
-        controller.meetingQuery.isEmpty && !filters.isActive ? controller.upcomingDays : []
+    /// The invites of the next two work days (`UpcomingMeeting.listPart`), by day, latest on top, so time runs one
+    /// way down the whole list and the next meeting sits just above the ones that happened; the calendar shows the
+    /// rest. A search finds invites in the whole read; a filter, which narrows what was recorded, shows none.
+    private var upcomingList: (days: [UpcomingMeeting.Day], more: Int, after: Date)? {
+        filters.isActive ? nil : controller.upcomingList(query: controller.meetingQuery)
     }
+
+    private var upcomingDays: [UpcomingMeeting.Day] { upcomingList?.days ?? [] }
 
     private var upcoming: [UpcomingMeeting] { upcomingDays.flatMap(\.meetings) }
 
@@ -49,8 +53,13 @@ struct MeetingList: View {
                                 .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
                         }
                     }
+                    if let list = upcomingList, list.more > 0 {
+                        MoreUpcomingRow(count: list.more) { showCalendar(list.after) }
+                            // Under the call that records now, the gap of a new group: the row is the far end of the invites, not of "Now".
+                            .padding(.top, live.isEmpty ? 6 : 14)
+                    }
                     ForEach(Array(upcomingDays.enumerated()), id: \.element.date) { i, day in
-                        GroupHeader(title: day.title, first: i == 0 && live.isEmpty)
+                        GroupHeader(title: day.title, first: i == 0 && live.isEmpty && (upcomingList?.more ?? 0) == 0)
                         ForEach(day.meetings) { m in
                             UpcomingRow(meeting: m, dated: false).listRow(selected: selection == m.id) { select(m.id) }
                         }
@@ -113,7 +122,10 @@ struct MeetingList: View {
             // Return or Down Arrow in the search field, or its close, gives the keys back to the list.
             .onChange(of: controller.listFocusRequest) { _, _ in
                 focused = true
-                if selection.map({ !order.contains($0) }) ?? true, let first = order.first { _ = jump(to: first, proxy) }
+                // A far invite opened from a search or a link stays when the search closes; it has no row.
+                let known = selection.map { id in controller.meetings.contains { $0.id == id } || controller.calendarUpcoming.contains { $0.id == id } } ?? false
+                if !MeetingListRows.keepsSelection(selection, query: controller.meetingQuery, inList: selection.map(order.contains) ?? false, known: known),
+                   let first = order.first { _ = jump(to: first, proxy) }
             }
         }
     }
@@ -220,8 +232,34 @@ private struct ListRow: ViewModifier {
     }
 }
 
-/// "TODAY", "WEDNESDAY": the label role in tertiary, more space above than below so it binds to its rows.
-private struct GroupHeader: View {
+/// "12 more in the next 45 days" over the invites, the far end of the list in time: a quiet row whose click opens
+/// the calendar at the first day after the list's two work days.
+private struct MoreUpcomingRow: View {
+    let count: Int
+    let open: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar").font(.system(size: 11))
+                Text(UpcomingMeeting.moreText(count)).font(.system(size: 12))
+                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(hovering ? Palette.ink : Palette.secondary)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Open the calendar after these two work days")
+    }
+}
+
+/// "TODAY", "WEDNESDAY": the label role in tertiary, more space above than below so it binds to its rows. The
+/// Recurring list's weekdays use it too.
+struct GroupHeader: View {
     let title: String
     var color: Color = Palette.tertiary
     var first = false

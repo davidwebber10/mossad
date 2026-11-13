@@ -12,7 +12,29 @@ struct PhoneMeetingPoints: View {
     var body: some View {
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
+        let mentioned = book.mentioned(in: callID)
         VStack(spacing: 0) {
+            if !mentioned.isEmpty {
+                LabelColumn(label: "Your open points in these notes") {
+                    VStack(alignment: .leading, spacing: Space.s) {
+                        ForEach(mentioned) { p in
+                            let m = p.mentions?.first { $0.callID == callID }
+                            Button { read(m?.at) } label: {
+                                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                                    Image(systemName: "circle").font(.caption).foregroundStyle(Palette.tertiary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(p.text).textRole(.body).foregroundStyle(Palette.ink)
+                                        Text("Still open. Mossad has only the notes of this meeting" + (m.map { " · at \(meetingClock($0.at, length: 0))" } ?? ""))
+                                            .textRole(.secondary).foregroundStyle(Palette.secondary)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
             if !discussed.isEmpty || !carried.isEmpty {
                 LabelColumn(label: "Your points") {
                     VStack(alignment: .leading, spacing: Space.s) {

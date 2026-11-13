@@ -405,7 +405,7 @@
             "The last meeting's decisions and action items",
             "Your open tasks for these people",
             "Join from the same page",
-            "Your next 45 days of meetings in the list, by day"
+            "Your next two work days of meetings in the list, and 45 days on the calendar"
           ],
           "icon": "calendar.badge.clock",
           "comingSoon": false,
@@ -420,11 +420,16 @@
             "The coach suggests points from open action items, open decisions, and unanswered questions",
             "Add a point from Chat or from another AI app",
             "Points for a person show on that person's page",
-            "Search and filter the series by people, cadence, next meeting, last met, length, and open items"
+            "Your points sit above the live transcript during the call, so nothing you meant to raise slips by",
+            "Tick a point as you raise it, or let Mossad mark it when it hears you",
+            "A heads-up near the planned end while points are still open, with no pop-up and no sound",
+            "A meeting you missed never closes your points: you see where they came up",
+            "Search and filter the series by people, cadence, next meeting, last met, length, and open items",
+            "See your recurring meetings by weekday, or as one typical week on a calendar"
           ],
           "icon": "repeat",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesFilter.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesListSearch.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Series/MeetingSeries.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTime.swift", "Packages/MossadCore/Sources/MossadCore/Series/NextTimeCheck.swift", "Packages/MossadCore/Sources/MossadCore/Series/LivePoints.swift", "App/LivePointsPanel.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSuggestion.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesReport.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesFilter.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesListSearch.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesSchedule.swift", "Packages/MossadCore/Sources/MossadCore/Series/SeriesWeek.swift", "App/RecurringCalendar.swift"]
         },
         {
           "id": "filters",
@@ -596,6 +601,7 @@
           "details": [
             "One-click questions: what did I miss, a summary so far, action items so far",
             "Finds the questions put to you that you have not answered yet",
+            "Ask which of your points for this meeting are still open",
             "Each answer links to the moment in the live transcript",
             "Knows your past meetings too, so \"what did Sam promise last time?\" works",
             "Option-Command-K, or Ask about this call in the menu bar",
@@ -604,6 +610,20 @@
           "icon": "bubble.left.and.text.bubble.right",
           "comingSoon": false,
           "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/LiveChat.swift", "Packages/MossadCore/Sources/MossadCore/Chat/LiveSummary.swift", "App/LiveChatView.swift", "App/AppController+LiveChat.swift"]
+        },
+        {
+          "id": "ask-panel",
+          "title": "Ask without leaving the call",
+          "body": "Press Option-Command-M in any app, even with the call in full screen, ask your question, and keep your eyes on the call.",
+          "details": [
+            "The same conversation as the meeting's Chat tab, ready where you left it",
+            "Click a time in an answer to read those lines of the call right there",
+            "Between calls, the same shortcut asks about all your meetings",
+            "Choose your own shortcut in Settings"
+          ],
+          "icon": "sparkle.magnifyingglass",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Chat/AskPanel.swift", "Packages/MossadCore/Sources/MossadCore/Support/HotKeyShortcut.swift", "App/AskPanelView.swift", "App/AskPanelController.swift", "App/ShortcutRecorder.swift"]
         },
         {
           "id": "mcp-local",

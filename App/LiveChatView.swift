@@ -7,7 +7,7 @@ import SwiftUI
 struct LiveChatView: View {
     @EnvironmentObject var controller: AppController
     let record: CallRecord
-    @ObservedObject var session: LiveChatSession
+    @ObservedObject var session: ChatSession
     var top: CGFloat = 14
     /// Set by "Ask about this call…": focus the field once.
     @Binding var focusRequest: Bool
@@ -68,7 +68,8 @@ struct LiveChatView: View {
         VStack(spacing: 8) {
             if !session.running, controller.liveOffReason == nil {
                 LiveChipsRow(model: controller.live, owner: controller.ownerName, record: record,
-                             invitedOthers: invitedOthers, recorded: { controller.liveRecorded }) { q in
+                             invitedOthers: invitedOthers, openPoints: LivePointRules.open(controller.livePointList(), marks: controller.livePoints.marks).count,
+                             recorded: { controller.liveRecorded }) { q in
                     question = ""
                     session.send(q, record: record, controller: controller)
                 }
@@ -118,6 +119,7 @@ private struct LiveChipsRow: View {
     let owner: String
     let record: CallRecord
     let invitedOthers: Int?
+    let openPoints: Int
     let recorded: () -> TimeInterval
     let ask: (String) -> Void
 
@@ -126,7 +128,7 @@ private struct LiveChipsRow: View {
             let entries = model.transcript.entries(owner: owner, lines: model.visibleLines)
             let open = LiveQuestions.forOwner(entries, owner: owner, now: recorded(), invitedOthers: invitedOthers,
                                               room: record.platform == .inPerson)
-            let chips = LiveChips.chips(entries, owner: owner, openQuestions: open.count)
+            let chips = LiveChips.chips(entries, owner: owner, openQuestions: open.count, openPoints: openPoints)
             if !chips.isEmpty {
                 FlowLayout(spacing: Space.s) {
                     ForEach(chips) { chip in

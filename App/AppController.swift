@@ -159,10 +159,21 @@ final class AppController: ObservableObject {
     private var liveFileOffset: TimeInterval = 0
     /// Where the live transcript did not listen in this call, for the live chat.
     var liveCoverage = LiveCoverage()
-    /// Why this call has no live transcript, in words; nil when it runs. The live chat says it.
-    @Published var liveOffReason: String?
-    /// The live chat of each call, so an answer that runs survives a change of tab.
-    var liveChatSessions: [String: LiveChatSession] = [:]
+    /// Why this call has no live transcript; nil when it runs. The live chat and the quick panel say it.
+    @Published var liveOff: LiveOffReason?
+    var liveOffReason: String? { liveOff?.text }
+    /// The live chat of each call, so an answer that runs survives a change of tab or of view (the Chat tab and
+    /// the quick panel show the same one).
+    var liveChatSessions: [String: ChatSession] = [:]
+    /// The quick panel's chat when no call records, kept while the app runs.
+    var quickChat: ChatSession?
+    /// The quick panel: a small window over any app, the global shortcut's and the menu's "Ask about this call…".
+    var askPanel: AskPanelController?
+    /// A moment of the live call to show in its live transcript; the live page takes it.
+    @Published var liveJumpRequest: LiveJumpRequest?
+    /// The owner's points on the live call's page and in the quick panel: what Mossad heard, and the call's
+    /// series and people.
+    let livePoints = LivePointsModel()
     /// When the open streaming sessions started, to log the time AssemblyAI bills.
     private var liveOpened: Date?
     private var liveNaming: Task<Void, Never>?
@@ -185,6 +196,7 @@ final class AppController: ObservableObject {
         didSet {
             meetingsVersion += 1
             upcomingMemo = nil
+            upcomingListMemo = nil
             if !meetingQuery.isEmpty { filterMeetings(debounce: false) }
         }
     }
@@ -220,6 +232,7 @@ final class AppController: ObservableObject {
     @Published private(set) var calendarEvents: [CalendarEventInfo] = [] {
         didSet {
             upcomingMemo = nil
+            upcomingListMemo = nil
             noRecordGate.update(events: calendarEvents)
         }
     }
@@ -234,18 +247,30 @@ final class AppController: ObservableObject {
     /// Every call invite in the fetched days (`UpcomingMeeting.days`), for the Meetings list, the calendar, and the
     /// prep pages.
     var calendarUpcoming: [UpcomingMeeting] { upcomingMemoNow.list }
-    /// The same invites in the Meetings list's day groups, made once with the list rather than at each draw.
-    var upcomingDays: [UpcomingMeeting.Day] { upcomingMemoNow.days }
-    private var upcomingMemoNow: (minute: Int, list: [UpcomingMeeting], days: [UpcomingMeeting.Day]) {
+    /// The invites of the Meetings list (the next two work days, or what the search finds in the whole read) in its
+    /// day groups, with the count of the rest; made once for each minute and search, not at each draw.
+    func upcomingList(query: String) -> (days: [UpcomingMeeting.Day], more: Int, after: Date) {
+        let now = Date()
+        let minute = Int(now.timeIntervalSince1970 / 60)
+        let all = upcomingMemoNow.list
+        if let memo = upcomingListMemo, memo.minute == minute, memo.query == query, memo.count == all.count { return memo.value }
+        let part = UpcomingMeeting.listPart(all, query: query, now: now)
+        let value = (UpcomingMeeting.byDay(part.meetings, now: now), part.more, part.after)
+        upcomingListMemo = (minute, query, all.count, value)
+        return value
+    }
+    private var upcomingListMemo: (minute: Int, query: String, count: Int, value: (days: [UpcomingMeeting.Day], more: Int, after: Date))?
+    private var upcomingMemoNow: (minute: Int, list: [UpcomingMeeting]) {
         let now = Date()
         let minute = Int(now.timeIntervalSince1970 / 60)
         if let memo = upcomingMemo, memo.minute == minute { return memo }
         let list = UpcomingMeeting.from(calendarEvents, now: now, limit: .max, recorded: meetings)
-        let memo = (minute, list, UpcomingMeeting.byDay(list, now: now))
+        let memo = (minute, list)
         upcomingMemo = memo
+        upcomingListMemo = nil
         return memo
     }
-    private var upcomingMemo: (minute: Int, list: [UpcomingMeeting], days: [UpcomingMeeting.Day])?
+    private var upcomingMemo: (minute: Int, list: [UpcomingMeeting])?
     /// The Mac's calendars, for the choice in Settings.
     @Published private(set) var calendars: [CalendarInfo] = []
     /// The calendars Mossad reads; saved once chosen, and defaulted to the owner's own on first use.
@@ -342,7 +367,10 @@ final class AppController: ObservableObject {
     }
     /// When the last bookmark was made, so the controls can confirm it.
     @Published private(set) var lastBookmark: Date?
-    private var bookmarkKey: GlobalHotKey?
+    /// The system-wide shortcuts: the bookmark's and the quick panel's.
+    let hotKeys = GlobalHotKeys()
+    /// The quick panel's shortcut could not be registered: Settings says so, and no key shows for it.
+    @Published var askShortcutFailed = false
 
     let paths = Paths.live
     /// Held for the life of the app: only the copy that has it records, recovers, and processes in this folder.
@@ -369,6 +397,11 @@ final class AppController: ObservableObject {
     var traitCards: [String: CoachFinding] = [:]
     /// Whether the owner shares the screen now; nil when Mossad cannot tell (+Personas).
     @Published var ownerSharing: Bool?
+    /// False from an open of the quick panel when the share watch was not running, until the first read answers: the
+    /// panel stays covered meanwhile (`AskPanelCover`), never shown on an old value (+Personas).
+    @Published var shareReadSinceOpen = true
+    /// Whether Mossad may read other apps' window titles (Screen Recording); without it a share cannot be known.
+    @Published var sharePermission = true
     /// The reads that the owner opened while they are covered, by person id: one click opens a card.
     @Published var shownCovered: Set<String> = []
     var personasRunning = false
@@ -702,7 +735,8 @@ final class AppController: ObservableObject {
             }
             requestPermissions()
             _ = updater
-            bookmarkKey = GlobalHotKey { [weak self] in self?.bookmarkCurrentCall() }
+            hotKeys.register(.bookmark, HotKeyShortcut.bookmark) { [weak self] in self?.bookmarkCurrentCall() }
+            registerAskShortcut()
 
             refreshUpcoming()
             // Chats and notes from the phone arrive within five minutes.
@@ -1054,7 +1088,10 @@ final class AppController: ObservableObject {
     }
 
     func skipCurrentCall() {
-        if case .recording(_, let since) = status { forgetLiveChats(callID: CallRecorder.callID(for: since)) }
+        if case .recording(_, let since) = status {
+            forgetLiveChats(callID: CallRecorder.callID(for: since))
+            reopenTicks(ofGoneCall: CallRecorder.callID(for: since))
+        }
         let recorder = recorder
         CaptureQueue.queue.async {
             recorder.skip()
@@ -1072,8 +1109,11 @@ final class AppController: ObservableObject {
     func stopCurrentCall() {
         let recorder = recorder
         CaptureQueue.queue.async {
+            let recording = recorder.currentCallID
             guard let record = recorder.end(at: Date(), trimTo: nil, byPerson: true) else {
-                Task { @MainActor in self.refresh() }
+                // Too short to keep: its ticks go back to open.
+                let gone = GoneCall.id(recording: recording, kept: nil)
+                Task { @MainActor in self.refresh(); if let gone { self.reopenTicks(ofGoneCall: gone) } }
                 return
             }
             // The stopped record goes into the list at once, so its row stops saying "recording".
@@ -1254,15 +1294,15 @@ final class AppController: ObservableObject {
             liveCoverage = LiveCoverage()
         }
         guard case .recording(_, let since) = status else { return }
-        guard liveTranscriptEnabled else { liveOffReason = "Live transcript is off in Settings."; return }
-        guard let key = keychain.get(.assemblyai) else { liveOffReason = "Live transcript needs an AssemblyAI key."; return }
+        guard liveTranscriptEnabled else { liveOff = .setting; return }
+        guard let key = keychain.get(.assemblyai) else { liveOff = .noKey; return }
         // The two audio streams take about half a megabit of upload. On a network the owner marked to save data
         // (Low Data Mode), the call's own video and sound get all of it.
         guard !NetworkPath.shared.isConstrained else {
-            liveOffReason = "Live transcript is off on a network in Low Data Mode."
+            liveOff = .lowData
             return Log.info("Live transcript is off: the network is in Low Data Mode")
         }
-        liveOffReason = nil
+        liveOff = nil
         // In a room the mic hears everyone and there is no call audio: one stream, with speaker labels, shown
         // like call audio so each voice gets its own name.
         let room: Bool = if case .recording(.inPerson, _) = status { true } else { false }
@@ -1308,6 +1348,7 @@ final class AppController: ObservableObject {
         // A pause cancels the timer, so a resumed call starts it again; the recorder keeps only the first title.
         startLiveTitling(callID: CallRecorder.callID(for: since))
         if voiceFingerprints { startLiveNaming(callID: CallRecorder.callID(for: since), themURL: themURL, room: room) }
+        startLiveHearing(callID: CallRecorder.callID(for: since))
     }
 
     /// Once per call, after about 5 minutes of live transcript, asks a small model for a provisional title so the
@@ -1418,6 +1459,7 @@ final class AppController: ObservableObject {
         liveNaming = nil
         liveTitling?.cancel()
         liveTitling = nil
+        stopLiveHearing()
         recorder.meSink.set(nil)
         recorder.themSink.set(nil)
         liveSessions.forEach { $0.stop() }
@@ -1845,9 +1887,14 @@ final class AppController: ObservableObject {
         case .ended(let at, let trimTo):
             if recorder.isManual { return }
             Log.info("Call ended")
+            // The id of the record the recorder holds: `at` is the end of the call, not its id. A call that the owner
+            // already stopped has no record here, and its ticks stay.
+            let recording = recorder.currentCallID
             guard let record = recorder.end(at: at, trimTo: trimTo) else {
-                // A short call is deleted, so its row must leave the list too, or it still looks live.
-                Task { @MainActor in self.refresh() }
+                // A short call is deleted, so its row must leave the list too, or it still looks live; its ticks go
+                // back to open.
+                let gone = GoneCall.id(recording: recording, kept: nil)
+                Task { @MainActor in self.refresh(); if let gone { self.reopenTicks(ofGoneCall: gone) } }
                 return
             }
             Task { @MainActor in self.update(record); self.refresh() }

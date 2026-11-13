@@ -84,6 +84,7 @@ struct ChatView: View {
                         ChatExchangeRow(message: m, callID: current.callID).id(m.id)
                     }
                     if running == current.id { ChatAnswering(steps: steps).id("running") }
+                    if let session = controller.session(answering: current, create: false) { SessionRun(session: session) }
                     if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
                 }
                 .frame(maxWidth: Self.column, alignment: .leading)
@@ -178,6 +179,14 @@ struct ChatView: View {
     private func send() {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty, running == nil else { return }
+        // The quick panel's chat, or the chat of the call that records: one writer for the file, the session that
+        // the panel and the live Chat tab use. A question asked while it answers waits for that answer.
+        if let session = controller.session(answering: current, create: true) {
+            session.adopt(current)
+            session.send(q, record: current.callID.flatMap { id in controller.meetings.first { $0.id == id } }, controller: controller)
+            question = ""
+            return
+        }
         var chat = current
         let history = chat.messages
         if chat.messages.isEmpty { chat.title = Chat.title(from: q) }
@@ -222,6 +231,15 @@ struct ChatView: View {
         do { try controller.chats.save(chat) } catch { Log.error("Saving the chat failed: \(error)") }
         reload()
         selection = chat.id
+    }
+}
+
+/// The answer of the session that writes this chat (the quick panel's, or the call's), on its way.
+private struct SessionRun: View {
+    @ObservedObject var session: ChatSession
+
+    var body: some View {
+        if session.running { ChatAnswering(steps: session.steps).id("running") }
     }
 }
 

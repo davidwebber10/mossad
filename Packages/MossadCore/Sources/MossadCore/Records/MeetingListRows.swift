@@ -11,4 +11,14 @@ public enum MeetingListRows {
             r.status == .recording || ((found?.contains(r.id) ?? true) && (kept?.contains(r.id) ?? true))
         }
     }
+
+    /// When the list takes the keys back (the search closed, Return or Down Arrow in the field): whether the
+    /// selection stays, or the first row is selected.
+    /// A meeting or an invite that the list has no row for (an invite past the two work days, opened from a search
+    /// or a link) stays shown while there is no search text; Return or Down Arrow from a search goes to its rows.
+    public static func keepsSelection(_ selection: String?, query: String, inList: Bool, known: Bool) -> Bool {
+        guard selection != nil else { return false }
+        if inList { return true }
+        return known && query.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 }

@@ -14,14 +14,30 @@ struct ChatMarkdown: View {
     var callID: String?
     /// The space between the lines of a block: chat answers are read, not scanned, so they get room.
     static let lineGap: CGFloat = 6
+    @Environment(\.chatMomentPeek) private var peek
 
     var body: some View {
+        let blocks = ChatBlocks.parse(ChatBlocks.linkTimes(text, callID: callID))
+        let peekAfter = peek.flatMap { p in blocks.firstIndex { Self.moments(of: $0).contains(p.seconds) } }
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(Array(ChatBlocks.parse(ChatBlocks.linkTimes(text, callID: callID)).enumerated()), id: \.offset) { i, block in
+            ForEach(Array(blocks.enumerated()), id: \.offset) { i, block in
                 view(block, first: i == 0)
+                if i == peekAfter, let peek { peek.content }
             }
         }
         .tint(Palette.accent)
+    }
+
+    /// The seconds of the moments a block links to.
+    private static func moments(of block: ChatBlock) -> [Int] {
+        let text = switch block {
+        case .paragraph(let s), .heading(_, let s): s
+        case .list(_, let items): items.map(\.text).joined(separator: " ")
+        case .quote(let q): (q.link ?? "") + " " + q.text
+        case .table(let header, let rows): (header + rows.flatMap { $0 }).joined(separator: " ")
+        case .code, .rule: ""
+        }
+        return ChatBlocks.momentSeconds(in: text)
     }
 
     @ViewBuilder
@@ -81,19 +97,21 @@ struct ChatMarkdown: View {
         for run in text.runs where run.inlinePresentationIntent?.contains(.code) == true {
             text[run.range].backgroundColor = Palette.fill
         }
-        return timeChips ? Self.chips(text) : text
+        return timeChips ? Self.chips(text, open: peek?.seconds) : text
     }
 
     /// Text cannot draw a capsule inside a line, so a chip is the link on a tint with no-break spaces each side, so
     /// it never splits.
-    private static func chips(_ s: AttributedString) -> AttributedString {
+    /// `open`: the seconds of a moment shown inline under its block, whose chip is drawn stronger.
+    private static func chips(_ s: AttributedString, open: Int?) -> AttributedString {
         var out = AttributedString()
         for run in s.runs {
             var piece = AttributedString(s[run.range])
             if let url = run.link, url.scheme == "mossad", isMoment(url) {
                 piece = AttributedString("\u{00A0}") + piece + AttributedString("\u{00A0}")
                 piece.link = url
-                piece.backgroundColor = Palette.accentTint
+                let isOpen = open != nil && ChatBlocks.momentSeconds(in: url.absoluteString).first == open
+                piece.backgroundColor = isOpen ? Palette.accent.opacity(0.32) : Palette.accentTint
                 piece.foregroundColor = TimeChip.ink
                 #if os(iOS)
                 piece.font = .footnote.monospacedDigit().weight(.medium)
@@ -110,6 +128,16 @@ struct ChatMarkdown: View {
     static func isMoment(_ url: URL) -> Bool {
         URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains { $0.name == "t" } == true
     }
+}
+
+/// A moment shown inline under the block that holds its time chip: the quick panel's look at the live transcript.
+struct ChatMomentPeek {
+    let seconds: Int
+    let content: AnyView
+}
+
+extension EnvironmentValues {
+    @Entry var chatMomentPeek: ChatMomentPeek?
 }
 
 /// A line quoted from a transcript: a quiet block with who said it and the time as a chip that opens the moment.

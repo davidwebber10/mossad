@@ -149,6 +149,7 @@ struct NextTimeList: View {
         if !parts.isEmpty {
             Text(parts.joined(separator: " · ")).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
         }
+        if p.isOpen, let m = p.lastMention { MentionNote(mention: m) }
     }
 
     private func startEdit(_ p: NextTimePoint) {
@@ -179,6 +180,21 @@ struct NextTimeList: View {
     }
 }
 
+/// "Came up on Nov 12, in a meeting Mossad has only the notes of ▸ 12:04": words that are true whether or not the
+/// owner listened. The lists hold open points only, so it never shows on a closed one.
+struct MentionNote: View {
+    let mention: NextTimePoint.Mention
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Came up on \(mention.date.formatted(.dateTime.month(.abbreviated).day())), in a meeting Mossad has only the notes of")
+                .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+            SeriesMoment(callID: mention.callID, at: mention.at)
+        }
+        .help("\u{201C}\(mention.quote)\u{201D}")
+    }
+}
+
 /// A point that was discussed: where, with its moment, and the way to take it back.
 struct DiscussedRow: View {
     @EnvironmentObject var controller: AppController
@@ -195,7 +211,8 @@ struct DiscussedRow: View {
                         let day = d.callID.flatMap { id in controller.meetings.first { $0.id == id }?.start } ?? d.date
                         Text(d.byOwner ? "Marked done \(shortDay(day))" : "Discussed \(shortDay(day))")
                             .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
-                        if let call = d.callID { SeriesMoment(callID: call, at: d.at) }
+                        // Only a meeting that exists: a chip to a skipped call would open "Select a meeting".
+                        if let call = d.callID, controller.meetings.contains(where: { $0.id == call }) { SeriesMoment(callID: call, at: d.at) }
                     }
                 }
                 if let q = point.done?.quote {
@@ -401,7 +418,33 @@ struct MeetingPointsGroup: View {
         let book = controller.series.book
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
+        // A meeting the owner missed (notes only, with no line of theirs) closes and carries nothing: its open points that came up are listed.
+        let mentioned = book.mentioned(in: callID)
         VStack(spacing: 0) {
+            if !mentioned.isEmpty {
+                LabelColumn(label: "Your open points in these notes") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(mentioned) { p in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 14, height: 14)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(p.text)
+                                    if let m = p.mentions?.first(where: { $0.callID == callID }) {
+                                        HStack(spacing: 8) {
+                                            Text("Still open. Mossad has only the notes of this meeting").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                                            SeriesMoment(callID: callID, at: m.at)
+                                        }
+                                        Text("\u{201C}\(m.quote)\u{201D}").font(.system(size: 12)).italic().foregroundStyle(Palette.secondary).lineLimit(2)
+                                    }
+                                }
+                                Spacer(minLength: 8)
+                            }
+                            .font(.system(size: 13))
+                            .padding(.vertical, 6).padding(.horizontal, 8)
+                        }
+                    }
+                }
+            }
             if !discussed.isEmpty || !carried.isEmpty {
                 LabelColumn(label: "Your points") {
                     VStack(alignment: .leading, spacing: 2) {
