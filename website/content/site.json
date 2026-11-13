@@ -405,7 +405,7 @@
             "The last meeting's decisions and action items",
             "Your open tasks for these people",
             "Join from the same page",
-            "Your next 45 days of meetings in the list, by day"
+            "Your next two work days of meetings in the list, and 45 days on the calendar"
           ],
           "icon": "calendar.badge.clock",
           "comingSoon": false,

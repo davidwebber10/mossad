@@ -185,6 +185,7 @@ final class AppController: ObservableObject {
         didSet {
             meetingsVersion += 1
             upcomingMemo = nil
+            upcomingListMemo = nil
             if !meetingQuery.isEmpty { filterMeetings(debounce: false) }
         }
     }
@@ -220,6 +221,7 @@ final class AppController: ObservableObject {
     @Published private(set) var calendarEvents: [CalendarEventInfo] = [] {
         didSet {
             upcomingMemo = nil
+            upcomingListMemo = nil
             noRecordGate.update(events: calendarEvents)
         }
     }
@@ -234,18 +236,30 @@ final class AppController: ObservableObject {
     /// Every call invite in the fetched days (`UpcomingMeeting.days`), for the Meetings list, the calendar, and the
     /// prep pages.
     var calendarUpcoming: [UpcomingMeeting] { upcomingMemoNow.list }
-    /// The same invites in the Meetings list's day groups, made once with the list rather than at each draw.
-    var upcomingDays: [UpcomingMeeting.Day] { upcomingMemoNow.days }
-    private var upcomingMemoNow: (minute: Int, list: [UpcomingMeeting], days: [UpcomingMeeting.Day]) {
+    /// The invites of the Meetings list (the next two work days, or what the search finds in the whole read) in its
+    /// day groups, with the count of the rest; made once for each minute and search, not at each draw.
+    func upcomingList(query: String) -> (days: [UpcomingMeeting.Day], more: Int, after: Date) {
+        let now = Date()
+        let minute = Int(now.timeIntervalSince1970 / 60)
+        let all = upcomingMemoNow.list
+        if let memo = upcomingListMemo, memo.minute == minute, memo.query == query, memo.count == all.count { return memo.value }
+        let part = UpcomingMeeting.listPart(all, query: query, now: now)
+        let value = (UpcomingMeeting.byDay(part.meetings, now: now), part.more, part.after)
+        upcomingListMemo = (minute, query, all.count, value)
+        return value
+    }
+    private var upcomingListMemo: (minute: Int, query: String, count: Int, value: (days: [UpcomingMeeting.Day], more: Int, after: Date))?
+    private var upcomingMemoNow: (minute: Int, list: [UpcomingMeeting]) {
         let now = Date()
         let minute = Int(now.timeIntervalSince1970 / 60)
         if let memo = upcomingMemo, memo.minute == minute { return memo }
         let list = UpcomingMeeting.from(calendarEvents, now: now, limit: .max, recorded: meetings)
-        let memo = (minute, list, UpcomingMeeting.byDay(list, now: now))
+        let memo = (minute, list)
         upcomingMemo = memo
+        upcomingListMemo = nil
         return memo
     }
-    private var upcomingMemo: (minute: Int, list: [UpcomingMeeting], days: [UpcomingMeeting.Day])?
+    private var upcomingMemo: (minute: Int, list: [UpcomingMeeting])?
     /// The Mac's calendars, for the choice in Settings.
     @Published private(set) var calendars: [CalendarInfo] = []
     /// The calendars Mossad reads; saved once chosen, and defaulted to the owner's own on first use.

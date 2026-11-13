@@ -186,7 +186,7 @@ struct MeetingsView: View {
                 CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, Space.s)
                 MeetingList(days: MeetingGroups.byDay(results.filter { $0.status != .recording }),
                             live: results.filter { $0.status == .recording },
-                            selection: $controller.selectedMeetingID, deleting: $deleting)
+                            selection: $controller.selectedMeetingID, deleting: $deleting, showCalendar: { showCalendar(at: $0) })
             }
             DetailColumn { toolbar } content: {
                 if let m = openInvite {
@@ -228,6 +228,13 @@ struct MeetingsView: View {
                 }
             }
         }
+    }
+
+    /// The "more" row of the list: Calendar mode at the first day after the list's window, as one step of Back.
+    private func showCalendar(at day: Date) {
+        controller.navigation.jumpNext()
+        calendarState.anchor = day.addingTimeInterval(12 * 3600)
+        if previewMode != nil { previewMode = .calendar } else { savedMode = .calendar }
     }
 
     /// Back or Forward: the mode, and in Calendar mode the meeting or the invite open full-pane. The controller
