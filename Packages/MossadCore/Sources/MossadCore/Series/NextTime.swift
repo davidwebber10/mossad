@@ -241,8 +241,6 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         for (n, id) in ids.enumerated() { update(id, at: date) { $0.rank = Double(n + 1) } }
     }
 
-    /// The owner marks a point done by hand, or takes a done back. A "discussed" that the check found and the
-    /// owner took back is never found again in that meeting.
     /// A call that Mossad did not keep (skipped, too short) cannot hold a point's "done".
     @discardableResult
     public mutating func reopen(doneIn callID: String, at date: Date = Date()) -> Bool {
@@ -251,6 +249,8 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         return !ids.isEmpty
     }
 
+    /// The owner marks a point done by hand, or takes a done back. A "discussed" that the check found and the
+    /// owner took back is never found again in that meeting.
     public mutating func toggleDone(_ id: UUID, at date: Date = Date()) {
         update(id, at: date) { p in
             if let d = p.done {

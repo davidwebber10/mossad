@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.23.0",
+      "date": "2026-11-13",
+      "notes": [
+        "A quick chat panel over any app, with a shortcut you can change. Your points during the call, checked off as you raise them. Recurring meetings by weekday, and on a calendar. The list shows your next two work days. A headset that changes mode can no longer stop a recording."
+      ]
+    },
+    {
       "version": "2.22.1",
       "date": "2026-11-12",
       "notes": [

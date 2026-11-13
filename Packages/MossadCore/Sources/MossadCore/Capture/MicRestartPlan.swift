@@ -41,10 +41,27 @@ public enum MicStartCheck {
         case settling
     }
 
+    /// The sample rates only: AVFAudio raises on a rate that differs; channel counts can differ for good (a
+    /// 2-channel input, voice processing's 5 channels).
     public static func check(hardware: MicFormat, output: MicFormat) -> Result {
         if !hardware.isValid, !output.isValid { return .noInput }
-        guard hardware.isValid, output.isValid, hardware == output else { return .settling }
+        guard hardware.isValid, output.isValid, hardware.sampleRate == output.sampleRate else { return .settling }
         return .ok
+    }
+}
+
+/// What a start does with the check's answer.
+public enum MicStartDecision: Equatable, Sendable {
+    case install, installAnyway, wait, noInput
+
+    /// A disagreement may be a route that settles, so the first tries wait; the last chance installs the tap with
+    /// the node's own format inside the catcher. The catcher is the real protection; the check only buys time.
+    public static func decide(_ check: MicStartCheck.Result, lastChance: Bool) -> MicStartDecision {
+        switch check {
+        case .ok: .install
+        case .noInput: .noInput
+        case .settling: lastChance ? .installAnyway : .wait
+        }
     }
 }
 
@@ -59,9 +76,26 @@ public struct MicRestartPlan: Sendable {
     }
 
     public static let delays: [Double] = [0.3, 0.6, 1.2, 2.4, 4.8]
+    /// How long a started engine has to send its first buffer.
+    public static let livenessWait: Double = 2
+
+    /// A first start whose formats disagree: one short wait, then a last chance.
+    public mutating func firstStartSettling() -> Step? {
+        guard !stopped, !pending else { return nil }
+        pending = true
+        limit = 1
+        attempt = 1
+        token += 1
+        return .restart(token: token, after: Self.delays[0])
+    }
+
+    /// Whether the attempt with `token` is the last before giving up: it installs the tap whatever the formats say.
+    public func isLastChance(_ token: Int) -> Bool { isCurrent(token) && attempt >= limit }
 
     private var token = 0
+    /// The failed tries of this sequence so far, and how many it may have.
     private var attempt = 0
+    private var limit = MicRestartPlan.delays.count
     private var stopped = false
     public private(set) var pending = false
 
@@ -72,6 +106,7 @@ public struct MicRestartPlan: Sendable {
         guard !stopped, !pending else { return nil }
         pending = true
         attempt = 0
+        limit = Self.delays.count
         token += 1
         return .restart(token: token, after: 0)
     }
@@ -79,7 +114,7 @@ public struct MicRestartPlan: Sendable {
     /// The attempt with `token` failed: the next one after its wait, or give up. Nil for an old token.
     public mutating func failed(token: Int) -> Step? {
         guard !stopped, pending, token == self.token else { return nil }
-        guard attempt < Self.delays.count else {
+        guard attempt < limit else {
             pending = false
             return .giveUp
         }

@@ -3,7 +3,7 @@ Maker: the Mossad contributors
 Source: https://github.com/davidwebber10/mossad
 
 /* SITE */
-Last update: 2026-11-12
+Last update: 2026-11-13
 Standards: HTML, CSS
 Fonts: Bricolage Grotesque, Inter, IBM Plex Mono (SIL Open Font License, in /fonts)
 Components: none. No cookies, no third-party requests.

@@ -46,5 +46,7 @@ final class ReleaseSeamTests: XCTestCase {
                        "2 times with no meeting recorded (every Thursday 15:00). Mossad cannot tell a cancelled meeting from one it did not record.")
         XCTAssertEqual(s.skippedText(gaps: 1)?.hasPrefix("1 time with no meeting recorded"), true)
         XCTAssertNil(SeriesSchedule.none.skippedText(gaps: 1))
+        // F8: a series that ended has no words for a skipped meeting.
+        XCTAssertNil(SeriesSchedule(weekdays: [], times: [:], minuteOfDay: nil, rhythm: .weekly, ended: true).skippedText(gaps: 2))
     }
 }

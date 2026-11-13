@@ -94,7 +94,8 @@ public struct SeriesSchedule: Sendable, Equatable, Hashable {
 
     /// The Stats tab's "Skipped" line, in the words of the page's band.
     public func skippedText(gaps: Int, time: ((Int, Int) -> String)? = nil) -> String? {
-        guard let words = text(time: time) else { return nil }
+        // A series that ended skips nothing now; its words would say "no meeting recently".
+        guard !ended, let words = text(time: time) else { return nil }
         let quiet = (words.first.map { String($0).lowercased() } ?? "") + words.dropFirst()
         return gaps == 0 ? "Mossad recorded every meeting (\(quiet)) since the first."
             : "\(gaps) \(gaps == 1 ? "time" : "times") with no meeting recorded (\(quiet)). Mossad cannot tell a cancelled meeting from one it did not record."
