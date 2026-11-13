@@ -66,11 +66,7 @@ struct AnalyticsView: View {
                         Color.clear.frame(height: 400)
                     }
                 }
-                .padding(.horizontal, 36)
-                .padding(.top, 10)
-                .padding(.bottom, 40)
-                .frame(maxWidth: Self.maxContentWidth + 72, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .pageColumn(Self.maxContentWidth)
             }
             // Development hook for screenshots: MOSSAD_SCROLL_TO names a section label, such as "Who you meet with",
             // or a chart of "How you communicate", such as "Pace". The charts come after the page.
