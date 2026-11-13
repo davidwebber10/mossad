@@ -127,7 +127,7 @@ struct ListMatchLine: View {
 
     var body: some View {
         if let context = match.context {
-            (Text(lead).foregroundStyle(Palette.tertiary) + Text(context.boldMatches(size: 12)).foregroundStyle(Palette.secondary))
+            (Text(lead).foregroundStyle(Palette.tertiary) + Text(context.boldMatches(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary))
                 .font(.system(size: Rhythm.secondarySize))
                 .lineLimit(lines)
                 .truncationMode(.tail)

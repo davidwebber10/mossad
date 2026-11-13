@@ -59,7 +59,7 @@ struct OnboardingView: View {
                 .accessibilityAddTraits(.isHeader)
             Text(lede)
                 .font(.system(size: Rhythm.readingSize)).foregroundStyle(Palette.secondary)
-                .cssLineHeight(1.5, size: 14)
+                .cssLineHeight(1.5, size: Rhythm.readingSize)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: Onboard.ledeMax, alignment: .leading)
                 .padding(.top, 10)

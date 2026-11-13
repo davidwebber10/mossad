@@ -41,10 +41,10 @@ struct IconLine: View {
                 .background(Palette.accentTint, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(text).font(.system(size: Rhythm.readingSize, weight: .medium)).foregroundStyle(Palette.ink)
-                    .cssLineHeight(size: 13.5)
+                    .cssLineHeight(size: Rhythm.readingSize)
                 if let detail {
                     Text(detail).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary)
-                        .cssLineHeight(1.45, size: 12.5)
+                        .cssLineHeight(1.45, size: Rhythm.bodySize)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)

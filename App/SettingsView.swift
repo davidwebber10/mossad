@@ -121,7 +121,7 @@ private struct SettingsListRow: View {
                     .frame(width: 28, height: 28)
                     .background(Palette.fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-                    Text(page.title).font(.system(size: Rhythm.bodySize, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink).cssLineHeight(size: 13)
+                    Text(page.title).font(.system(size: Rhythm.bodySize, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink).cssLineHeight(size: Rhythm.bodySize)
                     Text(page.contents).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
                         .lineLimit(1).truncationMode(.tail)
                 }

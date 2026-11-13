@@ -158,11 +158,11 @@ private struct ShareListRow: View {
         Button(action: select) {
             VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 HStack(spacing: Space.s) {
-                    Text(match?.title.boldMatches(size: 13) ?? AttributedString(row.title))
+                    Text(match?.title.boldMatches(size: Rhythm.bodySize) ?? AttributedString(row.title))
                         .font(.system(size: Rhythm.bodySize, weight: selected ? .semibold : .medium))
                         .foregroundStyle(row.state == .live ? Palette.ink : Palette.secondary)
                         .lineLimit(1).truncationMode(.tail)
-                        .cssLineHeight(size: 13)
+                        .cssLineHeight(size: Rhythm.bodySize)
                     Spacer(minLength: 4)
                     if row.pin != .off {
                         HStack(spacing: Space.xs) {

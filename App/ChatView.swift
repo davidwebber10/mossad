@@ -312,7 +312,7 @@ private struct ChatListRow: View {
                     .font(.system(size: Rhythm.bodySize, weight: selected ? .semibold : .medium))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1).truncationMode(.tail)
-                    .cssLineHeight(size: 13)
+                    .cssLineHeight(size: Rhythm.bodySize)
                 HStack(spacing: Space.xs) {
                     if chat.callID != nil {
                         IconImage(.waveform, size: 11).foregroundStyle(Palette.tertiaryMark)
@@ -345,7 +345,7 @@ private struct ExampleQuestion: View {
     var body: some View {
         Button(action: ask) {
             HStack(spacing: Space.s) {
-                Text(text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).cssLineHeight(size: 13)
+                Text(text).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).cssLineHeight(size: Rhythm.bodySize)
                 Spacer(minLength: Space.s)
                 IconImage(.arrowUp, size: 11).rotationEffect(.degrees(45))
                     .foregroundStyle(Palette.tertiaryMark)

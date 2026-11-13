@@ -11,7 +11,7 @@ struct FocusProse: View {
     var body: some View {
         if let f = profile.activeFocus {
             VStack(alignment: .leading, spacing: Rhythm.itemGap) {
-                Text(f.plan).font(.system(size: Rhythm.leadSize, weight: .medium)).cssLineHeight(1.4, size: 16).foregroundStyle(Palette.ink)
+                Text(f.plan).font(.system(size: Rhythm.leadSize, weight: .medium)).cssLineHeight(1.4, size: Rhythm.leadSize).foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 if !f.results.isEmpty {
                     HStack(spacing: Space.m) {
@@ -34,10 +34,10 @@ struct FocusProse: View {
                 if editing {
                     TextField("Your focus", text: $text, axis: .vertical).textFieldStyle(SheetFieldStyle())
                 } else {
-                    Text(f.plan).font(.system(size: Rhythm.leadSize, weight: .medium)).cssLineHeight(1.4, size: 16).foregroundStyle(Palette.ink)
+                    Text(f.plan).font(.system(size: Rhythm.leadSize, weight: .medium)).cssLineHeight(1.4, size: Rhythm.leadSize).foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(f.why).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).cssLineHeight(1.45, size: 12.5)
+                Text(f.why).font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).cssLineHeight(1.45, size: Rhythm.bodySize)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
                 HStack(spacing: Space.s) {
@@ -84,7 +84,7 @@ struct QuestionProse: View {
                 }
                 .accessibilityElement(children: .combine)
                 Text(q.statement).font(.system(size: Rhythm.readingSize, weight: .medium)).foregroundStyle(Palette.ink)
-                    .cssLineHeight(size: 14)
+                    .cssLineHeight(size: Rhythm.readingSize)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
                 if let name = q.personName {
@@ -247,7 +247,7 @@ struct CoachKnowledge: View {
     private func entry<Value: View, Action: View>(_ key: String, @ViewBuilder value: () -> Value, @ViewBuilder action: () -> Action) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Text(key).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
-                .cssLineHeight(size: 12)
+                .cssLineHeight(size: Rhythm.secondarySize)
                 .frame(width: 150, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             value().frame(maxWidth: .infinity, alignment: .leading)

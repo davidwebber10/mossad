@@ -205,7 +205,7 @@ struct SpeakerFinding: View {
     let text: String
 
     var body: some View {
-        SpeakerSentence(speaker: speaker, callID: callID, text: text, size: 15)
+        SpeakerSentence(speaker: speaker, callID: callID, text: text, size: Rhythm.headingSize)
             .font(.system(size: Rhythm.headingSize, weight: .medium))
             .foregroundStyle(Palette.ink)
             .accessibilityAddTraits(.isHeader)

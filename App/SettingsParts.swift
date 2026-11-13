@@ -31,7 +31,7 @@ struct SettingsFootnote: View {
     var body: some View {
         Text(text)
             .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
-            .cssLineHeight(1.5, size: 12)
+            .cssLineHeight(1.5, size: Rhythm.secondarySize)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, Space.s)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -278,9 +278,9 @@ struct RadioRow<Trailing: View>: View {
                 RadioMark(on: selected)
                 VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     Text(title).font(.system(size: Rhythm.bodySize, weight: selected ? .semibold : .medium)).foregroundStyle(Palette.ink)
-                        .cssLineHeight(size: 13)
+                        .cssLineHeight(size: Rhythm.bodySize)
                     if let detail {
-                        Text(detail).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).cssLineHeight(size: 12)
+                        Text(detail).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).cssLineHeight(size: Rhythm.secondarySize)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -350,7 +350,7 @@ struct CopyField: View {
             Text(text)
                 .font(.system(size: Rhythm.secondarySize, design: .monospaced))
                 .foregroundStyle(Palette.ink)
-                .cssLineHeight(1.4, size: 11.5)
+                .cssLineHeight(1.4, size: Rhythm.secondarySize)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, Space.s).padding(.vertical, 4)

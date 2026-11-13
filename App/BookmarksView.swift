@@ -133,11 +133,11 @@ private struct BookmarkRow: View {
                     Text("at \(clock(mark.offset))").font(.system(size: Rhythm.secondarySize)).monospacedDigit().foregroundStyle(Palette.tertiary)
                 }
                 if let note = mark.note {
-                    Text(SearchText.marking(note, query: query).boldMatches(size: 13))
+                    Text(SearchText.marking(note, query: query).boldMatches(size: Rhythm.bodySize))
                         .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                 }
                 if let said = mark.said {
-                    Text("\(Text(said.speaker + ":").fontWeight(.medium)) “\(Text(SearchText.marking(said.text, query: query).boldMatches(size: 12.5)))”")
+                    Text("\(Text(said.speaker + ":").fontWeight(.medium)) “\(Text(SearchText.marking(said.text, query: query).boldMatches(size: Rhythm.bodySize)))”")
                         .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).lineLimit(2)
                 } else if mark.note == nil {
                     Text("No note").font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.tertiary)

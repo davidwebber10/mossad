@@ -111,7 +111,7 @@ private struct AllScreensTile: View {
     private var line: AttributedString {
         guard matches else { return AttributedString(ScreenText.excerpt(text)) }
         let flat = text.split(whereSeparator: \.isNewline).joined(separator: " ")
-        return SearchText.marking(flat, query: query).excerpt(length: 48).boldMatches(size: 11.5)
+        return SearchText.marking(flat, query: query).excerpt(length: 48).boldMatches(size: Rhythm.secondarySize)
     }
     @State private var hovered = false
 

@@ -448,7 +448,7 @@ private struct PersonRow: View {
             HStack(spacing: Space.m) {
                 PersonMark(name: profile.name, size: 28, isOwner: profile.isOwner)
                 VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-                    Text(match?.title.boldMatches(size: 13) ?? AttributedString(profile.name))
+                    Text(match?.title.boldMatches(size: Rhythm.bodySize) ?? AttributedString(profile.name))
                         .font(.system(size: Rhythm.bodySize, weight: profile.isOwner || selected ? .semibold : .medium))
                         .foregroundStyle(Palette.ink)
                     if let match, match.context != nil {

@@ -300,7 +300,7 @@ private struct SeriesRow: View {
 
     private var title: AttributedString {
         guard let match = place?.match, match.title.text == series.title else { return AttributedString(series.title) }
-        return match.title.boldMatches(size: 13)
+        return match.title.boldMatches(size: Rhythm.bodySize)
     }
 
     private var fill: Color {

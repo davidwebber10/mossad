@@ -163,8 +163,8 @@ struct CommitmentsView: View {
 
     private func row(_ c: Commitment, showPerson: Bool) -> some View {
         let match = matches?[c.id]
-        return CommitmentRow(commitment: c, showPerson: showPerson, marked: match?.title.boldMatches(size: 13),
-                             matchLine: match?.line(size: 12), open: { activate(c) }, toggleDone: { controller.toggleDone(c.id) }) {
+        return CommitmentRow(commitment: c, showPerson: showPerson, marked: match?.title.boldMatches(size: Rhythm.bodySize),
+                             matchLine: match?.line(size: Rhythm.secondarySize), open: { activate(c) }, toggleDone: { controller.toggleDone(c.id) }) {
             trailing(c)
         }
         .padding(.vertical, c.status() == .overdue ? 11 : 10)

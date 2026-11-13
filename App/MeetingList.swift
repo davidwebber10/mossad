@@ -286,7 +286,7 @@ private struct MeetingRow: View {
 
     private var title: AttributedString {
         guard let match, match.title.text == record.title else { return AttributedString(record.title) }
-        return match.title.boldMatches(size: 13)
+        return match.title.boldMatches(size: Rhythm.bodySize)
     }
 
     var body: some View {
