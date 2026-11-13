@@ -236,7 +236,7 @@ private struct AskPanelChat: View {
         .environment(\.chatMomentVerb, "Show")
         .onAppear { focusSoon() }
         .onChange(of: model.focusRequest) { _, _ in focusSoon() }
-        .onChange(of: session.running) { _, running in if !running { focused = true } }
+        .onChange(of: session.running) { _, running in if !running { focusSoon() } }
         .onChange(of: session.returned) { _, text in
             // A waiting question that was not asked comes back to the field.
             guard let text else { return }
@@ -421,10 +421,11 @@ private struct AskPanelChat: View {
         session.send(q, record: record, controller: controller)
     }
 
+    /// Never in a panel opened without the keyboard (a preview), and never while hidden.
     private func focusSoon() {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(60))
-            focused = true
+            if AskPanelKeys.focusesField(model.keyboard, visible: model.isOpen) { focused = true }
         }
     }
 }

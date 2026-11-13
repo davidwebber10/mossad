@@ -275,4 +275,30 @@ final class AskPanelTests: XCTestCase {
         XCTAssertTrue(ChatRunRules.removesChat(messagesLeft: 0))
         XCTAssertFalse(ChatRunRules.removesChat(messagesLeft: 2))
     }
+
+    // MARK: The keyboard
+
+    func testOnlyTheOwnersOwnActionGivesThePanelTheKeyboard() {
+        for action in [AskPanelKeys.Show.shortcut, .menu] {
+            XCTAssertEqual(AskPanelKeys.opened(by: action), .byOwner)
+        }
+        XCTAssertEqual(AskPanelKeys.opened(by: .preview), .withoutKeyboard)
+        XCTAssertTrue(AskPanelKeys.canBecomeKey(.byOwner))
+        // A preview's panel never: not on its first open, not on a re-open, not on a click.
+        XCTAssertFalse(AskPanelKeys.canBecomeKey(.withoutKeyboard))
+        XCTAssertFalse(AskPanelKeys.canBecomeKey(nil))
+    }
+
+    func testAProgrammaticChangeKeepsTheOpenItFoundAndNeverFocusesAHiddenOrPreviewField() {
+        // A call that starts or ends, the share cover, or a new height: the panel keeps how it was opened.
+        for change in [AskPanelKeys.Change.callStarted, .callEnded, .shareCover, .resized] {
+            XCTAssertEqual(AskPanelKeys.after(change, opened: .withoutKeyboard), .withoutKeyboard)
+            XCTAssertEqual(AskPanelKeys.after(change, opened: .byOwner), .byOwner)
+            XCTAssertNil(AskPanelKeys.after(change, opened: nil))
+        }
+        XCTAssertTrue(AskPanelKeys.focusesField(.byOwner, visible: true))
+        XCTAssertFalse(AskPanelKeys.focusesField(.byOwner, visible: false))
+        XCTAssertFalse(AskPanelKeys.focusesField(.withoutKeyboard, visible: true))
+        XCTAssertFalse(AskPanelKeys.focusesField(nil, visible: true))
+    }
 }

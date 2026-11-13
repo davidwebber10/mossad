@@ -239,3 +239,26 @@ public enum ChatDividers {
         return "Asked \(hours) \(hours == 1 ? "hour" : "hours") ago"
     }
 }
+
+/// When the quick panel may take the keyboard: only when the owner opened it (the shortcut or the menu). A panel
+/// shown without the keyboard (a preview) never becomes key, on any open, re-open, or click, and never focuses its
+/// field. A change that Mossad makes (a call that starts or ends, the share cover, a new height) keeps how the panel
+/// was opened and never gives it the keyboard.
+public enum AskPanelKeys {
+    public enum Show: Sendable { case shortcut, menu, preview }
+    public enum Opened: Equatable, Sendable { case byOwner, withoutKeyboard }
+    public enum Change: Sendable { case callStarted, callEnded, shareCover, resized }
+
+    public static func opened(by action: Show) -> Opened {
+        switch action {
+        case .shortcut, .menu: .byOwner
+        case .preview: .withoutKeyboard
+        }
+    }
+
+    public static func canBecomeKey(_ opened: Opened?) -> Bool { opened == .byOwner }
+
+    public static func after(_ change: Change, opened: Opened?) -> Opened? { opened }
+
+    public static func focusesField(_ opened: Opened?, visible: Bool) -> Bool { visible && opened == .byOwner }
+}

@@ -28,14 +28,21 @@ final class AskPanelController {
     var isVisible: Bool { panel?.isVisible == true }
     /// The panel's window number, for a preview's capture.
     var windowNumber: Int? { panel?.windowNumber }
+    /// Whether it has the keyboard, for a preview's check.
+    var isKey: Bool { panel?.isKeyWindow == true }
 
     func toggle() {
-        if isVisible { hide() } else { show() }
+        if isVisible { hide() } else { show(.shortcut) }
     }
 
-    /// Only on the owner's action: the shortcut or the menu. A preview shows it without the keyboard.
-    func show(takeKeyboard: Bool = true) {
+    /// Only on the owner's action: the shortcut or the menu. A preview shows it without the keyboard, and then it
+    /// can never become key (`AskPanelKeys`).
+    func show(_ action: AskPanelKeys.Show) {
         let panel = panel ?? makePanel()
+        let opened = AskPanelKeys.opened(by: action)
+        panel.opened = opened
+        model.keyboard = opened
+        let takeKeyboard = AskPanelKeys.canBecomeKey(opened)
         if !controller.isRecording { controller.refreshQuickChat() }
         model.opened()
         model.track(controller)
@@ -64,6 +71,8 @@ final class AskPanelController {
         guard let panel, panel.isVisible else { return }
         stopKeys()
         panel.orderOut(nil)
+        panel.opened = nil
+        model.keyboard = nil
         model.closed()
     }
 
@@ -215,7 +224,9 @@ final class AskPanelController {
 
 /// A borderless panel that takes the keyboard while the app it belongs to stays in the background.
 final class AskPanelWindow: NSPanel {
-    override var canBecomeKey: Bool { true }
+    /// How the panel was opened this time; nil while hidden.
+    var opened: AskPanelKeys.Opened?
+    override var canBecomeKey: Bool { AskPanelKeys.canBecomeKey(opened) }
     override var canBecomeMain: Bool { false }
 }
 
@@ -242,6 +253,8 @@ final class AskPanelModel: ObservableObject {
     /// The moment shown inline: the message whose chip was clicked and its seconds.
     @Published var peek: (message: UUID, seconds: Int)?
     @Published var focusRequest = 0
+    /// How the panel was opened: only an open by the owner focuses the field.
+    @Published var keyboard: AskPanelKeys.Opened?
     @Published var scrollRequest = 0
     /// A preview's made-up call that records, so no recording icon joins the owner's menu bar.
     var previewCall: (id: String, since: Date)?

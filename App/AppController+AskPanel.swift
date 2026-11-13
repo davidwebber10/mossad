@@ -77,7 +77,7 @@ extension AppController {
 
     /// The menu's "Ask about this call…".
     func showAskPanel() {
-        askPanelController.show()
+        askPanelController.show(.menu)
     }
 
     // MARK: The quick chat
