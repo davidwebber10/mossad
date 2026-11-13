@@ -1,0 +1,298 @@
+{
+  "made" : "2027-01-15T08:00:00Z",
+  "periods" : [
+    {
+      "averageSeconds" : 1800,
+      "backToBackShare" : 0,
+      "callFreeDays" : 5,
+      "calls" : 1,
+      "callSeconds" : 1800,
+      "callsPerDay" : 0.14285714285714285,
+      "coreHoursShare" : 0,
+      "cost" : 0.28605199999999997,
+      "costParts" : [
+        {
+          "dollars" : 0.22999999999999998,
+          "name" : "transcription"
+        },
+        {
+          "dollars" : 0.056052000000000005,
+          "name" : "summary"
+        }
+      ],
+      "cutInPerHour" : 0,
+      "cutOffPerHour" : 0,
+      "days" : 7,
+      "decisionsPerHour" : 2,
+      "from" : "2027-01-08T05:00:00Z",
+      "groupShare" : 0.25,
+      "hoursPerWorkday" : 0,
+      "itemsMine" : 0,
+      "itemsOthers" : 1,
+      "itemsPerHour" : 2,
+      "people" : [
+        {
+          "name" : "Dana Lee",
+          "seconds" : 1800
+        },
+        {
+          "name" : "Sam Carter",
+          "seconds" : 1800
+        }
+      ],
+      "questionsPerHour" : 0,
+      "scheduled" : 1,
+      "talkShare" : 0.25,
+      "tasksDone" : 0,
+      "tasksMade" : 0,
+      "to" : "2027-01-15T05:00:00Z",
+      "topics" : [
+
+      ],
+      "trends" : [
+        {
+          "metric" : "Talk share",
+          "sentence" : "The period is too short to show a trend"
+        },
+        {
+          "metric" : "Questions you ask",
+          "sentence" : "The period is too short to show a trend"
+        },
+        {
+          "metric" : "You cut in",
+          "sentence" : "The period is too short to show a trend"
+        },
+        {
+          "metric" : "Pace",
+          "sentence" : "The period is too short to show a trend"
+        }
+      ],
+      "unscheduled" : 0,
+      "valueHours" : [
+
+      ],
+      "withOutcomesShare" : 1,
+      "workdays" : 5
+    },
+    {
+      "averageSeconds" : 1500,
+      "backToBackShare" : 0,
+      "callFreeDays" : 22,
+      "calls" : 3,
+      "callSeconds" : 4500,
+      "callsPerDay" : 0.10000000000000001,
+      "coreHoursShare" : 0,
+      "cost" : 0.74311199999999999,
+      "costParts" : [
+        {
+          "dollars" : 0.57499999999999996,
+          "name" : "transcription"
+        },
+        {
+          "dollars" : 0.16811200000000001,
+          "name" : "summary"
+        }
+      ],
+      "cutInPerHour" : 0,
+      "cutOffPerHour" : 0,
+      "days" : 30,
+      "decisionsPerHour" : 1.6000000000000001,
+      "from" : "2026-12-16T05:00:00Z",
+      "groupShare" : 0.25,
+      "hoursPerWorkday" : 0,
+      "itemsMine" : 0,
+      "itemsOthers" : 2,
+      "itemsPerHour" : 1.6000000000000001,
+      "people" : [
+        {
+          "name" : "Sam Carter",
+          "seconds" : 4500
+        },
+        {
+          "name" : "Dana Lee",
+          "seconds" : 3600
+        }
+      ],
+      "questionsPerHour" : 0,
+      "scheduled" : 3,
+      "talkShare" : 0.30769230769230771,
+      "tasksDone" : 0,
+      "tasksMade" : 0,
+      "to" : "2027-01-15T05:00:00Z",
+      "topics" : [
+
+      ],
+      "trends" : [
+        {
+          "metric" : "Talk share",
+          "sentence" : "Too few meetings to show a trend"
+        },
+        {
+          "metric" : "Questions you ask",
+          "sentence" : "Too few meetings to show a trend"
+        },
+        {
+          "metric" : "You cut in",
+          "sentence" : "Too few meetings to show a trend"
+        },
+        {
+          "metric" : "Pace",
+          "sentence" : "Too few meetings to show a trend"
+        }
+      ],
+      "unscheduled" : 0,
+      "valueHours" : [
+
+      ],
+      "withOutcomesShare" : 0.66666666666666663,
+      "workdays" : 22
+    },
+    {
+      "averageSeconds" : 1500,
+      "backToBackShare" : 0,
+      "callFreeDays" : 64,
+      "calls" : 3,
+      "callSeconds" : 4500,
+      "callsPerDay" : 0.033333333333333333,
+      "coreHoursShare" : 0,
+      "cost" : 0.74311199999999999,
+      "costParts" : [
+        {
+          "dollars" : 0.57499999999999996,
+          "name" : "transcription"
+        },
+        {
+          "dollars" : 0.16811200000000001,
+          "name" : "summary"
+        }
+      ],
+      "cutInPerHour" : 0,
+      "cutOffPerHour" : 0,
+      "days" : 90,
+      "decisionsPerHour" : 1.6000000000000001,
+      "from" : "2026-10-17T05:00:00Z",
+      "groupShare" : 0.25,
+      "hoursPerWorkday" : 0,
+      "itemsMine" : 0,
+      "itemsOthers" : 2,
+      "itemsPerHour" : 1.6000000000000001,
+      "people" : [
+        {
+          "name" : "Sam Carter",
+          "seconds" : 4500
+        },
+        {
+          "name" : "Dana Lee",
+          "seconds" : 3600
+        }
+      ],
+      "questionsPerHour" : 0,
+      "scheduled" : 3,
+      "talkShare" : 0.30769230769230771,
+      "tasksDone" : 0,
+      "tasksMade" : 0,
+      "to" : "2027-01-15T05:00:00Z",
+      "topics" : [
+
+      ],
+      "trends" : [
+        {
+          "metric" : "Talk share",
+          "sentence" : "Too few meetings to show a trend"
+        },
+        {
+          "metric" : "Questions you ask",
+          "sentence" : "Too few meetings to show a trend"
+        },
+        {
+          "metric" : "You cut in",
+          "sentence" : "Too few meetings to show a trend"
+        },
+        {
+          "metric" : "Pace",
+          "sentence" : "Too few meetings to show a trend"
+        }
+      ],
+      "unscheduled" : 0,
+      "valueHours" : [
+
+      ],
+      "withOutcomesShare" : 0.66666666666666663,
+      "workdays" : 64
+    },
+    {
+      "averageSeconds" : 1500,
+      "backToBackShare" : 0,
+      "callFreeDays" : 261,
+      "calls" : 3,
+      "callSeconds" : 4500,
+      "callsPerDay" : 0.00821917808219178,
+      "coreHoursShare" : 0,
+      "cost" : 0.74311199999999999,
+      "costParts" : [
+        {
+          "dollars" : 0.57499999999999996,
+          "name" : "transcription"
+        },
+        {
+          "dollars" : 0.16811200000000001,
+          "name" : "summary"
+        }
+      ],
+      "cutInPerHour" : 0,
+      "cutOffPerHour" : 0,
+      "days" : 365,
+      "decisionsPerHour" : 1.6000000000000001,
+      "from" : "2026-01-15T05:00:00Z",
+      "groupShare" : 0.25,
+      "hoursPerWorkday" : 0,
+      "itemsMine" : 0,
+      "itemsOthers" : 2,
+      "itemsPerHour" : 1.6000000000000001,
+      "people" : [
+        {
+          "name" : "Sam Carter",
+          "seconds" : 4500
+        },
+        {
+          "name" : "Dana Lee",
+          "seconds" : 3600
+        }
+      ],
+      "questionsPerHour" : 0,
+      "scheduled" : 3,
+      "talkShare" : 0.30769230769230771,
+      "tasksDone" : 0,
+      "tasksMade" : 0,
+      "to" : "2027-01-15T05:00:00Z",
+      "topics" : [
+
+      ],
+      "trends" : [
+        {
+          "metric" : "Talk share",
+          "sentence" : "Too few meetings to show a trend"
+        },
+        {
+          "metric" : "Questions you ask",
+          "sentence" : "Too few meetings to show a trend"
+        },
+        {
+          "metric" : "You cut in",
+          "sentence" : "Too few meetings to show a trend"
+        },
+        {
+          "metric" : "Pace",
+          "sentence" : "Too few meetings to show a trend"
+        }
+      ],
+      "unscheduled" : 0,
+      "valueHours" : [
+
+      ],
+      "withOutcomesShare" : 0.66666666666666663,
+      "workdays" : 261
+    }
+  ],
+  "version" : 1
+}

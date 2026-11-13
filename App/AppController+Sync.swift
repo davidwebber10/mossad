@@ -147,6 +147,9 @@ extension AppController {
         return sync
     }
 
+    /// When the digest was last made and from what, this launch.
+    static var lastDigest: (key: String, at: Date)?
+
     /// What the server's MCP was told, this launch: a send that failed is tried again at the next sync.
     static var serverConfig = ServerConfigState()
 
@@ -197,7 +200,17 @@ extension AppController {
         let serverIsMain = syncWith == .server
         // A call that starts during a long copy stops it at the next batch.
         let callStarted: @Sendable () -> Bool = { CaptureQueue.queue.sync { recorder.isRecording } }
+        // The digest for the server's MCP (`ServerDigest`): only with a server, never during a call, and made again
+        // only when the meetings, the coach, or the tasks changed, or an hour passed (the periods move with the day).
+        let digestKey = "\(meetingsVersion)|\(coachVersion)|\(commitmentsVersion)|\(personasHere)|\(Calendar.current.startOfDay(for: Date()))"
+        let makesDigest = serverConnection != nil && !calling
+            && (Self.lastDigest?.key != digestKey || Date().timeIntervalSince(Self.lastDigest?.at ?? .distantPast) > 3600)
+        let digestTools = makesDigest ? ChatTools(records: meetings, owner: ownerName, paths: paths, personaTraits: personasHere) : nil
+        let digestDir = paths.sync
+        if makesDigest { Self.lastDigest = (digestKey, Date()) }
         Task.detached(priority: .utility) {
+            // Off the main thread, from the app's own rules; a month is made again only when its meetings changed.
+            let digest = digestTools.map { ServerDigest.parts($0, personasInMCP: personasHere, cache: DigestCache(directory: digestDir)) }
             var received = 0
             var failure: FriendlyError?
             var waiting: [PendingRecording] = []
@@ -205,7 +218,7 @@ extension AppController {
                 do {
                     let changed = try await cloud.push()
                     received = try await cloud.pull(includeMeetings: false)
-                    let shared = try await cloud.pushShared(people: true, personas: personas)
+                    let shared = try await cloud.pushShared(people: true, personas: personas, stop: callStarted, digest: digest)
                     if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
                     // The server's tools read what time the Mac last sent everything: never the age of one record.
                     if serverIsMain, let connection { try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date()) }
@@ -223,7 +236,7 @@ extension AppController {
                     // What the server's MCP reads besides the meetings, one way, by the same allowed-field lists:
                     // never during a call, when the disk and the network belong to the recording.
                     if !calling {
-                        let shared = try await mirror.pushShared(people: true, personas: personas, mirror: true, stop: callStarted)
+                        let shared = try await mirror.pushShared(people: true, personas: personas, mirror: true, stop: callStarted, digest: digest)
                         if shared > 0 { Log.info("Server: \(shared) people, tasks, points, coach, and chat records copied") }
                         if !callStarted(), let connection {
                             try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date())

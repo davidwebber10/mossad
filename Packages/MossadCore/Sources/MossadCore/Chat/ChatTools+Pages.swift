@@ -108,16 +108,25 @@ extension ChatTools {
 
     // MARK: Coach
 
-    func findingsText(_ input: [String: Any]) -> String {
-        guard let paths else { return "Not available here." }
-        guard settings.coach else { return "The coach is off in Settings, so there are no cards." }
+    /// The deck as Findings shows it: never a card about a person who keeps no read, and trait cards only where the
+    /// reads may go (`traits`). The local tool and the server's digest both read it.
+    func findingCards(traits allowed: Bool) -> [CoachFinding] {
+        guard let paths else { return [] }
         let profile = profile, now = now
         let recent = records.filter { now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }
-        let reads = personaTraits && settings.personaReads
+        let reads = allowed && settings.personaReads
         let traits = reads ? PersonaFindings.cards(PersonaReads.sources(paths: paths, saved: coachPeople, answers: profile.answers, readOnly: true),
                                                    calls: PersonaFindings.calls(from: records, now: now), profile: profile, now: now) : [:]
-        var cards = FindingRules.deck(reviews: recent.compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (callID: r.id, date: r.start, review: $0) } },
-                                      profile: profile, now: now, traits: traits)
+        let off = coachPeople.notProfiled
+        return FindingRules.deck(reviews: recent.compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (callID: r.id, date: r.start, review: $0) } },
+                                 profile: profile, now: now, traits: traits)
+            .filter { c in c.person.map { !off.contains(coachPeople.canonical($0)) } ?? true }
+    }
+
+    func findingsText(_ input: [String: Any]) -> String {
+        guard paths != nil else { return "Not available here." }
+        guard settings.coach else { return "The coach is off in Settings, so there are no cards." }
+        var cards = findingCards(traits: personaTraits)
         if let id = (input["call_id"] as? String)?.nonBlank { cards = cards.filter { $0.callID == id } }
         guard !cards.isEmpty else { return "No cards wait for an answer." }
         let titles = Dictionary(records.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })

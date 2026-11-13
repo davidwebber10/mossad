@@ -1,0 +1,41 @@
+{
+  "ended" : [
+
+  ],
+  "findings" : [
+    {
+      "answers" : [
+        "Useful",
+        "Not useful"
+      ],
+      "at" : 0,
+      "callID" : "20270113-100000",
+      "date" : "2027-01-09T08:00:00Z",
+      "id" : "20270113-100000|could_be_better|commitment-dates",
+      "question" : "Is this feedback useful to you?",
+      "quote" : "Let us look at the roadmap.",
+      "say" : "I will send it by Friday.",
+      "text" : "When you take an item, say the day.",
+      "title" : "This could be better",
+      "why" : "Without a day, nobody can plan on it or tell when it is late."
+    }
+  ],
+  "goal" : {
+    "date" : "2027-01-15T08:00:00Z",
+    "hits" : "0 of 0 chances",
+    "plan" : "Name a date when you take an item",
+    "results" : [
+
+    ],
+    "status" : "active",
+    "why" : "Items without dates slip."
+  },
+  "learned" : [
+
+  ],
+  "made" : "2027-01-15T08:00:00Z",
+  "notTaken" : [
+
+  ],
+  "version" : 1
+}

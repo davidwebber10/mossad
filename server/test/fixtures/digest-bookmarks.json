@@ -1,0 +1,24 @@
+{
+  "bookmarks" : [
+    {
+      "at" : 310,
+      "callID" : "20270113-100000",
+      "note" : "Slip 2",
+      "said" : "The roadmap slips.",
+      "speaker" : "Sam Carter",
+      "start" : "2027-01-09T08:00:00Z",
+      "title" : "Weekly sync"
+    },
+    {
+      "at" : 310,
+      "callID" : "20270108-100000",
+      "note" : "Slip 1",
+      "said" : "The roadmap slips.",
+      "speaker" : "Sam Carter",
+      "start" : "2027-01-03T08:00:00Z",
+      "title" : "Weekly sync"
+    }
+  ],
+  "made" : "2027-01-15T08:00:00Z",
+  "version" : 1
+}

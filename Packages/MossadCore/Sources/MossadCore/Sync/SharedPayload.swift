@@ -4,7 +4,7 @@ import Foundation
 /// What both devices write and read: chats, the owner's ratings and conversation on a review, and the
 /// coach's memory. Meetings themselves come only from the Mac.
 public struct SharedPayload: Sendable {
-    public enum Kind: String, Sendable { case chat, notes, profile, commitments, people, personas, nextTime }
+    public enum Kind: String, Sendable { case chat, notes, profile, commitments, people, personas, nextTime, digest }
 
     public let kind: Kind
     /// "chat:<uuid>", "notes:<call id>", or "profile": the record name and the key in the sync state.

@@ -69,11 +69,16 @@ The tools, all read only:
 | `coach_profile`, `read_coach_review` | The coach's memory and one meeting's review. |
 | `past_chats`, `read_chat` | The newest 60 chats. |
 | `shares` | The share links with their expiry, PIN state, and views. Never a token or a PIN. |
-| `search`, `fetch` | ChatGPT's pair: meetings (a call id, or `meeting:<id>`), people (`person:<id>`), and tasks (`task:<id>`). |
+| `recurring`, `read_series` | The recurring meetings as the Mac computed them from the meetings: schedule, history, people, numbers, open items, and the points for next time. No next date: the calendar never comes here. |
+| `meeting_analytics` | One meeting's numbers, by month as the Mac sends them. |
+| `analytics` | The Analytics page for 7, 30, 90, or 365 days. |
+| `coach_findings`, `coach_goals` | The coach's cards and goal. |
+| `bookmarks` | Every bookmark with its note. |
+| `search`, `fetch` | ChatGPT's pair: meetings (a call id, or `meeting:<id>`), people (`person:<id>`), tasks (`task:<id>`), series (`series:<id>`), and bookmarks (`bookmark:<call id>#<second>`). |
 
 The Mac sends the people, the reads, the points, the tasks, the coach's memory, and the chats to this server with either sync choice: through this server, or iCloud with this server as a copy (Mossad after 2.24; never during a call). Until a kind has arrived, its tool says so ("This server has no tasks from your Mac yet"). After each full send the Mac also sends the time (`syncedAt` in the config); when that time is two days before the newest meeting here, the answers say so. A server that never got the time says nothing about age. What the coach learned about a person who keeps no read never leaves the Mac, and the server checks the flag again.
 
-Recurring meetings, the prep page, upcoming meetings, each meeting's numbers, analytics, the coach's cards and goal, bookmarks, screens, the live call, and the app's settings are in `Mossad --mcp` on the Mac only: they are rules over the Mac's history and calendar that this server does not repeat.
+The digest tools read what the Mac computed (`ServerDigest`, records named `digest-…`), sent with the copy to this server by Mossad after 2.25, never during a call; each answer says when the Mac made it. Upcoming meetings, the prep page, screens, the live call, and the app's settings stay in `Mossad --mcp` on the Mac: the calendar never comes here.
 
 ## Share links
 

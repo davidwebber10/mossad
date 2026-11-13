@@ -17,6 +17,8 @@ public actor CloudSync {
     /// The owner's points for next time, both ways. Only through the owner's server: an iCloud store needs the type
     /// in its production schema first.
     static let nextTimeType = "NextTime"
+    /// The parts of the digest for the server's MCP (`ServerDigest`); no device reads them back.
+    static let digestType = "Digest"
     static let recordingType = "Recording"
     /// Assets make big requests, so stay well under CloudKit's 400 changes a request.
     static let batch = 50
@@ -164,7 +166,7 @@ public actor CloudSync {
     /// `personas`: the reduced copy of the reads (`SyncedPersonas`), from the Mac, with the people.
     /// `stop`: true stops the upload before its next batch (a call started).
     public func pushShared(people sendPeople: Bool = false, personas: SyncedPersonas? = nil, mirror: Bool = false,
-                           stop: @Sendable () -> Bool = { false }) async throws -> Int {
+                           stop: @Sendable () -> Bool = { false }, digest: [SharedPayload]? = nil) async throws -> Int {
         try await prepare()
         let chats = ChatStore(directory: paths.chats)
         var payloads = chats.all().map(SharedPayload.chat)
@@ -200,6 +202,8 @@ public actor CloudSync {
         if sendPeople, store.wantsMeetingView, let personas {
             payloads.append(.personas(personas))
         }
+        // The digest for the server's MCP: to the owner's server only, and only when it was made this time.
+        if store.wantsMeetingView, let digest { payloads += digest }
         var deleted = chats.deleted()
         let state = try loadState()
         if mirror {
@@ -210,7 +214,12 @@ public actor CloudSync {
                 if !FileManager.default.fileExists(atPath: paths.chats.appendingPathComponent("\(id.uuidString).json").path) { deleted.insert(id) }
             }
         }
-        let plan = state.planShared(payloads, deletedChats: deleted)
+        var plan = state.planShared(payloads, deletedChats: deleted)
+        // A part of the digest that was not made again leaves the server: a month with no meeting left.
+        if store.wantsMeetingView, let digest {
+            let now = Set(digest.map(\.key))
+            plan.delete += state.uploaded.keys.filter { $0.hasPrefix("digest:") && !now.contains($0) }.sorted()
+        }
         guard !plan.upload.isEmpty || !plan.delete.isEmpty else { return 0 }
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -226,6 +235,7 @@ public actor CloudSync {
                 case .people: Self.peopleType
                 case .personas: Self.personasType
                 case .nextTime: Self.nextTimeType
+                case .digest: Self.digestType
                 }
                 let name = Self.recordName(p.key)
                 return StoredRecord(name: name, type: type, files: ["data": try file(p.data, "\(name).json", in: dir)])

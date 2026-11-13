@@ -97,7 +97,7 @@ export function safeZone(tz: string | undefined): string {
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz ?? 'UTC' }); return tz ?? 'UTC'; } catch { return 'UTC'; }
 }
 
-function day(iso: string | undefined, tz: string): string {
+export function day(iso: string | undefined, tz: string): string {
   if (!iso) return 'no date';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -105,7 +105,7 @@ function day(iso: string | undefined, tz: string): string {
 }
 
 /** The page of a list: `limit` (1 to 60, default `d`) from `offset`, and a line that says how many more there are. */
-function page<T>(items: T[], input: Record<string, unknown>, d = 20): { rows: T[]; tail: string } {
+export function page<T>(items: T[], input: Record<string, unknown>, d = 20): { rows: T[]; tail: string } {
   const limit = typeof input.limit === 'number' && input.limit > 0 ? Math.min(Math.floor(input.limit), maxLimit) : d;
   const offset = typeof input.offset === 'number' && input.offset > 0 ? Math.floor(input.offset) : 0;
   const rows = items.slice(offset, offset + limit);
@@ -113,7 +113,7 @@ function page<T>(items: T[], input: Record<string, unknown>, d = 20): { rows: T[
   return { rows, tail: more > 0 ? `\n(${more} more; ask with offset ${offset + rows.length}.)` : '' };
 }
 
-async function data<T>(env: Env, name: string): Promise<T | null> {
+export async function data<T>(env: Env, name: string): Promise<T | null> {
   const object = await env.FILES.get(`records/${name}/data`);
   if (!object) return null;
   try { return (await object.json()) as T; } catch { return null; }

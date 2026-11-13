@@ -203,39 +203,42 @@ The config key is additive in the `config` table (no migration). No D1 migration
 - Screens and voices: never leave the Mac.
 - App status: the Mac's settings are not on the server.
 
-### Design for the rest: the digest payload (not built in this branch)
+### The digest (built in `feature/mcp-digest`, after 2.25.0)
 
-Series, prep, meeting analytics, period analytics, trends, findings, goals, and bookmarks are Swift rules over
-data the server partly has. A second implementation in TypeScript would drift. Instead, the Mac computes them and
-sends a digest: one more shared payload, Mac to server only, like `SyncedPersonas`.
+The owner said yes to the recurring meetings, a meeting's numbers, the Analytics page, the coach's cards and goal,
+and the bookmarks on the server, and no to upcoming meetings: the calendar never goes to the server, so
+`upcoming_meetings` and `prep` stay on the Mac, and the live call too. Series, meeting numbers, period analytics,
+trends, findings, goals, and bookmarks are Swift rules; the Mac computes them (`ServerDigest`) and the Worker only
+finds, pages, and writes them out (`server/src/digest.ts`).
 
-- `SyncedDigest` (`kind: .digest`, record `digest`, type `Digest`), `version: 1`, `made` (date), and
-  allowed-field lists, each with a test that fails on any other key:
-  - `series[]`: `id`, `keys`, `title`, `schedule` (text), `next` (date), `usualPeople` (`{id?, name}`), `line`,
-    `rows[]` (`callID`, `start`, `minutes`, `lateMinutes`, `overMinutes`, `ownerShare`, `people`), `attendees[]`
-    (`name`, `personID?`, `came`, `of`, `share`, `trend`), `stats` (the Stats tab's numbers), `openItems[]` (`kind`,
-    `text`, `owner`, `callID`, `at`, `date`). No suggestions (they change by the owner's answers on the Mac).
-  - `meetings[]`: per call id the Analytics tab's numbers that `MeetingAnalytics` gives and the sentences of
-    `MeetingFindings`, plus `bookmarks[]` (`at`, `note`), `source`.
-  - `period`: the last 90 days of `AnalyticsReport` and the four `CommunicationTrends` sentences.
-  - `findings[]`: the deck's cards (no trait card for a `doNotProfile` person; trait cards only when
-    `mcpPersonas`).
-  - `goal`: the active goal, its target, and its progress sentence.
-  - `upcoming[]`: off by default (a switch in Settings > Storage & Sync, "Upcoming meetings on my server"):
-    `title`, `start`, `end`, `seriesID`, invited people as `{id?, name}` with no address. No link (it can hold a
-    passcode).
-- Size: series and per-meeting numbers are small; cap `meetings[]` to the last 180 days.
-- Server: one record, read whole (R2), no D1 migration. The Worker that runs before it ignores the unknown type
-  (`putRecord` stores any type), so it is additive. New tools: `recurring`, `read_series`, `meeting_analytics`,
-  `stats`, `coach_findings`, `coach_goals`, `bookmarks`, `upcoming_meetings` (when sent); `search` and `fetch` add
-  `series:<id>`.
-- Estimate: two to three days with tests on both sides; the owner's choice on the upcoming switch first.
-
-## Owner decisions
-
-1. Deploy the Worker (the agent never deploys). No D1 migration is needed for this branch.
-2. Upcoming meetings on the server: yes or no (the digest design keeps it off by default).
-3. The digest payload: build it next, or keep the server to the reads above.
+- Parts, each its own shared record (`kind: .digest`, type `Digest`), sent only when its content changed, each with
+  `version: 1` and `made` (when its content last changed), from allowed-field lists (`ServerDigest.allowedKeys`,
+  with a test that fails on any other key):
+  - `digest-series`: each series that still meets, made from the meetings alone (`SeriesCatalog` with no
+    calendar): `id`, `keys` (as a point saves them), `title`, `schedule`, `usualPeople`, `line`, the newest 12
+    `rows`, `attendees` (20 at most), `stats`, `openItems` (20 at most). No next date and no invite; no suggestions.
+  - `digest-meetings-YYYY-MM`: each meeting of that month (by its call id) with the Analytics tab's numbers
+    (`MeetingAnalytics`, the sentences of `MeetingFindings`). A month is made again only when its meetings, their
+    reviews, or the meetings before them changed (`DigestCache`, `~/Mossad/Sync/digest-cache.json`, never synced).
+  - `digest-bookmarks`: every bookmark (2,000 at most) with its note and the line said then.
+  - `digest-analytics`: the Analytics page for 7, 30, 90, and 365 days (`AnalyticsReport`, `CommunicationTrends`).
+  - `digest-coach`: the deck's cards (`ChatTools.findingCards`: never a card about a person who keeps no read, trait
+    cards only with the switch for other AI apps on) and the goals (`GoalProgress`).
+- Sizes, measured by `ServerDigestTests.testTheSizesStayBounded` (1,500 meetings over two years, 60 series, a
+  bookmark on each tenth meeting): series 233 KB (an extreme case: 19 people per series), each month at most
+  66 KB (25 months, 1.5 MB in all, sent once and then only a changed month), bookmarks 23 KB, analytics 6 KB,
+  coach a few KB. Each part is under `ServerDigest.maxPartBytes` (400 KB).
+- When: with the server's copy (server sync or the iCloud mirror), after meetings are written, never during a call
+  (a call that starts stops the upload at its next batch), off the main thread, made again only when the meetings,
+  the coach, or the tasks changed, or an hour passed. Not to iCloud.
+- Deletes: an ended series leaves `digest-series`, a removed bookmark leaves `digest-bookmarks`, an expired card
+  leaves `digest-coach` (each an overwrite), and a month with no meeting left is deleted (`pushShared(digest:)`
+  deletes each `digest:` key it holds that was not made again; with no digest made, nothing is deleted).
+- Server: R2 reads, no D1 migration. The 2.25.0 Worker stores the new records and has no tool that reads them; the
+  new Worker with the 2.25.0 app says "This server has no recurring meetings from your Mac yet". New tools:
+  `recurring`, `read_series`, `bookmarks`, `meeting_analytics`, `analytics`, `coach_findings`, `coach_goals`;
+  `search` and `fetch` add `series:<id>` and `bookmark:<call id>#<second>`. Each answer says when the Mac made it,
+  and a series says that its next date is only known on the Mac.
 
 ## Chat actions (added later in this branch, the app's own chat only)
 
