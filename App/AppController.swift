@@ -1108,11 +1108,12 @@ final class AppController: ObservableObject {
     /// new recording until the call really ends.
     func stopCurrentCall() {
         let recorder = recorder
-        let id: String? = if case .recording(_, let since) = status { CallRecorder.callID(for: since) } else { nil }
         CaptureQueue.queue.async {
+            let recording = recorder.currentCallID
             guard let record = recorder.end(at: Date(), trimTo: nil, byPerson: true) else {
                 // Too short to keep: its ticks go back to open.
-                Task { @MainActor in self.refresh(); if let id { self.reopenTicks(ofGoneCall: id) } }
+                let gone = GoneCall.id(recording: recording, kept: nil)
+                Task { @MainActor in self.refresh(); if let gone { self.reopenTicks(ofGoneCall: gone) } }
                 return
             }
             // The stopped record goes into the list at once, so its row stops saying "recording".
@@ -1886,10 +1887,14 @@ final class AppController: ObservableObject {
         case .ended(let at, let trimTo):
             if recorder.isManual { return }
             Log.info("Call ended")
+            // The id of the record the recorder holds: `at` is the end of the call, not its id. A call that the owner
+            // already stopped has no record here, and its ticks stay.
+            let recording = recorder.currentCallID
             guard let record = recorder.end(at: at, trimTo: trimTo) else {
                 // A short call is deleted, so its row must leave the list too, or it still looks live; its ticks go
                 // back to open.
-                Task { @MainActor in self.refresh(); self.reopenTicks(ofGoneCall: CallRecorder.callID(for: at)) }
+                let gone = GoneCall.id(recording: recording, kept: nil)
+                Task { @MainActor in self.refresh(); if let gone { self.reopenTicks(ofGoneCall: gone) } }
                 return
             }
             Task { @MainActor in self.update(record); self.refresh() }

@@ -21,6 +21,13 @@ public extension TrackSource {
 
 /// The one serial queue for capture work: starting, stopping, and trimming can wait on Core Audio,
 /// so none of it runs on the main thread. Every CallRecorder call and every source restart goes through it.
+/// Which call's ticks go back to open when a call ends.
+public enum GoneCall {
+    /// `recording`: the id of the record the recorder held before the end; `kept`: what the end returned.
+    /// The id comes from the record, never from a time: the end time of a call is not its id.
+    public static func id(recording: String?, kept: CallRecord?) -> String? { kept == nil ? recording : nil }
+}
+
 public enum CaptureQueue {
     public static let queue = DispatchQueue(label: "com.dwebber.mossad.capture", qos: .userInitiated)
     static let operations: OperationQueue = {
@@ -94,6 +101,8 @@ public final class CallRecorder: @unchecked Sendable {
     }
 
     private var record: CallRecord?
+    /// The id of the call being recorded. On `CaptureQueue.queue`.
+    public var currentCallID: String? { record?.id }
     private var themSource: TrackSource?
     private var meSource: TrackSource?
     // The app reads the durations on the main thread, so the lines sit behind a lock.
