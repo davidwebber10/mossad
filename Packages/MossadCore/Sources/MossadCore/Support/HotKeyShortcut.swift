@@ -54,7 +54,7 @@ public struct HotKeyShortcut: Equatable, Hashable, Sendable {
     // MARK: Rules
 
     public enum Problem: Equatable, Sendable {
-        case needsModifier, bookmark, mossad, system, unknownKey
+        case needsModifier, bookmark, mossad, system, unknownKey, typesCharacter
         /// The system refused to register it.
         case taken
 
@@ -65,7 +65,8 @@ public struct HotKeyShortcut: Equatable, Hashable, Sendable {
             case .mossad: "Mossad uses this shortcut in its window. Choose another."
             case .system: "macOS or other apps use this shortcut. Choose another."
             case .unknownKey: "Mossad cannot use this key. Choose another."
-            case .taken: "Another app or macOS uses this shortcut. Choose another."
+            case .typesCharacter: "This types a character or moves the cursor in other apps. Add Command, or use Control with Option."
+            case .taken: "macOS did not accept this shortcut, so it does not work now. Choose another."
             }
         }
     }
@@ -78,6 +79,10 @@ public struct HotKeyShortcut: Equatable, Hashable, Sendable {
         if self == Self.bookmark { return .bookmark }
         if Self.mossad.contains(self) { return .mossad }
         if modifiers.isSubset(of: [.command, .shift]) || Self.system.contains(self) { return .system }
+        // Option types accents and other characters; Control with a character key moves the cursor in text.
+        if !Self.functionKeys.contains(keyCode), modifiers.isSubset(of: [.option, .shift]) || modifiers.isSubset(of: [.control, .shift]) {
+            return .typesCharacter
+        }
         return nil
     }
 
@@ -87,6 +92,8 @@ public struct HotKeyShortcut: Equatable, Hashable, Sendable {
         .init(keyCode: 0x28, modifiers: [.command, .option]), .init(keyCode: 0x0B, modifiers: [.command, .option]),
         .init(keyCode: 0x2D, modifiers: [.command]), .init(keyCode: 0x0F, modifiers: [.command]),
         .init(keyCode: 0x01, modifiers: [.command, .shift]),
+        // The Meetings filter.
+        .init(keyCode: 0x03, modifiers: [.command, .option]), .init(keyCode: 0x33, modifiers: [.command, .option]),
     ]
 
     /// macOS's own: Spotlight and input sources, Force Quit, Lock Screen, full screen, the emoji viewer.
@@ -95,7 +102,15 @@ public struct HotKeyShortcut: Equatable, Hashable, Sendable {
         .init(keyCode: 0x31, modifiers: [.control, .command]), .init(keyCode: 0x31, modifiers: [.control, .option]),
         .init(keyCode: 0x35, modifiers: [.option, .command]), .init(keyCode: 0x0C, modifiers: [.control, .command]),
         .init(keyCode: 0x03, modifiers: [.control, .command]), .init(keyCode: 0x30, modifiers: [.control]),
+        // Mission Control and the Spaces, the Dock, Zoom, the keyboard focus.
+        .init(keyCode: 0x7B, modifiers: [.control]), .init(keyCode: 0x7C, modifiers: [.control]),
+        .init(keyCode: 0x7D, modifiers: [.control]), .init(keyCode: 0x7E, modifiers: [.control]),
+        .init(keyCode: 0x02, modifiers: [.option, .command]), .init(keyCode: 0x1C, modifiers: [.option, .command]),
+        .init(keyCode: 0x18, modifiers: [.option, .command]), .init(keyCode: 0x1B, modifiers: [.option, .command]),
+        .init(keyCode: 0x60, modifiers: [.option, .command]),
     ]
+
+    static let functionKeys: Set<UInt32> = [0x7A, 0x78, 0x63, 0x76, 0x60, 0x61, 0x62, 0x64, 0x65, 0x6D, 0x67, 0x6F]
 
     /// The keys by their US layout names.
     static let keyNames: [UInt32: String] = {

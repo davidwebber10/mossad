@@ -15,6 +15,8 @@ final class ChatSession: ObservableObject {
     @Published var error: FriendlyError?
     /// A question typed while an answer comes: it is asked when that answer is in.
     @Published private(set) var queued: String?
+    /// A waiting question that was not asked (its answer before failed, or its call ended): the field takes it back.
+    @Published var returned: String?
     private var loaded = false
     private var pendingText: String?
     private var textScheduled = false
@@ -40,6 +42,10 @@ final class ChatSession: ObservableObject {
     /// The quick chat to continue, or none for a new one. Not while an answer comes: it saves its own copy.
     func adopt(_ found: Chat?) {
         guard !running else { return }
+        if found?.id != chat?.id {
+            error = nil
+            queued = nil
+        }
         chat = found
     }
 
@@ -75,6 +81,7 @@ final class ChatSession: ObservableObject {
         let stepSink = StepSink { [weak self] step in Task { @MainActor in self?.steps.append(step) } }
         let textSink = StepSink { [weak self] text in Task { @MainActor in self?.setPartial(text) } }
         task = Task {
+            var failed = false
             do {
                 let answer: String
                 if let record {
@@ -90,17 +97,26 @@ final class ChatSession: ObservableObject {
                 save(current, controller)
                 if record != nil {
                     controller.liveChatsToSummarize.insert(current.id)
-                } else {
+                } else if !controller.isRecording {
+                    // During a call the disk and the network belong to the recording; the sync after it sends this.
                     controller.summarizeChat(current.id)
                     controller.syncNow()
                 }
                 AccessibilityNotification.Announcement("Answer ready").post()
             } catch {
                 if stopped {
-                    // A stopped answer leaves no question without its answer.
+                    // A stopped answer leaves no question without its answer, and a first question no empty chat.
                     if current.messages.last?.id == asked.id { current.messages.removeLast() }
-                    save(current, controller)
+                    if ChatRunRules.removesChat(messagesLeft: current.messages.count) {
+                        controller.chats.delete(current.id, record: false)
+                        chat = nil
+                        if isQuick { controller.rememberQuickChat(nil) }
+                        controller.chatsVersion += 1
+                    } else {
+                        save(current, controller)
+                    }
                 } else {
+                    failed = true
                     Log.error("\(record == nil ? "Quick chat" : "Live chat") failed: \(error)")
                     let friendly = FriendlyError(error, context: .chatting)
                     if friendly.shouldShow(failures: 1) { self.error = friendly }
@@ -110,9 +126,15 @@ final class ChatSession: ObservableObject {
             partial = ""
             pendingText = nil
             task = nil
-            if let next = queued {
+            let callRecords = record.map { controller.isRecording(callID: $0.id) } ?? true
+            switch ChatRunRules.next(queued: queued, failed: failed, stopped: stopped, callRecords: callRecords) {
+            case .nothing: break
+            case .send(let next):
                 queued = nil
                 send(next, record: record, controller: controller)
+            case .toField(let next):
+                queued = nil
+                returned = next
             }
         }
     }

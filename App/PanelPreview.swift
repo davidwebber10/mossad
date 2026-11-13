@@ -79,6 +79,18 @@ extension AppController {
                 if let answer { model.peek = (answer.id, seconds) }
             }
         }
+        // `MOSSAD_ASK_CYCLE=1`: the real floating panel, opened, hidden, and opened again (without the keyboard), to
+        // check its height on a second open. Its window number goes to the log for the capture.
+        if env["MOSSAD_ASK_CYCLE"] == "1" {
+            panel.show(takeKeyboard: false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { panel.hide() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                panel.show(takeKeyboard: false)
+                print("ask-panel-window \(panel.windowNumber ?? 0)")
+                fflush(stdout)
+            }
+            return
+        }
         let content = ZStack(alignment: .bottom) {
             Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
                 ? NSColor(red: 0x12 / 255, green: 0x12 / 255, blue: 0x11 / 255, alpha: 1)

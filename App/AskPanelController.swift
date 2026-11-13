@@ -14,6 +14,11 @@ final class AskPanelController {
     private var hosting: NSHostingView<AnyView>?
     private var keyMonitor: Any?
     private var observers: [NSObjectProtocol] = []
+    /// The content's height as the view last reported it, also while hidden: an open with the same content gets no
+    /// new report, so it must not depend on one.
+    private var contentHeight: CGFloat?
+    /// Set while Mossad moves the panel itself, so only the owner's drag is remembered.
+    private var adjusting = false
     private static let originKey = "askPanelOrigin"
 
     init(controller: AppController) {
@@ -21,24 +26,38 @@ final class AskPanelController {
     }
 
     var isVisible: Bool { panel?.isVisible == true }
+    /// The panel's window number, for a preview's capture.
+    var windowNumber: Int? { panel?.windowNumber }
 
     func toggle() {
         if isVisible { hide() } else { show() }
     }
 
-    /// Only on the owner's action: the shortcut or the menu.
-    func show() {
+    /// Only on the owner's action: the shortcut or the menu. A preview shows it without the keyboard.
+    func show(takeKeyboard: Bool = true) {
         let panel = panel ?? makePanel()
         if !controller.isRecording { controller.refreshQuickChat() }
         model.opened()
         model.track(controller)
         if !panel.isVisible {
             hosting?.layoutSubtreeIfNeeded()
-            let height = max(hosting?.fittingSize.height ?? 160, 100)
-            panel.setFrame(NSRect(origin: startOrigin(height: height), size: NSSize(width: AskPanelView.width, height: height)), display: false)
+            let measured = hosting.map { $0.intrinsicContentSize.height }.flatMap { $0 > 0 ? $0 : nil }
+            let height = contentHeight ?? measured
+            place(content: height, bottomLeft: startOrigin(height: height ?? minimum), on: panel)
         }
-        panel.makeKeyAndOrderFront(nil)
-        startKeys()
+        if takeKeyboard {
+            panel.makeKeyAndOrderFront(nil)
+            startKeys()
+        } else {
+            panel.orderFrontRegardless()
+        }
+        // Once more after the first layout of this open, from the size the content has now.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let panel = self.panel, panel.isVisible else { return }
+            self.hosting?.layoutSubtreeIfNeeded()
+            let measured = self.hosting.map { $0.intrinsicContentSize.height }.flatMap { $0 > 0 ? $0 : nil }
+            self.place(content: self.contentHeight ?? measured, bottomLeft: panel.frame.origin, on: panel)
+        }
     }
 
     func hide() {
@@ -61,14 +80,17 @@ final class AskPanelController {
         panel.hasShadow = true
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .utilityWindow
-        // Kept out of screen sharing and screenshots: the owner's questions stay the owner's. Mossad's own frames
-        // never see it anyway, as they capture the call app's window alone.
-        panel.sharingType = .none
+        // Asks the system to keep it out of screen captures. Since macOS 15, ScreenCaptureKit (which the call apps
+        // use to share) may still capture it, so this is no promise; the panel covers its chat itself while it
+        // sees a share (`ownerSharing`). Mossad's own frames never see it: they capture the call app's window alone.
+        // A preview's panel can be captured, to check it.
+        panel.sharingType = DevHooks.preview ? .readOnly : .none
         panel.title = "Ask Mossad"
         let view = AskPanelView(model: model, actions: actions)
             .environmentObject(controller)
         let hosting = NSHostingView(rootView: AnyView(view))
-        hosting.sizingOptions = []
+        // Its own height only, to read; never the window's least or largest size.
+        hosting.sizingOptions = [.intrinsicContentSize]
         panel.contentView = hosting
         self.hosting = hosting
         self.panel = panel
@@ -88,15 +110,31 @@ final class AskPanelController {
             height: { [weak self] h in self?.fit(height: h) })
     }
 
-    /// The bottom edge, where the field is, stays put; the panel grows up, and moves down only to stay on screen.
-    private func fit(height: CGFloat) {
-        guard let panel, height > 0, abs(panel.frame.height - height) > 0.5 else { return }
-        var frame = panel.frame
-        frame.size.height = height
-        if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame, frame.maxY > visible.maxY {
-            frame.origin.y = max(visible.minY, visible.maxY - height)
+    /// The header, the field, and the keys; a notice in place of the chat needs less.
+    private var minimum: CGFloat {
+        switch model.mode(controller) {
+        case .call, .quick: AskPanelSizing.minimum(chips: false)
+        case .noTranscript, .ended: 100
         }
-        panel.setFrame(frame, display: true)
+    }
+
+    /// Each change of the content: the bottom edge, where the field is, stays put; the panel grows up, and moves
+    /// down only to stay on screen.
+    private func fit(height: CGFloat) {
+        guard height > 0 else { return }
+        contentHeight = height
+        guard let panel, panel.isVisible else { return }
+        place(content: height, bottomLeft: panel.frame.origin, on: panel)
+    }
+
+    private func place(content: CGFloat?, bottomLeft: NSPoint, on panel: NSPanel) {
+        let screen = NSScreen.screens.first { $0.frame.contains(bottomLeft) } ?? panel.screen ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        let frame = AskPanelSizing.frame(content: content, minimum: minimum, bottomLeft: bottomLeft, visible: visible)
+        guard frame != panel.frame else { return }
+        adjusting = true
+        panel.setFrame(frame, display: panel.isVisible)
+        adjusting = false
         panel.invalidateShadow()
     }
 
@@ -122,7 +160,7 @@ final class AskPanelController {
     }
 
     private func saveOrigin() {
-        guard let panel, panel.isVisible else { return }
+        guard !adjusting, !controller.isInert, let panel, panel.isVisible else { return }
         UserDefaults.standard.set("\(panel.frame.minX),\(panel.frame.minY)", forKey: Self.originKey)
     }
 
@@ -132,23 +170,41 @@ final class AskPanelController {
     private func startKeys() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            // By key code and the four modifiers only, so Caps Lock and the function key change nothing.
+            let mods = event.modifierFlags.intersection([.command, .option, .control, .shift])
             let code = event.keyCode
             let number = event.window?.windowNumber
             let handled = MainActor.assumeIsolated { () -> Bool in
                 guard let self, let panel = self.panel, number == panel.windowNumber else { return false }
-                if code == 53, mods.isEmpty {
-                    self.hide()
-                    return true
-                }
-                if [36, 76].contains(code), mods == .command {
-                    self.controller.openAskInWindow(self.model.mode(self.controller))
-                    return true
-                }
-                return false
+                return self.handleKey(code, mods, in: panel)
             }
             return handled ? nil : event
         }
+    }
+
+    /// Escape hides (not while an input method composes), Command-Return opens the window, Command-W hides, and
+    /// Command-N starts a new quick chat. Mossad's other menu keys would bring the main window forward and take
+    /// the call app out of full screen, so the panel takes them and does nothing; the text keys still work.
+    private func handleKey(_ code: UInt16, _ mods: NSEvent.ModifierFlags, in panel: NSPanel) -> Bool {
+        let composing = (panel.firstResponder as? NSTextView)?.hasMarkedText() == true
+        if code == 53, mods.isEmpty { if composing { return false }; hide(); return true }
+        guard mods.contains(.command) else { return false }
+        let plain = mods == .command
+        if plain, code == 36 || code == 76 {
+            controller.openAskInWindow(model.mode(controller))
+        } else if plain, code == 13 {
+            hide()
+        } else if plain, code == 45 {
+            if model.mode(controller) == .quick, controller.quickChat?.running != true {
+                controller.quickChat?.newChat()
+                controller.rememberQuickChat(nil)
+                model.focusRequest += 1
+            }
+        } else if [0, 6, 7, 8, 9, 0x33, 0x7B, 0x7C, 0x7D, 0x7E].contains(code) {
+            // Select all, undo and redo, cut, copy, paste, and the text moves.
+            return false
+        }
+        return true
     }
 
     private func stopKeys() {
@@ -173,7 +229,12 @@ struct AskPanelActions {
 /// peek, and the requests to focus the field and scroll to the newest message.
 @MainActor
 final class AskPanelModel: ObservableObject {
-    private(set) var isOpen = false
+    /// Published, so the hidden panel's quick questions stop reading the transcript each second.
+    @Published private(set) var isOpen = false
+    /// The text typed in the field, for the call and for the quick chat apart, so a change of state keeps it.
+    @Published var drafts: [String: String] = [:]
+    /// The owner chose to see the chat during this share; until the panel hides.
+    @Published var showDuringShare = false
     @Published var shownCall: String?
     /// The call's start, and when it ended while the panel showed it, for "Ended, 47 min".
     @Published var since: Date?
@@ -195,6 +256,7 @@ final class AskPanelModel: ObservableObject {
 
     func closed() {
         isOpen = false
+        showDuringShare = false
         shownCall = nil
         endedAt = nil
         peek = nil

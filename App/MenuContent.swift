@@ -303,7 +303,7 @@ private struct RecordingStatus: View {
                 Image(systemName: "bubble.left").font(.system(size: 13)).foregroundStyle(Palette.accent).frame(width: 16)
                 Text("Ask about this call…")
                 Spacer()
-                if let shortcut = controller.askShortcut {
+                if let shortcut = controller.activeAskShortcut {
                     Text(shortcut.symbols).font(.system(size: 12)).foregroundStyle(Palette.tertiary)
                 }
             }

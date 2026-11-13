@@ -32,7 +32,7 @@ final class HotKeyShortcutTests: XCTestCase {
     func testAKeyAloneOrWithShiftIsRefused() {
         XCTAssertEqual(HotKeyShortcut(keyCode: 0x2E, modifiers: []).problem, .needsModifier)
         XCTAssertEqual(HotKeyShortcut(keyCode: 0x2E, modifiers: [.shift]).problem, .needsModifier)
-        XCTAssertNil(HotKeyShortcut(keyCode: 0x2E, modifiers: [.control]).problem)
+        XCTAssertNil(HotKeyShortcut(keyCode: 0x2E, modifiers: [.control, .option]).problem)
     }
 
     func testTheBookmarkShortcutIsTaken() {
@@ -51,9 +51,25 @@ final class HotKeyShortcutTests: XCTestCase {
     }
 
     func testEachProblemSaysWhatToDo() {
-        for p in [HotKeyShortcut.Problem.needsModifier, .bookmark, .system, .mossad, .unknownKey, .taken] {
+        for p in [HotKeyShortcut.Problem.needsModifier, .bookmark, .system, .mossad, .unknownKey, .taken, .typesCharacter] {
             XCTAssertFalse(p.message.isEmpty)
         }
-        XCTAssertEqual(HotKeyShortcut.Problem.taken.message, "Another app or macOS uses this shortcut. Choose another.")
+        XCTAssertEqual(HotKeyShortcut.Problem.taken.message, "macOS did not accept this shortcut, so it does not work now. Choose another.")
+    }
+
+    func testOptionOrControlAloneWithACharacterTypesInEveryApp() {
+        XCTAssertEqual(HotKeyShortcut(keyCode: 0x0E, modifiers: [.option]).problem, .typesCharacter)
+        XCTAssertEqual(HotKeyShortcut(keyCode: 0x0E, modifiers: [.option, .shift]).problem, .typesCharacter)
+        XCTAssertEqual(HotKeyShortcut(keyCode: 0x0E, modifiers: [.control]).problem, .typesCharacter)
+        XCTAssertNil(HotKeyShortcut(keyCode: 0x7A, modifiers: [.option]).problem)
+        XCTAssertNil(HotKeyShortcut(keyCode: 0x0E, modifiers: [.control, .option]).problem)
+    }
+
+    func testTheMeetingsFilterKeysAndMoreSystemKeysAreTaken() {
+        XCTAssertEqual(HotKeyShortcut(keyCode: 0x03, modifiers: [.option, .command]).problem, .mossad)
+        XCTAssertEqual(HotKeyShortcut(keyCode: 0x33, modifiers: [.option, .command]).problem, .mossad)
+        XCTAssertEqual(HotKeyShortcut(keyCode: 0x7B, modifiers: [.control]).problem, .system)
+        XCTAssertEqual(HotKeyShortcut(keyCode: 0x02, modifiers: [.option, .command]).problem, .system)
+        XCTAssertEqual(HotKeyShortcut(keyCode: 0x1C, modifiers: [.option, .command]).problem, .system)
     }
 }

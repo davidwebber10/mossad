@@ -173,4 +173,70 @@ final class AskPanelTests: XCTestCase {
         XCTAssertEqual(ChatDividers.age(3600 * 2 + 100), "Asked 2 hours ago")
         XCTAssertEqual(ChatDividers.age(3600), "Asked 1 hour ago")
     }
+
+    // MARK: The chip of the question just asked
+
+    func testOnlyAQuestionAskedJustNowHidesItsChip() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        var q = ChatMessage(role: .user, text: "Summarize the call so far.")
+        q.asked = now.addingTimeInterval(-30)
+        let a = ChatMessage(role: .assistant, text: "So far…")
+        XCTAssertEqual(AskPanelChips.recentQuestion([q, a], now: now), "Summarize the call so far.")
+        XCTAssertNil(AskPanelChips.recentQuestion([q, a], now: now.addingTimeInterval(600)))
+        XCTAssertNil(AskPanelChips.recentQuestion([ChatMessage(role: .user, text: "Old")], now: now))
+        XCTAssertNil(AskPanelChips.recentQuestion([], now: now))
+    }
+
+    // MARK: The panel's size
+
+    let screen = CGRect(x: 0, y: 25, width: 1440, height: 875)
+
+    func testThePanelGrowsUpFromTheFieldsEdge() {
+        let f = AskPanelSizing.frame(content: 400, minimum: 132, bottomLeft: CGPoint(x: 400, y: 160), visible: screen)
+        XCTAssertEqual(f, CGRect(x: 400, y: 160, width: AskPanelSizing.width, height: 400))
+    }
+
+    func testNoHeightOrATinyOneIsTheMinimum() {
+        XCTAssertEqual(AskPanelSizing.frame(content: nil, minimum: 132, bottomLeft: CGPoint(x: 400, y: 160), visible: screen).height, 132)
+        XCTAssertEqual(AskPanelSizing.frame(content: 0, minimum: 132, bottomLeft: CGPoint(x: 400, y: 160), visible: screen).height, 132)
+        XCTAssertEqual(AskPanelSizing.frame(content: 100, minimum: 132, bottomLeft: CGPoint(x: 400, y: 160), visible: screen).height, 132)
+    }
+
+    func testATallPanelMovesDownOnlyToStayOnScreen() {
+        let f = AskPanelSizing.frame(content: 700, minimum: 132, bottomLeft: CGPoint(x: 400, y: 600), visible: screen)
+        XCTAssertEqual(f.maxY, screen.maxY)
+        XCTAssertEqual(f.height, 700)
+    }
+
+    func testAPanelTallerThanTheScreenFitsTheScreen() {
+        let f = AskPanelSizing.frame(content: 2000, minimum: 132, bottomLeft: CGPoint(x: 400, y: 600), visible: screen)
+        XCTAssertEqual(f.minY, screen.minY)
+        XCTAssertEqual(f.height, screen.height)
+    }
+
+    func testTheMinimumHasRoomForTheChips() {
+        XCTAssertEqual(AskPanelSizing.minimum(chips: false), 132)
+        XCTAssertGreaterThan(AskPanelSizing.minimum(chips: true), 132)
+    }
+
+    // MARK: After an answer
+
+    func testAWaitingQuestionGoesNextOnlyAfterAGoodAnswer() {
+        XCTAssertEqual(ChatRunRules.next(queued: "Two", failed: false, stopped: false, callRecords: true), .send("Two"))
+        XCTAssertEqual(ChatRunRules.next(queued: "Two", failed: false, stopped: true, callRecords: true), .send("Two"))
+        XCTAssertEqual(ChatRunRules.next(queued: nil, failed: false, stopped: false, callRecords: true), .nothing)
+    }
+
+    func testAFailedAnswerKeepsItsErrorAndGivesTheWaitingQuestionBack() {
+        XCTAssertEqual(ChatRunRules.next(queued: "Two", failed: true, stopped: false, callRecords: true), .toField("Two"))
+    }
+
+    func testAWaitingQuestionOfACallThatEndedGoesBackToTheField() {
+        XCTAssertEqual(ChatRunRules.next(queued: "Two", failed: false, stopped: false, callRecords: false), .toField("Two"))
+    }
+
+    func testAStoppedFirstQuestionLeavesNoChat() {
+        XCTAssertTrue(ChatRunRules.removesChat(messagesLeft: 0))
+        XCTAssertFalse(ChatRunRules.removesChat(messagesLeft: 2))
+    }
 }

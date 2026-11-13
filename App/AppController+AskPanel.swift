@@ -21,9 +21,15 @@ extension AppController {
 
     /// Registered all the time, as the owner chose, so it opens the quick chat with no call too.
     func registerAskShortcut() {
-        guard let shortcut = askShortcut else { return hotKeys.unregister(.ask) }
-        hotKeys.register(.ask, shortcut) { [weak self] in self?.toggleAskPanel() }
+        guard let shortcut = askShortcut else {
+            askShortcutFailed = false
+            return hotKeys.unregister(.ask)
+        }
+        askShortcutFailed = !hotKeys.register(.ask, shortcut) { [weak self] in self?.toggleAskPanel() }
     }
+
+    /// The shortcut that works now, for the menu and the panel's keys; nil when cleared or not registered.
+    var activeAskShortcut: HotKeyShortcut? { askShortcutFailed ? nil : askShortcut }
 
     /// Sets the quick panel's shortcut, or clears it with nil. Gives the problem when it cannot be set; the shortcut
     /// before stays then.
@@ -35,8 +41,10 @@ extension AppController {
                 return .taken
             }
         }
-        UserDefaults.standard.set(shortcut?.saved ?? "", forKey: Self.askShortcutKey)
+        // A preview shares the app's settings: it changes nothing there.
+        if !isInert { UserDefaults.standard.set(shortcut?.saved ?? "", forKey: Self.askShortcutKey) }
         if shortcut == nil { hotKeys.unregister(.ask) }
+        askShortcutFailed = false
         objectWillChange.send()
         return nil
     }
@@ -45,6 +53,12 @@ extension AppController {
     func pauseAskShortcut(_ paused: Bool) {
         guard !isInert else { return }
         if paused { hotKeys.unregister(.ask) } else { registerAskShortcut() }
+    }
+
+    /// Whether this call is the one that records now.
+    func isRecording(callID: String) -> Bool {
+        guard case .recording(_, let since) = status else { return false }
+        return CallRecorder.callID(for: since) == callID
     }
 
     // MARK: The panel
@@ -89,8 +103,21 @@ extension AppController {
         }
     }
 
+    /// The session that writes this chat, when one does: the quick panel's chat, or the chat of the call that
+    /// records. The Chat page asks through it, so one writer saves the file. `create` makes the quick session.
+    func session(answering chat: Chat, create: Bool) -> ChatSession? {
+        if let callID = chat.callID {
+            guard isRecording(callID: callID), let session = liveChatSessions[callID], session.chat?.id == chat.id else { return nil }
+            return session
+        }
+        let remembered = UserDefaults.standard.string(forKey: Self.quickChatKey).flatMap(UUID.init(uuidString:))
+        guard quickChat?.chat?.id == chat.id || remembered == chat.id else { return nil }
+        return create ? quickChatSession() : quickChat
+    }
+
     /// The quick chat the panel continues next time.
     func rememberQuickChat(_ id: UUID?) {
+        guard !isInert else { return }
         UserDefaults.standard.set(id?.uuidString, forKey: Self.quickChatKey)
     }
 

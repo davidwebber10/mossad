@@ -192,9 +192,17 @@ private struct AskPanelChat: View {
     let mode: AskPanelMode
     let record: CallRecord?
     let actions: AskPanelActions
-    @State private var question = ""
     @State private var threadHeight: CGFloat = 0
     @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The field's text, kept on the model by chat, so a call that starts or ends does not lose it.
+    private var draftKey: String { mode.callID ?? "quick" }
+    private var question: Binding<String> {
+        Binding(get: { model.drafts[draftKey] ?? "" }, set: { model.drafts[draftKey] = $0 })
+    }
+    /// The owner shares the screen (as far as Mossad can tell): the chat is covered until they choose to see it.
+    private var covered: Bool { controller.ownerSharing == true && !model.showDuringShare }
 
     private var messages: [ChatMessage] { session.chat?.messages ?? [] }
     private var live: Bool { mode.callID != nil }
@@ -203,10 +211,14 @@ private struct AskPanelChat: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if hasThread { thread }
-            if live, !session.running, let record {
+            if covered {
+                ShareCover { model.showDuringShare = true }
+            } else if hasThread {
+                thread
+            }
+            if live, !session.running, model.isOpen, !covered, let record {
                 PanelChipsRow(model: controller.live, owner: controller.ownerName, record: record, compact: hasThread, divided: scrolls,
-                              lastAsked: messages.last { $0.role == .user }?.text, recorded: { controller.liveRecorded }) { ask($0) }
+                              messages: messages, recorded: { controller.liveRecorded }) { ask($0) }
             }
             field
             footer
@@ -216,6 +228,12 @@ private struct AskPanelChat: View {
         .onAppear { focusSoon() }
         .onChange(of: model.focusRequest) { _, _ in focusSoon() }
         .onChange(of: session.running) { _, running in if !running { focused = true } }
+        .onChange(of: session.returned) { _, text in
+            // A waiting question that was not asked comes back to the field.
+            guard let text else { return }
+            session.returned = nil
+            if question.wrappedValue.isEmpty { question.wrappedValue = text }
+        }
     }
 
     // MARK: Thread
@@ -238,8 +256,13 @@ private struct AskPanelChat: View {
                     }
                     if session.running { answering.id("running") }
                     if let queued = session.queued {
-                        ChatQuestionBubble(text: queued).opacity(0.55)
-                            .accessibilityLabel("Waiting to ask: \(queued)")
+                        VStack(alignment: .trailing, spacing: 4) {
+                            ChatQuestionBubble(text: queued)
+                            Text("Waits for this answer").font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Waits for this answer: \(queued)")
                     }
                     if let error = session.error {
                         ErrorCard(error: error, retry: error.canRetry ? { session.retry(record: record, controller: controller) } : nil)
@@ -249,6 +272,8 @@ private struct AskPanelChat: View {
                 .padding(.leading, 20).padding(.trailing, 24).padding(.top, 18).padding(.bottom, 8)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { threadHeight = $0 }
             }
+            // The answer on its way: its times are not in a saved message yet, so they get no peek.
+            .environment(\.openURL, OpenURLAction { open($0, in: nil) })
             .frame(height: min(threadHeight, AskPanelView.threadMax))
             .scrollIndicators(scrolls ? .automatic : .never)
             .onAppear { proxy.scrollTo("end", anchor: .bottom) }
@@ -269,7 +294,7 @@ private struct AskPanelChat: View {
         if live, session.steps.isEmpty, session.partial.isEmpty {
             HStack(spacing: 10) {
                 Image(systemName: "waveform").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.accent)
-                    .symbolEffect(.variableColor.iterative, options: .repeating)
+                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
                     .accessibilityHidden(true)
                 Text("Listening to the call…").font(.system(size: 13)).foregroundStyle(Palette.secondary)
             }
@@ -290,15 +315,17 @@ private struct AskPanelChat: View {
 
     /// A time in an answer about this call opens the peek under it, and closes it on a second click. Command-click
     /// shows it in the main window. A time of another meeting, or with no call, opens that meeting there.
-    private func open(_ url: URL, in message: UUID) -> OpenURLAction.Result {
+    private func open(_ url: URL, in message: UUID?) -> OpenURLAction.Result {
         if let link = ChatLink.parse(url), let at = link.at, live, link.callID == mode.callID {
             if NSEvent.modifierFlags.contains(.command) {
                 controller.showLiveMoment(callID: link.callID, at: at)
-            } else {
+            } else if let message {
                 let seconds = Int(at)
-                withAnimation(.snappy(duration: 0.2)) {
-                    model.peek = model.peek.map { $0.message == message && $0.seconds == seconds } == true ? nil : (message, seconds)
+                let closing = model.peek.map { $0.message == message && $0.seconds == seconds } == true
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
+                    model.peek = closing ? nil : (message, seconds)
                 }
+                if !closing { AccessibilityNotification.Announcement("Live transcript at \(LivePeekLine.clock(at))").post() }
             }
             return .handled
         }
@@ -322,7 +349,7 @@ private struct AskPanelChat: View {
             if !session.running {
                 IconImage(.sparkle, size: 20).foregroundStyle(Palette.accent)
             }
-            TextField(prompt, text: $question)
+            TextField(prompt, text: question)
                 .textFieldStyle(.plain)
                 .font(.system(size: session.running ? 15 : 17))
                 .foregroundStyle(Palette.ink)
@@ -361,7 +388,7 @@ private struct AskPanelChat: View {
             KeyHint(keys: ["↵"], label: "Ask")
             KeyHint(keys: ["⌘↵"], label: "Open in window")
             Spacer(minLength: 8)
-            KeyHint(keys: (controller.askShortcut.map { [$0.symbols] } ?? []) + ["esc"], label: "Hide, the chat stays")
+            KeyHint(keys: (controller.activeAskShortcut.map { [$0.symbols] } ?? []) + ["esc"], label: "Hide, the chat stays")
         }
         .font(.system(size: 11.5)).foregroundStyle(Palette.secondary)
         .padding(.horizontal, 16)
@@ -372,9 +399,11 @@ private struct AskPanelChat: View {
     // MARK: Actions
 
     private func send() {
-        let q = question
+        let q = question.wrappedValue
         guard !q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        question = ""
+        // The first moment of a call, before its record is read: the question stays in the field.
+        guard !live || record != nil else { return }
+        question.wrappedValue = ""
         ask(q)
     }
 
@@ -388,6 +417,29 @@ private struct AskPanelChat: View {
             try? await Task.sleep(for: .milliseconds(60))
             focused = true
         }
+    }
+}
+
+/// While the owner shares the screen, the chat is covered: people in the call could see it.
+private struct ShareCover: View {
+    let show: () -> Void
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("You seem to be sharing your screen, so the chat is hidden. People in the call could see it.")
+                .font(.system(size: 13)).foregroundStyle(Palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: show) {
+                Text("Show the chat").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.ink)
+                    .padding(.horizontal, 14).frame(height: 30)
+                    .background(Palette.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+        }
+        .padding(.horizontal, 20).padding(.vertical, 16)
     }
 }
 
@@ -436,12 +488,13 @@ private struct PanelChipsRow: View {
     let compact: Bool
     /// Under a thread that scrolls: a hairline over them.
     let divided: Bool
-    let lastAsked: String?
+    let messages: [ChatMessage]
     let recorded: () -> TimeInterval
     let ask: (String) -> Void
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let lastAsked = AskPanelChips.recentQuestion(messages, now: context.date)
             let entries = model.transcript.entries(owner: owner, lines: model.visibleLines)
             let open = LiveQuestions.forOwner(entries, owner: owner, now: max(recorded(), entries.last?.time ?? 0), invitedOthers: invitedOthers,
                                               room: record.platform == .inPerson)

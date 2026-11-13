@@ -352,6 +352,8 @@ final class AppController: ObservableObject {
     @Published private(set) var lastBookmark: Date?
     /// The system-wide shortcuts: the bookmark's and the quick panel's.
     let hotKeys = GlobalHotKeys()
+    /// The quick panel's shortcut could not be registered: Settings says so, and no key shows for it.
+    @Published var askShortcutFailed = false
 
     let paths = Paths.live
     /// Held for the life of the app: only the copy that has it records, recovers, and processes in this folder.

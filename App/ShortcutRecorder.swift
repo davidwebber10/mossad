@@ -61,7 +61,7 @@ private struct ShortcutRecorderRow: View {
                     }
                 }
             }
-            if let problem {
+            if let problem = problem ?? (controller.askShortcutFailed && !recording ? .taken : nil) {
                 Text(problem.message).font(.system(size: 12)).foregroundStyle(Palette.recording)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 10)
@@ -69,6 +69,9 @@ private struct ShortcutRecorderRow: View {
             }
         }
         .onDisappear(perform: stop)
+        // A click in another app or window ends the recording, so a later key press is not taken as the shortcut.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in if recording { stop() } }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in if recording { stop() } }
     }
 
     private func toggle() {
@@ -81,7 +84,8 @@ private struct ShortcutRecorderRow: View {
         recording = true
         controller.pauseAskShortcut(true)
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            // Caps Lock and the function key are not part of a shortcut.
+            let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
             let code = event.keyCode
             MainActor.assumeIsolated {
                 if code == 53, flags.isEmpty {

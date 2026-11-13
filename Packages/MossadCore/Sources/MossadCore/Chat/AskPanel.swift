@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Why a call that records has no live transcript, and where in Settings the owner can change it.
@@ -95,6 +96,54 @@ public enum AskPanelChips {
                     : AskPanelChip(label: chip.label, question: chip.question)
             }
     }
+}
+
+extension AskPanelChips {
+    /// How long the chip of the question just asked stays hidden.
+    static let hideFor: TimeInterval = 120
+
+    /// The newest question, while it was asked just now; nil for an older one or one with no time.
+    public static func recentQuestion(_ messages: [ChatMessage], now: Date) -> String? {
+        guard let last = messages.last(where: { $0.role == .user }), let asked = last.asked,
+              now.timeIntervalSince(asked) < hideFor else { return nil }
+        return last.text
+    }
+}
+
+/// The quick panel's frame: its content's height, never less than the header, the field, and the keys, grown up
+/// from the bottom edge where the field is, and moved down only to stay on the screen.
+public enum AskPanelSizing {
+    public static let width: CGFloat = 640
+    static let header: CGFloat = 44, field: CGFloat = 56, footer: CGFloat = 32, chips: CGFloat = 46
+
+    public static func minimum(chips withChips: Bool) -> CGFloat {
+        header + field + footer + (withChips ? chips : 0)
+    }
+
+    public static func frame(content: CGFloat?, minimum: CGFloat, bottomLeft: CGPoint, visible: CGRect) -> CGRect {
+        let height = min(max(content ?? 0, minimum), visible.height)
+        var y = bottomLeft.y
+        if y + height > visible.maxY { y = visible.maxY - height }
+        y = max(y, visible.minY)
+        return CGRect(x: bottomLeft.x, y: y, width: width, height: height)
+    }
+}
+
+/// What a chat does after an answer: the question that waited goes next only after a good answer while its call
+/// still records; else it goes back to the field, so a failed answer keeps its error and its Retry.
+public enum ChatRunRules {
+    public enum Next: Equatable, Sendable {
+        case nothing, send(String), toField(String)
+    }
+
+    public static func next(queued: String?, failed: Bool, stopped: Bool, callRecords: Bool) -> Next {
+        guard let queued else { return .nothing }
+        if failed && !stopped || !callRecords { return .toField(queued) }
+        return .send(queued)
+    }
+
+    /// A stopped first question leaves a chat with nothing in it: it goes.
+    public static func removesChat(messagesLeft: Int) -> Bool { messagesLeft == 0 }
 }
 
 /// One line of the live transcript under a time in an answer.
