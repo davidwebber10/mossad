@@ -146,14 +146,23 @@ public struct LivePointMarks: Codable, Equatable, Sendable {
 
     public var marks: [Mark] = []
     public var asks: [Ask] = []
+    /// Marks the owner said were wrong: the point is open again and is never marked again from that line.
+    public var rejected: [Mark]?
 
     public init() {}
 
     public func mark(for id: UUID) -> Mark? { marks.first { $0.point == id } }
 
     public mutating func add(_ m: Mark) {
-        guard mark(for: m.point) == nil else { return }
+        guard mark(for: m.point) == nil, !(rejected ?? []).contains(where: { $0.point == m.point && $0.at == m.at }) else { return }
         marks.append(m)
+    }
+
+    /// "Not raised": the mark goes, and its line can never mark that point again.
+    public mutating func reject(_ id: UUID) {
+        guard let m = mark(for: id) else { return }
+        marks.removeAll { $0.point == id }
+        rejected = (rejected ?? []) + [m]
     }
 
     public static func load(from dir: URL) -> LivePointMarks? {

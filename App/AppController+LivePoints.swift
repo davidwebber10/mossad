@@ -91,14 +91,20 @@ extension AppController {
 
     func livePointList() -> [NextTimePoint] { livePoints.points(series.book, refs: series.people) }
 
-    /// The owner's tick: raised now, at this second of the recording. A second tick takes it back.
+    /// The owner's tick: raised now, at this second of the recording, or at the moment Mossad heard it when the
+    /// tick confirms a mark. A second tick takes it back.
     func toggleLivePoint(_ p: NextTimePoint, callID: String) {
         if p.done?.callID == callID {
             changeNextTime { $0.toggleDone(p.id) }
         } else {
-            let at: TimeInterval? = isRecording ? liveRecorded : nil
+            let at: TimeInterval? = livePoints.marks.mark(for: p.id)?.at ?? (isRecording ? liveRecorded : nil)
             changeNextTime { $0.update(p.id) { $0.done = .init(callID: callID, at: at, quote: nil, date: Date(), byOwner: true) } }
         }
+    }
+
+    /// "Not raised": the owner says Mossad's mark is wrong. The point is open again, and that line never marks it.
+    func rejectLivePoint(_ p: NextTimePoint) {
+        livePoints.change(paths) { $0.reject(p.id) }
     }
 
     /// The points as the live chat reads them.

@@ -265,6 +265,23 @@ final class LivePointsTests: XCTestCase {
         XCTAssertEqual(after[ticked.id]?.done?.at, 400)
     }
 
+    func testARejectedMarkOpensThePointAndItsLineNeverMarksItAgain() throws {
+        let p = NextTimePoint(text: "API sunset plan", rank: 1)
+        var marks = LivePointMarks()
+        marks.add(.init(point: p.id, at: 50, quote: "where are we on the API sunset plan"))
+        marks.reject(p.id)
+        XCTAssertNil(marks.mark(for: p.id))
+        XCTAssertEqual(LivePointRules.open([p], marks: marks).map(\.id), [p.id])
+        // The same line again: no mark. Another line later: a mark.
+        marks.add(.init(point: p.id, at: 50, quote: "where are we on the API sunset plan"))
+        XCTAssertNil(marks.mark(for: p.id))
+        marks.add(.init(point: p.id, at: 400, quote: "so the API sunset plan is final then"))
+        XCTAssertEqual(marks.mark(for: p.id)?.at, 400)
+        // A file from before rejections reads.
+        let old = try JSONDecoder().decode(LivePointMarks.self, from: Data(#"{"marks":[],"asks":[]}"#.utf8))
+        XCTAssertNil(old.rejected)
+    }
+
     func testTheMarksSaveAndRead() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("marks-\(UUID())")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

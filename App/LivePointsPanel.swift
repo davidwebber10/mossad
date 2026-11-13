@@ -14,6 +14,7 @@ struct LivePointsPanel: View {
     let show: (TimeInterval) -> Void
     @AppStorage("livePointsCollapsed") private var collapsed = false
     @State private var showAll = false
+    @State private var hovered: UUID?
     private static let shownRows = 4
 
     var body: some View {
@@ -79,14 +80,20 @@ struct LivePointsPanel: View {
         }
     }
 
+    /// Three looks: open (an empty circle), heard by Mossad (a quiet check in the circle, the text dimmed), and
+    /// the owner's tick (a solid check, the text struck through). A click on a heard point's circle confirms it as
+    /// the owner's tick; "Not raised" opens it again.
     private func row(_ p: NextTimePoint) -> some View {
         let ticked = p.done?.callID == record.id
-        let mark = model.marks.mark(for: p.id)
+        let mark = ticked ? nil : model.marks.mark(for: p.id)
         return HStack(alignment: .firstTextBaseline, spacing: 10) {
             Button { controller.toggleLivePoint(p, callID: record.id) } label: {
                 Group {
                     if ticked {
                         IconImage(.checkSmall, size: 14).foregroundStyle(Palette.accent)
+                    } else if mark != nil {
+                        Circle().fill(Palette.accentTint)
+                            .overlay(IconImage(.checkSmall, size: 10).foregroundStyle(Palette.accent.opacity(0.75)))
                     } else {
                         Circle().strokeBorder(Palette.ring, lineWidth: 1.5)
                     }
@@ -94,18 +101,26 @@ struct LivePointsPanel: View {
                 .frame(width: 14, height: 14).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(ticked ? "Not raised yet: open it again" : "Mark it raised now")
-            .accessibilityLabel(ticked ? "Open \(p.text) again" : "Mark \(p.text) raised")
+            .help(ticked ? "Not raised yet: open it again" : mark != nil ? "Confirm: you raised it" : "Mark it raised now")
+            .accessibilityLabel(ticked ? "Open \(p.text) again" : mark != nil ? "Confirm \(p.text) raised" : "Mark \(p.text) raised")
             .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(p.text)
-                    .foregroundStyle(ticked ? Palette.secondary : Palette.ink)
+                    .foregroundStyle(ticked || mark != nil ? Palette.secondary : Palette.ink)
                     .strikethrough(ticked, color: Palette.tertiaryMark)
                     .fixedSize(horizontal: false, vertical: true)
                 if ticked {
                     note("You marked it", at: p.done?.at, help: nil)
                 } else if let mark {
-                    note("Raised", at: mark.at, help: "Mossad heard \u{201C}\(mark.quote)\u{201D}. The check after the call confirms it.")
+                    HStack(spacing: 10) {
+                        note("Raised", at: mark.at, help: "Mossad heard \u{201C}\(mark.quote)\u{201D}. The check after the call confirms it.")
+                        if hovered == p.id {
+                            Button("Not raised") { controller.rejectLivePoint(p) }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.secondary)
+                                .help("Mossad heard it wrong: the point is open again")
+                        }
+                    }
                 } else if p.isForPerson, let name = p.personName {
                     Text("For \(SeriesNames.first(name))").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
                 }
@@ -114,6 +129,19 @@ struct LivePointsPanel: View {
         }
         .font(.system(size: 13))
         .padding(.vertical, 4).padding(.horizontal, 8)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            if inside { hovered = p.id } else if hovered == p.id { hovered = nil }
+        }
+        .contextMenu {
+            if mark != nil {
+                Button("Confirm: I raised it") { controller.toggleLivePoint(p, callID: record.id) }
+                Button("Not raised") { controller.rejectLivePoint(p) }
+            } else {
+                Button(ticked ? "Not raised yet" : "Mark raised") { controller.toggleLivePoint(p, callID: record.id) }
+            }
+        }
+        .accessibilityAction(named: "Not raised") { if mark != nil { controller.rejectLivePoint(p) } }
     }
 
     /// "Raised 12:04" with the time as a chip that shows the moment in the live transcript.
