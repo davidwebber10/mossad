@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.22.1",
+      "date": "2026-11-12",
+      "notes": [
+        "More room in chat answers and questions."
+      ]
+    },
+    {
       "version": "2.22.0",
       "date": "2026-11-12",
       "notes": [
