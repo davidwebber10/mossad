@@ -138,7 +138,7 @@ struct ChatView: View {
 
     private var composer: some View {
         FloatingComposer(prompt: current.messages.isEmpty ? "Ask about your meetings" : "Ask a follow-up", text: $question,
-                         focused: $focused, send: send)
+                         focused: $focused, send: { send() })
             .onAppear { focused = true }
     }
 
@@ -176,8 +176,8 @@ struct ChatView: View {
         reload()
     }
 
-    private func send() {
-        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func send(again: ChatMessage? = nil) {
+        let q = (again?.text ?? question).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty, running == nil else { return }
         // The quick panel's chat, or the chat of the call that records: one writer for the file, the session that
         // the panel and the live Chat tab use. A question asked while it answers waits for that answer.
@@ -188,32 +188,44 @@ struct ChatView: View {
             return
         }
         var chat = current
-        let history = chat.messages
-        if chat.messages.isEmpty { chat.title = Chat.title(from: q) }
-        chat.messages.append(ChatMessage(role: .user, text: q))
+        // A Retry asks the question that is there, by its id; a new question is added.
+        let asking: ChatMessage
+        let history: [ChatMessage]
+        if let again, let i = chat.messages.firstIndex(where: { $0.id == again.id }) {
+            asking = again
+            history = Array(chat.messages[..<i])
+        } else {
+            history = chat.messages
+            if chat.messages.isEmpty { chat.title = Chat.title(from: q) }
+            asking = ChatMessage(role: .user, text: q)
+            chat.messages.append(asking)
+            question = ""
+        }
         chat.updated = Date()
         store(chat)
-        question = ""
         error = nil
         steps = []
         running = chat.id
         let collector = StepSink { step in Task { @MainActor in steps.append(step) } }
         // Each receipt goes into the chat the moment its action is done; the answer joins the file's copy.
-        let answerID = UUID(), asked = chat, questionID = chat.messages.last!.id
+        let answerID = UUID(), asked = chat, questionID = asking.id
         let actionSink = ActionSink { r in Task { @MainActor in _ = controller.saveChatAction(r, chat: asked, answer: answerID); reload() } }
         let earlier = controller.chatActions(chat)
         Task {
             do {
-                let answer = try await controller.chatAnswer(q, history: history, about: chat.callID, earlier: earlier, onAction: actionSink.add, onStep: collector.add)
+                let answer = try await controller.chatAnswer(q, history: history, about: chat.callID, earlier: earlier, questionID: questionID,
+                                                             onAction: actionSink.add, onStep: collector.add)
                 var message = answer.message(steps: steps)
                 message.id = answerID
                 store(controller.finishChatAnswer(message, chat: asked))
-                controller.summarizeChat(chat.id)
-                if !controller.isRecording { controller.syncNow() }
+                // During a call the disk and the network belong to the recording: no model request, no sync.
+                if !controller.isRecording {
+                    controller.summarizeChat(chat.id)
+                    controller.syncNow()
+                }
             } catch {
-                // What was done stays with its question.
-                let stop = controller.stopChatAnswer(chat: asked, answer: answerID, question: questionID)
-                if stop.kept { store(stop.chat) }
+                // The question stays for Retry, with what was done.
+                store(controller.stopChatAnswer(chat: asked, answer: answerID, question: questionID, byOwner: false).chat)
                 Log.error("Chat failed: \(error)")
                 let friendly = FriendlyError(error, context: .chatting)
                 if friendly.shouldShow(failures: 1) { self.error = friendly }
@@ -223,14 +235,10 @@ struct ChatView: View {
         }
     }
 
-    /// Asks the last question again: it leaves the chat and goes back through send.
+    /// Asks the last question again, the same message by its id, also after a stopped answer with what it did.
     private func retry() {
-        var chat = current
-        guard let last = chat.messages.last, last.role == .user else { return }
-        chat.messages.removeLast()
-        store(chat)
-        question = last.text
-        send()
+        guard let question = ChatThreadEdits.retryQuestion(current) else { return }
+        send(again: question)
     }
 
     /// Saves the chat and keeps it selected; a new chat becomes a saved one with its first question.

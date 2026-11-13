@@ -113,64 +113,102 @@ public struct ActionTurn: Sendable {
     }
 }
 
-/// Whether the owner's own words ask for an action of this kind: a verb and a thing of that kind, two words, in the
-/// owner's first lines, in a message that is not a question. It decides only between running at once and a card,
-/// never whether an action may happen at all.
+/// Whether the owner's own words ask for an action of this kind. Conservative, so that pasted or quoted text is
+/// never read as the owner's request; when in doubt it is a card (a click), never a refusal of the action:
+/// - Only the owner's first line counts, and only in a short message (at most 200 characters, at most 3 lines
+///   before a blank line, none quoted with ">").
+/// - A message with a greeting, an email header, a transcript line ("[12:04] Sam: …", "Sam Carter: …"), quote marks,
+///   or reported speech ("said", "wrote", "asked") is a card.
+/// - A question is a card; "Please" and "Can you" before a request word are a request, before a question word not.
+/// - A "don't" or "not" before the verb is a card.
+/// - The verb must be in the first 6 words, with a thing of its kind after it; a wide word ("me", "this", "it") counts
+///   only right after the verb.
 enum ActionIntent {
     typealias Kind = ChatActionRequest.Kind
-    static let pointThings: Set<String> = ["point", "points", "note", "notes", "agenda", "discuss", "raise", "meeting", "next"]
-    static let taskThings: Set<String> = ["task", "tasks", "todo", "to-do", "reminder", "me"]
-    static let rules: [Kind: (verbs: Set<String>, things: Set<String>)] = [
-        .addPoint: (["add", "save", "put", "note", "remind", "raise", "bring", "jot"], pointThings),
-        .editPoint: (["change", "edit", "reword", "update", "rewrite"], ["point", "points", "note"]),
-        .removePoint: (["remove", "drop", "delete", "cross", "scrap"], ["point", "points", "note"]),
-        .tickPoint: (["tick", "check", "mark"], ["point", "points", "raised", "discussed", "covered", "done"]),
-        .reopenPoint: (["reopen", "untick", "unmark"], ["point", "points"]),
-        .addTask: (["add", "create", "make", "remind", "track"], taskThings),
-        .setTaskDone: (["mark", "done", "finished", "finish", "complete", "completed", "close", "tick", "check"], ["task", "tasks", "todo", "done"]),
-        .setTaskOpen: (["reopen", "open", "untick", "unmark"], ["task", "tasks", "todo"]),
-        .setTaskDue: (["move", "push", "change", "set", "shift", "reschedule"], ["due", "deadline", "date", "task", "tasks"]),
-        .addBookmark: (["bookmark", "mark", "flag", "star"], ["moment", "this", "that", "time", "second", "minute", "here", "it", "note", "bookmark"]),
-        .bookmarkNow: (["bookmark", "mark", "flag", "star"], ["moment", "this", "that", "time", "now", "here", "it", "bookmark"]),
+    static let maxCharacters = 200
+    static let verbWindow = 6
+
+    struct Rule {
+        var verbs: Set<String>
+        var things: Set<String>
+        /// Wide words that count only right after the verb: "remind me", "bookmark this".
+        var nextTo: Set<String> = []
+    }
+
+    static let rules: [Kind: Rule] = [
+        .addPoint: Rule(verbs: ["add", "save", "put", "note", "raise", "jot"], things: ["point", "points", "note", "notes", "agenda", "discuss"]),
+        .editPoint: Rule(verbs: ["change", "edit", "reword", "update", "rewrite"], things: ["point", "points", "note"]),
+        .removePoint: Rule(verbs: ["remove", "drop", "delete", "cross", "scrap"], things: ["point", "points", "note"]),
+        .tickPoint: Rule(verbs: ["tick", "check", "mark"], things: ["point", "points", "raised", "discussed", "covered"]),
+        .reopenPoint: Rule(verbs: ["reopen", "untick", "unmark"], things: ["point", "points"]),
+        .addTask: Rule(verbs: ["add", "create", "make", "remind", "track"], things: ["task", "tasks", "todo", "to-do", "reminder"], nextTo: ["me"]),
+        .setTaskDone: Rule(verbs: ["mark", "finish", "complete", "close", "tick", "check"], things: ["task", "tasks", "todo"]),
+        .setTaskOpen: Rule(verbs: ["reopen", "untick", "unmark"], things: ["task", "tasks", "todo"]),
+        .setTaskDue: Rule(verbs: ["move", "push", "change", "set", "shift", "reschedule"], things: ["due", "deadline", "date", "task", "tasks"]),
+        .addBookmark: Rule(verbs: ["bookmark", "flag", "star"], things: ["moment", "second", "minute", "bookmark"], nextTo: ["this", "that", "it", "here"]),
+        .bookmarkNow: Rule(verbs: ["bookmark", "flag", "star"], things: ["moment", "bookmark"], nextTo: ["this", "that", "it", "here", "now"]),
     ]
     static let questionWords: Set<String> = ["what", "which", "who", "whom", "whose", "when", "where", "why", "how", "did", "does", "do", "is", "are",
-                                             "was", "were", "has", "have", "summarize", "summarise", "explain", "tell"]
+                                             "was", "were", "has", "have", "summarize", "summarise", "explain", "tell", "show", "list", "find"]
+    static let greetings: Set<String> = ["hi", "hello", "hey", "dear", "thanks", "thank", "regards", "best", "cheers"]
+    static let reported: Set<String> = ["said", "says", "wrote", "writes", "asked", "asks", "told", "mentioned"]
+    static let negations: Set<String> = ["don't", "dont", "not", "never", "no", "doesn't", "didn't"]
 
-    /// The owner's own lines: up to the first blank line, at most 3, and none quoted with ">".
-    static func ownLines(_ message: String) -> [String] {
+    /// The owner's own lines: up to the first blank line, none quoted with ">"; nil when there are more than 3.
+    static func ownLines(_ message: String) -> [String]? {
         var out: [String] = []
         for line in message.split(separator: "\n", omittingEmptySubsequences: false).map({ $0.trimmingCharacters(in: .whitespaces) }) {
             if line.isEmpty { if out.isEmpty { continue } else { break } }
-            if line.hasPrefix(">") { continue }
+            if line.hasPrefix(">") { return nil }
             out.append(line)
-            if out.count == 3 { break }
         }
-        return out
+        return out.count <= 3 ? out : nil
     }
 
-    static func words(_ text: String) -> [String] { text.lowercased().split { !$0.isLetter && !$0.isNumber && $0 != "-" }.map(String.init) }
+    static func words(_ text: String) -> [String] {
+        text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'").split { !$0.isLetter && !$0.isNumber && $0 != "-" && $0 != "'" }.map(String.init)
+    }
 
-    /// A question asks for an answer, not an action; "Can you add…?" and "Please…" are requests.
-    static func isQuestion(_ lines: [String]) -> Bool {
-        guard let first = lines.first else { return true }
-        let w = words(first)
-        if w.first == "please" || (["can", "could", "would", "will"].contains(w.first ?? "") && w.dropFirst().first == "you") { return false }
-        return questionWords.contains(w.first ?? "") || lines.contains { $0.hasSuffix("?") }
+    /// Text that someone else wrote or said: a greeting, a mail header, a transcript line, quote marks, reported speech.
+    static func looksPasted(_ lines: [String]) -> Bool {
+        for line in lines {
+            let w = words(line)
+            if let first = w.first, greetings.contains(first) { return true }
+            if line.range(of: #"^(from|to|subject|sent|cc|date|re|fwd?)\s*:"#, options: [.regularExpression, .caseInsensitive]) != nil { return true }
+            if line.range(of: #"^\[?\d{1,2}:\d{2}"#, options: .regularExpression) != nil { return true }
+            if line.range(of: #"^[A-Z][\p{L}'.-]*( [A-Z][\p{L}'.-]*)?:\s"#, options: .regularExpression) != nil { return true }
+            if line.contains("\"") || line.contains("\u{201C}") || line.contains("\u{201D}") { return true }
+            if w.contains(where: reported.contains) { return true }
+        }
+        return false
     }
 
     static func asks(_ kind: Kind, _ message: String) -> Bool {
-        guard let rule = rules[kind] else { return false }
-        let lines = ownLines(message)
-        guard !isQuestion(lines) else { return false }
-        let text = lines.joined(separator: " ")
-        let w = words(text)
-        let set = Set(w)
-        let verbs = set.intersection(rule.verbs)
-        var things = set.intersection(rule.things)
-        // A time such as "12:04" is the thing of a bookmark.
-        if kind == .addBookmark, text.range(of: #"\d+:\d\d"#, options: .regularExpression) != nil { things.insert("12:04") }
-        // A verb and a thing, two words: "note" alone asks for nothing.
-        return verbs.contains { v in things.contains { $0 != v } }
+        guard let rule = rules[kind], message.count <= maxCharacters, let lines = ownLines(message), let first = lines.first,
+              !looksPasted(lines), !lines.contains(where: { $0.hasSuffix("?") && !isRequestOpener(words($0)) }) else { return false }
+        var w = words(first)
+        // "Please" and "can you" open a request; what follows them is read as the request.
+        if w.first == "please" { w.removeFirst() } else if isRequestOpener(w) { w.removeFirst(2) }
+        if let head = w.first, questionWords.contains(head) { return false }
+        guard let v = w.prefix(verbWindow).firstIndex(where: rule.verbs.contains) else { return false }
+        if w[..<v].contains(where: negations.contains) { return false }
+        // A verb after a colon is in what follows the colon: someone else's text ("Here is Sam's mail: please add…").
+        if let colon = first.firstIndex(of: ":") {
+            let before = words(String(first[..<colon])).count
+            // `w` may have lost "please" or "can you" at its start.
+            let offset = words(first).count - w.count
+            if v + offset >= before { return false }
+        }
+        let after = Array(w[(v + 1)...])
+        if let next = after.first, rule.nextTo.contains(next) { return true }
+        // A time such as "12:04" is the thing of a bookmark of a past meeting.
+        if kind == .addBookmark, first.range(of: #"\d+:\d\d"#, options: .regularExpression) != nil { return true }
+        return after.contains(where: rule.things.contains)
+    }
+
+    /// "Can you", "could you", "would you", "will you" before the request.
+    static func isRequestOpener(_ w: [String]) -> Bool {
+        ["can", "could", "would", "will"].contains(w.first ?? "") && w.dropFirst().first == "you"
     }
 }
 

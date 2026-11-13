@@ -70,8 +70,13 @@ public struct Chat: Codable, Equatable, Sendable, Identifiable {
         // A copy from an older build has no receipts, and an old copy can hold a card that was clicked since: each
         // action keeps its later state, from whichever copy has it.
         for i in out.messages.indices {
-            guard let theirs = other.messages.first(where: { $0.id == out.messages[i].id })?.actions, !theirs.isEmpty else { continue }
-            out.messages[i].actions = ChatThreadEdits.merge(out.messages[i].actions ?? [], theirs)
+            guard let theirs = other.messages.first(where: { $0.id == out.messages[i].id }) else { continue }
+            // An answer saved before its text came (a receipt first) never replaces the text of the other copy.
+            if theirs.text.count > out.messages[i].text.count, out.messages[i].text.isEmpty || out.messages[i].text == ChatThreadEdits.stoppedText {
+                out.messages[i].text = theirs.text
+                out.messages[i].steps = theirs.steps
+            }
+            if let acts = theirs.actions, !acts.isEmpty { out.messages[i].actions = ChatThreadEdits.merge(out.messages[i].actions ?? [], acts) }
         }
         return out
     }

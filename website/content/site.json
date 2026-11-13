@@ -954,6 +954,7 @@
         "Meetings, to your iPhone through iCloud or through your own server, if you turn on sync.",
         "Recordings, to Cloudflare R2, Amazon S3, or your own server, if you turn on backup.",
         "One meeting, to your own server, when you share it.",
+        "Your meetings, the people in them, your tasks and points, the coach's notes, and chats, to your own server, if you connect one: a copy that its AI apps can read. What the coach learned about a person you keep no read on never goes.",
         "Read-only requests to Google, if you connect Google.",
         "The weekly review, to your own email address through your mail provider, if you turn it on."
       ],

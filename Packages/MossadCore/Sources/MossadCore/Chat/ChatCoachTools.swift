@@ -49,7 +49,12 @@ extension ChatTools {
     /// notes or older reads on people where the reads do not show (`personaTraits`).
     var shownProfile: CoachProfile {
         var p = profile.withoutCoachData(on: coachPeople)
-        if !personaTraits { p.people = [:] }
+        if !personaTraits {
+            // With the reads off for this place, nothing the coach holds about any one person.
+            p.people = [:]
+            p.questions.removeAll { $0.person != nil }
+            p.answers.removeAll { $0.person != nil }
+        }
         return p
     }
 

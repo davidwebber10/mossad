@@ -47,10 +47,11 @@ final class ChatActionReviewTests: XCTestCase {
     func testEachReceiptIsHandedOverAtOnceAndARetryDoesNotRepeatTheAction() throws {
         let seen = Records()
         let message = "Remind me to send the deck"
-        let a = actions(message, onRecord: { seen.add($0) })
+        let question = UUID()
+        let a = ChatActions(message: message, question: question, tools: tools, host: ChatActionHost(paths: paths), live: false, onRecord: { seen.add($0) })
         _ = a.run("add_task", input: ["text": "Send the deck"])
         XCTAssertEqual(seen.list.map(\.state), [.done], "before the answer goes on")
-        let retry = actions(message, earlier: seen.list)
+        let retry = ChatActions(message: message, question: question, tools: tools, host: ChatActionHost(paths: paths), live: false, earlier: seen.list)
         let reply = try XCTUnwrap(retry.run("add_task", input: ["text": "Send the deck"]))
         XCTAssertTrue(reply.hasPrefix("Already done for this message"), reply)
         XCTAssertEqual(CommitmentBook.peek(in: paths.commitments)?.visible.count, 1)
@@ -77,12 +78,12 @@ final class ChatActionReviewTests: XCTestCase {
         let receipt = ChatActionRecord(request: r, state: .done, summary: "Task added: Send the deck", date: now)
         ChatThreadEdits.record(receipt, in: &chat, answer: answer)
         XCTAssertEqual(chat.messages.last?.actions?.map(\.id), [receipt.id])
-        XCTAssertTrue(ChatThreadEdits.stop(in: &chat, answer: answer, question: question.id), "the question stays: something was done")
+        XCTAssertTrue(ChatThreadEdits.stop(in: &chat, answer: answer, question: question.id, byOwner: true), "the question stays: something was done")
         XCTAssertEqual(chat.messages.count, 2)
         XCTAssertTrue(chat.messages[1].text.hasPrefix("The answer stopped. This was done:"))
         var plain = Chat(title: "T")
         plain.messages = [question]
-        XCTAssertFalse(ChatThreadEdits.stop(in: &plain, answer: UUID(), question: question.id))
+        XCTAssertFalse(ChatThreadEdits.stop(in: &plain, answer: UUID(), question: question.id, byOwner: true))
         XCTAssertTrue(plain.messages.isEmpty)
         // The answer that arrives keeps the receipt that is in the file.
         var done = ChatMessage(role: .assistant, text: "Added.")

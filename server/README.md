@@ -71,7 +71,7 @@ The tools, all read only:
 | `shares` | The share links with their expiry, PIN state, and views. Never a token or a PIN. |
 | `search`, `fetch` | ChatGPT's pair: meetings (a call id, or `meeting:<id>`), people (`person:<id>`), and tasks (`task:<id>`). |
 
-The Mac sends the people, the reads, the points, the tasks, the coach's memory, and the chats to this server with either sync choice: through this server, or iCloud with this server as a copy (Mossad after 2.24; never during a call). Until a kind has arrived, its tool says so ("This server has no tasks from your Mac yet"), and a copy older than the newest meeting by two days gives its date. What the coach learned about a person who keeps no read never leaves the Mac, and the server checks the flag again.
+The Mac sends the people, the reads, the points, the tasks, the coach's memory, and the chats to this server with either sync choice: through this server, or iCloud with this server as a copy (Mossad after 2.24; never during a call). Until a kind has arrived, its tool says so ("This server has no tasks from your Mac yet"). After each full send the Mac also sends the time (`syncedAt` in the config); when that time is two days before the newest meeting here, the answers say so. A server that never got the time says nothing about age. What the coach learned about a person who keeps no read never leaves the Mac, and the server checks the flag again.
 
 Recurring meetings, the prep page, upcoming meetings, each meeting's numbers, analytics, the coach's cards and goal, bookmarks, screens, the live call, and the app's settings are in `Mossad --mcp` on the Mac only: they are rules over the Mac's history and calendar that this server does not repeat.
 

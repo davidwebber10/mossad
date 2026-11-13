@@ -63,6 +63,8 @@ public struct ChatActionRequest: Codable, Equatable, Sendable {
     public var items: [ChatActionRequest]?
     /// What one action of such a card does, in words, for its receipt.
     public var summary: String?
+    /// The key of one action of such a card, so a Retry does not run it beside the card.
+    public var key: String?
 
     public init(_ kind: Kind) { self.kind = kind }
 }
@@ -206,14 +208,30 @@ public enum ChatThreadEdits {
 
     /// The answer stopped or failed. With something done, the question stays and the answer says what was done;
     /// with nothing done, the question goes. Returns whether the question stays.
+    static let stoppedText = "The answer stopped. This was done:"
+
+    /// The answer stopped (`byOwner`, the owner's Stop) or failed. With something done, the question stays and the
+    /// answer says what was done. A failure keeps the question for Retry; the owner's Stop with nothing done takes
+    /// it out. Returns whether the question stays.
     @discardableResult
-    public static func stop(in chat: inout Chat, answer: UUID, question: UUID) -> Bool {
+    public static func stop(in chat: inout Chat, answer: UUID, question: UUID, byOwner: Bool) -> Bool {
         if let i = chat.messages.firstIndex(where: { $0.id == answer }), !(chat.messages[i].actions ?? []).isEmpty {
-            if chat.messages[i].text.isEmpty { chat.messages[i].text = "The answer stopped. This was done:" }
+            if chat.messages[i].text.isEmpty { chat.messages[i].text = stoppedText }
             return true
         }
-        chat.messages.removeAll { $0.id == answer || $0.id == question }
+        chat.messages.removeAll { $0.id == answer }
+        guard byOwner else { return true }
+        chat.messages.removeAll { $0.id == question }
         return false
+    }
+
+    /// The question a Retry asks again, by its id: the last one, when only a stopped answer with what it did (or
+    /// nothing) follows it. Nil when it has its answer.
+    public static func retryQuestion(_ chat: Chat) -> ChatMessage? {
+        guard let i = chat.messages.lastIndex(where: { $0.role == .user }) else { return nil }
+        let after = chat.messages[(i + 1)...]
+        guard after.allSatisfy({ $0.role == .assistant && ($0.text.isEmpty || $0.text == stoppedText) }) else { return nil }
+        return chat.messages[i]
     }
 
     /// The answer as it came, on the copy in the file: its receipts stay, and so does every click saved meanwhile.
@@ -279,7 +297,10 @@ public struct NameVoiceTarget: Equatable, Sendable {
               MarkdownWriter.displayNames(record)[key] == label else { return nil }
         let refs = PersonReferences(people: people)
         if let id = r.personID {
-            guard let p = refs.person(refs.canonical(id)), p.isLive else { return nil }
+            let id = refs.canonical(id)
+            guard let p = refs.person(id), p.isLive else { return nil }
+            // The address is still nobody's or this person's.
+            if let email = r.email, let holder = refs.id(for: email).map(refs.canonical), holder != id { return nil }
             return (p.displayName, r.email)
         }
         // A new person: still no saved person by that name or address.

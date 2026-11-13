@@ -132,11 +132,11 @@ public actor CoachRunner {
                 if let offer, let this = measured.facts, GoalOffers.roomInOneOnOnes(this: this, history: history ?? [], profile: fresh, at: r.start, people: sizes) != nil {
                     fresh.propose(offer, at: r.start)
                 }
-                fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start, proposal: result.proposal, advice: result.advice,
+                // Nothing new about a person who keeps no read; what the coach had stays as it was.
+                let kept = result.withoutNew(about: CoachPeople.read(paths: paths))
+                fresh.apply(kept.update, review: kept.review, callID: r.id, title: r.title, at: r.start, proposal: kept.proposal, advice: kept.advice,
                             people: ids)
-                fresh.ask(result.questions)
-                // Nothing learned about a person who keeps no read is kept.
-                fresh = fresh.withoutCoachData(on: CoachPeople.read(paths: paths))
+                fresh.ask(kept.questions)
                 try fresh.save(to: paths.coach)
                 profile = fresh
                 done += 1

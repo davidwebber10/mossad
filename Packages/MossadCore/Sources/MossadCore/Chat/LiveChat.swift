@@ -336,12 +336,13 @@ public struct LiveChatAgent: Sendable {
     /// `actions`: the light actions of a call (points, tasks, this moment's bookmark), from the owner's message only.
     public func answer(_ question: String, history: [ChatMessage], facts: LiveCallFacts, entries: [LiveEntry], summary: LiveSummary?,
                        records: [CallRecord], paths: Paths? = nil, now: Date = Date(), personaTraits: Bool = true, limits: LiveLimits = .standard,
-                       actions: ChatActionHost? = nil, earlier: [ChatActionRecord] = [], onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
+                       actions: ChatActionHost? = nil, earlier: [ChatActionRecord] = [], questionID: UUID = UUID(),
+                       onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
                        onStep: @escaping @Sendable (String) -> Void, onText: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         let open = LiveQuestions.forOwner(entries, owner: ownerName, now: facts.now(now),
                                           invitedOthers: facts.invited.isEmpty ? nil : facts.invited.count, room: facts.room)
         let tools = ChatTools(records: records, owner: ownerName, paths: paths, personaTraits: personaTraits)
-        let doer = actions.map { ChatActions(message: question, tools: tools, host: $0, live: true, earlier: earlier, onRecord: onAction) }
+        let doer = actions.map { ChatActions(message: question, question: questionID, tools: tools, host: $0, live: true, earlier: earlier, onRecord: onAction) }
         let system = LiveChatPrompt.system(facts: facts, entries: entries, summary: summary, openQuestions: open, now: now, limits: limits)
             + (doer == nil ? "" : ChatActions.prompt(owner: ownerName, live: true))
         let offeredTools = Self.tools + (doer == nil ? [] : ChatActions.definitions(live: true))

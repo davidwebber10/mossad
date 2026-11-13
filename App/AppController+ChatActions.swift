@@ -70,9 +70,9 @@ extension AppController {
 
     /// The answer stopped or failed. The question stays when something was done; returns the chat as saved, and
     /// whether the question stays.
-    func stopChatAnswer(chat fallback: Chat, answer: UUID, question: UUID) -> (chat: Chat, kept: Bool) {
+    func stopChatAnswer(chat fallback: Chat, answer: UUID, question: UUID, byOwner: Bool) -> (chat: Chat, kept: Bool) {
         var kept = false
-        let chat = changeChat(fallback.id, fallback: fallback) { kept = ChatThreadEdits.stop(in: &$0, answer: answer, question: question) } ?? fallback
+        let chat = changeChat(fallback.id, fallback: fallback) { kept = ChatThreadEdits.stop(in: &$0, answer: answer, question: question, byOwner: byOwner) } ?? fallback
         return (chat, kept)
     }
 

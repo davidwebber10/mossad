@@ -162,7 +162,9 @@ public actor CloudSync {
     /// `people`: the Mac sends the people too; the phone only reads them.
     @discardableResult
     /// `personas`: the reduced copy of the reads (`SyncedPersonas`), from the Mac, with the people.
-    public func pushShared(people sendPeople: Bool = false, personas: SyncedPersonas? = nil, mirror: Bool = false) async throws -> Int {
+    /// `stop`: true stops the upload before its next batch (a call started).
+    public func pushShared(people sendPeople: Bool = false, personas: SyncedPersonas? = nil, mirror: Bool = false,
+                           stop: @Sendable () -> Bool = { false }) async throws -> Int {
         try await prepare()
         let chats = ChatStore(directory: paths.chats)
         var payloads = chats.all().map(SharedPayload.chat)
@@ -198,13 +200,23 @@ public actor CloudSync {
         if sendPeople, store.wantsMeetingView, let personas {
             payloads.append(.personas(personas))
         }
-        let deleted = chats.deleted()
-        let plan = try loadState().planShared(payloads, deletedChats: deleted)
+        var deleted = chats.deleted()
+        let state = try loadState()
+        if mirror {
+            // The server's copy finds its own deletes: each chat it holds whose file is gone from this Mac. A file that
+            // is there and does not read is not a deleted chat. The main sync may have cleared its notes already.
+            for key in state.uploaded.keys where key.hasPrefix("chat:") {
+                guard let id = UUID(uuidString: String(key.dropFirst("chat:".count))) else { continue }
+                if !FileManager.default.fileExists(atPath: paths.chats.appendingPathComponent("\(id.uuidString).json").path) { deleted.insert(id) }
+            }
+        }
+        let plan = state.planShared(payloads, deletedChats: deleted)
         guard !plan.upload.isEmpty || !plan.delete.isEmpty else { return 0 }
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
         var changed = 0
         for chunk in stride(from: 0, to: plan.upload.count, by: Self.batch).map({ Array(plan.upload[$0..<min($0 + Self.batch, plan.upload.count)]) }) {
+            if stop() { return changed }
             let records = try chunk.map { p -> StoredRecord in
                 let type = switch p.kind {
                 case .chat: Self.chatType

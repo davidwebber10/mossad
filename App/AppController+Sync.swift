@@ -161,10 +161,9 @@ extension AppController {
         let main = currentSync
         // No store to pull from: a file that was set aside has no other copy to wait for.
         if main == nil { CloudSync.nothingToMerge(paths: paths) }
-        guard let cloud = main ?? mirror else { return }
-        if syncRunning { syncAgain = true; return }
         // The config again when the owner's name or the switch of the reads for other AI apps changed.
         let config = "\(ownerName)|\(personasInServerMCP)"
+        // Also with sync off: a connected server must hear that the reads went off.
         if Self.serverConfig.needsSend(config), let c = serverConnection {
             let first = !serverConfigSent
             serverConfigSent = true
@@ -185,6 +184,8 @@ extension AppController {
                 refreshServerFacts { if self.serverKeepsRecordings != kept { self.syncCloud() } }
             }
         }
+        guard let cloud = main ?? mirror else { return }
+        if syncRunning { syncAgain = true; return }
         syncRunning = true
         syncActivity.running = true
         let place = syncWith == .server ? "your server" : "iCloud"
@@ -192,6 +193,10 @@ extension AppController {
         // reads were read once, so a sync at launch does not empty the phone's copy; an empty one when they are off.
         let personas: SyncedPersonas? = !personasOn ? SyncedPersonas([]) : personaReadsMade ? SyncedPersonas(Array(personaReads.values)) : nil
         let calling = isRecording
+        let recorder = self.recorder, connection = serverConnection, owner = ownerName, personasHere = personasInServerMCP
+        let serverIsMain = syncWith == .server
+        // A call that starts during a long copy stops it at the next batch.
+        let callStarted: @Sendable () -> Bool = { CaptureQueue.queue.sync { recorder.isRecording } }
         Task.detached(priority: .utility) {
             var received = 0
             var failure: FriendlyError?
@@ -202,6 +207,8 @@ extension AppController {
                     received = try await cloud.pull(includeMeetings: false)
                     let shared = try await cloud.pushShared(people: true, personas: personas)
                     if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
+                    // The server's tools read what time the Mac last sent everything: never the age of one record.
+                    if serverIsMain, let connection { try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date()) }
                     if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
                 } catch {
                     failure = FriendlyError(error, context: .syncing, service: place)
@@ -216,8 +223,11 @@ extension AppController {
                     // What the server's MCP reads besides the meetings, one way, by the same allowed-field lists:
                     // never during a call, when the disk and the network belong to the recording.
                     if !calling {
-                        let shared = try await mirror.pushShared(people: true, personas: personas, mirror: true)
+                        let shared = try await mirror.pushShared(people: true, personas: personas, mirror: true, stop: callStarted)
                         if shared > 0 { Log.info("Server: \(shared) people, tasks, points, coach, and chat records copied") }
+                        if !callStarted(), let connection {
+                            try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date())
+                        }
                     }
                 } catch {
                     Log.error("Copying meetings to your server failed: \(error)")

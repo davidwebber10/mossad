@@ -92,16 +92,32 @@ describe('R2: unknown is not false', () => {
     expect(await text(w, 'coach_profile')).toMatch(/^This server has no coach memory from your Mac yet/);
   });
 
-  it('gives the date of a copy that is older than the newest meeting', async () => {
-    const w = await base({ updated: { commitments: '2026-10-01T12:00:00Z' } });
-    const old = await text(w, 'commitments');
-    expect(old.slice(-200)).toContain('This copy is from Oct 1, 2026');
-    expect(await text(w, 'people')).not.toContain('This copy is from');
+  it('says how old a copy is only by when the Mac last sent everything, never by the age of one record', async () => {
+    // A record that last changed long ago is current when the Mac sent everything since (N6).
+    const current = await base({ config: { syncedAt: '2026-11-12T17:00:00Z' }, updated: { commitments: '2026-10-01T12:00:00Z' } });
+    expect(await text(current, 'commitments')).not.toContain('last sent');
+    // Until a Mac sends the time, nothing is said about age.
+    const unknown = await base({ updated: { commitments: '2026-10-01T12:00:00Z' } });
+    expect(await text(unknown, 'commitments')).not.toContain('last sent');
+    const old = await base({ config: { syncedAt: '2026-10-01T12:00:00Z' } });
+    expect((await text(old, 'commitments')).slice(-200)).toContain('Your Mac last sent these on Oct 1, 2026');
+    expect(await text(old, 'people')).toContain('Your Mac last sent these on Oct 1, 2026');
   });
 
-  it('gives no read when the reads are newer than the people file that says who keeps none', async () => {
-    const w = await base({ config: { mcpPersonas: '1' }, updated: { personas: '2026-11-11T00:00:00Z', people: '2026-11-10T00:00:00Z' } });
-    expect(await text(w, 'read_person', { person: 'sam@example.com' })).not.toContain('Sam READ');
+  it('gives the reads when they changed after the people did: records change only when their content does', async () => {
+    const w = await base({ config: { mcpPersonas: '1' }, updated: { personas: '2026-11-11T00:00:00Z', people: '2026-11-01T00:00:00Z' } });
+    expect(await text(w, 'read_person', { person: 'sam@example.com' })).toContain('Sam READ');
+  });
+
+  it('names the release that sends the kinds', async () => {
+    const w = await base({ skip: ['commitments'] });
+    expect(await text(w, 'commitments')).toContain('Mossad after 2.24');
+  });
+
+  it('pages the meetings of a person and says so in its schema', async () => {
+    const res = await handleMCP(new Request('https://mcp.example.com/mossad', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) }), (await base()).env);
+    const tools = ((await res.json()) as { result: { tools: { name: string; inputSchema: { properties: Record<string, unknown> } }[] } }).result.tools;
+    expect(Object.keys(tools.find((t) => t.name === 'read_person')!.inputSchema.properties)).toContain('offset');
   });
 });
 

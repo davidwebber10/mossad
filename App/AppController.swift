@@ -1629,14 +1629,15 @@ final class AppController: ObservableObject {
 
     /// The answer, with what it did or proposes (`ChatActions`): the app's own chat can act, the MCPs cannot.
     func chatAnswer(_ question: String, history: [ChatMessage], about callID: String? = nil, earlier: [ChatActionRecord] = [],
-                    onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
+                    questionID: UUID = UUID(), onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
                     onStep: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
         // The chat's `remember` tool writes the coach's profile.
         defer { coachVersion += 1 }
         return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths,
                                                                           about: callID, personaTraits: personasOn,
-                                                                          actions: isInert ? nil : chatActionHost, earlier: earlier, onAction: onAction,
+                                                                          actions: isInert ? nil : chatActionHost, earlier: earlier, questionID: questionID,
+                                                                          onAction: onAction,
                                                                           onStep: onStep)
     }
 
@@ -2100,12 +2101,11 @@ final class AppController: ObservableObject {
             calendarRead = true
             // For Chat's and other AI apps' tools, which cannot read the calendar: the events as read, without their
             // notes (`CalendarSnapshot`). Never made-up invites.
-            if !isInert, !sampled {
-                let access = CalendarSnapshot.Access(mac: .macCalendar, google: calendar.lastGoogleRead)
-                let snapshot = CalendarSnapshot(events, saved: now, access: access), dir = paths.calendar
-                Task.detached(priority: .utility) {
-                    do { try snapshot.save(to: dir) } catch { Log.error("Saving the calendar for the tools failed: \(error)") }
-                }
+            let access = CalendarSnapshot.Access(mac: .macCalendar, google: calendar.lastGoogleRead)
+            let dir = paths.calendar, inert = isInert, read = events, made = sampled
+            Task.detached(priority: .utility) {
+                do { try CalendarSnapshot.write(read, access: access, saved: now, inert: inert, sampled: made, to: dir) }
+                catch { Log.error("Saving the calendar for the tools failed: \(error)") }
             }
             // Development hook for screenshots: MOSSAD_UPCOMING_OPEN=<title> opens that invite's page.
             if DevHooks.preview, let title = ProcessInfo.processInfo.environment["MOSSAD_UPCOMING_OPEN"],

@@ -134,13 +134,13 @@ public struct ChatAgent: Sendable {
     /// has, so a Retry does no action again.
     public func answer(_ question: String, history: [ChatMessage], records: [CallRecord], paths: Paths? = nil, now: Date = Date(),
                        about callID: String? = nil, personaTraits: Bool = true, actions: ChatActionHost? = nil, earlier: [ChatActionRecord] = [],
-                       onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
+                       questionID: UUID = UUID(), onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
                        onStep: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         let tools = ChatTools(records: records, owner: ownerName, paths: paths, personaTraits: personaTraits)
         let live = history.contains { $0.live == true }
         // While a call records, only the light actions, from any chat.
         let calling = actions?.liveMoment() != nil
-        let doer = actions.map { ChatActions(message: question, tools: tools, host: $0, live: calling, earlier: earlier, onRecord: onAction) }
+        let doer = actions.map { ChatActions(message: question, question: questionID, tools: tools, host: $0, live: calling, earlier: earlier, onRecord: onAction) }
         let system = Self.system(owner: ownerName, tools: tools, now: now, about: callID, liveHistory: live)
             + (doer == nil ? "" : ChatActions.prompt(owner: ownerName, live: calling))
         let offered = Self.tools(paths: paths, actions: doer != nil, calling: calling)

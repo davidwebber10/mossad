@@ -102,6 +102,7 @@ public final class ChatActions: @unchecked Sendable {
     let host: ChatActionHost
     let live: Bool
     let message: String
+    let question: UUID
     /// The receipts and cards the chat already has: a Retry of the same message never does an action again.
     let earlier: [ChatActionRecord]
     /// Gets each receipt and card the moment it exists, so it is saved whatever happens to the answer.
@@ -121,8 +122,17 @@ public final class ChatActions: @unchecked Sendable {
         return "mossad://series/" + (id.addingPercentEncoding(withAllowedCharacters: allowed) ?? id)
     }
 
-    public init(message: String, tools: ChatTools, host: ChatActionHost, live: Bool, earlier: [ChatActionRecord] = [],
+    /// A new owner message each time: no earlier action counts as this one's.
+    public convenience init(message: String, tools: ChatTools, host: ChatActionHost, live: Bool, earlier: [ChatActionRecord] = [],
+                            onRecord: (@Sendable (ChatActionRecord) -> Void)? = nil) {
+        self.init(message: message, question: UUID(), tools: tools, host: host, live: live, earlier: earlier, onRecord: onRecord)
+    }
+
+    /// `question` is the owner message's id: a Retry asks the same message again with the same id, so only its own
+    /// actions count as done; a new message is always a new request.
+    public init(message: String, question: UUID, tools: ChatTools, host: ChatActionHost, live: Bool, earlier: [ChatActionRecord] = [],
                 onRecord: (@Sendable (ChatActionRecord) -> Void)? = nil) {
+        self.question = question
         self.tools = tools
         self.host = host
         self.live = live
@@ -132,10 +142,10 @@ public final class ChatActions: @unchecked Sendable {
         turn = ActionTurn(message: message, live: live)
     }
 
-    /// The owner's message and the action's arguments, as one key.
-    static func key(message: String, name: String, input: [String: Any]) -> String {
+    /// The owner message's id and the action's arguments, as one key.
+    static func key(question: UUID, name: String, input: [String: Any]) -> String {
         let args = (try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? ""
-        return "\(message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())|\(name)|\(args)"
+        return "\(question.uuidString)|\(name)|\(args)"
     }
 
     private func keep(_ r: ChatActionRecord) {
@@ -233,9 +243,16 @@ public final class ChatActions: @unchecked Sendable {
     /// Runs an action tool and returns the words for the model; nil for any other tool.
     public func run(_ name: String, input: [String: Any]) -> String? {
         guard Self.names.contains(name) else { return nil }
-        let key = Self.key(message: message, name: name, input: input)
-        if let before = earlier.first(where: { $0.key == key && $0.state != .failed }) {
-            return "Already done for this message, so not again: \(before.summary)" + (before.state == .proposed ? " (it waits for the owner's click)" : "")
+        let key = Self.key(question: question, name: name, input: input)
+        // Only a Retry of this same message, and only what still stands: an action undone, declined, or failed runs
+        // again. Each "bookmark this" is a new moment.
+        if name != "bookmark_now" {
+            if let before = earlier.first(where: { $0.key == key && [.done, .proposed].contains($0.state) }) {
+                return "Already done for this message, so not again: \(before.summary)" + (before.state == .proposed ? " (it waits for the owner's click)" : "")
+            }
+            if earlier.contains(where: { $0.state == .proposed && ($0.request.items ?? []).contains { $0.key == key } }) {
+                return "Already on the card of this message's actions over the limit, so not again: it waits for the owner's click."
+            }
         }
         let made: Result<(ChatActionRequest, String, String?), Refusal>
         switch name {
@@ -281,7 +298,9 @@ public final class ChatActions: @unchecked Sendable {
         case .refuse(let why):
             return "Not done: \(why)"
         case .later:
-            lock.withLock { waiting.append((r, summary)) }
+            var item = r
+            item.key = key
+            lock.withLock { waiting.append((item, summary)) }
             if let card = lock.withLock({ batchRecord }) { onRecord?(card) }
             return "Not done yet: one message runs at most \(ActionTurn.limit) actions. This one is on a card with the others over the limit; the owner clicks Do it."
         case .propose(let why):

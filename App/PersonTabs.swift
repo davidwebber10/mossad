@@ -13,7 +13,7 @@ struct PersonOverviewTab: View {
 
     private var first: String { profile.name.split(separator: " ").first.map(String.init) ?? profile.name }
     /// By the person's id when the people store has one, so the read stays with the person through a new name.
-    private var brief: PersonBrief? { controller.shownCoachProfile.note(on: profile.name, people: controller.shownCoachPeople)?.value.brief }
+    private var brief: PersonBrief? { controller.visibleCoachProfile.note(on: profile.name, people: controller.shownCoachPeople)?.value.brief }
     /// How the person thinks: shown traits and the card, built by code. Nil for the owner and until a trait shows.
     private var read: PersonaSummary? { profile.isOwner ? nil : controller.persona(of: profile.name) }
     private var personID: String? { controller.personID(of: profile.name) }
@@ -183,7 +183,7 @@ struct PersonKnowledgeTab: View {
     /// What the owner confirmed about this person on a card, by the person's id; by the label of the coach's note
     /// when the people store is off.
     private var confirmed: [CoachFact] {
-        let coach = controller.shownCoachProfile, saved = controller.personaPeople
+        let coach = controller.visibleCoachProfile, saved = controller.personaPeople
         let byID = saved.id(of: profile.name).map { coach.learnings(about: $0, people: saved) } ?? []
         return byID.isEmpty ? coach.learnings(named: profile.name) : byID
     }
@@ -192,7 +192,7 @@ struct PersonKnowledgeTab: View {
     private var blocked: [FindingAnswer] {
         guard let personID else { return [] }
         let saved = controller.personaPeople
-        return controller.shownCoachProfile.neverAgain.filter { a in a.person.map { saved.canonical($0) == personID || $0 == personID } ?? false }
+        return controller.visibleCoachProfile.neverAgain.filter { a in a.person.map { saved.canonical($0) == personID || $0 == personID } ?? false }
     }
 
     var body: some View {

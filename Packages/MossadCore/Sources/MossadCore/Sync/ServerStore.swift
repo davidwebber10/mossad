@@ -133,9 +133,11 @@ public struct ServerClient: Sendable {
 
     /// The owner's name and time zone, for the MCP's answers and dates, and whether its MCP may give the coach's
     /// reads of how people think (`MCPServer.showsPersonas`; a server that never hears it gives none).
-    public func putConfig(owner: String, timeZone: String = TimeZone.current.identifier, personasInMCP: Bool? = nil) async throws {
+    /// `syncedAt`: when the Mac last sent every kind the server's tools read, without an error.
+    public func putConfig(owner: String, timeZone: String = TimeZone.current.identifier, personasInMCP: Bool? = nil, syncedAt: Date? = nil) async throws {
         var config: [String: Any] = ["owner": owner, "timeZone": timeZone]
         if let personasInMCP { config["mcpPersonas"] = personasInMCP }
+        if let syncedAt { config["syncedAt"] = ISO8601DateFormatter().string(from: syncedAt) }
         let body = try JSONSerialization.data(withJSONObject: config)
         try await send(connection.request("api/config", method: "PUT"), body: body)
     }

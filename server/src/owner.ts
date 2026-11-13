@@ -88,8 +88,6 @@ const maxLimit = 60;
 const maxChatCharacters = 160_000;
 /** A copy older than the newest meeting by this much gives its date. */
 const staleMs = 2 * 86_400_000;
-/** The reads must not be newer than the people file that says who keeps none, beyond this. */
-const personasLeadMs = 10 * 60_000;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const same = (a: string | undefined, b: string | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
@@ -149,6 +147,8 @@ export class OwnerData {
     readonly showsPersonas: boolean,
     readonly updated: Partial<Record<Kind, string>> = {},
     readonly newestMeeting?: string,
+    /** When the Mac last sent every kind without an error (`config.syncedAt`); absent from a Mac before it. */
+    readonly syncedAt?: string,
   ) {
     const byID = new Map(people.map((p) => [p.id.toLowerCase(), p]));
     for (const p of people) {
@@ -178,25 +178,26 @@ export class OwnerData {
       arrivals(env),
     ]);
     const tz = safeZone(config.timeZone ?? meetings.find((m) => m.timeZone)?.timeZone);
-    // The reads only with a people file at least as new: it is what says who keeps no read.
-    const p = when.updated.people, r = when.updated.personas;
-    const agree = !!people && !!personas && !!p && !!r && Date.parse(r) <= Date.parse(p) + personasLeadMs;
+    // The reads only with the people file, which says who keeps no read. The Mac sends both at each sync where they
+    // changed, so a record's own date says nothing about how current it is.
+    const both = !!people && !!personas;
     return new OwnerData(people?.people ?? [], personas?.personas ?? [], book?.points ?? [], tasks?.items ?? [], meetings,
-      config.owner ?? 'the owner', tz, config[personasKey] === '1' && agree, when.updated, when.newestMeeting);
+      config.owner ?? 'the owner', tz, config[personasKey] === '1' && both, when.updated, when.newestMeeting, config.syncedAt);
   }
 
   /** "This server has no tasks from your Mac yet" when the kind never came; nil when it is here. */
   absent(kind: Kind): string | null {
     if (this.updated[kind]) return null;
-    return `This server has no ${kinds[kind]} from your Mac yet. The Mac sends them at its next sync (Mossad with this server set up); until then, Mossad's MCP on the Mac has them.`;
+    return `This server has no ${kinds[kind]} from your Mac yet. Mossad after 2.24 sends them at its next sync; until then, Mossad's MCP on the Mac has them.`;
   }
 
-  /** The date of a copy that is older than the newest meeting. */
-  age(kind: Kind): string {
-    const at = this.updated[kind];
-    if (!at || !this.newestMeeting) return '';
+  /** How old the copies are, by when the Mac last sent everything: said only when that is days before the newest
+   * meeting here. A Mac that never sent the time gets no word on age, not a false one. */
+  age(_kind?: Kind): string {
+    const at = this.syncedAt;
+    if (!at || !this.newestMeeting || Number.isNaN(Date.parse(at))) return '';
     return Date.parse(this.newestMeeting) - Date.parse(at) > staleMs
-      ? `\n(This copy is from ${day(at, this.tz)}; your Mac has not sent a newer one since.)` : '';
+      ? `\n(Your Mac last sent these on ${day(at, this.tz)}; newer meetings came since, so they can be out of date.)` : '';
   }
 
   get live(): SyncedPerson[] { return this.people.filter((p) => !p.deleted && !p.mergedInto); }
@@ -317,7 +318,7 @@ export class OwnerData {
       }
       const items = meetings.flatMap((m) => m.actionItems.filter((a) => a.ownerId && this.canonical(a.ownerId) === this.canonical(p.id))
         .map((a) => `- ${a.task} (call_id: ${m.id}, ${day(m.start, this.tz)})`));
-      const itemPage = page(items, input);
+      const itemPage = page(items, { limit: input.limit });
       parts.push(`${first}'s action items:\n` + (items.length ? itemPage.rows.join('\n') + itemPage.tail : '- none'));
       if (this.updated.commitments) {
         const promises = this.tasks.filter((t) => !t.deleted && t.toID && this.canonical(t.toID) === this.canonical(p.id)).map((t) => this.taskLine(t));
@@ -475,7 +476,7 @@ export async function chats(env: Env): Promise<Chat[]> {
 }
 
 export function pastChatsText(list: Chat[], input: Record<string, unknown>, tz: string): string {
-  if (!list.length) return 'This server has no chats from your Mac yet. The Mac sends them at its next sync.';
+  if (!list.length) return 'This server has no chats from your Mac yet. Mossad after 2.24 sends them at its next sync.';
   const q = typeof input.query === 'string' ? input.query.trim().toLowerCase() : '';
   const found = list.filter((c) => !q || c.title.toLowerCase().includes(q) || (c.summary ?? '').toLowerCase().includes(q)
     || c.messages.some((m) => m.text.toLowerCase().includes(q)));
@@ -551,7 +552,7 @@ export const ownerToolDefinitions = [
   {
     name: 'read_person',
     description: "Reads one person: person_id, every written form of the name, addresses, job and team, the meetings with them (call_id), the owner's points for next time with them, how to present to them (when the owner allows the coach's reads here), their action items, and the owner's promises to them. person is a person_id, a whole name, or an address; a first name alone is not enough.",
-    inputSchema: { type: 'object', properties: { person, limit: { type: 'integer' } }, required: ['person'] },
+    inputSchema: { type: 'object', properties: { person, limit: { type: 'integer' }, offset: { type: 'integer', description: 'Moves the list of meetings.' } }, required: ['person'] },
   },
   {
     name: 'next_time_points',

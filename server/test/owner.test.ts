@@ -120,6 +120,14 @@ describe('the owner tools of the server MCP', () => {
     }), w.env);
     expect(res.status).toBe(200);
     expect(await text(w, 'read_person', { person: 'id-sam' })).toContain('asks for the answer first');
+    // The time of the Mac's last full send is kept; a date that does not parse is not.
+    const put = (body: unknown) => handleAPI(new Request('https://notes.example.com/api/config', {
+      method: 'PUT', headers: { Authorization: 'Bearer owner-secret', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), w.env);
+    await put({ owner: 'Avery Webb', syncedAt: 'not a date' });
+    expect(await w.env.DB.prepare("SELECT value FROM config WHERE key = 'syncedAt'").first()).toBeNull();
+    await put({ owner: 'Avery Webb', syncedAt: '2026-10-01T12:00:00Z' });
+    await w.env.DB.prepare(`INSERT INTO records (name, type, fields, assets, seq, deleted, updated) VALUES ('m1', 'Meeting', '{}', '["view"]', 99, 0, '2026-11-12T00:00:00Z')`).run();
+    expect(await text(w, 'commitments')).toContain('Your Mac last sent these on Oct 1, 2026');
   });
 
   it('lists the people, the points, and the tasks', async () => {

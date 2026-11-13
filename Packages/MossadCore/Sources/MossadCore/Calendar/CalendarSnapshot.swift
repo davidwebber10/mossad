@@ -10,7 +10,7 @@ public struct CalendarSnapshot: Codable, Equatable, Sendable {
 
     /// The keys each level may have. A test fails when the file has any other key.
     public static let allowedKeys: [String: Set<String>] = [
-        "root": ["version", "saved", "events"],
+        "root": ["version", "saved", "events", "access"],
         "participant": ["name", "email", "isSelf", "personID", "response", "kind"],
         "event": ["title", "start", "end", "attendees", "participants", "link", "isAllDay", "source", "iCalUID", "seriesID", "isRecurring"],
     ]
@@ -100,8 +100,19 @@ public struct CalendarSnapshot: Codable, Equatable, Sendable {
         return s
     }
 
+    /// The app's write after each read of the calendar: never from an inert copy (a preview, a second copy) and never
+    /// with made-up invites. Returns whether it wrote.
+    @discardableResult
+    public static func write(_ events: [CalendarEventInfo], access: Access, saved: Date, inert: Bool, sampled: Bool, to dir: URL) throws -> Bool {
+        guard !inert, !sampled else { return false }
+        try CalendarSnapshot(events, saved: saved, access: access).save(to: dir)
+        return true
+    }
+
     public func save(to dir: URL) throws {
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // The folder is the owner's alone, so the atomic write's temporary file is never readable by others.
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
         let url = dir.appendingPathComponent(Self.fileName)
         try JSONEncoder.callRecord.encode(self).write(to: url, options: .atomic)
         // The owner's alone, as their calendar is: no other account of this Mac reads 45 days of invites.
