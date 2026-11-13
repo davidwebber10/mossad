@@ -149,6 +149,7 @@ struct NextTimeList: View {
         if !parts.isEmpty {
             Text(parts.joined(separator: " · ")).font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
         }
+        if p.isOpen, let m = p.lastMention { MentionNote(mention: m) }
     }
 
     private func startEdit(_ p: NextTimePoint) {
@@ -176,6 +177,21 @@ struct NextTimeList: View {
         ids.removeAll { $0 == id }
         ids.insert(id, at: ids.firstIndex(of: target) ?? ids.count)
         controller.changeNextTime { $0.reorder(ids) }
+    }
+}
+
+/// "Came up on Nov 12, in a meeting Mossad has only the notes of ▸ 12:04": words that are true whether or not the
+/// owner listened. The lists hold open points only, so it never shows on a closed one.
+struct MentionNote: View {
+    let mention: NextTimePoint.Mention
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Came up on \(mention.date.formatted(.dateTime.month(.abbreviated).day())), in a meeting Mossad has only the notes of")
+                .font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+            SeriesMoment(callID: mention.callID, at: mention.at)
+        }
+        .help("\u{201C}\(mention.quote)\u{201D}")
     }
 }
 
@@ -401,7 +417,33 @@ struct MeetingPointsGroup: View {
         let book = controller.series.book
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
+        // A meeting Mossad has only the notes of closes and carries nothing: its open points that came up are listed.
+        let mentioned = book.mentioned(in: callID)
         VStack(spacing: 0) {
+            if !mentioned.isEmpty {
+                LabelColumn(label: "Your open points in these notes") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(mentioned) { p in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 14, height: 14)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(p.text)
+                                    if let m = p.mentions?.first(where: { $0.callID == callID }) {
+                                        HStack(spacing: 8) {
+                                            Text("Still open. Mossad has only the notes of this meeting").font(.system(size: 11.5)).foregroundStyle(Palette.tertiary)
+                                            SeriesMoment(callID: callID, at: m.at)
+                                        }
+                                        Text("\u{201C}\(m.quote)\u{201D}").font(.system(size: 12)).italic().foregroundStyle(Palette.secondary).lineLimit(2)
+                                    }
+                                }
+                                Spacer(minLength: 8)
+                            }
+                            .font(.system(size: 13))
+                            .padding(.vertical, 6).padding(.horizontal, 8)
+                        }
+                    }
+                }
+            }
             if !discussed.isEmpty || !carried.isEmpty {
                 LabelColumn(label: "Your points") {
                     VStack(alignment: .leading, spacing: 2) {

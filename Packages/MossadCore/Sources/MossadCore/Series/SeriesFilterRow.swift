@@ -34,7 +34,7 @@ public struct SeriesFilterRow: Sendable, Equatable {
         var people = count.values.sorted { $0.n != $1.n ? $0.n > $1.n : $0.who.name.localizedStandardCompare($1.who.name) == .orderedAscending }.map(\.who)
         for who in invited where !people.contains(who) { people.append(who) }
         self.people = people
-        cadence = SeriesFilter.Cadence(series.cadence)
+        cadence = SeriesFilter.Cadence(series.schedule)
         platform = Self.usual(rows.map(\.platform)) ?? series.next?.platform
         let notesOnly = Set(series.meetings.filter(\.notesOnly).map(\.id))
         seconds = Self.median(rows.filter { !notesOnly.contains($0.id) && $0.seconds > 0 }.map(\.seconds))

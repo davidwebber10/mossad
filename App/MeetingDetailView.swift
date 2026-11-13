@@ -93,6 +93,13 @@ struct MeetingDetailView: View {
                 try? await Task.sleep(for: .milliseconds(600))
                 if !player.isAvailable, let url = controller.cloudArchive?.playbackURL(for: record) { await player.loadRemote(url) }
             }
+            .task(id: controller.liveJumpRequest) {
+                // A moment from the quick panel: the live transcript at that line.
+                guard let jump = controller.liveJumpRequest, jump.callID == record.id, record.status == .recording else { return }
+                controller.liveJumpRequest = nil
+                liveTab = .transcript
+                liveJump = LiveJump(at: jump.at)
+            }
             .task(id: controller.liveChatFocus) {
                 guard controller.liveChatFocus == record.id else { return }
                 controller.liveChatFocus = nil

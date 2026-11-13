@@ -186,7 +186,7 @@ struct MeetingsView: View {
                 CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, Space.s)
                 MeetingList(days: MeetingGroups.byDay(results.filter { $0.status != .recording }),
                             live: results.filter { $0.status == .recording },
-                            selection: $controller.selectedMeetingID, deleting: $deleting)
+                            selection: $controller.selectedMeetingID, deleting: $deleting, showCalendar: { showCalendar(at: $0) })
             }
             DetailColumn { toolbar } content: {
                 if let m = openInvite {
@@ -228,6 +228,13 @@ struct MeetingsView: View {
                 }
             }
         }
+    }
+
+    /// The "more" row of the list: Calendar mode at the first day after the list's window, as one step of Back.
+    private func showCalendar(at day: Date) {
+        controller.navigation.jumpNext()
+        calendarState.anchor = day.addingTimeInterval(12 * 3600)
+        if previewMode != nil { previewMode = .calendar } else { savedMode = .calendar }
     }
 
     /// Back or Forward: the mode, and in Calendar mode the meeting or the invite open full-pane. The controller
@@ -275,6 +282,18 @@ struct MeetingsView: View {
 
     /// Back, then "Meetings › <period> › <title>".
     private func backBar(title: String, back: @escaping () -> Void) -> some View {
+        PaneBackBar(crumbs: ["Meetings", openedFrom], title: title, back: back)
+    }
+}
+
+/// The bar over a page that a calendar opened full-pane: Back, then the way to it ("Meetings › <period> › <title>").
+/// Escape goes back too.
+struct PaneBackBar: View {
+    let crumbs: [String]
+    let title: String
+    let back: () -> Void
+
+    var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Button { back() } label: {
@@ -285,10 +304,10 @@ struct MeetingsView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
                 .keyboardShortcut(.escape, modifiers: [])
-                Button("Meetings") { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
-                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
-                Button(openedFrom) { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
-                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
+                ForEach(Array(crumbs.enumerated()), id: \.offset) { _, crumb in
+                    Button(crumb) { back() }.buttonStyle(.plain).foregroundStyle(Palette.secondary)
+                    Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Palette.tertiaryMark)
+                }
                 Text(title).fontWeight(.medium).lineLimit(1)
                 Spacer()
             }

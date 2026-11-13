@@ -29,28 +29,41 @@ public enum CalendarLayout {
                                 column: 0, columns: 1) }
             .sorted { ($0.start, $0.end, $0.id) < ($1.start, $1.end, $1.id) }
 
-        var result: [CalendarItem] = []
-        var group: [CalendarItem] = []
-        var columnEnds: [Date] = []
-        var groupEnd = Date.distantPast
+        // `pack` keeps the order it is given.
+        return zip(items, pack(items.map { (id: $0.id, start: $0.start, end: $0.end) })).map { item, place in
+            var item = item
+            item.column = place.column
+            item.columns = place.columns
+            return item
+        }
+    }
+
+    /// Spans sorted by start: those that overlap share the width, each in the first free column; `columns` is the
+    /// number of columns of its group of overlaps. The result keeps the order of `spans`.
+    public static func pack<T: Comparable>(_ spans: [(id: String, start: T, end: T)]) -> [(id: String, column: Int, columns: Int)] {
+        var result: [(id: String, column: Int, columns: Int)] = []
+        var group: [(id: String, column: Int)] = []
+        var columnEnds: [T] = []
+        var groupEnd: T?
 
         func closeGroup() {
-            result += group.map { var item = $0; item.columns = columnEnds.count; return item }
+            result += group.map { ($0.id, $0.column, columnEnds.count) }
             group = []
             columnEnds = []
         }
 
-        for var item in items {
-            if item.start >= groupEnd { closeGroup() }
-            if let free = columnEnds.firstIndex(where: { $0 <= item.start }) {
-                item.column = free
-                columnEnds[free] = item.end
+        for span in spans {
+            if let end = groupEnd, span.start >= end { closeGroup() }
+            let column: Int
+            if let free = columnEnds.firstIndex(where: { $0 <= span.start }) {
+                column = free
+                columnEnds[free] = span.end
             } else {
-                item.column = columnEnds.count
-                columnEnds.append(item.end)
+                column = columnEnds.count
+                columnEnds.append(span.end)
             }
-            groupEnd = group.isEmpty ? item.end : max(groupEnd, item.end)
-            group.append(item)
+            groupEnd = group.isEmpty ? span.end : max(groupEnd ?? span.end, span.end)
+            group.append((span.id, column))
         }
         closeGroup()
         return result

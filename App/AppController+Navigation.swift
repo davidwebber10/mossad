@@ -34,7 +34,8 @@ extension AppController {
             if let moment = lastMoment, moment.callID == place.item,
                (UserDefaults.standard.string(forKey: "detailTab") ?? "") == MeetingDetailView.Tab.transcript.rawValue { place.time = moment.at }
         case .recurring:
-            place.item = part?.item ?? series.selected
+            // The list keeps its selection here; Calendar mode reports the series it opened full-pane, or none.
+            place.item = part?.page == nil ? part?.item ?? series.selected : part?.item
             place.search = Self.text(seriesFilter.query)
             place.seriesFilter = seriesFilter.filter.isEmpty ? nil : seriesFilter.filter
         case .people:

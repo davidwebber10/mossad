@@ -191,20 +191,7 @@ private struct HourGrid: View {
     }
 
     private func grid(columnWidth: CGFloat) -> some View {
-        Canvas { context, size in
-            for h in 0...24 {
-                let y = CGFloat(h) * hour
-                context.fill(Path(CGRect(x: gutter, y: y, width: size.width - gutter - 12, height: 1)), with: .color(Palette.hairline))
-                if h > 0, h < 24 {
-                    let label = Calendar.current.date(bySettingHour: h, minute: 0, second: 0, of: Date())!.formatted(.dateTime.hour())
-                    context.draw(Text(label).font(.system(size: 10.5)).monospacedDigit().foregroundStyle(Palette.tertiary),
-                                 at: CGPoint(x: gutter - 10, y: y), anchor: .trailing)
-                }
-            }
-            for i in 0..<days.count {
-                context.fill(Path(CGRect(x: gutter + CGFloat(i) * columnWidth, y: 0, width: 1, height: size.height)), with: .color(Palette.hairline))
-            }
-        }
+        HourLines(hour: hour, gutter: gutter, columns: days.count, columnWidth: columnWidth)
     }
 
     private func event(_ r: CallRecord, _ item: CalendarItem, x: CGFloat, width: CGFloat, day: Date) -> some View {
@@ -375,7 +362,34 @@ private func durationText(_ seconds: TimeInterval) -> String {
     return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m"
 }
 
-private struct NowLine: View {
+/// The lines of the hours with their labels in the gutter, and a line between the columns. The calendar's week and
+/// day, and the Recurring page's typical week.
+struct HourLines: View {
+    let hour: CGFloat
+    let gutter: CGFloat
+    let columns: Int
+    let columnWidth: CGFloat
+
+    var body: some View {
+        Canvas { context, size in
+            for h in 0...24 {
+                let y = CGFloat(h) * hour
+                context.fill(Path(CGRect(x: gutter, y: y, width: size.width - gutter - 12, height: 1)), with: .color(Palette.hairline))
+                if h > 0, h < 24 {
+                    let label = Calendar.current.date(bySettingHour: h, minute: 0, second: 0, of: Date())!.formatted(.dateTime.hour())
+                    context.draw(Text(label).font(.system(size: 10.5)).monospacedDigit().foregroundStyle(Palette.tertiary),
+                                 at: CGPoint(x: gutter - 10, y: y), anchor: .trailing)
+                }
+            }
+            for i in 0..<columns {
+                context.fill(Path(CGRect(x: gutter + CGFloat(i) * columnWidth, y: 0, width: 1, height: size.height)), with: .color(Palette.hairline))
+            }
+        }
+    }
+}
+
+/// The time now across a day's column, in the accent.
+struct NowLine: View {
     var body: some View {
         TimelineView(.everyMinute) { context in
             let minutes = CGFloat(context.date.timeIntervalSince(Calendar.current.startOfDay(for: context.date)) / 60)
