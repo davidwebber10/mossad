@@ -2037,7 +2037,8 @@ final class AppController: ObservableObject {
 
     func refreshUpcoming() {
         let calendar = calendar
-        calendars = macCalendar.calendars()
+        // A preview lists made-up calendars: a capture never shows the owner's accounts or calendar names.
+        calendars = AppIdentity.current.isPreview ? OnboardingSample.calendars : macCalendar.calendars()
         if UserDefaults.standard.stringArray(forKey: "calendarIDs") == nil, !calendars.isEmpty {
             // The first time, read only the owner's own calendars, not shared or subscribed ones.
             chosenCalendars = CalendarInfo.defaults(calendars, ownerName: ownerName,
