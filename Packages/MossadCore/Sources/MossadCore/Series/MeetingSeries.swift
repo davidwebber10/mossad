@@ -10,6 +10,8 @@ public struct MeetingSeries: Sendable, Equatable, Identifiable, Hashable {
         public var start: Date
         public var end: Date
         public var notesOnly: Bool
+        /// When the calendar had it start, which says the series' time better than when the recording began.
+        public var plannedStart: Date? = nil
     }
 
     /// Stable while the series lives: "cal:<calendar series id>" when the calendar ever named one, else
@@ -244,7 +246,8 @@ public enum SeriesCatalog {
             ?? "title:\(PeopleDuplicates.normalized(upcoming.first?.title ?? ""))"
         var keys = Set(calendarIDs.map { "cal:\($0)" } + oldestFirst.map { "call:\($0.id)" })
         keys.insert(id)
-        let meetings = oldestFirst.reversed().map { MeetingSeries.Occurrence(id: $0.id, title: $0.title, start: $0.start, end: $0.end, notesOnly: $0.isNotesOnly) }
+        let meetings = oldestFirst.reversed().map { MeetingSeries.Occurrence(id: $0.id, title: $0.title, start: $0.start, end: $0.end, notesOnly: $0.isNotesOnly,
+                                                                       plannedStart: $0.plannedStart) }
         // A planned start says the series' time better than when the recording began.
         let dates = oldestFirst.map { $0.plannedStart ?? $0.start } + upcoming.map(\.start)
         return MeetingSeries(id: id, keys: keys, title: upcoming.last?.title ?? meetings.first?.title ?? "", meetings: meetings, upcoming: upcoming,
