@@ -3,21 +3,73 @@
   "meetings" : [
     {
       "byWords" : false,
+      "callID" : "20270115-010000",
+      "duration" : 600,
+      "earlier" : 5,
+      "owners" : [
+
+      ],
+      "sentences" : [
+        "You talked most: 3 min 20 s, 50% of the talk",
+        "You held the longest turn, 3 min 20 s",
+        "You spoke fastest, at 1 words a minute"
+      ],
+      "speakers" : [
+        {
+          "cutIn" : 0,
+          "cutOff" : 0,
+          "fillersPerMinute" : 0,
+          "isOwner" : true,
+          "name" : "Avery Webb",
+          "personID" : "id-owner",
+          "questions" : 0,
+          "seconds" : 200,
+          "share" : 0.5,
+          "turns" : 1,
+          "wordsPerMinute" : 0.59999999999999998
+        },
+        {
+          "cutIn" : 0,
+          "cutOff" : 0,
+          "fillersPerMinute" : 0,
+          "isOwner" : false,
+          "name" : "Sam Carter",
+          "personID" : "id-sam",
+          "questions" : 0,
+          "reply" : 0,
+          "seconds" : 200,
+          "share" : 0.5,
+          "turns" : 1,
+          "wordsPerMinute" : 0.29999999999999999
+        }
+      ],
+      "standouts" : [
+
+      ],
+      "start" : "2027-01-15T07:00:00Z",
+      "title" : "Quick chat"
+    },
+    {
+      "byWords" : false,
       "callID" : "20270113-100000",
       "duration" : 1800,
-      "earlier" : 2,
-      "outcomes" : "1 decision and 1 action item",
+      "earlier" : 4,
+      "outcomes" : "1 decision and 2 action items",
       "owners" : [
         {
           "name" : "Sam Carter",
           "tasks" : [
             "Draft the plan"
           ]
+        },
+        {
+          "tasks" : [
+            "Send the deck"
+          ]
         }
       ],
-      "participation" : "All 2 invited people spoke",
       "sentences" : [
-        "Sam Carter talked most: 10 min, 50% of the talk",
+        "Sam Carter talked most: 10 min, 40% of the talk",
         "Sam Carter held the longest turn, 10 min",
         "You spoke fastest, at 1 words a minute"
       ],
@@ -31,7 +83,7 @@
           "personID" : "id-owner",
           "questions" : 0,
           "seconds" : 300,
-          "share" : 0.25,
+          "share" : 0.20000000000000001,
           "turns" : 1,
           "wordsPerMinute" : 1.2
         },
@@ -45,7 +97,7 @@
           "questions" : 0,
           "reply" : 0,
           "seconds" : 600,
-          "share" : 0.5,
+          "share" : 0.40000000000000002,
           "turns" : 1,
           "wordsPerMinute" : 0.29999999999999999
         },
@@ -59,9 +111,22 @@
           "questions" : 0,
           "reply" : 0,
           "seconds" : 300,
-          "share" : 0.25,
+          "share" : 0.20000000000000001,
           "turns" : 1,
           "wordsPerMinute" : 0.20000000000000001
+        },
+        {
+          "cutIn" : 0,
+          "cutOff" : 0,
+          "fillersPerMinute" : 0,
+          "isOwner" : false,
+          "name" : "Speaker C",
+          "questions" : 0,
+          "reply" : 0,
+          "seconds" : 300,
+          "share" : 0.20000000000000001,
+          "turns" : 1,
+          "wordsPerMinute" : 0.40000000000000002
         }
       ],
       "standouts" : [
@@ -74,7 +139,7 @@
       "byWords" : false,
       "callID" : "20270108-100000",
       "duration" : 1800,
-      "earlier" : 1,
+      "earlier" : 3,
       "outcomes" : "1 decision and 1 action item",
       "owners" : [
         {
@@ -84,7 +149,6 @@
           ]
         }
       ],
-      "participation" : "All 2 invited people spoke",
       "sentences" : [
         "Sam Carter talked most: 10 min, 50% of the talk",
         "Sam Carter held the longest turn, 10 min",

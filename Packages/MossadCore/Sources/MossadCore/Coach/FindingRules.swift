@@ -109,7 +109,9 @@ public enum FindingRules {
     /// times last.
     /// `trait`: the call's trait card, from `PersonaFindings`; it stands after the conclusions and counts in the
     /// call's limit.
-    public static func deck(callID: String, date: Date, review: CoachReview, profile: CoachProfile, now: Date = Date(), trait: CoachFinding? = nil) -> [CoachFinding] {
+    /// `keep` leaves a card out before the limit, so a card that may not show here uses no place of its call.
+    public static func deck(callID: String, date: Date, review: CoachReview, profile: CoachProfile, now: Date = Date(), trait: CoachFinding? = nil,
+                            keep: (CoachFinding) -> Bool = { _ in true }) -> [CoachFinding] {
         guard now.timeIntervalSince(date) <= (review.findings == nil ? seedDays : expiryDays) * 86_400 else { return [] }
         let training = profile.training(asOf: now)
         let made = (review.findings ?? cards(review: review, callID: callID, date: date, measured: nil,
@@ -146,6 +148,7 @@ public enum FindingRules {
         // the list must not let a third card move up.
         let answered = profile.answers.filter { $0.callID == callID && $0.verdict != nil }.count
         return Array(all.filter { card in
+            guard keep(card) else { return false }
             if card.kind == .learning, let q = profile.questions.first(where: { $0.id == card.questionID }), q.dismissed != nil { return false }
             return profile.answer(to: card.id) == nil
         }.prefix(max(0, perCall - answered)))
@@ -162,8 +165,10 @@ public enum FindingRules {
     /// A goal that waits for an answer comes first, so newer calls do not push it out of the deck.
     /// `traits`: the trait card of each call, by call id (`PersonaFindings.cards`).
     public static func deck(reviews: [(callID: String, date: Date, review: CoachReview)], profile: CoachProfile, now: Date = Date(),
-                            traits: [String: CoachFinding] = [:]) -> [CoachFinding] {
-        let all = reviews.sorted { $0.date > $1.date }.flatMap { deck(callID: $0.callID, date: $0.date, review: $0.review, profile: profile, now: now, trait: traits[$0.callID]) }
+                            traits: [String: CoachFinding] = [:], keep: (CoachFinding) -> Bool = { _ in true }) -> [CoachFinding] {
+        let all = reviews.sorted { $0.date > $1.date }.flatMap {
+            deck(callID: $0.callID, date: $0.date, review: $0.review, profile: profile, now: now, trait: traits[$0.callID], keep: keep)
+        }
         return Array((all.filter { $0.kind == .goalOffer } + all.filter { $0.kind != .goalOffer }).prefix(deckLimit))
     }
 }

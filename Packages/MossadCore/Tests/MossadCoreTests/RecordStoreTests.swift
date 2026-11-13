@@ -15,12 +15,16 @@ actor MemoryStore: RecordStore {
 
     func prepare() async throws {}
 
+    /// A record the store does not take, as a server that answers one upload with an error.
+    private var refused: String?
+    func refuse(_ name: String?) { refused = name }
+
     func save(_ records: [StoredRecord]) async throws -> Set<String> {
-        for r in records {
+        for r in records where r.name != refused {
             seq += 1
             entries[r.name] = Entry(record: r, data: r.files.mapValues { (try? Data(contentsOf: $0)) ?? Data() }, seq: seq, deleted: false)
         }
-        return Set(records.map(\.name))
+        return Set(records.map(\.name).filter { $0 != refused })
     }
 
     func delete(_ names: [String]) async throws -> Set<String> {

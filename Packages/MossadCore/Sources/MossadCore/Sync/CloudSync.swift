@@ -215,16 +215,22 @@ public actor CloudSync {
             }
         }
         var plan = state.planShared(payloads, deletedChats: deleted)
-        // A part of the digest that was not made again leaves the server: a month with no meeting left.
+        // A part of the digest that was not made again leaves the server: a month with no meeting left. A digest
+        // with no month (no meeting read) deletes no month.
         if store.wantsMeetingView, let digest {
             let now = Set(digest.map(\.key))
-            plan.delete += state.uploaded.keys.filter { $0.hasPrefix("digest:") && !now.contains($0) }.sorted()
+            let months = now.contains { $0.hasPrefix("digest:meetings-") }
+            plan.delete += state.uploaded.keys.filter { $0.hasPrefix("digest:") && !now.contains($0) && (months || !$0.hasPrefix("digest:meetings-")) }.sorted()
         }
         guard !plan.upload.isEmpty || !plan.delete.isEmpty else { return 0 }
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
         var changed = 0
-        for chunk in stride(from: 0, to: plan.upload.count, by: Self.batch).map({ Array(plan.upload[$0..<min($0 + Self.batch, plan.upload.count)]) }) {
+        // The digest's parts go one by one after the rest: a call that starts stops the copy before the next part.
+        let rest = plan.upload.filter { $0.kind != .digest }
+        let chunks = stride(from: 0, to: rest.count, by: Self.batch).map { Array(rest[$0..<min($0 + Self.batch, rest.count)]) }
+            + plan.upload.filter { $0.kind == .digest }.map { [$0] }
+        for chunk in chunks {
             if stop() { return changed }
             let records = try chunk.map { p -> StoredRecord in
                 let type = switch p.kind {
@@ -262,6 +268,12 @@ public actor CloudSync {
             changed += done.count
         }
         return changed
+    }
+
+    /// Whether the store has each of these payloads as they are now: every part of a digest arrived.
+    public func holds(_ payloads: [SharedPayload]) throws -> Bool {
+        let state = try loadState()
+        return payloads.allSatisfy { state.uploaded[$0.key] == $0.hash }
     }
 
     /// "chat:<uuid>" becomes "chat-<uuid>"; the profile keeps its own name.

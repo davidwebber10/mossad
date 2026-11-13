@@ -1,8 +1,41 @@
 {
+  "coachOn" : true,
   "ended" : [
 
   ],
   "findings" : [
+    {
+      "answers" : [
+        "Useful",
+        "Not useful"
+      ],
+      "at" : 0,
+      "callID" : "20270115-010000",
+      "date" : "2027-01-15T07:00:00Z",
+      "id" : "20270115-010000|could_be_better|interruptions",
+      "question" : "Is this feedback useful to you?",
+      "quote" : "Thanks all.",
+      "say" : "Go on, Sam.",
+      "text" : "Let Sam Carter finish before you answer.",
+      "title" : "This could be better",
+      "why" : "A cut-in stops a thought before you hear all of it."
+    },
+    {
+      "answers" : [
+        "True",
+        "Not true"
+      ],
+      "at" : 200,
+      "callID" : "20270115-010000",
+      "date" : "2027-01-15T07:00:00Z",
+      "id" : "20270115-010000|learning|00000000-0000-0000-0000-00000000000A",
+      "personID" : "id-sam",
+      "personName" : "Sam Carter",
+      "question" : "Is this true?",
+      "quote" : "Sure.",
+      "text" : "Sam reports to you.",
+      "title" : "What the coach believes"
+    },
     {
       "answers" : [
         "Useful",
@@ -18,6 +51,20 @@
       "text" : "When you take an item, say the day.",
       "title" : "This could be better",
       "why" : "Without a day, nobody can plan on it or tell when it is late."
+    },
+    {
+      "answers" : [
+        "True",
+        "Not true"
+      ],
+      "at" : 300,
+      "callID" : "20270113-100000",
+      "date" : "2027-01-09T08:00:00Z",
+      "id" : "20270113-100000|learning|00000000-0000-0000-0000-00000000000C",
+      "question" : "Is this true?",
+      "quote" : "The roadmap slips.",
+      "text" : "This call sets the plan for March.",
+      "title" : "What the coach believes"
     }
   ],
   "goal" : {

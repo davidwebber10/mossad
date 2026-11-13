@@ -5,12 +5,12 @@
       "byWords" : false,
       "callID" : "20261220-090000",
       "duration" : 900,
-      "earlier" : 0,
+      "earlier" : 2,
       "owners" : [
 
       ],
       "sentences" : [
-        "You was the only voice, for 3 min 20 s",
+        "You were the only voice, for 3 min 20 s",
         "You held the longest turn, 3 min 20 s",
         "You spoke at 1 words a minute"
       ],

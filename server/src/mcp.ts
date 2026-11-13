@@ -101,6 +101,12 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
       if (ownerToolNames.has(name)) return reply({ content: [{ type: 'text', text: await runOwnerTool(env, name, args, await config(env), () => meetings(env)) }] });
       if (digestToolNames.has(name)) return reply({ content: [{ type: 'text', text: await runDigestTool(env, name, args, await config(env)) }] });
       const id = typeof args.id === 'string' ? args.id : '';
+      // A series or a bookmark is read from the digest alone, before any meeting is loaded.
+      if (name === 'fetch' && /^(series|bookmark)(:|%3a)/i.test(id)) {
+        const doc = await digestFetch(env, id, await config(env));
+        if (!doc) return reply({ content: [{ type: 'text', text: 'Nothing with that id.' }], isError: true });
+        return reply({ content: [{ type: 'text', text: JSON.stringify(doc) }], structuredContent: doc });
+      }
       // A kind prefix: "person:<id>" and "task:<id>" are the owner's data; "meeting:<id>" and a bare id are meetings.
       const meetingArgs = name === 'fetch' && id.startsWith('meeting:') ? { ...args, id: id.slice(8) } : args;
       const tools = await toolsFor(env, name, meetingArgs);
@@ -113,9 +119,7 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
       if (name === 'fetch') {
         const doc = id.startsWith('person:') || id.startsWith('task:')
           ? (await OwnerData.load(env, tools.meetings, await config(env))).fetch(id)
-          : id.startsWith('series:') || id.startsWith('bookmark:')
-            ? await digestFetch(env, id, await config(env))
-            : tools.fetch(typeof meetingArgs.id === 'string' ? meetingArgs.id : '');
+          : tools.fetch(typeof meetingArgs.id === 'string' ? meetingArgs.id : '');
         if (!doc) return reply({ content: [{ type: 'text', text: 'Nothing with that id.' }], isError: true });
         return reply({ content: [{ type: 'text', text: JSON.stringify(doc) }], structuredContent: doc });
       }

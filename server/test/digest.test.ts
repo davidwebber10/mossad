@@ -11,7 +11,13 @@ import { fixture } from './fixtures.mjs';
 
 type W = ReturnType<typeof fakeEnv>;
 
-async function setUp(skip: string[] = [], config: Record<string, string> = {}) {
+const parts = ['digest-series', 'digest-bookmarks', 'digest-analytics', 'digest-coach', 'digest-meetings-2027-01', 'digest-meetings-2026-12', 'digest-meetings-2026-09'];
+async function hash(k: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(k.toLowerCase()));
+  return 'h:' + [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+}
+
+async function setUp(skip: string[] = [], config: Record<string, string> = {}, replace: Record<string, unknown> = {}) {
   const w = fakeEnv();
   const put = async (name: string, type: string, body: unknown) => {
     if (skip.includes(name)) return;
@@ -19,9 +25,8 @@ async function setUp(skip: string[] = [], config: Record<string, string> = {}) {
     await w.env.DB.prepare(`INSERT INTO records (name, type, fields, assets, seq, deleted, updated) VALUES (?, ?, '{}', '["data"]',
       (SELECT COALESCE(MAX(seq), 0) + 1 FROM records), 0, '2027-01-15T09:00:00Z')`).bind(name, type).run();
   };
-  for (const part of ['digest-series', 'digest-bookmarks', 'digest-analytics', 'digest-coach', 'digest-meetings-2027-01', 'digest-meetings-2026-12']) {
-    await put(part, 'Digest', fixture(part));
-  }
+  for (const part of parts) await put(part, 'Digest', part in replace ? replace[part] : fixture(part));
+  if ('people' in replace) await put('people', 'People', replace.people);
   await put('next-time', 'NextTime', {
     points: [
       { id: 'P1', text: 'Ask about the March date', seriesID: 'cal:g-weekly', seriesTitle: 'Weekly sync', rank: 1, created: '2027-01-14T00:00:00Z' },
@@ -59,9 +64,9 @@ describe('the digest tools', () => {
   it('lists the recurring meetings with no next date, and says when the Mac made the list', async () => {
     const out = await text(await setUp(), 'recurring');
     expect(out).toContain('series_id: cal:g-weekly | Weekly sync');
-    expect(out).toContain('Usually 3 people; 1 open item');
+    expect(out).toContain('Usually 4 people; 1 open item');
     expect(out).toContain('The next date is only known on your Mac');
-    expect(out).toContain('As your Mac made it on Jan 15, 2027');
+    expect(out).toContain('Last changed on your Mac on Jan 15, 2027');
   });
 
   it('reads one series with its points, history, people, numbers, and open items', async () => {
@@ -74,7 +79,8 @@ describe('the digest tools', () => {
     expect(out).toContain('Old key point');
     expect(out).not.toContain('Another series');
     expect(out).toContain('call_id: 20270113-100000');
-    expect(out).toContain('Sam Carter: came 2 of 2');
+    expect(out).toContain('Sam Carter: spoke in 2 of 2');
+    expect(out).not.toContain('Riley Stone');
     expect(out).toContain('Draft the plan');
     expect(out).toContain('The next date is only known on your Mac');
     expect(await text(w, 'read_series', { series: 'nothing like it' })).toMatch(/^No recurring meeting matches/);
@@ -91,7 +97,7 @@ describe('the digest tools', () => {
     expect(numbers).toContain('Speakers:');
     expect(await text(w, 'meeting_analytics', { call_id: '20991231-000000' })).toMatch(/^No numbers on this server for that call_id/);
     const page = await text(w, 'analytics', { days: 30 });
-    expect(page).toContain('Last 30 days: 3 calls');
+    expect(page).toContain('Last 30 days, Dec 17, 2026 to Jan 15, 2027: 4 calls');
     expect(await text(w, 'analytics', { days: 20 })).toContain('Last 30 days');
     const cards = await text(w, 'coach_findings');
     expect(cards).toContain('When you take an item, say the day.');
@@ -99,7 +105,7 @@ describe('the digest tools', () => {
   });
 
   it('says plainly when a part never arrived', async () => {
-    const w = await setUp(['digest-series', 'digest-bookmarks', 'digest-analytics', 'digest-coach', 'digest-meetings-2027-01', 'digest-meetings-2026-12']);
+    const w = await setUp(parts);
     expect(await text(w, 'recurring')).toMatch(/^This server has no recurring meetings from your Mac yet/);
     expect(await text(w, 'bookmarks')).toMatch(/^This server has no bookmarks from your Mac yet/);
     expect(await text(w, 'analytics')).toMatch(/^This server has no analytics from your Mac yet/);
@@ -122,5 +128,75 @@ describe('the digest tools', () => {
     expect(marks).toContain('bookmark:20270113-100000#310');
     expect(await text(w, 'fetch', { id: 'series:cal:g-weekly' })).toContain('Weekly sync');
     expect(await text(w, 'fetch', { id: 'bookmark:20270113-100000#310' })).toContain('Slip 2');
+  });
+
+  it('gives a card about a person only with the switch on and while the person keeps a read', async () => {
+    const people = fixture('people');
+    const sam = { id: 'id-sam', displayName: 'Sam Carter' };
+    const off = await text(await setUp([], {}, { people: { people: [...people.people, sam] } }), 'coach_findings');
+    expect(off).not.toContain('Sam reports to you.');
+    expect(off).toContain('When you take an item, say the day.');
+    const on = await text(await setUp([], { mcpPersonas: '1' }, { people: { people: [...people.people, sam] } }), 'coach_findings');
+    expect(on).toContain('Sam reports to you.');
+    expect(on).toContain('About Sam Carter');
+    const kept = await text(await setUp([], { mcpPersonas: '1' }, { people: { people: [...people.people, { ...sam, doNotProfile: true }] } }), 'coach_findings');
+    expect(kept).not.toContain('Sam reports to you.');
+    // With no people file the server cannot tell who keeps a read: no card about a person.
+    expect(await text(await setUp([], { mcpPersonas: '1' }), 'coach_findings')).not.toContain('Sam reports to you.');
+  });
+
+  it('says the coach is off on the Mac', async () => {
+    const coach = { ...fixture('digest-coach'), coachOn: false, findings: [] };
+    expect(await text(await setUp([], {}, { 'digest-coach': coach }), 'coach_findings')).toMatch(/^The coach is off on your Mac/);
+  });
+
+  it('writes out only the fields it knows: a key it does not know never shows', async () => {
+    const series = fixture('digest-series');
+    const s = series.series[0];
+    const odd = { ...series, series: [{ ...s, next: '2027-01-16T10:00:00Z', invitees: ['odd.guest@example.com'], rows: s.rows.map((r: object) => ({ ...r, plannedMinutes: 77 })) }] };
+    const w = await setUp([], {}, { 'digest-series': odd });
+    for (const out of [await text(w, 'recurring'), await text(w, 'read_series', { series: 'weekly sync' })]) {
+      expect(out).not.toContain('odd.guest');
+      expect(out).not.toContain('2027-01-16');
+      expect(out).not.toContain('Jan 16');
+      expect(out).not.toContain('77');
+    }
+  });
+
+  it('answers in words for a part from a newer Mac or a part that does not read', async () => {
+    const newer = await setUp([], {}, { 'digest-series': { ...fixture('digest-series'), version: 2 } });
+    expect(await text(newer, 'recurring')).toMatch(/newer form than this server reads/);
+    const broken = await setUp([], {}, { 'digest-series': { version: 1, made: '2027-01-15T08:00:00Z' }, 'digest-coach': { version: 1, made: '2027-01-15T08:00:00Z', findings: 'x' } });
+    expect(await text(broken, 'recurring')).toMatch(/do not read/);
+    expect(await text(broken, 'coach_findings')).toMatch(/do not read/);
+  });
+
+  it('says the list of recurring meetings comes from the recorded meetings alone', async () => {
+    const w = await setUp();
+    expect(await text(w, 'recurring')).toContain('from your recorded meetings alone');
+    const none = await text(w, 'read_series', { series: 'old standup' });
+    expect(none).toMatch(/^No recurring meeting matches/);
+    expect(none).toContain("Recurring page has every one");
+  });
+
+  it('finds a series by a calendar id it only holds as a hash', async () => {
+    const series = fixture('digest-series');
+    const id = 'cal:ek:abc123@google.com';
+    const h = await hash(id);
+    const s = { ...series.series[0], id: h, keys: [h, ...series.series[0].keys] };
+    const w = await setUp([], {}, { 'digest-series': { ...series, series: [s] } });
+    expect(await text(w, 'read_series', { series: id })).toContain(`series_id: ${h}`);
+    expect(await text(w, 'read_series', { series: 'call:20270113-100000' })).toContain('Weekly sync');
+  });
+
+  it('says when the Mac last changed a part and last sent its copy', async () => {
+    const w = await setUp([], { syncedAt: '2027-01-20T09:00:00Z' });
+    const out = await text(w, 'bookmarks');
+    expect(out).toContain('Last changed on your Mac on Jan 15, 2027');
+    expect(out).toContain('Your Mac last sent its copy on Jan 20, 2027');
+  });
+
+  it('fetches a bookmark by an id with its # sent as %23', async () => {
+    expect(await text(await setUp(), 'fetch', { id: 'bookmark:20270113-100000%23310' })).toContain('Slip 2');
   });
 });

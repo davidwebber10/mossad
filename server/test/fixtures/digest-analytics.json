@@ -2,50 +2,54 @@
   "made" : "2027-01-15T08:00:00Z",
   "periods" : [
     {
-      "averageSeconds" : 1800,
+      "averageSeconds" : 1200,
       "backToBackShare" : 0,
-      "callFreeDays" : 5,
-      "calls" : 1,
-      "callSeconds" : 1800,
-      "callsPerDay" : 0.14285714285714285,
+      "callFreeDays" : 4,
+      "calls" : 2,
+      "callSeconds" : 2400,
+      "callsPerDay" : 0.33333333333333331,
       "coreHoursShare" : 0,
-      "cost" : 0.28605199999999997,
+      "cost" : 0.41874666666666666,
       "costParts" : [
         {
-          "dollars" : 0.22999999999999998,
+          "dollars" : 0.30666666666666664,
           "name" : "transcription"
         },
         {
-          "dollars" : 0.056052000000000005,
+          "dollars" : 0.11208000000000001,
           "name" : "summary"
         }
       ],
       "cutInPerHour" : 0,
       "cutOffPerHour" : 0,
       "days" : 7,
-      "decisionsPerHour" : 2,
-      "from" : "2027-01-08T05:00:00Z",
-      "groupShare" : 0.25,
-      "hoursPerWorkday" : 0,
+      "decisionsPerHour" : 1.5,
+      "from" : "2027-01-09T06:00:00Z",
+      "groupShare" : 0.20000000000000001,
+      "hoursPerWorkday" : 0.033333333333333333,
       "itemsMine" : 0,
-      "itemsOthers" : 1,
-      "itemsPerHour" : 2,
+      "itemsOthers" : 2,
+      "itemsPerHour" : 3,
+      "oneOnOneShare" : 0.5,
       "people" : [
+        {
+          "name" : "Sam Carter",
+          "seconds" : 2400
+        },
         {
           "name" : "Dana Lee",
           "seconds" : 1800
         },
         {
-          "name" : "Sam Carter",
+          "name" : "Speaker C",
           "seconds" : 1800
         }
       ],
       "questionsPerHour" : 0,
-      "scheduled" : 1,
-      "talkShare" : 0.25,
+      "talkShare" : 0.26315789473684209,
       "tasksDone" : 0,
       "tasksMade" : 0,
-      "to" : "2027-01-15T05:00:00Z",
+      "to" : "2027-01-15T06:00:00Z",
       "topics" : [
 
       ],
@@ -67,65 +71,68 @@
           "sentence" : "The period is too short to show a trend"
         }
       ],
-      "unscheduled" : 0,
       "valueHours" : [
 
       ],
-      "withOutcomesShare" : 1,
+      "withOutcomesShare" : 0.5,
       "workdays" : 5
     },
     {
-      "averageSeconds" : 1500,
+      "averageSeconds" : 1275,
       "backToBackShare" : 0,
-      "callFreeDays" : 22,
-      "calls" : 3,
-      "callSeconds" : 4500,
-      "callsPerDay" : 0.10000000000000001,
+      "callFreeDays" : 21,
+      "calls" : 4,
+      "callSeconds" : 5100,
+      "callsPerDay" : 0.13793103448275862,
       "coreHoursShare" : 0,
-      "cost" : 0.74311199999999999,
+      "cost" : 0.87580666666666662,
       "costParts" : [
         {
-          "dollars" : 0.57499999999999996,
+          "dollars" : 0.65166666666666662,
           "name" : "transcription"
         },
         {
-          "dollars" : 0.16811200000000001,
+          "dollars" : 0.22414000000000001,
           "name" : "summary"
         }
       ],
       "cutInPerHour" : 0,
       "cutOffPerHour" : 0,
       "days" : 30,
-      "decisionsPerHour" : 1.6000000000000001,
-      "from" : "2026-12-16T05:00:00Z",
-      "groupShare" : 0.25,
-      "hoursPerWorkday" : 0,
+      "decisionsPerHour" : 1.4117647058823528,
+      "from" : "2026-12-17T06:00:00Z",
+      "groupShare" : 0.22222222222222221,
+      "hoursPerWorkday" : 0.007575757575757575,
       "itemsMine" : 0,
-      "itemsOthers" : 2,
-      "itemsPerHour" : 1.6000000000000001,
+      "itemsOthers" : 3,
+      "itemsPerHour" : 2.1176470588235294,
+      "oneOnOneShare" : 0.5,
       "people" : [
         {
           "name" : "Sam Carter",
-          "seconds" : 4500
+          "seconds" : 5100
         },
         {
           "name" : "Dana Lee",
           "seconds" : 3600
+        },
+        {
+          "name" : "Speaker C",
+          "seconds" : 1800
         }
       ],
       "questionsPerHour" : 0,
-      "scheduled" : 3,
-      "talkShare" : 0.30769230769230771,
+      "talkShare" : 0.30303030303030304,
       "tasksDone" : 0,
       "tasksMade" : 0,
-      "to" : "2027-01-15T05:00:00Z",
+      "to" : "2027-01-15T06:00:00Z",
       "topics" : [
 
       ],
       "trends" : [
         {
           "metric" : "Talk share",
-          "sentence" : "Too few meetings to show a trend"
+          "sentence" : "Too few meetings of one size to show a trend"
         },
         {
           "metric" : "Questions you ask",
@@ -140,65 +147,68 @@
           "sentence" : "Too few meetings to show a trend"
         }
       ],
-      "unscheduled" : 0,
       "valueHours" : [
 
       ],
-      "withOutcomesShare" : 0.66666666666666663,
+      "withOutcomesShare" : 0.5,
       "workdays" : 22
     },
     {
-      "averageSeconds" : 1500,
+      "averageSeconds" : 1275,
       "backToBackShare" : 0,
       "callFreeDays" : 64,
-      "calls" : 3,
-      "callSeconds" : 4500,
-      "callsPerDay" : 0.033333333333333333,
+      "calls" : 4,
+      "callSeconds" : 5100,
+      "callsPerDay" : 0.0449438202247191,
       "coreHoursShare" : 0,
-      "cost" : 0.74311199999999999,
+      "cost" : 0.87580666666666662,
       "costParts" : [
         {
-          "dollars" : 0.57499999999999996,
+          "dollars" : 0.65166666666666662,
           "name" : "transcription"
         },
         {
-          "dollars" : 0.16811200000000001,
+          "dollars" : 0.22414000000000001,
           "name" : "summary"
         }
       ],
       "cutInPerHour" : 0,
       "cutOffPerHour" : 0,
       "days" : 90,
-      "decisionsPerHour" : 1.6000000000000001,
-      "from" : "2026-10-17T05:00:00Z",
-      "groupShare" : 0.25,
-      "hoursPerWorkday" : 0,
+      "decisionsPerHour" : 1.4117647058823528,
+      "from" : "2026-10-18T05:00:00Z",
+      "groupShare" : 0.22222222222222221,
+      "hoursPerWorkday" : 0.002564102564102564,
       "itemsMine" : 0,
-      "itemsOthers" : 2,
-      "itemsPerHour" : 1.6000000000000001,
+      "itemsOthers" : 3,
+      "itemsPerHour" : 2.1176470588235294,
+      "oneOnOneShare" : 0.5,
       "people" : [
         {
           "name" : "Sam Carter",
-          "seconds" : 4500
+          "seconds" : 5100
         },
         {
           "name" : "Dana Lee",
           "seconds" : 3600
+        },
+        {
+          "name" : "Speaker C",
+          "seconds" : 1800
         }
       ],
       "questionsPerHour" : 0,
-      "scheduled" : 3,
-      "talkShare" : 0.30769230769230771,
+      "talkShare" : 0.30303030303030304,
       "tasksDone" : 0,
       "tasksMade" : 0,
-      "to" : "2027-01-15T05:00:00Z",
+      "to" : "2027-01-15T06:00:00Z",
       "topics" : [
 
       ],
       "trends" : [
         {
           "metric" : "Talk share",
-          "sentence" : "Too few meetings to show a trend"
+          "sentence" : "Too few meetings of one size to show a trend"
         },
         {
           "metric" : "Questions you ask",
@@ -213,69 +223,73 @@
           "sentence" : "Too few meetings to show a trend"
         }
       ],
-      "unscheduled" : 0,
       "valueHours" : [
 
       ],
-      "withOutcomesShare" : 0.66666666666666663,
-      "workdays" : 64
+      "withOutcomesShare" : 0.5,
+      "workdays" : 65
     },
     {
-      "averageSeconds" : 1500,
+      "averageSeconds" : 1150,
       "backToBackShare" : 0,
-      "callFreeDays" : 261,
-      "calls" : 3,
-      "callSeconds" : 4500,
-      "callsPerDay" : 0.00821917808219178,
+      "callFreeDays" : 258,
+      "calls" : 6,
+      "callSeconds" : 6900,
+      "callsPerDay" : 0.016483516483516484,
       "coreHoursShare" : 0,
-      "cost" : 0.74311199999999999,
+      "cost" : 1.2178386666666667,
       "costParts" : [
         {
-          "dollars" : 0.57499999999999996,
+          "dollars" : 0.8816666666666666,
           "name" : "transcription"
         },
         {
-          "dollars" : 0.16811200000000001,
+          "dollars" : 0.33617200000000003,
           "name" : "summary"
         }
       ],
       "cutInPerHour" : 0,
       "cutOffPerHour" : 0,
       "days" : 365,
-      "decisionsPerHour" : 1.6000000000000001,
-      "from" : "2026-01-15T05:00:00Z",
-      "groupShare" : 0.25,
-      "hoursPerWorkday" : 0,
+      "decisionsPerHour" : 1.0434782608695652,
+      "from" : "2026-01-16T06:00:00Z",
+      "groupShare" : 0.22222222222222221,
+      "hoursPerWorkday" : 0.0025542784163473816,
       "itemsMine" : 0,
-      "itemsOthers" : 2,
-      "itemsPerHour" : 1.6000000000000001,
+      "itemsOthers" : 3,
+      "itemsPerHour" : 1.5652173913043477,
+      "oneOnOneShare" : 0.5,
       "people" : [
         {
           "name" : "Sam Carter",
-          "seconds" : 4500
+          "seconds" : 6900
         },
         {
           "name" : "Dana Lee",
           "seconds" : 3600
+        },
+        {
+          "name" : "Speaker C",
+          "seconds" : 1800
         }
       ],
       "questionsPerHour" : 0,
-      "scheduled" : 3,
-      "talkShare" : 0.30769230769230771,
+      "talkShare" : 0.34146341463414637,
       "tasksDone" : 0,
       "tasksMade" : 0,
-      "to" : "2027-01-15T05:00:00Z",
+      "to" : "2027-01-15T06:00:00Z",
       "topics" : [
 
       ],
       "trends" : [
         {
           "metric" : "Talk share",
-          "sentence" : "Too few meetings to show a trend"
+          "sentence" : "Too few meetings of one size to show a trend"
         },
         {
           "metric" : "Questions you ask",
-          "sentence" : "Too few meetings to show a trend"
+          "sentence" : "Too few meetings to show a trend",
+          "usual" : "Usual in this period 0.0 an hour"
         },
         {
           "metric" : "You cut in",
@@ -283,14 +297,14 @@
         },
         {
           "metric" : "Pace",
-          "sentence" : "Too few meetings to show a trend"
+          "sentence" : "Too few meetings to show a trend",
+          "usual" : "Usual in this period 1 words a minute"
         }
       ],
-      "unscheduled" : 0,
       "valueHours" : [
 
       ],
-      "withOutcomesShare" : 0.66666666666666663,
+      "withOutcomesShare" : 0.33333333333333331,
       "workdays" : 261
     }
   ],

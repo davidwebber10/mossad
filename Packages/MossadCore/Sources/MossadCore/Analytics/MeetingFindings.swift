@@ -13,6 +13,20 @@ public enum MeetingFindings {
             self.subject = subject
             self.text = text
         }
+
+        /// The words after a name, with the verb that fits "You": "You were the only voice".
+        public func text(after name: String) -> String {
+            guard name == "You" else { return text }
+            for (one, you) in [("was ", "were "), ("is ", "are "), ("has ", "have ")] where text.hasPrefix(one) { return you + text.dropFirst(one.count) }
+            return text
+        }
+
+        /// The sentence with its subject's name in front.
+        public func said(_ name: (String) -> String) -> String {
+            guard let subject else { return text }
+            let n = name(subject)
+            return n + " " + text(after: n)
+        }
     }
 
     /// "48 s", "3 min 12 s", "1 h 4 min".

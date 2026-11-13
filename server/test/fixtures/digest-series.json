@@ -22,11 +22,11 @@
       ],
       "id" : "cal:g-weekly",
       "keys" : [
-        "cal:g-weekly",
-        "call:20270108-100000",
-        "call:20270113-100000"
+        "h:96d5d9235218365838ac6982",
+        "h:930739fe6cb4bb8118c8c304",
+        "h:ee97110d55d8174621ebfb98"
       ],
-      "line" : "Usually 3 people; 1 open item",
+      "line" : "Usually 4 people; 1 open item",
       "openItems" : [
         {
           "callID" : "20270113-100000",
@@ -41,8 +41,8 @@
           "callID" : "20270113-100000",
           "minutes" : 30,
           "notesOnly" : false,
-          "ownerShare" : 0.25,
-          "people" : 3,
+          "ownerShare" : 0.20000000000000001,
+          "people" : 4,
           "start" : "2027-01-09T08:00:00Z"
         },
         {
@@ -57,10 +57,7 @@
       "stats" : {
         "medianMinutes" : 30,
         "meetings" : 2,
-        "planned" : 0,
-        "ranOver" : 0,
-        "since" : "2027-01-03T08:00:00Z",
-        "startedLate" : 0
+        "since" : "2027-01-03T08:00:00Z"
       },
       "title" : "Weekly sync",
       "usualPeople" : [
