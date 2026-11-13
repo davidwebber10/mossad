@@ -5,6 +5,8 @@ import MossadCore
 @main
 struct MossadEntry {
     static func main() {
+        // First of all: a preview reads and writes its own empty settings, never the real app's.
+        AppIdentity.current.isolateDefaults()
         // Before any resolver: the app, `--mcp`, and each command-line step read the same company domains.
         CompanyDomains.loadSaved()
         // The build flag says what this copy does; the bundle id picks its folder and Keychain. They must agree.

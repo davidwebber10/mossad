@@ -94,3 +94,37 @@ final class AppIdentityBuildTests: XCTestCase {
         XCTAssertNotNil(AppIdentity(bundleID: AppIdentity.rehearsalBundleID).mismatch(rehearsalBuild: false))
     }
 }
+
+final class AppIdentityPreviewTests: XCTestCase {
+    func testAPreviewHasItsOwnSettingsAndKeychain() {
+        let id = AppIdentity(bundleID: AppIdentity.mainBundleID, arguments: ["Mossad", "--ui-preview"])
+        XCTAssertTrue(id.isPreview)
+        XCTAssertEqual(id.keychainService, "com.dwebber.mossad.preview")
+        XCTAssertEqual(id.defaultsSuite, "com.dwebber.mossad.preview")
+    }
+
+    func testARunOnAMadeUpFolderIsAPreview() {
+        let id = AppIdentity(bundleID: AppIdentity.mainBundleID, arguments: ["Mossad"], environment: ["MOSSAD_ROOT": "/tmp/demo"])
+        XCTAssertTrue(id.isPreview)
+        XCTAssertNotEqual(id.keychainService, AppIdentity.mainBundleID)
+    }
+
+    func testAnEmptyRootIsNotAPreview() {
+        let id = AppIdentity(bundleID: AppIdentity.mainBundleID, arguments: ["Mossad"], environment: ["MOSSAD_ROOT": ""])
+        XCTAssertFalse(id.isPreview)
+        XCTAssertNil(id.defaultsSuite)
+        XCTAssertEqual(id.keychainService, AppIdentity.mainBundleID)
+    }
+
+    func testTheRealAppReadsItsOwnSettings() {
+        let id = AppIdentity(bundleID: AppIdentity.mainBundleID, arguments: ["Mossad", "--open-window", "Meetings"])
+        XCTAssertFalse(id.isPreview)
+        XCTAssertNil(id.defaultsSuite)
+    }
+
+    func testARehearsalPreviewNeverReadsRehearsalsKeys() {
+        let id = AppIdentity(bundleID: AppIdentity.rehearsalBundleID, arguments: ["--ui-preview"])
+        XCTAssertEqual(id.keychainService, "com.dwebber.mossad.rehearsal.preview")
+        XCTAssertEqual(id.defaultsSuite, "com.dwebber.mossad.rehearsal.preview")
+    }
+}

@@ -37,6 +37,8 @@ public enum ServerPairing {
 
     /// The server the Mac shared through iCloud Keychain, if any.
     public static func shared() -> ServerConnection? {
+        // A preview never reads the owner's iCloud Keychain.
+        guard !AppIdentity.current.isPreview else { return nil }
         var q = query
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -46,6 +48,7 @@ public enum ServerPairing {
     }
 
     public static func share(_ c: ServerConnection) throws {
+        guard !AppIdentity.current.isPreview else { return }
         let data = try JSONEncoder().encode(c)
         let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecItemNotFound {
@@ -59,7 +62,10 @@ public enum ServerPairing {
         }
     }
 
-    public static func unshare() { SecItemDelete(query as CFDictionary) }
+    public static func unshare() {
+        guard !AppIdentity.current.isPreview else { return }
+        SecItemDelete(query as CFDictionary)
+    }
 }
 
 /// Where this device syncs: iCloud (the default), the owner's own server, or nowhere.
