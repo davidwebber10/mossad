@@ -140,7 +140,8 @@ extension AppController {
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
             // Only while there are reads to cover.
-            guard let self, self.personasOn else { return }
+            // Also while the quick panel shows, which covers its chat during a share.
+            guard let self, self.personasOn || self.askPanel?.isVisible == true else { return }
             DispatchQueue.global(qos: .utility).async {
                 // With no Screen Recording permission the titles of other apps cannot be read: not known.
                 let own = ProcessInfo.processInfo.processIdentifier

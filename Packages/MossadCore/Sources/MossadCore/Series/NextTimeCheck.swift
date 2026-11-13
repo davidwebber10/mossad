@@ -50,21 +50,28 @@ public struct NextTimeChecker: Sendable {
     /// The line that holds every word of the quote, in order and on word limits, with those words as the line
     /// has them. Nil otherwise: a paraphrase or a quote with a made-up end is not proof.
     static func line(quoting quote: String, in lines: [Utterance]) -> (line: Utterance, quote: String)? {
+        for line in Transcript.interleaved(lines) {
+            if let words = words(quoting: quote, in: line.text) { return (line, words) }
+        }
+        return nil
+    }
+
+    /// The quote's words as `text` has them, when every word of the quote is there in order and on word limits,
+    /// and the quote has `quoteWords` words or more. The after-call check and the live check use this one rule.
+    static func words(quoting quote: String, in text: String) -> String? {
         func norm(_ word: Substring) -> String { word.lowercased().filter { $0.isLetter || $0.isNumber } }
         let wanted = quote.split(whereSeparator: \.isWhitespace).map(norm).filter { !$0.isEmpty }
         guard wanted.count >= quoteWords else { return nil }
-        for line in Transcript.interleaved(lines) {
-            let raw = line.text.split(whereSeparator: \.isWhitespace)
-            let pairs = raw.enumerated().map { ($0.offset, norm($0.element)) }.filter { !$0.1.isEmpty }
-            guard pairs.count >= wanted.count else { continue }
-            for start in 0...(pairs.count - wanted.count) where (0..<wanted.count).allSatisfy({ pairs[start + $0].1 == wanted[$0] }) {
-                let first = pairs[start].0, last = pairs[start + wanted.count - 1].0
-                var words = raw[first...last].map(String.init)
-                // Leading and trailing marks belong to the sentence around the quote.
-                words[0] = String(words[0].drop { !$0.isLetter && !$0.isNumber })
-                words[words.count - 1] = String(words[words.count - 1].reversed().drop { !$0.isLetter && !$0.isNumber }.reversed())
-                return (line, words.joined(separator: " "))
-            }
+        let raw = text.split(whereSeparator: \.isWhitespace)
+        let pairs = raw.enumerated().map { ($0.offset, norm($0.element)) }.filter { !$0.1.isEmpty }
+        guard pairs.count >= wanted.count else { return nil }
+        for start in 0...(pairs.count - wanted.count) where (0..<wanted.count).allSatisfy({ pairs[start + $0].1 == wanted[$0] }) {
+            let first = pairs[start].0, last = pairs[start + wanted.count - 1].0
+            var words = raw[first...last].map(String.init)
+            // Leading and trailing marks belong to the sentence around the quote.
+            words[0] = String(words[0].drop { !$0.isLetter && !$0.isNumber })
+            words[words.count - 1] = String(words[words.count - 1].reversed().drop { !$0.isLetter && !$0.isNumber }.reversed())
+            return words.joined(separator: " ")
         }
         return nil
     }
@@ -82,29 +89,60 @@ public struct NextTimeChecker: Sendable {
 /// Which points a written meeting is checked for, and what the check changes. Pure.
 public enum NextTimeRules {
     /// The open points that `r` can settle: its series' points and the points for a person who spoke in it, each
-    /// saved before the meeting began. A point the owner reopened from this meeting is left out.
+    /// saved before the meeting ended (a point added during it is read only against the lines after it, in
+    /// `apply`). A point the owner reopened from this meeting is left out.
     public static func points(for r: CallRecord, in book: NextTimeBook, series: MeetingSeries?, people: PersonReferences) -> [NextTimePoint] {
         let spoke = Set((r.speakerPeople ?? [:]).values.map(people.canonical))
             .union(r.speakerNames.values.compactMap { people.id(for: $0) })
         return book.visible.filter { p in
-            guard p.isOpen, p.created < r.start, !(p.reopened ?? []).contains(r.id) else { return false }
+            guard p.isOpen, p.created < r.end, !(p.reopened ?? []).contains(r.id) else { return false }
             if let s = series, p.seriesID != nil, p.belongs(to: s) { return true }
             if p.seriesID == nil, let id = p.personID { return spoke.contains(people.canonical(id)) }
             return false
         }
     }
 
-    /// Marks the found points discussed in `r`, and carries the rest of `checked` to the next meeting.
-    public static func apply(_ found: [NextTimeChecker.Found], checked: [NextTimePoint], call r: CallRecord, to book: inout NextTimeBook, at date: Date) {
+    /// A meeting the owner missed: a notes-only meeting in which the owner is not known to be there
+    /// (`CallRecord.ownerPresent`, the rule that keeps it out of the owner's hours and "last met"). A recording is
+    /// one the owner attended: Mossad records the owner's own call.
+    public static func ownerMissed(_ r: CallRecord) -> Bool { r.isNotesOnly && r.ownerPresent != true }
+
+    /// Marks the found points discussed in `r`, and carries the rest of `checked` to the next meeting. In a
+    /// meeting the owner missed, nothing closes and nothing is carried: a found point gets a mention and stays open.
+    /// `rejected` are the live marks the owner answered with "Not raised": their lines never close the point.
+    /// A point added during the meeting is found only in a line said after it existed, and is never carried by it.
+    public static func apply(_ found: [NextTimeChecker.Found], checked: [NextTimePoint], call r: CallRecord, to book: inout NextTimeBook, at date: Date,
+                             rejected: [LivePointMarks.Mark] = []) {
+        let missed = ownerMissed(r)
         for p in checked {
-            if let f = found.first(where: { $0.point == p.id }) {
-                book.update(p.id, at: date) { $0.done = NextTimePoint.Discussed(callID: r.id, at: f.at, quote: f.quote, date: date, byOwner: false) }
-            } else if !(p.carried ?? []).contains(r.id), p.seriesID != nil {
+            let since = p.created > r.start ? p.created.timeIntervalSince(r.start) : nil
+            let usable = found.first { f in
+                f.point == p.id && since.map { f.at > $0 } != false
+                    && !rejected.contains { isRejected(f, by: $0, lines: r.utterances) }
+            }
+            if let f = usable {
+                if missed {
+                    book.mention(p.id, .init(callID: r.id, at: f.at, quote: f.quote, date: r.start), at: date)
+                } else {
+                    book.update(p.id, at: date) { $0.done = NextTimePoint.Discussed(callID: r.id, at: f.at, quote: f.quote, date: date, byOwner: false) }
+                }
+            } else if !missed, since == nil, !(p.carried ?? []).contains(r.id), p.seriesID != nil {
                 // A person's point waits for a meeting with them; it is not "carried" by a meeting of no series.
                 book.update(p.id, at: date) { $0.carried = ($0.carried ?? []) + [r.id] }
             }
         }
         book.checked.insert(r.id)
+    }
+
+    /// The live times and the final ones differ by a few seconds: a found line this close to a rejected one, or
+    /// one that holds the rejected words, is the line the owner rejected.
+    static let rejectedNear: TimeInterval = 30
+
+    static func isRejected(_ f: NextTimeChecker.Found, by m: LivePointMarks.Mark, lines: [Utterance]) -> Bool {
+        guard f.point == m.point else { return false }
+        if abs(f.at - m.at) <= rejectedNear { return true }
+        let line = lines.first { $0.start == f.at }?.text ?? f.quote
+        return NextTimeChecker.words(quoting: m.quote, in: line) != nil
     }
 
     /// A meeting older than this is not checked: a point is about the next meetings, not the old ones.
@@ -115,7 +153,8 @@ public enum NextTimeRules {
     public static func pending(_ records: [CallRecord], book: NextTimeBook, now: Date = Date()) -> [CallRecord] {
         guard let first = book.visible.filter(\.isOpen).map(\.created).min() else { return [] }
         let since = max(first, now.addingTimeInterval(-pendingDays * 86_400))
-        return records.filter { $0.status == .written && $0.start > since && !book.checked.contains($0.id) }.sorted { $0.start < $1.start }
+        // By its end: a point added during a meeting is checked against it.
+        return records.filter { $0.status == .written && $0.end > since && !book.checked.contains($0.id) }.sorted { $0.start < $1.start }
     }
 }
 
@@ -159,11 +198,21 @@ public actor NextTimeRunner {
             }
             do {
                 let found = try await UsageContext.$callID.withValue(r.id) { try await checker.check(points, in: r) }
+                // The marks made during the call: a line the owner rejected never closes its point.
+                let marks = LivePointMarks.load(from: paths.callDirectory(r.id))
                 // Read again: the owner may have changed a point while the request ran.
-                try NextTimeBook.change(in: paths.nextTime) { NextTimeRules.apply(found, checked: points, call: r, to: &$0, at: now()) }
+                try NextTimeBook.change(in: paths.nextTime) {
+                    NextTimeRules.apply(found, checked: points, call: r, to: &$0, at: now(), rejected: marks?.rejected ?? [])
+                }
                 checked += 1
                 if ledger.entries[r.id] != nil { ledger.clear(r.id); ledger.save(to: paths.nextTime) }
-                Log.info("Next time: \(found.count) of \(points.count) points discussed in \(r.id)")
+                let missed = NextTimeRules.ownerMissed(r)
+                Log.info("Next time: \(found.count) of \(points.count) points \(missed ? "came up while the owner was out" : "discussed") in \(r.id)")
+                // The marks made during the call were provisional: this check is the truth.
+                if let marks, !marks.marks.isEmpty {
+                    let result = LivePointRules.reconcile(marks, found: found, checked: points)
+                    Log.info("Next time: live marks in \(r.id): \(result.confirmed.count) confirmed, \(result.unsupported.count) not in the final transcript")
+                }
             } catch {
                 guard !RetryLedger.isUnbilled(error), !(error is UnreadableFile), !(error is NewerFile) else {
                     Log.error("Checking the points in \(r.id) waits: \(error)")

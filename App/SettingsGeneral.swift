@@ -3,7 +3,7 @@ import MossadCore
 import ServiceManagement
 import SwiftUI
 
-/// Settings › General: on or off and login, the owner, permissions, setup, the org chart, and updates.
+/// Settings › General: on or off and login, the owner, the shortcuts, permissions, setup, the org chart, and updates.
 struct GeneralSettings: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
@@ -54,6 +54,7 @@ struct GeneralSettings: View {
                     Button("Edit…") { editingDomains = true }.buttonStyle(.settings)
                 }
             }
+            ShortcutSettings()
             LabelColumn(label: "Permissions", note: permissions.allGood ? nil : "\(permissions.problemCount) need\(permissions.problemCount == 1 ? "s" : "") attention",
                         labelTopPadding: 10) {
                 VStack(alignment: .leading, spacing: 0) {

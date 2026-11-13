@@ -207,6 +207,16 @@ public enum ChatBlocks {
 
     // MARK: Times
 
+    private static let moment = try! NSRegularExpression(pattern: #"mossad://call/[^)?\s]+\?t=([0-9]+(?:\.[0-9]+)?)"#)
+
+    /// The whole seconds of each moment link in a block's text, in order: where an answer's time chips point.
+    public static func momentSeconds(in text: String) -> [Int] {
+        let ns = text as NSString
+        return moment.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap {
+            Double(ns.substring(with: $0.range(at: 1))).map { Int($0) }
+        }
+    }
+
     private static let bare = try! NSRegularExpression(pattern: #"\[(\d{1,3}):(\d{2})(?::(\d{2}))?\](?:\((mossad://call/[^)?\s]+)(\?t=[0-9.]+)?\)|(?!\())"#)
 
     /// Each time in an answer as a chip to its moment. A "[12:04]" with no link gets one to `callID`; a time link

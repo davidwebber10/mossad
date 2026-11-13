@@ -10,6 +10,8 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
     public var steps: [String] = []
     /// An answer given during the call, from the live transcript: its names and letters were not final.
     public var live: Bool?
+    /// When the owner asked it; nil on a question from an older build.
+    public var asked: Date?
 
     public init(role: Role, text: String, steps: [String] = []) {
         self.role = role

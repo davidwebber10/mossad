@@ -102,6 +102,25 @@ struct LiveTranscriptPanel: View {
     private var room: Bool { record.platform == .inPerson }
 
     var body: some View {
+        let points = !controller.livePointList().isEmpty
+        VStack(spacing: 0) {
+            // The owner's points stay over the transcript, which scrolls under them.
+            LivePointsPanel(model: controller.livePoints, record: record, top: top) { at in jump = LiveJump(at: at) }
+            transcript(top: points ? Space.m : top)
+        }
+        .task(id: record.id) {
+            // The catalog, the invite, and the names heard change during the call.
+            // Often at first, while the catalog is made, then every 10 s.
+            var n = 0
+            while !Task.isCancelled {
+                controller.refreshLivePoints(callID: record.id)
+                n += 1
+                try? await Task.sleep(for: .seconds(n < 5 ? 1 : 10))
+            }
+        }
+    }
+
+    private func transcript(top: CGFloat) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.m) {
@@ -198,15 +217,13 @@ private struct LiveLines: View {
 
     /// You, a voice's first name once the voice library knows it, else its letter. Unnamed voices are in the accent:
     /// they need a name after the call.
+    /// The quick panel's peek uses the same names (`LivePeek.name`).
     private func who(_ line: LiveTranscript.Line) -> (name: String, hue: Int, unnamed: Bool) {
-        guard line.source == .them else { return ("You", 0, false) }
-        let hue = model.transcript.hue(of: line, owner: owner)
-        if let name = line.speakerKey.flatMap({ model.transcript.names[$0] }) {
-            return name == owner ? ("You", 0, false) : (String(name.split(separator: " ").first ?? ""), hue, false)
-        }
-        // The same label as the chat and current_call: "Speaker A2" in a later stream session.
-        if let letter = line.speaker { return (LiveTranscript.label(letter, session: line.session), hue, true) }
-        return (room ? "Room" : "Call", hue, false)
+        let name = LivePeek.name(of: line, in: model.transcript, owner: owner, room: room)
+        guard line.source == .them, name != "You" || line.speakerKey.flatMap({ model.transcript.names[$0] }) == nil else { return ("You", 0, false) }
+        // A letter ("Speaker A2" in a later stream session) needs a name after the call.
+        let unnamed = line.speaker != nil && line.speakerKey.flatMap { model.transcript.names[$0] } == nil
+        return (name, model.transcript.hue(of: line, owner: owner), unnamed)
     }
 }
 
