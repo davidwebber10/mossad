@@ -146,8 +146,6 @@ public enum AskPanelSizing {
     public static let pointsRow: CGFloat = 36, pointsMax: CGFloat = 220
     /// One receipt or card of the chat's actions, as the panel shows it: one line.
     public static let actionRow: CGFloat = 30
-    /// The rows of an answer's actions, which the thread's height holds.
-    public static func actions(_ count: Int) -> CGFloat { CGFloat(max(0, count)) * actionRow }
     /// The panel's tallest.
     public static var limit: CGFloat { header + threadLimit + chips + field + footer }
 

@@ -39,7 +39,19 @@ extension ChatTools {
                  schema: ["type": "object", "properties": ["chat_id": ["type": "string"]], "required": ["chat_id"]]),
     ] }
 
-    var profile: CoachProfile { paths.flatMap { try? CoachProfile.load(from: $0.coach) } ?? CoachProfile() }
+    /// Only read: a file that does not decode stays where it is for the app (`CoachProfile.load` would set it aside).
+    var profile: CoachProfile {
+        paths.flatMap { (try? Data(contentsOf: $0.coach.appendingPathComponent(CoachProfile.fileName))).flatMap { try? JSONDecoder.coach.decode(CoachProfile.self, from: $0) } }
+            ?? CoachProfile()
+    }
+
+    /// The profile as the tools may give it: never what the coach learned about a person who keeps no read, and no
+    /// notes or older reads on people where the reads do not show (`personaTraits`).
+    var shownProfile: CoachProfile {
+        var p = profile.withoutCoachData(on: coachPeople)
+        if !personaTraits { p.people = [:] }
+        return p
+    }
 
     var chats: [Chat] { paths.map { ChatStore(directory: $0.chats).all() } ?? [] }
 
@@ -104,8 +116,13 @@ extension ChatTools {
         }
     }
 
+    /// Whether two live saved people have this name.
+    static func sharedName(_ name: String, in people: [Person]) -> Bool {
+        people.filter { $0.isLive && $0.displayName == name }.count > 1
+    }
+
     func coachProfileText() -> String {
-        let p = profile
+        let p = shownProfile
         var parts: [String] = []
         for kind in CoachFact.Kind.allCases where !p.facts(kind).isEmpty {
             parts.append("\(kind.title):\n" + p.facts(kind).map { "- \($0.text)" }.joined(separator: "\n"))
@@ -142,7 +159,7 @@ extension ChatTools {
     }
 
     func commitmentsText(status: String, person: String?, limit: Int) -> String {
-        guard let paths, let book = try? CommitmentBook.load(from: paths.commitments) else { return "No commitments yet." }
+        guard let paths, let book = CommitmentBook.peek(in: paths.commitments) else { return "No commitments yet." }
         let now = Date()
         let list = book.visible.filter { c in
             let s = c.status(now: now)
@@ -155,7 +172,7 @@ extension ChatTools {
             return keep && (person.map { p in (c.to ?? "").localizedCaseInsensitiveContains(p) || (c.callTitle ?? "").localizedCaseInsensitiveContains(p) } ?? true)
         }
         .sorted { ($0.due ?? .distantFuture, $0.madeAt) < ($1.due ?? .distantFuture, $1.madeAt) }
-        .prefix(max(limit, 30))
+        .prefix(min(limit, Self.maxLimit))
         guard !list.isEmpty else { return "No commitments match." }
         let day = Date.FormatStyle().year().month(.abbreviated).day()
         return list.map { c in
@@ -198,7 +215,7 @@ extension ChatTools {
 
     func peopleText(query: String?, limit: Int) -> String {
         let stats = PersonStatistics.compute(records)
-        let notes = profile.people
+        let notes = shownProfile.people
         let reads = personaTraits ? personaReads() : [:]
         let names = stats.keys.filter { name in
             name != owner && !name.hasPrefix("Speaker ") && (query.map { q in Self.name(q, matches: name) } ?? true)
@@ -208,21 +225,26 @@ extension ChatTools {
         return names.prefix(min(limit, Self.maxLimit)).map { name in
             let s = stats[name]!
             let id = PeopleStore.id(forVoiceName: name, isOwner: false, in: savedPeople)
+            // Two saved people with this name: the numbers by name count both, so no one id is theirs.
+            let shared = Self.sharedName(name, in: savedPeople)
             var line = name
-            if let id, let p = saved.person(id.rawValue) {
+            if shared {
+                line += " | two saved people have this name; use read_person with an address or a person_id"
+            } else if let id, let p = saved.person(id.rawValue) {
                 line += " | person_id: \(id.rawValue)"
                 if let job = p.directory?.jobTitle?.nonBlank { line += " | \(job)" }
             }
             line += " | \(s.meetings.count) meetings | talked \(Int(s.totalTalk / 60)) min"
             if let last = s.lastHeard { line += " | last \(last.formatted(.dateTime.month(.abbreviated).day()))" }
-            if let note = notes[name]?.note { line += " | coach: \(note)" }
+            let shows = !shared && coachPeople.showsRead(of: id?.rawValue, shows: personaTraits)
+            if shows, let note = notes[name]?.note { line += " | coach: \(note)" }
             // Never the read of a person who keeps none, also from a copy that another device made.
-            let read = coachPeople.id(of: name).flatMap { coachPeople.notProfiled.contains($0) ? nil : reads[$0] }
+            let read = shared ? nil : coachPeople.id(of: name).flatMap { coachPeople.notProfiled.contains($0) ? nil : reads[$0] }
             if let read, !read.traits.isEmpty {
                 line += "\n  How they think:\n" + read.text(name: name).split(separator: "\n").map { "  " + $0 }.joined(separator: "\n")
             }
             // The older read stays until the person has a card.
-            if read?.card == nil, let brief = notes[name]?.brief {
+            if shows, read?.card == nil, let brief = notes[name]?.brief {
                 line += "\n  The coach's read (from \(brief.calls) calls): " + brief.text.replacingOccurrences(of: "\n", with: " / ")
             }
             return line

@@ -240,3 +240,19 @@ public struct ServerStore: RecordStore {
         }
     }
 }
+
+/// What the server's MCP was told, so a config that did not arrive is sent again.
+public struct ServerConfigState: Equatable, Sendable {
+    /// What the server answered for with a success.
+    private var arrivedConfig: String?
+    private var inFlight: String?
+
+    public init() {}
+    public func needsSend(_ config: String) -> Bool { inFlight == nil && arrivedConfig != config }
+    public mutating func sending(_ config: String) { inFlight = config }
+    public mutating func failed() { inFlight = nil }
+    public mutating func arrived(_ config: String) {
+        inFlight = nil
+        arrivedConfig = config
+    }
+}

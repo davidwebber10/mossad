@@ -135,6 +135,8 @@ public actor CoachRunner {
                 fresh.apply(result.update, review: result.review, callID: r.id, title: r.title, at: r.start, proposal: result.proposal, advice: result.advice,
                             people: ids)
                 fresh.ask(result.questions)
+                // Nothing learned about a person who keeps no read is kept.
+                fresh = fresh.withoutCoachData(on: CoachPeople.read(paths: paths))
                 try fresh.save(to: paths.coach)
                 profile = fresh
                 done += 1

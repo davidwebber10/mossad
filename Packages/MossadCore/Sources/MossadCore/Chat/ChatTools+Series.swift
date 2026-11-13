@@ -14,7 +14,7 @@ extension ChatTools {
                     "series": ["type": "string"], "limit": ["type": "integer", "description": "The most meetings to list, default 20."],
                  ] as [String: Any], "required": ["series"]]),
         ToolSpec(name: "next_time_points",
-                 description: "The owner's points to raise later: for the next meeting of a recurring meeting or the next time they see a person. Each with point_id, its series or person, when it was saved, and what happened to it: discussed (in which call_id, at what second, with the quote), carried over meetings that did not discuss it, or seen in a meeting Mossad has only the notes of. status is open (default), done, or all. Narrow by series (series_id or title words) or person (person_id or whole name). To add one, use add_next_time_point.",
+                 description: "The owner's points to raise later: for the next meeting of a recurring meeting or the next time they see a person. Each with point_id, its series or person, when it was saved, and what happened to it: discussed (in which call_id, at what second, with the quote), carried over meetings that did not discuss it, or seen in a meeting Mossad has only the notes of. status is open (default), done, or all. Narrow by series (series_id or title words) or person (person_id or whole name). To add one, use add_next_time_point (in Mossad's own chat: add_point).",
                  schema: ["type": "object", "properties": [
                     "status": ["type": "string", "enum": ["open", "done", "all"]], "series": ["type": "string"], "person": ["type": "string"], "limit": ["type": "integer"],
                  ] as [String: Any]]),
@@ -79,8 +79,18 @@ extension ChatTools {
 
     private func asOf(_ s: CalendarSnapshot, now: Date) -> String {
         let hours = now.timeIntervalSince(s.saved) / 3600
-        let line = "Calendar as Mossad read it \(s.saved.formatted(.dateTime.month(.abbreviated).day().hour().minute()))."
-        return hours > 24 ? line + " That is more than a day ago: open Mossad to read it again." : line
+        var line = "Calendar as Mossad read it \(s.saved.formatted(.dateTime.month(.abbreviated).day().hour().minute()))."
+        if hours > 24 { line += " That is more than a day ago: open Mossad to read it again." }
+        if s.access?.google == .failed { line += " Google's calendar could not be read then: this is the Mac's calendar only." }
+        if s.access?.mac == .no, s.access?.google == .yes { line += " Mossad has no access to the Mac's calendar: this is Google's only." }
+        return line
+    }
+
+    /// Unknown is not "no calls": a calendar Mossad could not read says so.
+    func noAccess(_ s: CalendarSnapshot?) -> String? {
+        guard let a = s?.access, a.mac != .yes, a.google != .yes else { return nil }
+        return "Mossad has no access to the calendar" + (a.google == .failed ? " (and Google's calendar could not be read)" : "")
+            + ", so it cannot say which calls come. Allow it in System Settings > Privacy & Security > Calendars, or connect Google in Mossad."
     }
 
     static let noCalendar = "Mossad has not read the calendar on this Mac yet. It reads it while the app runs, with calendar access on."
@@ -90,6 +100,7 @@ extension ChatTools {
     func upcomingText(_ input: [String: Any], now: Date = Date()) -> String {
         let (all, upcoming, snapshot) = catalog(now: now)
         guard let snapshot else { return Self.noCalendar }
+        if let none = noAccess(snapshot) { return none }
         let days = max(1, min(input["days"] as? Int ?? 7, UpcomingMeeting.days))
         let limit = min(input["limit"] as? Int ?? Self.defaultLimit, Self.maxLimit)
         let horizon = now.addingTimeInterval(Double(days) * 86_400)
@@ -114,6 +125,7 @@ extension ChatTools {
     func prepText(_ input: [String: Any], now: Date = Date()) -> String {
         let (all, upcoming, snapshot) = catalog(now: now)
         guard let snapshot else { return Self.noCalendar }
+        if let none = noAccess(snapshot) { return none }
         let query = (input["meeting"] as? String)?.nonBlank
         let meeting = query.map { q in upcoming.first { $0.id == q } ?? upcoming.first { $0.title.localizedCaseInsensitiveContains(q) } } ?? upcoming.first
         guard let meeting else { return asOf(snapshot, now: now) + "\nNo upcoming call" + (query.map { " matches \u{201C}\($0)\u{201D}" } ?? "") + ". Use upcoming_meetings for the list." }
@@ -123,7 +135,7 @@ extension ChatTools {
         let commitments = paths.flatMap { CommitmentBook.peek(in: $0.commitments) }?.items
         let prep = MeetingPrep(meeting: meeting, owner: owner, records: records, facts: MeetingFactsCache().facts(for: records, owner: owner),
                                commitments: commitments, people: directory, ownerEmails: [settings.ownerEmail], now: now,
-                               memory: profile, saved: coachPeople, reads: reads)
+                               memory: shownProfile, saved: coachPeople, reads: reads)
         var parts = ["upcoming_id: \(meeting.id) | \(meeting.title) | \(when(meeting.start, meeting.end))"
                      + (SeriesCatalog.series(of: meeting, in: all).map { " | series_id: \($0.id)" } ?? "")]
         if !prep.invited.isEmpty {
@@ -173,7 +185,7 @@ extension ChatTools {
             parts.append(line)
         }
         let coach = prep.coach.people.compactMap { p -> String? in
-            guard let headline = p.headline else { return nil }
+            guard coachPeople.showsRead(of: p.personID, shows: personaTraits), let headline = p.headline else { return nil }
             var line = "- \(p.name): \(headline)"
             if p.showsCard, let card = p.card { line += "\n  " + card.lines.map { "\($0.kind.title): \($0.text)" }.joined(separator: " / ") }
             return line

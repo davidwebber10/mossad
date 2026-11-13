@@ -9,7 +9,7 @@ public struct ChatActionHost: Sendable {
     /// The call that records now and the second of its recording; nil with no call.
     public var liveMoment: @Sendable () -> (callID: String, at: TimeInterval)?
     /// Marks a second of a written meeting, with its note.
-    public var bookmark: @Sendable (_ callID: String, _ at: TimeInterval, _ note: String?) -> Void
+    public var bookmark: @Sendable (_ callID: String, _ at: TimeInterval, _ note: String?) -> Bool
     /// Marks this moment of the call that records, with its note; the second, or nil when no call records.
     public var bookmarkNow: @Sendable (_ note: String?) -> TimeInterval?
     /// Takes a bookmark away; false while its call still records (Undo works after the call).
@@ -18,7 +18,7 @@ public struct ChatActionHost: Sendable {
     public var changed: @Sendable (Changed) -> Void
 
     public init(paths: Paths, liveMoment: @escaping @Sendable () -> (callID: String, at: TimeInterval)? = { nil },
-                bookmark: @escaping @Sendable (String, TimeInterval, String?) -> Void = { _, _, _ in },
+                bookmark: @escaping @Sendable (String, TimeInterval, String?) -> Bool = { _, _, _ in false },
                 bookmarkNow: @escaping @Sendable (String?) -> TimeInterval? = { _ in nil },
                 removeBookmark: @escaping @Sendable (String, TimeInterval) -> Bool = { _, _ in false },
                 changed: @escaping @Sendable (Changed) -> Void = { _ in }) {
@@ -52,12 +52,14 @@ public struct ChatActionHost: Sendable {
             undo.callID = callID
             switch r.kind {
             case .addBookmark:
-                guard let at = r.at else { return nil }
-                bookmark(callID, at, r.text)
+                // Only once the pipeline wrote it: a receipt says Done after the write, never before.
+                guard let at = r.at, bookmark(callID, at, r.text) else { return nil }
                 undo.at = at
+                target.note = r.text
             case .bookmarkNow:
                 guard let at = bookmarkNow(r.text) else { return nil }
                 undo.at = at
+                target.note = r.text
             case .removeBookmark:
                 guard let at = r.at, removeBookmark(callID, at) else { return nil }
                 return ChatActionChange(undo: r, after: ChatActionTarget())
@@ -84,7 +86,8 @@ public struct ChatActionHost: Sendable {
             guard ChatActionApply.holds(after, task: task) else { return .changedSince }
         case .bookmarks:
             guard let id = undo.callID, let at = undo.at, let r = try? CallRecord.load(from: paths.callDirectory(id)) else { return .failed }
-            guard r.markers.contains(where: { $0.isBookmark && abs($0.offset - at) <= 1 }) else { return .changedSince }
+            // The bookmark as the chat left it, with its note: one the owner changed since stays.
+            guard let m = r.markers.first(where: { $0.isBookmark && abs($0.offset - at) <= 1 }), m.note == after.note else { return .changedSince }
         default:
             return .failed
         }
@@ -98,31 +101,67 @@ public final class ChatActions: @unchecked Sendable {
     let tools: ChatTools
     let host: ChatActionHost
     let live: Bool
+    let message: String
+    /// The receipts and cards the chat already has: a Retry of the same message never does an action again.
+    let earlier: [ChatActionRecord]
+    /// Gets each receipt and card the moment it exists, so it is saved whatever happens to the answer.
+    let onRecord: (@Sendable (ChatActionRecord) -> Void)?
     private let lock = NSLock()
     private var turn: ActionTurn
     private var done: [ChatActionRecord] = []
     private var waiting: [(ChatActionRequest, String)] = []
+    /// The card of the actions over the limit, the same one each time it grows.
+    private let batchID = UUID()
 
     /// `message`: the owner's own words, the only reason to act. `live`: a call records now.
-    public init(message: String, tools: ChatTools, host: ChatActionHost, live: Bool) {
+    /// A series' place, with its id encoded: an id such as "cal:ek:a/b c" holds a slash and a space.
+    public static func place(series id: String) -> String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/ ")
+        return "mossad://series/" + (id.addingPercentEncoding(withAllowedCharacters: allowed) ?? id)
+    }
+
+    public init(message: String, tools: ChatTools, host: ChatActionHost, live: Bool, earlier: [ChatActionRecord] = [],
+                onRecord: (@Sendable (ChatActionRecord) -> Void)? = nil) {
         self.tools = tools
         self.host = host
         self.live = live
+        self.message = message
+        self.earlier = earlier
+        self.onRecord = onRecord
         turn = ActionTurn(message: message, live: live)
+    }
+
+    /// The owner's message and the action's arguments, as one key.
+    static func key(message: String, name: String, input: [String: Any]) -> String {
+        let args = (try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        return "\(message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())|\(name)|\(args)"
+    }
+
+    private func keep(_ r: ChatActionRecord) {
+        lock.withLock {
+            if let i = done.firstIndex(where: { $0.id == r.id }) { done[i] = r } else { done.append(r) }
+        }
+        onRecord?(r)
     }
 
     /// What the thread shows: each receipt and card, and one card for the actions over the limit.
     public var records: [ChatActionRecord] {
         lock.withLock {
             var out = done
-            if !waiting.isEmpty {
-                var batch = ChatActionRequest(.batch)
-                batch.items = waiting.map(\.0)
-                out.append(ChatActionRecord(request: batch, state: .proposed,
-                                            summary: "\(waiting.count) more: " + waiting.map(\.1).joined(separator: "; "), date: tools.now))
-            }
+            if let batch = batchRecord { out.append(batch) }
             return out
         }
+    }
+
+    private var batchRecord: ChatActionRecord? {
+        guard !waiting.isEmpty else { return nil }
+        var batch = ChatActionRequest(.batch)
+        batch.items = waiting.map { r, words in var x = r; x.summary = words; return x }
+        var card = ChatActionRecord(request: batch, state: .proposed,
+                                    summary: "\(waiting.count) more: " + waiting.map { ChatActionRecord.futureForm($0.1) }.joined(separator: "; "), date: tools.now)
+        card.id = batchID
+        return card
     }
 
     // MARK: The tools
@@ -194,6 +233,10 @@ public final class ChatActions: @unchecked Sendable {
     /// Runs an action tool and returns the words for the model; nil for any other tool.
     public func run(_ name: String, input: [String: Any]) -> String? {
         guard Self.names.contains(name) else { return nil }
+        let key = Self.key(message: message, name: name, input: input)
+        if let before = earlier.first(where: { $0.key == key && $0.state != .failed }) {
+            return "Already done for this message, so not again: \(before.summary)" + (before.state == .proposed ? " (it waits for the owner's click)" : "")
+        }
         let made: Result<(ChatActionRequest, String, String?), Refusal>
         switch name {
         case "add_point": made = point(input)
@@ -210,38 +253,58 @@ public final class ChatActions: @unchecked Sendable {
         }
         switch made {
         case .failure(let why): return why.text
-        case .success(let (request, summary, place)): return admit(request, summary: summary, place: place)
+        case .success(let (request, summary, place)): return admit(request, summary: summary, place: place, key: key, detail: Self.detail(request.kind))
         }
     }
 
     struct Refusal: Error { let text: String }
 
-    private func admit(_ r: ChatActionRequest, summary: String, place: String?) -> String {
+    /// What a card says before the click about what the click starts.
+    static func detail(_ kind: ChatActionRequest.Kind) -> String? {
+        switch kind {
+        case .nameVoice: "Mossad learns this voice for later calls and writes the summary again. No Undo here; you can rename the voice on the meeting."
+        case .setRecording: "No Undo here; you can change it on the meeting's page."
+        default: nil
+        }
+    }
+
+    private func admit(_ r: ChatActionRequest, summary: String, place: String?, key: String? = nil, detail: String? = nil) -> String {
         let admission = lock.withLock { turn.admit(r) }
+        let now = tools.now
+        func record(_ state: ChatActionRecord.State, _ words: String, place: String?, change: ChatActionChange? = nil) -> ChatActionRecord {
+            var rec = ChatActionRecord(request: r, state: state, summary: words, place: place, undo: change?.undo, after: change?.after, date: now)
+            rec.key = key
+            rec.detail = detail
+            return rec
+        }
         switch admission {
         case .refuse(let why):
             return "Not done: \(why)"
         case .later:
             lock.withLock { waiting.append((r, summary)) }
+            if let card = lock.withLock({ batchRecord }) { onRecord?(card) }
             return "Not done yet: one message runs at most \(ActionTurn.limit) actions. This one is on a card with the others over the limit; the owner clicks Do it."
         case .propose(let why):
-            lock.withLock { done.append(ChatActionRecord(request: r, state: .proposed, summary: summary, place: place, date: tools.now)) }
+            keep(record(.proposed, ChatActionRecord.futureForm(summary), place: place))
             return "Proposed, not done: \(summary). \(why) Tell the owner it waits for their click on the card."
         case .run:
-            let now = tools.now
             var request = r
             if request.kind == .bookmarkNow, request.callID == nil { return "Not done: no call records now." }
-            if request.kind == .tickPoint, request.callID == nil, let moment = host.liveMoment() {
+            // A tick is at this moment of the call only for a point of the call; any other is a plain tick.
+            if request.kind == .tickPoint, request.callID == nil, let id = request.pointID, let moment = host.liveMoment(),
+               let call = tools.live, call.id == moment.callID, tools.livePointList(call).contains(where: { $0.id == id }) {
                 request.callID = moment.callID
                 request.at = moment.at
             }
             guard let change = host.perform(request, now: now) else {
-                lock.withLock { done.append(ChatActionRecord(request: request, state: .failed, summary: summary, place: place, date: now)) }
+                keep(record(.failed, ChatActionRecord.futureForm(summary), place: place))
                 return "Could not do it: \(summary). The target is not there, is already so, or its file cannot be read."
             }
             var place = place
             if request.kind == .bookmarkNow, let id = request.callID, let at = change.undo.at { place = "mossad://call/\(id)?t=\(Int(at))" }
-            lock.withLock { done.append(ChatActionRecord(request: request, state: .done, summary: summary, place: place, undo: change.undo, after: change.after, date: now)) }
+            var rec = record(.done, summary, place: place, change: change)
+            rec.request = request
+            keep(rec)
             return "Done: \(summary). The owner sees a receipt with Undo."
         }
     }
@@ -259,7 +322,7 @@ public final class ChatActions: @unchecked Sendable {
             r.seriesKeys = s.savedKeys
             r.seriesTitle = s.title
             let when = (u ?? s.next).map { " (\(day($0)))" } ?? ""
-            return .success((r, "Saved for the next \(s.title)\(when): \(text)", "mossad://series/\(s.id)"))
+            return .success((r, "Saved for the next \(s.title)\(when): \(text)", Self.place(series: s.id)))
         }
         func person(_ id: String, _ name: String, _ u: UpcomingMeeting?) -> Result<(ChatActionRequest, String, String?), Refusal> {
             r.personID = id
@@ -299,7 +362,7 @@ public final class ChatActions: @unchecked Sendable {
               let p = tools.book?.points.first(where: { $0.id == id && !$0.deleted }) else { return .failure(Refusal(text: "Not done: no point with that point_id.")) }
         var r = ChatActionRequest(.editPoint)
         r.pointID = id
-        let place = p.seriesID.map { "mossad://series/\($0)" } ?? p.personID.map { "mossad://person/\($0)" }
+        let place = p.seriesID.map(Self.place(series:)) ?? p.personID.map { "mossad://person/\($0)" }
         switch input["change"] as? String {
         case "edit":
             guard let text = (input["text"] as? String)?.nonBlank else { return .failure(Refusal(text: "Not done: the new text is missing.")) }
@@ -367,9 +430,18 @@ public final class ChatActions: @unchecked Sendable {
     }
 
     private func bookmark(_ input: [String: Any]) -> Result<(ChatActionRequest, String, String?), Refusal> {
+        if let id = input["call_id"] as? String, tools.live?.id == id {
+            return .failure(Refusal(text: "Not done: that call records now. Use bookmark_now to mark this moment of it."))
+        }
         guard let id = input["call_id"] as? String, let m = tools.records.first(where: { $0.id == id }) else { return .failure(Refusal(text: "Not done: no meeting with that call_id.")) }
         guard let at = (input["at_seconds"] as? NSNumber)?.doubleValue, at >= 0, at <= max(m.recordedSeconds, m.end.timeIntervalSince(m.start)) else {
             return .failure(Refusal(text: "Not done: at_seconds is not a moment of that meeting."))
+        }
+        // The record on disk, which the owner may have marked since the list was read.
+        let current = tools.paths.flatMap { try? CallRecord.load(from: $0.callDirectory(id)) } ?? m
+        if let mine = current.markers.first(where: { $0.isBookmark && abs($0.offset - at) <= 1 }) {
+            return .failure(Refusal(text: "Not done: there is a bookmark at \(MarkdownWriter.timestamp(mine.offset)) already" + (mine.note.map { " (\u{201C}\($0)\u{201D})" } ?? "")
+                                    + ". The chat does not change the owner's bookmarks; ask whether another second will do."))
         }
         var r = ChatActionRequest(.addBookmark)
         r.callID = id
@@ -403,16 +475,20 @@ public final class ChatActions: @unchecked Sendable {
         switch name {
         case "name_voice":
             guard let label = (input["speaker"] as? String)?.nonBlank, let typed = (input["name"] as? String)?.nonBlank else { return .failure(Refusal(text: "Not done: give speaker and name.")) }
-            let shown = MarkdownWriter.displayNames(m)
-            guard let key = shown.first(where: { $0.value.caseInsensitiveCompare(label) == .orderedSame })?.key ?? (m.utterances.contains { $0.speakerKey == label } ? label : nil) else {
-                return .failure(Refusal(text: "Not done: \(m.title) has no voice called \(label)."))
+            // The name and the address must be one sure person, or a new one; the card shows all of it.
+            let target: NameVoiceTarget
+            switch NameVoiceTarget.resolve(label: label, name: typed, email: input["email"] as? String, record: m, people: tools.savedPeople) {
+            case .success(let t): target = t
+            case .failure(let e): return .failure(Refusal(text: "Not done: \(e.text)"))
             }
             r.kind = .nameVoice
-            r.speakerKey = key
-            r.speakerLabel = shown[key] ?? label
-            r.text = typed
-            r.email = (input["email"] as? String)?.nonBlank
-            return .success((r, "Name \(r.speakerLabel ?? label) in \(m.title) as \(typed)", place))
+            r.speakerKey = target.key
+            r.speakerLabel = target.label
+            r.text = target.name
+            r.email = target.email
+            r.personID = target.personID
+            let who = target.personID != nil ? "the saved person \(target.name)" : "a new person"
+            return .success((r, "Name \(target.label) in \(m.title) as \(target.name)" + (target.email.map { " (\($0))" } ?? "") + ", \(who)", place))
         case "rename_meeting":
             guard let title = (input["title"] as? String)?.nonBlank else { return .failure(Refusal(text: "Not done: the title is missing.")) }
             r.text = title

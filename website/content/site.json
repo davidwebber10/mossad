@@ -579,7 +579,7 @@
     {
       "id": "chat",
       "title": "Chat and MCP for other AI apps",
-      "intro": "Ask your meetings a question, or tell Mossad what to do, here or in the AI app you already use.",
+      "intro": "Ask your meetings a question, here or in the AI app you already use. In Mossad's own chat, you can also tell it what to do.",
       "image": "The Chat page: an answer with links that open the meeting at the moment it cites.",
       "features": [
         {

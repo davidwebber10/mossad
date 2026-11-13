@@ -39,6 +39,9 @@ final class ChatSession: ObservableObject {
         }
     }
 
+    /// The chat as its one writer saved it (a receipt, a click): shown also while an answer comes.
+    func show(_ c: Chat) { chat = c }
+
     /// The quick chat to continue, or none for a new one. Not while an answer comes: it saves its own copy.
     func adopt(_ found: Chat?) {
         guard !running else { return }
@@ -80,20 +83,26 @@ final class ChatSession: ObservableObject {
         stopped = false
         let stepSink = StepSink { [weak self] step in Task { @MainActor in self?.steps.append(step) } }
         let textSink = StepSink { [weak self] text in Task { @MainActor in self?.setPartial(text) } }
+        // Each receipt goes into the chat the moment its action is done, whatever happens to the answer.
+        let answerID = UUID(), asked0 = current
+        let actionSink = ActionSink { r in Task { @MainActor in _ = controller.saveChatAction(r, chat: asked0, answer: answerID) } }
+        let earlier = controller.chatActions(current)
         task = Task {
             var failed = false
             do {
                 let answer: ChatReply
                 if let record {
-                    answer = try await controller.liveChatAnswer(q, history: history, record: record, onStep: stepSink.add, onText: textSink.add)
+                    answer = try await controller.liveChatAnswer(q, history: history, record: record, earlier: earlier, onAction: actionSink.add,
+                                                                 onStep: stepSink.add, onText: textSink.add)
                 } else {
-                    answer = try await controller.chatAnswer(q, history: history, onStep: stepSink.add)
+                    answer = try await controller.chatAnswer(q, history: history, earlier: earlier, onAction: actionSink.add, onStep: stepSink.add)
                 }
                 guard !stopped else { throw CancellationError() }
                 var message = answer.message(steps: steps)
+                message.id = answerID
                 if record != nil { message.live = true }
-                current.messages.append(message)
-                current.updated = Date()
+                // Joined to the file's copy: its receipts and any click saved meanwhile stay.
+                current = controller.finishChatAnswer(message, chat: asked0)
                 save(current, controller)
                 if record != nil {
                     controller.liveChatsToSummarize.insert(current.id)
@@ -104,9 +113,11 @@ final class ChatSession: ObservableObject {
                 }
                 AccessibilityNotification.Announcement("Answer ready").post()
             } catch {
+                // What was done stays with its question, whatever happened to the answer.
+                let stop = controller.stopChatAnswer(chat: asked0, answer: answerID, question: asked.id)
+                current = stop.chat
                 if stopped {
                     // A stopped answer leaves no question without its answer, and a first question no empty chat.
-                    if current.messages.last?.id == asked.id { current.messages.removeLast() }
                     if ChatRunRules.removesChat(messagesLeft: current.messages.count) {
                         controller.chats.delete(current.id, record: false)
                         chat = nil
@@ -116,6 +127,8 @@ final class ChatSession: ObservableObject {
                         save(current, controller)
                     }
                 } else {
+                    if !stop.kept, current.messages.last?.id != asked.id { current.messages.append(asked) }
+                    save(current, controller)
                     failed = true
                     Log.error("\(record == nil ? "Quick chat" : "Live chat") failed: \(error)")
                     let friendly = FriendlyError(error, context: .chatting)

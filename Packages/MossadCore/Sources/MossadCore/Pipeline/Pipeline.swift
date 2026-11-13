@@ -1254,12 +1254,14 @@ public actor Pipeline {
     }
 
     /// Sets a bookmark's note after the call, or adds a bookmark at `offset` when none is there, and rewrites the note.
-    public func setBookmarkNote(callID: String, offset: TimeInterval, note: String) {
+    @discardableResult
+    public func setBookmarkNote(callID: String, offset: TimeInterval, note: String) -> Bool {
         guard var r = edit(callID, { r in
             let time = r.start.addingTimeInterval(offset).formatted(date: .omitted, time: .shortened)
             return r.setBookmarkNote(at: offset, note, markerText: "★ Bookmarked at \(time)")
-        }) else { return }
+        }) else { return false }
         save(&r, dir: paths.callDirectory(callID))
+        return true
     }
 
     /// Takes away the bookmark within a second of `offset` and rewrites the note: the Undo of one the chat added.

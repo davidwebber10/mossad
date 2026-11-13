@@ -77,6 +77,8 @@ final class ChatPagesToolsTests: XCTestCase {
         XCTAssertTrue(text.contains("Speakers:"), text)
         XCTAssertTrue(text.contains("You (Avery Webb)"), text)
         XCTAssertTrue(text.contains("Sam Carter"), text)
+        // The owner answered nobody: the reply time is not known, never 0.
+        XCTAssertTrue(text.contains("You (Avery Webb)") && text.contains("reply after not known"), text)
         XCTAssertEqual(tools().run("meeting_analytics", input: ["call_id": "nope"]), "No meeting with that call_id.")
     }
 

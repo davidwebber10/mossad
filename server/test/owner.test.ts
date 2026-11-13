@@ -32,7 +32,12 @@ const view = (id: string, start: string, persons: { id: string; name: string }[]
 
 async function setUp(config: Record<string, string> = {}) {
   const w = fakeEnv();
-  const put = (name: string, body: unknown) => w.files.put(`records/${name}/data`, JSON.stringify(body));
+  const types: Record<string, string> = { people: 'People', personas: 'Personas', 'next-time': 'NextTime', commitments: 'Commitments', 'coach-profile': 'CoachProfile' };
+  const put = async (name: string, body: unknown) => {
+    await w.files.put(`records/${name}/data`, JSON.stringify(body));
+    await w.env.DB.prepare(`INSERT INTO records (name, type, fields, assets, seq, deleted, updated) VALUES (?, ?, '{}', '["data"]',
+      (SELECT COALESCE(MAX(seq), 0) + 1 FROM records), 0, '2026-11-10T00:00:00Z')`).bind(name, types[name] ?? 'Chat').run();
+  };
   await put('people', people);
   await put('personas', { version: 1, personas: [read('id-sam', 'Sam'), read('id-dana', 'Dana')] });
   await put('next-time', {
@@ -45,9 +50,8 @@ async function setUp(config: Record<string, string> = {}) {
   });
   await put('commitments', { items: [{ id: 't1', text: 'Send the forecast', to: 'Sam Carter', toID: 'id-sam', due: '2099-01-01T00:00:00Z', madeAt: '2026-11-01T00:00:00Z' }] });
   await put('coach-profile', { facts: [{ kind: 'role', text: 'Head of data' }], guidance: [{ text: 'Be blunt.' }], people: { 'Sam Carter': { note: 'Wants the decision first.' } } });
-  await put('chat-c1', { id: 'c1', title: 'Budget prep', updated: '2026-11-02T00:00:00Z', summary: 'Planned the pitch.', messages: [{ role: 'user', text: 'How do I pitch two hires?' }, { role: 'assistant', text: 'Lead with the cost.' }] });
+  await put('chat-AAAAAAAA-0000-0000-0000-000000000001', { id: 'AAAAAAAA-0000-0000-0000-000000000001', title: 'Budget prep', updated: '2026-11-02T00:00:00Z', summary: 'Planned the pitch.', messages: [{ role: 'user', text: 'How do I pitch two hires?' }, { role: 'assistant', text: 'Lead with the cost.' }] });
   await w.files.put('records/m1/coach', JSON.stringify({ headline: 'Strong open', overview: 'O', strengths: [{ title: 'Framed the goal', observation: 'Opened with it.', quote: 'Let us start' }], improvements: [] }));
-  await w.env.DB.prepare(`INSERT INTO records (name, type, fields, assets, seq, deleted, updated) VALUES ('chat-c1', 'Chat', '{}', '["data"]', 1, 0, '2026-11-02T00:00:00Z')`).run();
   const meetings = [
     view('m1', '2026-11-03T15:00:00Z', [{ id: 'id-owner', name: 'Avery Webb' }, { id: 'id-sam', name: 'Sam Carter' }],
       [{ task: 'Send the vendor list', owner: 'Sam Carter', text: 'Sam Carter: Send the vendor list', ownerId: 'id-sam' }]),
@@ -133,12 +137,12 @@ describe('the owner tools of the server MCP', () => {
   });
 
   it('reads the coach, the chats, and the shares, never a PIN', async () => {
-    const w = await setUp();
+    const w = await setUp({ mcpPersonas: '1' });
     expect(await text(w, 'coach_profile')).toContain('Head of data');
     expect(await text(w, 'coach_profile')).toContain('Sam Carter: Wants the decision first.');
     expect(await text(w, 'read_coach_review', { call_id: 'm1' })).toContain('Strength: Framed the goal');
-    expect(await text(w, 'past_chats')).toContain('chat_id: c1');
-    expect(await text(w, 'read_chat', { chat_id: 'c1' })).toContain('Avery Webb: How do I pitch two hires?');
+    expect(await text(w, 'past_chats')).toContain('chat_id: AAAAAAAA-0000-0000-0000-000000000001');
+    expect(await text(w, 'read_chat', { chat_id: 'aaaaaaaa-0000-0000-0000-000000000001' })).toContain('Avery Webb: How do I pitch two hires?');
     const shares = await text(w, 'shares');
     expect(shares).toContain('Budget review');
     expect(shares).toContain('PIN on');

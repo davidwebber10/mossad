@@ -33,11 +33,9 @@ struct MossadEntry {
             // For the usage statistics' "mcp" feature: only the date of the last start.
             UserDefaults.standard.set(Date(), forKey: AppController.mcpLastUsedKey)
             let owner = UserDefaults.standard.string(forKey: "ownerName") ?? NSFullUserName()
-            // The coach's reads of how people think: on for other AI apps, unless the owner turned it off.
-            let d = UserDefaults.standard
-            let traits = MCPServer.showsPersonas(coachEnabled: d.bool(forKey: "coachEnabled"), personaEnabled: d.object(forKey: "personaEnabled") as? Bool ?? true,
-                                                 personaInMCP: d.object(forKey: "personaInMCP") as? Bool ?? true)
-            MCPServer(paths: .live, owner: owner, personaTraits: traits).run()
+            // The coach's reads of how people think: on for other AI apps, unless the owner turned it off. Read at each
+            // call, so a switch turned off reaches this process, which an AI app keeps for days.
+            MCPServer(paths: .live, owner: owner, settings: { ToolSettings.read(.standard) }).run()
             exit(0)
         }
         // `--persona-eval --gold <folder> [--cap 15] [--model claude-sonnet-5-5] [--out <folder>] [--estimate-only]` runs the

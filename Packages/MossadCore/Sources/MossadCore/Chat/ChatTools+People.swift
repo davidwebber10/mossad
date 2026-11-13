@@ -32,15 +32,38 @@ extension ChatTools {
         return personaReads()[coachPeople.canonical(id)]
     }
 
+    /// The live saved people that the words name in one of their written forms or addresses, when more than one does.
+    func candidates(_ query: String?) -> [Person] {
+        guard let q = query?.nonBlank?.lowercased() else { return [] }
+        let hits = savedPeople.filter { p in
+            p.isLive && (p.displayName.lowercased() == q || p.forms.contains { $0.text.lowercased() == q }
+                         || p.emails.contains { $0.state != .rejected && !$0.shared && $0.address.lowercased() == q })
+        }
+        return hits.count > 1 ? hits : []
+    }
+
     func readPerson(_ input: [String: Any]) -> String {
-        guard let p = person(input["person"] as? String) else {
-            return "No saved person is surely \u{201C}\((input["person"] as? String) ?? "")\u{201D}. Use their person_id (from people or read_meeting), their whole name, or an address."
+        let words = (input["person"] as? String) ?? ""
+        guard let p = person(words) else {
+            let several = candidates(words)
+            if !several.isEmpty {
+                return "Several saved people fit \u{201C}\(words)\u{201D}; ask the owner which one:\n" + several.map { c in
+                    let last = PersonMeetings(records: records, name: c.displayName, people: filterPeople).together.lastMet
+                    return "- \(c.displayName) (person_id: \(c.id.rawValue))" + ([c.directory?.jobTitle].compactMap { $0?.nonBlank }.first.map { ", \($0)" } ?? "")
+                        + (c.email.map { ", \($0)" } ?? "") + (last.map { ", last met \(shortDay($0))" } ?? "")
+                }.joined(separator: "\n")
+            }
+            return "No saved person is surely \u{201C}\(words)\u{201D}. Use their person_id (from people or read_meeting), their whole name, or an address."
         }
         let wanted = Set((input["sections"] as? [String] ?? []).compactMap(PersonSection.init(rawValue:)))
         func shows(_ s: PersonSection) -> Bool { wanted.isEmpty || wanted.contains(s) }
         let limit = min(input["limit"] as? Int ?? Self.defaultLimit, Self.maxLimit)
         let id = p.id.rawValue, name = p.displayName, first = SeriesSuggestion.first(name)
         let isOwner = p.isOwner
+        // Two saved people with this name: what is kept by the name can be the other one's.
+        let shared = Self.sharedName(name, in: savedPeople)
+        let showsRead = !shared && coachPeople.showsRead(of: id, shows: personaTraits)
+        let coach = shownProfile
         let commitments = paths.flatMap { CommitmentBook.peek(in: $0.commitments) }?.visible ?? []
         let list = PersonMeetings(records: records, name: name, isOwner: isOwner, people: filterPeople)
         let stats = PersonStatistics.compute(records)[name] ?? PersonStats()
@@ -60,6 +83,7 @@ extension ChatTools {
         let emails = p.emails.filter { $0.state != .rejected && !$0.shared }.map(\.address)
         if !emails.isEmpty { head += " | \(emails.joined(separator: ", "))" }
         parts.append(head)
+        if shared { parts.append("Note: two saved people have this name, so the numbers by name below count both, and the coach's notes by name are left out.") }
         let forms = Array(Set(p.forms.map(\.text).filter { $0 != name })).sorted()
         if !forms.isEmpty { parts.append("Also written as: \(forms.joined(separator: "; "))") }
         let t = list.together
@@ -75,10 +99,10 @@ extension ChatTools {
                 parts.append("Next time I see \(first):\n" + (points.isEmpty ? "- nothing saved" : points.map { "- \($0.text) (point_id: \($0.id.uuidString))" }.joined(separator: "\n")))
             }
             if !isOwner {
-                let read = shownRead(of: id)
+                let read = shared ? nil : shownRead(of: id)
                 if let read, read.card != nil || !read.traits.isEmpty {
                     parts.append("How \(first) thinks (the coach's read, by code from several calls):\n" + read.text(name: first))
-                } else if let brief = profile.note(on: name, people: coachPeople)?.value.brief, !coachPeople.notProfiled.contains(id) {
+                } else if showsRead, let brief = coach.note(on: name, people: coachPeople)?.value.brief {
                     parts.append("The coach's read (from \(brief.calls) calls): \(brief.headline)\n" + brief.sections.map { "\($0.title): " + $0.points.map(\.text).joined(separator: " ") }.joined(separator: "\n"))
                 }
             }
@@ -136,19 +160,19 @@ extension ChatTools {
         }
 
         if shows(.knowledge), !isOwner {
-            let byID = profile.learnings(about: id, people: coachPeople)
-            let confirmed = byID.isEmpty ? profile.learnings(named: name) : byID
+            let byID = coach.learnings(about: id, people: coachPeople)
+            let confirmed = byID.isEmpty && !shared ? coach.learnings(named: name) : byID
             if !confirmed.isEmpty { parts.append("You confirmed:\n" + confirmed.map { "- \($0.text)" }.joined(separator: "\n")) }
-            if let read = shownRead(of: id), !read.traits.isEmpty {
+            if !shared, let read = shownRead(of: id), !read.traits.isEmpty {
                 parts.append("How they think, each with its confidence:\n" + read.traits.map { "- \($0.statement) (\($0.confidenceLine))" }.joined(separator: "\n"))
             }
-            let blocked = profile.neverAgain.filter { a in a.person.map { coachPeople.canonical($0) == id || $0 == id } ?? false }
+            let blocked = coach.neverAgain.filter { a in a.person.map { coachPeople.canonical($0) == id || $0 == id } ?? false }
             if !blocked.isEmpty { parts.append("Never again (the owner blocked these cards):\n" + blocked.map { "- \($0.text)" }.joined(separator: "\n")) }
-            if coachPeople.notProfiled.contains(id) { parts.append("The owner keeps no read on \(first): the coach learns nothing about them.") }
+            if coachPeople.notProfiled.contains(id) { parts.append("The owner keeps no read on \(first): what the coach learned about them is not given.") }
         }
 
         if shows(.voice) {
-            let voice = profiles.first { $0.name == name }
+            let voice = shared ? nil : profiles.first { $0.name == name }
             let samples = paths.flatMap { VoiceSampleStore.peek(in: $0.voices) }?.filter { $0.personID == p.id } ?? []
             let count = voice?.embeddings.count ?? samples.count
             var line = count == 0 ? "No voice sample yet." : "\(count) voice \(count == 1 ? "sample" : "samples"): Mossad recognizes \(isOwner ? "the owner" : first) by voice in later calls."

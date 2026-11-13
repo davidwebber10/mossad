@@ -11,6 +11,7 @@ public struct CalendarSnapshot: Codable, Equatable, Sendable {
     /// The keys each level may have. A test fails when the file has any other key.
     public static let allowedKeys: [String: Set<String>] = [
         "root": ["version", "saved", "events"],
+        "participant": ["name", "email", "isSelf", "personID", "response", "kind"],
         "event": ["title", "start", "end", "attendees", "participants", "link", "isAllDay", "source", "iCalUID", "seriesID", "isRecurring"],
     ]
 
@@ -34,7 +35,14 @@ public struct CalendarSnapshot: Codable, Equatable, Sendable {
             end = e.end
             attendees = e.attendees
             participants = e.participants
-            link = e.callLink.url?.absoluteString
+            // The link without its query and fragment: a Zoom link keeps its passcode there. The platform and the
+            // meeting's id are in the host and the path.
+            link = e.callLink.url.flatMap { url in
+                var c = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                c?.query = nil
+                c?.fragment = nil
+                return c?.url?.absoluteString
+            }
             isAllDay = e.isAllDay
             source = e.source
             iCalUID = e.iCalUID
@@ -53,14 +61,33 @@ public struct CalendarSnapshot: Codable, Equatable, Sendable {
         }
     }
 
+    public struct Access: Codable, Equatable, Sendable {
+        public enum Read: String, Codable, Sendable { case yes, no, failed }
+        public var mac: Read
+        public var google: Read
+        public init(mac: Read, google: Read) {
+            self.mac = mac
+            self.google = google
+        }
+    }
+
+    public var access: Access?
     public var version = CalendarSnapshot.currentVersion
     /// When the app read the calendar.
     public var saved: Date
     public var events: [Event]
 
-    public init(_ events: [CalendarEventInfo], saved: Date) {
+    public init(_ events: [CalendarEventInfo], saved: Date, access: Access? = nil) {
         self.saved = saved
-        self.events = events.map(Event.init)
+        self.access = access
+        // Only what the lists (`UpcomingMeeting.from`) and the series' two names (`SeriesCatalog.aliases`) can use.
+        self.events = events.filter(Self.isUseful).map(Event.init)
+    }
+
+    static func isUseful(_ e: CalendarEventInfo) -> Bool {
+        let listed = !e.isAllDay && !e.declinedByOwner && e.callLink.platform != nil
+        let alias = e.source == .google && e.seriesID != nil && e.iCalUID?.nonBlank != nil
+        return listed || alias
     }
 
     /// The events, for `UpcomingMeeting.from` and `SeriesCatalog.aliases`: the same rules as the app's lists.
@@ -75,6 +102,9 @@ public struct CalendarSnapshot: Codable, Equatable, Sendable {
 
     public func save(to dir: URL) throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try JSONEncoder.callRecord.encode(self).write(to: dir.appendingPathComponent(Self.fileName), options: .atomic)
+        let url = dir.appendingPathComponent(Self.fileName)
+        try JSONEncoder.callRecord.encode(self).write(to: url, options: .atomic)
+        // The owner's alone, as their calendar is: no other account of this Mac reads 45 days of invites.
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 }

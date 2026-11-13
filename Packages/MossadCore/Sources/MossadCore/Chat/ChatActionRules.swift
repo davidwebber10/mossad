@@ -55,7 +55,8 @@ public enum PointTarget {
     static func target(person id: String, name: String, owner: String?, refs: PersonReferences, upcoming: [UpcomingMeeting], series: [MeetingSeries],
                        now: Date) -> Outcome {
         // The next meeting of the two of them: everyone invited other than the owner is this one person.
-        let theirs = upcoming.filter { $0.end > now }.sorted { $0.start < $1.start }.first { u in
+        // The next one: a meeting that runs now is this one, not the next.
+        let theirs = upcoming.filter { $0.start > now }.sorted { $0.start < $1.start }.first { u in
             let others = u.attendees.filter { a in refs.id(for: a).map(refs.canonical) != owner }
             return others.count == 1 && others.allSatisfy { refs.id(for: $0).map(refs.canonical) == id }
         }
@@ -65,7 +66,10 @@ public enum PointTarget {
             }
             return .person(id: id, name: name, u)
         }
-        let usual = series.filter { s in s.usualPeople.contains { $0 == name || refs.id(for: $0).map(refs.canonical) == id } }
+        // A series that still meets and is about the two of them; a group or an ended series is not "their" meeting.
+        let usual = series.filter { s in
+            s.next != nil && s.usualPeople.count <= 2 && s.usualPeople.contains { $0 == name || refs.id(for: $0).map(refs.canonical) == id }
+        }
         if usual.count == 1 { return .series(usual[0], usual[0].next) }
         if usual.count > 1 { return .choose(usual.map(\.title)) }
         return .person(id: id, name: name, nil)
@@ -86,14 +90,14 @@ public struct ActionTurn: Sendable {
         case later
     }
 
-    let words: Set<String>
+    let message: String
     let live: Bool
     private(set) var ran = 0
 
     /// `message` is the owner's own message: text from a meeting, an invite, a chat, or a tool's result is data and
     /// never a reason to act. `live`: a call records now.
     public init(message: String, live: Bool) {
-        words = Set(message.lowercased().split { !$0.isLetter && !$0.isNumber && $0 != "-" }.map(String.init))
+        self.message = message
         self.live = live
     }
 
@@ -102,27 +106,71 @@ public struct ActionTurn: Sendable {
             return live ? .refuse("That waits for the end of the call.") : .propose("It waits for the owner's click.")
         }
         if r.kind == .bookmarkNow, !live { return .refuse("No call records now. To mark a moment of a past meeting, give its call_id and the second.") }
-        guard ActionIntent.asks(r.kind, words) else { return .propose("The owner's message did not ask for this, so it waits for a click.") }
+        guard ActionIntent.asks(r.kind, message) else { return .propose("The owner's message did not ask for this, so it waits for a click.") }
         guard ran < Self.limit else { return .later }
         ran += 1
         return .run
     }
 }
 
-/// Whether the owner's own words ask for an action of this kind. A word list, so it can be tested; it decides only
-/// between running at once and a card, never whether an action may happen at all.
+/// Whether the owner's own words ask for an action of this kind: a verb and a thing of that kind, two words, in the
+/// owner's first lines, in a message that is not a question. It decides only between running at once and a card,
+/// never whether an action may happen at all.
 enum ActionIntent {
-    static let words: [ChatActionRequest.Family: Set<String>] = [
-        .points: ["add", "note", "notes", "point", "points", "raise", "bring", "discuss", "agenda", "remind", "edit", "change", "update", "reword",
-                  "remove", "drop", "delete", "tick", "check", "done", "reopen", "save", "put", "next"],
-        .tasks: ["task", "tasks", "todo", "to-do", "remind", "promise", "promised", "owe", "due", "deadline", "done", "finished", "finish", "complete",
-                 "completed", "reopen", "open", "add", "move", "push", "track"],
-        .bookmarks: ["bookmark", "bookmarks", "mark", "flag", "star", "moment"],
+    typealias Kind = ChatActionRequest.Kind
+    static let pointThings: Set<String> = ["point", "points", "note", "notes", "agenda", "discuss", "raise", "meeting", "next"]
+    static let taskThings: Set<String> = ["task", "tasks", "todo", "to-do", "reminder", "me"]
+    static let rules: [Kind: (verbs: Set<String>, things: Set<String>)] = [
+        .addPoint: (["add", "save", "put", "note", "remind", "raise", "bring", "jot"], pointThings),
+        .editPoint: (["change", "edit", "reword", "update", "rewrite"], ["point", "points", "note"]),
+        .removePoint: (["remove", "drop", "delete", "cross", "scrap"], ["point", "points", "note"]),
+        .tickPoint: (["tick", "check", "mark"], ["point", "points", "raised", "discussed", "covered", "done"]),
+        .reopenPoint: (["reopen", "untick", "unmark"], ["point", "points"]),
+        .addTask: (["add", "create", "make", "remind", "track"], taskThings),
+        .setTaskDone: (["mark", "done", "finished", "finish", "complete", "completed", "close", "tick", "check"], ["task", "tasks", "todo", "done"]),
+        .setTaskOpen: (["reopen", "open", "untick", "unmark"], ["task", "tasks", "todo"]),
+        .setTaskDue: (["move", "push", "change", "set", "shift", "reschedule"], ["due", "deadline", "date", "task", "tasks"]),
+        .addBookmark: (["bookmark", "mark", "flag", "star"], ["moment", "this", "that", "time", "second", "minute", "here", "it", "note", "bookmark"]),
+        .bookmarkNow: (["bookmark", "mark", "flag", "star"], ["moment", "this", "that", "time", "now", "here", "it", "bookmark"]),
     ]
+    static let questionWords: Set<String> = ["what", "which", "who", "whom", "whose", "when", "where", "why", "how", "did", "does", "do", "is", "are",
+                                             "was", "were", "has", "have", "summarize", "summarise", "explain", "tell"]
 
-    static func asks(_ kind: ChatActionRequest.Kind, _ words: Set<String>) -> Bool {
-        guard let list = Self.words[kind.family] else { return true }
-        return !list.isDisjoint(with: words)
+    /// The owner's own lines: up to the first blank line, at most 3, and none quoted with ">".
+    static func ownLines(_ message: String) -> [String] {
+        var out: [String] = []
+        for line in message.split(separator: "\n", omittingEmptySubsequences: false).map({ $0.trimmingCharacters(in: .whitespaces) }) {
+            if line.isEmpty { if out.isEmpty { continue } else { break } }
+            if line.hasPrefix(">") { continue }
+            out.append(line)
+            if out.count == 3 { break }
+        }
+        return out
+    }
+
+    static func words(_ text: String) -> [String] { text.lowercased().split { !$0.isLetter && !$0.isNumber && $0 != "-" }.map(String.init) }
+
+    /// A question asks for an answer, not an action; "Can you add…?" and "Please…" are requests.
+    static func isQuestion(_ lines: [String]) -> Bool {
+        guard let first = lines.first else { return true }
+        let w = words(first)
+        if w.first == "please" || (["can", "could", "would", "will"].contains(w.first ?? "") && w.dropFirst().first == "you") { return false }
+        return questionWords.contains(w.first ?? "") || lines.contains { $0.hasSuffix("?") }
+    }
+
+    static func asks(_ kind: Kind, _ message: String) -> Bool {
+        guard let rule = rules[kind] else { return false }
+        let lines = ownLines(message)
+        guard !isQuestion(lines) else { return false }
+        let text = lines.joined(separator: " ")
+        let w = words(text)
+        let set = Set(w)
+        let verbs = set.intersection(rule.verbs)
+        var things = set.intersection(rule.things)
+        // A time such as "12:04" is the thing of a bookmark.
+        if kind == .addBookmark, text.range(of: #"\d+:\d\d"#, options: .regularExpression) != nil { things.insert("12:04") }
+        // A verb and a thing, two words: "note" alone asks for nothing.
+        return verbs.contains { v in things.contains { $0 != v } }
     }
 }
 
@@ -172,7 +220,8 @@ public enum ChatActionApply {
             undo.kind = .reopenPoint
         case .reopenPoint:
             guard !before.deleted, let done = before.done else { return nil }
-            book.update(id, at: now) { $0.done = nil }
+            // The book's own rule: a "discussed" the check found and the owner takes back is never found again there.
+            book.toggleDone(id, at: now)
             undo.kind = .tickPoint
             undo.discussed = done
         default:
@@ -216,6 +265,10 @@ public enum ChatActionApply {
         case .deleteTask:
             guard !before.deleted else { return nil }
             book.items[i].deleted = true
+            undo.kind = .restoreTask
+        case .restoreTask:
+            guard before.deleted else { return nil }
+            book.items[i].deleted = false
             undo.kind = .deleteTask
         default:
             return nil

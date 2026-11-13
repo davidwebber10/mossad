@@ -147,8 +147,8 @@ extension AppController {
         return sync
     }
 
-    /// What the server's MCP was last told, this launch.
-    static var serverConfigSentFor: String?
+    /// What the server's MCP was told, this launch: a send that failed is tried again at the next sync.
+    static var serverConfig = ServerConfigState()
 
     /// The coach's reads of people go to other AI apps through the owner's server by the same switch as `--mcp`.
     var personasInServerMCP: Bool { MCPServer.showsPersonas(coachEnabled: coachEnabled, personaEnabled: personaEnabled, personaInMCP: personaInMCP) }
@@ -165,12 +165,20 @@ extension AppController {
         if syncRunning { syncAgain = true; return }
         // The config again when the owner's name or the switch of the reads for other AI apps changed.
         let config = "\(ownerName)|\(personasInServerMCP)"
-        if !serverConfigSent || Self.serverConfigSentFor != config, let c = serverConnection {
+        if Self.serverConfig.needsSend(config), let c = serverConnection {
             let first = !serverConfigSent
             serverConfigSent = true
-            Self.serverConfigSentFor = config
+            Self.serverConfig.sending(config)
             let owner = ownerName, personas = personasInServerMCP
-            Task { try? await ServerClient(c).putConfig(owner: owner, personasInMCP: personas) }
+            Task {
+                do {
+                    try await ServerClient(c).putConfig(owner: owner, personasInMCP: personas)
+                    Self.serverConfig.arrived(config)
+                } catch {
+                    Self.serverConfig.failed()
+                    Log.error("Telling your server the owner's name and the switch of the reads failed; it is tried again at the next sync: \(error)")
+                }
+            }
             // Once a launch: a server that was updated may keep recordings now.
             if first {
                 let kept = serverKeepsRecordings
@@ -183,6 +191,7 @@ extension AppController {
         // The reduced copy of the reads for the phone's card: shown traits and pointers, no words. None before the
         // reads were read once, so a sync at launch does not empty the phone's copy; an empty one when they are off.
         let personas: SyncedPersonas? = !personasOn ? SyncedPersonas([]) : personaReadsMade ? SyncedPersonas(Array(personaReads.values)) : nil
+        let calling = isRecording
         Task.detached(priority: .utility) {
             var received = 0
             var failure: FriendlyError?
@@ -204,6 +213,12 @@ extension AppController {
                 do {
                     let copied = try await mirror.push()
                     if copied > 0 { Log.info("Server: \(copied) meetings copied for ChatGPT and share links") }
+                    // What the server's MCP reads besides the meetings, one way, by the same allowed-field lists:
+                    // never during a call, when the disk and the network belong to the recording.
+                    if !calling {
+                        let shared = try await mirror.pushShared(people: true, personas: personas, mirror: true)
+                        if shared > 0 { Log.info("Server: \(shared) people, tasks, points, coach, and chat records copied") }
+                    }
                 } catch {
                     Log.error("Copying meetings to your server failed: \(error)")
                 }

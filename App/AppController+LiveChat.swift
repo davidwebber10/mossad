@@ -62,7 +62,8 @@ extension AppController {
 
     /// Answers off the main thread. The request goes at normal priority; capture runs on its own queue and comes
     /// first. Its cost is logged with the call. Nothing is written into the call's folder.
-    func liveChatAnswer(_ question: String, history: [ChatMessage], record: CallRecord,
+    func liveChatAnswer(_ question: String, history: [ChatMessage], record: CallRecord, earlier: [ChatActionRecord] = [],
+                        onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
                         onStep: @escaping @Sendable (String) -> Void, onText: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         guard let llm = liveChatLLM else { throw MissingAPIKey(service: aiProvider.displayName) }
         let small = liveSummaryLLM ?? llm
@@ -82,7 +83,8 @@ extension AppController {
                                                   voices: facts.voices)
                 return try await LiveChatAgent(llm: llm, ownerName: owner).answer(
                     question, history: history, facts: facts, entries: entries, summary: summary, records: records,
-                    paths: paths, personaTraits: personas, limits: limits, actions: host, onStep: onStep, onText: onText)
+                    paths: paths, personaTraits: personas, limits: limits, actions: host, earlier: earlier, onAction: onAction,
+                    onStep: onStep, onText: onText)
             }
         }
         return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }

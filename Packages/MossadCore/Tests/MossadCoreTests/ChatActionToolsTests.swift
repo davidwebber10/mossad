@@ -94,7 +94,11 @@ final class ChatActionToolsTests: XCTestCase {
         try book.save(to: paths.nextTime)
         let marks = Marks()
         let host = ChatActionHost(paths: paths, liveMoment: { ("live", 125) }, bookmarkNow: { note in marks.add(note); return 125 })
-        let a = actions("Tick the hiring point and bookmark this moment", live: true, host: host)
+        // The point is one of the call's: the call invites Jeffrey.
+        var call = CallRecord(id: "live", platform: .meet, bundleID: "b", start: now.addingTimeInterval(-600), end: now, status: .recording)
+        call.attendees = ["jeff@example.com"]
+        let tools = ChatTools(records: [record(), call], owner: "Avery Webb", paths: paths, people: people, settings: ToolSettings(), now: now)
+        let a = ChatActions(message: "Tick the hiring point and bookmark this moment", tools: tools, host: host, live: true)
         XCTAssertTrue(a.run("change_point", input: ["point_id": p.id.uuidString, "change": "tick"])?.hasPrefix("Done") == true)
         let done = NextTimeBook.peek(in: paths.nextTime)?.points.first?.done
         XCTAssertEqual(done?.callID, "live")

@@ -1,0 +1,55 @@
+{
+  "personas" : [
+    {
+      "calls" : 6,
+      "oneCall" : 0,
+      "person" : "id-sam",
+      "traits" : [
+        {
+          "confidence" : 0.71999999999999997,
+          "confirmed" : false,
+          "counter" : [
+
+          ],
+          "counterCalls" : 0,
+          "dimension" : "order",
+          "id" : "id-sam|order|answer_first|any",
+          "lastSeen" : "2027-01-31T08:00:00Z",
+          "moments" : [
+            {
+              "at" : 60,
+              "callID" : "c16",
+              "line" : "h16"
+            },
+            {
+              "at" : 60,
+              "callID" : "c13",
+              "line" : "h13"
+            },
+            {
+              "at" : 60,
+              "callID" : "c10",
+              "line" : "h10"
+            },
+            {
+              "at" : 60,
+              "callID" : "c7",
+              "line" : "h7"
+            },
+            {
+              "at" : 60,
+              "callID" : "c4",
+              "line" : "h4"
+            }
+          ],
+          "soDoThis" : "Open with the answer.",
+          "statement" : "Sam asks for the answer first.",
+          "supportCalls" : 6,
+          "value" : "answer_first"
+        }
+      ],
+      "updated" : "2027-01-15T08:00:00Z"
+    }
+  ],
+  "version" : 1
+}

@@ -152,7 +152,14 @@ next-time points, coach); the calendar, shares, screens, and app status are Mac 
 
 ## Server MCP
 
-### What the server has today (checked in `CloudSync.push`, `pushShared`, `ServerStore`)
+### What the server has (checked in `CloudSync.push`, `pushShared`, `ServerStore`)
+
+Before the review of this branch, the table held only when the Mac synced through the server. With iCloud as the
+sync, the server was a copy of the meetings only (`push`). Now the copy also gets `pushShared(mirror: true)`: the
+people, the reads, the points, the tasks, the coach's memory, the review notes, and the chats, by the same
+allowed-field lists, off the main thread, never during a call, without touching the main sync's notes of deleted
+chats. The coach's memory leaves the Mac without what it learned about a person who keeps no read
+(`CoachProfile.withoutCoachData`), an overwrite at each sync.
 
 | Record (R2 `records/<name>/<asset>`) | From | Holds |
 | --- | --- | --- |

@@ -40,7 +40,12 @@ extension AppController {
         guard let store = library.identity?.people, let id = personID(of: name) else { return }
         do {
             try store.setDoNotProfile(!on, for: PersonID(rawValue: id))
-            if !on { forgetPersona(id) } else { rereadCalls(of: id) }
+            if !on {
+                forgetPersona(id)
+                // What the coach learned about them goes too; the next sync overwrites every copy that left the Mac.
+                let saved = CoachPeople(people: store.people)
+                _ = try? changeCoachProfile { $0 = $0.withoutCoachData(on: saved) }
+            } else { rereadCalls(of: id) }
             Log.info(on ? "The coach keeps a read on a person again" : "The coach keeps no read on a person; its files are deleted")
         } catch {
             Log.error("The switch for a person's read was not saved: \(error)")

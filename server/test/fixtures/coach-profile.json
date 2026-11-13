@@ -1,0 +1,51 @@
+{
+  "advice" : [
+
+  ],
+  "adviceVersion" : 0,
+  "answers" : [
+
+  ],
+  "facts" : [
+    {
+      "date" : "2027-01-15T08:00:00Z",
+      "kind" : "role",
+      "text" : "Head of data"
+    }
+  ],
+  "foci" : [
+
+  ],
+  "focus" : "",
+  "forgotten" : {
+
+  },
+  "guidance" : [
+
+  ],
+  "history" : [
+
+  ],
+  "observations" : [
+
+  ],
+  "patterns" : [
+
+  ],
+  "people" : {
+    "Sam Carter" : {
+      "calls" : 2,
+      "lastSeen" : "2027-01-15T08:00:00Z",
+      "note" : "Sam NOTE",
+      "person" : "id-sam"
+    }
+  },
+  "questions" : [
+
+  ],
+  "rated" : [
+
+  ],
+  "summary" : "",
+  "voice" : "direct"
+}

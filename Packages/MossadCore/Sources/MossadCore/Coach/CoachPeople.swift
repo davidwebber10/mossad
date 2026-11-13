@@ -295,3 +295,31 @@ extension CoachProfile {
         return changed
     }
 }
+
+extension CoachProfile {
+    /// The profile without what the coach or the persona work learned about the people who keep no read
+    /// (`doNotProfile`): their notes and older reads, the facts and guidance about them, the questions about them,
+    /// and the answers to cards about them. What the owner said about themselves stays. The one rule for the copy
+    /// that leaves the Mac and for every tool's answer.
+    public func withoutCoachData(on saved: CoachPeople) -> CoachProfile {
+        let off = saved.notProfiled
+        guard !off.isEmpty else { return self }
+        func isOff(_ id: String?) -> Bool { id.map { off.contains(saved.canonical($0)) } ?? false }
+        var p = self
+        p.people = people.filter { key, v in !isOff(v.person) && !isOff(saved.id(of: key)) }
+        p.facts.removeAll { isOff($0.person) }
+        p.guidance.removeAll { isOff($0.person) }
+        p.questions.removeAll { isOff($0.person) }
+        p.answers.removeAll { isOff($0.person) }
+        return p
+    }
+}
+
+extension CoachPeople {
+    /// Whether the coach's notes and reads of a person show: the reads on where they are asked for (`shows`), and the
+    /// person keeps a read. A name that is no saved person keeps one, as on the person page.
+    public func showsRead(of id: String?, shows: Bool) -> Bool {
+        guard shows else { return false }
+        return id.map { !notProfiled.contains(canonical($0)) } ?? true
+    }
+}

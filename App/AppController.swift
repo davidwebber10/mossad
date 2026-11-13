@@ -549,6 +549,8 @@ final class AppController: ObservableObject {
     @Published var personRequests = 0
     /// A task or a chat to select when its page shows; the page clears it.
     @Published var taskToOpen: UUID?
+    /// The chat's cards and receipts with a click in work: a second click on one does nothing.
+    @Published var actionsInWork: Set<UUID> = []
     @Published var chatToOpen: UUID?
 
     /// The mic is recorded raw: when Chrome also uses voice processing, macOS gives a second voice-processing
@@ -1626,14 +1628,16 @@ final class AppController: ObservableObject {
     }
 
     /// The answer, with what it did or proposes (`ChatActions`): the app's own chat can act, the MCPs cannot.
-    func chatAnswer(_ question: String, history: [ChatMessage], about callID: String? = nil,
+    func chatAnswer(_ question: String, history: [ChatMessage], about callID: String? = nil, earlier: [ChatActionRecord] = [],
+                    onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
                     onStep: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
         guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
         // The chat's `remember` tool writes the coach's profile.
         defer { coachVersion += 1 }
         return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths,
                                                                           about: callID, personaTraits: personasOn,
-                                                                          actions: isInert ? nil : chatActionHost, onStep: onStep)
+                                                                          actions: isInert ? nil : chatActionHost, earlier: earlier, onAction: onAction,
+                                                                          onStep: onStep)
     }
 
     /// Writes the chat's short summary for later chats to recall, and syncs it.
@@ -1653,7 +1657,9 @@ final class AppController: ObservableObject {
     /// `mossad://series/<id>`, `mossad://person/<id>`, `mossad://tasks`.
     func openLink(_ url: URL) -> Bool {
         if url.scheme == "mossad", url.host != "call" {
-            let id = url.pathComponents.dropFirst().first ?? ""
+            // The id as it was encoded: a series id can hold a slash or a space.
+            let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath.dropFirst() ?? ""
+            let id = String(raw).removingPercentEncoding ?? String(raw)
             switch url.host {
             case "series" where !id.isEmpty: openSeries(id)
             case "person" where !id.isEmpty: openPerson(id)
@@ -2095,7 +2101,8 @@ final class AppController: ObservableObject {
             // For Chat's and other AI apps' tools, which cannot read the calendar: the events as read, without their
             // notes (`CalendarSnapshot`). Never made-up invites.
             if !isInert, !sampled {
-                let snapshot = CalendarSnapshot(events, saved: now), dir = paths.calendar
+                let access = CalendarSnapshot.Access(mac: .macCalendar, google: calendar.lastGoogleRead)
+                let snapshot = CalendarSnapshot(events, saved: now, access: access), dir = paths.calendar
                 Task.detached(priority: .utility) {
                     do { try snapshot.save(to: dir) } catch { Log.error("Saving the calendar for the tools failed: \(error)") }
                 }

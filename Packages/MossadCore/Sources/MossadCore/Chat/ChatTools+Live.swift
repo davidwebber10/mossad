@@ -32,13 +32,20 @@ extension ChatTools {
 
     /// "Your points" of the call that records now, as its panel lists them: the series' and each person's, with
     /// the owner's ticks and what Mossad heard. The check after the call decides.
-    func livePoints(_ r: CallRecord, heard: [String]) -> String? {
-        guard let paths, let book = NextTimeBook.peek(in: paths.nextTime) else { return nil }
+    /// The call's own points, as its panel lists them (`LivePoints`).
+    func livePointList(_ r: CallRecord, heard: [String] = []) -> [NextTimePoint] {
+        guard let book else { return [] }
         let (all, _, snapshot) = catalog(now: now)
         let series = LivePoints.series(ofLive: r, in: all, records: records, owner: owner, directory: PersonDirectory(profiles: profiles),
                                        ownerEmails: [settings.ownerEmail], aliases: SeriesCatalog.aliases(snapshot?.calendarEvents ?? []))
-        let people = LivePoints.personIDs(attendees: r.attendees, heard: heard, people: saved)
-        let list = LivePoints.list(book, series: series, people: people, callID: r.id, canonical: saved.canonical)
+        let names = heard.isEmpty ? Array(Set(r.speakerNames.values)) : heard
+        let people = LivePoints.personIDs(attendees: r.attendees, heard: names, people: saved)
+        return LivePoints.list(book, series: series, people: people, callID: r.id, canonical: saved.canonical)
+    }
+
+    func livePoints(_ r: CallRecord, heard: [String]) -> String? {
+        guard let paths else { return nil }
+        let list = livePointList(r, heard: heard)
         guard !list.isEmpty else { return nil }
         let marks = LivePointMarks.load(from: paths.callDirectory(r.id)) ?? LivePointMarks()
         return "Your points for this call:\n" + list.map { p in

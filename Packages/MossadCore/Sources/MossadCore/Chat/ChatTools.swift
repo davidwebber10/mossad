@@ -181,7 +181,8 @@ public struct ChatTools: Sendable {
         if !r.tags.isEmpty { line += " | tags: \(r.tags.joined(separator: ", "))" }
         if let h = r.headline { line += " | \(h)" }
         if r.isNotesOnly { line += " | from Gemini notes" }
-        if let note = r.markdownPath { line += " | note: \(note)" }
+        // The file's name only: a whole path names the Mac's account.
+        if let note = r.markdownPath { line += " | note: \((note as NSString).lastPathComponent)" }
         return line
     }
 

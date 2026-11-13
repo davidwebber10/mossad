@@ -47,6 +47,12 @@ public struct SharedPayload: Sendable {
         SharedPayload(kind: .people, key: "people", data: (try? JSONEncoder.callRecord.encode(SyncedPeople(people, domains: domains))) ?? Data())
     }
 
+    /// The coach's memory without what it learned about a person who keeps no read: that never leaves the Mac. An
+    /// overwrite of the copy the store has, so a person turned off goes from it at the next sync.
+    public static func profile(_ profile: CoachProfile, people: [Person]) -> SharedPayload {
+        .profile(profile.withoutCoachData(on: CoachPeople(people: people)))
+    }
+
     public static func profile(_ profile: CoachProfile) -> SharedPayload {
         SharedPayload(kind: .profile, key: "profile", data: (try? JSONEncoder.callRecord.encode(profile)) ?? Data())
     }

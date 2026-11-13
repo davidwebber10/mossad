@@ -1,0 +1,17 @@
+{
+  "created" : "2027-01-15T08:00:00Z",
+  "id" : "44444444-4444-4444-4444-444444444444",
+  "messages" : [
+    {
+      "id" : "55555555-5555-5555-5555-555555555555",
+      "role" : "user",
+      "steps" : [
+
+      ],
+      "text" : "How do I pitch?"
+    }
+  ],
+  "summary" : "Planned the pitch.",
+  "title" : "Pitch",
+  "updated" : "2027-01-15T08:00:00Z"
+}

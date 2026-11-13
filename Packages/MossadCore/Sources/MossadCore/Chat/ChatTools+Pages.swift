@@ -170,7 +170,7 @@ extension ChatTools {
     /// The parts of Coach › Knowledge and Weekly review beyond the facts: open questions, rules from the owner's
     /// answers, what was blocked for good, the advice log, and the review written and not sent.
     func coachKnowledgeText() -> String {
-        let p = profile
+        let p = shownProfile
         var parts: [String] = []
         if !p.openQuestions.isEmpty { parts.append("The coach's questions waiting for the owner:\n" + p.openQuestions.map { "- \($0.statement)" }.joined(separator: "\n")) }
         if !p.whyRules.isEmpty { parts.append("Rules from the owner's answers:\n" + p.whyRules.map { "- \($0.text)" }.joined(separator: "\n")) }

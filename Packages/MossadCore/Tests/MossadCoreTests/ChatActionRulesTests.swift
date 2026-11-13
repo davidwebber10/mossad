@@ -51,9 +51,11 @@ final class ChatActionRulesTests: XCTestCase {
     }
 
     func testOnePersonInTwoSeriesWithNoMeetingOfTheTwoIsAQuestion() {
-        let a = series("cal:a", "Platform review", people: ["Jeffrey Moore", "Sam Lee"])
-        let b = series("cal:b", "Budget sync", people: ["Jeffrey Moore"])
-        guard case .choose(let options) = resolve("Jeffrey Moore", people: [owner, jeff], series: [a, b]) else { return XCTFail() }
+        // Both still meet, and their next meetings are not of the two of them alone.
+        let group = ["jeff@example.com", "sam@example.com", "avery@example.com"]
+        let a = series("cal:a", "Platform review", people: ["Jeffrey Moore", "Sam Lee"], next: invite("Platform review", days: 2, group))
+        let b = series("cal:b", "Budget sync", people: ["Jeffrey Moore"], next: invite("Budget sync", days: 3, group))
+        guard case .choose(let options) = resolve("Jeffrey Moore", people: [owner, jeff], upcoming: [a.next!, b.next!], series: [a, b]) else { return XCTFail() }
         XCTAssertEqual(Set(options), ["Platform review", "Budget sync"])
     }
 

@@ -76,8 +76,12 @@ struct ChatActionRows: View {
                 Button("Open") { _ = controller.openLink(place) }.buttonStyle(SettingsTextButtonStyle(color: Palette.accent))
             }
             if a.state == .done, a.undo != nil {
+                // A bookmark of the call that records comes off after the call: the recorder holds the record.
+                let waits = a.request.kind == .bookmarkNow && a.request.callID.map { controller.isRecording(callID: $0) } == true
                 Button("Undo") { controller.undoChatAction(chatID: chatID, messageID: messageID, actionID: a.id) }
                     .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .semibold))
+                    .disabled(waits || controller.actionsInWork.contains(a.id))
+                    .help(waits ? "After the call" : "Undo")
                     .accessibilityLabel("Undo: \(a.summary)")
             }
         }
@@ -88,21 +92,25 @@ struct ChatActionRows: View {
     private func card(_ a: ChatActionRecord) -> some View {
         let live = controller.isRecording && a.request.kind.needsClick && a.request.kind != .batch
         return VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-            if !compact { Text("Waiting for you").font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(Palette.tertiary) }
+            Text("Waiting for you").font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(Palette.tertiary)
             HStack(alignment: .firstTextBaseline, spacing: Rhythm.itemGap) {
+                // The whole of what a click does: three lines in the quick panel too.
                 Text(a.summary).font(Rhythm.secondary).foregroundStyle(Palette.ink)
-                    .lineLimit(compact ? 1 : 4).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(compact ? 3 : 6).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
                 Button("Not now") { controller.answerActionCard(chatID: chatID, messageID: messageID, actionID: a.id, doIt: false) }
                     .buttonStyle(SettingsTextButtonStyle())
                 Button("Do it") { controller.answerActionCard(chatID: chatID, messageID: messageID, actionID: a.id, doIt: true) }
                     .buttonStyle(SettingsTextButtonStyle(color: Palette.accent, weight: .semibold))
-                    .disabled(live)
+                    .disabled(live || controller.actionsInWork.contains(a.id))
                     .help(live ? "After the call" : a.summary)
             }
+            if let detail = a.detail {
+                Text(detail).font(.system(size: Rhythm.noteSize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(.horizontal, compact ? 0 : Rhythm.listRowPadding).padding(.vertical, compact ? 0 : Rhythm.itemGap)
+        .padding(.horizontal, compact ? Rhythm.pairGap : Rhythm.listRowPadding).padding(.vertical, compact ? Rhythm.pairGap : Rhythm.itemGap)
         .frame(minHeight: compact ? AskPanelSizing.actionRow : nil)
-        .background { if !compact { RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.fill) } }
+        .background { RoundedRectangle(cornerRadius: compact ? 8 : 10, style: .continuous).fill(Palette.fill) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Waiting for you: \(a.summary)")
     }

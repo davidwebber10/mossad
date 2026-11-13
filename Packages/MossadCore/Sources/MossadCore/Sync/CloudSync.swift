@@ -162,7 +162,7 @@ public actor CloudSync {
     /// `people`: the Mac sends the people too; the phone only reads them.
     @discardableResult
     /// `personas`: the reduced copy of the reads (`SyncedPersonas`), from the Mac, with the people.
-    public func pushShared(people sendPeople: Bool = false, personas: SyncedPersonas? = nil) async throws -> Int {
+    public func pushShared(people sendPeople: Bool = false, personas: SyncedPersonas? = nil, mirror: Bool = false) async throws -> Int {
         try await prepare()
         let chats = ChatStore(directory: paths.chats)
         var payloads = chats.all().map(SharedPayload.chat)
@@ -177,7 +177,7 @@ public actor CloudSync {
         func waiting(_ name: String) -> Bool { files.first { $0.lastPathComponent == name }.map(StoredFile.awaitsMerge) ?? false }
         if !waiting(CoachProfile.fileName), FileManager.default.fileExists(atPath: paths.coach.appendingPathComponent(CoachProfile.fileName).path),
            let profile = try? CoachProfile.load(from: paths.coach) {
-            payloads.append(.profile(profile))
+            payloads.append(.profile(profile, people: PeopleStore.peek(in: paths.people) ?? []))
         }
         if !waiting(CommitmentBook.fileName), FileManager.default.fileExists(atPath: paths.commitments.appendingPathComponent(CommitmentBook.fileName).path),
            let book = try? CommitmentBook.load(from: paths.commitments) {
@@ -231,9 +231,12 @@ public actor CloudSync {
             try update { state in
                 for key in done { state.uploaded[key] = nil }
             }
-            // The store has the delete now; the note of it can go.
-            let ids = Set(done.compactMap { UUID(uuidString: String($0.dropFirst("chat:".count))) })
-            chats.setDeleted(chats.deleted().subtracting(ids))
+            // The store has the delete now; the note of it can go. Not for the server's mirror: the main sync has
+            // still to send the delete.
+            if !mirror {
+                let ids = Set(done.compactMap { UUID(uuidString: String($0.dropFirst("chat:".count))) })
+                chats.setDeleted(chats.deleted().subtracting(ids))
+            }
             changed += done.count
         }
         return changed

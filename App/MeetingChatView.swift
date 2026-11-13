@@ -131,15 +131,22 @@ struct MeetingChatView: View {
         steps = []
         running = true
         let sink = StepSink { step in Task { @MainActor in steps.append(step) } }
+        // Each receipt goes into the chat the moment its action is done; the answer joins the file's copy.
+        let answerID = UUID(), asked = current, questionID = current.messages.last!.id
+        let actionSink = ActionSink { r in Task { @MainActor in chat = controller.saveChatAction(r, chat: asked, answer: answerID) } }
+        let earlier = controller.chatActions(current)
         Task {
             do {
-                let answer = try await controller.chatAnswer(q, history: history, about: record.id, onStep: sink.add)
-                current.messages.append(answer.message(steps: steps))
-                current.updated = Date()
-                save(current)
+                let answer = try await controller.chatAnswer(q, history: history, about: record.id, earlier: earlier, onAction: actionSink.add, onStep: sink.add)
+                var message = answer.message(steps: steps)
+                message.id = answerID
+                save(controller.finishChatAnswer(message, chat: asked))
                 controller.summarizeChat(current.id)
-                controller.syncNow()
+                if !controller.isRecording { controller.syncNow() }
             } catch {
+                // What was done stays with its question.
+                let stop = controller.stopChatAnswer(chat: asked, answer: answerID, question: questionID)
+                if stop.kept { chat = stop.chat }
                 Log.error("Chat failed: \(error)")
                 let friendly = FriendlyError(error, context: .chatting)
                 if friendly.shouldShow(failures: 1) { self.error = friendly }

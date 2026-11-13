@@ -1,5 +1,5 @@
 import { MeetingTools, toolDefinitions as meetingToolDefinitions } from './tools';
-import { OwnerData, chats, coachProfileText, coachReviewText, ownerToolDefinitions, ownerToolNames, pastChatsText, readChatText, sharesText } from './owner';
+import { OwnerData, ownerToolDefinitions, ownerToolNames, runOwnerTool, safeZone } from './owner';
 import type { Env, Line, MeetingView } from './types';
 
 /** A stateless Streamable HTTP MCP server: each POST is one JSON-RPC message and gets one JSON reply. */
@@ -65,28 +65,7 @@ export async function toolsFor(env: Env, name: string, args: Record<string, unkn
     const m = list.find((v) => v.id === id);
     if (m) m.lines = await linesFor(env, id);
   }
-  return new MeetingTools(list, c.owner ?? 'the owner', c.timeZone);
-}
-
-/** The tools over the owner's synced data: people, points, tasks, the coach, chats, and shares. */
-export async function runOwnerTool(env: Env, name: string, args: Record<string, unknown>): Promise<string> {
-  const c = await config(env);
-  const tz = c.timeZone ?? 'UTC';
-  switch (name) {
-    case 'coach_profile': return coachProfileText(env);
-    case 'read_coach_review': return coachReviewText(env, args.call_id);
-    case 'past_chats': return pastChatsText(await chats(env), args, tz);
-    case 'read_chat': return readChatText(await chats(env), args.chat_id, c.owner ?? 'the owner');
-    case 'shares': return sharesText(env, args, tz);
-  }
-  const owner = await OwnerData.load(env, await meetings(env), c);
-  switch (name) {
-    case 'people': return owner.peopleText(args);
-    case 'read_person': return owner.readPerson(args);
-    case 'next_time_points': return owner.pointsText(args);
-    case 'commitments': return owner.commitmentsText(args);
-    default: return `Unknown tool ${name}.`;
-  }
+  return new MeetingTools(list, c.owner ?? 'the owner', c.timeZone ? safeZone(c.timeZone) : undefined);
 }
 
 type RPC = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
@@ -118,7 +97,7 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
       const name = typeof params.name === 'string' ? params.name : '';
       const args = (params.arguments as Record<string, unknown>) ?? {};
       if (!toolDefinitions.some((t) => t.name === name)) return reply({ content: [{ type: 'text', text: `Unknown tool ${name}.` }], isError: true });
-      if (ownerToolNames.has(name)) return reply({ content: [{ type: 'text', text: await runOwnerTool(env, name, args) }] });
+      if (ownerToolNames.has(name)) return reply({ content: [{ type: 'text', text: await runOwnerTool(env, name, args, await config(env), () => meetings(env)) }] });
       const id = typeof args.id === 'string' ? args.id : '';
       // A kind prefix: "person:<id>" and "task:<id>" are the owner's data; "meeting:<id>" and a bare id are meetings.
       const meetingArgs = name === 'fetch' && id.startsWith('meeting:') ? { ...args, id: id.slice(8) } : args;

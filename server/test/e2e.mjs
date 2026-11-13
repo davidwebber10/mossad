@@ -32,7 +32,8 @@ r = await fetch(`${share}/api/shares/${id}`, { headers: auth }); const detail = 
 r = await fetch(`${share}/api/shares/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ expires: '2030-01-01T00:00:00Z' }) }); ok(r.ok, 'expiry changed');
 r = await fetch(`${share}/api/shares/${id}/pin`, { method: 'DELETE', headers: auth }); ok(r.ok, 'pin removed');
 // MCP OAuth
-r = await fetch(`${mcp}/mossad`, { method: 'POST', body: '{}' }); ok(r.status === 401, 'mcp needs a token'); const www = r.headers.get('www-authenticate'); console.log(' ', www);
+r = await fetch(`${mcp}/mossad`, { method: 'POST', body: '{}' }); ok(r.status === 401, 'mcp needs a token');
+r = await fetch(`${mcp}/mossad`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read_person', arguments: { person: 'x' } } }) }); ok(r.status === 401, 'the owner tools need a token too'); const www = r.headers.get('www-authenticate'); console.log(' ', www);
 const prmURL = /resource_metadata="([^"]+)"/.exec(www)[1];
 const prm = await (await fetch(prmURL)).json(); console.log(' ', JSON.stringify(prm));
 const asURL = `${mcp}/.well-known/oauth-authorization-server/mossad`;
@@ -55,6 +56,7 @@ ok((await call('tools/list', {})).result.tools.length === 6, 'tools/list');
 const found = await call('tools/call', { name: 'find_meetings', arguments: { people: ['Jen'] } }); ok(found.result.content[0].text.includes('call_id: m1'), 'find_meetings ' + found.result.content[0].text);
 const read = await call('tools/call', { name: 'read_meeting', arguments: { call_id: 'm1' } }); ok(read.result.content[0].text.includes('[00:01:05] Jennifer Lee'), 'read_meeting');
 const s = await call('tools/call', { name: 'search', arguments: { query: 'friday' } }); ok(s.result.structuredContent.results[0].id === 'm1', 'search');
+const people = await call('tools/call', { name: 'commitments', arguments: {} }); ok(people.result.content[0].text.startsWith('This server has no tasks'), 'an owner tool with a token');
 // Recording backup
 const rec = crypto.randomBytes(300_000), recHash = crypto.createHash('sha256').update(rec).digest('hex');
 r = await fetch(`${share}/api/hello`); const open = await r.json(); ok(open.recordings?.maxBytes > 0 && !open.recordings.id, 'hello names the recording limit, and no id without the secret');

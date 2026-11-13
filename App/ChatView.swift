@@ -198,15 +198,22 @@ struct ChatView: View {
         steps = []
         running = chat.id
         let collector = StepSink { step in Task { @MainActor in steps.append(step) } }
+        // Each receipt goes into the chat the moment its action is done; the answer joins the file's copy.
+        let answerID = UUID(), asked = chat, questionID = chat.messages.last!.id
+        let actionSink = ActionSink { r in Task { @MainActor in _ = controller.saveChatAction(r, chat: asked, answer: answerID); reload() } }
+        let earlier = controller.chatActions(chat)
         Task {
             do {
-                let answer = try await controller.chatAnswer(q, history: history, about: chat.callID, onStep: collector.add)
-                chat.messages.append(answer.message(steps: steps))
-                chat.updated = Date()
-                store(chat)
+                let answer = try await controller.chatAnswer(q, history: history, about: chat.callID, earlier: earlier, onAction: actionSink.add, onStep: collector.add)
+                var message = answer.message(steps: steps)
+                message.id = answerID
+                store(controller.finishChatAnswer(message, chat: asked))
                 controller.summarizeChat(chat.id)
-                controller.syncNow()
+                if !controller.isRecording { controller.syncNow() }
             } catch {
+                // What was done stays with its question.
+                let stop = controller.stopChatAnswer(chat: asked, answer: answerID, question: questionID)
+                if stop.kept { store(stop.chat) }
                 Log.error("Chat failed: \(error)")
                 let friendly = FriendlyError(error, context: .chatting)
                 if friendly.shouldShow(failures: 1) { self.error = friendly }
@@ -382,4 +389,11 @@ struct MeetingPill: View {
         .buttonStyle(.plain)
         .help("Open this meeting")
     }
+}
+
+/// Hands each receipt and card of an answer to the main actor as soon as its action is done.
+final class ActionSink: Sendable {
+    private let handle: @Sendable (ChatActionRecord) -> Void
+    init(_ handle: @escaping @Sendable (ChatActionRecord) -> Void) { self.handle = handle }
+    func add(_ r: ChatActionRecord) { handle(r) }
 }

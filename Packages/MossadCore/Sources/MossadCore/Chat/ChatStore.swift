@@ -20,6 +20,25 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
         self.text = text
         self.steps = steps
     }
+
+    enum CodingKeys: String, CodingKey { case id, role, text, steps, live, asked, actions }
+
+    /// An action this build cannot read (a kind or a state of a later build) is left out; the chat is kept.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        role = try c.decode(Role.self, forKey: .role)
+        text = try c.decode(String.self, forKey: .text)
+        steps = try c.decode([String].self, forKey: .steps)
+        live = try c.decodeIfPresent(Bool.self, forKey: .live)
+        asked = try c.decodeIfPresent(Date.self, forKey: .asked)
+        actions = try c.decodeIfPresent([Lossy].self, forKey: .actions)?.compactMap(\.value)
+    }
+
+    private struct Lossy: Decodable {
+        let value: ChatActionRecord?
+        init(from decoder: Decoder) throws { value = try? ChatActionRecord(from: decoder) }
+    }
 }
 
 public struct Chat: Codable, Equatable, Sendable, Identifiable {
@@ -48,6 +67,12 @@ public struct Chat: Codable, Equatable, Sendable, Identifiable {
         let other = out == a ? b : a
         let ids = Set(out.messages.map(\.id))
         out.messages += other.messages.filter { !ids.contains($0.id) }
+        // A copy from an older build has no receipts, and an old copy can hold a card that was clicked since: each
+        // action keeps its later state, from whichever copy has it.
+        for i in out.messages.indices {
+            guard let theirs = other.messages.first(where: { $0.id == out.messages[i].id })?.actions, !theirs.isEmpty else { continue }
+            out.messages[i].actions = ChatThreadEdits.merge(out.messages[i].actions ?? [], theirs)
+        }
         return out
     }
 
