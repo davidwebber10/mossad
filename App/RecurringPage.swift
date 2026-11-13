@@ -94,7 +94,7 @@ struct RecurringPage: View {
             case .open: SeriesOpenTab(report: data?.report)
             }
         }
-        .font(.system(size: Rhythm.bodySize))
+        .readingText()
         .foregroundStyle(Palette.ink)
     }
 }
