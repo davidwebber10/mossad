@@ -76,9 +76,7 @@ struct CoachPageColumn<Content: View>: View {
         } content: {
             ScrollView {
                 content
-                    .padding(EdgeInsets(top: 10, leading: 36, bottom: 40, trailing: 36))
-                    .frame(maxWidth: 760 + 72, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .pageColumn(Rhythm.readingWidth)
             }
         }
     }
