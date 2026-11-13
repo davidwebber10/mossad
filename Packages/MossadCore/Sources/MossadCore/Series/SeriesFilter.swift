@@ -10,6 +10,18 @@ public struct SeriesFilter: Equatable, Codable, Sendable {
     public enum Cadence: Int, CaseIterable, Codable, Sendable {
         case weekly, everyTwoWeeks, monthly, other
 
+        /// The group of the series' schedule, the rule that its day groups use: a series on several weekdays each
+        /// week is weekly.
+        public init?(_ schedule: SeriesSchedule) {
+            switch schedule.rhythm {
+            case .weekly?: self = .weekly
+            case .weeks(2)?: self = .everyTwoWeeks
+            case .monthly?: self = .monthly
+            case .weeks?, .days?: self = .other
+            case nil: return nil
+            }
+        }
+
         public init?(_ cadence: SeriesCadence?) {
             guard let cadence else { return nil }
             switch cadence.rhythm {

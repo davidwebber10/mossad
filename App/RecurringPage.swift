@@ -113,7 +113,7 @@ private struct RecurringHeader: View {
                 FlowLayout(spacing: Space.s) {
                     HStack(spacing: Space.s) {
                         if let p = series.next?.platform { PlatformDot(platform: p, hollow: true) }
-                        Text(series.cadence?.text(time: clockTime) ?? (series.recurringInCalendar ? "Repeats in your calendar" : "Recurring"))
+                        Text(series.schedule.text(time: clockTime) ?? (series.recurringInCalendar ? "Repeats in your calendar" : "Recurring"))
                             .font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1)
                     }
                     .frame(minHeight: 20)

@@ -3,11 +3,13 @@ import SwiftUI
 
 /// Recurring's Calendar mode: one typical week, not this week. Monday to Friday, and a weekend day only when a
 /// series meets then; the hours on the side, as Meetings' week. Each series is a block at its usual time with its
-/// usual length; blocks that overlap sit side by side (`SeriesWeek.blocks`). Today's column is marked. A series
-/// with no fixed day or no known time is in a quiet strip under the grid.
+/// usual length; blocks that overlap sit side by side (`SeriesWeek.blocks`). Today's column is marked, and a block
+/// whose day this week has no date in the calendar says "not this week". A series with no fixed day or a day with
+/// no known time is in a quiet strip under the grid; a series that ended is in the list only. Everything it draws
+/// is made once per change (`SeriesWeekMemo`).
 struct SeriesWeekCalendar: View {
     let series: [MeetingSeries]
-    let entries: [SeriesWeek.Entry]
+    let week: SeriesWeekMemo.Week
     /// The series whose page was open last, so the way back finds it.
     let selected: String?
     let open: (String) -> Void
@@ -19,11 +21,8 @@ struct SeriesWeekCalendar: View {
     private var calendar: Calendar { .current }
 
     var body: some View {
-        let columns = SeriesWeek.columns(entries)
-        let blocks = SeriesWeek.blocks(entries)
-        let unplaced = SeriesWeek.unplaced(entries)
+        let columns = week.columns, blocks = week.blocks, unplaced = week.unplaced
         let byID = Dictionary(series.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let schedules = Dictionary(entries.map { ($0.id, $0.schedule) }, uniquingKeysWith: { a, _ in a })
         let today = calendar.component(.weekday, from: Date())
         VStack(spacing: 0) {
             header(columns, today: today)
@@ -40,7 +39,7 @@ struct SeriesWeekCalendar: View {
                         HourLines(hour: hour, gutter: gutter, columns: columns.count, columnWidth: width)
                         ForEach(blocks, id: \.self) { b in
                             if let i = columns.firstIndex(of: b.weekday), let s = byID[b.id] {
-                                block(b, series: s, schedule: schedules[b.id], x: gutter + CGFloat(i) * width, width: width)
+                                block(b, series: s, schedule: week.entries[b.id]?.schedule, x: gutter + CGFloat(i) * width, width: width)
                             }
                         }
                         if let i = columns.firstIndex(of: today) {
@@ -86,39 +85,45 @@ struct SeriesWeekCalendar: View {
     }
 
     private func block(_ b: SeriesWeek.Block, series s: MeetingSeries, schedule: SeriesSchedule?, x: CGFloat, width: CGFloat) -> some View {
-        let height = max(20, CGFloat(b.end - b.start) * hour / 60)
+        let height = max(CGFloat(SeriesWeek.leastMinutes), CGFloat(b.end - b.start)) * hour / 60
         let inset: CGFloat = 4
         let slot = (width - inset * 2) / CGFloat(max(b.columns, 1))
         let active = hovered == b.id || selected == b.id
-        let skips = schedule.flatMap { SeriesWeek.meetsThisWeek(s, schedule: $0, now: Date(), calendar: calendar) } == false
-        let note = [schedule.flatMap(quietNote), skips ? "not this week" : nil].compactMap { $0 }.joined(separator: " · ")
+        let time = clockTime(b.start / 60, b.start % 60)
+        // The time always; a rhythm that is not every week, and a day with no date this week, after it. The days
+        // of a series on several weekdays are the columns already.
+        let rhythm = schedule.flatMap { $0.rhythm == .weekly ? nil : $0.note?.lowercased() }
+        let line = [time, rhythm, b.skipped ? "not this week" : nil].compactMap { $0 }.joined(separator: " · ")
         return Button { open(b.id) } label: {
             VStack(alignment: .leading, spacing: 0) {
                 Text(s.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(height > 44 ? 2 : 1)
                 if height > 28 {
-                    Text(note.isEmpty ? clockTime(b.start / 60, b.start % 60) : note)
-                        .font(.system(size: 10.5)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Text(line).font(.system(size: 10.5)).foregroundStyle(Palette.secondary).lineLimit(1)
                 }
             }
             .lineSpacing(1)
             .padding(.leading, 8).padding(.trailing, 7).padding(.vertical, 3)
             .frame(width: slot - 2, height: height - 1, alignment: .topLeading)
             .clipped()
-            .background(active ? Palette.selection : Palette.fill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-            .opacity(skips ? 0.6 : 1)
+            // A day with no date this week has a lighter fill; its words keep their contrast.
+            .background(active ? Palette.selection : b.skipped ? Palette.fill.opacity(0.45) : Palette.fill,
+                        in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         }
         .buttonStyle(.plain)
         .offset(x: x + inset + slot * CGFloat(b.column), y: CGFloat(b.start) * hour / 60)
         .onHover { hovered = $0 ? b.id : (hovered == b.id ? nil : hovered) }
-        .help([s.title, clockTime(b.start / 60, b.start % 60), note].filter { !$0.isEmpty }.joined(separator: " · "))
-        .accessibilityLabel("\(s.title), \(calendar.weekdaySymbols[b.weekday - 1]) \(clockTime(b.start / 60, b.start % 60))\(note.isEmpty ? "" : ", \(note)")")
+        .help([s.title, line].joined(separator: " · "))
+        .accessibilityLabel("\(s.title), \(calendar.weekdaySymbols[b.weekday - 1]) \(line)")
+        .accessibilityAddTraits(selected == b.id ? .isSelected : [])
     }
 
     /// The series the grid cannot place: no fixed day, or a day with no known time. Each opens its page.
     private func strip(_ entries: [SeriesWeek.Entry], byID: [String: MeetingSeries]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("No fixed day or time").textRole(.label).foregroundStyle(Palette.tertiary)
+            // About three rows, then its own scroll: the grid keeps most of the pane.
+            ScrollView {
             FlowLayout(spacing: 6) {
                 ForEach(entries, id: \.id) { e in
                     if byID[e.id] != nil {
@@ -134,19 +139,26 @@ struct SeriesWeekCalendar: View {
                             .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
+                        .help([e.title, stripNote(e.schedule)].compactMap { $0 }.joined(separator: " · "))
+                        .accessibilityAddTraits(selected == e.id ? .isSelected : [])
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: 92)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, gutter).padding(.trailing, 12).padding(.vertical, Space.s)
         .overlay(alignment: .top) { Hairline() }
     }
 
-    /// "monthly", "Tue, time not known".
+    /// "monthly", "Tue, time not known": the days whose time is not known.
     private func stripNote(_ s: SeriesSchedule) -> String? {
         if s.hasFixedDay {
-            let days = s.weekdays.map { calendar.shortWeekdaySymbols[$0 - 1] }.joined(separator: ", ")
+            let days = s.weekdays.filter { s.minute(on: $0) == nil }.map { calendar.shortWeekdaySymbols[$0 - 1] }.joined(separator: ", ")
             return "\(days), time not known"
         }
         return quietNote(s)

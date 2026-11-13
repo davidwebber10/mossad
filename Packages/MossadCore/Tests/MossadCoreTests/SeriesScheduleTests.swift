@@ -12,6 +12,12 @@ final class SeriesScheduleTests: XCTestCase {
 
     /// Monday, November 2, 2026, 00:00 UTC.
     private var monday: Date { utc.date(from: DateComponents(year: 2026, month: 11, day: 2))! }
+    /// "Now" for the rule: that Monday at 08:00.
+    private var base: Date { monday.addingTimeInterval(8 * 3600) }
+
+    private func schedule(_ upcoming: [Date], _ history: [Date], now: Date? = nil) -> SeriesSchedule {
+        SeriesSchedule.from(upcoming: upcoming, history: history, now: now ?? base, calendar: utc)
+    }
 
     /// A date `weeks` weeks after the base Monday, on `weekday` (1 is Sunday) at `time` ("10:00").
     private func at(_ weeks: Int, _ weekday: Int, _ time: String = "10:00") -> Date {
@@ -68,7 +74,7 @@ final class SeriesScheduleTests: XCTestCase {
             Case(name: "nothing", upcoming: [], history: [], weekdays: [], minute: nil, rhythm: nil, note: nil),
         ]
         for c in cases {
-            let s = SeriesSchedule.from(upcoming: c.upcoming, history: c.history, calendar: utc)
+            let s = SeriesSchedule.from(upcoming: c.upcoming, history: c.history, now: base, calendar: utc)
             XCTAssertEqual(s.weekdays, c.weekdays, c.name)
             XCTAssertEqual(s.minuteOfDay, c.minute, c.name)
             XCTAssertEqual(s.rhythm, c.rhythm, c.name)
@@ -77,7 +83,7 @@ final class SeriesScheduleTests: XCTestCase {
     }
 
     func testTheTimeIsToFiveMinutes() {
-        let s = SeriesSchedule.from(upcoming: [], history: [at(-1, 3, "10:02"), at(-2, 3, "09:58"), at(-3, 3, "10:01")], calendar: utc)
+        let s = schedule([], [at(-1, 3, "10:02"), at(-2, 3, "09:58"), at(-3, 3, "10:01")])
         XCTAssertEqual(s.minuteOfDay, 600)
     }
 
@@ -85,14 +91,14 @@ final class SeriesScheduleTests: XCTestCase {
         // A monthly series: one meeting in the calendar's read, the rest in the history.
         let next = utc.date(from: DateComponents(year: 2026, month: 12, day: 1, hour: 15))!
         let past = [11, 10, 9].map { m in utc.date(from: DateComponents(year: 2026, month: m, day: [9: 1, 10: 6, 11: 3][m]!, hour: 15))! }
-        let s = SeriesSchedule.from(upcoming: [next], history: past, calendar: utc)
+        let s = schedule([next], past)
         XCTAssertEqual(s.weekdays, [3])
         XCTAssertEqual(s.rhythm, .monthly)
     }
 
     func testDailyHistoryReadsWeeksNotMeetings() {
         // Eight meetings of a daily series span two weeks; the rule reads the weeks, so each weekday is there.
-        let s = SeriesSchedule.from(upcoming: [], history: dates(-8 ... -1, [2, 3, 4, 5, 6]).reversed(), calendar: utc)
+        let s = schedule([], dates(-8 ... -1, [2, 3, 4, 5, 6]).reversed())
         XCTAssertEqual(s.weekdays, [2, 3, 4, 5, 6])
     }
 
@@ -103,7 +109,7 @@ final class SeriesScheduleTests: XCTestCase {
             MeetingSeries.Occurrence(id: "m\(w)", title: "Sync", start: at(-w, 3, "10:07"), end: at(-w, 3, "10:30"), notesOnly: false,
                                      plannedStart: at(-w, 3, "10:00"))
         }
-        let s = SeriesSchedule.of(series, calendar: utc)
+        let s = SeriesSchedule.of(series, now: base, calendar: utc)
         XCTAssertEqual(s.weekdays, [3])
         XCTAssertEqual(s.minuteOfDay, 600)
     }
@@ -198,6 +204,129 @@ final class SeriesScheduleTests: XCTestCase {
         XCTAssertEqual(items.map(\.columns), [2, 2])
     }
 
+    // MARK: The review's cases
+
+    // M3: each weekday has its own time.
+    func testEachWeekdayHasItsOwnTime() {
+        let standup = schedule(dates(1...6, [2, 3, 4, 5], "09:30") + dates(1...6, [6], "09:00"), [])
+        XCTAssertEqual(standup.minute(on: 5), 570)
+        XCTAssertEqual(standup.minute(on: 6), 540)
+        let split = schedule(dates(1...6, [2], "10:00") + dates(1...6, [5], "14:00"), [])
+        XCTAssertNil(split.minuteOfDay)
+        XCTAssertEqual(split.times, [2: 600, 5: 840])
+        XCTAssertEqual(split.text(), "Every Mon, Thu")
+        let blocks = SeriesWeek.blocks([SeriesWeek.Entry(id: "s", title: "S", schedule: split, minutes: 30)])
+        XCTAssertEqual(blocks.map(\.start), [600, 840])
+        XCTAssertTrue(SeriesWeek.unplaced([SeriesWeek.Entry(id: "s", title: "S", schedule: split)]).isEmpty)
+    }
+
+    // M4: with no calendar dates, the newest three meetings on one weekday move the series there at once.
+    func testASeriesThatMovedItsDayIsUnderTheNewDay() {
+        let moved = schedule([], [at(-1, 5, "11:00"), at(-2, 5, "11:00"), at(-3, 5, "11:00")] + dates(-9 ... -4, [3]))
+        XCTAssertEqual(moved.weekdays, [5])
+        XCTAssertEqual(moved.minute(on: 5), 660)
+        let even = schedule([], [at(-1, 5), at(-2, 5), at(-3, 5), at(-4, 5)] + dates(-8 ... -5, [3]))
+        XCTAssertEqual(even.weekdays, [5])
+        // Two meetings since the move are not enough: the old day still has the majority.
+        XCTAssertEqual(schedule([], [at(-1, 5), at(-2, 5)] + dates(-8 ... -3, [3])).weekdays, [3])
+    }
+
+    // M5: a series with no next meeting and none recently has ended.
+    func testASeriesThatEndedHasNoDay() {
+        let old = schedule([], dates(-30 ... -24, [3]))
+        XCTAssertTrue(old.ended)
+        XCTAssertEqual(old.weekdays, [])
+        XCTAssertEqual(old.note, "Not recently")
+        let entry = SeriesWeek.Entry(id: "old", title: "Old", schedule: old, last: at(-24, 3))
+        XCTAssertTrue(SeriesWeek.blocks([entry]).isEmpty)
+        XCTAssertTrue(SeriesWeek.unplaced([entry]).isEmpty)
+        XCTAssertEqual(SeriesWeek.days([entry]).map(\.weekday), [nil])
+        // A slow series keeps its day for two of its own gaps.
+        let monthly = [9, 8, 7].map { m in utc.date(from: DateComponents(year: 2026, month: m, day: 1, hour: 15))! }
+        XCTAssertFalse(schedule([], monthly, now: utc.date(from: DateComponents(year: 2026, month: 10, day: 20))!).ended)
+        XCTAssertTrue(schedule([], monthly, now: utc.date(from: DateComponents(year: 2027, month: 1, day: 20))!).ended)
+        // A next meeting in the calendar is never ended.
+        XCTAssertFalse(schedule([at(1, 3)], dates(-30 ... -24, [3])).ended)
+    }
+
+    // L1: the same date each month on different weekdays has no fixed day.
+    func testMonthlyByDateWithTwoWeekdaysTheSame() {
+        let dates = [2, 3, 4].map { m in utc.date(from: DateComponents(year: 2027, month: m, day: 15, hour: 9))! }
+        let s = schedule([], dates.reversed(), now: dates[2])
+        XCTAssertEqual(s.weekdays, [])
+        XCTAssertEqual(s.rhythm, .monthly)
+        XCTAssertEqual(s.minuteOfDay, 540)
+    }
+
+    // L2: one week of meetings is no habit.
+    func testOneWeekOfMeetingsHasNoFixedDay() {
+        let s = schedule([], [at(-1, 2), at(-1, 4), at(-1, 6)])
+        XCTAssertEqual(s.weekdays, [])
+        XCTAssertNil(s.note)
+    }
+
+    // L8: 23:58 is 23:55, never midnight.
+    func testALateStartStaysInItsDay() {
+        XCTAssertEqual(schedule(dates(1...4, [3], "23:58"), []).minute(on: 3), 23 * 60 + 55)
+    }
+
+    // L12: starts a minute or two either side of the hour still give the hour.
+    func testRecordedStartsAroundTheHourGiveTheHour() {
+        let starts = ["10:01", "10:03", "09:59", "10:04", "10:00", "10:03"].enumerated().map { at(-($0.offset + 1), 3, $0.element) }
+        XCTAssertEqual(schedule([], starts).minute(on: 3), 600)
+    }
+
+    func testThePagesLine() {
+        XCTAssertEqual(SeriesSchedule(weekdays: [3], minuteOfDay: 600, rhythm: .weekly).text(), "Every Tuesday 10:00")
+        XCTAssertEqual(SeriesSchedule(weekdays: [2, 3, 4, 5, 6], minuteOfDay: 570, rhythm: .weekly).text(), "Every weekday 9:30")
+        XCTAssertEqual(SeriesSchedule(weekdays: [5], minuteOfDay: 660, rhythm: .weeks(2)).text(), "Every 2 weeks on Thursday 11:00")
+        XCTAssertEqual(SeriesSchedule(weekdays: [], minuteOfDay: 540, rhythm: .monthly).text(), "Monthly 9:00")
+        XCTAssertEqual(SeriesSchedule(weekdays: [], minuteOfDay: nil, rhythm: .days(10)).text(), "About every 10 days")
+        XCTAssertNil(SeriesSchedule.none.text())
+    }
+
+    // M2: a row under a weekday says that weekday's own next date, only when the header does not.
+    func testTheNextWordOfARow() {
+        let now = at(0, 2, "08:00")  // Monday
+        let standup = dates(0...2, [2, 3, 4, 5, 6], "09:30")
+        XCTAssertEqual(SeriesWeek.next(on: 2, upcoming: standup, now: now, calendar: utc), .today)
+        XCTAssertEqual(SeriesWeek.next(on: 3, upcoming: standup, now: now, calendar: utc), .tomorrow)
+        XCTAssertNil(SeriesWeek.next(on: 4, upcoming: standup, now: now, calendar: utc))
+        // Every 2 weeks, off this week: the date says when.
+        let roadmap = [at(1, 5, "11:00"), at(3, 5, "11:00")]
+        XCTAssertEqual(SeriesWeek.next(on: 5, upcoming: roadmap, now: now, calendar: utc), .date(at(1, 5, "11:00")))
+        XCTAssertNil(SeriesWeek.next(on: 3, upcoming: roadmap, now: now, calendar: utc))
+    }
+
+    // L3: the arrow keys go row by row from the row they left.
+    func testTheArrowKeysGoRowByRow() {
+        let days = SeriesWeek.days([entry("standup", [2, 3], 570), entry("tb", [3], 600)])
+        let rows = SeriesWeek.rows(days)
+        XCTAssertEqual(rows.map(\.id), ["standup", "standup", "tb"])
+        let second = SeriesWeek.move(rows, cursor: rows[0], selection: "standup", by: 1)
+        XCTAssertEqual(second, rows[1])
+        XCTAssertEqual(SeriesWeek.move(rows, cursor: second, selection: "standup", by: 1), rows[2])
+        // A selection from elsewhere starts at its first row.
+        XCTAssertEqual(SeriesWeek.move(rows, cursor: rows[2], selection: "standup", by: 1), rows[1])
+        XCTAssertEqual(SeriesWeek.move(rows, cursor: nil, selection: nil, by: 1), rows[0])
+        XCTAssertNil(SeriesWeek.move([], cursor: nil, selection: nil, by: 1))
+    }
+
+    // L6: a short block is packed as tall as it is drawn.
+    func testAShortBlockDoesNotCoverTheNext() {
+        let blocks = SeriesWeek.blocks([entry("a", [2], 570, minutes: 8), entry("b", [2], 585, minutes: 30)])
+        XCTAssertEqual(blocks.map(\.columns), [2, 2])
+        XCTAssertEqual(blocks.first?.end, 578)
+    }
+
+    // L7: the invite's length before the recorded median.
+    func testTheInvitesLengthComesFirst() {
+        var s = series(upcoming: [at(1, 3)])
+        s.schedule = SeriesSchedule(weekdays: [3], minuteOfDay: 600, rhythm: .weekly)
+        XCTAssertEqual(SeriesWeek.Entry(s, seconds: 68 * 60, now: base, calendar: utc).minutes, 30)
+        XCTAssertEqual(SeriesWeek.Entry(series(upcoming: []), seconds: 68 * 60, now: base, calendar: utc).minutes, 68)
+    }
+
     // MARK: This week
 
     private func series(upcoming: [Date], meetings: [Date] = []) -> MeetingSeries {
@@ -208,13 +337,22 @@ final class SeriesScheduleTests: XCTestCase {
                       cadence: nil, recurringInCalendar: true, usualPeople: [])
     }
 
-    func testThisWeekIsKnownOnlyFromTheCalendar() {
-        let thursday = SeriesSchedule(weekdays: [5], minuteOfDay: 600, rhythm: .weeks(2))
-        let mondayMorning = at(0, 2, "08:00")
-        XCTAssertEqual(SeriesWeek.meetsThisWeek(series(upcoming: [at(0, 5)]), schedule: thursday, now: mondayMorning, calendar: utc), true)
-        XCTAssertEqual(SeriesWeek.meetsThisWeek(series(upcoming: [at(1, 5)]), schedule: thursday, now: mondayMorning, calendar: utc), false)
-        // Friday: Thursday has passed, and nothing recorded says whether it met.
-        XCTAssertNil(SeriesWeek.meetsThisWeek(series(upcoming: [at(1, 5)]), schedule: thursday, now: at(0, 6), calendar: utc))
-        XCTAssertNil(SeriesWeek.meetsThisWeek(series(upcoming: []), schedule: thursday, now: mondayMorning, calendar: utc))
+    // L10: each weekday still to come this week, Monday to Sunday, with no date in the calendar.
+    func testTheWeekdaysSkippedThisWeek() {
+        let monThu = SeriesSchedule(weekdays: [2, 5], minuteOfDay: 600, rhythm: .weekly)
+        let monday = at(0, 2, "08:00")
+        // Monday is today (never marked); Thursday has no date this week.
+        XCTAssertEqual(SeriesWeek.skipped(monThu, upcoming: [at(0, 2, "10:00"), at(1, 2), at(1, 5)], now: monday, calendar: utc), [5])
+        XCTAssertEqual(SeriesWeek.skipped(monThu, upcoming: [at(0, 5), at(1, 2)], now: monday, calendar: utc), [])
+        // Friday: Thursday has passed.
+        XCTAssertEqual(SeriesWeek.skipped(monThu, upcoming: [at(1, 2)], now: at(0, 6), calendar: utc), [])
+        XCTAssertEqual(SeriesWeek.skipped(monThu, upcoming: [], now: monday, calendar: utc), [])
+        // A calendar whose week starts on Sunday: the grid's week still runs Monday to Sunday, so on Saturday the
+        // Sunday is still to come, and on Sunday everything has come.
+        var sunday = utc
+        sunday.firstWeekday = 1
+        let sun = SeriesSchedule(weekdays: [1, 3], minuteOfDay: 600, rhythm: .weekly)
+        XCTAssertEqual(SeriesWeek.skipped(sun, upcoming: [at(1, 3)], now: at(0, 7, "08:00"), calendar: sunday), [1])
+        XCTAssertEqual(SeriesWeek.skipped(sun, upcoming: [at(1, 3)], now: at(0, 1, "08:00"), calendar: sunday), [])
     }
 }

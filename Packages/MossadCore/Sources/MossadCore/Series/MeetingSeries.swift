@@ -31,13 +31,16 @@ public struct MeetingSeries: Sendable, Equatable, Identifiable, Hashable {
     public var recurringInCalendar: Bool
     /// The people (without the owner) who came to at least half of the last meetings, most often first.
     public var usualPeople: [String]
+    /// Its weekdays and usual times (`SeriesSchedule`), made with the catalog off the main thread: the one rule of
+    /// the list's groups, the typical week, the search, the filter, and the page's band.
+    public var schedule: SeriesSchedule = .none
 
     public var next: UpcomingMeeting? { upcoming.first }
     public var last: Occurrence? { meetings.first }
 
     public static func == (a: MeetingSeries, b: MeetingSeries) -> Bool {
         a.id == b.id && a.keys == b.keys && a.title == b.title && a.meetings == b.meetings && a.upcoming.map(\.id) == b.upcoming.map(\.id)
-            && a.cadence == b.cadence && a.usualPeople == b.usualPeople
+            && a.cadence == b.cadence && a.usualPeople == b.usualPeople && a.schedule == b.schedule
     }
 
     public func hash(into h: inout Hasher) { h.combine(id) }
@@ -143,7 +146,8 @@ public enum SeriesCatalog {
 
     /// `records` may hold every meeting: only the written ones count. `upcoming` are the calendar's invites.
     public static func build(records: [CallRecord], upcoming: [UpcomingMeeting], owner: String, directory: PersonDirectory,
-                             ownerEmails: [String] = [], aliases: [String: String] = [:], calendar: Calendar = .current) -> [MeetingSeries] {
+                             ownerEmails: [String] = [], aliases: [String: String] = [:], now: Date = Date(),
+                             calendar: Calendar = .current) -> [MeetingSeries] {
         // One series, two ids: the Mac's calendar and Google name one series in two ways (`aliases`).
         func canon(_ id: String?) -> String? { id.map { aliases[$0] ?? $0 } }
         let past = records.filter { $0.status == .written }.sorted { ($0.start, $0.id) < ($1.start, $1.id) }
@@ -211,10 +215,10 @@ public enum SeriesCatalog {
             let repeats = upcoming.contains(where: \.repeats)
             guard records.count >= 2 || repeats else { continue }
             out.append(make(records: records, upcoming: upcoming, repeats: repeats, members: indices.map { members[$0] }, directory: directory, aliases: aliases,
-                            calendar: calendar))
+                            now: now, calendar: calendar))
         }
         for (_, upcoming) in calendarOnly {
-            out.append(make(records: [], upcoming: upcoming, repeats: true, members: [], directory: directory, aliases: aliases, calendar: calendar))
+            out.append(make(records: [], upcoming: upcoming, repeats: true, members: [], directory: directory, aliases: aliases, now: now, calendar: calendar))
         }
         // The next meeting first, then the most recent.
         return out.sorted { a, b in
@@ -237,7 +241,7 @@ public enum SeriesCatalog {
     }
 
     static func make(records: [CallRecord], upcoming: [UpcomingMeeting], repeats: Bool, members: [Member], directory: PersonDirectory,
-                     aliases: [String: String] = [:], calendar: Calendar) -> MeetingSeries {
+                     aliases: [String: String] = [:], now: Date = Date(), calendar: Calendar) -> MeetingSeries {
         let oldestFirst = records.sorted { ($0.start, $0.id) < ($1.start, $1.id) }
         let raw = oldestFirst.compactMap(\.calendarSeriesID) + upcoming.compactMap(\.seriesID)
         // The id from the canonical calendar id; the keys hold both names of it.
@@ -250,9 +254,11 @@ public enum SeriesCatalog {
                                                                        plannedStart: $0.plannedStart) }
         // A planned start says the series' time better than when the recording began.
         let dates = oldestFirst.map { $0.plannedStart ?? $0.start } + upcoming.map(\.start)
-        return MeetingSeries(id: id, keys: keys, title: upcoming.last?.title ?? meetings.first?.title ?? "", meetings: meetings, upcoming: upcoming,
-                             cadence: SeriesCadence.from(dates, calendar: calendar), recurringInCalendar: repeats,
-                             usualPeople: usualPeople(members.sorted { $0.record.start > $1.record.start }, directory: directory, upcoming: upcoming))
+        var series = MeetingSeries(id: id, keys: keys, title: upcoming.last?.title ?? meetings.first?.title ?? "", meetings: meetings, upcoming: upcoming,
+                                   cadence: SeriesCadence.from(dates, calendar: calendar), recurringInCalendar: repeats,
+                                   usualPeople: usualPeople(members.sorted { $0.record.start > $1.record.start }, directory: directory, upcoming: upcoming))
+        series.schedule = .of(series, now: now, calendar: calendar)
+        return series
     }
 
     static let usualWindow = 10

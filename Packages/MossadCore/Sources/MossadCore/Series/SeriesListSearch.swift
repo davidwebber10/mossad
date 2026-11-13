@@ -18,13 +18,10 @@ public struct SeriesSearchRow: Sendable, Equatable {
         id = series.id
         title = series.title
         meetings = series.meetings.map(\.id)
-        // The day and the group only: the time and words such as "every" would match nearly every series.
-        var cadenceWords: [String] = []
-        switch series.cadence?.rhythm {
-        case .weekly(let d)?, .everyOtherWeek(let d)?: cadenceWords.append(SeriesCadence.weekdays[(d - 1) % 7])
-        default: break
-        }
-        if let group = SeriesFilter.Cadence(series.cadence), group != .other { cadenceWords.append(group.option) }
+        // The days and the group only, from the schedule that the list's groups use: the time and words such as
+        // "every" would match nearly every series.
+        var cadenceWords = series.schedule.weekdays.map { SeriesCadence.weekdays[$0 - 1] }
+        if let group = SeriesFilter.Cadence(series.schedule), group != .other { cadenceWords.append(group.option) }
         if series.recurringInCalendar { cadenceWords.append("Repeats") }
 
         var names: [String] = [], nameKeys: Set<String> = []
