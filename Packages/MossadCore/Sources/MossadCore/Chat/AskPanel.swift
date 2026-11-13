@@ -87,8 +87,8 @@ public struct AskPanelChip: Equatable, Sendable, Identifiable {
 public enum AskPanelChips {
     static let forMe = "Questions for me"
 
-    public static func chips(_ entries: [LiveEntry], owner: String, openQuestions: Int, lastAsked: String?) -> [AskPanelChip] {
-        LiveChips.chips(entries, owner: owner, openQuestions: openQuestions)
+    public static func chips(_ entries: [LiveEntry], owner: String, openQuestions: Int, openPoints: Int = 0, lastAsked: String?) -> [AskPanelChip] {
+        LiveChips.chips(entries, owner: owner, openQuestions: openQuestions, openPoints: openPoints)
             .filter { $0.question != lastAsked && $0.label != lastAsked }
             .map { chip in
                 chip.label == forMe
@@ -112,12 +112,28 @@ extension AskPanelChips {
 
 /// The quick panel's frame: its content's height, never less than the header, the field, and the keys, grown up
 /// from the bottom edge where the field is, and moved down only to stay on the screen.
+/// The owner's points take their height from the thread, so the panel's tallest size stays `limit` and the field
+/// stays where it is.
 public enum AskPanelSizing {
     public static let width: CGFloat = 640
     static let header: CGFloat = 44, field: CGFloat = 56, footer: CGFloat = 32, chips: CGFloat = 46
+    /// The thread's tallest, with no points row; then it scrolls.
+    public static let threadLimit: CGFloat = 452
+    /// The collapsed "Your points" row, and the open checklist's tallest; past it the checklist scrolls.
+    public static let pointsRow: CGFloat = 36, pointsMax: CGFloat = 220
+    /// The panel's tallest.
+    public static var limit: CGFloat { header + threadLimit + chips + field + footer }
 
-    public static func minimum(chips withChips: Bool) -> CGFloat {
-        header + field + footer + (withChips ? chips : 0)
+    public static func minimum(chips withChips: Bool, points: CGFloat = 0) -> CGFloat {
+        header + field + footer + (withChips ? chips : 0) + Self.points(content: points)
+    }
+
+    /// The points row's height as shown: its content up to `pointsMax`.
+    public static func points(content: CGFloat) -> CGFloat { min(max(0, content), pointsMax) }
+
+    /// The thread's tallest beside a points row of this height: the thread gives way first.
+    public static func threadMax(points content: CGFloat, chips withChips: Bool = true) -> CGFloat {
+        max(0, threadLimit - points(content: content))
     }
 
     public static func frame(content: CGFloat?, minimum: CGFloat, bottomLeft: CGPoint, visible: CGRect) -> CGRect {

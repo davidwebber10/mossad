@@ -13,9 +13,6 @@ struct LivePointsPanel: View {
     /// Shows a moment in the live transcript.
     let show: (TimeInterval) -> Void
     @AppStorage("livePointsCollapsed") private var collapsed = false
-    @State private var showAll = false
-    @State private var hovered: UUID?
-    private static let shownRows = 4
 
     var body: some View {
         let points = controller.livePointList()
@@ -33,7 +30,7 @@ struct LivePointsPanel: View {
                                 .font(.system(size: 12.5)).foregroundStyle(Palette.secondary).lineLimit(1)
                                 .padding(.top, 2)
                         } else {
-                            rows(points)
+                            LivePointRows(model: model, record: record, points: points, show: show)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -66,6 +63,23 @@ struct LivePointsPanel: View {
         .help(collapsed ? "Show your points" : "Hide your points")
         .accessibilityLabel("Your points, \(open == 0 ? "all raised" : "\(open) open")\(late ? ", the meeting ends soon" : "")")
     }
+}
+
+/// The checklist itself, one component for the live page and the quick panel: open, heard by Mossad (confirm or
+/// "Not raised"), and the owner's tick, with the time chips. Four rows, then "N more".
+struct LivePointRows: View {
+    @EnvironmentObject var controller: AppController
+    @ObservedObject var model: LivePointsModel
+    let record: CallRecord
+    let points: [NextTimePoint]
+    /// A time chip: the live page shows the moment in its transcript, the panel opens its peek.
+    let show: (TimeInterval) -> Void
+    var compact = false
+    @State private var showAll = false
+    @State private var hovered: UUID?
+    private static let shownRows = 4
+
+    var body: some View { rows(points) }
 
     @ViewBuilder
     private func rows(_ points: [NextTimePoint]) -> some View {
@@ -127,8 +141,8 @@ struct LivePointsPanel: View {
             }
             Spacer(minLength: 0)
         }
-        .font(.system(size: 13))
-        .padding(.vertical, 4).padding(.horizontal, 8)
+        .font(.system(size: compact ? 12.5 : 13))
+        .padding(.vertical, compact ? 3 : 4).padding(.horizontal, 8)
         .contentShape(Rectangle())
         .onHover { inside in
             if inside { hovered = p.id } else if hovered == p.id { hovered = nil }

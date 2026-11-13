@@ -214,6 +214,42 @@ final class AskPanelTests: XCTestCase {
         XCTAssertEqual(f.height, screen.height)
     }
 
+    // MARK: The points row
+
+    func testThePointsRowTakesItsHeightFromTheThreadSoThePanelKeepsItsLimit() {
+        let full = AskPanelSizing.threadMax(points: 0, chips: true)
+        XCTAssertEqual(full, AskPanelSizing.threadLimit)
+        // The collapsed row and the open checklist each take their height from the thread.
+        XCTAssertEqual(AskPanelSizing.threadMax(points: AskPanelSizing.pointsRow, chips: true), full - AskPanelSizing.pointsRow)
+        XCTAssertEqual(AskPanelSizing.threadMax(points: 180, chips: true), full - 180)
+        // The tallest panel is the same with or without the points.
+        for points: CGFloat in [0, AskPanelSizing.pointsRow, 180, AskPanelSizing.pointsMax] {
+            let tallest = AskPanelSizing.header + AskPanelSizing.threadMax(points: points, chips: true) + min(points, AskPanelSizing.pointsMax)
+                + AskPanelSizing.chips + AskPanelSizing.field + AskPanelSizing.footer
+            XCTAssertEqual(tallest, AskPanelSizing.limit, "points \(points)")
+        }
+    }
+
+    func testAChecklistTallerThanItsCapScrollsAndTheThreadKeepsItsShare() {
+        XCTAssertEqual(AskPanelSizing.points(content: 900), AskPanelSizing.pointsMax)
+        XCTAssertEqual(AskPanelSizing.points(content: 120), 120)
+        XCTAssertEqual(AskPanelSizing.threadMax(points: 900, chips: true), AskPanelSizing.threadMax(points: AskPanelSizing.pointsMax, chips: true))
+        XCTAssertGreaterThan(AskPanelSizing.threadMax(points: AskPanelSizing.pointsMax, chips: true), 0)
+    }
+
+    func testThePanelOffersMyOpenPointsWhenThereAreSome() {
+        XCTAssertEqual(AskPanelChips.chips([], owner: "Dana", openQuestions: 0, openPoints: 2, lastAsked: nil).map(\.label), ["My open points"])
+        XCTAssertTrue(AskPanelChips.chips([], owner: "Dana", openQuestions: 0, openPoints: 0, lastAsked: nil).isEmpty)
+    }
+
+    func testTheMinimumHasRoomForThePointsRow() {
+        XCTAssertEqual(AskPanelSizing.minimum(chips: false, points: AskPanelSizing.pointsRow), AskPanelSizing.minimum(chips: false) + AskPanelSizing.pointsRow)
+        // The field's edge stays where it was when the row opens: the panel grows up.
+        let closed = AskPanelSizing.frame(content: 300, minimum: 132, bottomLeft: CGPoint(x: 400, y: 160), visible: screen)
+        let open = AskPanelSizing.frame(content: 300 + 140, minimum: 132, bottomLeft: CGPoint(x: 400, y: 160), visible: screen)
+        XCTAssertEqual(closed.minY, open.minY)
+    }
+
     func testTheMinimumHasRoomForTheChips() {
         XCTAssertEqual(AskPanelSizing.minimum(chips: false), 132)
         XCTAssertGreaterThan(AskPanelSizing.minimum(chips: true), 132)

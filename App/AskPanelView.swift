@@ -7,7 +7,7 @@ import SwiftUI
 /// scrolls.
 struct AskPanelView: View {
     static let width: CGFloat = 640
-    static let threadMax: CGFloat = 452
+    static let threadMax = AskPanelSizing.threadLimit
     static let radius: CGFloat = 18
     /// The panel's edge: a little stronger than the hairlines inside it.
     static let border = Color(light: 0x1C1A17, lightAlpha: 0.12, dark: 0xFFFFFF, darkAlpha: 0.12)
@@ -193,6 +193,8 @@ private struct AskPanelChat: View {
     let record: CallRecord?
     let actions: AskPanelActions
     @State private var threadHeight: CGFloat = 0
+    /// The owner's points row as shown: the thread gives way to it (`AskPanelSizing`).
+    @State private var pointsHeight: CGFloat = 0
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -207,7 +209,9 @@ private struct AskPanelChat: View {
     private var messages: [ChatMessage] { session.chat?.messages ?? [] }
     private var live: Bool { mode.callID != nil }
     private var hasThread: Bool { !messages.isEmpty || session.running || session.error != nil }
-    private var scrolls: Bool { threadHeight > AskPanelView.threadMax }
+    private var threadMax: CGFloat { AskPanelSizing.threadMax(points: showsPoints ? pointsHeight : 0) }
+    private var scrolls: Bool { threadHeight > threadMax }
+    private var showsPoints: Bool { live && !covered && record != nil }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -216,8 +220,13 @@ private struct AskPanelChat: View {
             } else if hasThread {
                 thread
             }
+            if showsPoints, let record {
+                AskPanelPoints(model: controller.livePoints, record: record, divided: hasThread) { pointsHeight = $0 }
+            }
             if live, !session.running, model.isOpen, !covered, let record {
-                PanelChipsRow(model: controller.live, owner: controller.ownerName, record: record, compact: hasThread, divided: scrolls,
+                PanelChipsRow(model: controller.live, owner: controller.ownerName, record: record, compact: hasThread,
+                              divided: scrolls && pointsHeight == 0,
+                              openPoints: LivePointRules.open(controller.livePointList(), marks: controller.livePoints.marks).count,
                               messages: messages, recorded: { controller.liveRecorded }) { ask($0) }
             }
             field
@@ -274,7 +283,7 @@ private struct AskPanelChat: View {
             }
             // The answer on its way: its times are not in a saved message yet, so they get no peek.
             .environment(\.openURL, OpenURLAction { open($0, in: nil) })
-            .frame(height: min(threadHeight, AskPanelView.threadMax))
+            .frame(height: min(threadHeight, threadMax))
             .scrollIndicators(scrolls ? .automatic : .never)
             .onAppear { proxy.scrollTo("end", anchor: .bottom) }
             .onChange(of: model.scrollRequest) { _, _ in
@@ -488,6 +497,7 @@ private struct PanelChipsRow: View {
     let compact: Bool
     /// Under a thread that scrolls: a hairline over them.
     let divided: Bool
+    let openPoints: Int
     let messages: [ChatMessage]
     let recorded: () -> TimeInterval
     let ask: (String) -> Void
@@ -498,7 +508,7 @@ private struct PanelChipsRow: View {
             let entries = model.transcript.entries(owner: owner, lines: model.visibleLines)
             let open = LiveQuestions.forOwner(entries, owner: owner, now: max(recorded(), entries.last?.time ?? 0), invitedOthers: invitedOthers,
                                               room: record.platform == .inPerson)
-            let chips = AskPanelChips.chips(entries, owner: owner, openQuestions: open.count, lastAsked: lastAsked)
+            let chips = AskPanelChips.chips(entries, owner: owner, openQuestions: open.count, openPoints: openPoints, lastAsked: lastAsked)
             if !chips.isEmpty {
                 FlowLayout(spacing: Space.s) {
                     ForEach(chips) { chip in
@@ -533,7 +543,7 @@ private struct PanelChipsRow: View {
 // MARK: Peek
 
 /// The live transcript at a moment: the line there marked, with one line before and after.
-private struct LivePeekView: View {
+struct LivePeekView: View {
     @ObservedObject var model: LiveTranscriptModel
     let at: TimeInterval
     let owner: String

@@ -70,6 +70,10 @@ enum DevHooks {
 
     private static let launch = Date()
 
+    /// `MOSSAD_ASK_POINTS=open|closed` in a preview: the quick panel's points row shown open or closed, without
+    /// the owner's saved choice.
+    static var askPoints: Bool? { preview ? env["MOSSAD_ASK_POINTS"].map { $0 == "open" } : nil }
+
     /// `MOSSAD_DECK_CARDS=<file>` in a preview: a JSON list of made-up cards to show as the Findings deck, so a
     /// picture of each kind of card needs no review files.
     static func sampleCards() -> [CoachFinding]? {
