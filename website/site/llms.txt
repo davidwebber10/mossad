@@ -4,7 +4,7 @@
 
 Mossad is work intelligence for your Mac. It records your calls without a bot, then keeps meeting notes, transcripts that know who spoke, decisions, action items, the promises you made, and a page for each person you meet. Before a meeting, it shows who is coming, what happened last time, and what you still owe. It is free and open source under the MIT License.
 
-- Latest version: 2.25.0
+- Latest version: 2.26.0
 - Requires: macOS 26 or later on Apple silicon
 - Price: free. Cloud AI providers that you connect bill you directly; models on your Mac cost nothing.
 - Website: https://getmossad.com/

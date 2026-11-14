@@ -4,7 +4,7 @@
 
 Mossad is work intelligence for your Mac. It records your calls without a bot, then keeps meeting notes, transcripts that know who spoke, decisions, action items, the promises you made, and a page for each person you meet. Before a meeting, it shows who is coming, what happened last time, and what you still owe. It is free and open source under the MIT License.
 
-- Latest version: 2.25.0
+- Latest version: 2.26.0
 - Requires: macOS 26 or later on Apple silicon
 - Price: free. Cloud AI providers that you connect bill you directly; models on your Mac cost nothing.
 - Website: https://getmossad.com/
@@ -208,6 +208,8 @@ Ask your meetings a question, here or in the AI app you already use. In Mossad's
   - It can save a point for next time; nothing else changes
 - **MCP for web AI apps.** With your own server, ChatGPT, Claude, and other web AI apps can read your meetings and the people in them after you sign in.
   - Meetings, people, your tasks, your points for next time, the coach's notes, earlier chats, and share links
+  - Your recurring meetings with their history and open items, each meeting's numbers, your analytics, bookmarks, and the coach's cards and goal
+  - Your upcoming meetings stay on your Mac
   - How to present to someone only when you allow it
   - Read only: an AI app cannot change anything
 - **Notes your agents can read.** Point an AI agent at ~/Mossad/Meetings and ask it to act on Tuesday's planning call.
