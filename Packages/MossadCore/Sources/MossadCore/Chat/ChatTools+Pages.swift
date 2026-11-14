@@ -130,25 +130,33 @@ extension ChatTools {
         }
     }
 
-    /// Whether a card is about another person (`FindingAbout`), by the saved people's written forms, the voices of
-    /// the card's call, and the conclusion it asks about.
+    /// Whether a card is about another person (`FindingAbout`), by the saved people's written forms (made one time),
+    /// the voices of the card's call, and the conclusion it asks about.
     func aboutPersonRule(_ profile: CoachProfile? = nil) -> (CoachFinding) -> Bool {
         let owner = ownerIdentity
-        let saved = FindingAbout.names(people: savedPeople, voices: [])
+        let saved = FindingAbout.Rule(names: FindingAbout.names(people: savedPeople, voices: []), isOwner: owner.isOwner)
         let voices = Dictionary(records.map { r in (r.id, r.speakerNames.values.filter { !owner.isOwner($0) && !$0.hasPrefix("Speaker ") }) },
                                 uniquingKeysWith: { a, _ in a })
         let questions = Dictionary((profile ?? self.profile).questions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var byCall: [String: FindingAbout.Rule] = [:]
         return { c in
-            FindingAbout.person(c, question: c.questionID.flatMap { questions[$0] }, names: saved + (voices[c.callID] ?? []), isOwner: owner.isOwner)
+            if saved.about(c, question: c.questionID.flatMap { questions[$0] }) { return true }
+            let rule = byCall[c.callID] ?? FindingAbout.Rule(names: voices[c.callID] ?? [], isOwner: owner.isOwner)
+            byCall[c.callID] = rule
+            return rule.names(in: c)
         }
     }
+
+    /// Said where the cards about a person are held back by the switch for other AI apps (Settings > Coach).
+    static let heldBack = "Cards about a person show here only when \"Share the reads with other AI apps\" is on in Settings > Coach."
 
     func findingsText(_ input: [String: Any]) -> String {
         guard paths != nil else { return "Not available here." }
         guard settings.coach else { return "The coach is off in Settings, so there are no cards." }
         var cards = findingCards(traits: personaTraits)
         if let id = (input["call_id"] as? String)?.nonBlank { cards = cards.filter { $0.callID == id } }
-        guard !cards.isEmpty else { return "No cards wait for an answer." }
+        let note = personaTraits ? "" : "\n" + Self.heldBack
+        guard !cards.isEmpty else { return "No cards wait for an answer." + note }
         let titles = Dictionary(records.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
         return cards.map { c in
             var line = "- \(c.kind.title): \(c.text) (call_id: \(c.callID), \(titles[c.callID] ?? ""), \(shortDay(c.date))"
@@ -160,7 +168,7 @@ extension ChatTools {
             if let why = c.why { line += "\n  Why it matters: \(why)" }
             line += "\n  It asks: \(c.kind.question) (\(c.kind.yes) or \(c.kind.no))"
             return line
-        }.joined(separator: "\n")
+        }.joined(separator: "\n") + note
     }
 
     func goalsText() -> String {

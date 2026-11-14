@@ -69,10 +69,10 @@ The tools, all read only:
 | `coach_profile`, `read_coach_review` | The coach's memory and one meeting's review. |
 | `past_chats`, `read_chat` | The newest 60 chats. |
 | `shares` | The share links with their expiry, PIN state, and views. Never a token or a PIN. |
-| `recurring`, `read_series` | The recurring meetings as the Mac computed them from the past meetings: schedule, history, the people who spoke, numbers, open items, and the points for next time. No next date: upcoming meetings stay on the Mac. A series with no meeting in 8 weeks or with one meeting is only on the Mac. |
+| `recurring`, `read_series` | The recurring meetings as the Mac computed them from the past meetings: schedule, history, the people who spoke, numbers, open items, and the points for next time. No next date: upcoming meetings stay on the Mac. A series with no meeting for about 8 weeks (longer for a series that meets less often) or with one meeting is only on the Mac. |
 | `meeting_analytics` | One meeting's numbers, by month as the Mac sends them. |
 | `analytics` | The Analytics page for the last 7, 30, 90, or 365 days, with its dates. |
-| `coach_findings`, `coach_goals` | The coach's cards and goal. A card about a person shows only with the reads switch on (`mcpPersonas`), the people file here, and that person keeping a read. |
+| `coach_findings`, `coach_goals` | The coach's cards and goal. While the reads switch (`mcpPersonas`) is off, no card about a person shows, and the answer says so. With it on, a card with a person id shows only with the people file here and that person keeping a read; a card with only a name or the Mac's flag shows. |
 | `bookmarks` | Every bookmark with its note. |
 | `search`, `fetch` | ChatGPT's pair: meetings (a call id, or `meeting:<id>`), people (`person:<id>`), tasks (`task:<id>`), series (`series:<id>`), and bookmarks (`bookmark:<call id>#<second>`). |
 

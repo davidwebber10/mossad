@@ -6,8 +6,9 @@ import { timestamp } from './util';
  * The tools over the digest (`ServerDigest` on the Mac): the recurring meetings, each meeting's numbers by month,
  * the bookmarks, the Analytics page, and the coach's cards and goal. The Mac computed every number and sentence with
  * the app's own rules, from the meetings as they were heard; this file only finds, pages, and writes out the fields
- * it knows. Upcoming meetings never reach the server, so a series has no next date here. A part that never arrived, came from a newer Mac, or does not read says so; each answer says when
- * the Mac last changed it. One Mac writes the digest: a second Mac on the same server replaces its parts.
+ * it knows. Upcoming meetings never reach the server, so a series has no next date here. A part that never
+ * arrived, came from a newer Mac, or does not read says so; each answer says when the Mac last changed it. One Mac
+ * writes the digest: a second Mac on the same server replaces its parts.
  */
 
 interface Named { name: string; personID?: string }
@@ -42,7 +43,9 @@ type AnalyticsPart = Part & { periods: Period[] };
 type CoachPart = Part & { coachOn?: boolean; findings: Card[]; goal?: Goal; learned: Goal[]; ended: Goal[]; notTaken: Goal[] };
 
 const noNext = 'Upcoming meetings stay on your Mac, so the next date is only known there.';
-const recordedOnly = "This list comes from your past meetings alone: a series with no meeting in the last 8 weeks, or with only one meeting, is not here, and the usual day and time are from your past meetings, so your Mac, which also reads the next ones, can show a newer time. Your Mac's Recurring page has every one.";
+const recordedOnly = "This list comes from your past meetings alone: a series with no meeting for about 8 weeks (longer for a series that meets less often), or with only one meeting, is not here, and the usual day and time are from your past meetings, so your Mac, which also reads the next ones, can show a newer time. Your Mac's Recurring page has every one.";
+/** The switch's name as Settings > Coach shows it. */
+const heldBack = 'Cards about a person show here only when "Share the reads with other AI apps" is on in Settings > Coach.';
 const pointsElsewhere = 'The points for next time of a series that is not in this list are in next_time_points.';
 const pct = (v?: number) => (typeof v === 'number' ? `${Math.round(v * 100)}%` : 'not known');
 const mins = (v?: number) => (typeof v === 'number' ? `${Math.round(v)} min` : 'not known');
@@ -316,9 +319,10 @@ export async function runDigestTool(env: Env, name: string, input: Record<string
         if (p.coachOn === false) return `The coach is off on your Mac, so there are no cards. ${made(p, tz, config)}`;
         const id = typeof input.call_id === 'string' ? input.call_id : '';
         const shown = (await shownCards(env, p.findings, config)).filter((c) => !id || c.callID === id);
-        if (!shown.length) return `No cards wait for an answer. ${made(p, tz, config)}`;
+        const note = config.mcpPersonas === '1' ? '' : `\n${heldBack}`;
+        if (!shown.length) return `No cards wait for an answer. ${made(p, tz, config)}${note}`;
         const { rows, tail } = page(shown, input);
-        return rows.map((c) => cardText(c, tz)).join('\n') + tail + `\n${made(p, tz, config)}`;
+        return rows.map((c) => cardText(c, tz)).join('\n') + tail + `\n${made(p, tz, config)}${note}`;
       }
       const parts: string[] = [];
       if (p.goal) parts.push(goalText(p.goal, tz, p.goal.status === 'active' ? 'Your goal' : 'Offered goal, waiting for the owner'));
@@ -373,7 +377,7 @@ const limits = { limit: { type: 'integer' }, offset: { type: 'integer' } };
 export const digestToolDefinitions = [
   {
     name: 'recurring',
-    description: "The owner's recurring meetings (series), from the past meetings alone: series_id, title, when it usually is, the last meeting, how many were recorded, who usually speaks, and one line such as \"Usually 5 people, Sam talks most; 3 open items\". A series with no meeting in 8 weeks or with one meeting is only on the owner's Mac, as is the next date: upcoming meetings stay on the Mac. query narrows by title words or a usual person. Read one with read_series.",
+    description: "The owner's recurring meetings (series), from the past meetings alone: series_id, title, when it usually is, the last meeting, how many were recorded, who usually speaks, and one line such as \"Usually 5 people, Sam talks most; 3 open items\". A series with no meeting for about 8 weeks (longer for a series that meets less often) or with one meeting is only on the owner's Mac, as is the next date: upcoming meetings stay on the Mac. query narrows by title words or a usual person. Read one with read_series.",
     inputSchema: { type: 'object', properties: { query: { type: 'string' }, ...limits } },
   },
   {

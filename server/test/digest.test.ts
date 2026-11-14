@@ -12,10 +12,6 @@ import { fixture } from './fixtures.mjs';
 type W = ReturnType<typeof fakeEnv>;
 
 const parts = ['digest-series', 'digest-bookmarks', 'digest-analytics', 'digest-coach', 'digest-meetings-2027-01', 'digest-meetings-2026-12', 'digest-meetings-2026-09'];
-async function hash(k: string): Promise<string> {
-  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(k.toLowerCase()));
-  return 'h:' + [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
-}
 
 async function setUp(skip: string[] = [], config: Record<string, string> = {}, replace: Record<string, unknown> = {}) {
   const w = fakeEnv();
@@ -223,5 +219,19 @@ describe('the digest tools', () => {
 
   it('fetches a bookmark by an id with its # sent as %23', async () => {
     expect(await text(await setUp(), 'fetch', { id: 'bookmark:20270113-100000%23310' })).toContain('Slip 2');
+  });
+
+  it('says that cards about a person are held back while the switch is off, with cards or without', async () => {
+    const held = 'Cards about a person show here only when "Share the reads with other AI apps" is on in Settings > Coach.';
+    expect(await text(await setUp(), 'coach_findings')).toContain(held);
+    const none = { ...fixture('digest-coach'), findings: [] };
+    const empty = await text(await setUp([], {}, { 'digest-coach': none }), 'coach_findings');
+    expect(empty).toMatch(/^No cards wait for an answer/);
+    expect(empty).toContain(held);
+    expect(await text(await setUp([], { mcpPersonas: '1' }), 'coach_findings')).not.toContain(held);
+  });
+
+  it('says how long a series may go with no meeting before it leaves the list', async () => {
+    expect(await text(await setUp(), 'recurring')).toContain('no meeting for about 8 weeks (longer for a series that meets less often)');
   });
 });

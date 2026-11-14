@@ -211,6 +211,8 @@ final class ServerDigestTests: XCTestCase {
         let other = try json(ServerDigest.clean(Data(#"{"bookmarks":[{"id":"cal:ek:abc@google.com"}]}"#.utf8), key: "digest:bookmarks"))
         XCTAssertEqual((other["bookmarks"] as? [[String: Any]])?.first?["id"] as? String, "cal:ek:(address)")
         XCTAssertEqual(ServerDigest.withoutAddresses("write to müller@firma.de or sam@corp"), "write to (address) or (address)")
+        XCTAssertEqual(ServerDigest.withoutAddresses("write to sam@corp.com. Then wait."), "write to (address). Then wait.")
+        XCTAssertEqual(ServerDigest.withoutAddresses("ask o'brien@corp.com- now"), "ask (address)- now")
     }
 
     /// The weekday and the time of a series come from its past meetings, the planned start first, as the app reads
@@ -271,8 +273,13 @@ final class ServerDigestTests: XCTestCase {
         XCTAssertTrue(ServerDigest.keepsStandout(subject: "them:B", record: r, off: ["id-dana"], canonical: canonical))
         XCTAssertTrue(ServerDigest.keepsStandout(subject: nil, record: r, off: ["id-dana"], canonical: canonical), "about the meeting")
         XCTAssertTrue(ServerDigest.keepsStandout(subject: "them:Z", record: r, off: ["id-dana"], canonical: canonical), "no person: a voice")
-        XCTAssertFalse(ServerDigest.keepsStandout(subject: "Dana Lee", record: r, off: ["id-dana"], canonical: canonical, idOfName: { $0 == "Dana Lee" ? "id-dana" : nil }),
-                       "a presenter's name")
+        XCTAssertFalse(ServerDigest.keepsStandout(subject: "Dana Lee", record: r, off: ["id-dana"], canonical: canonical,
+                                                  idsOfName: { $0 == "Dana Lee" ? ["id-dana"] : [] }), "a presenter's name")
+        // A named voice with no id in the record is looked up by its name; two people of one name, one of them off: out.
+        r.speakerNames["them:C"] = "Jordan Price"
+        let jordans: (String) -> [String] = { $0 == "Jordan Price" ? ["id-j1", "id-j2"] : [] }
+        XCTAssertFalse(ServerDigest.keepsStandout(subject: "them:C", record: r, off: ["id-j2"], canonical: { $0 }, idsOfName: jordans))
+        XCTAssertTrue(ServerDigest.keepsStandout(subject: "them:C", record: r, off: ["id-dana"], canonical: { $0 }, idsOfName: jordans))
 
         let cache = DigestCache(directory: paths.sync)
         _ = make(tools(), cache: cache)
@@ -283,6 +290,66 @@ final class ServerDigestTests: XCTestCase {
         s.coach = true
         _ = make(ChatTools(records: records(), owner: "Avery Webb", paths: paths, people: open, settings: s, now: now), cache: again)
         XCTAssertEqual(again.made, 3, "each month again: Dana's switch changed")
+    }
+
+    /// A merge into a person who keeps no read makes the month again: the stamp holds the ids of now.
+    func testAMergeIntoAPersonWhoKeepsNoReadMakesTheMonthAgain() {
+        var recs = records()
+        recs[1].speakerPeople?["them:B"] = "id-old"
+        var list = people
+        list.append(Person(id: PersonID(rawValue: "id-old"), displayName: "D. Lee", origin: .migration, at: now))
+        var s = ToolSettings()
+        s.coach = true
+        _ = make(ChatTools(records: recs, owner: "Avery Webb", paths: paths, people: list, settings: s, now: now), cache: DigestCache(directory: paths.sync))
+        list[list.count - 1].mergedInto = PersonID(rawValue: "id-dana")
+        let again = DigestCache(directory: paths.sync)
+        _ = make(ChatTools(records: recs, owner: "Avery Webb", paths: paths, people: list, settings: s, now: now), cache: again)
+        XCTAssertEqual(again.made, 1, "the month of the merged voice")
+    }
+
+    /// A part as it goes: "What stood out" about a person with "Keep a read" off is not in it; about the same person
+    /// with the switch on, it is.
+    func testAMonthPartHasNoStandoutAboutAPersonWhoKeepsNoRead() throws {
+        var recs: [CallRecord] = []
+        for d in 0..<8 {
+            let start = now.addingTimeInterval(-Double(d + 1) * 86_400)
+            var r = CallRecord(id: String(format: "202701%02d-100000", 14 - d), platform: .meet, bundleID: "b", start: start,
+                               end: start.addingTimeInterval(1200), status: .written)
+            r.calendarTitle = "Pair work"
+            r.speakerNames = ["me:A": "Avery Webb", "them:A": "Dana Lee"]
+            r.speakerPeople = ["me:A": "id-owner", "them:A": "id-dana"]
+            let fast = d == 0
+            r.utterances = (0..<10).flatMap { k -> [Utterance] in
+                let t = Double(k) * 120
+                return [Utterance(track: .me, speakerLabel: "A", start: t, end: t + 60, text: String(repeating: "plan ", count: 120)),
+                        Utterance(track: .them, speakerLabel: "A", start: t + 60, end: t + 120,
+                                  text: String(repeating: "word ", count: fast ? 360 : 120) + "right?")]
+            }
+            recs.append(r)
+        }
+        var s = ToolSettings()
+        s.coach = true
+        func standouts(_ list: [Person]) throws -> [String] {
+            let out = ServerDigest.parts(ChatTools(records: recs, owner: "Avery Webb", paths: paths, people: list, settings: s, now: now), personasInMCP: true) ?? []
+            let part = try json(out.first { $0.key == "digest:meetings-2027-01" }?.data)
+            let newest = try XCTUnwrap((part["meetings"] as? [[String: Any]])?.first { $0["callID"] as? String == "20270114-100000" })
+            return newest["standouts"] as? [String] ?? []
+        }
+        var open = people
+        open[2].doNotProfile = false
+        XCTAssertTrue(try standouts(open).contains { $0.hasPrefix("Dana Lee") }, "with the switch on, a sentence about Dana")
+        XCTAssertFalse(try standouts(people).contains { $0.contains("Dana") })
+    }
+
+    /// The Mac's own tool says why cards about a person are not there.
+    func testTheFindingsSayWhenCardsAboutAPersonAreHeldBack() {
+        var s = ToolSettings()
+        s.coach = true
+        let off = ChatTools(records: records(), owner: "Avery Webb", paths: paths, people: people, personaTraits: false, settings: s, now: now)
+        XCTAssertTrue(off.findingsText([:]).contains(ChatTools.heldBack), off.findingsText([:]))
+        let on = ChatTools(records: records(), owner: "Avery Webb", paths: paths, people: people, personaTraits: true, settings: s, now: now)
+        XCTAssertFalse(on.findingsText([:]).contains(ChatTools.heldBack))
+        XCTAssertTrue(ChatTools.heldBack.contains("Share the reads with other AI apps"))
     }
 
     func testAnEndedSeriesIsNotSent() throws {

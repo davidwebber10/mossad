@@ -219,15 +219,17 @@ finds, pages, and writes them out (`server/src/digest.ts`).
   one exception, the schedule (below). A person is a name with a person id; an address is never a name (a voice
   named by an address is its saved person's name or "Speaker C", an item's owner the same or no owner), and the last
   wall replaces any address left in any string (`ServerDigest.clean`, any script, with or without a dot in the
-  domain), except a series' `id` and `keys`, which go as the Mac has them (exempt by their place in the series
+  domain, an apostrophe in the name, and never the full stop or hyphen after it), except a series' `id` and `keys`, which go as the Mac has them (exempt by their place in the series
   part). A test fails on any address in any other field and on a person who was only invited.
 - Parts, each its own shared record (`kind: .digest`, type `Digest`), sent only when its content changed, each with
   `version: 1` and `made` (when its content last changed), from allowed-field lists (`ServerDigest.allowedKeys`,
   with a test that fails on any other key and checks that every list was used):
   - `digest-series`: each series that still meets, the catalog from the past meetings alone (`SeriesCatalog` with
     no upcoming meetings; the Mac's calendar is read only to join two ids of one series, `SeriesCatalog.aliases`):
-    `id` and `keys` as the Mac has them (the Worker matches a point's keys to them, and `mossad://series/<id>` opens
-    the series on the Mac, an id with an "@" too, `MossadLink.place` and `MeetingSeries.find`), `title`, `schedule`
+    `id` and `keys` as the Mac has them (the Worker matches a point's keys to them; `MossadLink.place` and
+    `MeetingSeries.find` resolve `mossad://series/<id>`, an id with an "@" too. Such a link opens in Mossad's own
+    chat, and a call's link on the iPhone; the Mac does not take `mossad://` links from other apps yet, so a link in
+    an AI app's answer is a name for the place, not a way to open it), `title`, `schedule`
     (the app's `SeriesSchedule` over the past meetings, which reads a meeting's planned start first, so the server
     says the weekday and time the app can say from past meetings; the Mac, which also reads the next meetings, can
     show a newer time, and the Worker says so),
@@ -240,9 +242,11 @@ finds, pages, and writes them out (`server/src/digest.ts`).
     invite and no late start or overrun. A month is made again only when its meetings, their outcomes, person ids,
     tasks, cost, reviews, or the meetings before them changed, or the digest's version (`DigestCache`,
     `~/Mossad/Sync/digest-cache.json`, never synced). "What stood out" leaves out each sentence about a person with
-    "Keep a read" off (`ServerDigest.keepsStandout`, by the id of now, so a merge follows the survivor); each
+    "Keep a read" off (`ServerDigest.keepsStandout`, by the id of now, so a merge follows the survivor; a named
+    voice with no id in the record by its name, and out when one of two people of that name keeps no read); each
     voice's numbers and the sentences of the one meeting stay for everyone (the owner's answer to F17). The ids of
-    the people with the switch off are in the month's stamp, so a month is made again when one changes.
+    the people with the switch off, and each voice's id of now, are in the month's stamp, so a month is made again
+    when a switch changes or a voice's person is merged.
   - `digest-bookmarks`: every bookmark (2,000 at most) with its note and the line said then (300 characters at most).
   - `digest-analytics`: the Analytics page for the app's own last 7, 30, and 90 days (`AnalyticsRange`: from 29 days
     before today to the moment it was made, so today's calls count) and the last 365 by the same rule
@@ -250,13 +254,19 @@ finds, pages, and writes them out (`server/src/digest.ts`).
   - `digest-coach`: the deck's cards (`ChatTools.findingCards`, from the memory without what the coach learned about
     a person who keeps no read: never a card about such a person; with the switch for other AI apps off, no card
     about any person: a trait, a conclusion about someone, or a card whose words name another person,
-    `FindingAbout`, which reads the card's text, words to say, why, detail, number, and usual value, and the names by
-    each written form, the first and the last name, their nicknames, without accents; a doubt removes a card; a card
-    left out uses no place of its call), each with `personID` and `personName` when it is about a saved person and
+    `FindingAbout`, which reads the card's text, words to say, why, detail, number, usual value, and quote, and the
+    names by each written form: the whole name, its first and last word as split at spaces ("J.R.", "D'Angelo"), its
+    first and last run of letters, and the short forms of the first name only (in "Carter, Sam" the word after the
+    comma); all without accents. A name of one word is found only as a word with a capital letter in the card
+    ("Will asked", not "you will"); a capital at the start of a sentence still removes a card, the safe side. A
+    longer form or one with a character that is no letter is found in any case. The forms are made one time for the
+    rule (`FindingAbout.Rule`): 2,000 names and 150 cards in well under a second. A card left out uses no place of
+    its call), each with `personID` and `personName` when it is about a saved person and
     `aboutPerson` when its words are about someone, `coachOn`, and the goals (`GoalProgress`). While `mcpPersonas` is
-    not "1", the Worker drops each card with a `personID`, a `personName`, or `aboutPerson`; with it on, a card with
-    a person goes only with the people file there and that person keeping a read. `Mossad --mcp` has the same card
-    rule.
+    not "1", the Worker drops each card with a `personID`, a `personName`, or `aboutPerson`, and says so ("Cards about
+    a person show here only when "Share the reads with other AI apps" is on in Settings > Coach."), with cards or
+    without; with it on, a card with a person id goes only with the people file there and that person keeping a
+    read. `Mossad --mcp` has the same card rule and the same sentence where the reads are not shown.
 - Sizes, measured by `ServerDigestTests.testTheSizesStayBounded` (1,500 meetings over two years, 60 series, a
   bookmark on each tenth meeting): series 130 KB (an extreme case: 19 voices per series), each month at most
   66 KB (25 months, 1.5 MB in all, sent once and then only a changed month), bookmarks 23 KB, analytics 6 KB,
@@ -282,7 +292,8 @@ finds, pages, and writes them out (`server/src/digest.ts`).
   `coach_findings`, `coach_goals`; `search` and `fetch` add `series:<id>` and `bookmark:<call id>#<whole second>`
   (read before any meeting is loaded). Each answer says when the Mac last changed the part and, with `syncedAt`,
   when it last sent its copy; a series says that upcoming meetings stay on the Mac (no next date) and that the list
-  comes from the past meetings alone (a series with no meeting in 8 weeks or with one meeting is only on the Mac);
+  comes from the past meetings alone (a series with no meeting for about 8 weeks, longer for a series that meets
+  less often, or with one meeting is only on the Mac);
   "No recurring meeting matches" adds that `next_time_points` has the points of a series that is not in the list.
 - Accepted with no change (the re-check of this branch): N7, the words of a goal (its plan, why, and each result's
   evidence) can name a person under no switch: the same goals are in the coach's memory on the server since 2.25.0,

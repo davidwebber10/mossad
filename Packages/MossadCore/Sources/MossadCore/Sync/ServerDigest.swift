@@ -153,7 +153,8 @@ public enum ServerDigest {
     // MARK: Names and addresses
 
     /// An address in any script, with or without a dot in its domain ("müller@firma.de", "sam@corp").
-    static let addressPattern = try! NSRegularExpression(pattern: "[\\p{L}\\p{N}._%+-]+@[\\p{L}\\p{N}.-]+")
+    /// The domain ends with a letter or a number, so a full stop or a hyphen after it stays in the text.
+    static let addressPattern = try! NSRegularExpression(pattern: "[\\p{L}\\p{N}._%+'-]+@[\\p{L}\\p{N}.-]*[\\p{L}\\p{N}]")
 
     static func isAddress(_ s: String) -> Bool { s.contains("@") }
 
@@ -205,6 +206,14 @@ public enum ServerDigest {
             let r = tools.paths.flatMap { CoachReview.load(in: $0.callDirectory(id)) }
             lock.withLock { reviews[id] = .some(r) }
             return r
+        }
+
+        /// Every live saved person with this name, by any written form.
+        func idsOfName(_ name: String) -> [String] {
+            let key = PersonNames.key(name)
+            guard !key.isEmpty else { return [] }
+            return tools.savedPeople.filter { $0.isLive && ([$0.displayName] + $0.forms.map(\.text)).contains { PersonNames.key($0) == key } }
+                .map(\.id.rawValue)
         }
 
         /// A saved person's id for a name, on a sure match only.
@@ -305,13 +314,13 @@ public enum ServerDigest {
     }
 
     /// Whether a sentence of "What stood out" may go: never one about a person with "Keep a read" off, by the id of
-    /// now. `subject` is a speaker key of the record, or a name (a presenter).
+    /// now. `subject` is a speaker key of the record, or a name (a presenter). A voice with no id in the record is
+    /// looked up by its name; when two people have that name and one of them keeps no read, the sentence is left out.
     static func keepsStandout(subject: String?, record: CallRecord, off: Set<String>, canonical: (String) -> String,
-                              idOfName: (String) -> String? = { _ in nil }) -> Bool {
+                              idsOfName: (String) -> [String] = { _ in [] }) -> Bool {
         guard let subject, !off.isEmpty else { return true }
-        let id = record.speakerPeople?[subject] ?? (record.speakerNames[subject] == nil ? idOfName(subject) : nil)
-        guard let id else { return true }
-        return !off.contains(canonical(id))
+        let ids = record.speakerPeople?[subject].map { [$0] } ?? idsOfName(record.speakerNames[subject] ?? subject)
+        return !ids.contains { off.contains(canonical($0)) }
     }
 
     /// What else a month's numbers stand on: its outcomes, the person ids, its tasks, its cost, and the coach's review.
@@ -322,7 +331,7 @@ public enum ServerDigest {
         let tasks = run.commitments.filter { $0.callID == r.id }.map { "\($0.id)\($0.done != nil)\($0.deleted)" }.sorted()
         let cost = run.usage.byCall[r.id]?.count ?? 0
         return "\(version)|\(run.off.sorted())|\(r.actionItems.map { "\($0.owner ?? "")=\($0.task)" })|\(r.decisions.map(\.text))|"
-            + "\((r.speakerPeople ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })|\(tasks)|\(cost)|\(review)"
+            + "\((r.speakerPeople ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\(run.tools.coachPeople.canonical($0.value))" })|\(tasks)|\(cost)|\(review)"
     }
 
     /// The recurring meetings: the catalog from the past meetings alone (no upcoming meeting, so no next date; the
@@ -404,7 +413,7 @@ public enum ServerDigest {
                        owners: a.outcomes?.owners.map { Meeting.Owner(name: $0.name, tasks: $0.tasks) } ?? [],
                        coach: a.coach.flatMap(MeetingFindings.coach), screens: a.screens.map { said(MeetingFindings.screens($0)) },
                        standouts: a.baselines.standouts
-                           .filter { keepsStandout(subject: $0.subject, record: r, off: run.off, canonical: tools.coachPeople.canonical, idOfName: run.personID) }
+                           .filter { keepsStandout(subject: $0.subject, record: r, off: run.off, canonical: tools.coachPeople.canonical, idsOfName: run.idsOfName) }
                            .map { said(MeetingFindings.Sentence(subject: $0.subject, $0.text)) }, earlier: a.baselines.earlier,
                        cost: a.cost.map { Meeting.Cost(total: $0.total, transcription: $0.transcription, ai: $0.ai, estimated: $0.estimated) })
     }
