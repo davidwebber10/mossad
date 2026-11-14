@@ -248,6 +248,39 @@ extension AppController {
             await MainActor.run {
                 UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "googleDirectoryRead")
                 if changed > 0 { self.refreshPeopleReferences() }
+                self.linkGeminiPeople()
+            }
+        }
+    }
+
+    /// The speakers of Gemini meetings become saved people with their address, on a sure match with the invite and
+    /// the directory (`GeminiPeople`). Each meeting is read once: at launch for the ones imported before, and after
+    /// each import. It waits for the people store and the directory copy. One run at a time, so a late run never
+    /// writes an older list of the meetings done; a call during a run starts one more after it.
+    func linkGeminiPeople() {
+        guard !isInert, !isSecondCopy, let people = library.identity?.people else { return }
+        guard !geminiPeopleRunning else { geminiPeopleAgain = true; return }
+        geminiPeopleRunning = true
+        let paths = paths, library = library
+        let done = Set(UserDefaults.standard.stringArray(forKey: "geminiPeopleLinked") ?? [])
+        Task {
+            defer {
+                geminiPeopleRunning = false
+                if geminiPeopleAgain { geminiPeopleAgain = false; linkGeminiPeople() }
+            }
+            // From disk, not the list on screen: a meeting just imported, or one at launch, may not be in it yet.
+            let out = await Task.detached(priority: .utility) { () -> (added: Int, done: Set<String>)? in
+                guard let cache = GoogleDirectoryCache.load(paths) else { return nil }
+                let todo = ProcessingQueue(paths: paths).allRecords().filter { $0.isNotesOnly && !done.contains($0.id) }
+                guard !todo.isEmpty else { return nil }
+                return GeminiPeople.link(todo, library: library, directory: GeminiPeople.directoryNames(cache), done: done,
+                                         people: people.people)
+            }.value
+            guard let out else { return }
+            UserDefaults.standard.set(Array(out.done).sorted(), forKey: "geminiPeopleLinked")
+            if out.added > 0 {
+                Log.info("Gemini people: \(out.added) \(out.added == 1 ? "person" : "people") saved from the invites")
+                refreshPeopleReferences()
             }
         }
     }
@@ -277,6 +310,7 @@ extension AppController {
             guard !items.isEmpty else { return good() }
             let outcome = await runner.run(items, ownerName: owner, ownerNames: ownerNames, isLive: { await MainActor.run { self.isRecording } })
             if !outcome.stopped, outcome.failed == 0 { good() }
+            if outcome.made > 0 { linkGeminiPeople() }
             Log.info("Gemini notes: \(outcome.made) made, \(outcome.attached) added to recordings, \(outcome.failed) to try again\(outcome.stopped ? ", stopped for a call" : "")")
             refresh()
         }
@@ -354,6 +388,7 @@ extension AppController {
                 + (total.failed > 0 ? " \(total.failed) could not be read now." : "")
                 + (total.stopped ? " The cap was reached." : "")
             Log.info("Gemini notes: \(connector.pastResult ?? "")")
+            if total.made > 0 { linkGeminiPeople() }
         }
     }
 
