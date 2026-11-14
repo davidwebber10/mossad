@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.26.0",
+      "date": "2026-11-14",
+      "notes": [
+        "ChatGPT, Claude, and other web AI apps can now read much more through your own server: your recurring meetings with their history and open items, each meeting's numbers, your analytics, your bookmarks, and the coach's cards and goal. Your upcoming meetings stay on your Mac."
+      ]
+    },
+    {
       "version": "2.25.0",
       "date": "2026-11-13",
       "notes": [
