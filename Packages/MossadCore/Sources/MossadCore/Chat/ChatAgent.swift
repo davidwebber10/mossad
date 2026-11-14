@@ -14,6 +14,16 @@ public struct ChatLink: Equatable, Sendable {
     }
 }
 
+/// The places of a chat's receipts and of the server's links: `mossad://series/<id>`, `mossad://person/<id>`,
+/// `mossad://tasks`. The id as it was encoded: a series id can hold a slash, a space, or an "@".
+public enum MossadLink {
+    public static func place(_ url: URL) -> (kind: String, id: String)? {
+        guard url.scheme == "mossad", let host = url.host, host != "call" else { return nil }
+        let raw = String(URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath.dropFirst() ?? "")
+        return (host, raw.removingPercentEncoding ?? raw)
+    }
+}
+
 /// Answers one chat message with Claude and the meeting tools: Claude decides what to look up, Mossad runs each
 /// lookup on this Mac, and the loop ends when Claude answers. Earlier turns go in as plain text.
 public struct ChatAgent: Sendable {

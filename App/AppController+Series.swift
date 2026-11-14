@@ -31,7 +31,7 @@ final class SeriesModel: ObservableObject {
     /// until the owner changes the list (`SeriesShown`).
     var asked = false
 
-    func series(_ id: String?) -> MeetingSeries? { id.flatMap { id in all.first { $0.id == id || $0.keys.contains(id) } } }
+    func series(_ id: String?) -> MeetingSeries? { MeetingSeries.find(id, in: all) }
 
     /// The saved people of each invite by its id, and of each series' usual people, made with the catalog: the
     /// pages and the menu read these and never the people file.

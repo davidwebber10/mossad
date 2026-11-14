@@ -307,3 +307,11 @@ extension UpcomingMeeting {
     /// The calendar says that it repeats.
     var repeats: Bool { isRecurring || seriesID != nil }
 }
+
+extension MeetingSeries {
+    /// The series a link or a point names: by its id, else by one of its keys.
+    public static func find(_ id: String?, in all: [MeetingSeries]) -> MeetingSeries? {
+        guard let id else { return nil }
+        return all.first { $0.id == id } ?? all.first { $0.keys.contains(id) }
+    }
+}

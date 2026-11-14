@@ -1,0 +1,38 @@
+{
+  "made" : "2027-01-15T08:00:00Z",
+  "meetings" : [
+    {
+      "byWords" : false,
+      "callID" : "20261220-090000",
+      "duration" : 900,
+      "earlier" : 2,
+      "owners" : [
+
+      ],
+      "sentences" : [
+        "You were the only voice, for 3 min 20 s",
+        "You held the longest turn, 3 min 20 s",
+        "You spoke at 1 words a minute"
+      ],
+      "speakers" : [
+        {
+          "fillersPerMinute" : 0,
+          "isOwner" : true,
+          "name" : "Avery Webb",
+          "questions" : 0,
+          "seconds" : 200,
+          "share" : 1,
+          "turns" : 1,
+          "wordsPerMinute" : 0.59999999999999998
+        }
+      ],
+      "standouts" : [
+
+      ],
+      "start" : "2026-12-20T08:00:00Z",
+      "title" : "Year end"
+    }
+  ],
+  "month" : "2026-12",
+  "version" : 1
+}

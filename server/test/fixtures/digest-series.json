@@ -1,0 +1,76 @@
+{
+  "made" : "2027-01-15T08:00:00Z",
+  "series" : [
+    {
+      "attendees" : [
+        {
+          "came" : 2,
+          "last" : "2027-01-09T08:00:00Z",
+          "name" : "Dana Lee",
+          "of" : 2,
+          "personID" : "id-dana",
+          "trend" : "steady"
+        },
+        {
+          "came" : 2,
+          "last" : "2027-01-09T08:00:00Z",
+          "name" : "Sam Carter",
+          "of" : 2,
+          "personID" : "id-sam",
+          "trend" : "steady"
+        }
+      ],
+      "id" : "cal:g-weekly",
+      "keys" : [
+        "cal:g-weekly",
+        "call:20270108-100000",
+        "call:20270113-100000"
+      ],
+      "line" : "Usually 4 people; 1 open item",
+      "openItems" : [
+        {
+          "callID" : "20270113-100000",
+          "date" : "2027-01-09T08:00:00Z",
+          "kind" : "actionItem",
+          "owner" : "Sam Carter",
+          "text" : "Draft the plan"
+        }
+      ],
+      "rows" : [
+        {
+          "callID" : "20270113-100000",
+          "minutes" : 30,
+          "notesOnly" : false,
+          "ownerShare" : 0.20000000000000001,
+          "people" : 4,
+          "start" : "2027-01-09T08:00:00Z"
+        },
+        {
+          "callID" : "20270108-100000",
+          "minutes" : 30,
+          "notesOnly" : false,
+          "ownerShare" : 0.25,
+          "people" : 3,
+          "start" : "2027-01-03T08:00:00Z"
+        }
+      ],
+      "stats" : {
+        "medianMinutes" : 30,
+        "meetings" : 2,
+        "since" : "2027-01-03T08:00:00Z"
+      },
+      "title" : "Weekly sync",
+      "usualPeople" : [
+        {
+          "name" : "Dana Lee",
+          "personID" : "id-dana"
+        },
+        {
+          "name" : "Sam Carter",
+          "personID" : "id-sam"
+        }
+      ]
+    }
+  ],
+  "version" : 1
+}

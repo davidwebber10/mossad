@@ -68,7 +68,7 @@ extension ChatTools {
         guard !a.isEmpty else { return "No numbers for this call: it has no speech." }
         var names: [String: String] = [:]
         for s in a.speakers where names[s.id] == nil { names[s.id] = s.isOwner ? "You" : s.name }
-        func said(_ s: MeetingFindings.Sentence) -> String { (s.subject.map { (names[$0] ?? $0) + " " } ?? "") + s.text }
+        func said(_ s: MeetingFindings.Sentence) -> String { s.said { names[$0] ?? $0 } }
         func known(_ v: Double?, _ f: (Double) -> String) -> String { v.map(f) ?? "not known" }
         var parts = ["call_id: \(r.id) | \(r.title) | \(shortDay(r.start)) | \(MeetingFindings.span(a.duration))" + (a.byWords ? " | shares by words, from Gemini's notes" : "")]
         let sentences = [MeetingFindings.talk(a), MeetingFindings.flow(a), MeetingFindings.delivery(a)].compactMap { $0 }.map(said)
@@ -108,18 +108,55 @@ extension ChatTools {
 
     // MARK: Coach
 
-    func findingsText(_ input: [String: Any]) -> String {
-        guard let paths else { return "Not available here." }
-        guard settings.coach else { return "The coach is off in Settings, so there are no cards." }
-        let profile = profile, now = now
+    /// The deck as Findings shows it, from the memory without what the coach learned about a person who keeps no
+    /// read: never a card about such a person, and where the reads may not go (`traits` off) no card about any
+    /// person (`FindingAbout`). A card that may not show here uses no place of its call. The local tool and the
+    /// server's digest both read it.
+    func findingCards(traits allowed: Bool) -> [CoachFinding] {
+        guard let paths else { return [] }
+        let saved = coachPeople
+        let full = profile, now = now
+        let shown = full.withoutCoachData(on: saved)
         let recent = records.filter { now.timeIntervalSince($0.start) <= FindingRules.expiryDays * 86_400 }
-        let reads = personaTraits && settings.personaReads
-        let traits = reads ? PersonaFindings.cards(PersonaReads.sources(paths: paths, saved: coachPeople, answers: profile.answers, readOnly: true),
-                                                   calls: PersonaFindings.calls(from: records, now: now), profile: profile, now: now) : [:]
-        var cards = FindingRules.deck(reviews: recent.compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (callID: r.id, date: r.start, review: $0) } },
-                                      profile: profile, now: now, traits: traits)
+        let reads = allowed && settings.personaReads
+        let traits = reads ? PersonaFindings.cards(PersonaReads.sources(paths: paths, saved: saved, answers: shown.answers, readOnly: true),
+                                                   calls: PersonaFindings.calls(from: records, now: now), profile: shown, now: now) : [:]
+        let off = saved.notProfiled
+        let about = aboutPersonRule(full)
+        return FindingRules.deck(reviews: recent.compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (callID: r.id, date: r.start, review: $0) } },
+                                 profile: shown, now: now, traits: traits) { c in
+            if let p = c.person, off.contains(saved.canonical(p)) { return false }
+            return allowed || !about(c)
+        }
+    }
+
+    /// Whether a card is about another person (`FindingAbout`), by the saved people's written forms (made one time),
+    /// the voices of the card's call, and the conclusion it asks about.
+    func aboutPersonRule(_ profile: CoachProfile? = nil) -> (CoachFinding) -> Bool {
+        let owner = ownerIdentity
+        let saved = FindingAbout.Rule(names: FindingAbout.names(people: savedPeople, voices: []), isOwner: owner.isOwner)
+        let voices = Dictionary(records.map { r in (r.id, r.speakerNames.values.filter { !owner.isOwner($0) && !$0.hasPrefix("Speaker ") }) },
+                                uniquingKeysWith: { a, _ in a })
+        let questions = Dictionary((profile ?? self.profile).questions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var byCall: [String: FindingAbout.Rule] = [:]
+        return { c in
+            if saved.about(c, question: c.questionID.flatMap { questions[$0] }) { return true }
+            let rule = byCall[c.callID] ?? FindingAbout.Rule(names: voices[c.callID] ?? [], isOwner: owner.isOwner)
+            byCall[c.callID] = rule
+            return rule.names(in: c)
+        }
+    }
+
+    /// Said where the cards about a person are held back by the switch for other AI apps (Settings > Coach).
+    static let heldBack = "Cards about a person show here only when \"Share the reads with other AI apps\" is on in Settings > Coach."
+
+    func findingsText(_ input: [String: Any]) -> String {
+        guard paths != nil else { return "Not available here." }
+        guard settings.coach else { return "The coach is off in Settings, so there are no cards." }
+        var cards = findingCards(traits: personaTraits)
         if let id = (input["call_id"] as? String)?.nonBlank { cards = cards.filter { $0.callID == id } }
-        guard !cards.isEmpty else { return "No cards wait for an answer." }
+        let note = personaTraits ? "" : "\n" + Self.heldBack
+        guard !cards.isEmpty else { return "No cards wait for an answer." + note }
         let titles = Dictionary(records.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
         return cards.map { c in
             var line = "- \(c.kind.title): \(c.text) (call_id: \(c.callID), \(titles[c.callID] ?? ""), \(shortDay(c.date))"
@@ -131,7 +168,7 @@ extension ChatTools {
             if let why = c.why { line += "\n  Why it matters: \(why)" }
             line += "\n  It asks: \(c.kind.question) (\(c.kind.yes) or \(c.kind.no))"
             return line
-        }.joined(separator: "\n")
+        }.joined(separator: "\n") + note
     }
 
     func goalsText() -> String {

@@ -1,0 +1,103 @@
+{
+  "made" : "2027-01-15T08:00:00Z",
+  "meetings" : [
+    {
+      "byWords" : false,
+      "callID" : "20260924-030000",
+      "duration" : 900,
+      "earlier" : 1,
+      "owners" : [
+
+      ],
+      "sentences" : [
+        "You talked most: 3 min 20 s, 50% of the talk",
+        "You held the longest turn, 3 min 20 s",
+        "You spoke fastest, at 1 words a minute"
+      ],
+      "speakers" : [
+        {
+          "cutIn" : 0,
+          "cutOff" : 0,
+          "fillersPerMinute" : 0,
+          "isOwner" : true,
+          "name" : "Avery Webb",
+          "personID" : "id-owner",
+          "questions" : 0,
+          "seconds" : 200,
+          "share" : 0.5,
+          "turns" : 1,
+          "wordsPerMinute" : 0.59999999999999998
+        },
+        {
+          "cutIn" : 0,
+          "cutOff" : 0,
+          "fillersPerMinute" : 0,
+          "isOwner" : false,
+          "name" : "Sam Carter",
+          "personID" : "id-sam",
+          "questions" : 0,
+          "reply" : 0,
+          "seconds" : 200,
+          "share" : 0.5,
+          "turns" : 1,
+          "wordsPerMinute" : 0.29999999999999999
+        }
+      ],
+      "standouts" : [
+
+      ],
+      "start" : "2026-09-24T08:00:00Z",
+      "title" : "Old standup"
+    },
+    {
+      "byWords" : false,
+      "callID" : "20260917-030000",
+      "duration" : 900,
+      "earlier" : 0,
+      "owners" : [
+
+      ],
+      "sentences" : [
+        "You talked most: 3 min 20 s, 50% of the talk",
+        "You held the longest turn, 3 min 20 s",
+        "You spoke fastest, at 1 words a minute"
+      ],
+      "speakers" : [
+        {
+          "cutIn" : 0,
+          "cutOff" : 0,
+          "fillersPerMinute" : 0,
+          "isOwner" : true,
+          "name" : "Avery Webb",
+          "personID" : "id-owner",
+          "questions" : 0,
+          "seconds" : 200,
+          "share" : 0.5,
+          "turns" : 1,
+          "wordsPerMinute" : 0.59999999999999998
+        },
+        {
+          "cutIn" : 0,
+          "cutOff" : 0,
+          "fillersPerMinute" : 0,
+          "isOwner" : false,
+          "name" : "Sam Carter",
+          "personID" : "id-sam",
+          "questions" : 0,
+          "reply" : 0,
+          "seconds" : 200,
+          "share" : 0.5,
+          "turns" : 1,
+          "wordsPerMinute" : 0.29999999999999999
+        }
+      ],
+      "standouts" : [
+
+      ],
+      "start" : "2026-09-17T08:00:00Z",
+      "title" : "Old standup"
+    }
+  ],
+  "month" : "2026-09",
+  "version" : 1
+}

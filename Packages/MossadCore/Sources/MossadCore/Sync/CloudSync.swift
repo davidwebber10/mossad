@@ -17,6 +17,8 @@ public actor CloudSync {
     /// The owner's points for next time, both ways. Only through the owner's server: an iCloud store needs the type
     /// in its production schema first.
     static let nextTimeType = "NextTime"
+    /// The parts of the digest for the server's MCP (`ServerDigest`); no device reads them back.
+    static let digestType = "Digest"
     static let recordingType = "Recording"
     /// Assets make big requests, so stay well under CloudKit's 400 changes a request.
     static let batch = 50
@@ -164,7 +166,7 @@ public actor CloudSync {
     /// `personas`: the reduced copy of the reads (`SyncedPersonas`), from the Mac, with the people.
     /// `stop`: true stops the upload before its next batch (a call started).
     public func pushShared(people sendPeople: Bool = false, personas: SyncedPersonas? = nil, mirror: Bool = false,
-                           stop: @Sendable () -> Bool = { false }) async throws -> Int {
+                           stop: @Sendable () -> Bool = { false }, digest: [SharedPayload]? = nil) async throws -> Int {
         try await prepare()
         let chats = ChatStore(directory: paths.chats)
         var payloads = chats.all().map(SharedPayload.chat)
@@ -200,6 +202,8 @@ public actor CloudSync {
         if sendPeople, store.wantsMeetingView, let personas {
             payloads.append(.personas(personas))
         }
+        // The digest for the server's MCP: to the owner's server only, and only when it was made this time.
+        if store.wantsMeetingView, let digest { payloads += digest }
         var deleted = chats.deleted()
         let state = try loadState()
         if mirror {
@@ -210,12 +214,23 @@ public actor CloudSync {
                 if !FileManager.default.fileExists(atPath: paths.chats.appendingPathComponent("\(id.uuidString).json").path) { deleted.insert(id) }
             }
         }
-        let plan = state.planShared(payloads, deletedChats: deleted)
+        var plan = state.planShared(payloads, deletedChats: deleted)
+        // A part of the digest that was not made again leaves the server: a month with no meeting left. A digest
+        // with no month (no meeting read) deletes no month.
+        if store.wantsMeetingView, let digest {
+            let now = Set(digest.map(\.key))
+            let months = now.contains { $0.hasPrefix("digest:meetings-") }
+            plan.delete += state.uploaded.keys.filter { $0.hasPrefix("digest:") && !now.contains($0) && (months || !$0.hasPrefix("digest:meetings-")) }.sorted()
+        }
         guard !plan.upload.isEmpty || !plan.delete.isEmpty else { return 0 }
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
         var changed = 0
-        for chunk in stride(from: 0, to: plan.upload.count, by: Self.batch).map({ Array(plan.upload[$0..<min($0 + Self.batch, plan.upload.count)]) }) {
+        // The digest's parts go one by one after the rest: a call that starts stops the copy before the next part.
+        let rest = plan.upload.filter { $0.kind != .digest }
+        let chunks = stride(from: 0, to: rest.count, by: Self.batch).map { Array(rest[$0..<min($0 + Self.batch, rest.count)]) }
+            + plan.upload.filter { $0.kind == .digest }.map { [$0] }
+        for chunk in chunks {
             if stop() { return changed }
             let records = try chunk.map { p -> StoredRecord in
                 let type = switch p.kind {
@@ -226,6 +241,7 @@ public actor CloudSync {
                 case .people: Self.peopleType
                 case .personas: Self.personasType
                 case .nextTime: Self.nextTimeType
+                case .digest: Self.digestType
                 }
                 let name = Self.recordName(p.key)
                 return StoredRecord(name: name, type: type, files: ["data": try file(p.data, "\(name).json", in: dir)])
@@ -252,6 +268,12 @@ public actor CloudSync {
             changed += done.count
         }
         return changed
+    }
+
+    /// Whether the store has each of these payloads as they are now: every part of a digest arrived.
+    public func holds(_ payloads: [SharedPayload]) throws -> Bool {
+        let state = try loadState()
+        return payloads.allSatisfy { state.uploaded[$0.key] == $0.hash }
     }
 
     /// "chat:<uuid>" becomes "chat-<uuid>"; the profile keeps its own name.

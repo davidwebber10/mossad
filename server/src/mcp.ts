@@ -1,4 +1,5 @@
 import { MeetingTools, toolDefinitions as meetingToolDefinitions } from './tools';
+import { digestFetch, digestSearch, digestToolDefinitions, digestToolNames, runDigestTool } from './digest';
 import { OwnerData, ownerToolDefinitions, ownerToolNames, runOwnerTool, safeZone } from './owner';
 import type { Env, Line, MeetingView } from './types';
 
@@ -7,7 +8,7 @@ import type { Env, Line, MeetingView } from './types';
 const fallbackVersion = '2025-06-18';
 
 /** The meeting tools, then the reads of what else the Mac syncs. All read only. */
-export const toolDefinitions = [...meetingToolDefinitions, ...ownerToolDefinitions];
+export const toolDefinitions = [...meetingToolDefinitions, ...ownerToolDefinitions, ...digestToolDefinitions];
 
 export async function config(env: Env): Promise<Record<string, string>> {
   const { results } = await env.DB.prepare('SELECT key, value FROM config').all<{ key: string; value: string }>();
@@ -98,14 +99,21 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
       const args = (params.arguments as Record<string, unknown>) ?? {};
       if (!toolDefinitions.some((t) => t.name === name)) return reply({ content: [{ type: 'text', text: `Unknown tool ${name}.` }], isError: true });
       if (ownerToolNames.has(name)) return reply({ content: [{ type: 'text', text: await runOwnerTool(env, name, args, await config(env), () => meetings(env)) }] });
+      if (digestToolNames.has(name)) return reply({ content: [{ type: 'text', text: await runDigestTool(env, name, args, await config(env)) }] });
       const id = typeof args.id === 'string' ? args.id : '';
+      // A series or a bookmark is read from the digest alone, before any meeting is loaded.
+      if (name === 'fetch' && /^(series|bookmark)(:|%3a)/i.test(id)) {
+        const doc = await digestFetch(env, id, await config(env));
+        if (!doc) return reply({ content: [{ type: 'text', text: 'Nothing with that id.' }], isError: true });
+        return reply({ content: [{ type: 'text', text: JSON.stringify(doc) }], structuredContent: doc });
+      }
       // A kind prefix: "person:<id>" and "task:<id>" are the owner's data; "meeting:<id>" and a bare id are meetings.
       const meetingArgs = name === 'fetch' && id.startsWith('meeting:') ? { ...args, id: id.slice(8) } : args;
       const tools = await toolsFor(env, name, meetingArgs);
       if (name === 'search') {
         const query = typeof args.query === 'string' ? args.query : '';
         const owner = await OwnerData.load(env, tools.meetings, await config(env));
-        const result = { results: [...tools.search(query).results, ...owner.search(query)] };
+        const result = { results: [...tools.search(query).results, ...owner.search(query), ...(await digestSearch(env, query))] };
         return reply({ content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result });
       }
       if (name === 'fetch') {
