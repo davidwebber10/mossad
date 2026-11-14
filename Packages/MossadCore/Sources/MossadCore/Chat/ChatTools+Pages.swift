@@ -122,16 +122,24 @@ extension ChatTools {
         let traits = reads ? PersonaFindings.cards(PersonaReads.sources(paths: paths, saved: saved, answers: shown.answers, readOnly: true),
                                                    calls: PersonaFindings.calls(from: records, now: now), profile: shown, now: now) : [:]
         let off = saved.notProfiled
-        let owner = ownerIdentity
-        let others = savedPeople.filter { !$0.isOwner && $0.deleted == nil }.map(\.displayName)
-        let voices = Dictionary(recent.map { r in (r.id, r.speakerNames.values.filter { !owner.isOwner($0) && !$0.hasPrefix("Speaker ") }) },
-                                uniquingKeysWith: { a, _ in a })
-        let questions = Dictionary(full.questions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let about = aboutPersonRule(full)
         return FindingRules.deck(reviews: recent.compactMap { r in CoachReview.load(in: paths.callDirectory(r.id)).map { (callID: r.id, date: r.start, review: $0) } },
                                  profile: shown, now: now, traits: traits) { c in
             if let p = c.person, off.contains(saved.canonical(p)) { return false }
-            if allowed { return true }
-            return !FindingAbout.person(c, question: c.questionID.flatMap { questions[$0] }, names: others + (voices[c.callID] ?? []), isOwner: owner.isOwner)
+            return allowed || !about(c)
+        }
+    }
+
+    /// Whether a card is about another person (`FindingAbout`), by the saved people's written forms, the voices of
+    /// the card's call, and the conclusion it asks about.
+    func aboutPersonRule(_ profile: CoachProfile? = nil) -> (CoachFinding) -> Bool {
+        let owner = ownerIdentity
+        let saved = FindingAbout.names(people: savedPeople, voices: [])
+        let voices = Dictionary(records.map { r in (r.id, r.speakerNames.values.filter { !owner.isOwner($0) && !$0.hasPrefix("Speaker ") }) },
+                                uniquingKeysWith: { a, _ in a })
+        let questions = Dictionary((profile ?? self.profile).questions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return { c in
+            FindingAbout.person(c, question: c.questionID.flatMap { questions[$0] }, names: saved + (voices[c.callID] ?? []), isOwner: owner.isOwner)
         }
     }
 

@@ -1657,11 +1657,9 @@ final class AppController: ObservableObject {
     /// Opens a `mossad://call/<id>?t=<seconds>` link from a chat answer, and the places of the chat's receipts:
     /// `mossad://series/<id>`, `mossad://person/<id>`, `mossad://tasks`.
     func openLink(_ url: URL) -> Bool {
-        if url.scheme == "mossad", url.host != "call" {
-            // The id as it was encoded: a series id can hold a slash or a space.
-            let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath.dropFirst() ?? ""
-            let id = String(raw).removingPercentEncoding ?? String(raw)
-            switch url.host {
+        if let place = MossadLink.place(url) {
+            let id = place.id
+            switch place.kind {
             case "series" where !id.isEmpty: openSeries(id)
             case "person" where !id.isEmpty: openPerson(id)
             case "tasks": open(.commitments)

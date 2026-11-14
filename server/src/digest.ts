@@ -6,8 +6,7 @@ import { timestamp } from './util';
  * The tools over the digest (`ServerDigest` on the Mac): the recurring meetings, each meeting's numbers by month,
  * the bookmarks, the Analytics page, and the coach's cards and goal. The Mac computed every number and sentence with
  * the app's own rules, from the meetings as they were heard; this file only finds, pages, and writes out the fields
- * it knows. No calendar or invite data reaches the server, so a series has no next date here, and its calendar ids
- * are only hashes. A part that never arrived, came from a newer Mac, or does not read says so; each answer says when
+ * it knows. Upcoming meetings never reach the server, so a series has no next date here. A part that never arrived, came from a newer Mac, or does not read says so; each answer says when
  * the Mac last changed it. One Mac writes the digest: a second Mac on the same server replaces its parts.
  */
 
@@ -32,7 +31,7 @@ interface Period {
   questionsPerHour?: number; cutInPerHour?: number; cutOffPerHour?: number; oneOnOneShare?: number; groupShare?: number;
   trends: { metric: string; sentence: string; usual?: string }[]; cost: number; costParts: { name: string; dollars: number }[];
 }
-interface Card { id: string; title: string; text: string; callID: string; date: string; at?: number; quote?: string; number?: string; usual?: string; say?: string; why?: string; question: string; answers: string[]; personID?: string; personName?: string }
+interface Card { id: string; title: string; text: string; callID: string; date: string; at?: number; quote?: string; number?: string; usual?: string; say?: string; why?: string; question: string; answers: string[]; personID?: string; personName?: string; aboutPerson?: boolean }
 interface Goal { plan: string; why?: string; status: string; target?: string; before?: string; progress?: string; review?: string; results: { date: string; outcome: string; callID: string; at?: number; evidence: string }[]; date: string; hits: string }
 interface Part { version: number; made: string }
 interface Point { id: string; text: string; seriesID?: string; seriesKeys?: string[]; personID?: string; done?: { callID?: string; at?: number; quote?: string; date: string }; carried?: string[]; deleted?: boolean; created: string }
@@ -42,8 +41,9 @@ type MeetingsPart = Part & { meetings: Meeting[] };
 type AnalyticsPart = Part & { periods: Period[] };
 type CoachPart = Part & { coachOn?: boolean; findings: Card[]; goal?: Goal; learned: Goal[]; ended: Goal[]; notTaken: Goal[] };
 
-const noNext = 'The next date is only known on your Mac: the calendar never goes to this server.';
-const recordedOnly = "This list comes from your recorded meetings alone: a series with no recording in the last 8 weeks, or with only one recording, is not here, and the usual day and time are the recorded ones. Your Mac's Recurring page has every one.";
+const noNext = 'Upcoming meetings stay on your Mac, so the next date is only known there.';
+const recordedOnly = "This list comes from your past meetings alone: a series with no meeting in the last 8 weeks, or with only one meeting, is not here, and the usual day and time are from your past meetings, so your Mac, which also reads the next ones, can show a newer time. Your Mac's Recurring page has every one.";
+const pointsElsewhere = 'The points for next time of a series that is not in this list are in next_time_points.';
 const pct = (v?: number) => (typeof v === 'number' ? `${Math.round(v * 100)}%` : 'not known');
 const mins = (v?: number) => (typeof v === 'number' ? `${Math.round(v)} min` : 'not known');
 const span = (s: number) => {
@@ -55,12 +55,6 @@ const span = (s: number) => {
 const words = (s: string) => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const list = (v: unknown) => Array.isArray(v);
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
-
-/** A series key as the Mac sends it: a hash of the key in lower case (`ServerDigest.publicKey`). */
-async function hashKey(key: string): Promise<string> {
-  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key.toLowerCase()));
-  return 'h:' + [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
-}
 
 const kinds = {
   'digest-series': 'recurring meetings', 'digest-bookmarks': 'bookmarks', 'digest-analytics': 'analytics', 'digest-coach': "coach's cards",
@@ -97,12 +91,11 @@ async function part<T extends Part>(env: Env, name: string): Promise<Got<T>> {
 const made = (p: Part, tz: string, config: Record<string, string>) =>
   `Last changed on your Mac on ${day(p.made, tz)}.` + (config.syncedAt && !Number.isNaN(Date.parse(config.syncedAt)) ? ` Your Mac last sent its copy on ${day(config.syncedAt, tz)}.` : '');
 
-/** The series a word names: its id, or one of its keys by hash, else every word of the query in its title. */
-async function findSeries(all: Series[], q: unknown): Promise<Series[]> {
+/** The series a word names: its id or one of its keys, else every word of the query in its title. */
+function findSeries(all: Series[], q: unknown): Series[] {
   if (typeof q !== 'string' || !q.trim()) return [];
   const query = q.trim().toLowerCase();
-  const hashed = await hashKey(query);
-  const byID = all.filter((s) => s.id.toLowerCase() === query || s.id === hashed || s.keys.some((k) => k === hashed || k.toLowerCase() === query));
+  const byID = all.filter((s) => s.id.toLowerCase() === query || s.keys.some((k) => k.toLowerCase() === query));
   if (byID.length) return byID;
   const exact = all.filter((s) => s.title.toLowerCase() === query);
   if (exact.length) return exact;
@@ -131,16 +124,9 @@ async function readSeries(env: Env, s: Series, input: Record<string, unknown>, p
   const parts = [seriesLine(s, tz), noNext];
   const book = await data<{ points: Point[] }>(env, 'next-time');
   if (book && list(book.points)) {
-    // A point keeps its series' id and keys; it belongs to the series that holds one of them (as a hash here).
-    const keys = new Set([s.id, ...s.keys]);
-    const mine: Point[] = [];
-    for (const x of book.points) {
-      if (x.deleted) continue;
-      const own = [x.seriesID ?? '', ...(x.seriesKeys ?? [])].filter(Boolean);
-      for (const k of own) {
-        if (keys.has(k) || keys.has(await hashKey(k))) { mine.push(x); break; }
-      }
-    }
+    // A point keeps its series' id and keys; it belongs to the series that holds one of them.
+    const keys = new Set([s.id, ...s.keys].map((k) => k.toLowerCase()));
+    const mine = book.points.filter((x) => !x.deleted && [x.seriesID ?? '', ...(x.seriesKeys ?? [])].some((k) => k && keys.has(k.toLowerCase())));
     const open = mine.filter((x) => !x.done), done = mine.filter((x) => x.done);
     parts.push('Your points for next time:\n' + (open.length ? open.map((x) => pointLine(x, tz)).join('\n') : '- none open'));
     if (done.length) parts.push('Done:\n' + done.slice(0, 20).map((x) => pointLine(x, tz)).join('\n'));
@@ -170,7 +156,7 @@ async function readSeries(env: Env, s: Series, input: Record<string, unknown>, p
     const label: Record<string, string> = { yourTask: 'Your task', actionItem: 'Action item', pendingDecision: 'Decision that may be open' };
     parts.push('Still open:\n' + s.openItems.map((i) => `- ${label[i.kind] ?? i.kind}${i.owner && i.kind === 'actionItem' ? ` (${i.owner})` : ''}: ${i.text}${i.callID ? ` (call_id: ${i.callID}, ${day(i.date, tz)})` : ''}`).join('\n'));
   }
-  parts.push("The coach's suggested points, the invites, and the planned times are on your Mac. " + made(p, tz, config));
+  parts.push("The coach's suggested points and the next meetings are on your Mac. " + made(p, tz, config));
   return parts.join('\n\n');
 }
 
@@ -191,7 +177,7 @@ function meetingText(m: Meeting, p: Part, tz: string, config: Record<string, str
   if (m.screens) parts.push(`Screens: ${m.screens}`);
   if (m.standouts.length) parts.push(`What stood out against your earlier meetings (${m.earlier} to compare with):\n` + m.standouts.map((x) => `- ${x}`).join('\n'));
   if (m.cost) parts.push(`Cost: $${m.cost.total.toFixed(2)} (transcription $${m.cost.transcription.toFixed(2)}, AI $${m.cost.ai.toFixed(2)})${m.cost.estimated ? ', estimated from the length' : ''}`);
-  parts.push("Who was invited and the planned times are on your Mac. " + made(p, tz, config));
+  parts.push(made(p, tz, config));
   return parts.join('\n\n');
 }
 
@@ -239,12 +225,14 @@ function goalText(g: Goal, tz: string, label: string): string {
 
 /**
  * The second wall for the cards: the Mac sends no card about a person where the reads may not go, and none about a
- * person who keeps no read; the server checks again. A card with a person goes only with the switch on, a people
- * file to say who keeps none, and that person (by the id of now, after a merge) keeping a read.
+ * person who keeps no read; the server checks again. While the switch is off, no card with a person id, a person's
+ * name, or the Mac's flag that its words are about someone goes. With it on, a card with a person goes only with a
+ * people file to say who keeps none, and that person (by the id of now, after a merge) keeping a read.
  */
 async function shownCards(env: Env, cards: Card[], config: Record<string, string>): Promise<Card[]> {
+  if (config.mcpPersonas !== '1') return cards.filter((c) => !c.personID && !c.personName && !c.aboutPerson);
   if (!cards.some((c) => c.personID)) return cards;
-  const people = config.mcpPersonas === '1' ? await data<{ people: SyncedPerson[] }>(env, 'people') : null;
+  const people = await data<{ people: SyncedPerson[] }>(env, 'people');
   const all = people && list(people.people) ? people.people : null;
   const byID = new Map((all ?? []).map((p) => [p.id.toLowerCase(), p]));
   const canonical = (id: string) => {
@@ -276,14 +264,14 @@ export async function runDigestTool(env: Env, name: string, input: Record<string
       if (!('ok' in got)) return got.why;
       const p = got.ok;
       if (name === 'read_series') {
-        const found = await findSeries(p.series, input.series);
+        const found = findSeries(p.series, input.series);
         if (found.length > 1) return `Several recurring meetings match; ask which one: ${found.map((s) => `${s.title} (series_id: ${s.id})`).join('; ')}.`;
-        if (!found.length) return `No recurring meeting matches. Use recurring for the list. ${recordedOnly}`;
+        if (!found.length) return `No recurring meeting matches. Use recurring for the list. ${recordedOnly} ${pointsElsewhere}`;
         return readSeries(env, found[0], input, p, tz, config);
       }
       const q = typeof input.query === 'string' ? input.query.trim().toLowerCase() : '';
       const shown = q ? p.series.filter((s) => s.title.toLowerCase().includes(q) || s.usualPeople.some((x) => x.name.toLowerCase().includes(q))) : p.series;
-      if (!shown.length) return `No recurring meeting matches. ${recordedOnly}\n${made(p, tz, config)}`;
+      if (!shown.length) return `No recurring meeting matches. ${recordedOnly} ${pointsElsewhere}\n${made(p, tz, config)}`;
       const { rows, tail } = page(shown, input);
       return rows.map((s) => seriesLine(s, tz)).join('\n') + tail + `\n${noNext}\n${recordedOnly}\n${made(p, tz, config)}`;
     }
@@ -364,7 +352,7 @@ export async function digestFetch(env: Env, id: string, config: Record<string, s
   if (raw.startsWith('series:')) {
     const got = await part<SeriesPart>(env, 'digest-series');
     if (!('ok' in got)) return null;
-    const s = await findSeries(got.ok.series, raw.slice(7));
+    const s = findSeries(got.ok.series, raw.slice(7));
     if (s.length !== 1) return null;
     return { id, title: s[0].title, text: await readSeries(env, s[0], {}, got.ok, tz, config), url: `mossad://series/${encodeURIComponent(s[0].id)}`, metadata: { kind: 'series' } };
   }
@@ -385,7 +373,7 @@ const limits = { limit: { type: 'integer' }, offset: { type: 'integer' } };
 export const digestToolDefinitions = [
   {
     name: 'recurring',
-    description: "The owner's recurring meetings (series), from the recorded meetings alone: series_id, title, when it usually is, the last meeting, how many were recorded, who usually speaks, and one line such as \"Usually 5 people, Sam talks most; 3 open items\". A series with no recording in 8 weeks or with one recording is only on the owner's Mac, as are the next date and the invites. query narrows by title words or a usual person. Read one with read_series.",
+    description: "The owner's recurring meetings (series), from the past meetings alone: series_id, title, when it usually is, the last meeting, how many were recorded, who usually speaks, and one line such as \"Usually 5 people, Sam talks most; 3 open items\". A series with no meeting in 8 weeks or with one meeting is only on the owner's Mac, as is the next date: upcoming meetings stay on the Mac. query narrows by title words or a usual person. Read one with read_series.",
     inputSchema: { type: 'object', properties: { query: { type: 'string' }, ...limits } },
   },
   {

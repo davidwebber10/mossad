@@ -206,33 +206,43 @@ The config key is additive in the `config` table (no migration). No D1 migration
 ### The digest (built in `feature/mcp-digest`, after 2.25.0)
 
 The owner said yes to the recurring meetings, a meeting's numbers, the Analytics page, the coach's cards and goal,
-and the bookmarks on the server, and no to upcoming meetings: the calendar never goes to the server, so
-`upcoming_meetings` and `prep` stay on the Mac, and the live call too. Series, meeting numbers, period analytics,
+and the bookmarks on the server, and no to upcoming meetings: upcoming meetings never go to the server, so
+`upcoming_meetings` and `prep` stay on the Mac, and the live call too. The owner's rule is only that one: the invite
+data of past meetings stays on the server as it always was (the meeting copy, `read_meeting`'s "Invited:" line, the
+record files). An earlier, stricter reading ("no calendar or invite data ever") was withdrawn; no tool answer, the
+site, or this spec says that invites, invited people, or planned times stay on the Mac. Series, meeting numbers, period analytics,
 trends, findings, goals, and bookmarks are Swift rules; the Mac computes them (`ServerDigest`) and the Worker only
 finds, pages, and writes them out (`server/src/digest.ts`).
 
-- No invite data, the owner's decision, also for past meetings: every part is made from the meetings as they were
-  heard (`ServerDigest.Run.spoken`: no invited people, no planned start or end, no expected speakers). A person is a
-  name with a person id; an address is never a name (a voice named by an address is its saved person's name or
-  "Speaker C", an item's owner the same or no owner), and the last wall replaces any address left in any string
-  (`ServerDigest.clean`). A test fails on any address in any part, on a person who was only invited, and on the
-  invite's times or counts. The titles of meetings stay (the meetings' own copies already carry them).
+- The digest's people are voices: every part is made from the meetings as they were heard
+  (`ServerDigest.Run.spoken`: no invited-only people, no counts against the invite, no late start or overrun), with
+  one exception, the schedule (below). A person is a name with a person id; an address is never a name (a voice
+  named by an address is its saved person's name or "Speaker C", an item's owner the same or no owner), and the last
+  wall replaces any address left in any string (`ServerDigest.clean`, any script, with or without a dot in the
+  domain), except a series' `id` and `keys`, which go as the Mac has them (exempt by their place in the series
+  part). A test fails on any address in any other field and on a person who was only invited.
 - Parts, each its own shared record (`kind: .digest`, type `Digest`), sent only when its content changed, each with
   `version: 1` and `made` (when its content last changed), from allowed-field lists (`ServerDigest.allowedKeys`,
   with a test that fails on any other key and checks that every list was used):
-  - `digest-series`: each series that still meets, the catalog from the meetings alone (`SeriesCatalog` with no
-    upcoming meetings; the Mac's calendar is read only to join two ids of one series, `SeriesCatalog.aliases`): `id`
-    (an id with an address in it is sent as a hash), `keys` (as a point saves them, each as a hash,
-    `ServerDigest.publicKey`; the Worker hashes a point's keys and a query the same way), `title`, `schedule`,
+  - `digest-series`: each series that still meets, the catalog from the past meetings alone (`SeriesCatalog` with
+    no upcoming meetings; the Mac's calendar is read only to join two ids of one series, `SeriesCatalog.aliases`):
+    `id` and `keys` as the Mac has them (the Worker matches a point's keys to them, and `mossad://series/<id>` opens
+    the series on the Mac, an id with an "@" too, `MossadLink.place` and `MeetingSeries.find`), `title`, `schedule`
+    (the app's `SeriesSchedule` over the past meetings, which reads a meeting's planned start first, so the server
+    says the weekday and time the app can say from past meetings; the Mac, which also reads the next meetings, can
+    show a newer time, and the Worker says so),
     `usualPeople` (the named voices, sure saved people, of at least half of the last 10 meetings), `line`, the
     newest 12 `rows` (length, the owner's share, the number of voices), `attendees` (the named voices that are sure
     saved people, 20 at most), `stats` (no planned length, no overrun, no late start), `openItems` (20 at most). No
-    next date, no invite, no suggestions.
+    next date and no suggestions.
   - `digest-meetings-YYYY-MM`: each meeting of that month (by its call id) with the Analytics tab's numbers
     (`MeetingAnalytics` with the owner's tasks, the sentences of `MeetingFindings`), with no "who came" against the
     invite and no late start or overrun. A month is made again only when its meetings, their outcomes, person ids,
     tasks, cost, reviews, or the meetings before them changed, or the digest's version (`DigestCache`,
-    `~/Mossad/Sync/digest-cache.json`, never synced).
+    `~/Mossad/Sync/digest-cache.json`, never synced). "What stood out" leaves out each sentence about a person with
+    "Keep a read" off (`ServerDigest.keepsStandout`, by the id of now, so a merge follows the survivor); each
+    voice's numbers and the sentences of the one meeting stay for everyone (the owner's answer to F17). The ids of
+    the people with the switch off are in the month's stamp, so a month is made again when one changes.
   - `digest-bookmarks`: every bookmark (2,000 at most) with its note and the line said then (300 characters at most).
   - `digest-analytics`: the Analytics page for the app's own last 7, 30, and 90 days (`AnalyticsRange`: from 29 days
     before today to the moment it was made, so today's calls count) and the last 365 by the same rule
@@ -240,10 +250,13 @@ finds, pages, and writes them out (`server/src/digest.ts`).
   - `digest-coach`: the deck's cards (`ChatTools.findingCards`, from the memory without what the coach learned about
     a person who keeps no read: never a card about such a person; with the switch for other AI apps off, no card
     about any person: a trait, a conclusion about someone, or a card whose words name another person,
-    `FindingAbout`; a card left out uses no place of its call), each with `personID` and `personName` when it is
-    about a saved person, `coachOn`, and the goals (`GoalProgress`). The Worker drops a card with a person again
-    unless `mcpPersonas` is "1", the people file is there, and that person keeps a read. `Mossad --mcp` has the same
-    card rule.
+    `FindingAbout`, which reads the card's text, words to say, why, detail, number, and usual value, and the names by
+    each written form, the first and the last name, their nicknames, without accents; a doubt removes a card; a card
+    left out uses no place of its call), each with `personID` and `personName` when it is about a saved person and
+    `aboutPerson` when its words are about someone, `coachOn`, and the goals (`GoalProgress`). While `mcpPersonas` is
+    not "1", the Worker drops each card with a `personID`, a `personName`, or `aboutPerson`; with it on, a card with
+    a person goes only with the people file there and that person keeping a read. `Mossad --mcp` has the same card
+    rule.
 - Sizes, measured by `ServerDigestTests.testTheSizesStayBounded` (1,500 meetings over two years, 60 series, a
   bookmark on each tenth meeting): series 130 KB (an extreme case: 19 voices per series), each month at most
   66 KB (25 months, 1.5 MB in all, sent once and then only a changed month), bookmarks 23 KB, analytics 6 KB,
@@ -252,8 +265,10 @@ finds, pages, and writes them out (`server/src/digest.ts`).
   read, never during a call and never before the meetings list was read at launch, off the main thread (the tools
   and the people are read there), with the app's one cache of the meetings' facts
   (`MeetingAnalyticsStore.facts`), made again only when the meetings, the coach, the tasks, the switch, or the day
-  changed since the last digest whose every part arrived (`CloudSync.holds`). A call stops it between months (a stop
-  sends nothing and keeps the months made) and between the parts of the upload. Not to iCloud.
+  changed since the last digest whose every part arrived (`CloudSync.holds`). A digest a part of which did not arrive
+  is kept in memory with its key and goes again as it is at each sync while the key holds, never made again
+  (`DigestPlan.step`: `.resend`). A call stops it before each of the four fixed parts, between months (a stop sends
+  nothing, deletes nothing, and keeps the months made), and between the parts of the upload. Not to iCloud.
 - Deletes: an ended series leaves `digest-series`, a removed bookmark leaves `digest-bookmarks`, an expired card
   leaves `digest-coach` (each an overwrite), and a month with no meeting left is deleted (`pushShared(digest:)`
   deletes each `digest:` key it holds that was not made again; with no digest made, nothing is deleted, and a digest
@@ -266,8 +281,17 @@ finds, pages, and writes them out (`server/src/digest.ts`).
   only the fields it knows. New tools: `recurring`, `read_series`, `bookmarks`, `meeting_analytics`, `analytics`,
   `coach_findings`, `coach_goals`; `search` and `fetch` add `series:<id>` and `bookmark:<call id>#<whole second>`
   (read before any meeting is loaded). Each answer says when the Mac last changed the part and, with `syncedAt`,
-  when it last sent its copy; a series says that its next date is only known on the Mac and that the list comes from
-  the recorded meetings alone (a series with no recording in 8 weeks or with one recording is only on the Mac).
+  when it last sent its copy; a series says that upcoming meetings stay on the Mac (no next date) and that the list
+  comes from the past meetings alone (a series with no meeting in 8 weeks or with one meeting is only on the Mac);
+  "No recurring meeting matches" adds that `next_time_points` has the points of a series that is not in the list.
+- Accepted with no change (the re-check of this branch): N7, the words of a goal (its plan, why, and each result's
+  evidence) can name a person under no switch: the same goals are in the coach's memory on the server since 2.25.0,
+  the app's rule of today, and no new class of data. N8, with the switch on, a card on the owner's behavior whose
+  words name a person with "Keep a read" off goes: the app's rule of today is by person id, and each coach review
+  on the server has such lines since 2.25.0. N11, which meetings make one series comes from the calendar's series
+  id and the invited people, and a goal's sure 1:1s from the size rule that reads the invite: no name, address,
+  time, or count of an invite is in these numbers, and a second rule on the server would give numbers that are not
+  the app's.
 
 ## Chat actions (added later in this branch, the app's own chat only)
 

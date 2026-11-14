@@ -5,10 +5,10 @@ import Foundation
 /// the recurring meetings, each meeting's numbers by month, the bookmarks, the Analytics page for the app's last 7,
 /// 30, and 90 days and the last 365, and the coach's cards and goal. Each part is its own record, sent only when its
 /// content changed, with `made`, when its content last changed. Built from allowed-field lists (`allowedKeys`) and
-/// from the meetings as they were heard (`spoken`): never calendar or invite data (no next date, no invited person,
-/// no invite's times or counts, no address), never a picture, audio, or fingerprint, and nothing the coach learned
-/// about a person who keeps no read (nothing about any person where the reads may not go). To the owner's server
-/// only, never during a call.
+/// from the meetings as they were heard (`spoken`): a person is a voice with a name and an id, never someone who was
+/// only invited, and never an address. No upcoming meeting (no next date), never a picture, audio, or fingerprint,
+/// and nothing the coach learned about a person who keeps no read (nothing about any person where the reads may not
+/// go). To the owner's server only, never during a call.
 public enum ServerDigest {
     public static let version = 1
     /// The tests hold each part under this size for 1,500 meetings and 60 series.
@@ -74,8 +74,9 @@ public enum ServerDigest {
     public struct Card: Codable, Equatable, Sendable {
         var id: String; var title: String; var text: String; var callID: String; var date: Date; var at: Double?; var quote: String?
         var number: String?; var usual: String?; var say: String?; var why: String?; var question: String; var answers: [String]
-        /// The saved person a card is about, so the server can check that person's switch again.
-        var personID: String?; var personName: String?
+        /// The saved person a card is about, so the server can check that person's switch again; `aboutPerson` when
+        /// its words are about someone (`FindingAbout`), so the server holds it back while the switch is off.
+        var personID: String?; var personName: String?; var aboutPerson: Bool?
     }
 
     public struct Goal: Codable, Equatable, Sendable {
@@ -122,7 +123,7 @@ public enum ServerDigest {
         "part": ["name", "dollars"],
         "trend": ["metric", "sentence", "usual"],
         "coach.root": ["version", "made", "coachOn", "findings", "goal", "learned", "ended", "notTaken"],
-        "card": ["id", "title", "text", "callID", "date", "at", "quote", "number", "usual", "say", "why", "question", "answers", "personID", "personName"],
+        "card": ["id", "title", "text", "callID", "date", "at", "quote", "number", "usual", "say", "why", "question", "answers", "personID", "personName", "aboutPerson"],
         "goal": ["plan", "why", "status", "target", "before", "progress", "review", "results", "date", "hits"],
         "result": ["date", "outcome", "callID", "at", "evidence"],
     ]
@@ -149,18 +150,10 @@ public enum ServerDigest {
         return "\(d.prefix(4))-\(d.suffix(2))"
     }
 
-    // MARK: Ids, names, and addresses
+    // MARK: Names and addresses
 
-    /// A series key as the server keeps it: a hash, so no calendar id (an iCalendar UID can hold an address) is
-    /// there. The server hashes a point's keys and a query the same way to compare them.
-    public static func publicKey(_ key: String) -> String {
-        "h:" + SHA256.hash(data: Data(key.lowercased().utf8)).map { String(format: "%02x", $0) }.joined().prefix(24)
-    }
-
-    /// A series id as the server shows it: the id itself, or its hash when it has an address in it.
-    public static func publicID(_ id: String) -> String { id.contains("@") ? publicKey(id) : id }
-
-    static let addressPattern = try! NSRegularExpression(pattern: "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", options: .caseInsensitive)
+    /// An address in any script, with or without a dot in its domain ("müller@firma.de", "sam@corp").
+    static let addressPattern = try! NSRegularExpression(pattern: "[\\p{L}\\p{N}._%+-]+@[\\p{L}\\p{N}.-]+")
 
     static func isAddress(_ s: String) -> Bool { s.contains("@") }
 
@@ -181,6 +174,8 @@ public enum ServerDigest {
         let usage: (byCall: [String: [UsageEvent]], all: [UsageEvent], since: Date?)
         let commitments: [Commitment]
         let names: [String: String]
+        /// The people with "Keep a read" off, by the id of now.
+        let off: Set<String>
         private let lock = NSLock()
         private var reviews: [String: CoachReview?] = [:]
         private var historyMade: [MeetingFacts]?
@@ -195,6 +190,7 @@ public enum ServerDigest {
             usage = (Dictionary(grouping: events.events.filter { $0.callID != nil }, by: { $0.callID! }), events.events, events.since)
             commitments = tools.paths.flatMap { CommitmentBook.peek(in: $0.commitments) }?.items ?? []
             names = Dictionary(tools.savedPeople.map { ($0.id.rawValue, $0.displayName) }, uniquingKeysWith: { a, _ in a })
+            off = tools.coachPeople.notProfiled
         }
 
         var history: [MeetingFacts] {
@@ -258,24 +254,31 @@ public enum ServerDigest {
         var out: [SharedPayload] = []
         func add<T: Encodable>(_ key: String, _ make: (Date) -> T) {
             // `made` is when the content last changed: the same content keeps its date, so it is not sent again.
-            let content = clean((try? JSONEncoder.callRecord.encode(make(.distantPast))) ?? Data())
+            let content = clean((try? JSONEncoder.callRecord.encode(make(.distantPast))) ?? Data(), key: key)
             let made = cache.made(key, content: content, now: now)
-            if let data = try? JSONEncoder.callRecord.encode(make(made)) { out.append(SharedPayload(kind: .digest, key: key, data: clean(data))) }
+            if let data = try? JSONEncoder.callRecord.encode(make(made)) { out.append(SharedPayload(kind: .digest, key: key, data: clean(data, key: key))) }
         }
+        // A call that starts stops the work at the next part or month: nothing goes, and the months made are kept.
+        func stopped() -> Bool {
+            guard stop() else { return false }
+            cache.save()
+            return true
+        }
+        if stopped() { return nil }
         let series = seriesList(run)
         add("digest:series") { SeriesPart(made: $0, series: series) }
+        if stopped() { return nil }
         let marks = bookmarks(run)
         add("digest:bookmarks") { BookmarksPart(made: $0, bookmarks: marks) }
+        if stopped() { return nil }
         let periods = analytics(run)
         add("digest:analytics") { AnalyticsPart(made: $0, periods: periods) }
+        if stopped() { return nil }
         let coach = coachPart(run, personasInMCP: personasInMCP)
         add("digest:coach") { var c = coach; c.made = $0; return c }
         let byMonth = Dictionary(grouping: run.spoken, by: { month(of: $0.id) })
         for month in byMonth.keys.sorted(by: >) {
-            if stop() {
-                cache.save()
-                return nil
-            }
+            if stopped() { return nil }
             let list = byMonth[month] ?? []
             let meetings = cache.meetings(month, records: list, all: run.spoken, extra: { stamp($0, run: run) }) { meetingNumbers($0, run: run) }
             add("digest:meetings-\(month)") { MeetingsPart(made: $0, month: month, meetings: meetings) }
@@ -284,16 +287,31 @@ public enum ServerDigest {
         return out.sorted { $0.key < $1.key }
     }
 
-    /// The last wall: a part's JSON with no address left in any string.
-    static func clean(_ data: Data) -> Data {
+    /// The last wall: a part's JSON with no address left in any string, except a series' id and keys, which are the
+    /// calendar's ids as the Mac has them (an iCalendar UID can hold an "@"), by their place in the series part.
+    static func clean(_ data: Data, key: String) -> Data {
         guard data.contains(UInt8(ascii: "@")), let object = try? JSONSerialization.jsonObject(with: data) else { return data }
-        func walk(_ v: Any) -> Any {
-            if let s = v as? String { return withoutAddresses(s) }
-            if let a = v as? [Any] { return a.map(walk) }
-            if let d = v as? [String: Any] { return d.mapValues(walk) }
+        let series = key == "digest:series"
+        func walk(_ v: Any, _ path: [String]) -> Any {
+            if let s = v as? String {
+                if series, path.first == "series", path.count >= 3, (path.count == 3 && path[2] == "id") || (path.count == 4 && path[2] == "keys") { return s }
+                return withoutAddresses(s)
+            }
+            if let a = v as? [Any] { return a.map { walk($0, path + ["*"]) } }
+            if let d = v as? [String: Any] { return Dictionary(uniqueKeysWithValues: d.map { ($0.key, walk($0.value, path + [$0.key])) }) }
             return v
         }
-        return (try? JSONSerialization.data(withJSONObject: walk(object), options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+        return (try? JSONSerialization.data(withJSONObject: walk(object, []), options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+    }
+
+    /// Whether a sentence of "What stood out" may go: never one about a person with "Keep a read" off, by the id of
+    /// now. `subject` is a speaker key of the record, or a name (a presenter).
+    static func keepsStandout(subject: String?, record: CallRecord, off: Set<String>, canonical: (String) -> String,
+                              idOfName: (String) -> String? = { _ in nil }) -> Bool {
+        guard let subject, !off.isEmpty else { return true }
+        let id = record.speakerPeople?[subject] ?? (record.speakerNames[subject] == nil ? idOfName(subject) : nil)
+        guard let id else { return true }
+        return !off.contains(canonical(id))
     }
 
     /// What else a month's numbers stand on: its outcomes, the person ids, its tasks, its cost, and the coach's review.
@@ -303,13 +321,14 @@ public enum ServerDigest {
         }.map { "\($0.timeIntervalSince1970)" } ?? ""
         let tasks = run.commitments.filter { $0.callID == r.id }.map { "\($0.id)\($0.done != nil)\($0.deleted)" }.sorted()
         let cost = run.usage.byCall[r.id]?.count ?? 0
-        return "\(version)|\(r.actionItems.map { "\($0.owner ?? "")=\($0.task)" })|\(r.decisions.map(\.text))|"
+        return "\(version)|\(run.off.sorted())|\(r.actionItems.map { "\($0.owner ?? "")=\($0.task)" })|\(r.decisions.map(\.text))|"
             + "\((r.speakerPeople ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })|\(tasks)|\(cost)|\(review)"
     }
 
-    /// The recurring meetings: the catalog from the meetings alone (no calendar, so no next date), each told from
-    /// the meetings as heard: the people are the named voices that are surely saved people, never someone who was
-    /// only invited. A series that ended is left out, and leaves the server.
+    /// The recurring meetings: the catalog from the past meetings alone (no upcoming meeting, so no next date; the
+    /// schedule reads their planned starts as the app does), each told from the meetings as heard: the people are the
+    /// named voices that are surely saved people, never someone who was only invited. A series that ended is left
+    /// out, and leaves the server.
     static func seriesList(_ run: Run) -> [Series] {
         let tools = run.tools
         let all = SeriesCatalog.build(records: tools.records, upcoming: [], owner: tools.owner, directory: PersonDirectory(profiles: tools.profiles),
@@ -345,8 +364,8 @@ public enum ServerDigest {
             let needed = max(1, Int((Double(recent.count) / 2).rounded(.up)))
             let usual = counts.filter { $0.value.n >= needed && !$0.value.name.isEmpty }.sorted { ($0.value.n, $1.value.name) > ($1.value.n, $0.value.name) }
                 .map { Name(name: $0.value.name, personID: $0.key) }
-            // The keys a point keeps (`savedKeys`), as hashes: the id, the calendar ids, and the last meetings.
-            return Series(id: publicID(s.id), keys: s.savedKeys.map(publicKey), title: s.title, schedule: s.schedule.text(), usualPeople: usual,
+            // The keys a point keeps (`savedKeys`): the id, the calendar ids, and the last meetings.
+            return Series(id: s.id, keys: s.savedKeys, title: s.title, schedule: s.schedule.text(), usualPeople: usual,
                           line: report.line, rows: Array(rows), attendees: Array(attendees.prefix(listLimit)), stats: stats, openItems: Array(open.prefix(listLimit)))
         }.sorted { $0.id < $1.id }
     }
@@ -384,7 +403,9 @@ public enum ServerDigest {
                        outcomes: a.outcomes.map(MeetingFindings.outcomes),
                        owners: a.outcomes?.owners.map { Meeting.Owner(name: $0.name, tasks: $0.tasks) } ?? [],
                        coach: a.coach.flatMap(MeetingFindings.coach), screens: a.screens.map { said(MeetingFindings.screens($0)) },
-                       standouts: a.baselines.standouts.map { said(MeetingFindings.Sentence(subject: $0.subject, $0.text)) }, earlier: a.baselines.earlier,
+                       standouts: a.baselines.standouts
+                           .filter { keepsStandout(subject: $0.subject, record: r, off: run.off, canonical: tools.coachPeople.canonical, idOfName: run.personID) }
+                           .map { said(MeetingFindings.Sentence(subject: $0.subject, $0.text)) }, earlier: a.baselines.earlier,
                        cost: a.cost.map { Meeting.Cost(total: $0.total, transcription: $0.transcription, ai: $0.ai, estimated: $0.estimated) })
     }
 
@@ -434,11 +455,13 @@ public enum ServerDigest {
     /// read, and with the switch for other AI apps off no card about any person (`ChatTools.findingCards`).
     static func coachPart(_ run: Run, personasInMCP: Bool) -> CoachPart {
         let tools = run.tools
+        let about = tools.aboutPersonRule()
         let cards: [Card] = !tools.settings.coach ? [] : tools.findingCards(traits: personasInMCP).map { c in
             let person = c.person.map(tools.saved.canonical)
             return Card(id: c.id, title: c.kind.title, text: c.text, callID: c.callID, date: c.date, at: c.at, quote: c.quote, number: c.number, usual: c.usual,
                         say: c.say, why: c.why, question: c.kind.question, answers: [c.kind.yes, c.kind.no], personID: person,
-                        personName: person.flatMap { run.name(of: $0) } ?? c.personName.flatMap { isAddress($0) ? nil : $0 })
+                        personName: person.flatMap { run.name(of: $0) } ?? c.personName.flatMap { isAddress($0) ? nil : $0 },
+                        aboutPerson: about(c) ? true : nil)
         }
         let goals = tools.profile.goalHistory
         func hits(_ f: CoachFocus) -> String {
@@ -463,13 +486,23 @@ public enum ServerDigest {
 /// read (a digest of no meeting would empty the server's parts), and when the meetings, the coach, the tasks, the
 /// switch, or the day changed since the last digest that arrived whole.
 public enum DigestPlan {
+    public enum Step: Equatable, Sendable {
+        /// Nothing to do: no server, a call, the meetings not read yet, or this digest arrived whole.
+        case nothing
+        case make
+        /// A digest with this key was made and a part did not arrive: send the kept copy again as it is.
+        case resend
+    }
+
     public static func key(meetings: Int, coach: Int, commitments: Int, personas: Bool, day: Date, calendar: Calendar = .current) -> String {
         "\(ServerDigest.version)|\(meetings)|\(coach)|\(commitments)|\(personas)|\(calendar.startOfDay(for: day).timeIntervalSince1970)"
     }
 
-    /// `sent`: the key of the last digest whose every part arrived.
-    public static func makes(server: Bool, calling: Bool, meetingsLoaded: Bool, key: String, sent: String?) -> Bool {
-        server && !calling && meetingsLoaded && key != sent
+    /// `sent`: the key of the last digest whose every part arrived. `pending`: the key of the digest kept in memory
+    /// after a part did not arrive.
+    public static func step(server: Bool, calling: Bool, meetingsLoaded: Bool, key: String, sent: String?, pending: String?) -> Step {
+        guard server, !calling, meetingsLoaded, key != sent else { return .nothing }
+        return key == pending ? .resend : .make
     }
 }
 

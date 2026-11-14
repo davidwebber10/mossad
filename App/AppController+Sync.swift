@@ -149,6 +149,8 @@ extension AppController {
 
     /// The key of the last digest whose every part arrived at the server, this launch (`DigestPlan`).
     static var digestSent: String?
+    /// A digest a part of which did not arrive, kept to send again as it is while its key holds.
+    static var digestPending: (key: String, parts: [SharedPayload])?
 
     /// What the server's MCP was told, this launch: a send that failed is tried again at the next sync.
     static var serverConfig = ServerConfigState()
@@ -204,12 +206,14 @@ extension AppController {
         // meetings are read, and made again only when the meetings, the coach, the tasks, the switch, or the day
         // changed since the last digest that arrived whole. Made after the meetings went, off the main thread.
         let digestKey = DigestPlan.key(meetings: meetingsVersion, coach: coachVersion, commitments: commitmentsVersion, personas: personasHere, day: Date())
-        let makesDigest = DigestPlan.makes(server: serverConnection != nil, calling: calling, meetingsLoaded: meetingsLoaded, key: digestKey, sent: Self.digestSent)
-        let digestRecords = makesDigest ? meetings : nil
+        let digestStep = DigestPlan.step(server: serverConnection != nil, calling: calling, meetingsLoaded: meetingsLoaded, key: digestKey,
+                                         sent: Self.digestSent, pending: Self.digestPending?.key)
+        let digestRecords = digestStep == .make ? meetings : nil
+        let digestKept = digestStep == .resend ? Self.digestPending?.parts : nil
         let digestDir = paths.sync, digestPaths = paths, facts = MeetingAnalyticsStore.shared.facts
         Task.detached(priority: .utility) {
-            var digest: [SharedPayload]?
-            var digestMade = false
+            var digest: [SharedPayload]? = digestKept
+            var digestMade = digestKept != nil
             // From the app's own rules; a month is made again only when its meetings changed, and a call stops it.
             func makeDigest() -> [SharedPayload]? {
                 guard let records = digestRecords, !digestMade else { return digest }
@@ -253,13 +257,18 @@ extension AppController {
                     Log.error("Copying meetings to your server failed: \(error)")
                 }
             }
-            // The digest counts as sent only when every part arrived; else it is made again (mostly from its cache)
-            // and sent at the next sync.
+            // The digest counts as sent only when every part arrived; else the same copy goes again at the next sync,
+            // not made again, while nothing it stands on changed.
             let server = serverIsMain ? cloud : mirror
             var digestArrived = false
             if let digest, let server { digestArrived = (try? await server.holds(digest)) == true }
             await MainActor.run {
-                if digestArrived { Self.digestSent = digestKey }
+                if digestArrived {
+                    Self.digestSent = digestKey
+                    Self.digestPending = nil
+                } else if let digest {
+                    Self.digestPending = (digestKey, digest)
+                }
                 // Chats, ratings, and memories from the phone show here at once.
                 if received > 0 {
                     self.coachVersion += 1; self.chatsVersion += 1; self.commitmentsVersion += 1

@@ -106,7 +106,7 @@ final class ServerDigestTests: XCTestCase {
         focus.status = .active
         profile.foci = [focus]
         try profile.save(to: paths.coach)
-        // The calendar says the series meets tomorrow: none of it may go to the server.
+        // The calendar says the series meets tomorrow: no upcoming meeting may go to the server.
         var e = CalendarEventInfo(title: "Weekly sync", start: now.addingTimeInterval(86_400), end: now.addingTimeInterval(88_200),
                                   attendees: ["Sam Carter", "secret.guest@example.com"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)
         e.seriesID = "g-weekly"
@@ -166,8 +166,8 @@ final class ServerDigestTests: XCTestCase {
         XCTAssertEqual(levels, Set(ServerDigest.allowedKeys.keys).subtracting(["result", "cost"]))
     }
 
-    /// The owner's decision: no calendar and no invite data on the server. A person is a name with an id, from the
-    /// voices of a meeting; never someone who was only invited, never an address, never an invite's times or counts.
+    /// The digest's people are the voices of a meeting: a person is a name with an id, never someone who was only
+    /// invited, never an address, and no part repeats an invite's times or counts.
     func testNoPartHoldsAnAddressAnInvitedOnlyPersonOrTheInvitesTimes() throws {
         let address = try NSRegularExpression(pattern: "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", options: .caseInsensitive)
         for (key, data) in parts() {
@@ -186,12 +186,9 @@ final class ServerDigestTests: XCTestCase {
         let stats = try XCTUnwrap(weekly["stats"] as? [String: Any])
         XCTAssertNil(stats["planned"])
         XCTAssertFalse((weekly["line"] as? String ?? "").contains("over"), "no overrun from the invite's end")
-        // The calendar's ids are kept only as hashes; the server compares hashes.
-        for k in weekly["keys"] as? [String] ?? [] { XCTAssertTrue(k.hasPrefix("h:"), k) }
+        // The series' id and keys go as the Mac has them: the server matches a point's keys to them, and a link opens it.
         XCTAssertEqual(weekly["id"] as? String, "cal:g-weekly")
-        XCTAssertEqual(ServerDigest.publicKey("cal:ek:ABC@google.com"), ServerDigest.publicKey("cal:ek:abc@google.com"))
-        XCTAssertTrue(ServerDigest.publicID("cal:ek:abc@google.com").hasPrefix("h:"))
-        XCTAssertEqual(ServerDigest.publicID("cal:g-weekly"), "cal:g-weekly")
+        XCTAssertTrue((weekly["keys"] as? [String] ?? []).contains("cal:g-weekly"))
         // A voice named by an address is a speaker with no name.
         let jan = try XCTUnwrap(try json(parts()["digest:meetings-2027-01"])["meetings"] as? [[String: Any]])
         let last = try XCTUnwrap(jan.first { $0["callID"] as? String == "20270113-100000" })
@@ -199,7 +196,96 @@ final class ServerDigestTests: XCTestCase {
         XCTAssertTrue(speakers.contains("Speaker C"), "\(speakers)")
     }
 
-    func testAnEndedSeriesIsNotSentAndTheCalendarNeverGoes() throws {
+    /// A series id or key with an "@" (an iCalendar UID) goes whole: the address check never touches those two
+    /// fields, by their place in the part. Every other string loses its addresses, also ones with no dot or with a
+    /// letter outside ASCII.
+    func testASeriesIdWithAnAtGoesWholeAndEveryAddressElseGoes() throws {
+        let raw = #"{"series":[{"id":"cal:ek:abc@google.com","keys":["cal:ek:abc@google.com","call:1"],"title":"Ask sam@corp","line":"m\u00fcller@firma.de"}],"version":1}"#
+        let out = try json(ServerDigest.clean(Data(raw.utf8), key: "digest:series"))
+        let s = try XCTUnwrap((out["series"] as? [[String: Any]])?.first)
+        XCTAssertEqual(s["id"] as? String, "cal:ek:abc@google.com")
+        XCTAssertEqual(s["keys"] as? [String], ["cal:ek:abc@google.com", "call:1"])
+        XCTAssertEqual(s["title"] as? String, "Ask (address)")
+        XCTAssertEqual(s["line"] as? String, "(address)")
+        // The same id in another part is no series id.
+        let other = try json(ServerDigest.clean(Data(#"{"bookmarks":[{"id":"cal:ek:abc@google.com"}]}"#.utf8), key: "digest:bookmarks"))
+        XCTAssertEqual((other["bookmarks"] as? [[String: Any]])?.first?["id"] as? String, "cal:ek:(address)")
+        XCTAssertEqual(ServerDigest.withoutAddresses("write to müller@firma.de or sam@corp"), "write to (address) or (address)")
+    }
+
+    /// The weekday and the time of a series come from its past meetings, the planned start first, as the app reads
+    /// them; a series id from the Mac's calendar with an "@" goes whole.
+    func testTheScheduleReadsThePlannedStartOfPastMeetings() throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Chicago")!
+        var standup: [CallRecord] = []
+        for week in 1...3 {
+            let day = cal.date(byAdding: .day, value: -7 * week, to: cal.startOfDay(for: now))!
+            let planned = cal.date(bySettingHour: 10, minute: 0, second: 0, of: day)!
+            let start = planned.addingTimeInterval(20 * 60)
+            var r = meeting(CallRecorder.callID(for: start), "Team standup", start: start, minutes: 15, series: "ek:standup@google.com")
+            r.plannedStart = planned
+            r.plannedEnd = planned.addingTimeInterval(15 * 60)
+            standup.append(r)
+        }
+        let out = make(tools(records: standup))
+        let part = try json(out.first { $0.key == "digest:series" }?.data)
+        let s = try XCTUnwrap((part["series"] as? [[String: Any]])?.first)
+        XCTAssertEqual(s["id"] as? String, "cal:ek:standup@google.com")
+        let schedule = try XCTUnwrap(s["schedule"] as? String)
+        XCTAssertTrue(schedule.contains("10:00"), schedule)
+        XCTAssertFalse(schedule.contains("10:20"), schedule)
+    }
+
+    /// A link from the server to a series with an "@" in its id opens that series on the Mac.
+    func testALinkToASeriesWithAnAtOpensIt() throws {
+        let id = "cal:ek:standup@google.com"
+        var c = URLComponents()
+        c.scheme = "mossad"
+        c.host = "series"
+        c.percentEncodedPath = "/" + id.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        let url = try XCTUnwrap(c.url)
+        let place = try XCTUnwrap(MossadLink.place(url))
+        XCTAssertEqual(place.kind, "series")
+        XCTAssertEqual(place.id, id)
+        // As the Worker writes it: encodeURIComponent keeps ":" and "@" encoded.
+        let worker = try XCTUnwrap(URL(string: "mossad://series/cal%3Aek%3Astandup%40google.com"))
+        XCTAssertEqual(MossadLink.place(worker)?.id, id)
+        var standup: [CallRecord] = []
+        for week in 1...2 {
+            standup.append(meeting("2027010\(week)-100000", "Team standup", start: now.addingTimeInterval(-Double(week) * 7 * 86_400), minutes: 15,
+                                   series: "ek:standup@google.com"))
+        }
+        let all = SeriesCatalog.build(records: standup, upcoming: [], owner: "Avery Webb", directory: PersonDirectory(profiles: []), now: now)
+        XCTAssertEqual(MeetingSeries.find(id, in: all)?.title, "Team standup")
+        XCTAssertEqual(MeetingSeries.find("call:20270101-100000", in: all)?.title, "Team standup", "by a key")
+    }
+
+    /// F17: a meeting's numbers keep every voice, but what stood out about a person with "Keep a read" off is left
+    /// out, by the id of now; the month is made again when that switch changes.
+    func testWhatStoodOutAboutAPersonWhoKeepsNoReadIsLeftOut() {
+        var r = meeting("20270110-100000", "One", start: now, minutes: 10)
+        r.speakerPeople = ["me:A": "id-owner", "them:A": "id-old-dana", "them:B": "id-sam"]
+        let canonical: (String) -> String = { $0 == "id-old-dana" ? "id-dana" : $0 }
+        XCTAssertFalse(ServerDigest.keepsStandout(subject: "them:A", record: r, off: ["id-dana"], canonical: canonical))
+        XCTAssertTrue(ServerDigest.keepsStandout(subject: "them:B", record: r, off: ["id-dana"], canonical: canonical))
+        XCTAssertTrue(ServerDigest.keepsStandout(subject: nil, record: r, off: ["id-dana"], canonical: canonical), "about the meeting")
+        XCTAssertTrue(ServerDigest.keepsStandout(subject: "them:Z", record: r, off: ["id-dana"], canonical: canonical), "no person: a voice")
+        XCTAssertFalse(ServerDigest.keepsStandout(subject: "Dana Lee", record: r, off: ["id-dana"], canonical: canonical, idOfName: { $0 == "Dana Lee" ? "id-dana" : nil }),
+                       "a presenter's name")
+
+        let cache = DigestCache(directory: paths.sync)
+        _ = make(tools(), cache: cache)
+        let again = DigestCache(directory: paths.sync)
+        var open = people
+        open[2].doNotProfile = false
+        var s = ToolSettings()
+        s.coach = true
+        _ = make(ChatTools(records: records(), owner: "Avery Webb", paths: paths, people: open, settings: s, now: now), cache: again)
+        XCTAssertEqual(again.made, 3, "each month again: Dana's switch changed")
+    }
+
+    func testAnEndedSeriesIsNotSent() throws {
         let series = try XCTUnwrap(try json(parts()["digest:series"])["series"] as? [[String: Any]])
         XCTAssertEqual(series.map { $0["title"] as? String }, ["Weekly sync"], "Old standup has two meetings and ended")
         XCTAssertEqual((series.first?["rows"] as? [Any])?.count, 2)
@@ -337,14 +423,28 @@ final class ServerDigestTests: XCTestCase {
         XCTAssertEqual(sent.count, 1)
     }
 
-    /// A stop while the months are made sends nothing, and keeps the months already made for the next time.
+    /// A stop while the months are made sends nothing, and keeps the months already made for the next time. The
+    /// stop is read before each of the four parts and each month: the sixth read is before the second month.
     func testAStopWhileTheMonthsAreMadeSendsNothingAndKeepsWhatWasMade() {
         let checks = StopCount()
-        let stopped = ServerDigest.parts(tools(), personasInMCP: true, cache: DigestCache(directory: paths.sync), stop: { checks.next() > 1 })
+        let stopped = ServerDigest.parts(tools(), personasInMCP: true, cache: DigestCache(directory: paths.sync), stop: { checks.next() > 5 })
         XCTAssertNil(stopped)
         let next = DigestCache(directory: paths.sync)
         XCTAssertNotNil(ServerDigest.parts(tools(), personasInMCP: true, cache: next))
         XCTAssertEqual(next.made, 2, "one of three months came from the first run")
+    }
+
+    /// A call that starts before the first part stops the digest at once: no part, no month, no meeting read.
+    func testAStopBeforeTheFirstPartDoesNoWork() async throws {
+        let facts = MeetingFactsCache()
+        XCTAssertNil(ServerDigest.parts(tools(), personasInMCP: true, cache: DigestCache(directory: paths.sync), facts: facts, stop: { true }))
+        XCTAssertEqual(facts.readCount, 0)
+        let store = MemoryStore(view: true)
+        try await CloudSync(paths: paths, store: store).pushShared(people: true, digest: nil)
+        let digest = await store.entries.keys.filter { $0.hasPrefix("digest") }
+        let deletes = await store.deletes
+        XCTAssertEqual(digest, [])
+        XCTAssertEqual(deletes, [])
     }
 
     /// The app's one cache of the meetings' facts: a digest reads no meeting again for its history or the goal.
@@ -376,16 +476,23 @@ final class ServerDigestTests: XCTestCase {
 
     func testWhenTheDigestIsMadeAgain() {
         let key = DigestPlan.key(meetings: 3, coach: 1, commitments: 2, personas: true, day: now)
-        XCTAssertTrue(DigestPlan.makes(server: true, calling: false, meetingsLoaded: true, key: key, sent: nil))
-        XCTAssertFalse(DigestPlan.makes(server: true, calling: false, meetingsLoaded: true, key: key, sent: key), "nothing changed")
-        XCTAssertTrue(DigestPlan.makes(server: true, calling: false, meetingsLoaded: true,
-                                       key: DigestPlan.key(meetings: 4, coach: 1, commitments: 2, personas: true, day: now), sent: key))
-        XCTAssertTrue(DigestPlan.makes(server: true, calling: false, meetingsLoaded: true,
-                                       key: DigestPlan.key(meetings: 3, coach: 1, commitments: 2, personas: true, day: now.addingTimeInterval(86_400)), sent: key),
-                      "a new day moves the periods")
-        XCTAssertFalse(DigestPlan.makes(server: true, calling: true, meetingsLoaded: true, key: key, sent: nil), "never during a call")
-        XCTAssertFalse(DigestPlan.makes(server: true, calling: false, meetingsLoaded: false, key: key, sent: nil), "not before the meetings are read")
-        XCTAssertFalse(DigestPlan.makes(server: false, calling: false, meetingsLoaded: true, key: key, sent: nil), "only with a server")
+        func step(_ k: String = key, sent: String? = nil, pending: String? = nil, calling: Bool = false, loaded: Bool = true, server: Bool = true) -> DigestPlan.Step {
+            DigestPlan.step(server: server, calling: calling, meetingsLoaded: loaded, key: k, sent: sent, pending: pending)
+        }
+        XCTAssertEqual(step(), .make)
+        XCTAssertEqual(step(sent: key), .nothing, "nothing changed")
+        XCTAssertEqual(step(DigestPlan.key(meetings: 4, coach: 1, commitments: 2, personas: true, day: now), sent: key), .make)
+        XCTAssertEqual(step(DigestPlan.key(meetings: 3, coach: 1, commitments: 2, personas: true, day: now.addingTimeInterval(86_400)), sent: key), .make,
+                       "a new day moves the periods")
+        XCTAssertEqual(step(calling: true), .nothing, "never during a call")
+        XCTAssertEqual(step(loaded: false), .nothing, "not before the meetings are read")
+        XCTAssertEqual(step(server: false), .nothing, "only with a server")
+        // A part refused: the made digest goes again as it is, at the next sync and the one after, never made again.
+        XCTAssertEqual(step(pending: key), .resend)
+        XCTAssertEqual(step(pending: key), .resend, "refused a second time")
+        XCTAssertEqual(step(pending: key, calling: true), .nothing)
+        // Until something changes: then the kept copy is old, and the digest is made again.
+        XCTAssertEqual(step(DigestPlan.key(meetings: 4, coach: 1, commitments: 2, personas: true, day: now), pending: key), .make)
     }
 
     /// The fixtures the server's tests read, written by this encoder (`MOSSAD_WRITE_FIXTURES=1`).

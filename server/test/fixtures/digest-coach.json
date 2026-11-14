@@ -5,6 +5,7 @@
   ],
   "findings" : [
     {
+      "aboutPerson" : true,
       "answers" : [
         "Useful",
         "Not useful"
@@ -21,6 +22,7 @@
       "why" : "A cut-in stops a thought before you hear all of it."
     },
     {
+      "aboutPerson" : true,
       "answers" : [
         "True",
         "Not true"

@@ -22,9 +22,9 @@
       ],
       "id" : "cal:g-weekly",
       "keys" : [
-        "h:96d5d9235218365838ac6982",
-        "h:930739fe6cb4bb8118c8c304",
-        "h:ee97110d55d8174621ebfb98"
+        "cal:g-weekly",
+        "call:20270108-100000",
+        "call:20270113-100000"
       ],
       "line" : "Usually 4 people; 1 open item",
       "openItems" : [
