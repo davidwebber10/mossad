@@ -272,11 +272,16 @@ public actor Pipeline {
         FileManager.default.fileExists(atPath: dir.appendingPathComponent(previousFileName).path)
     }
 
-    /// Undo brings back the last whole meeting: a run that failed or ended without the transcript or the summary the
-    /// kept copy has does not replace it. A quit or a crash resumes that run, and "Transcribe again" waits for its end.
+    /// Undo brings back the last whole meeting: only a record as whole as the kept copy replaces it. A quit or a crash
+    /// resumes the run, and "Transcribe again" waits for its end.
     static func keepsUndoCopy(kept: CallRecord, current: CallRecord) -> Bool {
-        (current.utterances.isEmpty && !kept.utterances.isEmpty)
-            || (current.summary?.nonBlank == nil && kept.summary?.nonBlank != nil)
+        undoWorth(kept) > undoWorth(current)
+    }
+
+    /// A failed run, even one that failed only at the note write, ranks with no transcript: Undo would write it as is.
+    private static func undoWorth(_ r: CallRecord) -> Int {
+        guard r.status != .failed, !r.utterances.isEmpty else { return 0 }
+        return r.summary?.nonBlank == nil ? 1 : 2
     }
 
     /// Transcribes a finished meeting again from its audio, optionally with how many people spoke, then names the
@@ -1211,6 +1216,9 @@ public actor Pipeline {
                 return false
             }
         }
+        // The copy from before a "Transcribe again" is one part's record and does not fit the joined audio. Before the
+        // plan goes, so a quit here is finished on the next run.
+        try? fm.removeItem(at: dir.appendingPathComponent(Self.previousFileName))
         FrameStore.finishJoin(in: dir)
         for r in parts {
             if let note = r.markdownPath { try? fm.removeItem(atPath: note) }

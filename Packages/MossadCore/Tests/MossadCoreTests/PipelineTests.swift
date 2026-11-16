@@ -582,6 +582,91 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
     }
 
+    // A run that failed at identification holds a transcript but no names; it must not replace a good copy, even one
+    // with no summary.
+    func testUndoAfterARunThatFailedAtIdentificationBringsBackTheMeetingWithNoSummary() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.overview = ""
+        await p.process(id)
+        let good = try load(id)
+        XCTAssertFalse(good.speakerNames.isEmpty)
+        _ = await p.transcribeAgain(id, speakers: nil)
+        // The doubles cannot fail identification, so the record is put in that state by hand.
+        var failed = try load(id)
+        failed.status = .failed
+        failed.failedStep = .transcribed
+        failed.speakerNames = [:]
+        failed.clearSummary()
+        try failed.save(to: paths.callDirectory(id))
+        _ = await p.transcribeAgain(id, speakers: 3)
+        let restored = await p.restorePreviousTranscript(id)
+        XCTAssertTrue(restored)
+        let r = try load(id)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.speakerNames, good.speakerNames)
+        XCTAssertEqual(r.utterances.count, good.utterances.count)
+    }
+
+    // Undo keeps the most whole meeting: a failed run or no transcript, then a transcript, then a transcript and a
+    // summary. A copy that is failed or empty is never kept over the record of now; an equal record replaces it.
+    func testTheUndoCopyIsKeptOnlyOverALessWholeRecord() {
+        let line = Utterance(track: .them, speakerLabel: "A", start: 0, end: 5, text: "It leaves Friday.")
+        func record(_ status: CallStatus, transcript: Bool, summary: String?) -> CallRecord {
+            var r = CallRecord(id: "c", platform: .meet, bundleID: "com.google.Chrome", start: start, end: start.addingTimeInterval(60), status: status)
+            r.utterances = transcript ? [line] : []
+            r.summary = summary
+            return r
+        }
+        let whole = record(.written, transcript: true, summary: "Summary 1")
+        let noSummary = record(.written, transcript: true, summary: nil)
+        let blankSummary = record(.written, transcript: true, summary: " ")
+        let silent = record(.written, transcript: false, summary: nil)
+        let failedAtTranscription = record(.failed, transcript: false, summary: nil)
+        let failedAtIdentification = record(.failed, transcript: true, summary: nil)
+        let failedAtWrite = record(.failed, transcript: true, summary: "Summary 2")
+        let rows: [(String, CallRecord, CallRecord, Bool)] = [
+            ("whole over whole", whole, whole, false),
+            ("whole over no summary", whole, noSummary, true),
+            ("whole over blank summary", whole, blankSummary, true),
+            ("whole over silence", whole, silent, true),
+            ("whole over failed at transcription", whole, failedAtTranscription, true),
+            ("whole over failed at identification", whole, failedAtIdentification, true),
+            ("whole over failed at the note write", whole, failedAtWrite, true),
+            ("no summary over whole", noSummary, whole, false),
+            ("no summary over no summary", noSummary, noSummary, false),
+            ("no summary over silence", noSummary, silent, true),
+            ("no summary over failed at transcription", noSummary, failedAtTranscription, true),
+            ("no summary over failed at identification", noSummary, failedAtIdentification, true),
+            ("no summary over failed at the note write", noSummary, failedAtWrite, true),
+            ("silence over whole", silent, whole, false),
+            ("silence over failed at identification", silent, failedAtIdentification, false),
+            ("failed over whole", failedAtIdentification, whole, false),
+            ("failed over no summary", failedAtTranscription, noSummary, false),
+            ("failed over failed", failedAtIdentification, failedAtTranscription, false),
+        ]
+        for (name, kept, current, keeps) in rows {
+            XCTAssertEqual(Pipeline.keepsUndoCopy(kept: kept, current: current), keeps, name)
+        }
+    }
+
+    // A merge joins other audio into the folder: the copy from before an earlier "Transcribe again" no longer fits it.
+    func testAMergeDropsTheUndoCopyOfTheTarget() async throws {
+        let first = try makeRecord()
+        let p = pipeline()
+        await p.process(first)
+        _ = await p.transcribeAgain(first, speakers: nil)
+        XCTAssertTrue(Pipeline.hasPreviousTranscript(paths.callDirectory(first)))
+        let second = try makeSecondPart(after: first, gap: 600, meetingID: nil)
+        await p.process(second)
+        let merged = await p.merge(callIDs: [first, second])
+        XCTAssertEqual(merged, first)
+        XCTAssertFalse(Pipeline.hasPreviousTranscript(paths.callDirectory(first)))
+        let restored = await p.restorePreviousTranscript(first)
+        XCTAssertFalse(restored)
+        XCTAssertEqual(try load(first).parts.count, 2)
+    }
+
     // After a run that succeeded, a new "Transcribe again" keeps that run's meeting for Undo.
     func testUndoAfterTwoGoodTranscribeAgainsBringsBackTheSecondToLast() async throws {
         let id = try makeRecord()
