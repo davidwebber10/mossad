@@ -424,6 +424,9 @@ final class AppController: ObservableObject {
     /// Every 15 minutes: the Gemini notes of meetings that ended (+Google).
     var googleTimer: Timer?
     var googleRunning = false
+    /// A Gemini people run is going on; one more was asked for meanwhile.
+    var geminiPeopleRunning = false
+    var geminiPeopleAgain = false
     /// The calendar the app and the pipeline read: Google for the Google calendar, the Mac for the rest.
     let calendar: MergedCalendarSource
     let notifier = Notifier()
@@ -971,6 +974,7 @@ final class AppController: ObservableObject {
                 self.linkCoachPeople()
                 self.refreshPeopleReferences()
                 self.refreshGoogleDirectory()
+                self.linkGeminiPeople()
             }
         }
     }
